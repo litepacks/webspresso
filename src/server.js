@@ -4,9 +4,52 @@
  */
 
 const express = require('express');
+const helmet = require('helmet');
 const nunjucks = require('nunjucks');
-const path = require('path');
+
 const { mountPages } = require('./file-router');
+
+/**
+ * Get default Helmet configuration
+ * @param {boolean} isDev - Whether in development mode
+ * @returns {Object} Helmet configuration
+ */
+function getDefaultHelmetConfig(isDev) {
+  return {
+    // Disable CSP in development for easier development (Nunjucks hot reload, etc.)
+    contentSecurityPolicy: isDev ? false : {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for Tailwind
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        fontSrc: ["'self'", "data:"],
+        connectSrc: ["'self'"],
+        frameSrc: ["'none'"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: []
+      }
+    },
+    // Other security headers
+    crossOriginEmbedderPolicy: false, // Disable for better compatibility
+    crossOriginOpenerPolicy: { policy: 'same-origin' },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    dnsPrefetchControl: true,
+    frameguard: { action: 'deny' },
+    hidePoweredBy: true,
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true
+    },
+    ieNoOpen: true,
+    noSniff: true,
+    originAgentCluster: true,
+    permittedCrossDomainPolicies: false,
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    xssFilter: true
+  };
+}
 
 /**
  * Create and configure the Express app
@@ -15,6 +58,7 @@ const { mountPages } = require('./file-router');
  * @param {string} options.viewsDir - Path to views directory  
  * @param {string} options.publicDir - Path to public/static directory
  * @param {boolean} options.logging - Enable request logging (default: isDev)
+ * @param {Object|boolean} options.helmet - Helmet configuration (default: auto-configured, false to disable)
  * @returns {Object} { app, nunjucksEnv }
  */
 function createApp(options = {}) {
@@ -26,7 +70,8 @@ function createApp(options = {}) {
     pagesDir,
     viewsDir,
     publicDir,
-    logging = isDev && !isTest
+    logging = isDev && !isTest,
+    helmet: helmetConfig
   } = options;
   
   if (!pagesDir) {
@@ -34,6 +79,16 @@ function createApp(options = {}) {
   }
   
   const app = express();
+  
+  // Security headers with Helmet
+  if (helmetConfig !== false) {
+    const defaultConfig = getDefaultHelmetConfig(isDev);
+    const finalConfig = helmetConfig === undefined || helmetConfig === true
+      ? defaultConfig
+      : { ...defaultConfig, ...helmetConfig };
+    
+    app.use(helmet(finalConfig));
+  }
   
   // Trust proxy (for correct req.ip, req.protocol behind reverse proxy)
   app.set('trust proxy', 1);

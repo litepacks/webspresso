@@ -180,6 +180,15 @@ Creates and configures the Express app.
 - `viewsDir` (optional): Path to views/layouts directory
 - `publicDir` (optional): Path to public/static directory
 - `logging` (optional): Enable request logging (default: true in development)
+- `helmet` (optional): Helmet security configuration
+  - `true` or `undefined`: Use default secure configuration
+  - `false`: Disable Helmet
+  - `Object`: Custom Helmet configuration (merged with defaults)
+
+**Default Helmet Configuration:**
+- CSP disabled in development, enabled in production
+- HSTS, XSS protection, frame guard, and other security headers enabled
+- Tailwind CSS inline styles allowed in CSP
 
 **Returns:** `{ app, nunjucksEnv }`
 
