@@ -53,7 +53,7 @@ program
         start: 'NODE_ENV=production node server.js'
       },
       dependencies: {
-        webspresso: '^1.0.0',
+        webspresso: '*',
         dotenv: '^16.3.1'
       }
     };

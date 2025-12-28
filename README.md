@@ -44,24 +44,6 @@ npm run dev
 
 > **Note:** New projects include Tailwind CSS by default. Use `--no-tailwind` flag to skip it.
 
-### Manual Setup
-
-```javascript
-// server.js
-const { createApp } = require('webspresso');
-const path = require('path');
-
-const { app } = createApp({
-  pagesDir: path.join(__dirname, 'pages'),
-  viewsDir: path.join(__dirname, 'views'),
-  publicDir: path.join(__dirname, 'public')
-});
-
-app.listen(3000, () => {
-  console.log('Server running at http://localhost:3000');
-});
-```
-
 ## CLI Commands
 
 ### `webspresso new <project-name>`
