@@ -1,6 +1,6 @@
 {
   "name": "webspresso",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Minimal, production-ready SSR framework for Node.js with file-based routing, Nunjucks templating, built-in i18n, and CLI tooling",
   "main": "index.js",
   "bin": {
