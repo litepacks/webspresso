@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="{{ locale or 'en' }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ meta.title or 'Webspresso' }}</title>
+  
+  {% if meta.description %}
+  <meta name="description" content="{{ meta.description }}">
+  {% endif %}
+  
+  {% if meta.indexable === false %}
+  <meta name="robots" content="noindex, nofollow">
+  {% endif %}
+  
+  {% if meta.canonical %}
+  <link rel="canonical" href="{{ meta.canonical }}">
+  {% else %}
+  <link rel="canonical" href="{{ fsy.canonical() }}">
+  {% endif %}
+  
+  <!-- Open Graph -->
+  <meta property="og:title" content="{{ meta.title or 'Webspresso' }}">
+  {% if meta.description %}
+  <meta property="og:description" content="{{ meta.description }}">
+  {% endif %}
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{ fsy.canonical() }}">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['DM Sans', 'system-ui', 'sans-serif'],
+            display: ['Bricolage Grotesque', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              200: '#bbf7d0',
+              300: '#86efac',
+              400: '#4ade80',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+              800: '#166534',
+              900: '#14532d',
+            },
+            ink: {
+              50: '#fafafa',
+              100: '#f4f4f5',
+              200: '#e4e4e7',
+              300: '#d4d4d8',
+              400: '#a1a1aa',
+              500: '#71717a',
+              600: '#52525b',
+              700: '#3f3f46',
+              800: '#27272a',
+              900: '#18181b',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+  
+  <style>
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+      font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+    }
+    
+    /* Smooth transitions */
+    * {
+      transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+    }
+    
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+      background: #a1a1a1;
+    }
+  </style>
+  
+  {% block head %}{% endblock %}
+</head>
+<body class="bg-ink-50 text-ink-800 min-h-screen flex flex-col">
+  <!-- Navigation -->
+  <nav class="bg-white border-b border-ink-100 sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/" class="flex items-center gap-2 font-display font-bold text-xl text-ink-900 hover:text-brand-600">
+          <svg class="w-8 h-8 text-brand-500" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor" opacity="0.3"/>
+            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          {{ t('site.name') or 'Webspresso' }}
+        </a>
+        
+        <div class="flex items-center gap-6">
+          <a href="/" class="text-ink-600 hover:text-ink-900 font-medium {% if fsy.isPath('/') %}text-brand-600{% endif %}">
+            {{ t('nav.home') or 'Home' }}
+          </a>
+          <a href="/tools" class="text-ink-600 hover:text-ink-900 font-medium {% if fsy.isPath('/tools*') %}text-brand-600{% endif %}">
+            {{ t('nav.tools') or 'Tools' }}
+          </a>
+          <a href="/about" class="text-ink-600 hover:text-ink-900 font-medium {% if fsy.isPath('/about') %}text-brand-600{% endif %}">
+            {{ t('nav.about') or 'About' }}
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+  
+  <!-- Main Content -->
+  <main class="flex-1">
+    {% block content %}{% endblock %}
+  </main>
+  
+  <!-- Footer -->
+  <footer class="bg-white border-t border-ink-100 mt-auto">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <p class="text-ink-500 text-sm">
+          {{ t('footer.copyright') or '© 2025 Webspresso. All rights reserved.' }}
+        </p>
+        <div class="flex items-center gap-4">
+          <span class="text-ink-400 text-sm">
+            {{ t('footer.poweredBy') or 'Powered by' }} 
+            <a href="https://github.com" class="text-brand-600 hover:text-brand-700">Webspresso</a>
+          </span>
+        </div>
+      </div>
+    </div>
+  </footer>
+  
+  {% block scripts %}{% endblock %}
+</body>
+</html>
+

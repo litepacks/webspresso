@@ -1,0 +1,157 @@
+/**
+ * Integration Tests for API Routes
+ */
+
+const path = require('path');
+const request = require('supertest');
+const { createApp } = require('../../src/server');
+
+const FIXTURES_PATH = path.join(__dirname, '..', 'fixtures');
+const PAGES_DIR = path.join(FIXTURES_PATH, 'pages');
+const VIEWS_DIR = path.join(FIXTURES_PATH, 'views');
+
+describe('API Routes Integration', () => {
+  let app;
+
+  beforeAll(() => {
+    const result = createApp({
+      pagesDir: PAGES_DIR,
+      viewsDir: VIEWS_DIR
+    });
+    app = result.app;
+  });
+
+  describe('GET /api/health', () => {
+    it('should return health status', async () => {
+      const res = await request(app)
+        .get('/api/health')
+        .expect('Content-Type', /json/)
+        .expect(200);
+
+      expect(res.body).toHaveProperty('status', 'ok');
+      expect(res.body).toHaveProperty('timestamp');
+      expect(res.body).toHaveProperty('uptime');
+      expect(res.body).toHaveProperty('environment');
+      expect(res.body).toHaveProperty('version');
+    });
+
+    it('should have valid timestamp', async () => {
+      const res = await request(app).get('/api/health').expect(200);
+
+      const timestamp = new Date(res.body.timestamp);
+      expect(timestamp).toBeInstanceOf(Date);
+      expect(isNaN(timestamp.getTime())).toBe(false);
+    });
+
+    it('should have positive uptime', async () => {
+      const res = await request(app).get('/api/health').expect(200);
+
+      expect(res.body.uptime).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('POST /api/echo', () => {
+    it('should echo back JSON body', async () => {
+      const testBody = { message: 'Hello', count: 42 };
+
+      const res = await request(app)
+        .post('/api/echo')
+        .send(testBody)
+        .set('Content-Type', 'application/json')
+        .expect('Content-Type', /json/)
+        .expect(200);
+
+      expect(res.body).toHaveProperty('message', 'Echo response');
+      expect(res.body).toHaveProperty('received');
+      expect(res.body.received).toHaveProperty('body');
+      expect(res.body.received.body).toEqual(testBody);
+    });
+
+    it('should include query parameters', async () => {
+      const res = await request(app)
+        .post('/api/echo?foo=bar&num=123')
+        .send({})
+        .expect(200);
+
+      expect(res.body.received.query).toHaveProperty('foo', 'bar');
+      expect(res.body.received.query).toHaveProperty('num', '123');
+    });
+
+    it('should include content-type header', async () => {
+      const res = await request(app)
+        .post('/api/echo')
+        .send({ test: true })
+        .set('Content-Type', 'application/json')
+        .expect(200);
+
+      expect(res.body.received.contentType).toContain('application/json');
+    });
+
+    it('should include timestamp', async () => {
+      const res = await request(app)
+        .post('/api/echo')
+        .send({})
+        .expect(200);
+
+      expect(res.body).toHaveProperty('timestamp');
+      const timestamp = new Date(res.body.timestamp);
+      expect(isNaN(timestamp.getTime())).toBe(false);
+    });
+
+    it('should handle empty body', async () => {
+      const res = await request(app)
+        .post('/api/echo')
+        .expect(200);
+
+      expect(res.body.received.body).toEqual({});
+    });
+  });
+
+  describe('API error handling', () => {
+    it('should return 404 for unknown API routes', async () => {
+      const res = await request(app)
+        .get('/api/unknown')
+        .set('Accept', 'application/json')
+        .expect(404);
+
+      expect(res.body).toHaveProperty('error', 'Not Found');
+    });
+
+    it('should return JSON for API 404', async () => {
+      const res = await request(app)
+        .get('/api/unknown')
+        .set('Accept', 'application/json')
+        .expect('Content-Type', /json/)
+        .expect(404);
+
+      expect(res.body).toHaveProperty('error');
+    });
+  });
+
+  describe('HTTP methods', () => {
+    it('should reject GET on POST-only endpoint', async () => {
+      // /api/echo is POST only, GET should 404
+      const res = await request(app)
+        .get('/api/echo')
+        .expect(404);
+    });
+
+    it('should reject POST on GET-only endpoint', async () => {
+      // /api/health is GET only, POST should 404
+      const res = await request(app)
+        .post('/api/health')
+        .expect(404);
+    });
+  });
+
+  describe('Content negotiation', () => {
+    it('should return JSON for API endpoints', async () => {
+      const res = await request(app)
+        .get('/api/health')
+        .set('Accept', 'application/json')
+        .expect('Content-Type', /json/);
+
+      expect(typeof res.body).toBe('object');
+    });
+  });
+});
