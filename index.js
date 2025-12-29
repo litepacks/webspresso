@@ -19,6 +19,12 @@ const {
   configureAssets, 
   getAssetManager 
 } = require('./src/helpers');
+const {
+  PluginManager,
+  createPluginManager,
+  getPluginManager,
+  resetPluginManager
+} = require('./src/plugin-manager');
 
 module.exports = {
   // Main API
@@ -40,6 +46,12 @@ module.exports = {
   // Asset management
   AssetManager,
   configureAssets,
-  getAssetManager
+  getAssetManager,
+  
+  // Plugin system
+  PluginManager,
+  createPluginManager,
+  getPluginManager,
+  resetPluginManager
 };
 

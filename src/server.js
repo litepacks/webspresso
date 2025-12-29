@@ -9,6 +9,7 @@ const nunjucks = require('nunjucks');
 
 const { mountPages } = require('./file-router');
 const { configureAssets } = require('./helpers');
+const { createPluginManager } = require('./plugin-manager');
 
 /**
  * Get default Helmet configuration
@@ -117,6 +118,7 @@ function default500Html(err, isDev) {
  * @param {boolean} options.logging - Enable request logging (default: isDev)
  * @param {Object|boolean} options.helmet - Helmet configuration (default: auto-configured, false to disable)
  * @param {Object} options.middlewares - Named middleware registry for route configs
+ * @param {Array} options.plugins - Array of plugin definitions
  * @param {Object} options.assets - Asset manager configuration
  * @param {string} options.assets.manifestPath - Path to asset manifest file (Vite, Webpack)
  * @param {string} options.assets.version - Asset version for cache busting
@@ -124,7 +126,7 @@ function default500Html(err, isDev) {
  * @param {Object} options.errorPages - Custom error page handlers
  * @param {Function|string} options.errorPages.notFound - Custom 404 handler or template path
  * @param {Function|string} options.errorPages.serverError - Custom 500 handler or template path
- * @returns {Object} { app, nunjucksEnv }
+ * @returns {Object} { app, nunjucksEnv, pluginManager }
  */
 function createApp(options = {}) {
   const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -138,9 +140,13 @@ function createApp(options = {}) {
     logging = isDev && !isTest,
     helmet: helmetConfig,
     middlewares = {},
+    plugins = [],
     assets: assetsConfig = {},
     errorPages = {}
   } = options;
+  
+  // Create plugin manager
+  const pluginManager = createPluginManager();
   
   // Configure asset manager
   configureAssets({
@@ -213,6 +219,10 @@ function createApp(options = {}) {
     return d.toString();
   });
   
+  // Register plugins (synchronous part)
+  const pluginContext = { app, nunjucksEnv, options };
+  pluginManager.register(plugins, pluginContext);
+  
   // Request logging middleware
   if (logging) {
     app.use((req, res, next) => {
@@ -229,12 +239,36 @@ function createApp(options = {}) {
   if (!isTest) {
     console.log('\nMounting routes:');
   }
-  mountPages(app, {
+  const routeMetadata = mountPages(app, {
     pagesDir,
     nunjucks: nunjucksEnv,
     middlewares,
+    pluginManager,
     silent: isTest
   });
+  
+  // Set route metadata in plugin manager
+  pluginManager.setRoutes(routeMetadata);
+  
+  // Call onRoutesReady hook synchronously (plugins should not be async in this phase)
+  // and mount any custom routes added by plugins
+  for (const [name, plugin] of pluginManager.plugins) {
+    if (typeof plugin.onRoutesReady === 'function') {
+      const ctx = {
+        app,
+        nunjucksEnv,
+        options,
+        routes: pluginManager.routes,
+        usePlugin: (n) => pluginManager.getPluginAPI(n),
+        addHelper: (n, fn) => pluginManager.registeredHelpers.set(n, fn),
+        addFilter: (n, fn) => pluginManager.registeredFilters.set(n, fn),
+        addRoute: (method, path, ...handlers) => {
+          app[method.toLowerCase()](path, ...handlers);
+        }
+      };
+      plugin.onRoutesReady(ctx);
+    }
+  }
   
   // 404 handler
   app.use((req, res) => {
@@ -302,7 +336,7 @@ function createApp(options = {}) {
     }
   });
   
-  return { app, nunjucksEnv };
+  return { app, nunjucksEnv, pluginManager };
 }
 
 // Export for use as library

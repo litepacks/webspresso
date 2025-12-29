@@ -10,6 +10,8 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 - **Built-in i18n**: JSON-based translations with automatic locale detection
 - **Lifecycle Hooks**: Global and route-level hooks for request processing
 - **Template Helpers**: Laravel-inspired helper functions available in templates
+- **Plugin System**: Extensible architecture with version control and inter-plugin communication
+- **Built-in Plugins**: Sitemap generator, analytics integration (Google, Yandex, Bing)
 
 ## Installation
 
@@ -313,7 +315,138 @@ Works with Vite and Webpack manifest formats:
 }
 ```
 
-**Returns:** `{ app, nunjucksEnv }`
+**Returns:** `{ app, nunjucksEnv, pluginManager }`
+
+## Plugin System
+
+Webspresso has a built-in plugin system with version control and dependency management.
+
+### Using Plugins
+
+```javascript
+const { createApp } = require('webspresso');
+const { sitemapPlugin, analyticsPlugin } = require('webspresso/plugins');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  viewsDir: './views',
+  plugins: [
+    sitemapPlugin({
+      hostname: 'https://example.com',
+      exclude: ['/admin/*', '/api/*'],
+      i18n: true,
+      locales: ['en', 'tr']
+    }),
+    analyticsPlugin({
+      google: {
+        measurementId: 'G-XXXXXXXXXX',
+        verificationCode: 'xxxxx'
+      },
+      yandex: {
+        counterId: '12345678',
+        verificationCode: 'xxxxx'
+      },
+      bing: {
+        uetId: '12345678',
+        verificationCode: 'xxxxx'
+      }
+    })
+  ]
+});
+```
+
+### Built-in Plugins
+
+**Sitemap Plugin:**
+- Generates `/sitemap.xml` from routes automatically
+- Excludes dynamic routes and API endpoints
+- Supports i18n with hreflang tags
+- Generates `/robots.txt`
+
+**Analytics Plugin:**
+- Google Analytics (GA4) and Google Ads
+- Google Tag Manager
+- Yandex.Metrika
+- Microsoft/Bing UET
+- Facebook Pixel
+- Verification meta tags for all services
+
+Template helpers from analytics plugin:
+
+```njk
+<head>
+  {{ fsy.verificationTags() | safe }}
+  {{ fsy.analyticsHead() | safe }}
+</head>
+<body>
+  {{ fsy.analyticsBodyOpen() | safe }}
+  ...
+</body>
+```
+
+Individual helpers: `gtag()`, `gtm()`, `gtmNoscript()`, `yandexMetrika()`, `bingUET()`, `facebookPixel()`, `allAnalytics()`
+
+### Creating Custom Plugins
+
+```javascript
+const myPlugin = {
+  name: 'my-plugin',
+  version: '1.0.0',
+  
+  // Optional: depend on other plugins
+  dependencies: {
+    'analytics': '^1.0.0'
+  },
+  
+  // Optional: expose API for other plugins
+  api: {
+    getData() { return this.data; }
+  },
+  
+  // Called during registration
+  register(ctx) {
+    // Access Express app
+    ctx.app.use((req, res, next) => next());
+    
+    // Add template helpers
+    ctx.addHelper('myHelper', () => 'Hello!');
+    
+    // Add Nunjucks filters
+    ctx.addFilter('myFilter', (val) => val.toUpperCase());
+    
+    // Use other plugins
+    const analytics = ctx.usePlugin('analytics');
+  },
+  
+  // Called after all routes are mounted
+  onRoutesReady(ctx) {
+    // Access route metadata
+    console.log('Routes:', ctx.routes);
+    
+    // Add custom routes
+    ctx.addRoute('get', '/my-route', (req, res) => {
+      res.json({ hello: 'world' });
+    });
+  },
+  
+  // Called before server starts
+  onReady(ctx) {
+    console.log('Server ready!');
+  }
+};
+
+// Use as factory function for configuration
+function myPluginFactory(options = {}) {
+  return {
+    name: 'my-plugin',
+    version: '1.0.0',
+    _options: options,
+    register(ctx) {
+      // ctx.options contains the passed options
+    }
+  };
+}
+```
 
 ## File-Based Routing
 

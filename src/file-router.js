@@ -310,10 +310,12 @@ function resolveMiddlewares(middlewareConfig, middlewareRegistry = {}) {
  * @param {string} options.pagesDir - Pages directory path
  * @param {Object} options.nunjucks - Nunjucks environment
  * @param {Object} options.middlewares - Named middleware registry
+ * @param {Object} options.pluginManager - Plugin manager instance
  * @param {boolean} options.silent - Suppress console output
+ * @returns {Array} Route metadata for plugins
  */
 function mountPages(app, options) {
-  const { pagesDir, nunjucks, middlewares = {}, silent = false } = options;
+  const { pagesDir, nunjucks, middlewares = {}, pluginManager = null, silent = false } = options;
   const isDev = process.env.NODE_ENV !== 'production';
   const log = silent ? () => {} : console.log.bind(console);
   
@@ -444,7 +446,10 @@ function mountPages(app, options) {
         const config = loadRouteConfig(route.configPath, isDev);
         const routeHooks = config?.hooks || {};
         
-        // Create context
+        // Create context with plugin helpers merged
+        const baseHelpers = createHelpers({ req, res, locale });
+        const pluginHelpers = pluginManager ? pluginManager.getHelpers() : {};
+        
         const ctx = {
           req,
           res,
@@ -460,7 +465,7 @@ function mountPages(app, options) {
             indexable: true,
             canonical: null
           },
-          fsy: createHelpers({ req, res, locale })
+          fsy: { ...baseHelpers, ...pluginHelpers }
         };
         
         // Execute hooks: onRequest
@@ -554,6 +559,26 @@ function mountPages(app, options) {
     
     log(`  GET ${route.routePath} -> ${route.file}`);
   }
+  
+  // Return route metadata for plugins
+  const routeMetadata = [
+    ...ssrRoutes.map(r => ({
+      type: 'ssr',
+      method: 'get',
+      pattern: r.routePath,
+      file: r.file,
+      isDynamic: r.routePath.includes(':') || r.routePath.includes('*')
+    })),
+    ...apiRoutes.map(r => ({
+      type: 'api',
+      method: r.method,
+      pattern: r.routePath,
+      file: r.file,
+      isDynamic: r.routePath.includes(':') || r.routePath.includes('*')
+    }))
+  ];
+  
+  return routeMetadata;
 }
 
 module.exports = {
