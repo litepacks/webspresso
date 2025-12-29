@@ -8,6 +8,7 @@ const helmet = require('helmet');
 const nunjucks = require('nunjucks');
 
 const { mountPages } = require('./file-router');
+const { configureAssets } = require('./helpers');
 
 /**
  * Get default Helmet configuration
@@ -52,6 +53,62 @@ function getDefaultHelmetConfig(isDev) {
 }
 
 /**
+ * Default 404 page HTML
+ */
+function default404Html() {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <title>404 - Not Found</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
+    .container { text-align: center; }
+    h1 { font-size: 4rem; margin: 0; color: #333; }
+    p { color: #666; margin: 1rem 0; }
+    a { color: #0066cc; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>404</h1>
+    <p>Page not found</p>
+    <a href="/">← Back to Home</a>
+  </div>
+</body>
+</html>`;
+}
+
+/**
+ * Default 500 page HTML
+ */
+function default500Html(err, isDev) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <title>500 - Server Error</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
+    .container { text-align: center; }
+    h1 { font-size: 4rem; margin: 0; color: #333; }
+    p { color: #666; margin: 1rem 0; }
+    pre { background: #fff; padding: 1rem; border-radius: 4px; text-align: left; overflow: auto; max-width: 600px; }
+    a { color: #0066cc; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>500</h1>
+    <p>Internal Server Error</p>
+    ${isDev && err ? `<pre>${err.stack || err.message}</pre>` : ''}
+    <a href="/">← Back to Home</a>
+  </div>
+</body>
+</html>`;
+}
+
+/**
  * Create and configure the Express app
  * @param {Object} options - Configuration options
  * @param {string} options.pagesDir - Path to pages directory
@@ -59,6 +116,14 @@ function getDefaultHelmetConfig(isDev) {
  * @param {string} options.publicDir - Path to public/static directory
  * @param {boolean} options.logging - Enable request logging (default: isDev)
  * @param {Object|boolean} options.helmet - Helmet configuration (default: auto-configured, false to disable)
+ * @param {Object} options.middlewares - Named middleware registry for route configs
+ * @param {Object} options.assets - Asset manager configuration
+ * @param {string} options.assets.manifestPath - Path to asset manifest file (Vite, Webpack)
+ * @param {string} options.assets.version - Asset version for cache busting
+ * @param {string} options.assets.prefix - URL prefix for assets
+ * @param {Object} options.errorPages - Custom error page handlers
+ * @param {Function|string} options.errorPages.notFound - Custom 404 handler or template path
+ * @param {Function|string} options.errorPages.serverError - Custom 500 handler or template path
  * @returns {Object} { app, nunjucksEnv }
  */
 function createApp(options = {}) {
@@ -71,8 +136,17 @@ function createApp(options = {}) {
     viewsDir,
     publicDir,
     logging = isDev && !isTest,
-    helmet: helmetConfig
+    helmet: helmetConfig,
+    middlewares = {},
+    assets: assetsConfig = {},
+    errorPages = {}
   } = options;
+  
+  // Configure asset manager
+  configureAssets({
+    publicDir: publicDir || 'public',
+    ...assetsConfig
+  });
   
   if (!pagesDir) {
     throw new Error('pagesDir is required');
@@ -158,73 +232,73 @@ function createApp(options = {}) {
   mountPages(app, {
     pagesDir,
     nunjucks: nunjucksEnv,
+    middlewares,
     silent: isTest
   });
   
   // 404 handler
   app.use((req, res) => {
     res.status(404);
+    
+    // Custom handler function
+    if (typeof errorPages.notFound === 'function') {
+      return errorPages.notFound(req, res);
+    }
+    
+    // Custom template
+    if (typeof errorPages.notFound === 'string') {
+      try {
+        const html = nunjucksEnv.render(errorPages.notFound, {
+          url: req.url,
+          method: req.method
+        });
+        return res.send(html);
+      } catch (e) {
+        console.error('Error rendering 404 template:', e);
+      }
+    }
+    
+    // Default response
     if (req.accepts('html')) {
-      res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>404 - Not Found</title>
-          <style>
-            body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
-            .container { text-align: center; }
-            h1 { font-size: 4rem; margin: 0; color: #333; }
-            p { color: #666; margin: 1rem 0; }
-            a { color: #0066cc; text-decoration: none; }
-            a:hover { text-decoration: underline; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>404</h1>
-            <p>Page not found</p>
-            <a href="/">← Back to Home</a>
-          </div>
-        </body>
-        </html>
-      `);
+      res.send(default404Html());
     } else {
-      res.json({ error: 'Not Found' });
+      res.json({ error: 'Not Found', status: 404 });
     }
   });
   
   // Error handler
   app.use((err, req, res, next) => {
     console.error('Server error:', err);
-    res.status(500);
+    res.status(err.status || 500);
+    
+    // Custom handler function
+    if (typeof errorPages.serverError === 'function') {
+      return errorPages.serverError(err, req, res);
+    }
+    
+    // Custom template
+    if (typeof errorPages.serverError === 'string') {
+      try {
+        const html = nunjucksEnv.render(errorPages.serverError, {
+          error: isDev ? err : { message: 'Internal Server Error' },
+          status: err.status || 500,
+          isDev
+        });
+        return res.send(html);
+      } catch (e) {
+        console.error('Error rendering 500 template:', e);
+      }
+    }
+    
+    // Default response
     if (req.accepts('html')) {
-      res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>500 - Server Error</title>
-          <style>
-            body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
-            .container { text-align: center; }
-            h1 { font-size: 4rem; margin: 0; color: #333; }
-            p { color: #666; margin: 1rem 0; }
-            pre { background: #fff; padding: 1rem; border-radius: 4px; text-align: left; overflow: auto; max-width: 600px; }
-            a { color: #0066cc; text-decoration: none; }
-            a:hover { text-decoration: underline; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>500</h1>
-            <p>Internal Server Error</p>
-            ${isDev ? `<pre>${err.stack || err.message}</pre>` : ''}
-            <a href="/">← Back to Home</a>
-          </div>
-        </body>
-        </html>
-      `);
+      res.send(default500Html(err, isDev));
     } else {
-      res.json({ error: 'Internal Server Error' });
+      res.json({ 
+        error: 'Internal Server Error', 
+        status: err.status || 500,
+        ...(isDev && { message: err.message, stack: err.stack })
+      });
     }
   });
   

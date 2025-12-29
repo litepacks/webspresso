@@ -12,7 +12,13 @@ const {
   createTranslator,
   detectLocale
 } = require('./src/file-router');
-const { createHelpers, utils } = require('./src/helpers');
+const { 
+  createHelpers, 
+  utils, 
+  AssetManager, 
+  configureAssets, 
+  getAssetManager 
+} = require('./src/helpers');
 
 module.exports = {
   // Main API
@@ -29,6 +35,11 @@ module.exports = {
   
   // Template helpers
   createHelpers,
-  utils
+  utils,
+  
+  // Asset management
+  AssetManager,
+  configureAssets,
+  getAssetManager
 };
 

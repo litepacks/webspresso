@@ -4,6 +4,167 @@
  */
 
 const querystring = require('querystring');
+const fs = require('fs');
+const path = require('path');
+
+/**
+ * Asset Manager - handles asset paths, versioning, and manifest
+ */
+class AssetManager {
+  constructor(options = {}) {
+    this.publicDir = options.publicDir || 'public';
+    this.manifestPath = options.manifestPath || null;
+    this.manifest = null;
+    this.version = options.version || null;
+    this.prefix = options.prefix || '';
+    
+    // Load manifest if path provided
+    if (this.manifestPath) {
+      this.loadManifest();
+    }
+  }
+  
+  /**
+   * Load asset manifest file (Vite, Webpack, etc.)
+   */
+  loadManifest() {
+    try {
+      const fullPath = path.resolve(this.manifestPath);
+      if (fs.existsSync(fullPath)) {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        this.manifest = JSON.parse(content);
+      }
+    } catch (err) {
+      console.warn('Failed to load asset manifest:', err.message);
+      this.manifest = null;
+    }
+  }
+  
+  /**
+   * Resolve asset path from manifest or add version
+   * @param {string} assetPath - Asset path
+   * @returns {string}
+   */
+  resolve(assetPath) {
+    // Remove leading slash for manifest lookup
+    const lookupPath = assetPath.replace(/^\//, '');
+    
+    // Check manifest first
+    if (this.manifest) {
+      // Vite manifest format
+      if (this.manifest[lookupPath]) {
+        const entry = this.manifest[lookupPath];
+        const resolved = typeof entry === 'string' ? entry : entry.file;
+        return this.prefix + '/' + resolved;
+      }
+      
+      // Webpack manifest format (direct mapping)
+      if (this.manifest[assetPath]) {
+        return this.prefix + this.manifest[assetPath];
+      }
+    }
+    
+    // Add version query string if provided
+    let finalPath = assetPath.startsWith('/') ? assetPath : '/' + assetPath;
+    finalPath = this.prefix + finalPath;
+    
+    if (this.version) {
+      const separator = finalPath.includes('?') ? '&' : '?';
+      finalPath += `${separator}v=${this.version}`;
+    }
+    
+    return finalPath;
+  }
+  
+  /**
+   * Get asset URL
+   */
+  asset(assetPath) {
+    return this.resolve(assetPath);
+  }
+  
+  /**
+   * Generate CSS link tag
+   */
+  css(href, attributes = {}) {
+    const resolvedHref = this.resolve(href);
+    const attrs = this.buildAttributes({
+      rel: 'stylesheet',
+      href: resolvedHref,
+      ...attributes
+    });
+    return `<link ${attrs}>`;
+  }
+  
+  /**
+   * Generate JS script tag
+   */
+  js(src, attributes = {}) {
+    const resolvedSrc = this.resolve(src);
+    const attrs = this.buildAttributes({
+      src: resolvedSrc,
+      ...attributes
+    });
+    return `<script ${attrs}></script>`;
+  }
+  
+  /**
+   * Generate image tag
+   */
+  img(src, alt = '', attributes = {}) {
+    const resolvedSrc = this.resolve(src);
+    const attrs = this.buildAttributes({
+      src: resolvedSrc,
+      alt,
+      ...attributes
+    });
+    return `<img ${attrs}>`;
+  }
+  
+  /**
+   * Build HTML attributes string
+   */
+  buildAttributes(attrs) {
+    return Object.entries(attrs)
+      .filter(([_, v]) => v !== undefined && v !== null && v !== false)
+      .map(([k, v]) => v === true ? k : `${k}="${this.escapeHtml(String(v))}"`)
+      .join(' ');
+  }
+  
+  /**
+   * Escape HTML special characters
+   */
+  escapeHtml(str) {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+}
+
+// Global asset manager instance
+let globalAssetManager = null;
+
+/**
+ * Configure global asset manager
+ * @param {Object} options - Asset manager options
+ */
+function configureAssets(options = {}) {
+  globalAssetManager = new AssetManager(options);
+  return globalAssetManager;
+}
+
+/**
+ * Get or create asset manager
+ */
+function getAssetManager() {
+  if (!globalAssetManager) {
+    globalAssetManager = new AssetManager();
+  }
+  return globalAssetManager;
+}
 
 /**
  * Create the fsy helper object bound to the current request context
@@ -217,6 +378,47 @@ function createHelpers(ctx) {
         return regex.test(currentPath);
       }
       return false;
+    },
+
+    // Asset helpers
+    /**
+     * Get asset URL with versioning/manifest support
+     * @param {string} assetPath - Asset path
+     * @returns {string}
+     */
+    asset(assetPath) {
+      return getAssetManager().asset(assetPath);
+    },
+
+    /**
+     * Generate CSS link tag
+     * @param {string} href - CSS file path
+     * @param {Object} attrs - Additional attributes
+     * @returns {string}
+     */
+    css(href, attrs = {}) {
+      return getAssetManager().css(href, attrs);
+    },
+
+    /**
+     * Generate JS script tag
+     * @param {string} src - JS file path
+     * @param {Object} attrs - Additional attributes
+     * @returns {string}
+     */
+    js(src, attrs = {}) {
+      return getAssetManager().js(src, attrs);
+    },
+
+    /**
+     * Generate image tag
+     * @param {string} src - Image file path
+     * @param {string} alt - Alt text
+     * @param {Object} attrs - Additional attributes
+     * @returns {string}
+     */
+    img(src, alt = '', attrs = {}) {
+      return getAssetManager().img(src, alt, attrs);
     }
   };
 }
@@ -270,6 +472,9 @@ const utils = {
 
 module.exports = {
   createHelpers,
-  utils
+  utils,
+  AssetManager,
+  configureAssets,
+  getAssetManager
 };
 

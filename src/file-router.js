@@ -273,15 +273,47 @@ function detectLocale(req) {
 }
 
 /**
+ * Resolve middleware from config - supports both functions and named strings
+ * @param {Array} middlewareConfig - Array of middleware functions or names
+ * @param {Object} middlewareRegistry - Named middleware registry
+ * @returns {Array} Array of resolved middleware functions
+ */
+function resolveMiddlewares(middlewareConfig, middlewareRegistry = {}) {
+  if (!middlewareConfig || !Array.isArray(middlewareConfig)) {
+    return [];
+  }
+  
+  return middlewareConfig.map((mw, index) => {
+    if (typeof mw === 'function') {
+      return mw;
+    }
+    
+    if (typeof mw === 'string') {
+      const resolved = middlewareRegistry[mw];
+      if (!resolved) {
+        throw new Error(`Middleware "${mw}" not found in registry. Available: ${Object.keys(middlewareRegistry).join(', ') || 'none'}`);
+      }
+      if (typeof resolved !== 'function') {
+        throw new Error(`Middleware "${mw}" must be a function`);
+      }
+      return resolved;
+    }
+    
+    throw new Error(`Invalid middleware at index ${index}: must be a function or string name`);
+  });
+}
+
+/**
  * Mount all pages as routes on the Express app
  * @param {Object} app - Express app
  * @param {Object} options - Options
  * @param {string} options.pagesDir - Pages directory path
  * @param {Object} options.nunjucks - Nunjucks environment
+ * @param {Object} options.middlewares - Named middleware registry
  * @param {boolean} options.silent - Suppress console output
  */
 function mountPages(app, options) {
-  const { pagesDir, nunjucks, silent = false } = options;
+  const { pagesDir, nunjucks, middlewares = {}, silent = false } = options;
   const isDev = process.env.NODE_ENV !== 'production';
   const log = silent ? () => {} : console.log.bind(console);
   
@@ -353,6 +385,7 @@ function mountPages(app, options) {
   for (const route of sortRoutes(apiRoutes)) {
     const handler = require(route.fullPath);
     const handlerFn = typeof handler === 'function' ? handler : handler.default || handler.handler;
+    const routeMiddleware = handler.middleware;
     
     if (typeof handlerFn !== 'function') {
       console.warn(`API route ${route.file} does not export a function`);
@@ -371,6 +404,20 @@ function mountPages(app, options) {
         const fn = typeof currentHandler === 'function' 
           ? currentHandler 
           : currentHandler.default || currentHandler.handler;
+        
+        // Run middleware if defined
+        const mwConfig = isDev ? currentHandler.middleware : routeMiddleware;
+        if (mwConfig) {
+          const resolvedMw = resolveMiddlewares(mwConfig, middlewares);
+          for (const mw of resolvedMw) {
+            await new Promise((resolve, reject) => {
+              mw(req, res, (err) => {
+                if (err) reject(err);
+                else resolve();
+              });
+            });
+          }
+        }
         
         await fn(req, res, next);
       } catch (err) {
@@ -429,8 +476,9 @@ function mountPages(app, options) {
         await executeHook(routeHooks, 'beforeMiddleware', ctx);
         
         // Run route middleware
-        if (config?.middleware && Array.isArray(config.middleware)) {
-          for (const mw of config.middleware) {
+        if (config?.middleware) {
+          const resolvedMiddlewares = resolveMiddlewares(config.middleware, middlewares);
+          for (const mw of resolvedMiddlewares) {
             await new Promise((resolve, reject) => {
               mw(req, res, (err) => {
                 if (err) reject(err);
@@ -515,6 +563,7 @@ module.exports = {
   scanDirectory,
   loadI18n,
   createTranslator,
-  detectLocale
+  detectLocale,
+  resolveMiddlewares
 };
 

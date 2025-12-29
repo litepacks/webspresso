@@ -184,11 +184,134 @@ Creates and configures the Express app.
   - `true` or `undefined`: Use default secure configuration
   - `false`: Disable Helmet
   - `Object`: Custom Helmet configuration (merged with defaults)
+- `middlewares` (optional): Named middleware registry for routes
 
-**Default Helmet Configuration:**
-- CSP disabled in development, enabled in production
-- HSTS, XSS protection, frame guard, and other security headers enabled
-- Tailwind CSS inline styles allowed in CSP
+**Example with middlewares:**
+
+```javascript
+const { createApp } = require('webspresso');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  viewsDir: './views',
+  middlewares: {
+    auth: (req, res, next) => {
+      if (!req.session?.user) {
+        return res.redirect('/login');
+      }
+      next();
+    },
+    admin: (req, res, next) => {
+      if (req.session?.user?.role !== 'admin') {
+        return res.status(403).send('Forbidden');
+      }
+      next();
+    },
+    rateLimit: require('express-rate-limit')({ windowMs: 60000, max: 100 })
+  }
+});
+```
+
+Then use in route configs by name:
+
+```javascript
+// pages/admin/index.js
+module.exports = {
+  middleware: ['auth', 'admin'], // Use named middlewares
+  load(req, ctx) { ... }
+};
+
+// pages/api/data.get.js
+module.exports = {
+  middleware: ['auth', 'rateLimit'],
+  handler: (req, res) => res.json({ data: 'protected' })
+};
+```
+
+**Custom Error Pages:**
+
+```javascript
+const { createApp } = require('webspresso');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  viewsDir: './views',
+  errorPages: {
+    // Option 1: Custom handler function
+    notFound: (req, res) => {
+      res.render('errors/404.njk', { url: req.url });
+    },
+    
+    // Option 2: Template path (rendered with Nunjucks)
+    serverError: 'errors/500.njk'
+  }
+});
+```
+
+Error templates receive these variables:
+- `404.njk`: `{ url, method }`
+- `500.njk`: `{ error, status, isDev }`
+
+**Asset Management:**
+
+Configure asset handling with versioning and manifest support:
+
+```javascript
+const { createApp } = require('webspresso');
+const path = require('path');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  viewsDir: './views',
+  publicDir: './public',
+  assets: {
+    // Option 1: Simple versioning (cache busting)
+    version: '1.2.3',  // or process.env.APP_VERSION
+    
+    // Option 2: Manifest file (Vite, Webpack, etc.)
+    manifestPath: path.join(__dirname, 'public/.vite/manifest.json'),
+    
+    // URL prefix for assets
+    prefix: '/static'
+  }
+});
+```
+
+Use asset helpers in templates:
+
+```njk
+{# Using fsy helpers (auto-resolved) #}
+<link rel="stylesheet" href="{{ fsy.asset('/css/style.css') }}">
+
+{# Or generate full HTML tags #}
+{{ fsy.css('/css/style.css') | safe }}
+{{ fsy.js('/js/app.js', { defer: true, type: 'module' }) | safe }}
+{{ fsy.img('/images/logo.png', 'Site Logo', { class: 'logo', loading: 'lazy' }) | safe }}
+```
+
+Asset helpers available in `fsy`:
+- `asset(path)` - Returns versioned/manifest-resolved URL
+- `css(href, attrs)` - Generates `<link>` tag
+- `js(src, attrs)` - Generates `<script>` tag
+- `img(src, alt, attrs)` - Generates `<img>` tag
+
+**Manifest Support:**
+
+Works with Vite and Webpack manifest formats:
+
+```json
+// Vite manifest format (.vite/manifest.json)
+{
+  "css/style.css": { "file": "assets/style-abc123.css" },
+  "js/app.js": { "file": "assets/app-xyz789.js" }
+}
+
+// Webpack manifest format
+{
+  "/css/style.css": "/dist/style.abc123.css",
+  "/js/app.js": "/dist/app.xyz789.js"
+}
+```
 
 **Returns:** `{ app, nunjucksEnv }`
 

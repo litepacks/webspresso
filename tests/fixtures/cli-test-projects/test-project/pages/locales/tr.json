@@ -1,0 +1,13 @@
+{
+  "site": {
+    "name": "Webspresso"
+  },
+  "nav": {
+    "home": "Ana Sayfa"
+  },
+  "footer": {
+    "copyright": "© 2025 Webspresso. Tüm hakları saklıdır."
+  },
+  "welcome": "Webspresso'ya Hoş Geldiniz",
+  "description": "SSR uygulamanızı oluşturmaya başlayın!"
+}
