@@ -1,0 +1,68 @@
+{% extends "layout.njk" %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+  <h1 class="font-display text-4xl font-bold text-ink-900 mb-6">
+    {{ t('about.title') or 'About Webspresso' }}
+  </h1>
+  
+  <div class="prose prose-lg max-w-none">
+    <p class="text-xl text-ink-600 mb-8">
+      {{ t('about.intro') or 'Webspresso is a minimal, production-leaning Node.js SSR framework designed with the "minimal files, maximum output" philosophy.' }}
+    </p>
+    
+    <div class="bg-white rounded-2xl p-8 border border-ink-100 mb-8">
+      <h2 class="font-display text-2xl font-semibold text-ink-900 mb-4">{{ t('about.philosophy.title') or 'Our Philosophy' }}</h2>
+      <ul class="space-y-4 text-ink-600">
+        <li class="flex items-start gap-3">
+          <svg class="w-6 h-6 text-brand-500 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none">
+            <path d="M5 13L9 17L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>{{ t('about.philosophy.item1') or 'File-based routing for intuitive project structure' }}</span>
+        </li>
+        <li class="flex items-start gap-3">
+          <svg class="w-6 h-6 text-brand-500 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none">
+            <path d="M5 13L9 17L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>{{ t('about.philosophy.item2') or 'Blade-like templating with Nunjucks' }}</span>
+        </li>
+        <li class="flex items-start gap-3">
+          <svg class="w-6 h-6 text-brand-500 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none">
+            <path d="M5 13L9 17L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>{{ t('about.philosophy.item3') or 'Built-in i18n with JSON files' }}</span>
+        </li>
+        <li class="flex items-start gap-3">
+          <svg class="w-6 h-6 text-brand-500 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none">
+            <path d="M5 13L9 17L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>{{ t('about.philosophy.item4') or 'CommonJS for minimal friction' }}</span>
+        </li>
+      </ul>
+    </div>
+    
+    <div class="grid sm:grid-cols-2 gap-6">
+      <div class="bg-brand-50 rounded-xl p-6">
+        <h3 class="font-display text-lg font-semibold text-brand-900 mb-2">{{ t('about.stack.title') or 'Tech Stack' }}</h3>
+        <ul class="text-brand-700 space-y-1">
+          <li>• Node.js + Express</li>
+          <li>• Nunjucks templating</li>
+          <li>• Tailwind CSS (CDN)</li>
+          <li>• CommonJS modules</li>
+        </ul>
+      </div>
+      
+      <div class="bg-ink-100 rounded-xl p-6">
+        <h3 class="font-display text-lg font-semibold text-ink-900 mb-2">{{ t('about.features.title') or 'Key Features' }}</h3>
+        <ul class="text-ink-700 space-y-1">
+          <li>• SSR pages + API endpoints</li>
+          <li>• Dynamic route params</li>
+          <li>• Lifecycle hooks</li>
+          <li>• Hot reload in dev</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

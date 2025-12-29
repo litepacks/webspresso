@@ -53,8 +53,10 @@ afterAll(() => {
   }
 });
 
+// CLI tests must run sequentially to avoid directory conflicts
 describe('CLI', () => {
-  describe('Help and Version', () => {
+  // Run all CLI tests sequentially
+  describe.sequential('Help and Version', () => {
     it('should display help', () => {
       const result = runCli('--help');
       expect(result.stdout).toContain('Webspresso CLI');
@@ -81,8 +83,13 @@ describe('CLI', () => {
     });
   });
 
-  describe('New Project Command', () => {
+  describe.sequential('New Project Command', () => {
     const projectName = 'test-project';
+
+    beforeEach(() => {
+      // Clean up before each test to ensure clean state
+      cleanup(projectName);
+    });
 
     afterEach(() => {
       cleanup(projectName);
@@ -261,20 +268,25 @@ describe('CLI', () => {
     });
   });
 
-  describe('New Project without Tailwind', () => {
+  describe.sequential('New Project without Tailwind', () => {
     const projectName = 'test-no-tailwind';
+    let projectPath;
+    let createResult;
 
-    afterEach(() => {
+    beforeAll(() => {
+      // Clean up and create project once for all tests
+      cleanup(projectName);
+      createResult = runCli(`new ${projectName} --no-tailwind`);
+      projectPath = path.join(TEST_DIR, projectName);
+    });
+
+    afterAll(() => {
       cleanup(projectName);
     });
 
     it('should create project without Tailwind when --no-tailwind is used', () => {
-      const result = runCli(`new ${projectName} --no-tailwind`);
-      
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).not.toContain('Tailwind CSS setup');
-
-      const projectPath = path.join(TEST_DIR, projectName);
+      expect(createResult.exitCode).toBe(0);
+      expect(createResult.stdout).not.toContain('Tailwind CSS setup');
       
       // Should NOT have Tailwind files
       expect(fs.existsSync(path.join(projectPath, 'tailwind.config.js'))).toBe(false);
@@ -283,9 +295,7 @@ describe('CLI', () => {
     });
 
     it('should use CDN in layout when --no-tailwind', () => {
-      runCli(`new ${projectName} --no-tailwind`);
-      
-      const layoutPath = path.join(TEST_DIR, projectName, 'views', 'layout.njk');
+      const layoutPath = path.join(projectPath, 'views', 'layout.njk');
       const layoutContent = fs.readFileSync(layoutPath, 'utf-8');
       
       expect(layoutContent).toContain('cdn.tailwindcss.com');
@@ -293,9 +303,7 @@ describe('CLI', () => {
     });
 
     it('should have simpler scripts without Tailwind', () => {
-      runCli(`new ${projectName} --no-tailwind`);
-      
-      const packagePath = path.join(TEST_DIR, projectName, 'package.json');
+      const packagePath = path.join(projectPath, 'package.json');
       const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
       
       expect(packageJson.scripts.dev).not.toContain('watch:css');
@@ -304,7 +312,7 @@ describe('CLI', () => {
     });
   });
 
-  describe('Error Handling', () => {
+  describe.sequential('Error Handling', () => {
     it('should fail if project directory already exists', () => {
       const projectName = 'existing-project';
       const projectPath = path.join(TEST_DIR, projectName);
@@ -322,10 +330,12 @@ describe('CLI', () => {
     });
   });
 
-  describe('Add Tailwind Command', () => {
+  describe.sequential('Add Tailwind Command', () => {
     const projectName = 'test-add-tailwind';
 
     beforeEach(() => {
+      // Clean up first to ensure clean state
+      cleanup(projectName);
       // Create a project without Tailwind first
       runCli(`new ${projectName} --no-tailwind`);
     });

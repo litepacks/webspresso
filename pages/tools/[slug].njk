@@ -1,0 +1,73 @@
+{% extends "layout.njk" %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+  <!-- Breadcrumb -->
+  <nav class="flex items-center gap-2 text-sm text-ink-500 mb-8">
+    <a href="/" class="hover:text-ink-700">{{ t('nav.home') or 'Home' }}</a>
+    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none">
+      <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <a href="/tools" class="hover:text-ink-700">{{ t('nav.tools') or 'Tools' }}</a>
+    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none">
+      <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="text-ink-900">{{ tool.name }}</span>
+  </nav>
+  
+  <!-- Tool Header -->
+  <div class="bg-white rounded-2xl p-8 border border-ink-100 mb-8">
+    <div class="flex items-start gap-6">
+      <div class="w-16 h-16 bg-{{ tool.color or 'brand' }}-100 rounded-2xl flex items-center justify-center flex-shrink-0">
+        <span class="text-3xl">{{ tool.icon or '🔧' }}</span>
+      </div>
+      <div>
+        <h1 class="font-display text-3xl font-bold text-ink-900 mb-2">
+          {{ tool.name }}
+        </h1>
+        <p class="text-lg text-ink-600">
+          {{ tool.description }}
+        </p>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Tool Interface Placeholder -->
+  <div class="bg-white rounded-2xl border border-ink-100 overflow-hidden">
+    <div class="border-b border-ink-100 px-6 py-4 bg-ink-50">
+      <h2 class="font-display font-semibold text-ink-900">{{ t('tool.interface') or 'Tool Interface' }}</h2>
+    </div>
+    <div class="p-8">
+      <div class="text-center py-16">
+        <div class="w-20 h-20 bg-ink-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <span class="text-4xl">{{ tool.icon or '🔧' }}</span>
+        </div>
+        <h3 class="font-display text-xl font-semibold text-ink-900 mb-2">
+          {{ t('tool.comingSoon') or 'Coming Soon' }}
+        </h3>
+        <p class="text-ink-600 max-w-md mx-auto">
+          {{ t('tool.placeholder') or 'This tool interface is under development. Check back soon!' }}
+        </p>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Related Tools -->
+  {% if relatedTools and relatedTools.length > 0 %}
+  <div class="mt-12">
+    <h2 class="font-display text-2xl font-bold text-ink-900 mb-6">{{ t('tool.related') or 'Related Tools' }}</h2>
+    <div class="grid sm:grid-cols-3 gap-4">
+      {% for related in relatedTools %}
+      <a href="{{ fsy.url('/tools/' + related.slug) }}" class="group bg-white rounded-xl p-4 border border-ink-100 hover:border-brand-300 transition-all">
+        <div class="flex items-center gap-3">
+          <span class="text-xl">{{ related.icon }}</span>
+          <span class="font-medium text-ink-900 group-hover:text-brand-600 transition-colors">{{ related.name }}</span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+

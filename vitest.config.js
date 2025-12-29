@@ -17,6 +17,15 @@ export default defineConfig({
     // Exclude patterns
     exclude: ['node_modules', 'dist'],
     
+    // Use forks pool instead of threads to avoid abort issues with child processes
+    // CLI tests use execSync which can cause worker thread crashes
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleFork: true  // Run all tests in a single fork
+      }
+    },
+    
     // Coverage configuration
     coverage: {
       provider: 'v8',
