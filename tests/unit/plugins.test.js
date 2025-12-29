@@ -548,3 +548,169 @@ describe('Plugin Integration', () => {
   });
 });
 
+describe('Dashboard Plugin', () => {
+  const dashboardPlugin = require('../../plugins/dashboard');
+  const fixturesDir = path.join(__dirname, '../fixtures');
+
+  it('should create plugin with default options', () => {
+    const plugin = dashboardPlugin();
+
+    expect(plugin.name).toBe('dashboard');
+    expect(plugin.version).toBe('1.0.0');
+    expect(plugin.onRoutesReady).toBeTypeOf('function');
+  });
+
+  it('should be disabled in production by default', () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+
+    const plugin = dashboardPlugin();
+    const mockCtx = {
+      app: { get: vi.fn() },
+      routes: [],
+      options: {},
+      addRoute: vi.fn()
+    };
+
+    plugin.onRoutesReady(mockCtx);
+
+    // Should not add any routes in production
+    expect(mockCtx.addRoute).not.toHaveBeenCalled();
+
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it('should register dashboard route in development', () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+
+    const plugin = dashboardPlugin();
+    const addedRoutes = [];
+    const mockCtx = {
+      app: {},
+      routes: [
+        { type: 'ssr', method: 'get', pattern: '/', file: 'index.njk', isDynamic: false }
+      ],
+      options: {},
+      addRoute: (method, path, handler) => addedRoutes.push({ method, path })
+    };
+
+    plugin.onRoutesReady(mockCtx);
+
+    // Should add dashboard routes
+    expect(addedRoutes).toContainEqual({ method: 'get', path: '/_webspresso' });
+    expect(addedRoutes).toContainEqual({ method: 'get', path: '/_webspresso/api/routes' });
+    expect(addedRoutes).toContainEqual({ method: 'get', path: '/_webspresso/api/plugins' });
+    expect(addedRoutes).toContainEqual({ method: 'get', path: '/_webspresso/api/config' });
+
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it('should allow custom dashboard path', () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+
+    const plugin = dashboardPlugin({ path: '/_admin' });
+    const addedRoutes = [];
+    const mockCtx = {
+      app: {},
+      routes: [],
+      options: {},
+      addRoute: (method, path, handler) => addedRoutes.push({ method, path })
+    };
+
+    plugin.onRoutesReady(mockCtx);
+
+    expect(addedRoutes).toContainEqual({ method: 'get', path: '/_admin' });
+    expect(addedRoutes).toContainEqual({ method: 'get', path: '/_admin/api/routes' });
+
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it('should force enable in production when enabled option is true', () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+
+    const plugin = dashboardPlugin({ enabled: true });
+    const addedRoutes = [];
+    const mockCtx = {
+      app: {},
+      routes: [],
+      options: {},
+      addRoute: (method, path, handler) => addedRoutes.push({ method, path })
+    };
+
+    plugin.onRoutesReady(mockCtx);
+
+    // Should add routes even in production
+    expect(addedRoutes.length).toBeGreaterThan(0);
+
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it('should integrate with createApp', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+
+    const { app, pluginManager } = createApp({
+      pagesDir: path.join(fixturesDir, 'pages'),
+      viewsDir: path.join(fixturesDir, 'views'),
+      plugins: [dashboardPlugin()]
+    });
+
+    expect(pluginManager.hasPlugin('dashboard')).toBe(true);
+
+    // Test dashboard endpoint
+    const res = await request(app)
+      .get('/_webspresso')
+      .expect(200);
+
+    expect(res.text).toContain('Webspresso Dashboard');
+    expect(res.text).toContain('mithril');
+
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it('should return JSON for API routes endpoint', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+
+    const { app } = createApp({
+      pagesDir: path.join(fixturesDir, 'pages'),
+      viewsDir: path.join(fixturesDir, 'views'),
+      plugins: [dashboardPlugin()]
+    });
+
+    const res = await request(app)
+      .get('/_webspresso/api/routes')
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    expect(Array.isArray(res.body)).toBe(true);
+
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it('should return JSON for API config endpoint', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+
+    const { app } = createApp({
+      pagesDir: path.join(fixturesDir, 'pages'),
+      viewsDir: path.join(fixturesDir, 'views'),
+      plugins: [dashboardPlugin()]
+    });
+
+    const res = await request(app)
+      .get('/_webspresso/api/config')
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    expect(res.body).toHaveProperty('env');
+    expect(res.body).toHaveProperty('i18n');
+    expect(res.body).toHaveProperty('server');
+
+    process.env.NODE_ENV = originalEnv;
+  });
+});
+

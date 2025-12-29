@@ -11,7 +11,7 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 - **Lifecycle Hooks**: Global and route-level hooks for request processing
 - **Template Helpers**: Laravel-inspired helper functions available in templates
 - **Plugin System**: Extensible architecture with version control and inter-plugin communication
-- **Built-in Plugins**: Sitemap generator, analytics integration (Google, Yandex, Bing)
+- **Built-in Plugins**: Development dashboard, sitemap generator, analytics integration (Google, Yandex, Bing)
 
 ## Installation
 
@@ -325,12 +325,13 @@ Webspresso has a built-in plugin system with version control and dependency mana
 
 ```javascript
 const { createApp } = require('webspresso');
-const { sitemapPlugin, analyticsPlugin } = require('webspresso/plugins');
+const { sitemapPlugin, analyticsPlugin, dashboardPlugin } = require('webspresso/plugins');
 
 const { app } = createApp({
   pagesDir: './pages',
   viewsDir: './views',
   plugins: [
+    dashboardPlugin(),  // Dev dashboard at /_webspresso
     sitemapPlugin({
       hostname: 'https://example.com',
       exclude: ['/admin/*', '/api/*'],
@@ -356,6 +357,28 @@ const { app } = createApp({
 ```
 
 ### Built-in Plugins
+
+**Dashboard Plugin:**
+- Development dashboard at `/_webspresso`
+- Monitor all routes (SSR pages and API endpoints)
+- View loaded plugins and configuration
+- Filter and search routes
+- Only active in development mode (disabled in production)
+
+```javascript
+const { dashboardPlugin } = require('webspresso/plugins');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  plugins: [
+    dashboardPlugin()  // Available at /_webspresso in dev mode
+  ]
+});
+```
+
+Options:
+- `path` - Custom dashboard path (default: `/_webspresso`)
+- `enabled` - Force enable/disable (default: auto based on NODE_ENV)
 
 **Sitemap Plugin:**
 - Generates `/sitemap.xml` from routes automatically
