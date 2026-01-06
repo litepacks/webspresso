@@ -7,6 +7,7 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 - **File-Based Routing**: Create pages by adding `.njk` files to a `pages/` directory
 - **Dynamic Routes**: Use `[param]` for dynamic params and `[...rest]` for catch-all routes
 - **API Endpoints**: Add `.js` files to `pages/api/` with method suffixes (e.g., `health.get.js`)
+- **Schema Validation**: Zod-based request validation for body, params, and query
 - **Built-in i18n**: JSON-based translations with automatic locale detection
 - **Lifecycle Hooks**: Global and route-level hooks for request processing
 - **Template Helpers**: Laravel-inspired helper functions available in templates
@@ -493,6 +494,75 @@ Create `.js` files in `pages/api/` with optional method suffixes:
 | `pages/api/health.get.js` | `GET /api/health` |
 | `pages/api/echo.post.js` | `POST /api/echo` |
 | `pages/api/users/[id].get.js` | `GET /api/users/:id` |
+
+**Basic API Handler:**
+
+```javascript
+// pages/api/health.get.js
+module.exports = async function handler(req, res) {
+  res.json({ status: 'ok' });
+};
+```
+
+**With Schema Validation:**
+
+```javascript
+// pages/api/posts.post.js
+module.exports = {
+  schema: ({ z }) => ({
+    body: z.object({
+      title: z.string().min(3).max(100),
+      content: z.string(),
+      tags: z.array(z.string()).optional()
+    }),
+    query: z.object({
+      draft: z.coerce.boolean().default(false)
+    })
+  }),
+
+  async handler(req, res) {
+    // Validated & parsed data available in req.input
+    const { title, content, tags } = req.input.body;
+    const { draft } = req.input.query;
+    
+    // Original req.body, req.query remain untouched
+    res.json({ success: true, title, draft });
+  }
+};
+```
+
+**Schema Options:**
+
+| Key | Description |
+|-----|-------------|
+| `body` | Validates `req.body` (POST/PUT/PATCH) |
+| `params` | Validates route parameters (e.g., `:id`) |
+| `query` | Validates query string parameters |
+| `response` | Response schema (for documentation, not enforced) |
+
+All schemas use [Zod](https://zod.dev) for validation. Invalid requests throw a `ZodError` which can be caught by error handlers.
+
+**Dynamic Route with Params Validation:**
+
+```javascript
+// pages/api/users/[id].get.js
+module.exports = {
+  schema: ({ z }) => ({
+    params: z.object({
+      id: z.string().uuid()
+    }),
+    query: z.object({
+      fields: z.string().optional()
+    })
+  }),
+
+  async handler(req, res) {
+    const { id } = req.input.params;  // Validated UUID
+    const user = await getUser(id);
+    res.json(user);
+  }
+};
+```
 
 ### Route Config
 

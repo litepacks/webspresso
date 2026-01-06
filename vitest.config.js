@@ -31,7 +31,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       reportsDirectory: './coverage',
-      include: ['src/**/*.js'],
+      include: ['src/**/*.js', 'utils/**/*.js', 'core/**/*.js'],
       exclude: ['src/**/*.test.js', 'node_modules']
     },
     

@@ -217,3 +217,4 @@ function sitemapPlugin(options = {}) {
 
 module.exports = sitemapPlugin;
 
+
