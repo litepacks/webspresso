@@ -1,6 +1,6 @@
 {
   "name": "webspresso",
-  "version": "0.0.5",
+  "version": "0.0.7",
   "description": "Minimal, production-ready SSR framework for Node.js with file-based routing, Nunjucks templating, built-in i18n, and CLI tooling",
   "main": "index.js",
   "bin": {
@@ -18,7 +18,9 @@
     "express",
     "file-based-routing",
     "i18n",
-    "framework"
+    "framework",
+    "orm",
+    "knex"
   ],
   "author": "cond",
   "license": "MIT",
@@ -38,19 +40,38 @@
     "express": "^4.18.2",
     "helmet": "^7.2.0",
     "inquirer": "^8.2.6",
+    "knex": "^3.1.0",
     "nunjucks": "^3.2.4",
     "zod": "^3.23.0"
   },
   "peerDependencies": {
-    "dotenv": "^16.0.0"
+    "dotenv": "^16.0.0",
+    "pg": "^8.0.0",
+    "mysql2": "^3.0.0",
+    "better-sqlite3": "^9.0.0",
+    "@faker-js/faker": "^9.0.0"
   },
   "peerDependenciesMeta": {
     "dotenv": {
       "optional": true
+    },
+    "pg": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    },
+    "better-sqlite3": {
+      "optional": true
+    },
+    "@faker-js/faker": {
+      "optional": true
     }
   },
   "devDependencies": {
+    "@faker-js/faker": "^9.3.0",
     "@vitest/coverage-v8": "^1.2.0",
+    "better-sqlite3": "^11.0.0",
     "chokidar": "^3.5.3",
     "dotenv": "^16.3.1",
     "release-it": "^17.11.0",

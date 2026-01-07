@@ -785,6 +785,261 @@ module.exports = {
     }
   });
 
+// ============================================================================
+// Database Commands
+// ============================================================================
+
+/**
+ * Load database configuration
+ * @param {string} [configPath] - Custom config path
+ * @returns {Object} Database config
+ */
+function loadDbConfig(configPath) {
+  const defaultPaths = ['webspresso.db.js', 'knexfile.js'];
+  const paths = configPath ? [configPath, ...defaultPaths] : defaultPaths;
+  
+  for (const p of paths) {
+    const fullPath = path.resolve(process.cwd(), p);
+    if (fs.existsSync(fullPath)) {
+      return { config: require(fullPath), path: fullPath };
+    }
+  }
+  
+  console.error('❌ Database config not found. Create webspresso.db.js or knexfile.js');
+  process.exit(1);
+}
+
+/**
+ * Create database instance from config
+ * @param {Object} config - Database config
+ * @param {string} [env] - Environment name
+ * @returns {Promise<Object>} Database instance
+ */
+async function createDbInstance(config, env) {
+  const environment = env || process.env.NODE_ENV || 'development';
+  const dbConfig = config[environment] || config;
+  
+  // Dynamic import knex
+  let knex;
+  try {
+    knex = require('knex');
+  } catch {
+    console.error('❌ Knex not installed. Run: npm install knex');
+    process.exit(1);
+  }
+  
+  return knex(dbConfig);
+}
+
+// db:migrate command
+program
+  .command('db:migrate')
+  .description('Run pending database migrations')
+  .option('-e, --env <environment>', 'Environment (development, production)', 'development')
+  .option('-c, --config <path>', 'Path to database config file')
+  .action(async (options) => {
+    const { config, path: configPath } = loadDbConfig(options.config);
+    console.log(`\n📦 Using config: ${configPath}`);
+    console.log(`   Environment: ${options.env}\n`);
+    
+    const knex = await createDbInstance(config, options.env);
+    
+    try {
+      const migrationConfig = config.migrations || {};
+      const [batch, migrations] = await knex.migrate.latest(migrationConfig);
+      
+      if (migrations.length === 0) {
+        console.log('✅ Already up to date.\n');
+      } else {
+        console.log(`Running migrations (batch ${batch}):`);
+        for (const m of migrations) {
+          console.log(`  → ${m}`);
+        }
+        console.log(`\n✅ Done. ${migrations.length} migration(s) completed.\n`);
+      }
+    } catch (err) {
+      console.error('❌ Migration failed:', err.message);
+      process.exit(1);
+    } finally {
+      await knex.destroy();
+    }
+  });
+
+// db:rollback command
+program
+  .command('db:rollback')
+  .description('Rollback the last batch of migrations')
+  .option('-e, --env <environment>', 'Environment (development, production)', 'development')
+  .option('-c, --config <path>', 'Path to database config file')
+  .option('-a, --all', 'Rollback all migrations')
+  .action(async (options) => {
+    const { config, path: configPath } = loadDbConfig(options.config);
+    console.log(`\n📦 Using config: ${configPath}`);
+    console.log(`   Environment: ${options.env}\n`);
+    
+    const knex = await createDbInstance(config, options.env);
+    
+    try {
+      const migrationConfig = {
+        ...(config.migrations || {}),
+        ...(options.all ? { all: true } : {}),
+      };
+      
+      const [batch, migrations] = await knex.migrate.rollback(migrationConfig);
+      
+      if (migrations.length === 0) {
+        console.log('✅ Nothing to rollback.\n');
+      } else {
+        console.log(`Rolling back${options.all ? ' all' : ''} migrations:`);
+        for (const m of migrations) {
+          console.log(`  ← ${m}`);
+        }
+        console.log(`\n✅ Done. ${migrations.length} migration(s) rolled back.\n`);
+      }
+    } catch (err) {
+      console.error('❌ Rollback failed:', err.message);
+      process.exit(1);
+    } finally {
+      await knex.destroy();
+    }
+  });
+
+// db:status command
+program
+  .command('db:status')
+  .description('Show migration status')
+  .option('-e, --env <environment>', 'Environment (development, production)', 'development')
+  .option('-c, --config <path>', 'Path to database config file')
+  .action(async (options) => {
+    const { config, path: configPath } = loadDbConfig(options.config);
+    console.log(`\n📦 Using config: ${configPath}`);
+    console.log(`   Environment: ${options.env}\n`);
+    
+    const knex = await createDbInstance(config, options.env);
+    
+    try {
+      const migrationConfig = config.migrations || {};
+      const [completed, pending] = await knex.migrate.list(migrationConfig);
+      
+      console.log('Migration Status');
+      console.log('================\n');
+      
+      // Sort all migrations by name
+      const all = [
+        ...completed.map(m => ({ name: m.name || m, completed: true })),
+        ...pending.map(m => ({ name: m.name || m, completed: false })),
+      ].sort((a, b) => a.name.localeCompare(b.name));
+      
+      if (all.length === 0) {
+        console.log('  No migrations found.\n');
+      } else {
+        for (const m of all) {
+          const status = m.completed ? '✓' : '○';
+          const suffix = m.completed ? '' : ' (pending)';
+          console.log(`  ${status} ${m.name}${suffix}`);
+        }
+        console.log(`\n  Total: ${all.length} (${completed.length} completed, ${pending.length} pending)\n`);
+      }
+    } catch (err) {
+      console.error('❌ Failed to get status:', err.message);
+      process.exit(1);
+    } finally {
+      await knex.destroy();
+    }
+  });
+
+// db:make command
+program
+  .command('db:make <name>')
+  .description('Create a new migration file')
+  .option('-c, --config <path>', 'Path to database config file')
+  .option('-m, --model <model>', 'Generate migration from model (requires models directory)')
+  .action(async (name, options) => {
+    const { config, path: configPath } = loadDbConfig(options.config);
+    console.log(`\n📦 Using config: ${configPath}\n`);
+    
+    const migrationDir = config.migrations?.directory || './migrations';
+    
+    // Ensure migrations directory exists
+    if (!fs.existsSync(migrationDir)) {
+      fs.mkdirSync(migrationDir, { recursive: true });
+      console.log(`Created directory: ${migrationDir}`);
+    }
+    
+    // Generate filename with timestamp
+    const now = new Date();
+    const timestamp = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+      '_',
+      String(now.getHours()).padStart(2, '0'),
+      String(now.getMinutes()).padStart(2, '0'),
+      String(now.getSeconds()).padStart(2, '0'),
+    ].join('');
+    
+    const filename = `${timestamp}_${name}.js`;
+    const filepath = path.join(migrationDir, filename);
+    
+    let content;
+    
+    if (options.model) {
+      // Try to load model and generate migration from schema
+      const modelsDir = config.models || './models';
+      const modelPath = path.resolve(process.cwd(), modelsDir, `${options.model}.js`);
+      
+      if (fs.existsSync(modelPath)) {
+        try {
+          const model = require(modelPath);
+          const { scaffoldMigration } = require('../core/orm/migrations/scaffold');
+          content = scaffoldMigration(model);
+          console.log(`Generated migration from model: ${options.model}`);
+        } catch (err) {
+          console.warn(`⚠️  Could not generate from model: ${err.message}`);
+          console.log('   Creating empty migration instead.\n');
+          content = getDefaultMigrationContent(name);
+        }
+      } else {
+        console.warn(`⚠️  Model not found: ${modelPath}`);
+        console.log('   Creating empty migration instead.\n');
+        content = getDefaultMigrationContent(name);
+      }
+    } else {
+      content = getDefaultMigrationContent(name);
+    }
+    
+    fs.writeFileSync(filepath, content);
+    console.log(`✅ Created: ${filepath}\n`);
+  });
+
+/**
+ * Get default migration content
+ * @param {string} name - Migration name
+ * @returns {string}
+ */
+function getDefaultMigrationContent(name) {
+  // Parse table name from migration name (e.g., create_users_table -> users)
+  const match = name.match(/^create_(\w+)_table$/);
+  const tableName = match ? match[1] : 'table_name';
+  
+  return `/**
+ * Migration: ${name}
+ */
+
+exports.up = function(knex) {
+  return knex.schema.createTable('${tableName}', (table) => {
+    table.bigIncrements('id').primary();
+    // Add your columns here
+    table.timestamps(true, true);
+  });
+};
+
+exports.down = function(knex) {
+  return knex.schema.dropTableIfExists('${tableName}');
+};
+`;
+}
+
 // Parse arguments
 program.parse();
 

@@ -26,6 +26,12 @@ const {
   resetPluginManager
 } = require('./src/plugin-manager');
 
+// ORM exports (lazy loaded)
+const orm = require('./core/orm');
+
+// Built-in plugins
+const { schemaExplorerPlugin } = require('./plugins');
+
 module.exports = {
   // Main API
   createApp,
@@ -52,6 +58,12 @@ module.exports = {
   PluginManager,
   createPluginManager,
   getPluginManager,
-  resetPluginManager
+  resetPluginManager,
+  
+  // ORM
+  ...orm,
+  
+  // Plugins
+  schemaExplorerPlugin,
 };
 

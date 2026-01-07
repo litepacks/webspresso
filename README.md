@@ -691,6 +691,500 @@ module.exports = {
 | `DEFAULT_LOCALE` | `en` | Default locale |
 | `SUPPORTED_LOCALES` | `en` | Comma-separated locales |
 | `BASE_URL` | `http://localhost:3000` | Base URL for canonical URLs |
+| `DATABASE_URL` | - | Database connection string (for ORM) |
+
+## ORM (Database)
+
+Webspresso includes a minimal, Eloquent-inspired ORM built on Knex with Zod schemas as the single source of truth.
+
+### Quick Start
+
+```javascript
+const { z } = require('zod');
+const { createSchemaHelpers, defineModel, createDatabase } = require('webspresso');
+
+// 1. Create schema helpers
+const zdb = createSchemaHelpers(z);
+
+// 2. Define your schema with database metadata
+const UserSchema = z.object({
+  id: zdb.id(),
+  email: zdb.string({ unique: true, index: true }),
+  name: zdb.string({ maxLength: 100 }),
+  status: zdb.enum(['active', 'inactive'], { default: 'active' }),
+  company_id: zdb.foreignKey('companies', { nullable: true }),
+  created_at: zdb.timestamp({ auto: 'create' }),
+  updated_at: zdb.timestamp({ auto: 'update' }),
+  deleted_at: zdb.timestamp({ nullable: true }),
+});
+
+// 3. Define your model
+const User = defineModel({
+  name: 'User',
+  table: 'users',
+  schema: UserSchema,
+  relations: {
+    company: { type: 'belongsTo', model: () => Company, foreignKey: 'company_id' },
+    posts: { type: 'hasMany', model: () => Post, foreignKey: 'user_id' },
+  },
+  scopes: { softDelete: true, timestamps: true },
+});
+
+// 4. Create database and use
+const db = createDatabase({
+  client: 'pg',
+  connection: process.env.DATABASE_URL,
+});
+
+const UserRepo = db.createRepository(User);
+const user = await UserRepo.findById(1, { with: ['company', 'posts'] });
+```
+
+### Schema Helpers (zdb)
+
+The `zdb` helpers wrap Zod schemas with database column metadata:
+
+| Helper | Description | Options |
+|--------|-------------|---------|
+| `zdb.id()` | Primary key (bigint, auto-increment) | |
+| `zdb.uuid()` | UUID primary key | |
+| `zdb.string(opts)` | VARCHAR column | `maxLength`, `unique`, `index`, `nullable` |
+| `zdb.text(opts)` | TEXT column | `nullable` |
+| `zdb.integer(opts)` | INTEGER column | `nullable`, `default` |
+| `zdb.bigint(opts)` | BIGINT column | `nullable` |
+| `zdb.float(opts)` | FLOAT column | `nullable` |
+| `zdb.decimal(opts)` | DECIMAL column | `precision`, `scale`, `nullable` |
+| `zdb.boolean(opts)` | BOOLEAN column | `default`, `nullable` |
+| `zdb.date(opts)` | DATE column | `nullable` |
+| `zdb.datetime(opts)` | DATETIME column | `nullable` |
+| `zdb.timestamp(opts)` | TIMESTAMP column | `auto: 'create'\|'update'`, `nullable` |
+| `zdb.json(opts)` | JSON column | `nullable` |
+| `zdb.enum(values, opts)` | ENUM column | `default`, `nullable` |
+| `zdb.foreignKey(table, opts)` | Foreign key (bigint) | `referenceColumn`, `nullable` |
+| `zdb.foreignUuid(table, opts)` | Foreign key (uuid) | `referenceColumn`, `nullable` |
+
+### Model Definition
+
+```javascript
+const User = defineModel({
+  name: 'User',           // Model name
+  table: 'users',         // Database table
+  schema: UserSchema,     // Zod schema
+  primaryKey: 'id',       // Primary key column (default: 'id')
+  
+  relations: {
+    // belongsTo: this model has foreign key
+    company: {
+      type: 'belongsTo',
+      model: () => Company,
+      foreignKey: 'company_id',
+    },
+    // hasMany: related model has foreign key
+    posts: {
+      type: 'hasMany',
+      model: () => Post,
+      foreignKey: 'user_id',
+    },
+    // hasOne: like hasMany but returns single record
+    profile: {
+      type: 'hasOne',
+      model: () => Profile,
+      foreignKey: 'user_id',
+    },
+  },
+  
+  scopes: {
+    softDelete: true,     // Use deleted_at column
+    timestamps: true,     // Auto-manage created_at/updated_at
+    tenant: 'tenant_id',  // Multi-tenant column (optional)
+  },
+});
+```
+
+### Repository API
+
+```javascript
+const db = createDatabase({ client: 'pg', connection: '...' });
+const UserRepo = db.createRepository(User);
+
+// Find by ID (with eager loading)
+const user = await UserRepo.findById(1, { with: ['company', 'posts'] });
+
+// Find one by conditions
+const admin = await UserRepo.findOne({ email: 'admin@example.com' });
+
+// Find all
+const users = await UserRepo.findAll({ with: ['company'] });
+
+// Create
+const newUser = await UserRepo.create({
+  email: 'new@example.com',
+  name: 'New User',
+});
+
+// Create many
+const users = await UserRepo.createMany([
+  { email: 'user1@test.com', name: 'User 1' },
+  { email: 'user2@test.com', name: 'User 2' },
+]);
+
+// Update
+const updated = await UserRepo.update(1, { name: 'Updated Name' });
+
+// Update where
+await UserRepo.updateWhere({ status: 'inactive' }, { status: 'banned' });
+
+// Delete (soft delete if enabled)
+await UserRepo.delete(1);
+
+// Force delete (permanent)
+await UserRepo.forceDelete(1);
+
+// Restore soft-deleted
+await UserRepo.restore(1);
+
+// Count
+const count = await UserRepo.count({ status: 'active' });
+
+// Exists
+const exists = await UserRepo.exists({ email: 'test@example.com' });
+```
+
+### Query Builder
+
+```javascript
+const users = await UserRepo.query()
+  .where({ status: 'active' })
+  .where('created_at', '>', '2024-01-01')
+  .whereIn('role', ['admin', 'moderator'])
+  .whereNotNull('email_verified_at')
+  .orderBy('name', 'asc')
+  .orderBy('created_at', 'desc')
+  .limit(10)
+  .offset(20)
+  .with('company', 'posts')
+  .list();
+
+// First result
+const user = await UserRepo.query()
+  .where({ email: 'admin@example.com' })
+  .first();
+
+// Count
+const count = await UserRepo.query()
+  .where({ status: 'active' })
+  .count();
+
+// Pagination
+const result = await UserRepo.query()
+  .where({ status: 'active' })
+  .orderBy('created_at', 'desc')
+  .paginate(1, 20);  // page 1, 20 per page
+
+// result = { data: [...], total: 150, page: 1, perPage: 20, totalPages: 8 }
+
+// Soft delete scopes
+await UserRepo.query().withTrashed().list();   // Include deleted
+await UserRepo.query().onlyTrashed().list();   // Only deleted
+
+// Multi-tenant
+await UserRepo.query().forTenant(tenantId).list();
+```
+
+### Transactions
+
+```javascript
+await db.transaction(async (trx) => {
+  const userRepo = trx.createRepository(User);
+  const postRepo = trx.createRepository(Post);
+  
+  const user = await userRepo.create({ email: 'new@test.com', name: 'New' });
+  await postRepo.create({ title: 'First Post', user_id: user.id });
+  
+  // All changes committed on success
+  // Rolled back on error
+});
+```
+
+### Migrations
+
+**CLI Commands:**
+
+```bash
+# Run pending migrations
+webspresso db:migrate
+
+# Rollback last batch
+webspresso db:rollback
+
+# Rollback all
+webspresso db:rollback --all
+
+# Show migration status
+webspresso db:status
+
+# Create empty migration
+webspresso db:make create_posts_table
+
+# Create migration from model (scaffolding)
+webspresso db:make create_users_table --model User
+```
+
+**Database Config File (`webspresso.db.js`):**
+
+```javascript
+module.exports = {
+  client: 'pg',  // or 'mysql2', 'better-sqlite3'
+  connection: process.env.DATABASE_URL,
+  migrations: {
+    directory: './migrations',
+    tableName: 'knex_migrations',
+  },
+  
+  // Environment overrides
+  production: {
+    connection: process.env.DATABASE_URL,
+    pool: { min: 2, max: 10 },
+  },
+};
+```
+
+**Programmatic API:**
+
+```javascript
+const db = createDatabase({
+  client: 'pg',
+  connection: process.env.DATABASE_URL,
+  migrations: { directory: './migrations' },
+});
+
+await db.migrate.latest();                      // Run pending
+await db.migrate.rollback();                    // Rollback last batch
+await db.migrate.rollback({ all: true });       // Rollback all
+const status = await db.migrate.status();       // Get status
+```
+
+### Migration Scaffolding
+
+Generate migration from model schema:
+
+```javascript
+const { scaffoldMigration } = require('webspresso');
+
+const migration = scaffoldMigration(User);
+// Outputs complete migration file content with:
+// - All columns with proper types
+// - Indexes
+// - Foreign key constraints
+// - Up and down functions
+```
+
+### Supported Databases
+
+Install the appropriate driver as a peer dependency:
+
+```bash
+# PostgreSQL
+npm install pg
+
+# MySQL
+npm install mysql2
+
+# SQLite
+npm install better-sqlite3
+```
+
+### Design Philosophy
+
+| Boundary | Zod's Job | ORM's Job |
+|----------|-----------|-----------|
+| Schema definition | Type shape, validation rules | Column metadata extraction |
+| Input validation | `.parse()` / `.safeParse()` | Never - pass through to Zod |
+| Query building | N/A | Full ownership |
+| Relation resolution | N/A | Eager loading with batch queries |
+| Timestamps/SoftDelete | N/A | Auto-inject on operations |
+
+**N+1 Prevention:** Relations are always loaded with batch `WHERE IN (...)` queries, never with individual queries per record.
+
+### Database Seeding
+
+Generate fake data for testing and development using `@faker-js/faker`:
+
+```bash
+npm install @faker-js/faker
+```
+
+**Basic Usage:**
+
+```javascript
+const { faker } = require('@faker-js/faker');
+const db = createDatabase({ /* config */ });
+
+const seeder = db.seeder(faker);
+
+// Generate a single record
+const user = await seeder.factory('User').create();
+
+// Generate multiple records
+const users = await seeder.factory('User').create(10);
+
+// Generate without saving (for testing)
+const userData = seeder.factory('User').make();
+```
+
+**Define Factories with Defaults and States:**
+
+```javascript
+seeder.defineFactory('User', {
+  // Default values
+  defaults: {
+    status: 'pending',
+  },
+  
+  // Custom generators
+  generators: {
+    username: (f) => f.internet.username().toLowerCase(),
+  },
+  
+  // Named states for variations
+  states: {
+    admin: { role: 'admin', status: 'active' },
+    verified: (f) => ({
+      status: 'verified',
+      verified_at: f.date.past().toISOString(),
+    }),
+  },
+});
+
+// Use states
+const admin = await seeder.factory('User').state('admin').create();
+const verified = await seeder.factory('User').state('verified').create();
+```
+
+**Smart Field Detection:**
+
+The seeder automatically generates appropriate fake data based on column names:
+
+| Field Name Pattern | Generated Data |
+|-------------------|----------------|
+| `email`, `*_email` | Valid email address |
+| `name`, `first_name`, `last_name` | Person names |
+| `username` | Username |
+| `title` | Short sentence |
+| `content`, `body`, `description` | Paragraphs |
+| `slug` | URL-safe slug |
+| `phone`, `tel` | Phone number |
+| `address`, `city`, `country` | Location data |
+| `price`, `amount`, `cost` | Decimal numbers |
+| `*_url`, `avatar`, `image` | URLs |
+
+**Override and Custom Generators:**
+
+```javascript
+const user = await seeder.factory('User')
+  .override({ email: 'test@example.com' })
+  .generators({
+    code: (f) => `USR-${f.string.alphanumeric(8)}`,
+  })
+  .create();
+```
+
+**Batch Seeding:**
+
+```javascript
+// Seed multiple models at once
+const results = await seeder.run([
+  { model: 'Company', count: 5 },
+  { model: 'User', count: 20, state: 'active' },
+  { model: 'Post', count: 50 },
+]);
+
+// Access results
+console.log(results.Company); // Array of 5 companies
+console.log(results.User);    // Array of 20 users
+```
+
+**Cleanup:**
+
+```javascript
+// Truncate specific tables
+await seeder.truncate('User');
+await seeder.truncate(['User', 'Post']);
+
+// Clear all registered model tables
+await seeder.clearAll();
+```
+
+### Schema Explorer Plugin
+
+A plugin that exposes ORM schema information via API endpoints. Useful for frontend code generation, documentation, or admin tools.
+
+**Setup:**
+
+```javascript
+const { createApp, schemaExplorerPlugin } = require('webspresso');
+
+const app = createApp({
+  plugins: [
+    schemaExplorerPlugin({
+      path: '/_schema',           // Endpoint path (default: '/_schema')
+      enabled: true,              // Force enable (default: auto based on NODE_ENV)
+      exclude: ['Secret'],        // Exclude specific models
+      includeColumns: true,       // Include column metadata
+      includeRelations: true,     // Include relation metadata
+      includeScopes: true,        // Include scope configuration
+      authorize: (req) => {       // Custom authorization
+        return req.headers['x-api-key'] === 'secret';
+      },
+    }),
+  ],
+});
+```
+
+**Endpoints:**
+
+- `GET /_schema` - List all models
+- `GET /_schema/:modelName` - Get single model details
+- `GET /_schema/openapi` - Export in OpenAPI 3.0 schema format
+
+**Example Response (`GET /_schema`):**
+
+```json
+{
+  "meta": {
+    "version": "1.0.0",
+    "generatedAt": "2024-01-01T12:00:00.000Z",
+    "modelCount": 2
+  },
+  "models": [
+    {
+      "name": "User",
+      "table": "users",
+      "primaryKey": "id",
+      "columns": [
+        { "name": "id", "type": "bigint", "primary": true, "autoIncrement": true },
+        { "name": "email", "type": "string", "unique": true },
+        { "name": "company_id", "type": "bigint", "references": "companies" }
+      ],
+      "relations": [
+        { "name": "company", "type": "belongsTo", "relatedModel": "Company", "foreignKey": "company_id" }
+      ],
+      "scopes": { "softDelete": true, "timestamps": true, "tenant": null }
+    }
+  ]
+}
+```
+
+**Plugin API (programmatic usage):**
+
+```javascript
+const plugin = schemaExplorerPlugin();
+
+// Plugin API can be used by other plugins or in code
+const models = plugin.api.getModels();       // All models
+const user = plugin.api.getModel('User');    // Single model
+const names = plugin.api.getModelNames();    // Model names
+```
 
 ## Development
 
