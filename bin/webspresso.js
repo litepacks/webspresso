@@ -18,25 +18,113 @@ program
 
 // New project command
 program
-  .command('new <project-name>')
+  .command('new [project-name]')
   .description('Create a new Webspresso project')
   .option('-t, --template <template>', 'Template to use (minimal, full)', 'minimal')
   .option('--no-tailwind', 'Skip Tailwind CSS setup')
   .option('-i, --install', 'Auto install dependencies and build CSS')
-  .action(async (projectName, options) => {
+  .action(async (projectNameArg, options) => {
     const useTailwind = options.tailwind !== false;
     const autoInstall = options.install === true;
-    const projectPath = path.resolve(projectName);
     
-    if (fs.existsSync(projectPath)) {
-      console.error(`❌ Directory ${projectName} already exists!`);
-      process.exit(1);
+    let projectName;
+    let projectPath;
+    let useCurrentDir = false;
+    
+    if (!projectNameArg) {
+      // No project name provided - ask if they want to use current directory
+      const currentDirName = path.basename(process.cwd());
+      const currentDirFiles = fs.readdirSync(process.cwd());
+      const hasExistingFiles = currentDirFiles.some(f => !f.startsWith('.'));
+      
+      const { useCurrent } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'useCurrent',
+          message: `Install in current directory (${currentDirName})?`,
+          default: true
+        }
+      ]);
+      
+      if (useCurrent) {
+        useCurrentDir = true;
+        projectPath = process.cwd();
+        
+        // Check for existing Webspresso files
+        if (fs.existsSync(path.join(projectPath, 'server.js')) || 
+            fs.existsSync(path.join(projectPath, 'pages'))) {
+          console.error('❌ Current directory already contains a Webspresso project!');
+          process.exit(1);
+        }
+        
+        // Warn if there are existing files
+        if (hasExistingFiles) {
+          const { continueAnyway } = await inquirer.prompt([
+            {
+              type: 'confirm',
+              name: 'continueAnyway',
+              message: '⚠️  Current directory is not empty. Continue anyway?',
+              default: false
+            }
+          ]);
+          
+          if (!continueAnyway) {
+            console.log('Cancelled.');
+            process.exit(0);
+          }
+        }
+        
+        // Ask for project name (for package.json)
+        const { name } = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'name',
+            message: 'Project name:',
+            default: currentDirName,
+            validate: (input) => {
+              if (!input.trim()) return 'Project name is required';
+              if (!/^[a-z0-9-_]+$/i.test(input)) return 'Project name can only contain letters, numbers, hyphens, and underscores';
+              return true;
+            }
+          }
+        ]);
+        
+        projectName = name;
+      } else {
+        // Ask for directory name
+        const { dirName } = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'dirName',
+            message: 'Project directory name:',
+            validate: (input) => {
+              if (!input.trim()) return 'Directory name is required';
+              if (!/^[a-z0-9-_]+$/i.test(input)) return 'Directory name can only contain letters, numbers, hyphens, and underscores';
+              if (fs.existsSync(path.resolve(input))) return `Directory ${input} already exists!`;
+              return true;
+            }
+          }
+        ]);
+        
+        projectName = dirName;
+        projectPath = path.resolve(dirName);
+      }
+    } else {
+      projectName = projectNameArg;
+      projectPath = path.resolve(projectNameArg);
+      
+      if (fs.existsSync(projectPath)) {
+        console.error(`❌ Directory ${projectName} already exists!`);
+        process.exit(1);
+      }
     }
     
     console.log(`\n🚀 Creating new Webspresso project: ${projectName}\n`);
     
-    // Create directory structure
-    fs.mkdirSync(projectPath, { recursive: true });
+    // Create directory structure (skip root if using current dir)
+    if (!useCurrentDir) {
+      fs.mkdirSync(projectPath, { recursive: true });
+    }
     fs.mkdirSync(path.join(projectPath, 'pages'), { recursive: true });
     fs.mkdirSync(path.join(projectPath, 'pages', 'locales'), { recursive: true });
     fs.mkdirSync(path.join(projectPath, 'views'), { recursive: true });
@@ -361,7 +449,9 @@ module.exports = {
         
         console.log('\n✅ Project ready!\n');
         console.log('Start developing:');
-        console.log(`  cd ${projectName}`);
+        if (!useCurrentDir) {
+          console.log(`  cd ${projectName}`);
+        }
         console.log('  npm run dev\n');
       } catch (err) {
         console.error('❌ Installation failed:', err.message);
@@ -370,7 +460,9 @@ module.exports = {
     } else {
       console.log('\n✅ Project created successfully!\n');
       console.log('Next steps:');
-      console.log(`  cd ${projectName}`);
+      if (!useCurrentDir) {
+        console.log(`  cd ${projectName}`);
+      }
       console.log('  npm install');
       if (useTailwind) {
         console.log('  npm run build:css');

@@ -49,12 +49,18 @@ npm run dev
 
 ## CLI Commands
 
-### `webspresso new <project-name>`
+### `webspresso new [project-name]`
 
 Create a new Webspresso project with Tailwind CSS (default).
 
 ```bash
+# Create in a new directory
 webspresso new my-app
+
+# Create in current directory (interactive)
+webspresso new
+# → Prompts: "Install in current directory?"
+# → If yes, asks for project name (for package.json)
 
 # Auto install dependencies and build CSS
 webspresso new my-app --install
@@ -62,6 +68,11 @@ webspresso new my-app --install
 # Without Tailwind
 webspresso new my-app --no-tailwind
 ```
+
+**Interactive Mode (no arguments):**
+- Asks if you want to install in the current directory
+- If current directory is not empty, shows a warning
+- Prompts for project name (defaults to current folder name)
 
 Options:
 - `-i, --install` - Auto run `npm install` and `npm run build:css`
@@ -602,7 +613,6 @@ module.exports = {
 Add JSON files to `pages/locales/`:
 
 ```json
-// pages/locales/en.json
 {
   "nav": {
     "home": "Home",
