@@ -11,13 +11,20 @@ const CLI_PATH = path.join(__dirname, '../../bin/webspresso.js');
 const TEST_DIR = path.join(__dirname, '../fixtures/cli-test-projects');
 
 // Helper to run CLI commands
+// For interactive commands, pipes "n\n" to skip prompts
 function runCli(args, options = {}) {
-  const cmd = `node ${CLI_PATH} ${args}`;
+  // If command might be interactive, pipe "n\n" to skip prompts
+  const isInteractive = args.includes('new') && !args.includes('--install') && !args.includes('--help');
+  const cmd = isInteractive 
+    ? `echo -e "n\\n" | node ${CLI_PATH} ${args}`
+    : `node ${CLI_PATH} ${args}`;
+  
   try {
     return {
       stdout: execSync(cmd, { 
         encoding: 'utf-8',
         cwd: options.cwd || TEST_DIR,
+        shell: isInteractive ? '/bin/bash' : undefined,
         ...options
       }),
       exitCode: 0
@@ -331,6 +338,61 @@ describe('CLI', () => {
       // Verify the command accepts optional project name
       expect(result.stdout).toContain('[project-name]');
       expect(result.exitCode).toBe(0);
+    });
+  });
+
+  describe.sequential('New Project - Installation Flow', () => {
+    const projectName = 'test-install-flow';
+    
+    beforeEach(() => {
+      cleanup(projectName);
+    });
+    
+    afterEach(() => {
+      cleanup(projectName);
+    });
+
+    it('should include watch:css script when Tailwind is enabled', () => {
+      runCli(`new ${projectName}`);
+      
+      const packagePath = path.join(TEST_DIR, projectName, 'package.json');
+      const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
+      
+      expect(packageJson.scripts['watch:css']).toBeDefined();
+      expect(packageJson.scripts['watch:css']).toContain('tailwindcss');
+      expect(packageJson.scripts.dev).toContain('watch:css');
+    });
+
+    it('should include watch:css in dev script when Tailwind enabled', () => {
+      runCli(`new ${projectName}`);
+      
+      const packagePath = path.join(TEST_DIR, projectName, 'package.json');
+      const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
+      
+      // Dev script should include watch:css
+      expect(packageJson.scripts.dev).toContain('watch:css');
+      expect(packageJson.scripts.dev).toContain('node --watch server.js');
+    });
+
+    it('should not include watch:css when --no-tailwind is used', () => {
+      runCli(`new ${projectName} --no-tailwind`);
+      
+      const packagePath = path.join(TEST_DIR, projectName, 'package.json');
+      const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
+      
+      expect(packageJson.scripts['watch:css']).toBeUndefined();
+      expect(packageJson.scripts.dev).not.toContain('watch:css');
+    });
+
+    it('should have build:css script when Tailwind is enabled', () => {
+      runCli(`new ${projectName}`);
+      
+      const packagePath = path.join(TEST_DIR, projectName, 'package.json');
+      const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
+      
+      expect(packageJson.scripts['build:css']).toBeDefined();
+      expect(packageJson.scripts['build:css']).toContain('tailwindcss');
+      expect(packageJson.scripts.start).toContain('build:css');
     });
   });
 

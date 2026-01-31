@@ -73,9 +73,31 @@ webspresso new my-app --no-tailwind
 - Asks if you want to install in the current directory
 - If current directory is not empty, shows a warning
 - Prompts for project name (defaults to current folder name)
+- After project creation, asks if you want to install dependencies
+- If yes, runs `npm install` and `npm run build:css`
+- Then asks if you want to start the development server
+- If yes, starts `npm run dev` automatically
+
+**Auto Installation:**
+```bash
+# With --install flag (semi-interactive)
+webspresso new my-app --install
+# → Automatically runs: npm install && npm run build:css
+# → Then prompts: "Start development server?" [Y/n]
+# → If yes: starts npm run dev (with watch:css if Tailwind enabled)
+
+# Without --install flag (fully interactive)
+webspresso new my-app
+# → Prompts: "Install dependencies and build CSS now?" [Y/n]
+# → If yes: runs npm install && npm run build:css
+# → Then: "Start development server?" [Y/n]
+# → If yes: starts npm run dev (with watch:css if Tailwind enabled)
+```
+
+**Note:** When dev server starts with Tailwind CSS, it automatically runs `watch:css` in the background to watch for CSS changes.
 
 Options:
-- `-i, --install` - Auto run `npm install` and `npm run build:css`
+- `-i, --install` - Auto run `npm install` and `npm run build:css` (non-interactive)
 - `--no-tailwind` - Skip Tailwind CSS setup
 
 The project includes:

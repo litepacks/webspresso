@@ -429,8 +429,8 @@ module.exports = {
       console.log('✅ Tailwind CSS setup complete!');
     }
     
-    // Auto install if requested
-    if (autoInstall) {
+    // Helper function to run installation
+    async function runInstallation(projectPath, useTailwind) {
       console.log('\n📦 Installing dependencies...\n');
       const { execSync } = require('child_process');
       try {
@@ -447,27 +447,137 @@ module.exports = {
           });
         }
         
-        console.log('\n✅ Project ready!\n');
+        console.log('\n✅ Installation complete!\n');
+      } catch (err) {
+        console.error('❌ Installation failed:', err.message);
+        process.exit(1);
+      }
+    }
+    
+    // Helper function to start dev server
+    function startDevServer(projectPath, useTailwind) {
+      console.log('\n🚀 Starting development server...\n');
+      console.log('Press Ctrl+C to stop\n');
+      
+      const { spawn } = require('child_process');
+      
+      if (useTailwind) {
+        // Start CSS watch and server together
+        const cssWatch = spawn('npm', ['run', 'watch:css'], {
+          stdio: 'inherit',
+          shell: true,
+          cwd: projectPath
+        });
+        
+        const server = spawn('node', ['--watch', 'server.js'], {
+          stdio: 'inherit',
+          shell: true,
+          cwd: projectPath,
+          env: { ...process.env, PORT: process.env.PORT || '3000', NODE_ENV: 'development' }
+        });
+        
+        // Handle exit
+        const cleanup = () => {
+          cssWatch.kill();
+          server.kill();
+          process.exit(0);
+        };
+        
+        process.on('SIGINT', cleanup);
+        process.on('SIGTERM', cleanup);
+        
+        cssWatch.on('exit', cleanup);
+        server.on('exit', cleanup);
+      } else {
+        // Just start server
+        const server = spawn('node', ['--watch', 'server.js'], {
+          stdio: 'inherit',
+          shell: true,
+          cwd: projectPath,
+          env: { ...process.env, PORT: process.env.PORT || '3000', NODE_ENV: 'development' }
+        });
+        
+        server.on('exit', (code) => {
+          process.exit(code || 0);
+        });
+        
+        process.on('SIGINT', () => {
+          server.kill();
+          process.exit(0);
+        });
+      }
+    }
+    
+    // Auto install if requested or ask interactively
+    if (autoInstall) {
+      await runInstallation(projectPath, useTailwind);
+      
+      // Ask if user wants to start dev server
+      const { shouldStartDev } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'shouldStartDev',
+          message: 'Start development server?',
+          default: true
+        }
+      ]);
+      
+      if (shouldStartDev) {
+        startDevServer(projectPath, useTailwind);
+      } else {
+        console.log('✅ Project ready!\n');
         console.log('Start developing:');
         if (!useCurrentDir) {
           console.log(`  cd ${projectName}`);
         }
         console.log('  npm run dev\n');
-      } catch (err) {
-        console.error('❌ Installation failed:', err.message);
-        process.exit(1);
       }
     } else {
-      console.log('\n✅ Project created successfully!\n');
-      console.log('Next steps:');
-      if (!useCurrentDir) {
-        console.log(`  cd ${projectName}`);
+      // Ask if user wants to install dependencies
+      const { shouldInstall } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'shouldInstall',
+          message: 'Install dependencies and build CSS now?',
+          default: true
+        }
+      ]);
+      
+      if (shouldInstall) {
+        await runInstallation(projectPath, useTailwind);
+        
+        // Ask if user wants to start dev server
+        const { shouldStartDev } = await inquirer.prompt([
+          {
+            type: 'confirm',
+            name: 'shouldStartDev',
+            message: 'Start development server?',
+            default: true
+          }
+        ]);
+        
+        if (shouldStartDev) {
+          startDevServer(projectPath, useTailwind);
+        } else {
+          console.log('\n✅ Project ready!\n');
+          console.log('Start developing:');
+          if (!useCurrentDir) {
+            console.log(`  cd ${projectName}`);
+          }
+          console.log('  npm run dev\n');
+        }
+      } else {
+        console.log('\n✅ Project created successfully!\n');
+        console.log('Next steps:');
+        if (!useCurrentDir) {
+          console.log(`  cd ${projectName}`);
+        }
+        console.log('  npm install');
+        if (useTailwind) {
+          console.log('  npm run build:css');
+        }
+        console.log('  npm run dev\n');
       }
-      console.log('  npm install');
-      if (useTailwind) {
-        console.log('  npm run build:css');
-      }
-      console.log('  npm run dev\n');
     }
   });
 
