@@ -108,12 +108,32 @@ If you select a database:
 - The appropriate driver is added to `package.json` dependencies
 - `webspresso.db.js` config file is created with proper settings
 - `migrations/` directory is created
+- `models/` directory is created
 - `DATABASE_URL` is added to `.env.example` with a template
+
+**Seed Data Generation:**
+After selecting a database, you'll be asked if you want to generate seed data:
+- If yes, `@faker-js/faker` is added to dependencies
+- `seeds/` directory is created with `seeds/index.js`
+- `npm run seed` script is added to `package.json`
+- The seed script automatically detects models in `models/` directory and generates fake data based on their schemas
+
+To run seeds after creating models:
+```bash
+npm run seed
+```
+
+The seed script will:
+- Load all models from `models/` directory
+- Generate 10 fake records per model (by default)
+- Use smart field detection based on column names (email, name, title, etc.)
 
 You can always add database support later by:
 1. Installing the driver: `npm install better-sqlite3` (or `pg`, `mysql2`)
 2. Creating `webspresso.db.js` config file
 3. Adding `DATABASE_URL` to your `.env` file
+4. Creating `models/` directory and defining your models
+5. Optionally adding seed support: `npm install @faker-js/faker` and creating `seeds/index.js`
 
 Options:
 - `-i, --install` - Auto run `npm install` and `npm run build:css` (non-interactive)
@@ -695,6 +715,17 @@ The `fsy` object is available in all templates:
 {{ fsy.prettyBytes(1024) }}
 {{ fsy.prettyMs(5000) }}
 
+{# Date/Time helpers (dayjs) #}
+{{ fsy.dateFormat(post.created_at, 'YYYY-MM-DD HH:mm') }}
+{{ fsy.dateFromNow(post.created_at) }} {# "2 hours ago" #}
+{{ fsy.dateAgo(post.created_at) }} {# "2 hours ago" #}
+{{ fsy.dateUntil(event.date) }} {# "in 2 hours" #}
+{{ fsy.date(post.created_at).format('MMMM D, YYYY') }} {# Full dayjs API #}
+{% if fsy.dateIsBefore(post.created_at, fsy.date()) %}Published{% endif %}
+{{ fsy.dateDiff(post.created_at, fsy.date(), 'day') }} days ago
+{{ fsy.dateAdd(post.created_at, 7, 'day').format('YYYY-MM-DD') }}
+{{ fsy.dateStartOf(post.created_at, 'month').format('YYYY-MM-DD') }}
+
 {# Environment #}
 {% if fsy.isDev() %}Dev mode{% endif %}
 
@@ -1058,6 +1089,32 @@ npm install better-sqlite3
 **N+1 Prevention:** Relations are always loaded with batch `WHERE IN (...)` queries, never with individual queries per record.
 
 ### Database Seeding
+
+**CLI Command:**
+
+The easiest way to seed your database is using the CLI command:
+
+```bash
+# Run seeds (requires seeds/index.js)
+webspresso seed
+
+# Setup seed files if they don't exist
+webspresso seed --setup
+
+# Use custom database config
+webspresso seed --config ./custom-db-config.js
+
+# Use different environment
+webspresso seed --env production
+```
+
+The `webspresso seed` command:
+- Automatically loads all models from `models/` directory
+- Generates fake data based on model schemas
+- Creates 10 records per model by default
+- Uses smart field detection for appropriate fake data
+
+**Manual Setup:**
 
 Generate fake data for testing and development using `@faker-js/faker`:
 

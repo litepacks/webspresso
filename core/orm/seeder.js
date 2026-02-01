@@ -268,7 +268,8 @@ function createSeeder(faker, knex) {
 
     factories.set(model.name, factory);
 
-    return createFactoryBuilder(factory);
+    // Start with depth 0 and empty visited set
+    return createFactoryBuilder(factory, 0, new Set());
   }
 
   /**
@@ -291,7 +292,8 @@ function createSeeder(faker, knex) {
       factories.set(modelName, factoryDef);
     }
 
-    return createFactoryBuilder(factoryDef);
+    // Start with depth 0 and empty visited set
+    return createFactoryBuilder(factoryDef, 0, new Set());
   }
 
   /**
@@ -299,11 +301,15 @@ function createSeeder(faker, knex) {
    * @param {FactoryDefinition} factoryDef - Factory definition
    * @returns {Object} Factory builder
    */
-  function createFactoryBuilder(factoryDef) {
+  function createFactoryBuilder(factoryDef, depth = 0, visited = new Set()) {
     let currentOverrides = { ...factoryDef.defaults };
     let currentGenerators = { ...factoryDef.generators };
     let currentRelations = {};
     let activeStates = [];
+
+    // Maximum depth to prevent infinite recursion
+    const MAX_DEPTH = 5;
+    const modelKey = factoryDef.model.name || factoryDef.model.table;
 
     const builder = {
       /**
@@ -382,7 +388,12 @@ function createSeeder(faker, knex) {
           const record = generateRecord(model, currentOverrides, currentGenerators);
 
           // Handle belongsTo relations first (need parent IDs)
-          if (model.relations) {
+          // Only create parents if not in a circular dependency and depth is acceptable
+          if (model.relations && !visited.has(modelKey) && depth < MAX_DEPTH) {
+            // Create a new visited set for this record to track circular dependencies
+            const recordVisited = new Set(visited);
+            recordVisited.add(modelKey);
+            
             for (const [relName, relation] of Object.entries(model.relations)) {
               if (relation.type === 'belongsTo' && relation.foreignKey) {
                 // Check if foreign key is already set
@@ -391,11 +402,37 @@ function createSeeder(faker, knex) {
                 // Check if we should create related or skip
                 const relatedModel = relation.model();
                 if (relatedModel) {
-                  const parent = await factory(relatedModel).create();
-                  record[relation.foreignKey] = parent[relatedModel.primaryKey || 'id'];
+                  const relatedModelName = relatedModel.name || relatedModel.table;
+                  
+                  // Check for circular dependency
+                  if (recordVisited.has(relatedModelName)) {
+                    console.warn(`⚠️  Circular dependency detected: "${modelKey}" -> "${relatedModelName}". Skipping automatic parent creation.`);
+                    continue;
+                  }
+                  
+                  try {
+                    // Get or create factory for related model
+                    let relatedFactoryDef = factories.get(relatedModelName);
+                    if (!relatedFactoryDef) {
+                      relatedFactoryDef = { model: relatedModel, defaults: {}, generators: {}, states: {} };
+                      factories.set(relatedModelName, relatedFactoryDef);
+                    }
+                    
+                    // Create builder with increased depth and updated visited set
+                    const parentBuilder = createFactoryBuilder(relatedFactoryDef, depth + 1, recordVisited);
+                    const parent = await parentBuilder.create();
+                    record[relation.foreignKey] = parent[relatedModel.primaryKey || 'id'];
+                  } catch (err) {
+                    // If creating parent fails (e.g., circular dependency), skip it
+                    console.warn(`⚠️  Failed to create parent for "${modelKey}.${relName}": ${err.message}`);
+                  }
                 }
               }
             }
+          } else if (visited.has(modelKey)) {
+            console.warn(`⚠️  Circular dependency detected for model "${modelKey}". Skipping automatic parent creation.`);
+          } else if (depth >= MAX_DEPTH) {
+            console.warn(`⚠️  Maximum depth (${MAX_DEPTH}) reached for model "${modelKey}". Skipping automatic parent creation.`);
           }
 
           // Insert record
@@ -407,16 +444,41 @@ function createSeeder(faker, knex) {
           const created = await knex(model.table).where(primaryKey, id).first();
           
           // Handle hasMany relations
-          if (model.relations) {
+          if (model.relations && depth < MAX_DEPTH) {
+            // Create a new visited set for this record
+            const recordVisited = new Set(visited);
+            recordVisited.add(modelKey);
+            
             for (const [relName, count] of Object.entries(currentRelations)) {
               const relation = model.relations[relName];
               if (relation && relation.type === 'hasMany') {
                 const relatedModel = relation.model();
                 if (relatedModel) {
-                  const children = await factory(relatedModel)
-                    .override({ [relation.foreignKey]: created[primaryKey] })
-                    .create(count);
-                  created[relName] = Array.isArray(children) ? children : [children];
+                  const relatedModelName = relatedModel.name || relatedModel.table;
+                  
+                  // Check for circular dependency
+                  if (recordVisited.has(relatedModelName)) {
+                    console.warn(`⚠️  Circular dependency detected: "${modelKey}" -> "${relatedModelName}". Skipping automatic children creation.`);
+                    continue;
+                  }
+                  
+                  try {
+                    // Get or create factory for related model
+                    let relatedFactoryDef = factories.get(relatedModelName);
+                    if (!relatedFactoryDef) {
+                      relatedFactoryDef = { model: relatedModel, defaults: {}, generators: {}, states: {} };
+                      factories.set(relatedModelName, relatedFactoryDef);
+                    }
+                    
+                    // Create builder with increased depth and updated visited set
+                    const childrenBuilder = createFactoryBuilder(relatedFactoryDef, depth + 1, recordVisited);
+                    const children = await childrenBuilder
+                      .override({ [relation.foreignKey]: created[primaryKey] })
+                      .create(count);
+                    created[relName] = Array.isArray(children) ? children : [children];
+                  } catch (err) {
+                    console.warn(`⚠️  Failed to create children for "${modelKey}.${relName}": ${err.message}`);
+                  }
                 }
               }
             }

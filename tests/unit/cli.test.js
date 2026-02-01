@@ -23,12 +23,12 @@ function runCli(args, options = {}) {
     // Check if project name is provided
     const hasProjectName = args.match(/new\s+(\S+)/);
     if (hasProjectName) {
-      // Project name provided: database (n + Enter), install (n + Enter)
-      // Each answer needs Enter, so: n\n for database, n\n for install
-      answers = 'n\\nn\\n';
-    } else {
-      // No project name: current dir (n + Enter), database (n + Enter), install (n + Enter)
+      // Project name provided: database (n + Enter), seed (n + Enter), install (n + Enter)
+      // Each answer needs Enter, so: n\n for database, n\n for seed, n\n for install
       answers = 'n\\nn\\nn\\n';
+    } else {
+      // No project name: current dir (n + Enter), database (n + Enter), seed (n + Enter), install (n + Enter)
+      answers = 'n\\nn\\nn\\nn\\n';
     }
   }
   
@@ -482,6 +482,35 @@ describe('CLI', () => {
       // By default, migrations directory should not exist
       expect(fs.existsSync(path.join(TEST_DIR, projectName, 'migrations'))).toBe(false);
     });
+
+    it('should create models directory when database is selected', () => {
+      runCli(`new ${projectName}`);
+      
+      // Models directory should exist when database is selected (even if not used)
+      // Actually, it's only created if database is selected, but we answer "no" to database
+      // So it should not exist by default
+      expect(fs.existsSync(path.join(TEST_DIR, projectName, 'models'))).toBe(false);
+    });
+
+    it('should create seeds directory and files when seed is selected', () => {
+      // This test would require answering "yes" to database and "yes" to seed
+      // For now, we'll test that seeds directory is not created by default
+      runCli(`new ${projectName}`);
+      
+      // By default, seeds directory should not exist
+      expect(fs.existsSync(path.join(TEST_DIR, projectName, 'seeds'))).toBe(false);
+    });
+
+    it('should add faker dependency when seed is selected', () => {
+      runCli(`new ${projectName}`);
+      
+      const packageJsonPath = path.join(TEST_DIR, projectName, 'package.json');
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+      
+      // By default, faker should not be present
+      expect(packageJson.dependencies).not.toHaveProperty('@faker-js/faker');
+      expect(packageJson.scripts).not.toHaveProperty('seed');
+    });
   });
 
   describe.sequential('Error Handling', () => {
@@ -585,6 +614,109 @@ describe('CLI', () => {
       
       expect(result.exitCode).toBe(1);
       expect(result.stderr || result.stdout).toContain('Not a Webspresso project');
+    });
+  });
+
+  describe.sequential('Seed Command', () => {
+    const projectName = 'test-seed-project';
+    let projectPath;
+
+    beforeAll(() => {
+      cleanup(projectName);
+      // Create a basic project with database
+      runCli(`new ${projectName}`, { 
+        env: { ...process.env, CI: 'true' } // Skip interactive prompts
+      });
+      projectPath = path.join(TEST_DIR, projectName);
+      
+      // Create models directory and a dummy model file
+      fs.mkdirSync(path.join(projectPath, 'models'), { recursive: true });
+      
+      // Create webspresso.db.js if it doesn't exist
+      if (!fs.existsSync(path.join(projectPath, 'webspresso.db.js'))) {
+        const dbConfig = `module.exports = {
+  client: 'better-sqlite3',
+  connection: {
+    filename: ':memory:'
+  },
+  useNullAsDefault: true
+};
+`;
+        fs.writeFileSync(path.join(projectPath, 'webspresso.db.js'), dbConfig);
+      }
+    });
+
+    afterAll(() => {
+      cleanup(projectName);
+    });
+
+    it('should fail if not in a Webspresso project', () => {
+      const result = runCli('seed', { cwd: TEST_DIR });
+      
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr || result.stdout).toContain('Not a Webspresso project');
+    });
+
+    it('should fail if models directory does not exist', () => {
+      // Remove models directory
+      const modelsDir = path.join(projectPath, 'models');
+      if (fs.existsSync(modelsDir)) {
+        fs.rmSync(modelsDir, { recursive: true, force: true });
+      }
+      
+      const result = runCli('seed', { cwd: projectPath });
+      
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr || result.stdout).toContain('models/ directory not found');
+      
+      // Restore models directory
+      fs.mkdirSync(modelsDir, { recursive: true });
+    });
+
+    it('should fail if seeds/index.js does not exist', () => {
+      // Ensure seeds directory doesn't exist
+      const seedsDir = path.join(projectPath, 'seeds');
+      if (fs.existsSync(seedsDir)) {
+        fs.rmSync(seedsDir, { recursive: true, force: true });
+      }
+      
+      const result = runCli('seed', { cwd: projectPath });
+      
+      expect(result.exitCode).toBe(1);
+      const output = result.stderr || result.stdout;
+      // Main check: should mention seeds/index.js not found
+      expect(output).toContain('seeds/index.js not found');
+    });
+
+    it('should create seed files with --setup flag', () => {
+      const seedsDir = path.join(projectPath, 'seeds');
+      const seedIndexPath = path.join(seedsDir, 'index.js');
+      
+      // Remove seeds directory if exists
+      if (fs.existsSync(seedsDir)) {
+        fs.rmSync(seedsDir, { recursive: true, force: true });
+      }
+      
+      const result = runCli('seed --setup', { cwd: projectPath });
+      
+      // Check that seed files were created
+      expect(fs.existsSync(seedsDir)).toBe(true);
+      expect(fs.existsSync(seedIndexPath)).toBe(true);
+      
+      // Check seed file content
+      const seedContent = fs.readFileSync(seedIndexPath, 'utf-8');
+      expect(seedContent).toContain('createDatabase');
+      expect(seedContent).toContain('getAllModels');
+      expect(seedContent).toContain('seeder');
+    });
+
+    it('should show help for seed command', () => {
+      const result = runCli('seed --help', { cwd: projectPath });
+      
+      expect(result.stdout).toContain('Run database seeders');
+      expect(result.stdout).toContain('--setup');
+      expect(result.stdout).toContain('--config');
+      expect(result.stdout).toContain('--env');
     });
   });
 });

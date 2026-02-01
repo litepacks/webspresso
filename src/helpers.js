@@ -6,6 +6,17 @@
 const querystring = require('querystring');
 const fs = require('fs');
 const path = require('path');
+const dayjs = require('dayjs');
+const relativeTime = require('dayjs/plugin/relativeTime');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
+const customParseFormat = require('dayjs/plugin/customParseFormat');
+
+// Extend dayjs with plugins
+dayjs.extend(relativeTime);
+dayjs.extend(utc);
+dayjs.extend(timezone);
+dayjs.extend(customParseFormat);
 
 /**
  * Asset Manager - handles asset paths, versioning, and manifest
@@ -419,6 +430,157 @@ function createHelpers(ctx) {
      */
     img(src, alt = '', attrs = {}) {
       return getAssetManager().img(src, alt, attrs);
+    },
+
+    /**
+     * Date/time helpers using dayjs
+     */
+    
+    /**
+     * Create a dayjs instance from a date
+     * @param {string|Date|number} date - Date to parse
+     * @param {string} format - Optional format string
+     * @returns {Object} dayjs instance
+     */
+    date(date, format) {
+      if (!date) return dayjs();
+      if (format) {
+        return dayjs(date, format);
+      }
+      return dayjs(date);
+    },
+
+    /**
+     * Format a date
+     * @param {string|Date|number} date - Date to format
+     * @param {string} format - Format string (default: 'YYYY-MM-DD')
+     * @returns {string}
+     */
+    dateFormat(date, format = 'YYYY-MM-DD') {
+      if (!date) return '';
+      return dayjs(date).format(format);
+    },
+
+    /**
+     * Get relative time (e.g., "2 hours ago")
+     * @param {string|Date|number} date - Date to format
+     * @returns {string}
+     */
+    dateFromNow(date) {
+      if (!date) return '';
+      return dayjs(date).fromNow();
+    },
+
+    /**
+     * Get time ago (e.g., "2 hours ago")
+     * @param {string|Date|number} date - Date to format
+     * @returns {string}
+     */
+    dateAgo(date) {
+      if (!date) return '';
+      return dayjs(date).fromNow();
+    },
+
+    /**
+     * Get time until (e.g., "in 2 hours")
+     * @param {string|Date|number} date - Date to format
+     * @returns {string}
+     */
+    dateUntil(date) {
+      if (!date) return '';
+      return dayjs(date).toNow();
+    },
+
+    /**
+     * Check if date is before another date
+     * @param {string|Date|number} date1 - First date
+     * @param {string|Date|number} date2 - Second date
+     * @returns {boolean}
+     */
+    dateIsBefore(date1, date2) {
+      if (!date1 || !date2) return false;
+      return dayjs(date1).isBefore(date2);
+    },
+
+    /**
+     * Check if date is after another date
+     * @param {string|Date|number} date1 - First date
+     * @param {string|Date|number} date2 - Second date
+     * @returns {boolean}
+     */
+    dateIsAfter(date1, date2) {
+      if (!date1 || !date2) return false;
+      return dayjs(date1).isAfter(date2);
+    },
+
+    /**
+     * Check if date is same as another date
+     * @param {string|Date|number} date1 - First date
+     * @param {string|Date|number} date2 - Second date
+     * @param {string} unit - Unit to compare (day, month, year, etc.)
+     * @returns {boolean}
+     */
+    dateIsSame(date1, date2, unit = 'day') {
+      if (!date1 || !date2) return false;
+      return dayjs(date1).isSame(date2, unit);
+    },
+
+    /**
+     * Get difference between two dates
+     * @param {string|Date|number} date1 - First date
+     * @param {string|Date|number} date2 - Second date
+     * @param {string} unit - Unit (day, month, year, hour, minute, second)
+     * @returns {number}
+     */
+    dateDiff(date1, date2, unit = 'day') {
+      if (!date1 || !date2) return 0;
+      return dayjs(date1).diff(date2, unit);
+    },
+
+    /**
+     * Add time to a date
+     * @param {string|Date|number} date - Date to add to
+     * @param {number} amount - Amount to add
+     * @param {string} unit - Unit (day, month, year, hour, minute, second)
+     * @returns {Object} dayjs instance
+     */
+    dateAdd(date, amount, unit = 'day') {
+      if (!date) return dayjs();
+      return dayjs(date).add(amount, unit);
+    },
+
+    /**
+     * Subtract time from a date
+     * @param {string|Date|number} date - Date to subtract from
+     * @param {number} amount - Amount to subtract
+     * @param {string} unit - Unit (day, month, year, hour, minute, second)
+     * @returns {Object} dayjs instance
+     */
+    dateSubtract(date, amount, unit = 'day') {
+      if (!date) return dayjs();
+      return dayjs(date).subtract(amount, unit);
+    },
+
+    /**
+     * Get start of a time period
+     * @param {string|Date|number} date - Date
+     * @param {string} unit - Unit (day, month, year, week)
+     * @returns {Object} dayjs instance
+     */
+    dateStartOf(date, unit = 'day') {
+      if (!date) return dayjs();
+      return dayjs(date).startOf(unit);
+    },
+
+    /**
+     * Get end of a time period
+     * @param {string|Date|number} date - Date
+     * @param {string} unit - Unit (day, month, year, week)
+     * @returns {Object} dayjs instance
+     */
+    dateEndOf(date, unit = 'day') {
+      if (!date) return dayjs();
+      return dayjs(date).endOf(unit);
     }
   };
 }

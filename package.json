@@ -1,6 +1,6 @@
 {
   "name": "webspresso",
-  "version": "0.0.10",
+  "version": "0.0.13",
   "description": "Minimal, production-ready SSR framework for Node.js with file-based routing, Nunjucks templating, built-in i18n, and CLI tooling",
   "main": "index.js",
   "bin": {
@@ -38,6 +38,7 @@
   ],
   "dependencies": {
     "commander": "^11.1.0",
+    "dayjs": "^1.11.19",
     "express": "^4.18.2",
     "helmet": "^7.2.0",
     "inquirer": "^8.2.6",
@@ -46,11 +47,11 @@
     "zod": "^3.23.0"
   },
   "peerDependencies": {
-    "dotenv": "^16.0.0",
-    "pg": "^8.0.0",
-    "mysql2": "^3.0.0",
+    "@faker-js/faker": "^9.0.0",
     "better-sqlite3": "^9.0.0",
-    "@faker-js/faker": "^9.0.0"
+    "dotenv": "^16.0.0",
+    "mysql2": "^3.0.0",
+    "pg": "^8.0.0"
   },
   "peerDependenciesMeta": {
     "dotenv": {

@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Runtime API**: `w.resume()`, `w.init()`, `w.hydrate()`, `w.getStats()` methods
 - **Performance**: ~6.6x faster Time to Interactive (TTI), ~20x less initial JS execution
 
+#### Template Helpers
+- **dayjs integration**: Added dayjs as a core dependency for date/time manipulation in templates
+- **Date helpers**: `fsy.date()`, `fsy.dateFormat()`, `fsy.dateFromNow()`, `fsy.dateAgo()`, `fsy.dateUntil()`
+- **Date comparison**: `fsy.dateIsBefore()`, `fsy.dateIsAfter()`, `fsy.dateIsSame()`
+- **Date arithmetic**: `fsy.dateAdd()`, `fsy.dateSubtract()`, `fsy.dateDiff()`
+- **Date utilities**: `fsy.dateStartOf()`, `fsy.dateEndOf()`
+- **Full dayjs API**: Access full dayjs functionality via `fsy.date()` which returns a dayjs instance
+- **Plugins included**: relativeTime, utc, timezone, customParseFormat
+
 #### CLI Enhancements
 - **Interactive project creation**: `webspresso new` command now accepts optional project name
 - **Current directory installation**: Prompt to install in current directory when no project name provided
@@ -28,12 +37,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Interactive installation flow**: After project creation, prompts to install dependencies and build CSS
 - **Auto dev server start**: Option to automatically start development server after installation
 - **CSS watch integration**: Dev server automatically includes `watch:css` when Tailwind is enabled
+- **Seed CLI command**: `webspresso seed` command for existing projects to run database seeders
+- **Seed setup option**: `--setup` flag to automatically create seed files if they don't exist
+- **Automatic seed execution**: Seed command automatically loads models and generates fake data
 - **Database selection**: Interactive prompt to select database (SQLite, PostgreSQL, MySQL) during project creation
 - **Database driver installation**: Automatically adds appropriate database driver (`better-sqlite3`, `pg`, `mysql2`) to `package.json`
 - **Database config generation**: Creates `webspresso.db.js` with proper configuration for selected database
 - **Migrations directory**: Automatically creates `migrations/` directory when database is selected
+- **Models directory**: Automatically creates `models/` directory when database is selected
+- **Seed data generation**: Interactive prompt to generate seed data based on existing models
+- **Automatic seed setup**: When seed is selected, adds `@faker-js/faker` dependency and creates `seeds/index.js` with auto-detection
+- **Seed script**: Adds `npm run seed` command to `package.json` for easy seed execution
+- **Smart model detection**: Seed script automatically loads all models from `models/` directory and generates fake data
 - **DATABASE_URL in .env.example**: Adds appropriate `DATABASE_URL` template to `.env.example` based on selected database
-- **Streamlined workflow**: `webspresso new` → database selection → install → build → dev server (with CSS watch) in one flow
+- **Streamlined workflow**: `webspresso new` → database selection → seed setup → install → build → dev server (with CSS watch) in one flow
 - **--install flag enhancement**: Now also prompts for dev server start (previously only installed dependencies)
 
 #### Documentation
