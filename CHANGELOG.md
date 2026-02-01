@@ -28,7 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Interactive installation flow**: After project creation, prompts to install dependencies and build CSS
 - **Auto dev server start**: Option to automatically start development server after installation
 - **CSS watch integration**: Dev server automatically includes `watch:css` when Tailwind is enabled
-- **Streamlined workflow**: `webspresso new` → install → build → dev server (with CSS watch) in one flow
+- **Database selection**: Interactive prompt to select database (SQLite, PostgreSQL, MySQL) during project creation
+- **Database driver installation**: Automatically adds appropriate database driver (`better-sqlite3`, `pg`, `mysql2`) to `package.json`
+- **Database config generation**: Creates `webspresso.db.js` with proper configuration for selected database
+- **Migrations directory**: Automatically creates `migrations/` directory when database is selected
+- **DATABASE_URL in .env.example**: Adds appropriate `DATABASE_URL` template to `.env.example` based on selected database
+- **Streamlined workflow**: `webspresso new` → database selection → install → build → dev server (with CSS watch) in one flow
 - **--install flag enhancement**: Now also prompts for dev server start (previously only installed dependencies)
 
 #### Documentation

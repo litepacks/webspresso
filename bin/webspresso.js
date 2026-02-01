@@ -121,6 +121,29 @@ program
     
     console.log(`\n🚀 Creating new Webspresso project: ${projectName}\n`);
     
+    // Ask about database
+    const { useDatabase, databaseType } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'useDatabase',
+        message: 'Will you use a database?',
+        default: false
+      },
+      {
+        type: 'list',
+        name: 'databaseType',
+        message: 'Which database?',
+        choices: [
+          { name: 'SQLite (better-sqlite3)', value: 'better-sqlite3' },
+          { name: 'PostgreSQL (pg)', value: 'pg' },
+          { name: 'MySQL (mysql2)', value: 'mysql2' },
+          { name: 'None', value: null }
+        ],
+        default: 'better-sqlite3',
+        when: (answers) => answers.useDatabase
+      }
+    ]);
+    
     // Create directory structure (skip root if using current dir)
     if (!useCurrentDir) {
       fs.mkdirSync(projectPath, { recursive: true });
@@ -145,6 +168,17 @@ program
         dotenv: '^16.3.1'
       }
     };
+    
+    // Add database driver if selected
+    if (useDatabase && databaseType) {
+      const dbDrivers = {
+        'better-sqlite3': '^9.0.0',
+        'pg': '^8.0.0',
+        'mysql2': '^3.0.0'
+      };
+      
+      packageJson.dependencies[databaseType] = dbDrivers[databaseType];
+    }
     
     fs.writeFileSync(
       path.join(projectPath, 'package.json'),
@@ -172,14 +206,80 @@ app.listen(PORT, () => {
     fs.writeFileSync(path.join(projectPath, 'server.js'), serverJs);
     
     // Create .env.example
-    const envExample = `PORT=3000
+    let envExample = `PORT=3000
 NODE_ENV=development
 DEFAULT_LOCALE=en
 SUPPORTED_LOCALES=en,tr
 BASE_URL=http://localhost:3000
 `;
     
+    if (useDatabase && databaseType) {
+      if (databaseType === 'better-sqlite3') {
+        envExample += `DATABASE_URL=sqlite:./database.sqlite
+`;
+      } else if (databaseType === 'pg') {
+        envExample += `DATABASE_URL=postgresql://user:password@localhost:5432/dbname
+`;
+      } else if (databaseType === 'mysql2') {
+        envExample += `DATABASE_URL=mysql://user:password@localhost:3306/dbname
+`;
+      }
+    }
+    
     fs.writeFileSync(path.join(projectPath, '.env.example'), envExample);
+    
+    // Create database config if database is selected
+    if (useDatabase && databaseType) {
+      let dbConfig = '';
+      
+      if (databaseType === 'better-sqlite3') {
+        dbConfig = `module.exports = {
+  client: 'better-sqlite3',
+  connection: {
+    filename: process.env.DATABASE_URL?.replace('sqlite:', '') || './database.sqlite'
+  },
+  migrations: {
+    directory: './migrations',
+    tableName: 'knex_migrations',
+  },
+  useNullAsDefault: true
+};
+`;
+      } else if (databaseType === 'pg') {
+        dbConfig = `module.exports = {
+  client: 'pg',
+  connection: process.env.DATABASE_URL,
+  migrations: {
+    directory: './migrations',
+    tableName: 'knex_migrations',
+  },
+  pool: {
+    min: 2,
+    max: 10
+  }
+};
+`;
+      } else if (databaseType === 'mysql2') {
+        dbConfig = `module.exports = {
+  client: 'mysql2',
+  connection: process.env.DATABASE_URL,
+  migrations: {
+    directory: './migrations',
+    tableName: 'knex_migrations',
+  },
+  pool: {
+    min: 2,
+    max: 10
+  }
+};
+`;
+      }
+      
+      fs.writeFileSync(path.join(projectPath, 'webspresso.db.js'), dbConfig);
+      
+      // Create migrations directory
+      fs.mkdirSync(path.join(projectPath, 'migrations'), { recursive: true });
+    }
     
     // Create .gitignore
     const gitignore = `node_modules/

@@ -73,6 +73,8 @@ webspresso new my-app --no-tailwind
 - Asks if you want to install in the current directory
 - If current directory is not empty, shows a warning
 - Prompts for project name (defaults to current folder name)
+- Asks if you will use a database (SQLite, PostgreSQL, or MySQL)
+- If yes, adds the appropriate driver to `package.json` and creates `webspresso.db.js` config
 - After project creation, asks if you want to install dependencies
 - If yes, runs `npm install` and `npm run build:css`
 - Then asks if you want to start the development server
@@ -95,6 +97,23 @@ webspresso new my-app
 ```
 
 **Note:** When dev server starts with Tailwind CSS, it automatically runs `watch:css` in the background to watch for CSS changes.
+
+**Database Selection:**
+During project creation, you'll be asked if you want to use a database:
+- **SQLite** (better-sqlite3) - Recommended for development and small projects
+- **PostgreSQL** (pg) - For production applications
+- **MySQL** (mysql2) - Alternative SQL database
+
+If you select a database:
+- The appropriate driver is added to `package.json` dependencies
+- `webspresso.db.js` config file is created with proper settings
+- `migrations/` directory is created
+- `DATABASE_URL` is added to `.env.example` with a template
+
+You can always add database support later by:
+1. Installing the driver: `npm install better-sqlite3` (or `pg`, `mysql2`)
+2. Creating `webspresso.db.js` config file
+3. Adding `DATABASE_URL` to your `.env` file
 
 Options:
 - `-i, --install` - Auto run `npm install` and `npm run build:css` (non-interactive)
