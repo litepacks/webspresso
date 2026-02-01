@@ -238,6 +238,53 @@ describe('Schema Helpers', () => {
         expect(meta.type).toBe('json');
       });
     });
+
+    describe('array()', () => {
+      it('should create an array column with default item schema', () => {
+        const schema = zdb.array();
+        const meta = getColumnMeta(schema);
+        
+        expect(meta.type).toBe('array');
+        expect(meta.nullable).toBe(false);
+        // Should be a ZodArray
+        expect(schema._def.typeName).toBe('ZodArray');
+      });
+
+      it('should create an array column with custom item schema', () => {
+        const schema = zdb.array(z.string());
+        const meta = getColumnMeta(schema);
+        
+        expect(meta.type).toBe('array');
+        // Should validate array of strings
+        expect(() => schema.parse(['a', 'b', 'c'])).not.toThrow();
+        expect(() => schema.parse([1, 2, 3])).toThrow();
+      });
+
+      it('should accept options object as first argument', () => {
+        const schema = zdb.array({ nullable: true });
+        const meta = getColumnMeta(schema);
+        
+        expect(meta.type).toBe('array');
+        expect(meta.nullable).toBe(true);
+      });
+
+      it('should handle nullable arrays', () => {
+        const schema = zdb.array(z.number(), { nullable: true });
+        const meta = getColumnMeta(schema);
+        
+        expect(meta.nullable).toBe(true);
+        expect(() => schema.parse(null)).not.toThrow();
+        expect(() => schema.parse(undefined)).not.toThrow();
+      });
+
+      it('should validate array items correctly', () => {
+        const schema = zdb.array(z.number());
+        
+        expect(() => schema.parse([1, 2, 3])).not.toThrow();
+        expect(() => schema.parse(['a', 'b'])).toThrow();
+        expect(() => schema.parse('not an array')).toThrow();
+      });
+    });
   });
 
   describe('extractColumnsFromSchema', () => {

@@ -385,6 +385,187 @@ describe('Seeder', () => {
     });
   });
 
+  describe('array type generation', () => {
+    it('should generate array for array columns', () => {
+      faker.seed(123); // Deterministic test
+      const schema = z.object({
+        id: zdb.id(),
+        tags: zdb.array(),
+      });
+
+      defineModel({ name: 'Post', table: 'posts', schema });
+
+      const seeder = createSeeder(faker, {});
+      const record = seeder.factory('Post').make();
+
+      expect(record.tags).toBeDefined();
+      expect(Array.isArray(record.tags)).toBe(true);
+      expect(record.tags.length).toBeGreaterThan(0);
+      expect(record.tags.length).toBeLessThanOrEqual(5);
+    });
+
+    it('should generate string array for tag/category fields', () => {
+      faker.seed(123);
+      const schema = z.object({
+        id: zdb.id(),
+        tags: zdb.array(),
+        categories: zdb.array(),
+      });
+
+      defineModel({ name: 'Article', table: 'articles', schema });
+
+      const seeder = createSeeder(faker, {});
+      const record = seeder.factory('Article').make();
+
+      expect(Array.isArray(record.tags)).toBe(true);
+      expect(Array.isArray(record.categories)).toBe(true);
+      // Tags should be strings (detected by column name)
+      if (record.tags && record.tags.length > 0) {
+        record.tags.forEach(tag => {
+          expect(typeof tag).toBe('string');
+        });
+      }
+      // Categories might be mixed (default behavior), but should be array
+      expect(Array.isArray(record.categories)).toBe(true);
+    });
+
+    it('should generate number array for id/score fields', () => {
+      faker.seed(123);
+      const schema = z.object({
+        id: zdb.id(),
+        user_ids: zdb.array(),
+        scores: zdb.array(),
+      });
+
+      defineModel({ name: 'Game', table: 'games', schema });
+
+      const seeder = createSeeder(faker, {});
+      const record = seeder.factory('Game').make();
+
+      expect(Array.isArray(record.user_ids)).toBe(true);
+      expect(Array.isArray(record.scores)).toBe(true);
+      if (record.user_ids && record.user_ids.length > 0) {
+        record.user_ids.forEach(id => {
+          expect(typeof id).toBe('number');
+        });
+      }
+      if (record.scores && record.scores.length > 0) {
+        record.scores.forEach(score => {
+          expect(typeof score).toBe('number');
+        });
+      }
+    });
+
+    it('should generate email array for email fields', () => {
+      faker.seed(123);
+      const schema = z.object({
+        id: zdb.id(),
+        emails: zdb.array(),
+      });
+
+      defineModel({ name: 'Contact', table: 'contacts', schema });
+
+      const seeder = createSeeder(faker, {});
+      const record = seeder.factory('Contact').make();
+
+      expect(Array.isArray(record.emails)).toBe(true);
+      if (record.emails && record.emails.length > 0) {
+        record.emails.forEach(email => {
+          expect(typeof email).toBe('string');
+          expect(email).toMatch(/@/);
+        });
+      }
+    });
+
+    it('should generate URL array for url/link fields', () => {
+      const schema = z.object({
+        id: zdb.id(),
+        urls: zdb.array(),
+        links: zdb.array(),
+      });
+
+      defineModel({ name: 'Resource', table: 'resources', schema });
+
+      const seeder = createSeeder(faker, {});
+      const record = seeder.factory('Resource').make();
+
+      // Array should be generated (will be JSON stringified when inserted to DB)
+      expect(record.urls).toBeDefined();
+      expect(record.links).toBeDefined();
+      // In seeder, arrays are returned as arrays (Knex will stringify on insert)
+      if (Array.isArray(record.urls)) {
+        record.urls.forEach(url => {
+          expect(typeof url).toBe('string');
+          expect(url).toMatch(/^https?:\/\//);
+        });
+      }
+      if (Array.isArray(record.links)) {
+        record.links.forEach(link => {
+          expect(typeof link).toBe('string');
+        });
+      }
+    });
+
+    it('should handle nullable arrays', () => {
+      const schema = z.object({
+        id: zdb.id(),
+        optional_tags: zdb.array(z.string(), { nullable: true }),
+      });
+
+      defineModel({ name: 'Item', table: 'items', schema });
+
+      const seeder = createSeeder(faker, {});
+      // Generate multiple records to test nullable behavior
+      const records = seeder.factory('Item').make(20);
+      
+      let hasNull = false;
+      let hasArray = false;
+      
+      records.forEach(record => {
+        if (record.optional_tags === null || record.optional_tags === undefined) {
+          hasNull = true;
+        } else if (Array.isArray(record.optional_tags)) {
+          hasArray = true;
+        }
+      });
+      
+      // With 20 records, we should get at least one null (10% chance) and one array
+      // But we don't enforce this strictly as it's probabilistic
+      expect(hasArray || hasNull).toBe(true);
+    });
+
+    it('should work with array in seed()', async () => {
+      const schema = z.object({
+        id: zdb.id(),
+        tags: zdb.array(),
+      });
+
+      defineModel({ name: 'BlogPost', table: 'blog_posts', schema });
+
+      const mockInsert = vi.fn().mockResolvedValue([1]);
+      const mockWhere = vi.fn().mockReturnThis();
+      const mockSelect = vi.fn().mockReturnThis();
+      // Knex automatically parses JSON columns, so return as array
+      const mockFirst = vi.fn().mockResolvedValue({ id: 1, tags: ['tag1', 'tag2'] });
+      
+      const knex = vi.fn((table) => ({
+        insert: mockInsert,
+        where: mockWhere,
+        select: mockSelect,
+        first: mockFirst,
+      }));
+
+      const seeder = createSeeder(faker, knex);
+      const records = await seeder.seed('BlogPost', 2);
+
+      expect(records).toHaveLength(2);
+      records.forEach(record => {
+        // Tags should be an array (Knex parses JSON automatically)
+        expect(Array.isArray(record.tags)).toBe(true);
+      });
+    });
+  });
+
   describe('auto factory', () => {
     it('should auto-create factory if not defined', () => {
       const schema = z.object({

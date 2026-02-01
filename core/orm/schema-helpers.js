@@ -305,6 +305,34 @@ function createSchemaHelpers(z) {
     },
 
     /**
+     * Array column (stored as JSON in database)
+     * @param {import('zod').ZodTypeAny} [itemSchema] - Schema for array items (default: z.any())
+     * @param {Partial<import('./types').ColumnMeta>} [options={}]
+     * @returns {import('zod').ZodArray}
+     */
+    array(itemSchema, options = {}) {
+      // If first argument is options object (backward compatibility)
+      if (itemSchema && typeof itemSchema === 'object' && !itemSchema._def) {
+        options = itemSchema;
+        itemSchema = z.any();
+      }
+      
+      const { nullable = false, ...rest } = options;
+      const baseItemSchema = itemSchema || z.any();
+      let schema = z.array(baseItemSchema);
+      
+      if (nullable) {
+        schema = schema.nullable().optional();
+      }
+      
+      return withMeta(schema, {
+        type: 'array',
+        nullable,
+        ...rest,
+      });
+    },
+
+    /**
      * Enum column
      * @param {string[]} values - Allowed enum values
      * @param {Partial<import('./types').ColumnMeta>} [options={}]

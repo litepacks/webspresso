@@ -142,6 +142,11 @@ function generateColumnLine(columnName, meta) {
       parts.push(`table.json('${columnName}')`);
       break;
 
+    case 'array':
+      // Array is stored as JSON in database
+      parts.push(`table.json('${columnName}')`);
+      break;
+
     case 'enum':
       const enumValues = meta.enumValues || [];
       const valuesStr = enumValues.map(v => `'${v}'`).join(', ');

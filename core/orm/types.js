@@ -9,7 +9,7 @@
 // ============================================================================
 
 /**
- * @typedef {'id'|'string'|'text'|'integer'|'bigint'|'float'|'decimal'|'boolean'|'date'|'datetime'|'timestamp'|'json'|'enum'|'uuid'} ColumnType
+ * @typedef {'id'|'string'|'text'|'integer'|'bigint'|'float'|'decimal'|'boolean'|'date'|'datetime'|'timestamp'|'json'|'array'|'enum'|'uuid'} ColumnType
  */
 
 /**

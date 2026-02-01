@@ -61,6 +61,11 @@ function createSeeder(faker, knex) {
     // Smart field detection by name
     const lowerName = columnName.toLowerCase();
 
+    // Array type should be handled in generateByType (skip smart detection for arrays)
+    if (meta.type === 'array') {
+      return generateByType(columnName, meta);
+    }
+
     // Email detection
     if (lowerName.includes('email')) {
       return faker.internet.email().toLowerCase();
@@ -146,16 +151,17 @@ function createSeeder(faker, knex) {
       return faker.helpers.arrayElement(['active', 'inactive', 'pending']);
     }
 
-    // Generate by type
-    return generateByType(meta);
+    // Generate by type (pass columnName for array type detection)
+    return generateByType(columnName, meta);
   }
 
   /**
    * Generate value by column type
+   * @param {string} columnName - Column name (for smart detection, especially for arrays)
    * @param {Object} meta - Column metadata
    * @returns {*} Generated value
    */
-  function generateByType(meta) {
+  function generateByType(columnName, meta) {
     switch (meta.type) {
       case 'bigint':
       case 'integer':
@@ -185,6 +191,53 @@ function createSeeder(faker, knex) {
 
       case 'json':
         return { key: faker.lorem.word(), value: faker.lorem.sentence() };
+
+      case 'array':
+        // Generate a random array with 1-5 items
+        const arrayLength = faker.number.int({ min: 1, max: 5 });
+        const arrayItems = [];
+        
+        // Try to infer item type from column name
+        const lowerName = (columnName || '').toLowerCase();
+        
+        // String arrays (tags, categories, etc.)
+        if (lowerName.includes('tag') || lowerName.includes('category') || 
+            lowerName.includes('label') || lowerName.includes('keyword')) {
+          for (let i = 0; i < arrayLength; i++) {
+            arrayItems.push(faker.lorem.word());
+          }
+        }
+        // Number arrays (ids, scores, etc.)
+        else if (lowerName.includes('id') || lowerName.includes('score') || 
+                 lowerName.includes('price') || lowerName.includes('amount')) {
+          for (let i = 0; i < arrayLength; i++) {
+            arrayItems.push(faker.number.int({ min: 1, max: 100 }));
+          }
+        }
+        // Email arrays
+        else if (lowerName.includes('email')) {
+          for (let i = 0; i < arrayLength; i++) {
+            arrayItems.push(faker.internet.email().toLowerCase());
+          }
+        }
+        // URL arrays
+        else if (lowerName.includes('url') || lowerName.includes('link')) {
+          for (let i = 0; i < arrayLength; i++) {
+            arrayItems.push(faker.internet.url());
+          }
+        }
+        // Default: mixed array (strings and numbers)
+        else {
+          for (let i = 0; i < arrayLength; i++) {
+            if (faker.datatype.boolean()) {
+              arrayItems.push(faker.lorem.word());
+            } else {
+              arrayItems.push(faker.number.int({ min: 1, max: 100 }));
+            }
+          }
+        }
+        
+        return arrayItems;
 
       case 'enum':
         if (meta.enumValues && meta.enumValues.length > 0) {
