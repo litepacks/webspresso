@@ -4,7 +4,7 @@
  * @module plugins/admin-panel/api
  */
 
-const { getAllModels, getModel } = require('../../../core/orm/model');
+const { getAllModels, getModel } = require('../../core/orm/model');
 const { checkAdminExists, setupAdmin, login, logout, requireAuth } = require('./auth');
 
 /**

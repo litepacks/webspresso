@@ -4,8 +4,8 @@
  * @module plugins/admin-panel/admin-user-model
  */
 
-const { defineModel } = require('../../../core/orm/model');
-const { zdb } = require('../../../core/orm');
+const { defineModel } = require('../../core/orm/model');
+const { zdb } = require('../../core/orm');
 
 /**
  * AdminUser model schema
@@ -23,7 +23,7 @@ const AdminUserSchema = zdb.schema({
 
 /**
  * Create and register AdminUser model
- * @returns {import('../../../core/orm/types').ModelDefinition}
+ * @returns {import('../../core/orm/types').ModelDefinition}
  */
 function createAdminUserModel() {
   return defineModel({

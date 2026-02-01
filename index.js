@@ -63,6 +63,9 @@ module.exports = {
   // ORM
   ...orm,
   
+  // Direct zdb export (for convenience)
+  zdb: orm.zdb,
+
   // Plugins
   schemaExplorerPlugin,
   adminPanelPlugin,
