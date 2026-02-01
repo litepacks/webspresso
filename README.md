@@ -1007,6 +1007,9 @@ webspresso db:make create_posts_table
 
 # Create migration from model (scaffolding)
 webspresso db:make create_users_table --model User
+
+# Admin Panel Setup
+webspresso admin:setup  # Create admin_users migration
 ```
 
 **Database Config File (`webspresso.db.js`):**

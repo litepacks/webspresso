@@ -31,25 +31,9 @@ function adminPanelPlugin(options = {}) {
     throw new Error('Admin panel plugin requires a database instance. Pass `db` in options.');
   }
 
-  // Check for peer dependencies
-  let session = null;
-  let bcrypt = null;
-
-  try {
-    session = require('express-session');
-  } catch (e) {
-    throw new Error(
-      'Admin panel plugin requires express-session. Install it with: npm install express-session'
-    );
-  }
-
-  try {
-    bcrypt = require('bcrypt');
-  } catch (e) {
-    throw new Error(
-      'Admin panel plugin requires bcrypt. Install it with: npm install bcrypt'
-    );
-  }
+  // Dependencies are now in main package
+  const session = require('express-session');
+  const bcrypt = require('bcrypt');
 
   return {
     name: 'admin-panel',
@@ -61,8 +45,13 @@ function adminPanelPlugin(options = {}) {
      * Register hook - called when plugin is registered
      */
     async register(ctx) {
-      // Create and register AdminUser model
-      const AdminUser = createAdminUserModel();
+      // Create and register AdminUser model (only if not already registered)
+      const { getModel } = require('../../core/orm/model');
+      let AdminUser = getModel('AdminUser');
+      
+      if (!AdminUser) {
+        AdminUser = createAdminUserModel();
+      }
 
       // Store in plugin context for later use
       this._adminUser = AdminUser;
@@ -86,19 +75,24 @@ function adminPanelPlugin(options = {}) {
       const bcrypt = this._bcrypt;
       const session = this._session;
 
-      // Setup session middleware
-      const sessionSecret = options.sessionSecret || process.env.SESSION_SECRET || 'webspresso-admin-secret-change-in-production';
-      
-      app.use(session({
-        secret: sessionSecret,
-        resave: false,
-        saveUninitialized: false,
-        cookie: {
-          secure: process.env.NODE_ENV === 'production',
-          httpOnly: true,
-          maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        },
-      }));
+      // Setup session middleware (only once, even if multiple plugins)
+      // Check if session middleware is already registered
+      if (!app._webspressoSessionInitialized) {
+        const sessionSecret = options.sessionSecret || process.env.SESSION_SECRET || 'webspresso-admin-secret-change-in-production';
+        
+        app.use(session({
+          secret: sessionSecret,
+          resave: false,
+          saveUninitialized: false,
+          cookie: {
+            secure: process.env.NODE_ENV === 'production',
+            httpOnly: true,
+            maxAge: 24 * 60 * 60 * 1000, // 24 hours
+          },
+        }));
+        
+        app._webspressoSessionInitialized = true;
+      }
 
       // Create API handlers
       const apiHandlers = createApiHandlers({

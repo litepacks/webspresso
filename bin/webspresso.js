@@ -24,6 +24,7 @@ const { registerCommand: registerDbRollback } = require('./commands/db-rollback'
 const { registerCommand: registerDbStatus } = require('./commands/db-status');
 const { registerCommand: registerDbMake } = require('./commands/db-make');
 const { registerCommand: registerSeed } = require('./commands/seed');
+const { registerCommand: registerAdminSetup } = require('./commands/admin-setup');
 
 registerNew(program);
 registerPage(program);
@@ -36,6 +37,7 @@ registerDbRollback(program);
 registerDbStatus(program);
 registerDbMake(program);
 registerSeed(program);
+registerAdminSetup(program);
 
 // Parse arguments
 program.parse();
