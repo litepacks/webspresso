@@ -7,11 +7,13 @@ const sitemapPlugin = require('./sitemap');
 const analyticsPlugin = require('./analytics');
 const dashboardPlugin = require('./dashboard/index');
 const schemaExplorerPlugin = require('./schema-explorer');
+const adminPanelPlugin = require('./admin-panel');
 
 module.exports = {
   sitemapPlugin,
   analyticsPlugin,
   dashboardPlugin,
   schemaExplorerPlugin,
+  adminPanelPlugin,
 };
 

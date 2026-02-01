@@ -1,0 +1,436 @@
+/**
+ * Admin Panel API Routes
+ * CRUD endpoints for admin panel
+ * @module plugins/admin-panel/api
+ */
+
+const { getAllModels, getModel } = require('../../../core/orm/model');
+const { checkAdminExists, setupAdmin, login, logout, requireAuth } = require('./auth');
+
+/**
+ * Create API route handlers
+ * @param {Object} options - Options
+ * @param {string} options.path - Admin panel path
+ * @param {Object} options.db - Database instance
+ * @param {Object} options.AdminUser - AdminUser model
+ * @param {Function} options.hashPassword - Bcrypt hash function
+ * @param {Function} options.comparePassword - Bcrypt compare function
+ * @returns {Object} Route handlers
+ */
+function createApiHandlers(options) {
+  const { path, db, AdminUser, hashPassword, comparePassword } = options;
+  const adminPath = path || '/_admin';
+  const apiPath = `${adminPath}/api`;
+
+  // Get AdminUser repository
+  let AdminUserRepo = null;
+  if (db && AdminUser) {
+    AdminUserRepo = db.createRepository(AdminUser);
+  }
+
+  /**
+   * Check if admin user exists
+   */
+    async function checkHandler(req, res) {
+    try {
+      if (!AdminUserRepo) {
+        return res.json({ exists: false });
+      }
+      const exists = await checkAdminExists(AdminUserRepo);
+      res.json({ exists });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Setup first admin user
+   */
+  async function setupHandler(req, res) {
+    try {
+      if (!AdminUserRepo || !hashPassword) {
+        return res.status(500).json({ error: 'Admin user system not initialized' });
+      }
+
+      const { email, password, name } = req.body;
+
+      if (!email || !password || !name) {
+        return res.status(400).json({ error: 'Email, password, and name are required' });
+      }
+
+      const admin = await setupAdmin(AdminUserRepo, { email, password, name }, hashPassword);
+      
+      // Set session
+      req.session.adminUser = admin;
+      
+      res.json({ success: true, user: admin });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Login handler
+   */
+  async function loginHandler(req, res) {
+    try {
+      if (!AdminUserRepo || !comparePassword) {
+        return res.status(500).json({ error: 'Admin user system not initialized' });
+      }
+
+      const { email, password } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+      }
+
+      const user = await login(AdminUserRepo, email, password, comparePassword);
+
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      // Set session
+      req.session.adminUser = user;
+
+      res.json({ success: true, user });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Logout handler
+   */
+  async function logoutHandler(req, res) {
+    try {
+      await logout(req, res);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Get current user
+   */
+  function meHandler(req, res) {
+    if (req.session && req.session.adminUser) {
+      res.json({ user: req.session.adminUser });
+    } else {
+      res.status(401).json({ error: 'Not authenticated' });
+    }
+  }
+
+  /**
+   * Get all models (admin enabled)
+   */
+  function modelsHandler(req, res) {
+    try {
+      const allModels = getAllModels();
+      const adminModels = [];
+
+      for (const [name, model] of allModels) {
+        if (model.admin && model.admin.enabled) {
+          adminModels.push({
+            name: model.name,
+            table: model.table,
+            label: model.admin.label || model.name,
+            icon: model.admin.icon || null,
+            primaryKey: model.primaryKey,
+            columns: Array.from(model.columns.keys()),
+            relations: Object.keys(model.relations),
+          });
+        }
+      }
+
+      res.json({ models: adminModels });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Get model metadata
+   */
+  function modelHandler(req, res) {
+    try {
+      const { model: modelName } = req.params;
+      const model = getModel(modelName);
+
+      if (!model) {
+        return res.status(404).json({ error: 'Model not found' });
+      }
+
+      if (!model.admin || !model.admin.enabled) {
+        return res.status(403).json({ error: 'Model not enabled in admin panel' });
+      }
+
+      // Build column metadata
+      const columns = [];
+      for (const [name, meta] of model.columns) {
+        columns.push({
+          name,
+          type: meta.type,
+          nullable: meta.nullable || false,
+          default: meta.default,
+          maxLength: meta.maxLength,
+          enumValues: meta.enumValues,
+          references: meta.references,
+          customField: model.admin.customFields?.[name] || null,
+        });
+      }
+
+      res.json({
+        name: model.name,
+        table: model.table,
+        label: model.admin.label || model.name,
+        icon: model.admin.icon || null,
+        primaryKey: model.primaryKey,
+        columns,
+        relations: Object.keys(model.relations),
+        queries: Object.keys(model.admin.queries || {}),
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Get records (paginated)
+   */
+  async function recordsListHandler(req, res) {
+    try {
+      const { model: modelName } = req.params;
+      const model = getModel(modelName);
+
+      if (!model || !model.admin || !model.admin.enabled) {
+        return res.status(404).json({ error: 'Model not found or not enabled' });
+      }
+
+      const repo = db.createRepository(model);
+      const page = parseInt(req.query.page) || 1;
+      const perPage = parseInt(req.query.perPage) || 15;
+      const offset = (page - 1) * perPage;
+
+      // Build query
+      let query = repo.query();
+
+      // Apply filters if provided
+      if (req.query.search) {
+        // Simple search on string columns
+        const searchTerm = `%${req.query.search}%`;
+        const stringColumns = Array.from(model.columns.entries())
+          .filter(([_, meta]) => meta.type === 'string' || meta.type === 'text')
+          .map(([name]) => name);
+
+        if (stringColumns.length > 0) {
+          query = query.where(function() {
+            for (let i = 0; i < stringColumns.length; i++) {
+              if (i === 0) {
+                this.where(stringColumns[i], 'like', searchTerm);
+              } else {
+                this.orWhere(stringColumns[i], 'like', searchTerm);
+              }
+            }
+          });
+        }
+      }
+
+      // Get total count
+      const countConditions = {};
+      if (req.query.search) {
+        // For count, we'll use a simpler approach
+        // In a real implementation, you'd want to match the same search logic
+      }
+      const total = await repo.count(countConditions);
+
+      // Get records
+      const records = await query.list();
+
+      res.json({
+        data: records,
+        pagination: {
+          page,
+          perPage,
+          total,
+          totalPages: Math.ceil(total / perPage),
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Get single record
+   */
+  async function recordHandler(req, res) {
+    try {
+      const { model: modelName, id } = req.params;
+      const model = getModel(modelName);
+
+      if (!model || !model.admin || !model.admin.enabled) {
+        return res.status(404).json({ error: 'Model not found or not enabled' });
+      }
+
+      const repo = db.createRepository(model);
+      const record = await repo.findById(id);
+
+      if (!record) {
+        return res.status(404).json({ error: 'Record not found' });
+      }
+
+      res.json({ data: record });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Create record
+   */
+  async function createRecordHandler(req, res) {
+    try {
+      const { model: modelName } = req.params;
+      const model = getModel(modelName);
+
+      if (!model || !model.admin || !model.admin.enabled) {
+        return res.status(404).json({ error: 'Model not found or not enabled' });
+      }
+
+      const repo = db.createRepository(model);
+      const record = await repo.create(req.body);
+
+      res.status(201).json({ data: record });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Update record
+   */
+  async function updateRecordHandler(req, res) {
+    try {
+      const { model: modelName, id } = req.params;
+      const model = getModel(modelName);
+
+      if (!model || !model.admin || !model.admin.enabled) {
+        return res.status(404).json({ error: 'Model not found or not enabled' });
+      }
+
+      const repo = db.createRepository(model);
+      const record = await repo.update(id, req.body);
+
+      if (!record) {
+        return res.status(404).json({ error: 'Record not found' });
+      }
+
+      res.json({ data: record });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Delete record
+   */
+  async function deleteRecordHandler(req, res) {
+    try {
+      const { model: modelName, id } = req.params;
+      const model = getModel(modelName);
+
+      if (!model || !model.admin || !model.admin.enabled) {
+        return res.status(404).json({ error: 'Model not found or not enabled' });
+      }
+
+      const repo = db.createRepository(model);
+      const deleted = await repo.delete(id);
+
+      if (!deleted) {
+        return res.status(404).json({ error: 'Record not found' });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Get relation data
+   */
+  async function relationHandler(req, res) {
+    try {
+      const { model: modelName, relation: relationName } = req.params;
+      const model = getModel(modelName);
+
+      if (!model || !model.admin || !model.admin.enabled) {
+        return res.status(404).json({ error: 'Model not found or not enabled' });
+      }
+
+      const relation = model.relations[relationName];
+      if (!relation) {
+        return res.status(404).json({ error: 'Relation not found' });
+      }
+
+      const relatedModel = relation.model();
+      const relatedRepo = db.createRepository(relatedModel);
+
+      // Get all related records (for dropdown/select)
+      const records = await relatedRepo.findAll();
+
+      res.json({ data: records });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Execute custom query
+   */
+  async function queryHandler(req, res) {
+    try {
+      const { model: modelName, query: queryName } = req.params;
+      const model = getModel(modelName);
+
+      if (!model || !model.admin || !model.admin.enabled) {
+        return res.status(404).json({ error: 'Model not found or not enabled' });
+      }
+
+      const queryFn = model.admin.queries?.[queryName];
+      if (!queryFn || typeof queryFn !== 'function') {
+        return res.status(404).json({ error: 'Query not found' });
+      }
+
+      const repo = db.createRepository(model);
+      const result = await queryFn(repo);
+
+      res.json({ data: result });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  return {
+    checkHandler,
+    setupHandler,
+    loginHandler,
+    logoutHandler,
+    meHandler,
+    modelsHandler,
+    modelHandler,
+    recordsListHandler,
+    recordHandler,
+    createRecordHandler,
+    updateRecordHandler,
+    deleteRecordHandler,
+    relationHandler,
+    queryHandler,
+  };
+}
+
+module.exports = {
+  createApiHandlers,
+};

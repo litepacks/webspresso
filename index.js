@@ -30,7 +30,7 @@ const {
 const orm = require('./core/orm');
 
 // Built-in plugins
-const { schemaExplorerPlugin } = require('./plugins');
+const { schemaExplorerPlugin, adminPanelPlugin } = require('./plugins');
 
 module.exports = {
   // Main API
@@ -65,5 +65,6 @@ module.exports = {
   
   // Plugins
   schemaExplorerPlugin,
+  adminPanelPlugin,
 };
 

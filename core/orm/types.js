@@ -76,6 +76,31 @@
  */
 
 // ============================================================================
+// Admin Panel Types
+// ============================================================================
+
+/**
+ * @typedef {Object} CustomFieldConfig
+ * @property {string} type - Field renderer type (e.g., 'file-upload', 'rich-text')
+ * @property {*} [options] - Additional options for the field renderer
+ */
+
+/**
+ * @typedef {Function} QueryConfig
+ * @param {import('./repository').Repository} repo - Repository instance
+ * @returns {Promise<*>} Query result
+ */
+
+/**
+ * @typedef {Object} AdminMetadata
+ * @property {boolean} [enabled=false] - Whether model is enabled in admin panel
+ * @property {string} [label] - Display label for the model (default: model name)
+ * @property {string} [icon] - Icon for the model (emoji or icon name)
+ * @property {Object.<string, CustomFieldConfig>} [customFields={}] - Custom field configurations
+ * @property {Object.<string, QueryConfig>} [queries={}] - Custom query functions
+ */
+
+// ============================================================================
 // Model Types
 // ============================================================================
 
@@ -87,6 +112,7 @@
  * @property {string} [primaryKey='id'] - Primary key column name
  * @property {RelationsMap} [relations={}] - Relation definitions
  * @property {ScopeOptions} [scopes={}] - Scope options
+ * @property {AdminMetadata} [admin] - Admin panel metadata
  */
 
 /**
@@ -98,6 +124,7 @@
  * @property {RelationsMap} relations - Relation definitions
  * @property {ScopeOptions} scopes - Scope options
  * @property {Map<string, ColumnMeta>} columns - Parsed column metadata
+ * @property {AdminMetadata} [admin] - Admin panel metadata
  */
 
 // ============================================================================

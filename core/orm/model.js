@@ -25,6 +25,7 @@ function defineModel(options) {
     primaryKey = 'id',
     relations = {},
     scopes = {},
+    admin = {},
   } = options;
 
   // Validate required fields
@@ -78,6 +79,13 @@ function defineModel(options) {
       tenant: scopes.tenant || null,
     },
     columns,
+    admin: {
+      enabled: admin.enabled || false,
+      label: admin.label || name,
+      icon: admin.icon || null,
+      customFields: admin.customFields || {},
+      queries: admin.queries || {},
+    },
   };
 
   // Register model
