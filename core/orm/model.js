@@ -80,7 +80,7 @@ function defineModel(options) {
     },
     columns,
     admin: {
-      enabled: admin.enabled || false,
+      enabled: admin.enabled === true, // Explicit boolean check
       label: admin.label || name,
       icon: admin.icon || null,
       customFields: admin.customFields || {},

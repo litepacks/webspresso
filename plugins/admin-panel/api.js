@@ -131,7 +131,7 @@ function createApiHandlers(options) {
       const adminModels = [];
 
       for (const [name, model] of allModels) {
-        if (model.admin && model.admin.enabled) {
+        if (model.admin && model.admin.enabled === true) {
           adminModels.push({
             name: model.name,
             table: model.table,
@@ -162,7 +162,7 @@ function createApiHandlers(options) {
         return res.status(404).json({ error: 'Model not found' });
       }
 
-      if (!model.admin || !model.admin.enabled) {
+      if (!model.admin || model.admin.enabled !== true) {
         return res.status(403).json({ error: 'Model not enabled in admin panel' });
       }
 
@@ -204,7 +204,7 @@ function createApiHandlers(options) {
       const { model: modelName } = req.params;
       const model = getModel(modelName);
 
-      if (!model || !model.admin || !model.admin.enabled) {
+      if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
@@ -270,7 +270,7 @@ function createApiHandlers(options) {
       const { model: modelName, id } = req.params;
       const model = getModel(modelName);
 
-      if (!model || !model.admin || !model.admin.enabled) {
+      if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
@@ -295,7 +295,7 @@ function createApiHandlers(options) {
       const { model: modelName } = req.params;
       const model = getModel(modelName);
 
-      if (!model || !model.admin || !model.admin.enabled) {
+      if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
@@ -316,7 +316,7 @@ function createApiHandlers(options) {
       const { model: modelName, id } = req.params;
       const model = getModel(modelName);
 
-      if (!model || !model.admin || !model.admin.enabled) {
+      if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
@@ -341,7 +341,7 @@ function createApiHandlers(options) {
       const { model: modelName, id } = req.params;
       const model = getModel(modelName);
 
-      if (!model || !model.admin || !model.admin.enabled) {
+      if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
@@ -366,7 +366,7 @@ function createApiHandlers(options) {
       const { model: modelName, relation: relationName } = req.params;
       const model = getModel(modelName);
 
-      if (!model || !model.admin || !model.admin.enabled) {
+      if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
@@ -395,7 +395,7 @@ function createApiHandlers(options) {
       const { model: modelName, query: queryName } = req.params;
       const model = getModel(modelName);
 
-      if (!model || !model.admin || !model.admin.enabled) {
+      if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
