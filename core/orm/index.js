@@ -6,6 +6,18 @@
 
 const { createSchemaHelpers, extractColumnsFromSchema, getColumnMeta } = require('./schema-helpers');
 const { defineModel, getModel, getAllModels, hasModel, clearRegistry } = require('./model');
+
+// Create zdb instance with zod (zod is a dependency)
+let z;
+try {
+  z = require('zod');
+} catch {
+  // Zod not installed, zdb will be undefined
+  z = null;
+}
+
+// Export zdb instance directly
+const zdb = z ? createSchemaHelpers(z) : null;
 const { createRepository } = require('./repository');
 const { createQueryBuilder, QueryBuilder } = require('./query-builder');
 const { runTransaction, createTransactionContext } = require('./transaction');
@@ -110,7 +122,8 @@ module.exports = {
   // Main factory
   createDatabase,
 
-  // Schema helpers
+  // Schema helpers - zdb instance (direct export)
+  zdb,
   createSchemaHelpers,
   extractColumnsFromSchema,
   getColumnMeta,

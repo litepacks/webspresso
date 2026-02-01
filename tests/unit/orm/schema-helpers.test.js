@@ -42,6 +42,32 @@ describe('Schema Helpers', () => {
   describe('createSchemaHelpers', () => {
     const zdb = createSchemaHelpers(z);
 
+    describe('schema()', () => {
+      it('should create a Zod object schema', () => {
+        const schema = zdb.schema({
+          id: zdb.id(),
+          name: zdb.string(),
+        });
+        
+        expect(schema.parse).toBeDefined();
+        expect(typeof schema.parse).toBe('function');
+        
+        const result = schema.parse({ id: 1, name: 'test' });
+        expect(result.id).toBe(1);
+        expect(result.name).toBe('test');
+      });
+
+      it('should work with array fields', () => {
+        const schema = zdb.schema({
+          id: zdb.id(),
+          tags: zdb.array(z.string()),
+        });
+        
+        const result = schema.parse({ id: 1, tags: ['tag1', 'tag2'] });
+        expect(result.tags).toEqual(['tag1', 'tag2']);
+      });
+    });
+
     describe('id()', () => {
       it('should create a primary key column', () => {
         const schema = zdb.id();

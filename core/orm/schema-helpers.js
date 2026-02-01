@@ -67,7 +67,15 @@ function createSchemaHelpers(z) {
     return schema.describe(encodeColumnMeta(meta));
   }
 
-  return {
+  const helpers = {
+    /**
+     * Create a Zod object schema with database metadata
+     * @param {Object} shape - Object shape with zdb fields
+     * @returns {import('zod').ZodObject}
+     */
+    schema(shape) {
+      return z.object(shape);
+    },
     /**
      * Primary key column (bigint, auto-increment)
      * @param {Partial<import('./types').ColumnMeta>} [options={}]
@@ -398,6 +406,8 @@ function createSchemaHelpers(z) {
       });
     },
   };
+
+  return helpers;
 }
 
 /**

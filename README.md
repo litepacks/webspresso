@@ -782,14 +782,10 @@ Webspresso includes a minimal, Eloquent-inspired ORM built on Knex with Zod sche
 ### Quick Start
 
 ```javascript
-const { z } = require('zod');
-const { createSchemaHelpers, defineModel, createDatabase } = require('webspresso');
+const { zdb, defineModel, createDatabase } = require('webspresso');
 
-// 1. Create schema helpers
-const zdb = createSchemaHelpers(z);
-
-// 2. Define your schema with database metadata
-const UserSchema = z.object({
+// 1. Define your schema with database metadata
+const UserSchema = zdb.schema({
   id: zdb.id(),
   email: zdb.string({ unique: true, index: true }),
   name: zdb.string({ maxLength: 100 }),
@@ -841,6 +837,7 @@ The `zdb` helpers wrap Zod schemas with database column metadata:
 | `zdb.datetime(opts)` | DATETIME column | `nullable` |
 | `zdb.timestamp(opts)` | TIMESTAMP column | `auto: 'create'\|'update'`, `nullable` |
 | `zdb.json(opts)` | JSON column | `nullable` |
+| `zdb.array(itemSchema, opts)` | ARRAY column (stored as JSON) | `nullable` |
 | `zdb.enum(values, opts)` | ENUM column | `default`, `nullable` |
 | `zdb.foreignKey(table, opts)` | Foreign key (bigint) | `referenceColumn`, `nullable` |
 | `zdb.foreignUuid(table, opts)` | Foreign key (uuid) | `referenceColumn`, `nullable` |
