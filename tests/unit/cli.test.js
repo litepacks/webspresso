@@ -148,7 +148,7 @@ describe('CLI', () => {
       const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
       
       expect(packageJson.name).toBe(projectName);
-      expect(packageJson.scripts.dev).toContain('watch:css');
+      expect(packageJson.scripts.dev).toBe('webspresso dev');
       expect(packageJson.scripts.start).toContain('build:css');
       expect(packageJson.scripts['build:css']).toContain('tailwindcss');
       expect(packageJson.scripts['watch:css']).toContain('tailwindcss');
@@ -382,18 +382,20 @@ describe('CLI', () => {
       
       expect(packageJson.scripts['watch:css']).toBeDefined();
       expect(packageJson.scripts['watch:css']).toContain('tailwindcss');
-      expect(packageJson.scripts.dev).toContain('watch:css');
+      // Dev script uses webspresso dev which handles watch:css internally
+      expect(packageJson.scripts.dev).toBe('webspresso dev');
     });
 
-    it('should include watch:css in dev script when Tailwind enabled', () => {
+    it('should use webspresso dev command when Tailwind enabled', () => {
       runCli(`new ${projectName}`);
       
       const packagePath = path.join(TEST_DIR, projectName, 'package.json');
       const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
       
-      // Dev script should include watch:css
-      expect(packageJson.scripts.dev).toContain('watch:css');
-      expect(packageJson.scripts.dev).toContain('node --watch server.js');
+      // Dev script uses webspresso dev which handles CSS watch internally
+      expect(packageJson.scripts.dev).toBe('webspresso dev');
+      // watch:css script should still exist for manual use
+      expect(packageJson.scripts['watch:css']).toBeDefined();
     });
 
     it('should not include watch:css when --no-tailwind is used', () => {

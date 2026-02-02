@@ -4,10 +4,7 @@
  */
 
 const { z } = require('zod');
-const { createSchemaHelpers, defineModel, clearRegistry } = require('../../../core/orm');
-
-// Create zdb helpers
-const zdb = createSchemaHelpers(z);
+const { zdb, defineModel, clearRegistry, hasModel, getModel } = require('../../../core/orm');
 
 // ============================================================================
 // Company Model
@@ -58,13 +55,26 @@ const PostSchema = z.object({
 let Company, User, Post;
 
 /**
- * Initialize models (clears registry first for testing)
+ * Initialize models (reuses existing models if already defined)
+ * @param {boolean} [forceReset=false] - Force clear and redefine models
  * @returns {{ Company, User, Post }}
  */
-function initModels() {
-  // Clear registry for fresh start (important for tests)
-  clearRegistry();
+function initModels(forceReset = false) {
+  // If force reset, clear everything
+  if (forceReset) {
+    clearRegistry();
+    Company = User = Post = undefined;
+  }
 
+  // Reuse existing models if already defined
+  if (hasModel('Company') && hasModel('User') && hasModel('Post')) {
+    Company = getModel('Company');
+    User = getModel('User');
+    Post = getModel('Post');
+    return { Company, User, Post };
+  }
+
+  // Define models (will also register in global registry)
   Company = defineModel({
     name: 'Company',
     table: 'companies',
@@ -213,6 +223,7 @@ module.exports = {
   
   // Model initializer
   initModels,
+  clearRegistry,
   
   // Test helpers
   createTestSchema,

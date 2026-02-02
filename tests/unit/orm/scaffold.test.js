@@ -3,7 +3,7 @@
  */
 
 const { z } = require('zod');
-const { createSchemaHelpers, defineModel, clearRegistry } = require('../../../core/orm');
+const { zdb, defineModel, clearRegistry } = require('../../../core/orm');
 const {
   scaffoldMigration,
   scaffoldAlterMigration,
@@ -13,8 +13,6 @@ const {
 } = require('../../../core/orm/migrations/scaffold');
 
 describe('Migration Scaffold', () => {
-  const zdb = createSchemaHelpers(z);
-
   beforeEach(() => {
     clearRegistry();
   });
@@ -127,7 +125,7 @@ describe('Migration Scaffold', () => {
 
   describe('scaffoldMigration', () => {
     it('should generate complete migration from model', () => {
-      const schema = z.object({
+      const schema = zdb.schema({
         id: zdb.id(),
         email: zdb.string({ maxLength: 255, unique: true, index: true }),
         name: zdb.string({ maxLength: 100 }),

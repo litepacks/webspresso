@@ -4,12 +4,10 @@
 
 const { z } = require('zod');
 const { faker } = require('@faker-js/faker');
-const { createSchemaHelpers, defineModel, clearRegistry } = require('../../../core/orm');
+const { zdb, defineModel, clearRegistry } = require('../../../core/orm');
 const { createSeeder } = require('../../../core/orm/seeder');
 
 describe('Seeder', () => {
-  const zdb = createSchemaHelpers(z);
-
   beforeEach(() => {
     clearRegistry();
     faker.seed(12345); // Deterministic tests

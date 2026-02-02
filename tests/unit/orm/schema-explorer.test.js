@@ -2,13 +2,10 @@
  * Schema Explorer Plugin Unit Tests
  */
 
-const { z } = require('zod');
-const { createSchemaHelpers, defineModel, clearRegistry } = require('../../../core/orm');
+const { zdb, defineModel, clearRegistry } = require('../../../core/orm');
 const schemaExplorerPlugin = require('../../../plugins/schema-explorer');
 
 describe('Schema Explorer Plugin', () => {
-  const zdb = createSchemaHelpers(z);
-
   beforeEach(() => {
     clearRegistry();
   });
@@ -39,7 +36,7 @@ describe('Schema Explorer Plugin', () => {
     });
 
     it('should return all models', () => {
-      const schema = z.object({
+      const schema = zdb.schema({
         id: zdb.id(),
         name: zdb.string(),
       });
@@ -55,7 +52,7 @@ describe('Schema Explorer Plugin', () => {
     });
 
     it('should exclude specified models', () => {
-      const schema = z.object({ id: zdb.id() });
+      const schema = zdb.schema({ id: zdb.id() });
 
       defineModel({ name: 'User', table: 'users', schema });
       defineModel({ name: 'Secret', table: 'secrets', schema });
@@ -68,7 +65,7 @@ describe('Schema Explorer Plugin', () => {
     });
 
     it('should get single model by name', () => {
-      const schema = z.object({
+      const schema = zdb.schema({
         id: zdb.id(),
         email: zdb.string({ unique: true }),
       });
@@ -91,7 +88,7 @@ describe('Schema Explorer Plugin', () => {
     });
 
     it('should return model names', () => {
-      const schema = z.object({ id: zdb.id() });
+      const schema = zdb.schema({ id: zdb.id() });
 
       defineModel({ name: 'Alpha', table: 'alphas', schema });
       defineModel({ name: 'Beta', table: 'betas', schema });
@@ -105,7 +102,7 @@ describe('Schema Explorer Plugin', () => {
 
   describe('model serialization', () => {
     it('should serialize column metadata', () => {
-      const schema = z.object({
+      const schema = zdb.schema({
         id: zdb.id(),
         email: zdb.string({ unique: true, index: true, maxLength: 255 }),
         status: zdb.enum(['active', 'inactive'], { default: 'active' }),
@@ -140,10 +137,10 @@ describe('Schema Explorer Plugin', () => {
     });
 
     it('should serialize relation metadata', () => {
-      const companySchema = z.object({ id: zdb.id(), name: zdb.string() });
+      const companySchema = zdb.schema({ id: zdb.id(), name: zdb.string() });
       const Company = defineModel({ name: 'Company', table: 'companies', schema: companySchema });
 
-      const userSchema = z.object({
+      const userSchema = zdb.schema({
         id: zdb.id(),
         company_id: zdb.foreignKey('companies'),
       });
@@ -171,7 +168,7 @@ describe('Schema Explorer Plugin', () => {
     });
 
     it('should serialize scope configuration', () => {
-      const schema = z.object({
+      const schema = zdb.schema({
         id: zdb.id(),
         deleted_at: zdb.timestamp({ nullable: true }),
       });
@@ -198,7 +195,7 @@ describe('Schema Explorer Plugin', () => {
     });
 
     it('should optionally exclude columns', () => {
-      const schema = z.object({ id: zdb.id() });
+      const schema = zdb.schema({ id: zdb.id() });
       defineModel({ name: 'User', table: 'users', schema });
 
       const plugin = schemaExplorerPlugin({ includeColumns: false });
@@ -208,7 +205,7 @@ describe('Schema Explorer Plugin', () => {
     });
 
     it('should optionally exclude relations', () => {
-      const schema = z.object({ id: zdb.id() });
+      const schema = zdb.schema({ id: zdb.id() });
       defineModel({
         name: 'User',
         table: 'users',
@@ -225,7 +222,7 @@ describe('Schema Explorer Plugin', () => {
     });
 
     it('should optionally exclude scopes', () => {
-      const schema = z.object({ id: zdb.id() });
+      const schema = zdb.schema({ id: zdb.id() });
       defineModel({
         name: 'User',
         table: 'users',
@@ -243,7 +240,7 @@ describe('Schema Explorer Plugin', () => {
   describe('complex schema', () => {
     it('should handle full model with all features', () => {
       // Company model
-      const companySchema = z.object({
+      const companySchema = zdb.schema({
         id: zdb.id(),
         name: zdb.string({ maxLength: 255 }),
         slug: zdb.string({ unique: true }),
@@ -258,7 +255,7 @@ describe('Schema Explorer Plugin', () => {
       });
 
       // User model with relations
-      const userSchema = z.object({
+      const userSchema = zdb.schema({
         id: zdb.id(),
         email: zdb.string({ unique: true, index: true }),
         name: zdb.string(),
@@ -281,7 +278,7 @@ describe('Schema Explorer Plugin', () => {
       });
 
       // Post model
-      const postSchema = z.object({
+      const postSchema = zdb.schema({
         id: zdb.id(),
         title: zdb.string({ maxLength: 500 }),
         content: zdb.text({ nullable: true }),

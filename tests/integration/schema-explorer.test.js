@@ -5,11 +5,10 @@
 const request = require('supertest');
 const express = require('express');
 const { z } = require('zod');
-const { createSchemaHelpers, defineModel, clearRegistry } = require('../../core/orm');
+const { zdb, defineModel, clearRegistry } = require('../../core/orm');
 const schemaExplorerPlugin = require('../../plugins/schema-explorer');
 
 describe('Schema Explorer Plugin Integration', () => {
-  const zdb = createSchemaHelpers(z);
   let app;
 
   beforeEach(() => {

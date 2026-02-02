@@ -26,18 +26,24 @@ describe('Repository Integration', () => {
       useNullAsDefault: true,
     });
 
-    // Create database instance
+    // Create database instance (skip auto-loading)
     db = createDatabase({
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
+      models: './tests/fixtures/models-empty',
     });
 
-    // Initialize models
-    const models = initModels();
+    // Initialize models (force reset for test isolation)
+    const models = initModels(true);
     User = models.User;
     Company = models.Company;
     Post = models.Post;
+    
+    // Register models with db instance
+    db.registerModel(User);
+    db.registerModel(Company);
+    db.registerModel(Post);
 
     // Create schema
     await createTestSchema(db.knex);
@@ -56,9 +62,9 @@ describe('Repository Integration', () => {
     await seedTestData(db.knex);
 
     // Create fresh repositories
-    UserRepo = db.createRepository(User);
-    CompanyRepo = db.createRepository(Company);
-    PostRepo = db.createRepository(Post);
+    UserRepo = db.getRepository('User');
+    CompanyRepo = db.getRepository('Company');
+    PostRepo = db.getRepository('Post');
   });
 
   describe('findById', () => {

@@ -20,12 +20,18 @@ describe('Query Builder Integration', () => {
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
+      models: './tests/fixtures/models-empty', // Skip auto-loading
     });
 
-    const models = initModels();
+    const models = initModels(true); // Force reset for test isolation
     User = models.User;
     Company = models.Company;
     Post = models.Post;
+    
+    // Register models with db instance
+    db.registerModel(User);
+    db.registerModel(Company);
+    db.registerModel(Post);
 
     await createTestSchema(db.knex);
   });
@@ -40,7 +46,7 @@ describe('Query Builder Integration', () => {
     await db.knex('companies').del();
     await seedTestData(db.knex);
 
-    UserRepo = db.createRepository(User);
+    UserRepo = db.getRepository('User');
   });
 
   describe('where clauses', () => {
@@ -283,9 +289,15 @@ describe('Query Builder Integration', () => {
 
   describe('with (eager loading)', () => {
     it('should load belongsTo relation', async () => {
+      // First verify user exists
+      const rawUser = await db.knex('users').where('id', 1).first();
+      expect(rawUser).toBeDefined();
+      expect(rawUser.deleted_at).toBeNull();
+      
       // Need to use repository's query since it handles eager loading
       const user = await UserRepo.findById(1, { with: ['company'] });
 
+      expect(user).not.toBeNull();
       expect(user.company).not.toBeNull();
       expect(user.company.name).toBe('Acme Corp');
     });
@@ -293,6 +305,7 @@ describe('Query Builder Integration', () => {
     it('should load hasMany relation', async () => {
       const user = await UserRepo.findById(1, { with: ['posts'] });
 
+      expect(user).not.toBeNull();
       expect(user.posts).toBeInstanceOf(Array);
       expect(user.posts.length).toBe(2);
     });
@@ -300,6 +313,7 @@ describe('Query Builder Integration', () => {
     it('should load multiple relations', async () => {
       const user = await UserRepo.findById(1, { with: ['company', 'posts'] });
 
+      expect(user).not.toBeNull();
       expect(user.company).not.toBeNull();
       expect(user.posts.length).toBe(2);
     });
@@ -316,7 +330,7 @@ describe('Query Builder Integration', () => {
 
     it('should delete matching records', async () => {
       // This does hard delete since it's direct query builder
-      const PostRepo = db.createRepository(Post);
+      const PostRepo = db.getRepository('Post');
       const count = await PostRepo.query()
         .where('user_id', 1)
         .delete();

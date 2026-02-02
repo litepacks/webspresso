@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../src/server.js';
-import { createDatabase, defineModel, zdb } from '../../index.js';
+import { createDatabase, defineModel, zdb, hasModel } from '../../index.js';
 import { adminPanelPlugin } from '../../plugins/index.js';
 import { clearRegistry } from '../../core/orm/model.js';
 
@@ -18,33 +18,55 @@ describe('Admin Panel Integration', () => {
   beforeEach(async () => {
     clearRegistry();
 
-    // Create in-memory database
+    // Create in-memory database (skip auto-loading models)
     db = createDatabase({
       client: 'better-sqlite3',
       connection: ':memory:',
+      models: './tests/fixtures/models-empty', // Non-existent dir to skip auto-loading
     });
 
-    // Create a test model
-    const TestModel = defineModel({
-      name: 'TestModel',
-      table: 'test_models',
-      schema: zdb.schema({
-        id: zdb.id(),
-        name: zdb.string(),
-        email: zdb.string(),
-        active: zdb.boolean({ default: true }),
-        created_at: zdb.timestamp({ auto: 'create' }),
-        updated_at: zdb.timestamp({ auto: 'update' }),
-      }),
-      admin: {
-        enabled: true,
-        label: 'Test Models',
-        icon: '🧪',
-      },
+    // Create a test model (only if not already defined)
+    if (!hasModel('TestModel')) {
+      const TestModel = defineModel({
+        name: 'TestModel',
+        table: 'test_models',
+        schema: zdb.schema({
+          id: zdb.id(),
+          name: zdb.string(),
+          email: zdb.string(),
+          active: zdb.boolean({ default: true }),
+          created_at: zdb.timestamp({ auto: 'create' }),
+          updated_at: zdb.timestamp({ auto: 'update' }),
+        }),
+        admin: {
+          enabled: true,
+          label: 'Test Models',
+          icon: '🧪',
+        },
+      });
+      db.registerModel(TestModel);
+    }
+
+    // Create tables manually for in-memory database
+    await db.knex.schema.createTable('test_models', (table) => {
+      table.bigIncrements('id');
+      table.string('name');
+      table.string('email');
+      table.boolean('active').defaultTo(true);
+      table.timestamp('created_at');
+      table.timestamp('updated_at');
     });
 
-    // Run migrations
-    await db.migrate.latest();
+    await db.knex.schema.createTable('admin_users', (table) => {
+      table.bigIncrements('id');
+      table.string('email').unique();
+      table.string('password');
+      table.string('name');
+      table.string('role').defaultTo('admin');
+      table.boolean('active').defaultTo(true);
+      table.timestamp('created_at');
+      table.timestamp('updated_at');
+    });
 
     // Create app with admin panel
     const result = createApp({
@@ -266,11 +288,7 @@ describe('Admin Panel Integration', () => {
       adminCookie = loginRes.headers['set-cookie'];
 
       // Get test model repository
-      const { getModel } = await import('../../core/orm/model.js');
-      const TestModel = getModel('TestModel');
-      if (TestModel) {
-        testRepo = db.createRepository(TestModel);
-      }
+      testRepo = db.getRepository('TestModel');
     });
 
     it('should list records', async () => {

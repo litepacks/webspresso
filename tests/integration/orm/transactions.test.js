@@ -18,12 +18,18 @@ describe('Transaction Integration', () => {
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
+      models: './tests/fixtures/models-empty', // Skip auto-loading
     });
 
-    const models = initModels();
+    const models = initModels(true); // Force reset for test isolation
     User = models.User;
     Company = models.Company;
     Post = models.Post;
+    
+    // Register models with db instance
+    db.registerModel(User);
+    db.registerModel(Company);
+    db.registerModel(Post);
 
     await createTestSchema(db.knex);
   });

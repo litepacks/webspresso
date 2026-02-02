@@ -2,18 +2,12 @@
  * Eager Loader Unit Tests
  */
 
-const { z } = require('zod');
-const { createSchemaHelpers, defineModel, clearRegistry } = require('../../../core/orm');
+const { clearRegistry } = require('../../../core/orm');
 
 describe('Eager Loader', () => {
-  // Import after mocking
-  let loadRelations, loadBelongsTo, loadHasMany, loadHasOne;
-
   beforeEach(() => {
     clearRegistry();
   });
-
-  const zdb = createSchemaHelpers(z);
 
   // Note: loadRelations is tested in integration tests with real Knex
   // These unit tests focus on the algorithm logic

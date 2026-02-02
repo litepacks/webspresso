@@ -11,6 +11,7 @@ const { defineModel, getModel, getAllModels, hasModel, clearRegistry } = require
 const { createRepository } = require('./repository');
 const { createMigrationManager } = require('./migrations');
 const { createSeeder } = require('./seeder');
+const { createScopeContext } = require('./scopes');
 
 /**
  * Create a database instance
@@ -88,12 +89,6 @@ function createDatabase(config) {
   // Create migration manager
   const migrationConfig = config.migrations || {};
   const migrate = createMigrationManager(knexInstance, migrationConfig);
-
-  // Default scope context
-  const defaultScopeContext = {
-    tenantId: null,
-    userId: null,
-  };
 
   // Auto-load models from models directory
   const modelsDir = config.models || './models';
@@ -178,9 +173,11 @@ function createDatabase(config) {
    * @param {import('./types').ScopeContext} [scopeContext] - Scope context
    * @returns {import('./types').Repository}
    */
-  function getRepository(modelName, scopeContext = defaultScopeContext) {
+  function getRepository(modelName, scopeContext) {
     const model = getModelInstance(modelName);
-    return createRepository(model, knexInstance, scopeContext);
+    // Always create fresh scope context if not provided to avoid shared state
+    const ctx = scopeContext || createScopeContext();
+    return createRepository(model, knexInstance, ctx);
   }
 
   /**
@@ -189,9 +186,10 @@ function createDatabase(config) {
    * @param {import('./types').ScopeContext} [scopeContext] - Scope context
    * @returns {import('knex').Knex.QueryBuilder}
    */
-  function query(modelName, scopeContext = defaultScopeContext) {
+  function query(modelName, scopeContext) {
     const model = getModelInstance(modelName);
-    const repo = createRepository(model, knexInstance, scopeContext);
+    const ctx = scopeContext || createScopeContext();
+    const repo = createRepository(model, knexInstance, ctx);
     return repo.query();
   }
 
@@ -203,6 +201,41 @@ function createDatabase(config) {
     return createSeeder(knexInstance, models);
   }
 
+  /**
+   * Create repository from model object (alternative to getRepository)
+   * @param {import('./types').ModelDefinition} model - Model definition
+   * @param {import('./types').ScopeContext} [scopeContext] - Scope context
+   * @returns {import('./types').Repository}
+   */
+  function createRepositoryFromModel(model, scopeContext) {
+    const ctx = scopeContext || createScopeContext();
+    return createRepository(model, knexInstance, ctx);
+  }
+
+  /**
+   * Run operations in a transaction
+   * @param {Function} callback - Callback receiving transaction context
+   * @returns {Promise<*>} Result of callback
+   */
+  async function transaction(callback) {
+    return knexInstance.transaction(async (trx) => {
+      // Create transaction context with repository methods
+      const trxContext = {
+        trx,
+        getRepository(modelName, scopeContext) {
+          const model = getModelInstance(modelName);
+          const ctx = scopeContext || createScopeContext();
+          return createRepository(model, trx, ctx);
+        },
+        createRepository(model, scopeContext) {
+          const ctx = scopeContext || createScopeContext();
+          return createRepository(model, trx, ctx);
+        },
+      };
+      return callback(trxContext);
+    });
+  }
+
   return {
     knex: knexInstance,
     migrate,
@@ -211,7 +244,9 @@ function createDatabase(config) {
     getAllModels: getAllModelInstances,
     registerModel,
     getRepository,
+    createRepository: createRepositoryFromModel,
     query,
+    transaction,
     createSeeder: createSeederInstance,
     destroy: () => knexInstance.destroy(),
   };
@@ -226,6 +261,7 @@ module.exports = {
   createDatabase,
   // Schema helpers
   zdb,
+  createSchemaHelpers,
   // Model utilities
   defineModel,
   getModel,

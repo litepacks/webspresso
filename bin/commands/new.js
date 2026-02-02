@@ -172,7 +172,7 @@ function registerCommand(program) {
         description: 'Webspresso project',
         main: 'server.js',
         scripts: {
-          dev: 'node --watch server.js',
+          dev: 'webspresso dev',
           start: 'NODE_ENV=production node server.js'
         },
         dependencies: {
@@ -545,7 +545,7 @@ module.exports = {
         
         updatedPackageJson.scripts['build:css'] = 'tailwindcss -i ./src/input.css -o ./public/css/style.css --minify';
         updatedPackageJson.scripts['watch:css'] = 'tailwindcss -i ./src/input.css -o ./public/css/style.css --watch';
-        updatedPackageJson.scripts.dev = 'npm run watch:css & node --watch server.js';
+        updatedPackageJson.scripts.dev = 'webspresso dev';
         updatedPackageJson.scripts.start = 'npm run build:css && NODE_ENV=production node server.js';
         
         fs.writeFileSync(
