@@ -127,7 +127,7 @@ class PluginManager {
   }
 
   /**
-   * Register plugins with the manager
+   * Register plugins with the manager (async version)
    * @param {Array} plugins - Array of plugin definitions or factory functions
    * @param {Object} context - Context object { app, nunjucksEnv, options }
    */
@@ -152,6 +152,34 @@ class PluginManager {
     // Register each plugin in order
     for (const plugin of sorted) {
       await this._registerPlugin(plugin, context);
+    }
+  }
+
+  /**
+   * Register plugins with the manager (sync version)
+   * @param {Array} plugins - Array of plugin definitions or factory functions
+   * @param {Object} context - Context object { app, nunjucksEnv, options }
+   */
+  registerSync(plugins, context) {
+    if (!plugins || !Array.isArray(plugins)) return;
+
+    this.app = context.app;
+    this.nunjucksEnv = context.nunjucksEnv;
+
+    // Normalize plugins (handle factory functions)
+    const normalizedPlugins = plugins.map(p => {
+      if (typeof p === 'function') {
+        return p;
+      }
+      return p;
+    });
+
+    // Validate and sort by dependencies
+    const sorted = this._resolveDependencyOrder(normalizedPlugins);
+
+    // Register each plugin in order (sync)
+    for (const plugin of sorted) {
+      this._registerPluginSync(plugin, context);
     }
   }
 
@@ -213,7 +241,7 @@ class PluginManager {
   }
 
   /**
-   * Register a single plugin
+   * Register a single plugin (async)
    */
   async _registerPlugin(plugin, context) {
     // Validate dependencies
@@ -238,6 +266,38 @@ class PluginManager {
     // Call register hook
     if (typeof plugin.register === 'function') {
       await plugin.register(ctx);
+    }
+
+    // Apply registered helpers to nunjucks
+    this._applyHelpersAndFilters();
+  }
+
+  /**
+   * Register a single plugin (sync)
+   */
+  _registerPluginSync(plugin, context) {
+    // Validate dependencies
+    this._validateDependencies(plugin);
+
+    // Create plugin context
+    const ctx = this._createPluginContext(plugin, context);
+
+    // Store plugin
+    this.plugins.set(plugin.name, plugin);
+
+    // Store API if provided
+    if (plugin.api) {
+      // Bind API methods to plugin instance
+      const boundAPI = {};
+      for (const [key, value] of Object.entries(plugin.api)) {
+        boundAPI[key] = typeof value === 'function' ? value.bind(plugin) : value;
+      }
+      this.pluginAPIs.set(plugin.name, boundAPI);
+    }
+
+    // Call register hook (sync - if plugin has async register, it won't wait)
+    if (typeof plugin.register === 'function') {
+      plugin.register(ctx);
     }
 
     // Apply registered helpers to nunjucks

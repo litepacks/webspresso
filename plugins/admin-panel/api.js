@@ -25,7 +25,7 @@ function createApiHandlers(options) {
   // Get AdminUser repository
   let AdminUserRepo = null;
   if (db && AdminUser) {
-    AdminUserRepo = db.createRepository(AdminUser);
+    AdminUserRepo = db.getRepository(AdminUser.name);
   }
 
   /**
@@ -208,7 +208,7 @@ function createApiHandlers(options) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
-      const repo = db.createRepository(model);
+      const repo = db.getRepository(model.name);
       const page = parseInt(req.query.page) || 1;
       const perPage = parseInt(req.query.perPage) || 15;
       const offset = (page - 1) * perPage;
@@ -274,7 +274,7 @@ function createApiHandlers(options) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
-      const repo = db.createRepository(model);
+      const repo = db.getRepository(model.name);
       const record = await repo.findById(id);
 
       if (!record) {
@@ -299,7 +299,7 @@ function createApiHandlers(options) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
-      const repo = db.createRepository(model);
+      const repo = db.getRepository(model.name);
       const record = await repo.create(req.body);
 
       res.status(201).json({ data: record });
@@ -320,7 +320,7 @@ function createApiHandlers(options) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
-      const repo = db.createRepository(model);
+      const repo = db.getRepository(model.name);
       const record = await repo.update(id, req.body);
 
       if (!record) {
@@ -345,7 +345,7 @@ function createApiHandlers(options) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
-      const repo = db.createRepository(model);
+      const repo = db.getRepository(model.name);
       const deleted = await repo.delete(id);
 
       if (!deleted) {
@@ -376,7 +376,7 @@ function createApiHandlers(options) {
       }
 
       const relatedModel = relation.model();
-      const relatedRepo = db.createRepository(relatedModel);
+      const relatedRepo = db.getRepository(relatedModel.name);
 
       // Get all related records (for dropdown/select)
       const records = await relatedRepo.findAll();
@@ -404,7 +404,7 @@ function createApiHandlers(options) {
         return res.status(404).json({ error: 'Query not found' });
       }
 
-      const repo = db.createRepository(model);
+      const repo = db.getRepository(model.name);
       const result = await queryFn(repo);
 
       res.json({ data: result });

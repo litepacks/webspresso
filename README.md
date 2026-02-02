@@ -808,13 +808,16 @@ const User = defineModel({
   scopes: { softDelete: true, timestamps: true },
 });
 
-// 4. Create database and use
+// 4. Create database (models auto-loaded from ./models directory)
 const db = createDatabase({
   client: 'pg',
   connection: process.env.DATABASE_URL,
+  models: './models', // Optional, defaults to './models'
 });
 
-const UserRepo = db.createRepository(User);
+// Models are automatically loaded from models/ directory
+// Use getRepository with model name
+const UserRepo = db.getRepository('User');
 const user = await UserRepo.findById(1, { with: ['company', 'posts'] });
 ```
 
@@ -880,11 +883,48 @@ const User = defineModel({
 });
 ```
 
+### Auto-Loading Models
+
+Models are automatically loaded from the `models/` directory when you create a database instance:
+
+```javascript
+// models/User.js
+const { defineModel, zdb } = require('webspresso');
+
+module.exports = defineModel({
+  name: 'User',
+  table: 'users',
+  schema: zdb.schema({
+    id: zdb.id(),
+    email: zdb.string({ unique: true }),
+    name: zdb.string(),
+    created_at: zdb.timestamp({ auto: 'create' }),
+    updated_at: zdb.timestamp({ auto: 'update' }),
+  }),
+});
+
+// In your application code
+const db = createDatabase({
+  client: 'pg',
+  connection: process.env.DATABASE_URL,
+  models: './models', // Optional, defaults to './models'
+});
+
+// Models are automatically loaded, use getRepository with model name
+const UserRepo = db.getRepository('User');
+```
+
+**Model File Structure:**
+- Place model files in `models/` directory (or custom path via `config.models`)
+- Each file should export a model defined with `defineModel()`
+- Files starting with `_` are ignored (useful for shared utilities)
+- Models are loaded in alphabetical order
+
 ### Repository API
 
 ```javascript
 const db = createDatabase({ client: 'pg', connection: '...' });
-const UserRepo = db.createRepository(User);
+const UserRepo = db.getRepository('User'); // Use model name string
 
 // Find by ID (with eager loading)
 const user = await UserRepo.findById(1, { with: ['company', 'posts'] });
@@ -974,8 +1014,8 @@ await UserRepo.query().forTenant(tenantId).list();
 
 ```javascript
 await db.transaction(async (trx) => {
-  const userRepo = trx.createRepository(User);
-  const postRepo = trx.createRepository(Post);
+  const userRepo = trx.getRepository('User'); // Use model name
+  const postRepo = trx.getRepository('Post');
   
   const user = await userRepo.create({ email: 'new@test.com', name: 'New' });
   await postRepo.create({ title: 'First Post', user_id: user.id });

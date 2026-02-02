@@ -219,9 +219,9 @@ function createApp(options = {}) {
     return d.toString();
   });
   
-  // Register plugins (synchronous part)
+  // Register plugins (sync)
   const pluginContext = { app, nunjucksEnv, options };
-  pluginManager.register(plugins, pluginContext);
+  pluginManager.registerSync(plugins, pluginContext);
   
   // Request logging middleware
   if (logging) {

@@ -215,6 +215,7 @@
 
 /**
  * @typedef {Object} DatabaseConfig
+ * @property {string} [models] - Path to models directory (default: './models')
  * @property {string} client - Database client ('pg', 'mysql2', 'better-sqlite3')
  * @property {string|Object} connection - Connection string or config object
  * @property {MigrationConfig} [migrations] - Migration configuration

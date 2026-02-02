@@ -5,6 +5,7 @@
  */
 
 const path = require('path');
+const fs = require('fs');
 const { createSchemaHelpers, extractColumnsFromSchema, getColumnMeta } = require('./schema-helpers');
 const { defineModel, getModel, getAllModels, hasModel, clearRegistry } = require('./model');
 const { createRepository } = require('./repository');
@@ -94,8 +95,33 @@ function createDatabase(config) {
     userId: null,
   };
 
-  // Model registry
+  // Auto-load models from models directory
+  const modelsDir = config.models || './models';
+  const absoluteModelsDir = path.resolve(process.cwd(), modelsDir);
+  
+  if (fs.existsSync(absoluteModelsDir)) {
+    const modelFiles = fs.readdirSync(absoluteModelsDir)
+      .filter(file => file.endsWith('.js') && !file.startsWith('_'));
+    
+    for (const file of modelFiles) {
+      try {
+        const modelPath = path.join(absoluteModelsDir, file);
+        require(modelPath);
+      } catch (error) {
+        console.error(`Error loading model from ${file}:`, error.message);
+        // Continue loading other models even if one fails
+      }
+    }
+  }
+
+  // Model registry (use global registry, but keep local for backward compatibility)
   const models = new Map();
+  
+  // Sync global registry to local registry
+  const globalModels = getAllModels();
+  for (const [name, model] of globalModels) {
+    models.set(name, model);
+  }
 
   /**
    * Get a model by name
@@ -103,9 +129,19 @@ function createDatabase(config) {
    * @returns {import('./types').ModelDefinition}
    */
   function getModelInstance(name) {
-    const model = models.get(name);
+    // First check local registry
+    let model = models.get(name);
+    
+    // If not found, check global registry (for models loaded after database creation)
     if (!model) {
-      throw new Error(`Model "${name}" is not defined. Make sure you've called defineModel() first.`);
+      model = getModel(name);
+      if (model) {
+        models.set(name, model); // Cache in local registry
+      }
+    }
+    
+    if (!model) {
+      throw new Error(`Model "${name}" is not defined. Make sure you've called defineModel() first or the model file exists in ${modelsDir}.`);
     }
     return model;
   }
@@ -133,6 +169,7 @@ function createDatabase(config) {
    */
   function registerModel(model) {
     models.set(model.name, model);
+    // Also ensure it's in global registry (defineModel already does this, but just in case)
   }
 
   /**

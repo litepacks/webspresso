@@ -44,36 +44,40 @@ function adminPanelPlugin(options = {}) {
     /**
      * Register hook - called when plugin is registered
      */
-    async register(ctx) {
-      // Create and register AdminUser model (only if not already registered)
-      const { getModel } = require('../../core/orm/model');
-      let AdminUser = getModel('AdminUser');
-      
-      if (!AdminUser) {
-        AdminUser = createAdminUserModel();
-      }
-
-      // Store in plugin context for later use
-      this._adminUser = AdminUser;
-      this._db = db;
-      this._bcrypt = bcrypt;
-      this._session = session;
-      this._adminPath = adminPath;
+    register(ctx) {
+      // Ensure enabled is set
+      this.enabled = enabled;
     },
 
     /**
      * Routes ready hook - called after routes are mounted
      */
     onRoutesReady(ctx) {
-      if (!this.enabled) {
+      // Use closure variable 'enabled' directly (plugin.enabled property)
+      if (!enabled) {
         return;
       }
 
       const { app } = ctx;
-      const AdminUser = this._adminUser;
-      const db = this._db;
-      const bcrypt = this._bcrypt;
-      const session = this._session;
+      
+      // Create and register AdminUser model
+      // Check global registry first (defineModel adds to global registry)
+      const { hasModel: hasGlobalModel, getModel: getGlobalModel } = require('../../core/orm/model');
+      let AdminUser;
+      
+      if (hasGlobalModel('AdminUser')) {
+        // Model exists in global registry
+        AdminUser = getGlobalModel('AdminUser');
+        // Ensure it's also in db's local registry
+        if (!db.hasModel('AdminUser')) {
+          db.registerModel(AdminUser);
+        }
+      } else {
+        // Create AdminUser model (adds to global registry)
+        AdminUser = createAdminUserModel();
+        // Also add to db's local registry
+        db.registerModel(AdminUser);
+      }
 
       // Setup session middleware (only once, even if multiple plugins)
       // Check if session middleware is already registered
