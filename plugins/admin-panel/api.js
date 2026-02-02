@@ -200,6 +200,8 @@ function createApiHandlers(options) {
           auto: meta.auto || null, // 'create' | 'update' for timestamps
           autoIncrement: meta.autoIncrement || false,
           customField: model.admin.customFields?.[name] || null,
+          validations: meta.validations || null,
+          ui: meta.ui || null,
         });
       }
 
@@ -260,12 +262,14 @@ function createApiHandlers(options) {
       }
 
       // Get total count
-      const countConditions = {};
-      if (req.query.search) {
-        // For count, we'll use a simpler approach
-        // In a real implementation, you'd want to match the same search logic
-      }
-      const total = await repo.count(countConditions);
+      const total = await repo.count();
+
+      // Apply pagination
+      query = query.offset(offset).limit(perPage);
+
+      // Apply sorting (newest first by default)
+      const primaryKey = model.primaryKey || 'id';
+      query = query.orderBy(primaryKey, 'desc');
 
       // Get records
       const records = await query.list();

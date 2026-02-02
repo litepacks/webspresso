@@ -174,7 +174,7 @@ const db = createDatabase({
     // Create models directory
     fs.mkdirSync(path.join(projectPath, 'models'), { recursive: true });
 
-    // Create a test model with admin enabled
+    // Create a test model with admin enabled and chainable validations
     const testModel = `const { defineModel, zdb } = require('webspresso');
 
 module.exports = defineModel({
@@ -182,9 +182,21 @@ module.exports = defineModel({
   table: 'test_posts',
   schema: zdb.schema({
     id: zdb.id(),
-    title: zdb.string(),
-    content: zdb.text({ nullable: true }),
-    published: zdb.boolean({ default: false }),
+    title: zdb.string().min(1).max(200).config({
+      label: 'Post Title',
+      placeholder: 'Enter post title',
+      hint: 'Title must be between 1 and 200 characters',
+    }),
+    content: zdb.text({ nullable: true }).min(10).config({
+      label: 'Content',
+      placeholder: 'Write your post content here...',
+      hint: 'Content must be at least 10 characters',
+      rows: 6,
+    }),
+    published: zdb.boolean({ default: false }).config({
+      label: 'Published',
+      hint: 'Check to publish this post',
+    }),
     created_at: zdb.timestamp({ auto: 'create' }),
     updated_at: zdb.timestamp({ auto: 'update' }),
   }),

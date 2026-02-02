@@ -271,13 +271,154 @@ test.describe('Admin Panel', () => {
       const actionsHeader = page.locator('th:has-text("Actions")');
       await expect(actionsHeader).toBeVisible({ timeout: 10000 });
       
-      // Verify record count is shown
-      const recordCount = page.locator('text=/\\d+ records?/');
-      await expect(recordCount).toBeVisible({ timeout: 10000 });
-      
       // Verify Edit and Delete buttons are in table rows
       await expect(page.locator('button:has-text("Edit")').first()).toBeVisible({ timeout: 10000 });
       await expect(page.locator('button:has-text("Delete")').first()).toBeVisible({ timeout: 10000 });
+    });
+
+    test('should display breadcrumb navigation on records page', async ({ page }) => {
+      // Navigate to TestPost records
+      await page.goto('/_admin/models/TestPost');
+      await page.waitForLoadState('networkidle');
+      
+      // Wait for page to load
+      await page.waitForSelector('h2', { timeout: 15000 });
+      
+      // Verify breadcrumb navigation is present
+      const breadcrumbNav = page.locator('nav[aria-label="Breadcrumb"]');
+      await expect(breadcrumbNav).toBeVisible({ timeout: 10000 });
+      
+      // Verify home icon link is present
+      const homeLink = page.locator('nav[aria-label="Breadcrumb"] a svg');
+      await expect(homeLink.first()).toBeVisible({ timeout: 10000 });
+      
+      // Verify model name is in breadcrumb
+      const modelBreadcrumb = page.locator('nav[aria-label="Breadcrumb"]').getByText(/TestPost|Test Post/);
+      await expect(modelBreadcrumb).toBeVisible({ timeout: 10000 });
+    });
+
+    test('should display breadcrumb navigation on form page', async ({ page }) => {
+      // Navigate to new record form
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      
+      // Wait for form to load
+      await page.waitForSelector('h2:has-text("New Record")', { timeout: 15000 });
+      
+      // Verify breadcrumb has model link and "New" item
+      const breadcrumbNav = page.locator('nav[aria-label="Breadcrumb"]');
+      await expect(breadcrumbNav).toBeVisible({ timeout: 10000 });
+      
+      // Model name should be a link
+      const modelLink = page.locator('nav[aria-label="Breadcrumb"] a').filter({ hasText: /TestPost|Test Post/ });
+      await expect(modelLink).toBeVisible({ timeout: 10000 });
+      
+      // "New" should be the last breadcrumb item (not a link)
+      const newBreadcrumb = page.locator('nav[aria-label="Breadcrumb"] span:has-text("New")');
+      await expect(newBreadcrumb).toBeVisible({ timeout: 10000 });
+    });
+
+    test('should have sticky header on admin panel', async ({ page }) => {
+      // Navigate to admin panel
+      await page.goto('/_admin');
+      await page.waitForLoadState('networkidle');
+      
+      // Wait for header
+      const header = page.locator('.sticky.top-0');
+      await expect(header).toBeVisible({ timeout: 10000 });
+      
+      // Header should contain Admin Panel text
+      await expect(header.locator('text=Admin Panel')).toBeVisible();
+    });
+
+    test('should have sticky form buttons on record form', async ({ page }) => {
+      // Navigate to new record form
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      
+      // Wait for form to load
+      await page.waitForSelector('form', { timeout: 15000 });
+      
+      // Verify sticky footer with buttons exists
+      const stickyFooter = page.locator('.sticky.bottom-0');
+      await expect(stickyFooter).toBeVisible({ timeout: 10000 });
+      
+      // Verify Save and Cancel buttons are in the sticky footer
+      await expect(stickyFooter.locator('button:has-text("Save")')).toBeVisible();
+      await expect(stickyFooter.locator('button:has-text("Cancel")')).toBeVisible();
+    });
+
+    test('should display table with records and proper structure', async ({ page }) => {
+      // Create a record to ensure we have data
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('input#title, input[name="title"]', { timeout: 15000 });
+      
+      await page.fill('input#title, input[name="title"]', 'Table Structure Test Post');
+      await page.fill('textarea#content, textarea[name="content"]', 'Content for table structure test');
+      await page.click('button:has-text("Save")');
+      
+      await page.waitForURL(/\/models\/TestPost$/, { timeout: 15000 });
+      await page.waitForLoadState('networkidle');
+      
+      // Wait for table to load
+      await page.waitForSelector('table', { timeout: 15000 });
+      
+      // Verify table has sticky header (thead with sticky positioning)
+      const tableHeader = page.locator('thead');
+      await expect(tableHeader).toBeVisible({ timeout: 10000 });
+      
+      // Verify there are table rows with data
+      const tableRows = page.locator('tbody tr');
+      const rowCount = await tableRows.count();
+      expect(rowCount).toBeGreaterThan(0);
+      
+      // Verify Actions column exists with Edit/Delete buttons
+      const editButton = page.locator('tbody tr button:has-text("Edit")').first();
+      const deleteButton = page.locator('tbody tr button:has-text("Delete")').first();
+      await expect(editButton).toBeVisible({ timeout: 10000 });
+      await expect(deleteButton).toBeVisible({ timeout: 10000 });
+    });
+
+    test('should display pagination with many records', async ({ page }) => {
+      // Create 25 records to trigger pagination (perPage=20)
+      // Use API directly for faster record creation
+      for (let i = 1; i <= 25; i++) {
+        await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+          data: {
+            title: `Pagination Test Post ${i}`,
+            content: `Content for pagination test ${i}`,
+            published: i % 2 === 0, // alternate true/false
+          },
+        });
+      }
+      
+      // Navigate to records list
+      await page.goto('/_admin/models/TestPost');
+      await page.waitForLoadState('networkidle');
+      
+      // Wait for table to load
+      await page.waitForSelector('table', { timeout: 15000 });
+      
+      // Verify pagination controls are visible (Next button)
+      const nextButton = page.locator('button:has-text("Next")');
+      await expect(nextButton).toBeVisible({ timeout: 10000 });
+      
+      // Verify "Showing X to Y of Z results" text parts are visible
+      const showingText = page.locator('text=Showing');
+      await expect(showingText).toBeVisible({ timeout: 10000 });
+      
+      // Verify page numbers are visible
+      const pageButton = page.locator('nav button').filter({ hasText: /^[12]$/ }).first();
+      await expect(pageButton).toBeVisible({ timeout: 10000 });
+      
+      // Click next page and verify table updates
+      await nextButton.click();
+      await page.waitForTimeout(500); // Wait for API response
+      
+      // Prev button should now be enabled
+      const prevButton = page.locator('button:has-text("Prev")');
+      await expect(prevButton).toBeVisible({ timeout: 10000 });
     });
 
     test('should be able to logout', async ({ page }) => {
@@ -343,6 +484,136 @@ test.describe('Admin Panel', () => {
       // Should show error message (red background class)
       const errorMessage = page.locator('.bg-red-100, [class*="error"], [class*="text-red"]');
       await expect(errorMessage.first()).toBeVisible({ timeout: 10000 });
+    });
+  });
+
+  test.describe('Chainable Validation and UI Config', () => {
+    
+    test.beforeEach(async ({ page }) => {
+      await ensureLoggedIn(page);
+    });
+
+    test('should display custom labels from UI config', async ({ page }) => {
+      // Navigate to new record form
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('input#title, input[name="title"]', { timeout: 15000 });
+      
+      // Verify custom label is displayed
+      const titleLabel = page.locator('label[for="title"]');
+      await expect(titleLabel).toContainText('Post Title', { timeout: 10000 });
+      
+      const contentLabel = page.locator('label[for="content"]');
+      await expect(contentLabel).toContainText('Content', { timeout: 10000 });
+      
+      const publishedLabel = page.locator('label').filter({ hasText: 'Published' });
+      await expect(publishedLabel).toBeVisible({ timeout: 10000 });
+    });
+
+    test('should display placeholders from UI config', async ({ page }) => {
+      // Navigate to new record form
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('input#title, input[name="title"]', { timeout: 15000 });
+      
+      // Verify placeholder is displayed
+      const titleInput = page.locator('input#title, input[name="title"]');
+      await expect(titleInput).toHaveAttribute('placeholder', 'Enter post title', { timeout: 10000 });
+      
+      const contentTextarea = page.locator('textarea#content, textarea[name="content"]');
+      await expect(contentTextarea).toHaveAttribute('placeholder', 'Write your post content here...', { timeout: 10000 });
+    });
+
+    test('should display hint messages from UI config', async ({ page }) => {
+      // Navigate to new record form
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('input#title, input[name="title"]', { timeout: 15000 });
+      
+      // Verify hint messages are displayed
+      const titleHint = page.locator('p.text-xs.text-gray-500').filter({ hasText: 'Title must be between 1 and 200 characters' });
+      await expect(titleHint).toBeVisible({ timeout: 10000 });
+      
+      const contentHint = page.locator('p.text-xs.text-gray-500').filter({ hasText: 'Content must be at least 10 characters' });
+      await expect(contentHint).toBeVisible({ timeout: 10000 });
+      
+      const publishedHint = page.locator('p.text-xs.text-gray-500').filter({ hasText: 'Check to publish this post' });
+      await expect(publishedHint).toBeVisible({ timeout: 10000 });
+    });
+
+    test('should apply validation rules from chainable API', async ({ page }) => {
+      // Navigate to new record form
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('input#title, input[name="title"]', { timeout: 15000 });
+      
+      // Verify min/max attributes are set
+      const titleInput = page.locator('input#title, input[name="title"]');
+      await expect(titleInput).toHaveAttribute('minlength', '1', { timeout: 10000 });
+      await expect(titleInput).toHaveAttribute('maxlength', '200', { timeout: 10000 });
+      
+      const contentTextarea = page.locator('textarea#content, textarea[name="content"]');
+      await expect(contentTextarea).toHaveAttribute('minlength', '10', { timeout: 10000 });
+    });
+
+    test('should validate form with chainable validation rules', async ({ page }) => {
+      // Navigate to new record form
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('input#title, input[name="title"]', { timeout: 15000 });
+      
+      // Try to submit with invalid data (title too short, content too short)
+      await page.fill('input#title, input[name="title"]', ''); // Empty title (min: 1)
+      await page.fill('textarea#content, textarea[name="content"]', 'short'); // Too short (min: 10)
+      
+      // Submit form
+      await page.click('button:has-text("Save")');
+      
+      // Should show validation errors (browser native validation or API errors)
+      // Wait a bit for validation
+      await page.waitForTimeout(500);
+      
+      // Check if form is still visible (validation prevented submission)
+      // or if error message is shown
+      const formStillVisible = await page.locator('form').isVisible();
+      const errorVisible = await page.locator('.bg-red-100, [class*="error"]').isVisible();
+      
+      // Either form should still be visible (native validation) or error should be shown
+      expect(formStillVisible || errorVisible).toBeTruthy();
+    });
+
+    test('should successfully submit form with valid data', async ({ page }) => {
+      // Navigate to new record form
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('input#title, input[name="title"]', { timeout: 15000 });
+      
+      // Fill form with valid data
+      await page.fill('input#title, input[name="title"]', 'Valid Post Title');
+      await page.fill('textarea#content, textarea[name="content"]', 'This is a valid content that is longer than 10 characters');
+      await page.check('input[type="checkbox"][name="published"]');
+      
+      // Submit form
+      await page.click('button:has-text("Save")');
+      
+      // Should redirect to records list
+      await page.waitForURL(/\/models\/TestPost$/, { timeout: 15000 });
+      await page.waitForLoadState('networkidle');
+      
+      // Verify record was created
+      const recordsTable = page.locator('table');
+      await expect(recordsTable).toBeVisible({ timeout: 15000 });
+    });
+
+    test('should use custom textarea rows from UI config', async ({ page }) => {
+      // Navigate to new record form
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('textarea#content, textarea[name="content"]', { timeout: 15000 });
+      
+      // Verify textarea has custom rows attribute
+      const contentTextarea = page.locator('textarea#content, textarea[name="content"]');
+      await expect(contentTextarea).toHaveAttribute('rows', '6', { timeout: 10000 });
     });
   });
 });

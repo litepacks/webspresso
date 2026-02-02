@@ -13,6 +13,38 @@
  */
 
 /**
+ * @typedef {Object} ValidationMeta
+ * @property {number} [min] - Minimum value/length
+ * @property {number} [max] - Maximum value/length
+ * @property {number} [minLength] - Minimum length (for strings/arrays)
+ * @property {number} [maxLength] - Maximum length (for strings/arrays)
+ * @property {number} [length] - Exact length
+ * @property {string} [pattern] - Regex pattern (as string)
+ * @property {boolean} [email] - Must be valid email
+ * @property {boolean} [url] - Must be valid URL
+ * @property {boolean} [positive] - Must be positive number
+ * @property {boolean} [negative] - Must be negative number
+ * @property {boolean} [int] - Must be integer
+ * @property {number} [step] - Step value for numbers
+ * @property {boolean} [nonempty] - Cannot be empty
+ * @property {string} [includes] - String must include this
+ * @property {string} [startsWith] - String must start with this
+ * @property {string} [endsWith] - String must end with this
+ */
+
+/**
+ * @typedef {Object} UIMeta
+ * @property {string} [label] - Form label text
+ * @property {string} [placeholder] - Input placeholder
+ * @property {string} [hint] - Help text shown below input
+ * @property {string} [inputType] - HTML input type (email, tel, url, currency, etc.)
+ * @property {boolean} [hidden] - Hide field in forms
+ * @property {boolean} [readonly] - Make field read-only
+ * @property {string} [width] - Input width (half, third, full)
+ * @property {number} [rows] - Number of rows for textarea
+ */
+
+/**
  * @typedef {Object} ColumnMeta
  * @property {ColumnType} type - Database column type
  * @property {boolean} [nullable=false] - Whether column allows NULL
@@ -28,6 +60,8 @@
  * @property {string} [references] - Referenced table for foreign keys
  * @property {string} [referenceColumn='id'] - Referenced column name
  * @property {'create'|'update'} [auto] - Auto-set on create or update (for timestamps)
+ * @property {ValidationMeta} [validations] - Validation rules
+ * @property {UIMeta} [ui] - UI metadata for admin panel
  */
 
 /**

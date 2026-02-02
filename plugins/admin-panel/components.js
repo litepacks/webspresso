@@ -42,94 +42,256 @@ const state = {
   currentModel: null,
   currentModelMeta: null, // Full model metadata with columns
   records: [],
-  pagination: null,
+  pagination: {
+    page: 1,
+    perPage: 20,
+    total: 0,
+    totalPages: 0,
+  },
   currentRecord: null,
   formData: {}, // Form field values
   editing: false,
+};
+
+// Breadcrumb Component
+const Breadcrumb = {
+  view: (vnode) => {
+    const items = vnode.attrs.items || [];
+    if (items.length === 0) return null;
+    
+    return m('nav.mb-4', { 'aria-label': 'Breadcrumb' }, [
+      m('ol.flex.items-center.space-x-2.text-sm', [
+        // Home link
+        m('li', [
+          m('a.text-gray-500.hover:text-gray-700', {
+            href: '/',
+            onclick: (e) => {
+              e.preventDefault();
+              m.route.set('/');
+            }
+          }, [
+            m('svg.w-4.h-4', { fill: 'currentColor', viewBox: '0 0 20 20' }, [
+              m('path', { d: 'M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z' }),
+            ]),
+          ]),
+        ]),
+        // Dynamic items
+        ...items.map((item, idx) => [
+          m('li.flex.items-center', [
+            m('svg.w-4.h-4.text-gray-400.mx-1', { fill: 'currentColor', viewBox: '0 0 20 20' }, [
+              m('path', { 'fill-rule': 'evenodd', d: 'M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z', 'clip-rule': 'evenodd' }),
+            ]),
+            idx === items.length - 1
+              ? m('span.text-gray-700.font-medium', item.label)
+              : m('a.text-gray-500.hover:text-gray-700', {
+                  href: item.href,
+                  onclick: (e) => {
+                    e.preventDefault();
+                    m.route.set(item.href);
+                  }
+                }, item.label),
+          ]),
+        ]),
+      ]),
+    ]);
+  },
+};
+
+// Pagination Component
+const Pagination = {
+  view: (vnode) => {
+    const { page, totalPages, total, perPage, onPageChange } = vnode.attrs;
+    if (totalPages <= 1) return null;
+    
+    const pages = [];
+    const maxVisible = 5;
+    let start = Math.max(1, page - Math.floor(maxVisible / 2));
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    if (end - start < maxVisible - 1) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+    
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    
+    return m('.flex.items-center.justify-between.px-4.py-3.bg-white.border-t', [
+      m('.text-sm.text-gray-700', [
+        'Showing ',
+        m('span.font-medium', ((page - 1) * perPage) + 1),
+        ' to ',
+        m('span.font-medium', Math.min(page * perPage, total)),
+        ' of ',
+        m('span.font-medium', total),
+        ' results',
+      ]),
+      m('nav.flex.items-center.space-x-1', [
+        // Previous button
+        m('button.px-3.py-1.rounded.border.text-sm', {
+          disabled: page <= 1,
+          class: page <= 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100',
+          onclick: () => page > 1 && onPageChange(page - 1),
+        }, '← Prev'),
+        
+        // Page numbers
+        start > 1 ? [
+          m('button.px-3.py-1.rounded.text-sm.text-gray-700.hover:bg-gray-100', {
+            onclick: () => onPageChange(1),
+          }, '1'),
+          start > 2 ? m('span.px-2.text-gray-400', '...') : null,
+        ] : null,
+        
+        ...pages.map(p => 
+          m('button.px-3.py-1.rounded.text-sm', {
+            class: p === page 
+              ? 'bg-blue-600 text-white' 
+              : 'text-gray-700 hover:bg-gray-100',
+            onclick: () => onPageChange(p),
+          }, p)
+        ),
+        
+        end < totalPages ? [
+          end < totalPages - 1 ? m('span.px-2.text-gray-400', '...') : null,
+          m('button.px-3.py-1.rounded.text-sm.text-gray-700.hover:bg-gray-100', {
+            onclick: () => onPageChange(totalPages),
+          }, totalPages),
+        ] : null,
+        
+        // Next button
+        m('button.px-3.py-1.rounded.border.text-sm', {
+          disabled: page >= totalPages,
+          class: page >= totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100',
+          onclick: () => page < totalPages && onPageChange(page + 1),
+        }, 'Next →'),
+      ]),
+    ]);
+  },
 };
 
 // Field Renderers - render appropriate input based on column type
 const FieldRenderers = {
   // Text input (string)
   string: (col, value, onChange, readonly) => {
+    const validations = col.validations || {};
+    const ui = col.ui || {};
+    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const inputType = ui.inputType || (validations.email ? 'email' : validations.url ? 'url' : 'text');
+    const placeholder = ui.placeholder || '';
+    const hint = ui.hint || '';
+    
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, 
-        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
-      ),
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
       m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
-        type: 'text',
+        type: inputType,
         value: value || '',
-        maxlength: col.maxLength || 255,
+        placeholder: placeholder,
+        minlength: validations.minLength || validations.min,
+        maxlength: validations.maxLength || validations.max || col.maxLength || 255,
+        pattern: validations.pattern || undefined,
+        required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
         class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value),
       }),
+      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
     ]);
   },
 
   // Textarea (text)
   text: (col, value, onChange, readonly) => {
+    const validations = col.validations || {};
+    const ui = col.ui || {};
+    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const placeholder = ui.placeholder || '';
+    const hint = ui.hint || '';
+    const rows = ui.rows || 4;
+    
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
-        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
-      ),
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
       m('textarea.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
-        rows: 4,
+        rows: rows,
+        placeholder: placeholder,
+        minlength: validations.minLength || validations.min,
+        maxlength: validations.maxLength || validations.max,
+        required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
         class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value),
       }, value || ''),
+      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
     ]);
   },
 
   // Number input (integer, bigint)
   integer: (col, value, onChange, readonly) => {
+    const validations = col.validations || {};
+    const ui = col.ui || {};
+    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const placeholder = ui.placeholder || '';
+    const hint = ui.hint || '';
+    
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
-        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
-      ),
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
       m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
         type: 'number',
-        step: '1',
+        step: validations.step || '1',
+        min: validations.min,
+        max: validations.max,
         value: value !== null && value !== undefined ? value : '',
+        placeholder: placeholder,
+        required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
         class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value === '' ? null : parseInt(e.target.value, 10)),
       }),
+      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
     ]);
   },
 
   // Float/Decimal input
   float: (col, value, onChange, readonly) => {
+    const validations = col.validations || {};
+    const ui = col.ui || {};
+    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const placeholder = ui.placeholder || '';
+    const hint = ui.hint || '';
+    
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
-        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
-      ),
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
       m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
         type: 'number',
-        step: '0.01',
+        step: validations.step || '0.01',
+        min: validations.min,
+        max: validations.max,
         value: value !== null && value !== undefined ? value : '',
+        placeholder: placeholder,
+        required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
         class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value === '' ? null : parseFloat(e.target.value)),
       }),
+      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
     ]);
   },
 
   // Boolean checkbox
   boolean: (col, value, onChange, readonly) => {
+    const ui = col.ui || {};
+    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const hint = ui.hint || '';
+    
     return m('.mb-4', [
       m('label.flex.items-center.cursor-pointer', { class: readonly ? 'cursor-not-allowed' : '' }, [
         m('input.mr-2.w-4.h-4', {
@@ -139,64 +301,84 @@ const FieldRenderers = {
           disabled: readonly,
           onchange: (e) => onChange(e.target.checked),
         }),
-        m('span.text-sm.font-medium.text-gray-700',
-          col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
-        ),
+        m('span.text-sm.font-medium.text-gray-700', label),
       ]),
+      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
     ]);
   },
 
   // Date input
   date: (col, value, onChange, readonly) => {
+    const validations = col.validations || {};
+    const ui = col.ui || {};
+    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const placeholder = ui.placeholder || '';
+    const hint = ui.hint || '';
     const dateValue = value ? new Date(value).toISOString().split('T')[0] : '';
+    
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
-        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
-      ),
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
       m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
         type: 'date',
         value: dateValue,
+        placeholder: placeholder,
+        min: validations.min,
+        max: validations.max,
+        required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
         class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value),
       }),
+      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
     ]);
   },
 
   // DateTime input (datetime, timestamp)
   datetime: (col, value, onChange, readonly) => {
+    const validations = col.validations || {};
+    const ui = col.ui || {};
+    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const placeholder = ui.placeholder || '';
+    const hint = ui.hint || '';
     const dateTimeValue = value ? new Date(value).toISOString().slice(0, 16) : '';
+    
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
-        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
-      ),
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
       m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
         type: 'datetime-local',
         value: dateTimeValue,
+        placeholder: placeholder,
+        min: validations.min,
+        max: validations.max,
+        required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
         class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value),
       }),
+      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
     ]);
   },
 
   // Enum select
   enum: (col, value, onChange, readonly) => {
+    const ui = col.ui || {};
+    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const hint = ui.hint || '';
     const options = col.enumValues || [];
+    
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
-        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
-      ),
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
       m('select.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
         value: value || '',
+        required: !col.nullable && !readonly,
         disabled: readonly,
         class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
         onchange: (e) => onChange(e.target.value),
@@ -204,20 +386,27 @@ const FieldRenderers = {
         col.nullable ? m('option', { value: '' }, '-- Select --') : null,
         ...options.map(opt => m('option', { value: opt, selected: value === opt }, opt)),
       ]),
+      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
     ]);
   },
 
   // JSON textarea
   json: (col, value, onChange, readonly) => {
+    const ui = col.ui || {};
+    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const placeholder = ui.placeholder || '';
+    const hint = ui.hint || '';
+    const rows = ui.rows || 6;
     const jsonString = value ? (typeof value === 'string' ? value : JSON.stringify(value, null, 2)) : '';
+    
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
-        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
-      ),
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
       m('textarea.w-full.px-3.py-2.border.border-gray-300.rounded.font-mono.text-sm.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
-        rows: 6,
+        rows: rows,
+        placeholder: placeholder,
+        required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
         class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
@@ -230,22 +419,30 @@ const FieldRenderers = {
           }
         },
       }, jsonString),
+      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
     ]);
   },
 
   // Array (as JSON or tags)
   array: (col, value, onChange, readonly) => {
+    const validations = col.validations || {};
+    const ui = col.ui || {};
+    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const placeholder = ui.placeholder || 'Comma-separated values';
+    const hint = ui.hint || 'Enter comma-separated values';
     const arrayValue = Array.isArray(value) ? value.join(', ') : (value || '');
+    
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
-        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
-      ),
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
       m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
         type: 'text',
-        placeholder: 'Comma-separated values',
+        placeholder: placeholder,
         value: arrayValue,
+        minlength: validations.minLength || validations.min,
+        maxlength: validations.maxLength || validations.max,
+        required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
         class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
@@ -254,7 +451,7 @@ const FieldRenderers = {
           onChange(arr);
         },
       }),
-      m('p.text-xs.text-gray-500.mt-1', 'Enter comma-separated values'),
+      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
     ]);
   },
 };
@@ -402,26 +599,43 @@ const SetupForm = {
 
 // Layout Component
 const Layout = {
-  view: (vnode) => m('.min-h-screen.bg-gray-100', [
-    m('.bg-white.shadow', [
-      m('.max-w-7xl.mx-auto.px-4.py-4', [
-        m('.flex.items-center.justify-between', [
-          m('h1.text-xl.font-bold', 'Admin Panel'),
-          state.user ? m('.flex.items-center.gap-4', [
-            m('span.text-sm.text-gray-600', state.user.name || state.user.email),
-            m('button.text-sm.text-red-600.hover:text-red-800', {
-              onclick: async () => {
-                await api.post('/auth/logout');
-                state.user = null;
-                m.route.set('/login');
+  view: (vnode) => {
+    const breadcrumbs = vnode.attrs.breadcrumbs || [];
+    
+    return m('.min-h-screen.bg-gray-100.flex.flex-col', [
+      // Sticky header
+      m('.bg-white.shadow.sticky.top-0.z-50', [
+        m('.max-w-7xl.mx-auto.px-4.py-4', [
+          m('.flex.items-center.justify-between', [
+            m('a.text-xl.font-bold.hover:text-blue-600', {
+              href: '/',
+              onclick: (e) => {
+                e.preventDefault();
+                m.route.set('/');
               }
-            }, 'Logout'),
-          ]) : null,
+            }, 'Admin Panel'),
+            state.user ? m('.flex.items-center.gap-4', [
+              m('span.text-sm.text-gray-600', state.user.name || state.user.email),
+              m('button.text-sm.text-red-600.hover:text-red-800', {
+                onclick: async () => {
+                  await api.post('/auth/logout');
+                  state.user = null;
+                  m.route.set('/login');
+                }
+              }, 'Logout'),
+            ]) : null,
+          ]),
         ]),
       ]),
-    ]),
-    m('.max-w-7xl.mx-auto.px-4.py-6', vnode.children),
-  ]),
+      // Content area
+      m('.max-w-7xl.mx-auto.px-4.py-6.flex-1.w-full', [
+        // Breadcrumb
+        breadcrumbs.length > 0 ? m(Breadcrumb, { items: breadcrumbs }) : null,
+        // Page content
+        vnode.children,
+      ]),
+    ]);
+  },
 };
 
 // Model List Component
@@ -536,30 +750,49 @@ function getDisplayColumns(columns) {
     .slice(0, 6); // Max 6 columns for readability
 }
 
+// Load records with pagination
+function loadRecords(modelName, page = 1) {
+  state.loading = true;
+  state.error = null;
+  
+  const perPage = state.pagination.perPage || 20;
+  api.get('/models/' + modelName + '/records?page=' + page + '&perPage=' + perPage)
+    .then(result => {
+      state.records = result.data || [];
+      state.pagination = {
+        page: result.pagination?.page || page,
+        perPage: result.pagination?.perPage || perPage,
+        total: result.pagination?.total || state.records.length,
+        totalPages: result.pagination?.totalPages || Math.ceil((result.pagination?.total || state.records.length) / perPage),
+      };
+    })
+    .catch(err => {
+      state.error = err.message;
+    })
+    .finally(() => {
+      state.loading = false;
+      m.redraw();
+    });
+}
+
 // Record List Component - displays records with dynamic columns
 const RecordList = {
   oninit: () => {
     const modelName = m.route.param('model');
-    state.loading = true;
-    state.error = null;
     state.records = [];
     state.currentModelMeta = null;
+    state.pagination = { page: 1, perPage: 20, total: 0, totalPages: 0 };
     
     // Load model metadata first, then records
+    state.loading = true;
     api.get('/models/' + modelName)
       .then(modelMeta => {
         state.currentModelMeta = modelMeta;
         state.currentModel = modelMeta;
-        return api.get('/models/' + modelName + '/records');
-      })
-      .then(result => {
-        state.records = result.data || [];
-        state.pagination = result.pagination || null;
+        return loadRecords(modelName, 1);
       })
       .catch(err => {
         state.error = err.message;
-      })
-      .finally(() => {
         state.loading = false;
         m.redraw();
       });
@@ -570,7 +803,11 @@ const RecordList = {
     const displayColumns = modelMeta ? getDisplayColumns(modelMeta.columns) : [];
     const primaryKey = modelMeta?.primaryKey || 'id';
     
-    return m(Layout, [
+    const breadcrumbs = [
+      { label: modelMeta?.label || modelName, href: '/models/' + modelName },
+    ];
+    
+    return m(Layout, { breadcrumbs }, [
       m('.flex.items-center.justify-between.mb-6', [
         m('h2.text-2xl.font-bold', modelMeta?.label || modelName),
         m('button.bg-blue-600.text-white.px-4.py-2.rounded.hover:bg-blue-700', {
@@ -586,57 +823,70 @@ const RecordList = {
         ? m('p.text-gray-600', 'Loading records...')
         : state.records.length === 0
           ? m('p.text-gray-600', 'No records found.')
-          : m('.bg-white.rounded.shadow.overflow-x-auto', [
-            m('table.w-full', [
-              m('thead.bg-gray-50', [
-                m('tr', [
-                  // Dynamic column headers
-                  ...displayColumns.map(col => 
-                    m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500.uppercase.tracking-wider.whitespace-nowrap', 
-                      col.name.replace(/_/g, ' ')
-                    )
-                  ),
-                  m('th.px-4.py-3.text-right.text-xs.font-medium.text-gray-500.uppercase.tracking-wider', 'Actions'),
+          : m('.bg-white.rounded.shadow', [
+            // Table container with sticky header and actions
+            m('.overflow-x-auto.max-h-[calc(100vh-300px)]', { style: 'position: relative;' }, [
+              m('table.w-full.border-collapse', { style: 'min-width: 100%;' }, [
+                // Sticky header
+                m('thead.bg-gray-50', { style: 'position: sticky; top: 0; z-index: 10;' }, [
+                  m('tr', [
+                    // Dynamic column headers
+                    ...displayColumns.map(col => 
+                      m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500.uppercase.tracking-wider.whitespace-nowrap.bg-gray-50.border-b', 
+                        col.name.replace(/_/g, ' ')
+                      )
+                    ),
+                    // Sticky actions header
+                    m('th.px-4.py-3.text-right.text-xs.font-medium.text-gray-500.uppercase.tracking-wider.bg-gray-50.border-b', {
+                      style: 'position: sticky; right: 0; min-width: 120px;',
+                    }, 'Actions'),
+                  ]),
                 ]),
-              ]),
-              m('tbody.divide-y.divide-gray-200', state.records.map(record => 
-                m('tr.hover:bg-gray-50', [
-                  // Dynamic cell values
-                  ...displayColumns.map(col => 
-                    m('td.px-4.py-3.text-sm.whitespace-nowrap', 
-                      formatCellValue(record[col.name], col)
-                    )
-                  ),
-                  m('td.px-4.py-3.text-sm.text-right.whitespace-nowrap', [
-                    m('button.text-blue-600.hover:text-blue-800.mr-3', {
-                      onclick: () => {
-                        state.currentRecord = record;
-                        state.editing = true;
-                        m.route.set('/models/' + modelName + '/edit/' + record[primaryKey]);
-                      }
-                    }, 'Edit'),
-                    m('button.text-red-600.hover:text-red-800', {
-                      onclick: async () => {
-                        if (confirm('Are you sure you want to delete this record?')) {
-                          try {
-                            await api.delete('/models/' + modelName + '/records/' + record[primaryKey]);
-                            // Refresh the list
-                            state.records = state.records.filter(r => r[primaryKey] !== record[primaryKey]);
-                            m.redraw();
-                          } catch (err) {
-                            alert('Error: ' + err.message);
+                m('tbody.divide-y.divide-gray-200', state.records.map(record => 
+                  m('tr.hover:bg-gray-50', [
+                    // Dynamic cell values
+                    ...displayColumns.map(col => 
+                      m('td.px-4.py-3.text-sm.whitespace-nowrap', 
+                        formatCellValue(record[col.name], col)
+                      )
+                    ),
+                    // Sticky actions cell
+                    m('td.px-4.py-3.text-sm.text-right.whitespace-nowrap.bg-white', {
+                      style: 'position: sticky; right: 0; box-shadow: -4px 0 8px -4px rgba(0,0,0,0.1);',
+                    }, [
+                      m('button.text-blue-600.hover:text-blue-800.mr-3', {
+                        onclick: () => {
+                          state.currentRecord = record;
+                          state.editing = true;
+                          m.route.set('/models/' + modelName + '/edit/' + record[primaryKey]);
+                        }
+                      }, 'Edit'),
+                      m('button.text-red-600.hover:text-red-800', {
+                        onclick: async () => {
+                          if (confirm('Are you sure you want to delete this record?')) {
+                            try {
+                              await api.delete('/models/' + modelName + '/records/' + record[primaryKey]);
+                              // Refresh the list
+                              loadRecords(modelName, state.pagination.page);
+                            } catch (err) {
+                              alert('Error: ' + err.message);
+                            }
                           }
                         }
-                      }
-                    }, 'Delete'),
-                  ]),
-                ])
-              )),
+                      }, 'Delete'),
+                    ]),
+                  ])
+                )),
+              ]),
             ]),
-            // Record count
-            m('.px-4.py-3.bg-gray-50.border-t.text-sm.text-gray-500', 
-              state.records.length + ' record' + (state.records.length !== 1 ? 's' : '')
-            ),
+            // Pagination
+            m(Pagination, {
+              page: state.pagination.page,
+              perPage: state.pagination.perPage,
+              total: state.pagination.total,
+              totalPages: state.pagination.totalPages,
+              onPageChange: (newPage) => loadRecords(modelName, newPage),
+            }),
           ]),
     ]);
   },
@@ -692,7 +942,12 @@ const RecordForm = {
     const isNew = !id || id === 'new';
     const modelMeta = state.currentModelMeta;
     
-    return m(Layout, [
+    const breadcrumbs = [
+      { label: modelMeta?.label || modelName, href: '/models/' + modelName },
+      { label: isNew ? 'New' : 'Edit #' + id, href: '#' },
+    ];
+    
+    return m(Layout, { breadcrumbs }, [
       m('.flex.items-center.justify-between.mb-6', [
         m('h2.text-2xl.font-bold', isNew ? 'New Record' : 'Edit Record'),
         modelMeta ? m('span.text-gray-500', modelMeta.label || modelMeta.name) : null,
@@ -701,7 +956,8 @@ const RecordForm = {
       state.loading ? m('p.text-gray-600', 'Loading...') :
       state.error && !modelMeta ? m('.bg-red-100.border.border-red-400.text-red-700.px-4.py-3.rounded', state.error) :
       
-      m('form.bg-white.p-6.rounded.shadow', {
+      m('form.bg-white.rounded.shadow.flex.flex-col', {
+        style: 'min-height: calc(100vh - 280px);',
         onsubmit: async (e) => {
           e.preventDefault();
           state.loading = true;
@@ -735,26 +991,30 @@ const RecordForm = {
           }
         }
       }, [
-        state.error ? m('.bg-red-100.border.border-red-400.text-red-700.px-4.py-3.rounded.mb-4', state.error) : null,
+        // Form content (scrollable)
+        m('.p-6.flex-1.overflow-y-auto', [
+          state.error ? m('.bg-red-100.border.border-red-400.text-red-700.px-4.py-3.rounded.mb-4', state.error) : null,
+          
+          // Render form fields based on model columns
+          modelMeta && modelMeta.columns ? modelMeta.columns.map(col => {
+            const autoType = isAutoColumn(col);
+            
+            // Hide primary key in new mode
+            if (autoType === 'primary' && isNew) return null;
+            
+            const isReadonly = !!autoType;
+            const renderer = getFieldRenderer(col.type);
+            const value = state.formData[col.name];
+            const onChange = (newValue) => {
+              state.formData[col.name] = newValue;
+            };
+            
+            return renderer(col, value, onChange, isReadonly);
+          }) : m('p.text-gray-600.mb-4', 'Loading form fields...'),
+        ]),
         
-        // Render form fields based on model columns
-        modelMeta && modelMeta.columns ? modelMeta.columns.map(col => {
-          const autoType = isAutoColumn(col);
-          
-          // Hide primary key in new mode
-          if (autoType === 'primary' && isNew) return null;
-          
-          const isReadonly = !!autoType;
-          const renderer = getFieldRenderer(col.type);
-          const value = state.formData[col.name];
-          const onChange = (newValue) => {
-            state.formData[col.name] = newValue;
-          };
-          
-          return renderer(col, value, onChange, isReadonly);
-        }) : m('p.text-gray-600.mb-4', 'Loading form fields...'),
-        
-        m('.flex.gap-4.mt-6.pt-4.border-t', [
+        // Sticky footer buttons
+        m('.flex.gap-4.p-4.border-t.bg-gray-50.sticky.bottom-0', [
           m('button.bg-blue-600.text-white.px-6.py-2.rounded.hover:bg-blue-700.disabled:opacity-50', {
             type: 'submit',
             disabled: state.loading,

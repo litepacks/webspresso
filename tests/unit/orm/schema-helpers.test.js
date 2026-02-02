@@ -70,7 +70,8 @@ describe('Schema Helpers', () => {
 
     describe('id()', () => {
       it('should create a primary key column', () => {
-        const schema = zdb.id();
+        const builder = zdb.id();
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('bigint');
@@ -81,7 +82,8 @@ describe('Schema Helpers', () => {
 
     describe('uuid()', () => {
       it('should create a UUID primary key column', () => {
-        const schema = zdb.uuid();
+        const builder = zdb.uuid();
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('uuid');
@@ -91,7 +93,8 @@ describe('Schema Helpers', () => {
 
     describe('string()', () => {
       it('should create a string column with default maxLength', () => {
-        const schema = zdb.string();
+        const builder = zdb.string();
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('string');
@@ -100,7 +103,8 @@ describe('Schema Helpers', () => {
       });
 
       it('should accept custom options', () => {
-        const schema = zdb.string({ maxLength: 100, unique: true, index: true });
+        const builder = zdb.string({ maxLength: 100, unique: true, index: true });
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.maxLength).toBe(100);
@@ -109,7 +113,8 @@ describe('Schema Helpers', () => {
       });
 
       it('should handle nullable', () => {
-        const schema = zdb.string({ nullable: true });
+        const builder = zdb.string({ nullable: true });
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.nullable).toBe(true);
@@ -118,7 +123,8 @@ describe('Schema Helpers', () => {
 
     describe('text()', () => {
       it('should create a text column', () => {
-        const schema = zdb.text();
+        const builder = zdb.text();
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('text');
@@ -127,7 +133,8 @@ describe('Schema Helpers', () => {
 
     describe('integer()', () => {
       it('should create an integer column', () => {
-        const schema = zdb.integer();
+        const builder = zdb.integer();
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('integer');
@@ -136,7 +143,8 @@ describe('Schema Helpers', () => {
 
     describe('bigint()', () => {
       it('should create a bigint column', () => {
-        const schema = zdb.bigint();
+        const builder = zdb.bigint();
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('bigint');
@@ -145,7 +153,8 @@ describe('Schema Helpers', () => {
 
     describe('float()', () => {
       it('should create a float column', () => {
-        const schema = zdb.float();
+        const builder = zdb.float();
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('float');
@@ -154,7 +163,8 @@ describe('Schema Helpers', () => {
 
     describe('decimal()', () => {
       it('should create a decimal column with precision and scale', () => {
-        const schema = zdb.decimal({ precision: 8, scale: 4 });
+        const builder = zdb.decimal({ precision: 8, scale: 4 });
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('decimal');
@@ -163,7 +173,8 @@ describe('Schema Helpers', () => {
       });
 
       it('should use defaults for precision and scale', () => {
-        const schema = zdb.decimal();
+        const builder = zdb.decimal();
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.precision).toBe(10);
@@ -173,14 +184,16 @@ describe('Schema Helpers', () => {
 
     describe('boolean()', () => {
       it('should create a boolean column', () => {
-        const schema = zdb.boolean();
+        const builder = zdb.boolean();
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('boolean');
       });
 
       it('should accept default value', () => {
-        const schema = zdb.boolean({ default: true });
+        const builder = zdb.boolean({ default: true });
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.default).toBe(true);
@@ -189,14 +202,16 @@ describe('Schema Helpers', () => {
 
     describe('timestamp()', () => {
       it('should create a timestamp column', () => {
-        const schema = zdb.timestamp();
+        const builder = zdb.timestamp();
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('timestamp');
       });
 
       it('should support auto create', () => {
-        const schema = zdb.timestamp({ auto: 'create' });
+        const builder = zdb.timestamp({ auto: 'create' });
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.auto).toBe('create');
@@ -204,7 +219,8 @@ describe('Schema Helpers', () => {
       });
 
       it('should support auto update', () => {
-        const schema = zdb.timestamp({ auto: 'update' });
+        const builder = zdb.timestamp({ auto: 'update' });
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.auto).toBe('update');
@@ -213,7 +229,8 @@ describe('Schema Helpers', () => {
 
     describe('enum()', () => {
       it('should create an enum column', () => {
-        const schema = zdb.enum(['active', 'inactive']);
+        const builder = zdb.enum(['active', 'inactive']);
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('enum');
@@ -221,7 +238,8 @@ describe('Schema Helpers', () => {
       });
 
       it('should accept default value', () => {
-        const schema = zdb.enum(['a', 'b'], { default: 'a' });
+        const builder = zdb.enum(['a', 'b'], { default: 'a' });
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.default).toBe('a');
@@ -230,7 +248,8 @@ describe('Schema Helpers', () => {
 
     describe('foreignKey()', () => {
       it('should create a foreign key column', () => {
-        const schema = zdb.foreignKey('users');
+        const builder = zdb.foreignKey('users');
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('bigint');
@@ -239,7 +258,8 @@ describe('Schema Helpers', () => {
       });
 
       it('should accept custom reference column', () => {
-        const schema = zdb.foreignKey('users', { referenceColumn: 'uuid' });
+        const builder = zdb.foreignKey('users', { referenceColumn: 'uuid' });
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.referenceColumn).toBe('uuid');
@@ -248,7 +268,8 @@ describe('Schema Helpers', () => {
 
     describe('foreignUuid()', () => {
       it('should create a UUID foreign key column', () => {
-        const schema = zdb.foreignUuid('users');
+        const builder = zdb.foreignUuid('users');
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('uuid');
@@ -258,7 +279,8 @@ describe('Schema Helpers', () => {
 
     describe('json()', () => {
       it('should create a JSON column', () => {
-        const schema = zdb.json();
+        const builder = zdb.json();
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('json');
@@ -267,7 +289,8 @@ describe('Schema Helpers', () => {
 
     describe('array()', () => {
       it('should create an array column with default item schema', () => {
-        const schema = zdb.array();
+        const builder = zdb.array();
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('array');
@@ -277,7 +300,8 @@ describe('Schema Helpers', () => {
       });
 
       it('should create an array column with custom item schema', () => {
-        const schema = zdb.array(z.string());
+        const builder = zdb.array(z.string());
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('array');
@@ -287,7 +311,8 @@ describe('Schema Helpers', () => {
       });
 
       it('should accept options object as first argument', () => {
-        const schema = zdb.array({ nullable: true });
+        const builder = zdb.array({ nullable: true });
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.type).toBe('array');
@@ -295,7 +320,8 @@ describe('Schema Helpers', () => {
       });
 
       it('should handle nullable arrays', () => {
-        const schema = zdb.array(z.number(), { nullable: true });
+        const builder = zdb.array(z.number(), { nullable: true });
+        const schema = builder._finalize();
         const meta = getColumnMeta(schema);
         
         expect(meta.nullable).toBe(true);
@@ -304,7 +330,8 @@ describe('Schema Helpers', () => {
       });
 
       it('should validate array items correctly', () => {
-        const schema = zdb.array(z.number());
+        const builder = zdb.array(z.number());
+        const schema = builder._finalize();
         
         expect(() => schema.parse([1, 2, 3])).not.toThrow();
         expect(() => schema.parse(['a', 'b'])).toThrow();
@@ -316,7 +343,7 @@ describe('Schema Helpers', () => {
   describe('extractColumnsFromSchema', () => {
     it('should extract all column metadata from schema', () => {
       const zdb = createSchemaHelpers(z);
-      const schema = z.object({
+      const schema = zdb.schema({
         id: zdb.id(),
         name: zdb.string(),
         email: zdb.string({ unique: true }),
@@ -334,7 +361,7 @@ describe('Schema Helpers', () => {
   describe('hasColumnMeta', () => {
     it('should return true for schemas with metadata', () => {
       const zdb = createSchemaHelpers(z);
-      const schema = zdb.string();
+      const schema = zdb.string()._finalize();
       
       expect(hasColumnMeta(schema)).toBe(true);
     });
@@ -343,6 +370,104 @@ describe('Schema Helpers', () => {
       const schema = z.string();
       
       expect(hasColumnMeta(schema)).toBe(false);
+    });
+  });
+
+  describe('Chainable Validation API', () => {
+    const zdb = createSchemaHelpers(z);
+
+    it('should support chained validations', () => {
+      const schema = zdb.schema({
+        email: zdb.string().min(3).max(100).email(),
+        age: zdb.integer().min(18).max(120),
+        price: zdb.decimal().min(0).step(0.01),
+      });
+
+      // Should validate correctly
+      expect(() => schema.parse({ email: 'test@example.com', age: 25, price: 10.50 })).not.toThrow();
+      expect(() => schema.parse({ email: 'ab', age: 15, price: -5 })).toThrow();
+    });
+
+    it('should store validation metadata', () => {
+      const emailField = zdb.string().min(3).max(100).email();
+      const finalized = emailField._finalize();
+      const meta = getColumnMeta(finalized);
+
+      expect(meta.validations).toBeDefined();
+      expect(meta.validations.min).toBe(3);
+      expect(meta.validations.max).toBe(100);
+      expect(meta.validations.email).toBe(true);
+    });
+
+    it('should support UI config', () => {
+      const emailField = zdb.string().email().config({
+        label: 'Email Address',
+        placeholder: 'your@email.com',
+        hint: 'Enter your work email',
+      });
+      const finalized = emailField._finalize();
+      const meta = getColumnMeta(finalized);
+
+      expect(meta.ui).toBeDefined();
+      expect(meta.ui.label).toBe('Email Address');
+      expect(meta.ui.placeholder).toBe('your@email.com');
+      expect(meta.ui.hint).toBe('Enter your work email');
+    });
+
+    it('should support combined validations and UI config', () => {
+      const field = zdb.string().min(3).max(100).email().config({
+        label: 'Email',
+        placeholder: 'email@example.com',
+      });
+      const finalized = field._finalize();
+      const meta = getColumnMeta(finalized);
+
+      expect(meta.validations.email).toBe(true);
+      expect(meta.validations.min).toBe(3);
+      expect(meta.validations.max).toBe(100);
+      expect(meta.ui.label).toBe('Email');
+      expect(meta.ui.placeholder).toBe('email@example.com');
+    });
+
+    it('should auto-finalize in zdb.schema()', () => {
+      const schema = zdb.schema({
+        email: zdb.string().min(3).email().config({ label: 'Email' }),
+        age: zdb.integer().min(18).config({ label: 'Age' }),
+      });
+
+      // Should work without manual finalize
+      expect(() => schema.parse({ email: 'test@example.com', age: 25 })).not.toThrow();
+      
+      // Metadata should be preserved
+      const columns = extractColumnsFromSchema(schema);
+      expect(columns.get('email').validations.email).toBe(true);
+      expect(columns.get('email').ui.label).toBe('Email');
+      expect(columns.get('age').validations.min).toBe(18);
+      expect(columns.get('age').ui.label).toBe('Age');
+    });
+
+    it('should support nullable and optional chaining', () => {
+      const field = zdb.string().min(3).nullable().config({ label: 'Optional Field' });
+      const finalized = field._finalize();
+      const meta = getColumnMeta(finalized);
+
+      expect(meta.nullable).toBe(true);
+    });
+
+    it('should support pattern validation', () => {
+      const field = zdb.string().pattern(/^\+?[0-9]{10,14}$/).config({ label: 'Phone' });
+      const finalized = field._finalize();
+      const meta = getColumnMeta(finalized);
+
+      expect(meta.validations.pattern).toBe('^\\+?[0-9]{10,14}$');
+    });
+
+    it('should support step for numbers', () => {
+      const field = zdb.decimal().step(0.01).config({ label: 'Price' });
+      const finalized = field._finalize();
+      const meta = getColumnMeta(finalized);
+
+      expect(meta.validations.step).toBe(0.01);
     });
   });
 });
