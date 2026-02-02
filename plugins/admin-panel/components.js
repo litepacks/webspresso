@@ -223,8 +223,8 @@ const ModelList = {
 
 // Record List Component (placeholder - will be enhanced with field renderers)
 const RecordList = {
-  oninit: (vnode) => {
-    const modelName = vnode.attrs.model;
+  oninit: () => {
+    const modelName = m.route.param('model');
     state.loading = true;
     state.error = null;
     state.records = [];
@@ -249,8 +249,8 @@ const RecordList = {
         m.redraw();
       });
   },
-  view: (vnode) => {
-    const modelName = vnode.attrs.model;
+  view: () => {
+    const modelName = m.route.param('model');
     return m(Layout, [
       m('.flex.items-center.justify-between.mb-6', [
         m('h2.text-2xl.font-bold', state.currentModel?.label || modelName),
@@ -311,8 +311,9 @@ const RecordList = {
 
 // Record Form Component (placeholder - will be enhanced with field renderers)
 const RecordForm = {
-  oninit: (vnode) => {
-    const { model: modelName, id } = vnode.attrs;
+  oninit: () => {
+    const modelName = m.route.param('model');
+    const id = m.route.param('id');
     state.error = null;
     
     if (id && id !== 'new') {
@@ -332,8 +333,9 @@ const RecordForm = {
       state.currentRecord = {};
     }
   },
-  view: (vnode) => {
-    const { model: modelName, id } = vnode.attrs;
+  view: () => {
+    const modelName = m.route.param('model');
+    const id = m.route.param('id');
     const isNew = !id || id === 'new';
     return m(Layout, [
       m('h2.text-2xl.font-bold.mb-6', isNew ? 'New Record' : 'Edit Record'),

@@ -432,6 +432,37 @@ function createApiHandlers(options) {
     }
   }
 
+  /**
+   * Reset admin users (TEST ONLY)
+   * Clears all admin users from the database
+   */
+  async function resetHandler(req, res) {
+    // Only allow in test environment
+    if (process.env.NODE_ENV !== 'test') {
+      return res.status(403).json({ error: 'Only available in test environment' });
+    }
+
+    try {
+      // Try to delete all admin users using db.knex directly
+      // This works even if AdminUserRepo is not set up
+      if (db && db.knex) {
+        const tableExists = await db.knex.schema.hasTable('admin_users');
+        if (tableExists) {
+          const deleted = await db.knex('admin_users').del();
+          console.log(`[TEST RESET] Deleted ${deleted} admin users`);
+          res.json({ success: true, message: `Deleted ${deleted} admin users` });
+        } else {
+          res.json({ success: true, message: 'admin_users table does not exist' });
+        }
+      } else {
+        res.json({ success: true, message: 'No database instance' });
+      }
+    } catch (error) {
+      console.error('[TEST RESET] Error:', error.message);
+      res.status(500).json({ error: error.message });
+    }
+  }
+
   return {
     checkHandler,
     setupHandler,
@@ -447,6 +478,7 @@ function createApiHandlers(options) {
     deleteRecordHandler,
     relationHandler,
     queryHandler,
+    resetHandler,
   };
 }
 

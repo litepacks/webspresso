@@ -114,6 +114,9 @@ function adminPanelPlugin(options = {}) {
       ctx.addRoute('post', `${adminPath}/api/auth/logout`, requireAuth, apiHandlers.logoutHandler);
       ctx.addRoute('get', `${adminPath}/api/auth/me`, requireAuth, apiHandlers.meHandler);
 
+      // Debug/Test routes (no auth, TEST ENV ONLY)
+      ctx.addRoute('post', `${adminPath}/api/debug/reset`, apiHandlers.resetHandler);
+
       // Model API routes (auth required)
       ctx.addRoute('get', `${adminPath}/api/models`, requireAuth, apiHandlers.modelsHandler);
       ctx.addRoute('get', `${adminPath}/api/models/:model`, requireAuth, apiHandlers.modelHandler);
@@ -132,12 +135,28 @@ function adminPanelPlugin(options = {}) {
       ctx.addRoute('get', `${adminPath}/api/models/:model/queries/:query`, requireAuth, apiHandlers.queryHandler);
 
       // Admin panel HTML endpoint (optional auth - frontend handles routing)
-      ctx.addRoute('get', adminPath, optionalAuth, (req, res) => {
-        // This will be handled by Mithril SPA
-        // For now, return a simple HTML that loads the SPA
+      // This serves the SPA for all admin panel routes
+      // IMPORTANT: These routes must be added AFTER all API routes
+      // Express matches routes in order, so more specific routes (API) come first
+      const serveAdminPanel = (req, res) => {
         res.type('text/html');
         res.send(generateAdminPanelHtml(adminPath));
-      });
+      };
+      
+      // Root admin path
+      ctx.addRoute('get', adminPath, optionalAuth, serveAdminPanel);
+      
+      // Catch-all route for admin panel SPA routes (everything under /_admin except /api)
+      // This allows Mithril.js to handle client-side routing
+      // Express matches routes in order, so API routes (added above) will match first
+      // IMPORTANT: More specific routes must be added BEFORE less specific ones
+      // So /models/:model/new comes before /models/:model
+      ctx.addRoute('get', adminPath + '/login', optionalAuth, serveAdminPanel);
+      ctx.addRoute('get', adminPath + '/setup', optionalAuth, serveAdminPanel);
+      ctx.addRoute('get', adminPath + '/models/:model/edit/:id', optionalAuth, serveAdminPanel);
+      ctx.addRoute('get', adminPath + '/models/:model/new', optionalAuth, serveAdminPanel);
+      ctx.addRoute('get', adminPath + '/models/:model', optionalAuth, serveAdminPanel);
+      
 
       // Log admin panel URL
       console.log(`\n🔐 Admin Panel available at: http://localhost:${process.env.PORT || 3000}${adminPath}\n`);

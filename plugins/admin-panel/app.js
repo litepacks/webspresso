@@ -6,40 +6,79 @@
 const components = require('./components');
 
 module.exports = components + `
+// Set route prefix to admin path
+m.route.prefix = window.__ADMIN_PATH__ || '/_admin';
+
+// Helper to check auth status
+async function checkAuth() {
+  if (state.user) return true;
+  
+  try {
+    const result = await api.get('/auth/me');
+    state.user = result.user;
+    return true;
+  } catch (err) {
+    state.user = null;
+    return false;
+  }
+}
+
+// Helper to check if setup is needed
+async function checkSetupNeeded() {
+  try {
+    const checkResult = await api.get('/auth/check');
+    state.needsSetup = !checkResult.exists;
+    return state.needsSetup;
+  } catch (err) {
+    state.needsSetup = false;
+    return false;
+  }
+}
+
 // Router
 m.route(document.getElementById('app'), '/', {
   '/': {
     onmatch: async () => {
-      // Check if user is authenticated
-      try {
-        const result = await api.get('/auth/me');
-        state.user = result.user;
-      } catch (err) {
-        state.user = null;
-      }
-      
-      // Check if setup is needed
-      try {
-        const checkResult = await api.get('/auth/check');
-        state.needsSetup = !checkResult.exists;
-      } catch (err) {
-        state.needsSetup = false;
-      }
-      
-      if (state.needsSetup) {
+      // Check if setup is needed first
+      const needsSetup = await checkSetupNeeded();
+      if (needsSetup) {
         return SetupForm;
       }
-      if (!state.user) {
+      
+      // Check if user is authenticated
+      const isAuth = await checkAuth();
+      if (!isAuth) {
         return LoginForm;
       }
       return ModelList;
     }
   },
-  '/login': LoginForm,
-  '/setup': SetupForm,
+  '/login': {
+    onmatch: async () => {
+      // If already logged in, redirect to home
+      const isAuth = await checkAuth();
+      if (isAuth) {
+        m.route.set('/');
+        return;
+      }
+      return LoginForm;
+    }
+  },
+  '/setup': {
+    onmatch: async () => {
+      // If admin exists, redirect to login
+      const needsSetup = await checkSetupNeeded();
+      if (!needsSetup) {
+        m.route.set('/login');
+        return;
+      }
+      return SetupForm;
+    }
+  },
   '/models/:model': {
-    onmatch: async (params) => {
-      if (!state.user) {
+    onmatch: async () => {
+      const isAuth = await checkAuth();
+      if (!isAuth) {
         m.route.set('/login');
         return;
       }
@@ -47,8 +86,9 @@ m.route(document.getElementById('app'), '/', {
     }
   },
   '/models/:model/new': {
-    onmatch: async (params) => {
-      if (!state.user) {
+    onmatch: async () => {
+      const isAuth = await checkAuth();
+      if (!isAuth) {
         m.route.set('/login');
         return;
       }
@@ -56,8 +96,9 @@ m.route(document.getElementById('app'), '/', {
     }
   },
   '/models/:model/edit/:id': {
-    onmatch: async (params) => {
-      if (!state.user) {
+    onmatch: async () => {
+      const isAuth = await checkAuth();
+      if (!isAuth) {
         m.route.set('/login');
         return;
       }

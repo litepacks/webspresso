@@ -263,6 +263,10 @@ function createApp(options = {}) {
         addHelper: (n, fn) => pluginManager.registeredHelpers.set(n, fn),
         addFilter: (n, fn) => pluginManager.registeredFilters.set(n, fn),
         addRoute: (method, path, ...handlers) => {
+          // Log route for debugging (only in development)
+          if (process.env.NODE_ENV !== 'production' && !isTest) {
+            console.log(`  ${method.toUpperCase().padEnd(6)} ${path}`);
+          }
           app[method.toLowerCase()](path, ...handlers);
         }
       };
