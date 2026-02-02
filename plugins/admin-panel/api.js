@@ -22,6 +22,18 @@ function createApiHandlers(options) {
   const adminPath = path || '/_admin';
   const apiPath = `${adminPath}/api`;
 
+  // Helper to get model from db instance or global registry
+  function getModelFromDb(modelName) {
+    if (db && typeof db.getModel === 'function') {
+      try {
+        return db.getModel(modelName);
+      } catch {
+        // Fall through to global registry
+      }
+    }
+    return getModel(modelName);
+  }
+
   // Get AdminUser repository
   let AdminUserRepo = null;
   if (db && AdminUser) {
@@ -127,10 +139,17 @@ function createApiHandlers(options) {
    */
   function modelsHandler(req, res) {
     try {
-      const allModels = getAllModels();
+      // Use db.getAllModels() if available (local registry), fallback to global registry
+      const allModels = db && typeof db.getAllModels === 'function' 
+        ? db.getAllModels() 
+        : Array.from(getAllModels().values());
+      
       const adminModels = [];
 
-      for (const [name, model] of allModels) {
+      // Handle both Map entries and array of models
+      const modelList = Array.isArray(allModels) ? allModels : Array.from(allModels.values());
+
+      for (const model of modelList) {
         if (model.admin && model.admin.enabled === true) {
           adminModels.push({
             name: model.name,
@@ -156,7 +175,7 @@ function createApiHandlers(options) {
   function modelHandler(req, res) {
     try {
       const { model: modelName } = req.params;
-      const model = getModel(modelName);
+      const model = getModelFromDb(modelName);
 
       if (!model) {
         return res.status(404).json({ error: 'Model not found' });
@@ -202,7 +221,7 @@ function createApiHandlers(options) {
   async function recordsListHandler(req, res) {
     try {
       const { model: modelName } = req.params;
-      const model = getModel(modelName);
+      const model = getModelFromDb(modelName);
 
       if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
@@ -268,7 +287,7 @@ function createApiHandlers(options) {
   async function recordHandler(req, res) {
     try {
       const { model: modelName, id } = req.params;
-      const model = getModel(modelName);
+      const model = getModelFromDb(modelName);
 
       if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
@@ -293,7 +312,7 @@ function createApiHandlers(options) {
   async function createRecordHandler(req, res) {
     try {
       const { model: modelName } = req.params;
-      const model = getModel(modelName);
+      const model = getModelFromDb(modelName);
 
       if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
@@ -314,7 +333,7 @@ function createApiHandlers(options) {
   async function updateRecordHandler(req, res) {
     try {
       const { model: modelName, id } = req.params;
-      const model = getModel(modelName);
+      const model = getModelFromDb(modelName);
 
       if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
@@ -339,7 +358,7 @@ function createApiHandlers(options) {
   async function deleteRecordHandler(req, res) {
     try {
       const { model: modelName, id } = req.params;
-      const model = getModel(modelName);
+      const model = getModelFromDb(modelName);
 
       if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
@@ -364,7 +383,7 @@ function createApiHandlers(options) {
   async function relationHandler(req, res) {
     try {
       const { model: modelName, relation: relationName } = req.params;
-      const model = getModel(modelName);
+      const model = getModelFromDb(modelName);
 
       if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
@@ -393,7 +412,7 @@ function createApiHandlers(options) {
   async function queryHandler(req, res) {
     try {
       const { model: modelName, query: queryName } = req.params;
-      const model = getModel(modelName);
+      const model = getModelFromDb(modelName);
 
       if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });

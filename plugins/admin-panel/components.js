@@ -181,48 +181,73 @@ const Layout = {
 
 // Model List Component
 const ModelList = {
-  oninit: async () => {
-    try {
-      const result = await api.get('/models');
-      state.models = result.models || [];
-    } catch (err) {
-      state.error = err.message;
-    }
+  oninit: () => {
+    state.loading = true;
+    state.error = null;
+    api.get('/models')
+      .then(result => {
+        state.models = result.models || [];
+      })
+      .catch(err => {
+        state.error = err.message;
+      })
+      .finally(() => {
+        state.loading = false;
+        m.redraw();
+      });
   },
   view: () => m(Layout, [
     m('h2.text-2xl.font-bold.mb-6', 'Models'),
-    state.models.length === 0
-      ? m('p.text-gray-600', 'No models enabled in admin panel.')
-      : m('.grid.grid-cols-1.md:grid-cols-2.lg:grid-cols-3.gap-4', 
-          state.models.map(model => 
-            m('a.bg-white.p-6.rounded.shadow.hover:shadow-lg.transition', {
-              href: '/models/' + model.name,
-              onclick: (e) => {
-                e.preventDefault();
-                m.route.set('/models/' + model.name);
-              }
-            }, [
-              model.icon ? m('span.text-2xl.mb-2.block', model.icon) : null,
-              m('h3.font-semibold.text-lg', model.label || model.name),
-              m('p.text-sm.text-gray-600.mt-2', model.table),
-            ])
-          )
-        ),
+    state.error ? m('.bg-red-100.border.border-red-400.text-red-700.px-4.py-3.rounded.mb-4', state.error) : null,
+    state.loading
+      ? m('p.text-gray-600', 'Loading models...')
+      : state.models.length === 0
+        ? m('p.text-gray-600', 'No models enabled in admin panel. Make sure your models have admin: { enabled: true }')
+        : m('.grid.grid-cols-1.md:grid-cols-2.lg:grid-cols-3.gap-4', 
+            state.models.map(model => 
+              m('a.bg-white.p-6.rounded.shadow.hover:shadow-lg.transition', {
+                href: '/models/' + model.name,
+                onclick: (e) => {
+                  e.preventDefault();
+                  m.route.set('/models/' + model.name);
+                }
+              }, [
+                model.icon ? m('span.text-2xl.mb-2.block', model.icon) : null,
+                m('h3.font-semibold.text-lg', model.label || model.name),
+                m('p.text-sm.text-gray-600.mt-2', model.table),
+              ])
+            )
+          ),
   ]),
 };
 
 // Record List Component (placeholder - will be enhanced with field renderers)
 const RecordList = {
-  oninit: async (vnode) => {
+  oninit: (vnode) => {
     const modelName = vnode.attrs.model;
-    try {
-      const result = await api.get('/models/' + modelName + '/records');
-      state.records = result.data || [];
-      state.pagination = result.pagination || null;
-      state.currentModel = state.models.find(m => m.name === modelName);
-    } catch (err) {
-      state.error = err.message;
-    }
+    state.loading = true;
+    state.error = null;
+    state.records = [];
+    
+    // Load model metadata if not already loaded
+    const loadModel = state.models.length === 0 
+      ? api.get('/models').then(r => { state.models = r.models || []; })
+      : Promise.resolve();
+    
+    loadModel
+      .then(() => api.get('/models/' + modelName + '/records'))
+      .then(result => {
+        state.records = result.data || [];
+        state.pagination = result.pagination || null;
+        state.currentModel = state.models.find(m => m.name === modelName);
+      })
+      .catch(err => {
+        state.error = err.message;
+      })
+      .finally(() => {
+        state.loading = false;
+        m.redraw();
+      });
   },
   view: (vnode) => {
     const modelName = vnode.attrs.model;
@@ -237,9 +262,12 @@ const RecordList = {
           }
         }, 'New Record'),
       ]),
-      state.records.length === 0
-        ? m('p.text-gray-600', 'No records found.')
-        : m('.bg-white.rounded.shadow.overflow-hidden', [
+      state.error ? m('.bg-red-100.border.border-red-400.text-red-700.px-4.py-3.rounded.mb-4', state.error) : null,
+      state.loading
+        ? m('p.text-gray-600', 'Loading records...')
+        : state.records.length === 0
+          ? m('p.text-gray-600', 'No records found.')
+          : m('.bg-white.rounded.shadow.overflow-hidden', [
             m('table.w-full', [
               m('thead.bg-gray-50', [
                 m('tr', [
@@ -283,15 +311,23 @@ const RecordList = {
 
 // Record Form Component (placeholder - will be enhanced with field renderers)
 const RecordForm = {
-  oninit: async (vnode) => {
+  oninit: (vnode) => {
     const { model: modelName, id } = vnode.attrs;
+    state.error = null;
+    
     if (id && id !== 'new') {
-      try {
-        const result = await api.get('/models/' + modelName + '/records/' + id);
-        state.currentRecord = result.data;
-      } catch (err) {
-        state.error = err.message;
-      }
+      state.loading = true;
+      api.get('/models/' + modelName + '/records/' + id)
+        .then(result => {
+          state.currentRecord = result.data;
+        })
+        .catch(err => {
+          state.error = err.message;
+        })
+        .finally(() => {
+          state.loading = false;
+          m.redraw();
+        });
     } else {
       state.currentRecord = {};
     }
