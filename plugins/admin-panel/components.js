@@ -40,11 +40,256 @@ const state = {
   error: null,
   models: [],
   currentModel: null,
+  currentModelMeta: null, // Full model metadata with columns
   records: [],
   pagination: null,
   currentRecord: null,
+  formData: {}, // Form field values
   editing: false,
 };
+
+// Field Renderers - render appropriate input based on column type
+const FieldRenderers = {
+  // Text input (string)
+  string: (col, value, onChange, readonly) => {
+    return m('.mb-4', [
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, 
+        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
+      ),
+      m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+        id: col.name,
+        name: col.name,
+        type: 'text',
+        value: value || '',
+        maxlength: col.maxLength || 255,
+        readonly: readonly,
+        disabled: readonly,
+        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        oninput: (e) => onChange(e.target.value),
+      }),
+    ]);
+  },
+
+  // Textarea (text)
+  text: (col, value, onChange, readonly) => {
+    return m('.mb-4', [
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
+        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
+      ),
+      m('textarea.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+        id: col.name,
+        name: col.name,
+        rows: 4,
+        readonly: readonly,
+        disabled: readonly,
+        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        oninput: (e) => onChange(e.target.value),
+      }, value || ''),
+    ]);
+  },
+
+  // Number input (integer, bigint)
+  integer: (col, value, onChange, readonly) => {
+    return m('.mb-4', [
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
+        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
+      ),
+      m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+        id: col.name,
+        name: col.name,
+        type: 'number',
+        step: '1',
+        value: value !== null && value !== undefined ? value : '',
+        readonly: readonly,
+        disabled: readonly,
+        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        oninput: (e) => onChange(e.target.value === '' ? null : parseInt(e.target.value, 10)),
+      }),
+    ]);
+  },
+
+  // Float/Decimal input
+  float: (col, value, onChange, readonly) => {
+    return m('.mb-4', [
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
+        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
+      ),
+      m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+        id: col.name,
+        name: col.name,
+        type: 'number',
+        step: '0.01',
+        value: value !== null && value !== undefined ? value : '',
+        readonly: readonly,
+        disabled: readonly,
+        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        oninput: (e) => onChange(e.target.value === '' ? null : parseFloat(e.target.value)),
+      }),
+    ]);
+  },
+
+  // Boolean checkbox
+  boolean: (col, value, onChange, readonly) => {
+    return m('.mb-4', [
+      m('label.flex.items-center.cursor-pointer', { class: readonly ? 'cursor-not-allowed' : '' }, [
+        m('input.mr-2.w-4.h-4', {
+          type: 'checkbox',
+          name: col.name,
+          checked: Boolean(value),
+          disabled: readonly,
+          onchange: (e) => onChange(e.target.checked),
+        }),
+        m('span.text-sm.font-medium.text-gray-700',
+          col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
+        ),
+      ]),
+    ]);
+  },
+
+  // Date input
+  date: (col, value, onChange, readonly) => {
+    const dateValue = value ? new Date(value).toISOString().split('T')[0] : '';
+    return m('.mb-4', [
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
+        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
+      ),
+      m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+        id: col.name,
+        name: col.name,
+        type: 'date',
+        value: dateValue,
+        readonly: readonly,
+        disabled: readonly,
+        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        oninput: (e) => onChange(e.target.value),
+      }),
+    ]);
+  },
+
+  // DateTime input (datetime, timestamp)
+  datetime: (col, value, onChange, readonly) => {
+    const dateTimeValue = value ? new Date(value).toISOString().slice(0, 16) : '';
+    return m('.mb-4', [
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
+        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
+      ),
+      m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+        id: col.name,
+        name: col.name,
+        type: 'datetime-local',
+        value: dateTimeValue,
+        readonly: readonly,
+        disabled: readonly,
+        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        oninput: (e) => onChange(e.target.value),
+      }),
+    ]);
+  },
+
+  // Enum select
+  enum: (col, value, onChange, readonly) => {
+    const options = col.enumValues || [];
+    return m('.mb-4', [
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
+        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
+      ),
+      m('select.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+        id: col.name,
+        name: col.name,
+        value: value || '',
+        disabled: readonly,
+        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        onchange: (e) => onChange(e.target.value),
+      }, [
+        col.nullable ? m('option', { value: '' }, '-- Select --') : null,
+        ...options.map(opt => m('option', { value: opt, selected: value === opt }, opt)),
+      ]),
+    ]);
+  },
+
+  // JSON textarea
+  json: (col, value, onChange, readonly) => {
+    const jsonString = value ? (typeof value === 'string' ? value : JSON.stringify(value, null, 2)) : '';
+    return m('.mb-4', [
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
+        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
+      ),
+      m('textarea.w-full.px-3.py-2.border.border-gray-300.rounded.font-mono.text-sm.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+        id: col.name,
+        name: col.name,
+        rows: 6,
+        readonly: readonly,
+        disabled: readonly,
+        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        oninput: (e) => {
+          try {
+            const parsed = JSON.parse(e.target.value);
+            onChange(parsed);
+          } catch {
+            onChange(e.target.value);
+          }
+        },
+      }, jsonString),
+    ]);
+  },
+
+  // Array (as JSON or tags)
+  array: (col, value, onChange, readonly) => {
+    const arrayValue = Array.isArray(value) ? value.join(', ') : (value || '');
+    return m('.mb-4', [
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name },
+        col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())
+      ),
+      m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+        id: col.name,
+        name: col.name,
+        type: 'text',
+        placeholder: 'Comma-separated values',
+        value: arrayValue,
+        readonly: readonly,
+        disabled: readonly,
+        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        oninput: (e) => {
+          const arr = e.target.value.split(',').map(s => s.trim()).filter(s => s);
+          onChange(arr);
+        },
+      }),
+      m('p.text-xs.text-gray-500.mt-1', 'Enter comma-separated values'),
+    ]);
+  },
+};
+
+// Get appropriate renderer for a column type
+function getFieldRenderer(type) {
+  const typeMap = {
+    string: 'string',
+    text: 'text',
+    integer: 'integer',
+    bigint: 'integer',
+    float: 'float',
+    decimal: 'float',
+    boolean: 'boolean',
+    date: 'date',
+    datetime: 'datetime',
+    timestamp: 'datetime',
+    enum: 'enum',
+    json: 'json',
+    array: 'array',
+    uuid: 'string',
+  };
+  return FieldRenderers[typeMap[type] || 'string'];
+}
+
+// Check if a column is auto-generated (readonly)
+function isAutoColumn(col) {
+  // Primary key with auto-increment is readonly
+  if (col.primary || col.autoIncrement) return 'primary';
+  // Auto timestamps are always readonly
+  if (col.auto === 'create' || col.auto === 'update') return 'auto';
+  // Common timestamp field names
+  if (col.name === 'created_at' || col.name === 'updated_at') return 'auto';
+  return false;
+}
 
 // Login Form Component
 const LoginForm = {
@@ -221,25 +466,95 @@ const ModelList = {
   ]),
 };
 
-// Record List Component (placeholder - will be enhanced with field renderers)
+// Format cell value based on column type
+function formatCellValue(value, col) {
+  if (value === null || value === undefined) {
+    return m('span.text-gray-400.italic', 'null');
+  }
+  
+  switch (col?.type) {
+    case 'boolean':
+      return value 
+        ? m('span.inline-flex.items-center.px-2.py-1.rounded-full.text-xs.font-medium.bg-green-100.text-green-800', '✓ Yes')
+        : m('span.inline-flex.items-center.px-2.py-1.rounded-full.text-xs.font-medium.bg-gray-100.text-gray-600', '✗ No');
+    
+    case 'datetime':
+    case 'timestamp':
+      try {
+        const date = new Date(value);
+        return date.toLocaleString();
+      } catch { return String(value); }
+    
+    case 'date':
+      try {
+        const date = new Date(value);
+        return date.toLocaleDateString();
+      } catch { return String(value); }
+    
+    case 'json':
+    case 'array':
+      if (Array.isArray(value)) {
+        return value.length > 0 
+          ? m('span.text-xs.bg-gray-100.px-2.py-1.rounded', value.slice(0, 3).join(', ') + (value.length > 3 ? '...' : ''))
+          : m('span.text-gray-400', '[]');
+      }
+      if (typeof value === 'object') {
+        return m('span.text-xs.bg-gray-100.px-2.py-1.rounded.font-mono', '{...}');
+      }
+      return String(value);
+    
+    case 'text':
+      const textStr = String(value);
+      return textStr.length > 50 ? textStr.substring(0, 50) + '...' : textStr;
+    
+    default:
+      const str = String(value);
+      return str.length > 100 ? str.substring(0, 100) + '...' : str;
+  }
+}
+
+// Get columns to display in table (limit to reasonable number)
+function getDisplayColumns(columns) {
+  if (!columns || columns.length === 0) return [];
+  
+  // Prioritize: id, name/title, then others (excluding long text/json fields)
+  const priority = ['id', 'name', 'title', 'email', 'slug', 'status', 'published', 'created_at'];
+  const exclude = ['password', 'content', 'body', 'description']; // Usually too long
+  
+  const sorted = [...columns].sort((a, b) => {
+    const aIdx = priority.indexOf(a.name);
+    const bIdx = priority.indexOf(b.name);
+    if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+    if (aIdx !== -1) return -1;
+    if (bIdx !== -1) return 1;
+    return 0;
+  });
+  
+  // Filter and limit
+  return sorted
+    .filter(col => !exclude.includes(col.name) && col.type !== 'text' && col.type !== 'json')
+    .slice(0, 6); // Max 6 columns for readability
+}
+
+// Record List Component - displays records with dynamic columns
 const RecordList = {
   oninit: () => {
     const modelName = m.route.param('model');
     state.loading = true;
     state.error = null;
     state.records = [];
+    state.currentModelMeta = null;
     
-    // Load model metadata if not already loaded
-    const loadModel = state.models.length === 0 
-      ? api.get('/models').then(r => { state.models = r.models || []; })
-      : Promise.resolve();
-    
-    loadModel
-      .then(() => api.get('/models/' + modelName + '/records'))
+    // Load model metadata first, then records
+    api.get('/models/' + modelName)
+      .then(modelMeta => {
+        state.currentModelMeta = modelMeta;
+        state.currentModel = modelMeta;
+        return api.get('/models/' + modelName + '/records');
+      })
       .then(result => {
         state.records = result.data || [];
         state.pagination = result.pagination || null;
-        state.currentModel = state.models.find(m => m.name === modelName);
       })
       .catch(err => {
         state.error = err.message;
@@ -251,9 +566,13 @@ const RecordList = {
   },
   view: () => {
     const modelName = m.route.param('model');
+    const modelMeta = state.currentModelMeta;
+    const displayColumns = modelMeta ? getDisplayColumns(modelMeta.columns) : [];
+    const primaryKey = modelMeta?.primaryKey || 'id';
+    
     return m(Layout, [
       m('.flex.items-center.justify-between.mb-6', [
-        m('h2.text-2xl.font-bold', state.currentModel?.label || modelName),
+        m('h2.text-2xl.font-bold', modelMeta?.label || modelName),
         m('button.bg-blue-600.text-white.px-4.py-2.rounded.hover:bg-blue-700', {
           onclick: () => {
             state.currentRecord = null;
@@ -267,33 +586,43 @@ const RecordList = {
         ? m('p.text-gray-600', 'Loading records...')
         : state.records.length === 0
           ? m('p.text-gray-600', 'No records found.')
-          : m('.bg-white.rounded.shadow.overflow-hidden', [
+          : m('.bg-white.rounded.shadow.overflow-x-auto', [
             m('table.w-full', [
               m('thead.bg-gray-50', [
                 m('tr', [
-                  m('th.px-6.py-3.text-left.text-xs.font-medium.text-gray-500.uppercase', 'ID'),
-                  m('th.px-6.py-3.text-left.text-xs.font-medium.text-gray-500.uppercase', 'Data'),
-                  m('th.px-6.py-3.text-left.text-xs.font-medium.text-gray-500.uppercase', 'Actions'),
+                  // Dynamic column headers
+                  ...displayColumns.map(col => 
+                    m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500.uppercase.tracking-wider.whitespace-nowrap', 
+                      col.name.replace(/_/g, ' ')
+                    )
+                  ),
+                  m('th.px-4.py-3.text-right.text-xs.font-medium.text-gray-500.uppercase.tracking-wider', 'Actions'),
                 ]),
               ]),
-              m('tbody', state.records.map(record => 
-                m('tr.border-t', [
-                  m('td.px-6.py-4.text-sm', record.id || record[state.currentModel?.primaryKey || 'id']),
-                  m('td.px-6.py-4.text-sm.text-gray-600', JSON.stringify(record).substring(0, 100) + '...'),
-                  m('td.px-6.py-4.text-sm', [
-                    m('button.text-blue-600.hover:text-blue-800.mr-4', {
+              m('tbody.divide-y.divide-gray-200', state.records.map(record => 
+                m('tr.hover:bg-gray-50', [
+                  // Dynamic cell values
+                  ...displayColumns.map(col => 
+                    m('td.px-4.py-3.text-sm.whitespace-nowrap', 
+                      formatCellValue(record[col.name], col)
+                    )
+                  ),
+                  m('td.px-4.py-3.text-sm.text-right.whitespace-nowrap', [
+                    m('button.text-blue-600.hover:text-blue-800.mr-3', {
                       onclick: () => {
                         state.currentRecord = record;
                         state.editing = true;
-                        m.route.set('/models/' + modelName + '/edit/' + (record.id || record[state.currentModel?.primaryKey || 'id']));
+                        m.route.set('/models/' + modelName + '/edit/' + record[primaryKey]);
                       }
                     }, 'Edit'),
                     m('button.text-red-600.hover:text-red-800', {
                       onclick: async () => {
                         if (confirm('Are you sure you want to delete this record?')) {
                           try {
-                            await api.delete('/models/' + modelName + '/records/' + (record.id || record[state.currentModel?.primaryKey || 'id']));
-                            m.route.set('/models/' + modelName);
+                            await api.delete('/models/' + modelName + '/records/' + record[primaryKey]);
+                            // Refresh the list
+                            state.records = state.records.filter(r => r[primaryKey] !== record[primaryKey]);
+                            m.redraw();
                           } catch (err) {
                             alert('Error: ' + err.message);
                           }
@@ -304,56 +633,99 @@ const RecordList = {
                 ])
               )),
             ]),
+            // Record count
+            m('.px-4.py-3.bg-gray-50.border-t.text-sm.text-gray-500', 
+              state.records.length + ' record' + (state.records.length !== 1 ? 's' : '')
+            ),
           ]),
     ]);
   },
 };
 
-// Record Form Component (placeholder - will be enhanced with field renderers)
+// Record Form Component - renders fields based on model schema
 const RecordForm = {
   oninit: () => {
     const modelName = m.route.param('model');
     const id = m.route.param('id');
     state.error = null;
+    state.loading = true;
+    state.formData = {};
+    state.currentModelMeta = null;
     
-    if (id && id !== 'new') {
-      state.loading = true;
-      api.get('/models/' + modelName + '/records/' + id)
-        .then(result => {
-          state.currentRecord = result.data;
-        })
-        .catch(err => {
-          state.error = err.message;
-        })
-        .finally(() => {
-          state.loading = false;
-          m.redraw();
+    // Load model metadata first
+    api.get('/models/' + modelName)
+      .then(modelMeta => {
+        state.currentModelMeta = modelMeta;
+        
+        // Initialize form data with defaults
+        modelMeta.columns.forEach(col => {
+          if (col.default !== undefined) {
+            state.formData[col.name] = col.default;
+          }
         });
-    } else {
-      state.currentRecord = {};
-    }
+        
+        // If editing, load the record
+        if (id && id !== 'new') {
+          return api.get('/models/' + modelName + '/records/' + id)
+            .then(result => {
+              state.currentRecord = result.data;
+              // Populate form data with record values
+              Object.keys(result.data).forEach(key => {
+                state.formData[key] = result.data[key];
+              });
+            });
+        } else {
+          state.currentRecord = null;
+        }
+      })
+      .catch(err => {
+        state.error = err.message;
+      })
+      .finally(() => {
+        state.loading = false;
+        m.redraw();
+      });
   },
   view: () => {
     const modelName = m.route.param('model');
     const id = m.route.param('id');
     const isNew = !id || id === 'new';
+    const modelMeta = state.currentModelMeta;
+    
     return m(Layout, [
-      m('h2.text-2xl.font-bold.mb-6', isNew ? 'New Record' : 'Edit Record'),
+      m('.flex.items-center.justify-between.mb-6', [
+        m('h2.text-2xl.font-bold', isNew ? 'New Record' : 'Edit Record'),
+        modelMeta ? m('span.text-gray-500', modelMeta.label || modelMeta.name) : null,
+      ]),
+      
+      state.loading ? m('p.text-gray-600', 'Loading...') :
+      state.error && !modelMeta ? m('.bg-red-100.border.border-red-400.text-red-700.px-4.py-3.rounded', state.error) :
+      
       m('form.bg-white.p-6.rounded.shadow', {
         onsubmit: async (e) => {
           e.preventDefault();
           state.loading = true;
           state.error = null;
           try {
-            const data = new FormData(e.target);
-            const record = {};
-            for (const [key, value] of data.entries()) {
-              record[key] = value;
+            // Build payload, excluding auto-generated fields
+            const payload = {};
+            if (modelMeta && modelMeta.columns) {
+              modelMeta.columns.forEach(col => {
+                const autoType = isAutoColumn(col);
+                // Skip primary key and auto timestamps in payload
+                if (autoType === 'primary' || autoType === 'auto') return;
+                
+                const value = state.formData[col.name];
+                if (value !== undefined) {
+                  payload[col.name] = value;
+                }
+              });
             }
+            
             if (isNew) {
-              await api.post('/models/' + modelName + '/records', record);
+              await api.post('/models/' + modelName + '/records', payload);
             } else {
-              await api.put('/models/' + modelName + '/records/' + id, record);
+              await api.put('/models/' + modelName + '/records/' + id, payload);
             }
             m.route.set('/models/' + modelName);
           } catch (err) {
@@ -364,18 +736,31 @@ const RecordForm = {
         }
       }, [
         state.error ? m('.bg-red-100.border.border-red-400.text-red-700.px-4.py-3.rounded.mb-4', state.error) : null,
-        m('p.text-gray-600.mb-4', 'Form fields will be rendered here based on model schema.'),
-        m('.flex.gap-4', [
-          m('button.bg-blue-600.text-white.px-6.py-2.rounded.hover:bg-blue-700', {
+        
+        // Render form fields based on model columns
+        modelMeta && modelMeta.columns ? modelMeta.columns.map(col => {
+          const autoType = isAutoColumn(col);
+          
+          // Hide primary key in new mode
+          if (autoType === 'primary' && isNew) return null;
+          
+          const isReadonly = !!autoType;
+          const renderer = getFieldRenderer(col.type);
+          const value = state.formData[col.name];
+          const onChange = (newValue) => {
+            state.formData[col.name] = newValue;
+          };
+          
+          return renderer(col, value, onChange, isReadonly);
+        }) : m('p.text-gray-600.mb-4', 'Loading form fields...'),
+        
+        m('.flex.gap-4.mt-6.pt-4.border-t', [
+          m('button.bg-blue-600.text-white.px-6.py-2.rounded.hover:bg-blue-700.disabled:opacity-50', {
             type: 'submit',
             disabled: state.loading,
           }, state.loading ? 'Saving...' : 'Save'),
-          m('a.bg-gray-200.text-gray-800.px-6.py-2.rounded.hover:bg-gray-300', {
-            href: '/models/' + modelName,
-            onclick: (e) => {
-              e.preventDefault();
-              m.route.set('/models/' + modelName);
-            }
+          m('button.bg-gray-200.text-gray-800.px-6.py-2.rounded.hover:bg-gray-300[type=button]', {
+            onclick: () => m.route.set('/models/' + modelName),
           }, 'Cancel'),
         ]),
       ]),

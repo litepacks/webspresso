@@ -176,50 +176,108 @@ test.describe('Admin Panel', () => {
       await expect(newRecordBtn).toBeVisible({ timeout: 15000 });
     });
 
-    test('should access new record form', async ({ page }) => {
+    test('should access new record form with rendered fields', async ({ page }) => {
       // Navigate to TestPost model records
       await page.goto('/_admin/models/TestPost');
       await page.waitForLoadState('networkidle');
       
       // Wait for page to load
-      await page.waitForSelector('button:has-text("New Record"), h2', { timeout: 15000 });
+      await page.waitForSelector('button:has-text("New Record")', { timeout: 15000 });
       
-      // Click "New Record" button if visible
-      const newRecordButton = page.locator('button:has-text("New Record")');
-      if (await newRecordButton.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await newRecordButton.click();
-        
-        // Should navigate to new record form
-        await page.waitForURL(/\/models\/TestPost\/new/, { timeout: 15000 });
-        await page.waitForLoadState('networkidle');
-        
-        // Check form exists
-        const formHeading = page.locator('h2:has-text("New Record")');
-        await expect(formHeading).toBeVisible({ timeout: 15000 });
-      } else {
-        // If button not visible, check if we see loading or error
-        const pageState = await page.locator('body').textContent();
-        console.log('Page state:', pageState.substring(0, 500));
-        // Test passes if we can at least load the page
-        expect(true).toBeTruthy();
-      }
-    });
-
-    test('should display records list or empty state', async ({ page }) => {
-      // Navigate to TestPost model
-      await page.goto('/_admin/models/TestPost');
+      // Click "New Record" button
+      await page.click('button:has-text("New Record")');
+      
+      // Should navigate to new record form
+      await page.waitForURL(/\/models\/TestPost\/new/, { timeout: 15000 });
       await page.waitForLoadState('networkidle');
       
-      // Wait for content to load
-      await page.waitForTimeout(2000); // Allow time for API calls
+      // Check form exists
+      const formHeading = page.locator('h2:has-text("New Record")');
+      await expect(formHeading).toBeVisible({ timeout: 15000 });
       
-      // Should see the New Record button (always visible on records page)
-      const newRecordBtn = page.locator('button:has-text("New Record")');
-      await expect(newRecordBtn).toBeVisible({ timeout: 15000 });
+      // Verify form fields are rendered based on model schema
+      // Title field (string type) should be a text input
+      const titleInput = page.locator('input#title, input[name="title"]');
+      await expect(titleInput).toBeVisible({ timeout: 10000 });
       
-      // And either records table or empty state message
-      const recordsOrEmpty = page.locator('table').or(page.locator('text=No records found'));
-      await expect(recordsOrEmpty).toBeVisible({ timeout: 15000 });
+      // Content field (text type) should be a textarea
+      const contentInput = page.locator('textarea#content, textarea[name="content"]');
+      await expect(contentInput).toBeVisible({ timeout: 10000 });
+      
+      // Published field (boolean type) should be a checkbox
+      const publishedCheckbox = page.locator('input[type="checkbox"][name="published"]');
+      await expect(publishedCheckbox).toBeVisible({ timeout: 10000 });
+      
+      // ID field should NOT be visible in new record mode (auto-generated)
+      const idInput = page.locator('input#id, input[name="id"]');
+      await expect(idInput).not.toBeVisible();
+      
+      // Save and Cancel buttons should be visible
+      await expect(page.locator('button:has-text("Save")')).toBeVisible();
+      await expect(page.locator('button:has-text("Cancel")')).toBeVisible();
+    });
+
+    test('should create a new record with form fields', async ({ page }) => {
+      // Navigate to new record form
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      
+      // Wait for form to load
+      await page.waitForSelector('input#title, input[name="title"]', { timeout: 15000 });
+      
+      // Fill in the form
+      await page.fill('input#title, input[name="title"]', 'Test Post Title');
+      await page.fill('textarea#content, textarea[name="content"]', 'This is test content for the post.');
+      await page.check('input[type="checkbox"][name="published"]');
+      
+      // Submit the form
+      await page.click('button:has-text("Save")');
+      
+      // Should redirect back to records list
+      await page.waitForURL(/\/models\/TestPost$/, { timeout: 15000 });
+      await page.waitForLoadState('networkidle');
+      
+      // The new record should appear in the list (or we should see a table)
+      const recordsTable = page.locator('table');
+      await expect(recordsTable).toBeVisible({ timeout: 15000 });
+    });
+
+    test('should display records list with dynamic columns', async ({ page }) => {
+      // First create a record so we have data to display
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('input#title, input[name="title"]', { timeout: 15000 });
+      
+      // Fill and submit form
+      await page.fill('input#title, input[name="title"]', 'Column Test Post');
+      await page.fill('textarea#content, textarea[name="content"]', 'Content for column test');
+      await page.click('button:has-text("Save")');
+      
+      // Wait for redirect to list
+      await page.waitForURL(/\/models\/TestPost$/, { timeout: 15000 });
+      await page.waitForLoadState('networkidle');
+      
+      // Wait for table to load
+      await page.waitForSelector('table', { timeout: 15000 });
+      
+      // Verify dynamic column headers are present (id, title, published are expected columns)
+      const idHeader = page.locator('th:has-text("id")');
+      const titleHeader = page.locator('th:has-text("title")');
+      
+      await expect(idHeader).toBeVisible({ timeout: 10000 });
+      await expect(titleHeader).toBeVisible({ timeout: 10000 });
+      
+      // Verify Actions column is present
+      const actionsHeader = page.locator('th:has-text("Actions")');
+      await expect(actionsHeader).toBeVisible({ timeout: 10000 });
+      
+      // Verify record count is shown
+      const recordCount = page.locator('text=/\\d+ records?/');
+      await expect(recordCount).toBeVisible({ timeout: 10000 });
+      
+      // Verify Edit and Delete buttons are in table rows
+      await expect(page.locator('button:has-text("Edit")').first()).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('button:has-text("Delete")').first()).toBeVisible({ timeout: 10000 });
     });
 
     test('should be able to logout', async ({ page }) => {

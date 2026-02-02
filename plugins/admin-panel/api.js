@@ -196,6 +196,9 @@ function createApiHandlers(options) {
           maxLength: meta.maxLength,
           enumValues: meta.enumValues,
           references: meta.references,
+          primary: meta.primary || false,
+          auto: meta.auto || null, // 'create' | 'update' for timestamps
+          autoIncrement: meta.autoIncrement || false,
           customField: model.admin.customFields?.[name] || null,
         });
       }
