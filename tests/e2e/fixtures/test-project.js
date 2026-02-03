@@ -103,6 +103,7 @@ const db = createDatabase({
       table.bigIncrements('id');
       table.string('title');
       table.text('content');
+      table.text('body');
       table.boolean('published').defaultTo(false);
       table.timestamp('created_at');
       table.timestamp('updated_at');
@@ -193,6 +194,10 @@ module.exports = defineModel({
       hint: 'Content must be at least 10 characters',
       rows: 6,
     }),
+    body: zdb.text({ nullable: true }).config({
+      label: 'Body',
+      hint: 'Rich text content',
+    }),
     published: zdb.boolean({ default: false }).config({
       label: 'Published',
       hint: 'Check to publish this post',
@@ -204,6 +209,11 @@ module.exports = defineModel({
     enabled: true,
     label: 'Test Posts',
     icon: '📝',
+    customFields: {
+      body: {
+        type: 'rich-text',
+      },
+    },
   },
 });
 `;

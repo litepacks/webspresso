@@ -28,6 +28,8 @@ module.exports = {
       function initEditor(vnode) {
         const editorId = 'quill-editor-' + name;
         const editorEl = document.getElementById(editorId);
+        const hiddenInput = document.getElementById(name + '-value');
+        
         if (editorEl && !editorEl._quill) {
           const quill = new window.Quill(editorEl, {
             theme: 'snow',
@@ -45,28 +47,56 @@ module.exports = {
           // Set initial content
           if (value) {
             quill.root.innerHTML = value;
+            if (hiddenInput) {
+              hiddenInput.value = value;
+            }
           }
           
           // Handle content changes
           quill.on('text-change', () => {
             const content = quill.root.innerHTML;
+            if (hiddenInput) {
+              hiddenInput.value = content;
+            }
             if (onchange) {
               onchange(content);
             }
           });
           
           editorEl._quill = quill;
+          vnode.state.quill = quill;
+        }
+      }
+    },
+    
+    onupdate: (vnode) => {
+      // Update editor content if value changed externally
+      const { name, value = '' } = vnode.attrs;
+      const editorId = 'quill-editor-' + name;
+      const editorEl = document.getElementById(editorId);
+      const hiddenInput = document.getElementById(name + '-value');
+      
+      if (editorEl && editorEl._quill && vnode.state.quill) {
+        const currentContent = editorEl._quill.root.innerHTML;
+        if (currentContent !== value) {
+          editorEl._quill.root.innerHTML = value || '';
+          if (hiddenInput) {
+            hiddenInput.value = value || '';
+          }
         }
       }
     },
     
     view: (vnode) => {
-      const { name, meta = {}, required = false } = vnode.attrs;
+      const { name, meta = {}, required = false, value = '' } = vnode.attrs;
+      const ui = meta.ui || {};
+      const label = ui.label || meta.label || name;
+      const hint = ui.hint || '';
       const editorId = 'quill-editor-' + name;
       
       return m('.mb-4', [
-        m('label.block.text-sm.font-medium.mb-2',
-          meta.label || name,
+        m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: name },
+          label,
           required ? m('span.text-red-500', ' *') : null
         ),
         m('div.border.border-gray-300.rounded', {
@@ -76,7 +106,9 @@ module.exports = {
         m('input[type=hidden]', {
           name,
           id: name + '-value',
+          value: value || '',
         }),
+        hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
       ]);
     }
   },

@@ -616,4 +616,105 @@ test.describe('Admin Panel', () => {
       await expect(contentTextarea).toHaveAttribute('rows', '6', { timeout: 10000 });
     });
   });
+
+  test.describe('Rich Text Editor', () => {
+    
+    test.beforeEach(async ({ page }) => {
+      await ensureLoggedIn(page);
+    });
+
+    test('should display rich text editor for custom field', async ({ page }) => {
+      // Navigate to new record form
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      
+      // Wait for form to load
+      await page.waitForSelector('input#title, input[name="title"]', { timeout: 15000 });
+      
+      // Wait for Quill to load (may take a moment)
+      await page.waitForTimeout(2000);
+      
+      // Verify rich text editor container exists
+      const richTextEditor = page.locator('#quill-editor-body');
+      await expect(richTextEditor).toBeVisible({ timeout: 15000 });
+      
+      // Verify Quill editor is initialized (check for toolbar)
+      const quillToolbar = page.locator('.ql-toolbar');
+      await expect(quillToolbar).toBeVisible({ timeout: 10000 });
+      
+      // Verify hidden input exists (hidden inputs are not visible, so check for attachment)
+      const hiddenInput = page.locator('input[type="hidden"][id="body-value"]');
+      await expect(hiddenInput).toBeAttached({ timeout: 10000 });
+    });
+
+    test('should save rich text content', async ({ page }) => {
+      // Navigate to new record form
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('input#title, input[name="title"]', { timeout: 15000 });
+      
+      // Fill basic fields
+      await page.fill('input#title, input[name="title"]', 'Rich Text Test Post');
+      await page.fill('textarea#content, textarea[name="content"]', 'This is regular content');
+      
+      // Wait for Quill to load
+      await page.waitForTimeout(2000);
+      
+      // Type in rich text editor
+      const richTextEditor = page.locator('#quill-editor-body');
+      await expect(richTextEditor).toBeVisible({ timeout: 15000 });
+      
+      // Click on editor and type content
+      await richTextEditor.click();
+      await page.keyboard.type('This is rich text content');
+      
+      // Wait a bit for Quill to update
+      await page.waitForTimeout(500);
+      
+      // Submit form
+      await page.click('button:has-text("Save")');
+      
+      // Should redirect to records list
+      await page.waitForURL(/\/models\/TestPost$/, { timeout: 15000 });
+      await page.waitForLoadState('networkidle');
+      
+      // Verify record was created
+      const recordsTable = page.locator('table');
+      await expect(recordsTable).toBeVisible({ timeout: 15000 });
+    });
+
+    test('should load existing rich text content in edit mode', async ({ page }) => {
+      // First create a record with rich text content via API
+      const createResponse = await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+        data: {
+          title: 'Edit Rich Text Test',
+          content: 'Regular content',
+          body: '<p>This is <strong>rich text</strong> content</p>',
+          published: true,
+        },
+      });
+      
+      expect(createResponse.ok()).toBeTruthy();
+      const created = await createResponse.json();
+      const recordId = created.data.id;
+      
+      // Navigate to edit form
+      await page.goto('/_admin/models/TestPost/edit/' + recordId);
+      await page.waitForLoadState('networkidle');
+      
+      // Wait for form to load
+      await page.waitForSelector('input#title, input[name="title"]', { timeout: 15000 });
+      
+      // Wait for Quill to load
+      await page.waitForTimeout(2000);
+      
+      // Verify rich text editor is visible
+      const richTextEditor = page.locator('#quill-editor-body');
+      await expect(richTextEditor).toBeVisible({ timeout: 15000 });
+      
+      // Verify content is loaded (check for strong tag in editor)
+      const editorContent = await richTextEditor.locator('.ql-editor').innerHTML();
+      expect(editorContent).toContain('rich text');
+    });
+  });
 });

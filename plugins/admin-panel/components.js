@@ -456,8 +456,141 @@ const FieldRenderers = {
   },
 };
 
+// Rich Text Field Renderer Component
+const RichTextField = {
+    oncreate: (vnode) => {
+      const { name, value = '', onchange, readonly = false } = vnode.attrs;
+      
+      // Load Quill if not already loaded
+      if (typeof window.Quill === 'undefined') {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://cdn.quilljs.com/1.3.6/quill.snow.css';
+        document.head.appendChild(link);
+        
+        const script = document.createElement('script');
+        script.src = 'https://cdn.quilljs.com/1.3.6/quill.js';
+        script.onload = () => {
+          initEditor(vnode);
+        };
+        document.head.appendChild(script);
+      } else {
+        initEditor(vnode);
+      }
+      
+      function initEditor(vnode) {
+        const editorId = 'quill-editor-' + name;
+        const editorEl = document.getElementById(editorId);
+        const hiddenInput = document.getElementById(name + '-value');
+        const isReadonly = readonly || false;
+        
+        if (editorEl && !editorEl._quill) {
+          const quill = new window.Quill(editorEl, {
+            theme: 'snow',
+            readOnly: isReadonly,
+            modules: {
+              toolbar: isReadonly ? false : [
+                [{ 'header': [1, 2, 3, false] }],
+                ['bold', 'italic', 'underline', 'strike'],
+                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                ['link', 'image'],
+                ['clean']
+              ]
+            }
+          });
+          
+          // Set initial content
+          if (value) {
+            quill.root.innerHTML = value;
+            if (hiddenInput) {
+              hiddenInput.value = value;
+            }
+          }
+          
+          // Handle content changes
+          if (!isReadonly) {
+            quill.on('text-change', () => {
+              const content = quill.root.innerHTML;
+              if (hiddenInput) {
+                hiddenInput.value = content;
+              }
+              if (onchange) {
+                onchange(content);
+              }
+            });
+          }
+          
+          editorEl._quill = quill;
+        }
+      }
+    },
+  
+  onupdate: (vnode) => {
+    // Update editor content if value changed externally
+    const { name, value = '', readonly = false } = vnode.attrs;
+    const editorId = 'quill-editor-' + name;
+    const editorEl = document.getElementById(editorId);
+    const hiddenInput = document.getElementById(name + '-value');
+    
+    if (editorEl && editorEl._quill) {
+      const currentContent = editorEl._quill.root.innerHTML;
+      const newValue = value || '';
+      if (currentContent !== newValue) {
+        editorEl._quill.root.innerHTML = newValue;
+        if (hiddenInput) {
+          hiddenInput.value = newValue;
+        }
+      }
+    }
+  },
+  
+  view: (vnode) => {
+    const { name, col, value = '', onChange, readonly } = vnode.attrs;
+    const ui = col.ui || {};
+    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const hint = ui.hint || '';
+    const editorId = 'quill-editor-' + name;
+    const required = !col.nullable && !readonly;
+    
+    return m('.mb-4', [
+      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: name },
+        label,
+        required ? m('span.text-red-500', ' *') : null
+      ),
+      m('div.border.border-gray-300.rounded', {
+        id: editorId,
+        class: readonly ? 'bg-gray-100 opacity-50' : '',
+        style: 'min-height: 200px;'
+      }),
+      m('input[type=hidden]', {
+        name,
+        id: name + '-value',
+        value: value || '',
+      }),
+      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
+    ]);
+  }
+};
+
 // Get appropriate renderer for a column type
-function getFieldRenderer(type) {
+function getFieldRenderer(col, modelMeta) {
+  // Check for custom field first
+  if (col.customField && col.customField.type) {
+    if (col.customField.type === 'rich-text') {
+      return (col, value, onChange, readonly) => {
+        return m(RichTextField, {
+          name: col.name,
+          col,
+          value: value || '',
+          onChange,
+          readonly: readonly || false,
+        });
+      };
+    }
+    // Add other custom field types here if needed
+  }
+  
+  // Fallback to standard type renderers
   const typeMap = {
     string: 'string',
     text: 'text',
@@ -474,7 +607,7 @@ function getFieldRenderer(type) {
     array: 'array',
     uuid: 'string',
   };
-  return FieldRenderers[typeMap[type] || 'string'];
+  return FieldRenderers[typeMap[col.type] || 'string'];
 }
 
 // Check if a column is auto-generated (readonly)
@@ -971,9 +1104,19 @@ const RecordForm = {
                 // Skip primary key and auto timestamps in payload
                 if (autoType === 'primary' || autoType === 'auto') return;
                 
-                const value = state.formData[col.name];
-                if (value !== undefined) {
+                // For rich-text fields, get value from hidden input
+                let value = state.formData[col.name];
+                if (col.customField && col.customField.type === 'rich-text') {
+                  const hiddenInput = document.getElementById(col.name + '-value');
+                  if (hiddenInput) {
+                    value = hiddenInput.value;
+                  }
+                }
+                
+                if (value !== undefined && value !== null && value !== '') {
                   payload[col.name] = value;
+                } else if (value === null && col.nullable) {
+                  payload[col.name] = null;
                 }
               });
             }
@@ -1002,8 +1145,11 @@ const RecordForm = {
             // Hide primary key in new mode
             if (autoType === 'primary' && isNew) return null;
             
-            const isReadonly = !!autoType;
-            const renderer = getFieldRenderer(col.type);
+            // Hide hidden fields
+            if (col.ui && col.ui.hidden) return null;
+            
+            const isReadonly = !!autoType || (col.ui && col.ui.readonly);
+            const renderer = getFieldRenderer(col, modelMeta);
             const value = state.formData[col.name];
             const onChange = (newValue) => {
               state.formData[col.name] = newValue;
