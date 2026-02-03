@@ -758,100 +758,132 @@ test.describe('Admin Panel', () => {
       await page.waitForLoadState('networkidle');
       await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
       
-      // Click filter button
       await page.click('button:has-text("Filter")');
       await page.waitForTimeout(500);
       
-      // Check if filter panel is visible
       const filterPanel = page.locator('h3:has-text("Filters")');
       await expect(filterPanel).toBeVisible({ timeout: 5000 });
       
-      // Close filter panel
       await page.click('button:has-text("Close")');
       await page.waitForTimeout(500);
       
-      // Panel should be hidden
       await expect(filterPanel).not.toBeVisible({ timeout: 5000 });
     });
 
     test('should filter by string field (contains)', async ({ page }) => {
-      // Create a test record with unique title
-      const uniqueTitle = 'FilterTest_' + Date.now();
-      await page.goto('/_admin/models/TestPost/new');
-      await page.waitForLoadState('networkidle');
-      await page.waitForSelector('input#title', { timeout: 15000 });
+      const timestamp = Date.now();
+      const matchingTitle = 'FilterMatch_' + timestamp;
+      const nonMatchingTitle = 'OtherPost_' + timestamp;
       
-      await page.fill('input#title', uniqueTitle);
-      await page.fill('textarea#content', 'This is test content for filtering.');
-      await page.click('button:has-text("Save")');
-      await page.waitForURL(/\/models\/TestPost$/, { timeout: 15000 });
-      await page.waitForLoadState('networkidle');
-
-      // Wait for page to fully load
-      await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
+      await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+        data: { title: matchingTitle, content: 'Content for filter test' },
+      });
+      await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+        data: { title: nonMatchingTitle, content: 'Another content' },
+      });
       
-      // Open filter panel
+      await page.goto('/_admin/models/TestPost');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('table', { timeout: 15000 });
+      
+      await expect(page.getByRole('cell', { name: matchingTitle })).toBeVisible({ timeout: 5000 });
+      await expect(page.getByRole('cell', { name: nonMatchingTitle })).toBeVisible({ timeout: 5000 });
+      
       await page.click('button:has-text("Filter")');
       await page.waitForTimeout(500);
       
-      // Find title filter input
       const titleInput = page.locator('input[placeholder*="Enter search term"]').first();
       await expect(titleInput).toBeVisible({ timeout: 5000 });
-      await titleInput.fill(uniqueTitle);
+      await titleInput.click();
+      await titleInput.pressSequentially('FilterMatch', { delay: 30 });
+      await page.waitForTimeout(500);
       
-      // Apply filter
       await page.click('button:has-text("Apply Filters")');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
-      // Verify filtered results
-      const table = page.locator('table');
-      await expect(table).toBeVisible({ timeout: 10000 });
+      expect(page.url()).toContain('filter');
       
-      // Check if the record with unique title is visible in table cell (not badge)
-      const recordCell = page.getByRole('cell', { name: uniqueTitle });
-      await expect(recordCell).toBeVisible({ timeout: 5000 });
+      const filterBadge = page.locator('.bg-blue-100.text-blue-800');
+      await expect(filterBadge.first()).toBeVisible({ timeout: 5000 });
+      
+      await expect(page.getByRole('cell', { name: matchingTitle })).toBeVisible({ timeout: 5000 });
+      await expect(page.getByRole('cell', { name: nonMatchingTitle })).not.toBeVisible({ timeout: 3000 });
+    });
+
+    test('should filter by boolean field (published)', async ({ page }) => {
+      const timestamp = Date.now();
+      
+      await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+        data: { title: 'Published_' + timestamp, content: 'Published content', published: true },
+      });
+      await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+        data: { title: 'Draft_' + timestamp, content: 'Draft content', published: false },
+      });
+      
+      await page.goto('/_admin/models/TestPost');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('table', { timeout: 15000 });
+      
+      await page.click('button:has-text("Filter")');
+      await page.waitForTimeout(500);
+      
+      const yesRadio = page.locator('input[name="filter_published"][type="radio"]').first();
+      await yesRadio.click();
+      await page.waitForTimeout(300);
+      
+      await page.click('button:has-text("Apply Filters")');
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1000);
+      
+      await expect(page.getByRole('cell', { name: 'Published_' + timestamp })).toBeVisible({ timeout: 5000 });
+      await expect(page.getByRole('cell', { name: 'Draft_' + timestamp })).not.toBeVisible({ timeout: 3000 });
     });
 
     test('should show filter badges for active filters', async ({ page }) => {
+      await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+        data: { title: 'BadgeTest', content: 'Test content' },
+      });
+      
       await page.goto('/_admin/models/TestPost');
       await page.waitForLoadState('networkidle');
       await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
       
-      // Open filter panel
       await page.click('button:has-text("Filter")');
       await page.waitForTimeout(500);
       
-      // Apply a filter
       const titleInput = page.locator('input[placeholder*="Enter search term"]').first();
       await expect(titleInput).toBeVisible({ timeout: 5000 });
-      await titleInput.fill('test');
+      await titleInput.click();
+      await titleInput.pressSequentially('Badge', { delay: 30 });
       await page.click('button:has-text("Apply Filters")');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
-      // Check for filter badge
       const filterBadge = page.locator('.bg-blue-100.text-blue-800');
       await expect(filterBadge.first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should remove filter via badge', async ({ page }) => {
+      await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+        data: { title: 'RemoveTest', content: 'Test content' },
+      });
+      
       await page.goto('/_admin/models/TestPost');
       await page.waitForLoadState('networkidle');
       await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
       
-      // Open filter panel and apply filter
       await page.click('button:has-text("Filter")');
       await page.waitForTimeout(500);
       
       const titleInput = page.locator('input[placeholder*="Enter search term"]').first();
       await expect(titleInput).toBeVisible({ timeout: 5000 });
-      await titleInput.fill('test');
+      await titleInput.click();
+      await titleInput.pressSequentially('Remove', { delay: 30 });
       await page.click('button:has-text("Apply Filters")');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
-      // Find and click remove button on badge
       const filterBadge = page.locator('.bg-blue-100.text-blue-800').first();
       await expect(filterBadge).toBeVisible({ timeout: 5000 });
       
@@ -860,41 +892,70 @@ test.describe('Admin Panel', () => {
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(500);
       
-      // Badge should be removed
       await expect(filterBadge).not.toBeVisible({ timeout: 5000 });
     });
 
     test('should clear all filters', async ({ page }) => {
+      await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+        data: { title: 'ClearTest', content: 'Test content' },
+      });
+      
       await page.goto('/_admin/models/TestPost');
       await page.waitForLoadState('networkidle');
       await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
       
-      // Open filter panel and apply filter
       await page.click('button:has-text("Filter")');
       await page.waitForTimeout(500);
       
       const titleInput = page.locator('input[placeholder*="Enter search term"]').first();
       await expect(titleInput).toBeVisible({ timeout: 5000 });
-      await titleInput.fill('test');
+      await titleInput.click();
+      await titleInput.pressSequentially('Clear', { delay: 30 });
       await page.click('button:has-text("Apply Filters")');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
-      // Check badge is visible
       const filterBadge = page.locator('.bg-blue-100.text-blue-800').first();
       await expect(filterBadge).toBeVisible({ timeout: 5000 });
       
-      // Open filter panel again
       await page.click('button:has-text("Filter")');
       await page.waitForTimeout(500);
       
-      // Click clear all
       await page.click('button:has-text("Clear All")');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(500);
       
-      // Filter badges should be gone
       await expect(filterBadge).not.toBeVisible({ timeout: 5000 });
+    });
+
+    test('should persist filters in URL', async ({ page }) => {
+      await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+        data: { title: 'URLPersist', content: 'Test content' },
+      });
+      
+      await page.goto('/_admin/models/TestPost');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
+      
+      await page.click('button:has-text("Filter")');
+      await page.waitForTimeout(500);
+      
+      const titleInput = page.locator('input[placeholder*="Enter search term"]').first();
+      await titleInput.click();
+      await titleInput.pressSequentially('URLPersist', { delay: 30 });
+      await page.click('button:has-text("Apply Filters")');
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1000);
+      
+      const urlWithFilter = page.url();
+      expect(urlWithFilter).toContain('filter');
+      
+      await page.reload();
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1000);
+      
+      const filterBadge = page.locator('.bg-blue-100.text-blue-800');
+      await expect(filterBadge.first()).toBeVisible({ timeout: 5000 });
     });
   });
 });

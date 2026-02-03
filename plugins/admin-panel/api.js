@@ -255,38 +255,26 @@ function createApiHandlers(options) {
       let countQuery = repo.query();
 
       // Parse filter parameters from query string
-      // Format: filter[column][op]=value or filter[column][value]=value
-      const filterParams = {};
-      for (const [key, value] of Object.entries(req.query)) {
-        const match = key.match(/^filter\[([^\]]+)\]\[([^\]]+)\]$/);
-        if (match) {
-          const [, col, prop] = match;
-          if (!filterParams[col]) filterParams[col] = {};
-          if (prop === 'value') {
-            // Handle multiple values for 'in' operator
-            if (filterParams[col].value) {
-              if (!Array.isArray(filterParams[col].value)) {
-                filterParams[col].value = [filterParams[col].value];
-              }
-              filterParams[col].value.push(value);
-            } else {
-              filterParams[col].value = value;
-            }
-          } else {
-            filterParams[col][prop] = value;
-          }
-        }
-      }
+      // Express's qs library automatically parses filter[column][prop] into nested objects
+      // So req.query.filter is already { column: { op: '...', value: '...' } }
+      const filterParams = req.query.filter || {};
 
       // Apply filters
       for (const [colName, filter] of Object.entries(filterParams)) {
         const colMeta = model.columns.get(colName);
-        if (!colMeta) continue; // Skip if column doesn't exist
-
-        const op = filter.op || 'contains';
+        const colType = colMeta?.type || 'string';
+        const op = filter.op || (colType === 'boolean' ? 'eq' : 'contains');
         const value = filter.value;
         const from = filter.from;
         const to = filter.to;
+
+        // Handle boolean values - convert string 'true'/'false' to actual boolean
+        if (colType === 'boolean' && value !== undefined && value !== null) {
+          const boolValue = value === 'true' || value === true ? 1 : 0;
+          query = query.where(colName, '=', boolValue);
+          countQuery = countQuery.where(colName, '=', boolValue);
+          continue;
+        }
 
         if (op === 'between' && (from || to)) {
           if (from && to) {
@@ -305,7 +293,8 @@ function createApiHandlers(options) {
         } else if (value !== undefined && value !== null && value !== '') {
           switch (op) {
             case 'contains':
-              if (colMeta.type === 'string' || colMeta.type === 'text') {
+              // Apply LIKE for string/text types, or if type is unknown
+              if (colType === 'string' || colType === 'text' || !colMeta) {
                 query = query.where(colName, 'like', `%${value}%`);
                 countQuery = countQuery.where(colName, 'like', `%${value}%`);
               }
@@ -315,13 +304,13 @@ function createApiHandlers(options) {
               countQuery = countQuery.where(colName, '=', value);
               break;
             case 'starts_with':
-              if (colMeta.type === 'string' || colMeta.type === 'text') {
+              if (colType === 'string' || colType === 'text' || !colMeta) {
                 query = query.where(colName, 'like', `${value}%`);
                 countQuery = countQuery.where(colName, 'like', `${value}%`);
               }
               break;
             case 'ends_with':
-              if (colMeta.type === 'string' || colMeta.type === 'text') {
+              if (colType === 'string' || colType === 'text' || !colMeta) {
                 query = query.where(colName, 'like', `%${value}`);
                 countQuery = countQuery.where(colName, 'like', `%${value}`);
               }
