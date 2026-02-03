@@ -761,10 +761,10 @@ test.describe('Admin Panel', () => {
       await page.click('button:has-text("Filter")');
       await page.waitForTimeout(500);
       
-      const filterPanel = page.locator('h3:has-text("Filters")');
+      const filterPanel = page.locator('span:has-text("Filters")');
       await expect(filterPanel).toBeVisible({ timeout: 5000 });
       
-      await page.click('button:has-text("Close")');
+      await page.click('button:has-text("✕")');
       await page.waitForTimeout(500);
       
       await expect(filterPanel).not.toBeVisible({ timeout: 5000 });
@@ -798,13 +798,13 @@ test.describe('Admin Panel', () => {
       await titleInput.pressSequentially('FilterMatch', { delay: 30 });
       await page.waitForTimeout(500);
       
-      await page.click('button:has-text("Apply Filters")');
+      await page.click('button:has-text("Apply")');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
       expect(page.url()).toContain('filter');
       
-      const filterBadge = page.locator('.bg-blue-100.text-blue-800');
+      const filterBadge = page.locator('.bg-blue-50.text-blue-700');
       await expect(filterBadge.first()).toBeVisible({ timeout: 5000 });
       
       await expect(page.getByRole('cell', { name: matchingTitle })).toBeVisible({ timeout: 5000 });
@@ -832,7 +832,7 @@ test.describe('Admin Panel', () => {
       await yesRadio.click();
       await page.waitForTimeout(300);
       
-      await page.click('button:has-text("Apply Filters")');
+      await page.click('button:has-text("Apply")');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
@@ -856,11 +856,11 @@ test.describe('Admin Panel', () => {
       await expect(titleInput).toBeVisible({ timeout: 5000 });
       await titleInput.click();
       await titleInput.pressSequentially('Badge', { delay: 30 });
-      await page.click('button:has-text("Apply Filters")');
+      await page.click('button:has-text("Apply")');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
-      const filterBadge = page.locator('.bg-blue-100.text-blue-800');
+      const filterBadge = page.locator('.bg-blue-50.text-blue-700');
       await expect(filterBadge.first()).toBeVisible({ timeout: 5000 });
     });
 
@@ -880,11 +880,11 @@ test.describe('Admin Panel', () => {
       await expect(titleInput).toBeVisible({ timeout: 5000 });
       await titleInput.click();
       await titleInput.pressSequentially('Remove', { delay: 30 });
-      await page.click('button:has-text("Apply Filters")');
+      await page.click('button:has-text("Apply")');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
-      const filterBadge = page.locator('.bg-blue-100.text-blue-800').first();
+      const filterBadge = page.locator('.bg-blue-50.text-blue-700').first();
       await expect(filterBadge).toBeVisible({ timeout: 5000 });
       
       const removeButton = filterBadge.locator('button');
@@ -911,17 +911,17 @@ test.describe('Admin Panel', () => {
       await expect(titleInput).toBeVisible({ timeout: 5000 });
       await titleInput.click();
       await titleInput.pressSequentially('Clear', { delay: 30 });
-      await page.click('button:has-text("Apply Filters")');
+      await page.click('button:has-text("Apply")');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
-      const filterBadge = page.locator('.bg-blue-100.text-blue-800').first();
+      const filterBadge = page.locator('.bg-blue-50.text-blue-700').first();
       await expect(filterBadge).toBeVisible({ timeout: 5000 });
       
       await page.click('button:has-text("Filter")');
       await page.waitForTimeout(500);
       
-      await page.click('button:has-text("Clear All")');
+      await page.click('button:has-text("Clear")');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(500);
       
@@ -943,7 +943,7 @@ test.describe('Admin Panel', () => {
       const titleInput = page.locator('input[placeholder*="Enter search term"]').first();
       await titleInput.click();
       await titleInput.pressSequentially('URLPersist', { delay: 30 });
-      await page.click('button:has-text("Apply Filters")');
+      await page.click('button:has-text("Apply")');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
@@ -954,7 +954,7 @@ test.describe('Admin Panel', () => {
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
-      const filterBadge = page.locator('.bg-blue-100.text-blue-800');
+      const filterBadge = page.locator('.bg-blue-50.text-blue-700');
       await expect(filterBadge.first()).toBeVisible({ timeout: 5000 });
     });
   });

@@ -136,9 +136,9 @@ const FilterBadges = {
       }
       
       badges.push(
-        m('span.inline-flex.items-center.px-3.py-1.rounded-full.text-xs.font-medium.bg-blue-100.text-blue-800.mr-2.mb-2', [
+        m('span.inline-flex.items-center.px-2.py-0.5.rounded-full.text-xs.bg-blue-50.text-blue-700.mr-1.mb-1', [
           text,
-          m('button.ml-2.hover:text-blue-900', {
+          m('button.ml-1.hover:text-blue-900.text-blue-400', {
             onclick: () => onRemove(colName),
             type: 'button',
           }, '×'),
@@ -146,7 +146,7 @@ const FilterBadges = {
       );
     }
     
-    return badges.length > 0 ? m('.mb-4.flex.flex-wrap', badges) : null;
+    return badges.length > 0 ? m('.mb-2.flex.flex-wrap', badges) : null;
   },
 };
 
@@ -171,45 +171,44 @@ const FilterPanel = {
       const currentFilter = filters[col.name] || {};
       const colLabel = col.ui?.label || formatColumnLabel(col.name);
       
-      // Determine filter input based on column type
       if (col.type === 'boolean') {
-        return m('.mb-4', [
-          m('label.block.text-sm.font-medium.text-gray-700.mb-1', colLabel),
-          m('.flex.items-center.gap-4', [
-            m('label.flex.items-center', [
-              m('input.mr-2', {
+        return m('.mb-2', [
+          m('label.block.text-xs.font-medium.text-gray-600.mb-1', colLabel),
+          m('.flex.items-center.gap-3', [
+            m('label.flex.items-center.cursor-pointer', [
+              m('input.mr-1.w-3.h-3', {
                 type: 'radio',
                 name: 'filter_' + col.name,
                 checked: currentFilter.value === 'true',
                 onchange: () => onFilterChange(col.name, { value: 'true' }),
               }),
-              m('span.text-sm', 'Yes'),
+              m('span.text-xs', 'Yes'),
             ]),
-            m('label.flex.items-center', [
-              m('input.mr-2', {
+            m('label.flex.items-center.cursor-pointer', [
+              m('input.mr-1.w-3.h-3', {
                 type: 'radio',
                 name: 'filter_' + col.name,
                 checked: currentFilter.value === 'false',
                 onchange: () => onFilterChange(col.name, { value: 'false' }),
               }),
-              m('span.text-sm', 'No'),
+              m('span.text-xs', 'No'),
             ]),
-            m('label.flex.items-center', [
-              m('input.mr-2', {
+            m('label.flex.items-center.cursor-pointer', [
+              m('input.mr-1.w-3.h-3', {
                 type: 'radio',
                 name: 'filter_' + col.name,
                 checked: !currentFilter.value,
                 onchange: () => onFilterChange(col.name, null),
               }),
-              m('span.text-sm', 'All'),
+              m('span.text-xs', 'All'),
             ]),
           ]),
         ]);
       } else if (col.type === 'date' || col.type === 'datetime' || col.type === 'timestamp') {
-        return m('.mb-4', [
-          m('label.block.text-sm.font-medium.text-gray-700.mb-1', colLabel),
-          m('.flex.items-center.gap-2', [
-            m('select.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+        return m('.mb-2', [
+          m('label.block.text-xs.font-medium.text-gray-600.mb-1', colLabel),
+          m('.flex.items-center.gap-1', [
+            m('select.px-1.py-0.5.border.border-gray-300.rounded.text-xs', {
               value: currentFilter.op || 'eq',
               onchange: (e) => {
                 const op = e.target.value;
@@ -217,18 +216,17 @@ const FilterPanel = {
                 onFilterChange(col.name, { ...existing, op });
               },
             }, [
-              m('option', { value: 'eq' }, 'Equals'),
-              m('option', { value: 'gt' }, 'After'),
-              m('option', { value: 'gte' }, 'On or After'),
-              m('option', { value: 'lt' }, 'Before'),
-              m('option', { value: 'lte' }, 'On or Before'),
-              m('option', { value: 'between' }, 'Between'),
+              m('option', { value: 'eq' }, '='),
+              m('option', { value: 'gt' }, '>'),
+              m('option', { value: 'gte' }, '≥'),
+              m('option', { value: 'lt' }, '<'),
+              m('option', { value: 'lte' }, '≤'),
+              m('option', { value: 'between' }, '↔'),
             ]),
             currentFilter.op === 'between' ? [
-              m('input.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+              m('input.px-1.py-0.5.border.border-gray-300.rounded.text-xs.w-24', {
                 type: col.type === 'date' ? 'date' : 'datetime-local',
                 value: currentFilter.from || '',
-                placeholder: 'From',
                 oninput: (e) => {
                   onFilterChange(col.name, { 
                     op: 'between', 
@@ -237,11 +235,10 @@ const FilterPanel = {
                   });
                 },
               }),
-              m('span.text-sm', 'to'),
-              m('input.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+              m('span.text-xs.text-gray-400', '-'),
+              m('input.px-1.py-0.5.border.border-gray-300.rounded.text-xs.w-24', {
                 type: col.type === 'date' ? 'date' : 'datetime-local',
                 value: currentFilter.to || '',
-                placeholder: 'To',
                 oninput: (e) => {
                   onFilterChange(col.name, { 
                     op: 'between', 
@@ -250,7 +247,7 @@ const FilterPanel = {
                   });
                 },
               }),
-            ] : m('input.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+            ] : m('input.px-1.py-0.5.border.border-gray-300.rounded.text-xs.flex-1', {
               type: col.type === 'date' ? 'date' : 'datetime-local',
               value: currentFilter.value || '',
               oninput: (e) => {
@@ -263,10 +260,10 @@ const FilterPanel = {
           ]),
         ]);
       } else if (col.type === 'integer' || col.type === 'bigint' || col.type === 'float' || col.type === 'decimal') {
-        return m('.mb-4', [
-          m('label.block.text-sm.font-medium.text-gray-700.mb-1', colLabel),
-          m('.flex.items-center.gap-2', [
-            m('select.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+        return m('.mb-2', [
+          m('label.block.text-xs.font-medium.text-gray-600.mb-1', colLabel),
+          m('.flex.items-center.gap-1', [
+            m('select.px-1.py-0.5.border.border-gray-300.rounded.text-xs', {
               value: currentFilter.op || 'eq',
               onchange: (e) => {
                 const op = e.target.value;
@@ -274,18 +271,18 @@ const FilterPanel = {
                 onFilterChange(col.name, { ...existing, op });
               },
             }, [
-              m('option', { value: 'eq' }, 'Equals'),
-              m('option', { value: 'gt' }, 'Greater Than'),
-              m('option', { value: 'gte' }, 'Greater or Equal'),
-              m('option', { value: 'lt' }, 'Less Than'),
-              m('option', { value: 'lte' }, 'Less or Equal'),
-              m('option', { value: 'between' }, 'Between'),
+              m('option', { value: 'eq' }, '='),
+              m('option', { value: 'gt' }, '>'),
+              m('option', { value: 'gte' }, '≥'),
+              m('option', { value: 'lt' }, '<'),
+              m('option', { value: 'lte' }, '≤'),
+              m('option', { value: 'between' }, '↔'),
             ]),
             currentFilter.op === 'between' ? [
-              m('input.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+              m('input.px-1.py-0.5.border.border-gray-300.rounded.text-xs.w-16', {
                 type: 'number',
                 value: currentFilter.from || '',
-                placeholder: 'From',
+                placeholder: 'Min',
                 oninput: (e) => {
                   onFilterChange(col.name, { 
                     op: 'between', 
@@ -294,11 +291,11 @@ const FilterPanel = {
                   });
                 },
               }),
-              m('span.text-sm', 'to'),
-              m('input.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+              m('span.text-xs.text-gray-400', '-'),
+              m('input.px-1.py-0.5.border.border-gray-300.rounded.text-xs.w-16', {
                 type: 'number',
                 value: currentFilter.to || '',
-                placeholder: 'To',
+                placeholder: 'Max',
                 oninput: (e) => {
                   onFilterChange(col.name, { 
                     op: 'between', 
@@ -307,10 +304,10 @@ const FilterPanel = {
                   });
                 },
               }),
-            ] : m('input.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+            ] : m('input.px-1.py-0.5.border.border-gray-300.rounded.text-xs.flex-1', {
               type: 'number',
               value: currentFilter.value || '',
-              placeholder: 'Enter value',
+              placeholder: 'Value',
               oninput: (e) => {
                 onFilterChange(col.name, { 
                   op: currentFilter.op || 'eq', 
@@ -321,10 +318,11 @@ const FilterPanel = {
           ]),
         ]);
       } else if (col.type === 'enum') {
-        return m('.mb-4', [
-          m('label.block.text-sm.font-medium.text-gray-700.mb-1', colLabel),
-          m('select.px-2.py-1.border.border-gray-300.rounded.text-sm.w-full', {
+        return m('.mb-2', [
+          m('label.block.text-xs.font-medium.text-gray-600.mb-1', colLabel),
+          m('select.px-1.py-0.5.border.border-gray-300.rounded.text-xs.w-full', {
             multiple: true,
+            style: 'min-height: 50px;',
             value: Array.isArray(currentFilter.value) ? currentFilter.value : (currentFilter.value ? [currentFilter.value] : []),
             onchange: (e) => {
               const selected = Array.from(e.target.selectedOptions, opt => opt.value);
@@ -338,10 +336,10 @@ const FilterPanel = {
         ]);
       } else {
         // String/text fields
-        return m('.mb-4', [
-          m('label.block.text-sm.font-medium.text-gray-700.mb-1', colLabel),
-          m('.flex.items-center.gap-2', [
-            m('select.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+        return m('.mb-2', [
+          m('label.block.text-xs.font-medium.text-gray-600.mb-1', colLabel),
+          m('.flex.items-center.gap-1', [
+            m('select.px-1.py-0.5.border.border-gray-300.rounded.text-xs', {
               value: currentFilter.op || 'contains',
               onchange: (e) => {
                 const op = e.target.value;
@@ -349,12 +347,12 @@ const FilterPanel = {
                 onFilterChange(col.name, { ...existing, op });
               },
             }, [
-              m('option', { value: 'contains' }, 'Contains'),
-              m('option', { value: 'equals' }, 'Equals'),
-              m('option', { value: 'starts_with' }, 'Starts With'),
-              m('option', { value: 'ends_with' }, 'Ends With'),
+              m('option', { value: 'contains' }, '~'),
+              m('option', { value: 'equals' }, '='),
+              m('option', { value: 'starts_with' }, 'A*'),
+              m('option', { value: 'ends_with' }, '*Z'),
             ]),
-            m('input.px-2.py-1.border.border-gray-300.rounded.text-sm.flex-1', {
+            m('input.px-1.py-0.5.border.border-gray-300.rounded.text-xs.flex-1', {
               type: 'text',
               value: currentFilter.value || '',
               placeholder: 'Enter search term',
@@ -370,21 +368,21 @@ const FilterPanel = {
       }
     });
     
-    return m('.bg-white.border.border-gray-200.rounded.shadow-lg.p-4.mb-4', [
-      m('.flex.items-center.justify-between.mb-4', [
-        m('h3.text-lg.font-semibold', 'Filters'),
-        m('button.text-sm.text-gray-600.hover:text-gray-800', {
+    return m('.bg-white.border.border-gray-200.rounded-lg.shadow-sm.p-3.mb-3', [
+      m('.flex.items-center.justify-between.mb-2.pb-2.border-b.border-gray-100', [
+        m('span.text-sm.font-medium.text-gray-700', 'Filters'),
+        m('button.text-xs.text-gray-400.hover:text-gray-600', {
           onclick: () => vnode.attrs.onToggle(false),
-        }, '× Close'),
+        }, '✕'),
       ]),
-      m('.grid.grid-cols-1.md:grid-cols-2.lg:grid-cols-3.gap-4', filterInputs),
-      m('.flex.items-center.justify-end.gap-2.mt-4.pt-4.border-t', [
-        m('button.px-4.py-2.bg-gray-200.text-gray-800.rounded.hover:bg-gray-300', {
+      m('.grid.grid-cols-2.md:grid-cols-3.lg:grid-cols-4.xl:grid-cols-5.gap-3', filterInputs),
+      m('.flex.items-center.justify-end.gap-2.mt-3.pt-2.border-t.border-gray-100', [
+        m('button.px-3.py-1.text-xs.bg-gray-100.text-gray-600.rounded.hover:bg-gray-200', {
           onclick: onClear,
-        }, 'Clear All'),
-        m('button.px-4.py-2.bg-blue-600.text-white.rounded.hover:bg-blue-700', {
+        }, 'Clear'),
+        m('button.px-3.py-1.text-xs.bg-blue-600.text-white.rounded.hover:bg-blue-700', {
           onclick: onApply,
-        }, 'Apply Filters'),
+        }, 'Apply'),
       ]),
     ]);
   },
