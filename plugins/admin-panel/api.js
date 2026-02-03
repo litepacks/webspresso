@@ -8,6 +8,19 @@ const { getAllModels, getModel } = require('../../core/orm/model');
 const { checkAdminExists, setupAdmin, login, logout, requireAuth } = require('./auth');
 
 /**
+ * Check if rich-text content is empty
+ * @param {string} value - Rich-text HTML value
+ * @returns {boolean} True if empty
+ */
+function isRichTextEmpty(value) {
+  if (!value) return true;
+  // Remove all HTML tags and check if only whitespace remains
+  const stripped = value.replace(/<[^>]*>/g, '').trim();
+  // Check for common empty Quill outputs
+  return stripped === '' || value === '<p><br></p>' || value === '<p></p>';
+}
+
+/**
  * Create API route handlers
  * @param {Object} options - Options
  * @param {string} options.path - Admin panel path
@@ -239,10 +252,107 @@ function createApiHandlers(options) {
 
       // Build query
       let query = repo.query();
+      let countQuery = repo.query();
 
-      // Apply filters if provided
+      // Parse filter parameters from query string
+      // Format: filter[column][op]=value or filter[column][value]=value
+      const filterParams = {};
+      for (const [key, value] of Object.entries(req.query)) {
+        const match = key.match(/^filter\[([^\]]+)\]\[([^\]]+)\]$/);
+        if (match) {
+          const [, col, prop] = match;
+          if (!filterParams[col]) filterParams[col] = {};
+          if (prop === 'value') {
+            // Handle multiple values for 'in' operator
+            if (filterParams[col].value) {
+              if (!Array.isArray(filterParams[col].value)) {
+                filterParams[col].value = [filterParams[col].value];
+              }
+              filterParams[col].value.push(value);
+            } else {
+              filterParams[col].value = value;
+            }
+          } else {
+            filterParams[col][prop] = value;
+          }
+        }
+      }
+
+      // Apply filters
+      for (const [colName, filter] of Object.entries(filterParams)) {
+        const colMeta = model.columns.get(colName);
+        if (!colMeta) continue; // Skip if column doesn't exist
+
+        const op = filter.op || 'contains';
+        const value = filter.value;
+        const from = filter.from;
+        const to = filter.to;
+
+        if (op === 'between' && (from || to)) {
+          if (from && to) {
+            query = query.whereBetween(colName, [from, to]);
+            countQuery = countQuery.whereBetween(colName, [from, to]);
+          } else if (from) {
+            query = query.where(colName, '>=', from);
+            countQuery = countQuery.where(colName, '>=', from);
+          } else if (to) {
+            query = query.where(colName, '<=', to);
+            countQuery = countQuery.where(colName, '<=', to);
+          }
+        } else if (op === 'in' && Array.isArray(value) && value.length > 0) {
+          query = query.whereIn(colName, value);
+          countQuery = countQuery.whereIn(colName, value);
+        } else if (value !== undefined && value !== null && value !== '') {
+          switch (op) {
+            case 'contains':
+              if (colMeta.type === 'string' || colMeta.type === 'text') {
+                query = query.where(colName, 'like', `%${value}%`);
+                countQuery = countQuery.where(colName, 'like', `%${value}%`);
+              }
+              break;
+            case 'equals':
+              query = query.where(colName, '=', value);
+              countQuery = countQuery.where(colName, '=', value);
+              break;
+            case 'starts_with':
+              if (colMeta.type === 'string' || colMeta.type === 'text') {
+                query = query.where(colName, 'like', `${value}%`);
+                countQuery = countQuery.where(colName, 'like', `${value}%`);
+              }
+              break;
+            case 'ends_with':
+              if (colMeta.type === 'string' || colMeta.type === 'text') {
+                query = query.where(colName, 'like', `%${value}`);
+                countQuery = countQuery.where(colName, 'like', `%${value}`);
+              }
+              break;
+            case 'gt':
+              query = query.where(colName, '>', value);
+              countQuery = countQuery.where(colName, '>', value);
+              break;
+            case 'gte':
+              query = query.where(colName, '>=', value);
+              countQuery = countQuery.where(colName, '>=', value);
+              break;
+            case 'lt':
+              query = query.where(colName, '<', value);
+              countQuery = countQuery.where(colName, '<', value);
+              break;
+            case 'lte':
+              query = query.where(colName, '<=', value);
+              countQuery = countQuery.where(colName, '<=', value);
+              break;
+            case 'eq':
+            default:
+              query = query.where(colName, '=', value);
+              countQuery = countQuery.where(colName, '=', value);
+              break;
+          }
+        }
+      }
+
+      // Legacy search support (backward compatibility)
       if (req.query.search) {
-        // Simple search on string columns
         const searchTerm = `%${req.query.search}%`;
         const stringColumns = Array.from(model.columns.entries())
           .filter(([_, meta]) => meta.type === 'string' || meta.type === 'text')
@@ -258,11 +368,20 @@ function createApiHandlers(options) {
               }
             }
           });
+          countQuery = countQuery.where(function() {
+            for (let i = 0; i < stringColumns.length; i++) {
+              if (i === 0) {
+                this.where(stringColumns[i], 'like', searchTerm);
+              } else {
+                this.orWhere(stringColumns[i], 'like', searchTerm);
+              }
+            }
+          });
         }
       }
 
-      // Get total count
-      const total = await repo.count();
+      // Get total count with filters applied
+      const total = await countQuery.count();
 
       // Apply pagination
       query = query.offset(offset).limit(perPage);
@@ -325,6 +444,18 @@ function createApiHandlers(options) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
+      // Validate rich-text fields
+      for (const [colName, colMeta] of model.columns) {
+        if (model.admin.customFields?.[colName]?.type === 'rich-text' && !colMeta.nullable) {
+          const value = req.body[colName];
+          if (isRichTextEmpty(value)) {
+            return res.status(400).json({ 
+              error: `Field "${colName}" is required` 
+            });
+          }
+        }
+      }
+
       const repo = db.getRepository(model.name);
       const record = await repo.create(req.body);
 
@@ -344,6 +475,18 @@ function createApiHandlers(options) {
 
       if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
+      }
+
+      // Validate rich-text fields (only if field is being updated)
+      for (const [colName, colMeta] of model.columns) {
+        if (colName in req.body && model.admin.customFields?.[colName]?.type === 'rich-text' && !colMeta.nullable) {
+          const value = req.body[colName];
+          if (isRichTextEmpty(value)) {
+            return res.status(400).json({ 
+              error: `Field "${colName}" is required` 
+            });
+          }
+        }
       }
 
       const repo = db.getRepository(model.name);

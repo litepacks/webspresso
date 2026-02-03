@@ -32,6 +32,20 @@ const api = {
   delete(path) { return this.request(path, { method: 'DELETE' }); },
 };
 
+// Helper: Capitalize first letter of each word
+function capitalizeWords(str) {
+  if (!str) return '';
+  return str.split(' ').map(function(word) {
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  }).join(' ');
+}
+
+// Helper: Format column name to label
+function formatColumnLabel(name) {
+  if (!name) return '';
+  return capitalizeWords(name.replace(/_/g, ' '));
+}
+
 // State
 const state = {
   user: null,
@@ -51,6 +65,8 @@ const state = {
   currentRecord: null,
   formData: {}, // Form field values
   editing: false,
+  filters: {}, // Active filters { column: { op, value, from, to } }
+  filterPanelOpen: false, // Filter panel visibility
 };
 
 // Breadcrumb Component
@@ -92,6 +108,283 @@ const Breadcrumb = {
                 }, item.label),
           ]),
         ]),
+      ]),
+    ]);
+  },
+};
+
+// Filter Badges Component - shows active filters
+const FilterBadges = {
+  view: (vnode) => {
+    const { filters, modelMeta, onRemove } = vnode.attrs;
+    if (!filters || Object.keys(filters).length === 0) return null;
+    
+    const badges = [];
+    for (const [colName, filter] of Object.entries(filters)) {
+      const col = modelMeta?.columns?.find(c => c.name === colName);
+      const label = col?.ui?.label || col?.name?.replace(/_/g, ' ') || colName;
+      let text = '';
+      
+      if (filter.op === 'between') {
+        text = label + ': ' + filter.from + ' to ' + filter.to;
+      } else if (filter.op === 'in') {
+        text = label + ': ' + (Array.isArray(filter.value) ? filter.value.join(', ') : filter.value);
+      } else if (filter.op) {
+        text = label + ' ' + filter.op + ': ' + filter.value;
+      } else {
+        text = label + ': ' + filter.value;
+      }
+      
+      badges.push(
+        m('span.inline-flex.items-center.px-3.py-1.rounded-full.text-xs.font-medium.bg-blue-100.text-blue-800.mr-2.mb-2', [
+          text,
+          m('button.ml-2.hover:text-blue-900', {
+            onclick: () => onRemove(colName),
+            type: 'button',
+          }, '×'),
+        ])
+      );
+    }
+    
+    return badges.length > 0 ? m('.mb-4.flex.flex-wrap', badges) : null;
+  },
+};
+
+// Filter Panel Component
+const FilterPanel = {
+  view: (vnode) => {
+    const { modelMeta, filters, onFilterChange, onApply, onClear } = vnode.attrs;
+    const isOpen = vnode.attrs.isOpen || false;
+    
+    if (!isOpen) return null;
+    if (!modelMeta || !modelMeta.columns) return null;
+    
+    // Get filterable columns (exclude auto columns, json, and relations)
+    const filterableColumns = modelMeta.columns.filter(col => {
+      if (col.primary || col.autoIncrement) return false;
+      if (col.auto === 'create' || col.auto === 'update') return false;
+      if (col.type === 'json') return false;
+      return true;
+    });
+    
+    const filterInputs = filterableColumns.map(col => {
+      const currentFilter = filters[col.name] || {};
+      const colLabel = col.ui?.label || formatColumnLabel(col.name);
+      
+      // Determine filter input based on column type
+      if (col.type === 'boolean') {
+        return m('.mb-4', [
+          m('label.block.text-sm.font-medium.text-gray-700.mb-1', colLabel),
+          m('.flex.items-center.gap-4', [
+            m('label.flex.items-center', [
+              m('input.mr-2', {
+                type: 'radio',
+                name: 'filter_' + col.name,
+                checked: currentFilter.value === 'true',
+                onchange: () => onFilterChange(col.name, { value: 'true' }),
+              }),
+              m('span.text-sm', 'Yes'),
+            ]),
+            m('label.flex.items-center', [
+              m('input.mr-2', {
+                type: 'radio',
+                name: 'filter_' + col.name,
+                checked: currentFilter.value === 'false',
+                onchange: () => onFilterChange(col.name, { value: 'false' }),
+              }),
+              m('span.text-sm', 'No'),
+            ]),
+            m('label.flex.items-center', [
+              m('input.mr-2', {
+                type: 'radio',
+                name: 'filter_' + col.name,
+                checked: !currentFilter.value,
+                onchange: () => onFilterChange(col.name, null),
+              }),
+              m('span.text-sm', 'All'),
+            ]),
+          ]),
+        ]);
+      } else if (col.type === 'date' || col.type === 'datetime' || col.type === 'timestamp') {
+        return m('.mb-4', [
+          m('label.block.text-sm.font-medium.text-gray-700.mb-1', colLabel),
+          m('.flex.items-center.gap-2', [
+            m('select.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+              value: currentFilter.op || 'eq',
+              onchange: (e) => {
+                const op = e.target.value;
+                const existing = currentFilter.value || {};
+                onFilterChange(col.name, { ...existing, op });
+              },
+            }, [
+              m('option', { value: 'eq' }, 'Equals'),
+              m('option', { value: 'gt' }, 'After'),
+              m('option', { value: 'gte' }, 'On or After'),
+              m('option', { value: 'lt' }, 'Before'),
+              m('option', { value: 'lte' }, 'On or Before'),
+              m('option', { value: 'between' }, 'Between'),
+            ]),
+            currentFilter.op === 'between' ? [
+              m('input.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+                type: col.type === 'date' ? 'date' : 'datetime-local',
+                value: currentFilter.from || '',
+                placeholder: 'From',
+                oninput: (e) => {
+                  onFilterChange(col.name, { 
+                    op: 'between', 
+                    from: e.target.value, 
+                    to: currentFilter.to || '' 
+                  });
+                },
+              }),
+              m('span.text-sm', 'to'),
+              m('input.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+                type: col.type === 'date' ? 'date' : 'datetime-local',
+                value: currentFilter.to || '',
+                placeholder: 'To',
+                oninput: (e) => {
+                  onFilterChange(col.name, { 
+                    op: 'between', 
+                    from: currentFilter.from || '', 
+                    to: e.target.value 
+                  });
+                },
+              }),
+            ] : m('input.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+              type: col.type === 'date' ? 'date' : 'datetime-local',
+              value: currentFilter.value || '',
+              oninput: (e) => {
+                onFilterChange(col.name, { 
+                  op: currentFilter.op || 'eq', 
+                  value: e.target.value 
+                });
+              },
+            }),
+          ]),
+        ]);
+      } else if (col.type === 'integer' || col.type === 'bigint' || col.type === 'float' || col.type === 'decimal') {
+        return m('.mb-4', [
+          m('label.block.text-sm.font-medium.text-gray-700.mb-1', colLabel),
+          m('.flex.items-center.gap-2', [
+            m('select.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+              value: currentFilter.op || 'eq',
+              onchange: (e) => {
+                const op = e.target.value;
+                const existing = currentFilter.value || {};
+                onFilterChange(col.name, { ...existing, op });
+              },
+            }, [
+              m('option', { value: 'eq' }, 'Equals'),
+              m('option', { value: 'gt' }, 'Greater Than'),
+              m('option', { value: 'gte' }, 'Greater or Equal'),
+              m('option', { value: 'lt' }, 'Less Than'),
+              m('option', { value: 'lte' }, 'Less or Equal'),
+              m('option', { value: 'between' }, 'Between'),
+            ]),
+            currentFilter.op === 'between' ? [
+              m('input.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+                type: 'number',
+                value: currentFilter.from || '',
+                placeholder: 'From',
+                oninput: (e) => {
+                  onFilterChange(col.name, { 
+                    op: 'between', 
+                    from: e.target.value, 
+                    to: currentFilter.to || '' 
+                  });
+                },
+              }),
+              m('span.text-sm', 'to'),
+              m('input.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+                type: 'number',
+                value: currentFilter.to || '',
+                placeholder: 'To',
+                oninput: (e) => {
+                  onFilterChange(col.name, { 
+                    op: 'between', 
+                    from: currentFilter.from || '', 
+                    to: e.target.value 
+                  });
+                },
+              }),
+            ] : m('input.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+              type: 'number',
+              value: currentFilter.value || '',
+              placeholder: 'Enter value',
+              oninput: (e) => {
+                onFilterChange(col.name, { 
+                  op: currentFilter.op || 'eq', 
+                  value: e.target.value 
+                });
+              },
+            }),
+          ]),
+        ]);
+      } else if (col.type === 'enum') {
+        return m('.mb-4', [
+          m('label.block.text-sm.font-medium.text-gray-700.mb-1', colLabel),
+          m('select.px-2.py-1.border.border-gray-300.rounded.text-sm.w-full', {
+            multiple: true,
+            value: Array.isArray(currentFilter.value) ? currentFilter.value : (currentFilter.value ? [currentFilter.value] : []),
+            onchange: (e) => {
+              const selected = Array.from(e.target.selectedOptions, opt => opt.value);
+              onFilterChange(col.name, selected.length > 0 ? { op: 'in', value: selected } : null);
+            },
+          }, [
+            ...(col.enumValues || []).map(val => 
+              m('option', { value: val }, val)
+            ),
+          ]),
+        ]);
+      } else {
+        // String/text fields
+        return m('.mb-4', [
+          m('label.block.text-sm.font-medium.text-gray-700.mb-1', colLabel),
+          m('.flex.items-center.gap-2', [
+            m('select.px-2.py-1.border.border-gray-300.rounded.text-sm', {
+              value: currentFilter.op || 'contains',
+              onchange: (e) => {
+                const op = e.target.value;
+                const existing = currentFilter.value || {};
+                onFilterChange(col.name, { ...existing, op });
+              },
+            }, [
+              m('option', { value: 'contains' }, 'Contains'),
+              m('option', { value: 'equals' }, 'Equals'),
+              m('option', { value: 'starts_with' }, 'Starts With'),
+              m('option', { value: 'ends_with' }, 'Ends With'),
+            ]),
+            m('input.px-2.py-1.border.border-gray-300.rounded.text-sm.flex-1', {
+              type: 'text',
+              value: currentFilter.value || '',
+              placeholder: 'Enter search term',
+              oninput: (e) => {
+                onFilterChange(col.name, { 
+                  op: currentFilter.op || 'contains', 
+                  value: e.target.value 
+                });
+              },
+            }),
+          ]),
+        ]);
+      }
+    });
+    
+    return m('.bg-white.border.border-gray-200.rounded.shadow-lg.p-4.mb-4', [
+      m('.flex.items-center.justify-between.mb-4', [
+        m('h3.text-lg.font-semibold', 'Filters'),
+        m('button.text-sm.text-gray-600.hover:text-gray-800', {
+          onclick: () => vnode.attrs.onToggle(false),
+        }, '× Close'),
+      ]),
+      m('.grid.grid-cols-1.md:grid-cols-2.lg:grid-cols-3.gap-4', filterInputs),
+      m('.flex.items-center.justify-end.gap-2.mt-4.pt-4.border-t', [
+        m('button.px-4.py-2.bg-gray-200.text-gray-800.rounded.hover:bg-gray-300', {
+          onclick: onClear,
+        }, 'Clear All'),
+        m('button.px-4.py-2.bg-blue-600.text-white.rounded.hover:bg-blue-700', {
+          onclick: onApply,
+        }, 'Apply Filters'),
       ]),
     ]);
   },
@@ -174,7 +467,7 @@ const FieldRenderers = {
   string: (col, value, onChange, readonly) => {
     const validations = col.validations || {};
     const ui = col.ui || {};
-    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const label = ui.label || formatColumnLabel(col.name);
     const inputType = ui.inputType || (validations.email ? 'email' : validations.url ? 'url' : 'text');
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
@@ -204,7 +497,7 @@ const FieldRenderers = {
   text: (col, value, onChange, readonly) => {
     const validations = col.validations || {};
     const ui = col.ui || {};
-    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
     const rows = ui.rows || 4;
@@ -232,7 +525,7 @@ const FieldRenderers = {
   integer: (col, value, onChange, readonly) => {
     const validations = col.validations || {};
     const ui = col.ui || {};
-    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
     
@@ -261,7 +554,7 @@ const FieldRenderers = {
   float: (col, value, onChange, readonly) => {
     const validations = col.validations || {};
     const ui = col.ui || {};
-    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
     
@@ -289,7 +582,7 @@ const FieldRenderers = {
   // Boolean checkbox
   boolean: (col, value, onChange, readonly) => {
     const ui = col.ui || {};
-    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const label = ui.label || formatColumnLabel(col.name);
     const hint = ui.hint || '';
     
     return m('.mb-4', [
@@ -311,7 +604,7 @@ const FieldRenderers = {
   date: (col, value, onChange, readonly) => {
     const validations = col.validations || {};
     const ui = col.ui || {};
-    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
     const dateValue = value ? new Date(value).toISOString().split('T')[0] : '';
@@ -340,7 +633,7 @@ const FieldRenderers = {
   datetime: (col, value, onChange, readonly) => {
     const validations = col.validations || {};
     const ui = col.ui || {};
-    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
     const dateTimeValue = value ? new Date(value).toISOString().slice(0, 16) : '';
@@ -368,7 +661,7 @@ const FieldRenderers = {
   // Enum select
   enum: (col, value, onChange, readonly) => {
     const ui = col.ui || {};
-    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const label = ui.label || formatColumnLabel(col.name);
     const hint = ui.hint || '';
     const options = col.enumValues || [];
     
@@ -393,7 +686,7 @@ const FieldRenderers = {
   // JSON textarea
   json: (col, value, onChange, readonly) => {
     const ui = col.ui || {};
-    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
     const rows = ui.rows || 6;
@@ -427,7 +720,7 @@ const FieldRenderers = {
   array: (col, value, onChange, readonly) => {
     const validations = col.validations || {};
     const ui = col.ui || {};
-    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || 'Comma-separated values';
     const hint = ui.hint || 'Enter comma-separated values';
     const arrayValue = Array.isArray(value) ? value.join(', ') : (value || '');
@@ -547,7 +840,7 @@ const RichTextField = {
   view: (vnode) => {
     const { name, col, value = '', onChange, readonly } = vnode.attrs;
     const ui = col.ui || {};
-    const label = ui.label || col.name.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
+    const label = ui.label || formatColumnLabel(col.name);
     const hint = ui.hint || '';
     const editorId = 'quill-editor-' + name;
     const required = !col.nullable && !readonly;
@@ -619,6 +912,15 @@ function isAutoColumn(col) {
   // Common timestamp field names
   if (col.name === 'created_at' || col.name === 'updated_at') return 'auto';
   return false;
+}
+
+// Check if rich-text content is empty
+function isRichTextEmpty(value) {
+  if (!value) return true;
+  // Remove all HTML tags and check if only whitespace remains
+  const stripped = value.replace(/<[^>]*>/g, '').trim();
+  // Check for common empty Quill outputs
+  return stripped === '' || value === '<p><br></p>' || value === '<p></p>';
 }
 
 // Login Form Component
@@ -883,13 +1185,116 @@ function getDisplayColumns(columns) {
     .slice(0, 6); // Max 6 columns for readability
 }
 
-// Load records with pagination
-function loadRecords(modelName, page = 1) {
+// Build query string from filters
+function buildFilterQuery(filters) {
+  if (!filters || Object.keys(filters).length === 0) return '';
+  
+  const params = [];
+  for (const [col, filter] of Object.entries(filters)) {
+    if (!filter || (filter.value === '' && !filter.from && !filter.to)) continue;
+    
+    if (filter.op === 'between') {
+      params.push('filter[' + col + '][op]=between');
+      if (filter.from) params.push('filter[' + col + '][from]=' + encodeURIComponent(filter.from));
+      if (filter.to) params.push('filter[' + col + '][to]=' + encodeURIComponent(filter.to));
+    } else if (filter.op === 'in' && Array.isArray(filter.value)) {
+      params.push('filter[' + col + '][op]=in');
+      filter.value.forEach(v => params.push('filter[' + col + '][value]=' + encodeURIComponent(v)));
+    } else {
+      if (filter.op) params.push('filter[' + col + '][op]=' + encodeURIComponent(filter.op));
+      if (filter.value !== undefined && filter.value !== null && filter.value !== '') {
+        params.push('filter[' + col + '][value]=' + encodeURIComponent(filter.value));
+      }
+    }
+  }
+  
+  return params.length > 0 ? '&' + params.join('&') : '';
+}
+
+// Parse query string to filters
+function parseFilterQuery(queryString) {
+  const filters = {};
+  if (!queryString) return filters;
+  
+  const params = new URLSearchParams(queryString);
+  const filterParams = {};
+  
+  // Group filter parameters using simple string parsing (no regex needed)
+  for (const [key, value] of params.entries()) {
+    // Parse filter[column][prop] format
+    if (key.startsWith('filter[')) {
+      const firstClose = key.indexOf(']');
+      const secondOpen = key.indexOf('[', firstClose);
+      const secondClose = key.indexOf(']', secondOpen);
+      
+      if (firstClose > 7 && secondOpen > firstClose && secondClose > secondOpen) {
+        const col = key.substring(7, firstClose);
+        const prop = key.substring(secondOpen + 1, secondClose);
+        
+        if (!filterParams[col]) filterParams[col] = {};
+        if (prop === 'value' && filterParams[col].value) {
+          // Multiple values for 'in' operator
+          if (!Array.isArray(filterParams[col].value)) {
+            filterParams[col].value = [filterParams[col].value];
+          }
+          filterParams[col].value.push(value);
+        } else {
+          filterParams[col][prop] = value;
+        }
+      }
+    }
+  }
+  
+  // Convert to filter format
+  for (const [col, data] of Object.entries(filterParams)) {
+    if (data.op === 'between') {
+      filters[col] = { op: 'between', from: data.from || '', to: data.to || '' };
+    } else if (data.op === 'in') {
+      filters[col] = { op: 'in', value: Array.isArray(data.value) ? data.value : [data.value] };
+    } else {
+      filters[col] = { op: data.op || 'contains', value: data.value || '' };
+    }
+  }
+  
+  return filters;
+}
+
+// Load records with pagination and filters
+function loadRecords(modelName, page = 1, filters = null) {
   state.loading = true;
   state.error = null;
   
   const perPage = state.pagination.perPage || 20;
-  api.get('/models/' + modelName + '/records?page=' + page + '&perPage=' + perPage)
+  const activeFilters = filters !== null ? filters : state.filters;
+  const filterQuery = buildFilterQuery(activeFilters);
+  
+  // Update URL with filters
+  const queryParams = new URLSearchParams();
+  queryParams.set('page', page);
+  if (Object.keys(activeFilters).length > 0) {
+    for (const [col, filter] of Object.entries(activeFilters)) {
+      if (!filter || (filter.value === '' && !filter.from && !filter.to)) continue;
+      if (filter.op === 'between') {
+        queryParams.set('filter[' + col + '][op]', 'between');
+        if (filter.from) queryParams.set('filter[' + col + '][from]', filter.from);
+        if (filter.to) queryParams.set('filter[' + col + '][to]', filter.to);
+      } else if (filter.op === 'in' && Array.isArray(filter.value)) {
+        queryParams.set('filter[' + col + '][op]', 'in');
+        filter.value.forEach(v => queryParams.append('filter[' + col + '][value]', v));
+      } else {
+        if (filter.op) queryParams.set('filter[' + col + '][op]', filter.op);
+        if (filter.value !== undefined && filter.value !== null && filter.value !== '') {
+          queryParams.set('filter[' + col + '][value]', filter.value);
+        }
+      }
+    }
+  }
+  
+  // Update browser URL without reload
+  const newUrl = window.location.pathname + (queryParams.toString() ? '?' + queryParams.toString() : '');
+  window.history.replaceState({}, '', newUrl);
+  
+  api.get('/models/' + modelName + '/records?page=' + page + '&perPage=' + perPage + filterQuery)
     .then(result => {
       state.records = result.data || [];
       state.pagination = {
@@ -915,6 +1320,12 @@ const RecordList = {
     state.records = [];
     state.currentModelMeta = null;
     state.pagination = { page: 1, perPage: 20, total: 0, totalPages: 0 };
+    state.filterPanelOpen = false;
+    
+    // Parse filters from URL query string
+    const urlParams = new URLSearchParams(window.location.search);
+    const page = parseInt(urlParams.get('page')) || 1;
+    state.filters = parseFilterQuery(window.location.search);
     
     // Load model metadata first, then records
     state.loading = true;
@@ -922,7 +1333,7 @@ const RecordList = {
       .then(modelMeta => {
         state.currentModelMeta = modelMeta;
         state.currentModel = modelMeta;
-        return loadRecords(modelName, 1);
+        return loadRecords(modelName, page, state.filters);
       })
       .catch(err => {
         state.error = err.message;
@@ -943,14 +1354,68 @@ const RecordList = {
     return m(Layout, { breadcrumbs }, [
       m('.flex.items-center.justify-between.mb-6', [
         m('h2.text-2xl.font-bold', modelMeta?.label || modelName),
-        m('button.bg-blue-600.text-white.px-4.py-2.rounded.hover:bg-blue-700', {
-          onclick: () => {
-            state.currentRecord = null;
-            state.editing = true;
-            m.route.set('/models/' + modelName + '/new');
-          }
-        }, 'New Record'),
+        m('.flex.items-center.gap-2', [
+          m('button.bg-gray-200.text-gray-800.px-4.py-2.rounded.hover:bg-gray-300', {
+            onclick: () => {
+              state.filterPanelOpen = !state.filterPanelOpen;
+              m.redraw();
+            }
+          }, [
+            m('span.mr-2', '🔍'),
+            'Filter',
+          ]),
+          m('button.bg-blue-600.text-white.px-4.py-2.rounded.hover:bg-blue-700', {
+            onclick: () => {
+              state.currentRecord = null;
+              state.editing = true;
+              m.route.set('/models/' + modelName + '/new');
+            }
+          }, 'New Record'),
+        ]),
       ]),
+      
+      // Filter badges
+      m(FilterBadges, {
+        filters: state.filters,
+        modelMeta: modelMeta,
+        onRemove: (colName) => {
+          const newFilters = { ...state.filters };
+          delete newFilters[colName];
+          state.filters = newFilters;
+          loadRecords(modelName, 1, newFilters);
+        },
+      }),
+      
+      // Filter panel
+      m(FilterPanel, {
+        isOpen: state.filterPanelOpen,
+        modelMeta: modelMeta,
+        filters: state.filters,
+        onToggle: (open) => {
+          state.filterPanelOpen = open;
+          m.redraw();
+        },
+        onFilterChange: (colName, filter) => {
+          const newFilters = { ...state.filters };
+          if (filter === null) {
+            delete newFilters[colName];
+          } else {
+            newFilters[colName] = filter;
+          }
+          state.filters = newFilters;
+          m.redraw();
+        },
+        onApply: () => {
+          state.filterPanelOpen = false;
+          loadRecords(modelName, 1, state.filters);
+        },
+        onClear: () => {
+          state.filters = {};
+          state.filterPanelOpen = false;
+          loadRecords(modelName, 1, {});
+        },
+      }),
+      
       state.error ? m('.bg-red-100.border.border-red-400.text-red-700.px-4.py-3.rounded.mb-4', state.error) : null,
       state.loading
         ? m('p.text-gray-600', 'Loading records...')
@@ -1096,6 +1561,21 @@ const RecordForm = {
           state.loading = true;
           state.error = null;
           try {
+            // Validate rich-text fields first
+            if (modelMeta && modelMeta.columns) {
+              for (const col of modelMeta.columns) {
+                if (col.customField && col.customField.type === 'rich-text' && !col.nullable) {
+                  const hiddenInput = document.getElementById(col.name + '-value');
+                  const value = hiddenInput ? hiddenInput.value : state.formData[col.name];
+                  if (isRichTextEmpty(value)) {
+                    state.error = (col.ui?.label || col.name) + ' is required';
+                    state.loading = false;
+                    return;
+                  }
+                }
+              }
+            }
+            
             // Build payload, excluding auto-generated fields
             const payload = {};
             if (modelMeta && modelMeta.columns) {
@@ -1110,6 +1590,13 @@ const RecordForm = {
                   const hiddenInput = document.getElementById(col.name + '-value');
                   if (hiddenInput) {
                     value = hiddenInput.value;
+                  }
+                  // Skip empty rich-text values (normalize to null if nullable)
+                  if (isRichTextEmpty(value)) {
+                    if (col.nullable) {
+                      payload[col.name] = null;
+                    }
+                    return;
                   }
                 }
                 

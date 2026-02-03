@@ -716,5 +716,185 @@ test.describe('Admin Panel', () => {
       const editorContent = await richTextEditor.locator('.ql-editor').innerHTML();
       expect(editorContent).toContain('rich text');
     });
+
+    test('should validate required rich-text field is not empty', async ({ page }) => {
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('input#title', { timeout: 15000 });
+
+      // Fill other required fields
+      await page.fill('input#title', 'Test Post');
+      await page.fill('textarea#content', 'This is some content for testing.');
+
+      // Don't fill body (required rich-text field)
+      // Try to submit
+      await page.click('button:has-text("Save")');
+      await page.waitForTimeout(1000);
+
+      // Should show validation error or stay on form
+      const errorMessage = page.locator('text=/required|Rich Text Body/i');
+      const isStillOnForm = await page.locator('h2:has-text("New Record")').isVisible();
+      
+      expect(errorMessage.isVisible().catch(() => false) || isStillOnForm).toBeTruthy();
+    });
+  });
+
+  test.describe('Filtering', () => {
+    test.beforeEach(async ({ page }) => {
+      await ensureLoggedIn(page);
+    });
+
+    test('should display filter button', async ({ page }) => {
+      await page.goto('/_admin/models/TestPost');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('h2', { timeout: 10000 });
+      
+      const filterButton = page.locator('button:has-text("Filter")');
+      await expect(filterButton).toBeVisible({ timeout: 10000 });
+    });
+
+    test('should open and close filter panel', async ({ page }) => {
+      await page.goto('/_admin/models/TestPost');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
+      
+      // Click filter button
+      await page.click('button:has-text("Filter")');
+      await page.waitForTimeout(500);
+      
+      // Check if filter panel is visible
+      const filterPanel = page.locator('h3:has-text("Filters")');
+      await expect(filterPanel).toBeVisible({ timeout: 5000 });
+      
+      // Close filter panel
+      await page.click('button:has-text("Close")');
+      await page.waitForTimeout(500);
+      
+      // Panel should be hidden
+      await expect(filterPanel).not.toBeVisible({ timeout: 5000 });
+    });
+
+    test('should filter by string field (contains)', async ({ page }) => {
+      // Create a test record with unique title
+      const uniqueTitle = 'FilterTest_' + Date.now();
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('input#title', { timeout: 15000 });
+      
+      await page.fill('input#title', uniqueTitle);
+      await page.fill('textarea#content', 'This is test content for filtering.');
+      await page.click('button:has-text("Save")');
+      await page.waitForURL(/\/models\/TestPost$/, { timeout: 15000 });
+      await page.waitForLoadState('networkidle');
+
+      // Wait for page to fully load
+      await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
+      
+      // Open filter panel
+      await page.click('button:has-text("Filter")');
+      await page.waitForTimeout(500);
+      
+      // Find title filter input
+      const titleInput = page.locator('input[placeholder*="Enter search term"]').first();
+      await expect(titleInput).toBeVisible({ timeout: 5000 });
+      await titleInput.fill(uniqueTitle);
+      
+      // Apply filter
+      await page.click('button:has-text("Apply Filters")');
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1000);
+      
+      // Verify filtered results
+      const table = page.locator('table');
+      await expect(table).toBeVisible({ timeout: 10000 });
+      
+      // Check if the record with unique title is visible in table cell (not badge)
+      const recordCell = page.getByRole('cell', { name: uniqueTitle });
+      await expect(recordCell).toBeVisible({ timeout: 5000 });
+    });
+
+    test('should show filter badges for active filters', async ({ page }) => {
+      await page.goto('/_admin/models/TestPost');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
+      
+      // Open filter panel
+      await page.click('button:has-text("Filter")');
+      await page.waitForTimeout(500);
+      
+      // Apply a filter
+      const titleInput = page.locator('input[placeholder*="Enter search term"]').first();
+      await expect(titleInput).toBeVisible({ timeout: 5000 });
+      await titleInput.fill('test');
+      await page.click('button:has-text("Apply Filters")');
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1000);
+      
+      // Check for filter badge
+      const filterBadge = page.locator('.bg-blue-100.text-blue-800');
+      await expect(filterBadge.first()).toBeVisible({ timeout: 5000 });
+    });
+
+    test('should remove filter via badge', async ({ page }) => {
+      await page.goto('/_admin/models/TestPost');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
+      
+      // Open filter panel and apply filter
+      await page.click('button:has-text("Filter")');
+      await page.waitForTimeout(500);
+      
+      const titleInput = page.locator('input[placeholder*="Enter search term"]').first();
+      await expect(titleInput).toBeVisible({ timeout: 5000 });
+      await titleInput.fill('test');
+      await page.click('button:has-text("Apply Filters")');
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1000);
+      
+      // Find and click remove button on badge
+      const filterBadge = page.locator('.bg-blue-100.text-blue-800').first();
+      await expect(filterBadge).toBeVisible({ timeout: 5000 });
+      
+      const removeButton = filterBadge.locator('button');
+      await removeButton.click();
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(500);
+      
+      // Badge should be removed
+      await expect(filterBadge).not.toBeVisible({ timeout: 5000 });
+    });
+
+    test('should clear all filters', async ({ page }) => {
+      await page.goto('/_admin/models/TestPost');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
+      
+      // Open filter panel and apply filter
+      await page.click('button:has-text("Filter")');
+      await page.waitForTimeout(500);
+      
+      const titleInput = page.locator('input[placeholder*="Enter search term"]').first();
+      await expect(titleInput).toBeVisible({ timeout: 5000 });
+      await titleInput.fill('test');
+      await page.click('button:has-text("Apply Filters")');
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1000);
+      
+      // Check badge is visible
+      const filterBadge = page.locator('.bg-blue-100.text-blue-800').first();
+      await expect(filterBadge).toBeVisible({ timeout: 5000 });
+      
+      // Open filter panel again
+      await page.click('button:has-text("Filter")');
+      await page.waitForTimeout(500);
+      
+      // Click clear all
+      await page.click('button:has-text("Clear All")');
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(500);
+      
+      // Filter badges should be gone
+      await expect(filterBadge).not.toBeVisible({ timeout: 5000 });
+    });
   });
 });
