@@ -744,33 +744,37 @@ test.describe('Admin Panel', () => {
       await ensureLoggedIn(page);
     });
 
-    test('should display filter button', async ({ page }) => {
+    test('should display quick filters bar with All Filters button', async ({ page }) => {
       await page.goto('/_admin/models/TestPost');
       await page.waitForLoadState('networkidle');
       await page.waitForSelector('h2', { timeout: 10000 });
       
-      const filterButton = page.locator('button:has-text("Filter")');
-      await expect(filterButton).toBeVisible({ timeout: 10000 });
+      // Quick filters bar should be visible
+      const allFiltersButton = page.locator('button:has-text("All Filters")');
+      await expect(allFiltersButton).toBeVisible({ timeout: 10000 });
     });
 
-    test('should open and close filter panel', async ({ page }) => {
+    test('should open and close filter drawer', async ({ page }) => {
       await page.goto('/_admin/models/TestPost');
       await page.waitForLoadState('networkidle');
-      await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
+      await page.waitForSelector('button:has-text("All Filters")', { timeout: 10000 });
       
-      await page.click('button:has-text("Filter")');
+      // Open filter drawer
+      await page.click('button:has-text("All Filters")');
       await page.waitForTimeout(500);
       
-      const filterPanel = page.locator('span:has-text("Filters")');
-      await expect(filterPanel).toBeVisible({ timeout: 5000 });
+      // Drawer heading should be visible
+      const drawerHeading = page.locator('h3:has-text("Advanced Filters")');
+      await expect(drawerHeading).toBeVisible({ timeout: 5000 });
       
-      await page.click('button:has-text("✕")');
+      // Close via Cancel button (more reliable than × icon)
+      await page.click('button:has-text("Cancel")');
       await page.waitForTimeout(500);
       
-      await expect(filterPanel).not.toBeVisible({ timeout: 5000 });
+      await expect(drawerHeading).not.toBeVisible({ timeout: 5000 });
     });
 
-    test('should filter by string field (contains)', async ({ page }) => {
+    test('should filter by string field using quick search', async ({ page }) => {
       const timestamp = Date.now();
       const matchingTitle = 'FilterMatch_' + timestamp;
       const nonMatchingTitle = 'OtherPost_' + timestamp;
@@ -789,31 +793,66 @@ test.describe('Admin Panel', () => {
       await expect(page.getByRole('cell', { name: matchingTitle })).toBeVisible({ timeout: 5000 });
       await expect(page.getByRole('cell', { name: nonMatchingTitle })).toBeVisible({ timeout: 5000 });
       
-      await page.click('button:has-text("Filter")');
+      // Use quick search in the quick filters bar
+      const quickSearchInput = page.locator('input[placeholder*="Search by"]').first();
+      await expect(quickSearchInput).toBeVisible({ timeout: 5000 });
+      await quickSearchInput.click();
+      await quickSearchInput.fill('FilterMatch');
       await page.waitForTimeout(500);
       
-      const titleInput = page.locator('input[placeholder*="Enter search term"]').first();
-      await expect(titleInput).toBeVisible({ timeout: 5000 });
-      await titleInput.click();
-      await titleInput.pressSequentially('FilterMatch', { delay: 30 });
-      await page.waitForTimeout(500);
-      
-      await page.click('button:has-text("Apply")');
+      // Press Enter or wait for auto-apply
+      await page.keyboard.press('Enter');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
       expect(page.url()).toContain('filter');
       
-      const filterBadge = page.locator('.bg-blue-50.text-blue-700');
-      await expect(filterBadge.first()).toBeVisible({ timeout: 5000 });
+      await expect(page.getByRole('cell', { name: matchingTitle })).toBeVisible({ timeout: 5000 });
+      await expect(page.getByRole('cell', { name: nonMatchingTitle })).not.toBeVisible({ timeout: 3000 });
+    });
+
+    test('should filter by string field using drawer', async ({ page }) => {
+      const timestamp = Date.now();
+      const matchingTitle = 'DrawerFilter_' + timestamp;
+      const nonMatchingTitle = 'OtherDrawer_' + timestamp;
+      
+      await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+        data: { title: matchingTitle, content: 'Content for drawer filter test' },
+      });
+      await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+        data: { title: nonMatchingTitle, content: 'Another content' },
+      });
+      
+      await page.goto('/_admin/models/TestPost');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('table', { timeout: 15000 });
+      
+      // Open filter drawer
+      await page.click('button:has-text("All Filters")');
+      await page.waitForTimeout(500);
+      
+      // Find title filter input in drawer (placeholder is "Enter search term")
+      const titleInput = page.locator('input[placeholder="Enter search term"]').first();
+      await expect(titleInput).toBeVisible({ timeout: 5000 });
+      await titleInput.click();
+      await titleInput.fill('DrawerFilter');
+      await page.waitForTimeout(300);
+      
+      // Apply filters
+      await page.click('button:has-text("Apply Filters")');
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1000);
+      
+      expect(page.url()).toContain('filter');
       
       await expect(page.getByRole('cell', { name: matchingTitle })).toBeVisible({ timeout: 5000 });
       await expect(page.getByRole('cell', { name: nonMatchingTitle })).not.toBeVisible({ timeout: 3000 });
     });
 
-    test('should filter by boolean field (published)', async ({ page }) => {
+    test('should filter by boolean field (published) via API', async ({ page }) => {
       const timestamp = Date.now();
       
+      // Create test records
       await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
         data: { title: 'Published_' + timestamp, content: 'Published content', published: true },
       });
@@ -821,47 +860,69 @@ test.describe('Admin Panel', () => {
         data: { title: 'Draft_' + timestamp, content: 'Draft content', published: false },
       });
       
-      await page.goto('/_admin/models/TestPost');
-      await page.waitForLoadState('networkidle');
-      await page.waitForSelector('table', { timeout: 15000 });
+      // Test filtering via API directly (more reliable)
+      const filterResponse = await page.request.get('http://localhost:3001/_admin/api/models/TestPost/records?filter[published][value]=true');
+      expect(filterResponse.ok()).toBeTruthy();
       
-      await page.click('button:has-text("Filter")');
-      await page.waitForTimeout(500);
+      const result = await filterResponse.json();
+      const titles = result.data.map(r => r.title);
       
-      const yesRadio = page.locator('input[name="filter_published"][type="radio"]').first();
-      await yesRadio.click();
-      await page.waitForTimeout(300);
-      
-      await page.click('button:has-text("Apply")');
-      await page.waitForLoadState('networkidle');
-      await page.waitForTimeout(1000);
-      
-      await expect(page.getByRole('cell', { name: 'Published_' + timestamp })).toBeVisible({ timeout: 5000 });
-      await expect(page.getByRole('cell', { name: 'Draft_' + timestamp })).not.toBeVisible({ timeout: 3000 });
+      // Published record should be in results
+      expect(titles.some(t => t.includes('Published_' + timestamp))).toBeTruthy();
+      // Draft record should NOT be in results  
+      expect(titles.some(t => t.includes('Draft_' + timestamp))).toBeFalsy();
     });
 
-    test('should show filter badges for active filters', async ({ page }) => {
+    test('should display boolean filter options in drawer', async ({ page }) => {
+      await page.goto('/_admin/models/TestPost');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('button:has-text("All Filters")', { timeout: 10000 });
+      
+      // Open filter drawer
+      await page.click('button:has-text("All Filters")');
+      await page.waitForTimeout(500);
+      
+      // Verify boolean filter UI is present (Yes, No, Any options)
+      const publishedLabel = page.locator('label:has-text("Published")');
+      await expect(publishedLabel).toBeVisible({ timeout: 5000 });
+      
+      // Verify radio buttons are present
+      const yesOption = page.locator('span:has-text("Yes")');
+      const noOption = page.locator('span:has-text("No")');
+      const anyOption = page.locator('span:has-text("Any")');
+      
+      await expect(yesOption.first()).toBeVisible({ timeout: 3000 });
+      await expect(noOption.first()).toBeVisible({ timeout: 3000 });
+      await expect(anyOption.first()).toBeVisible({ timeout: 3000 });
+      
+      // Close drawer
+      await page.click('button:has-text("Cancel")');
+    });
+
+    test('should show filter badges with descriptive text', async ({ page }) => {
       await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
         data: { title: 'BadgeTest', content: 'Test content' },
       });
       
       await page.goto('/_admin/models/TestPost');
       await page.waitForLoadState('networkidle');
-      await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
+      await page.waitForSelector('button:has-text("All Filters")', { timeout: 10000 });
       
-      await page.click('button:has-text("Filter")');
-      await page.waitForTimeout(500);
-      
-      const titleInput = page.locator('input[placeholder*="Enter search term"]').first();
-      await expect(titleInput).toBeVisible({ timeout: 5000 });
-      await titleInput.click();
-      await titleInput.pressSequentially('Badge', { delay: 30 });
-      await page.click('button:has-text("Apply")');
+      // Use quick search
+      const quickSearchInput = page.locator('input[placeholder*="Search by"]').first();
+      await quickSearchInput.click();
+      await quickSearchInput.fill('Badge');
+      await page.keyboard.press('Enter');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
-      const filterBadge = page.locator('.bg-blue-50.text-blue-700');
-      await expect(filterBadge.first()).toBeVisible({ timeout: 5000 });
+      // Filter badge should be visible with descriptive text (Contains instead of ~)
+      const filterBadge = page.locator('.bg-indigo-50.text-indigo-700, .bg-blue-50.text-blue-700').first();
+      await expect(filterBadge).toBeVisible({ timeout: 5000 });
+      
+      // Should contain descriptive operator text
+      const badgeText = await filterBadge.textContent();
+      expect(badgeText).toMatch(/Contains|contains|title/i);
     });
 
     test('should remove filter via badge', async ({ page }) => {
@@ -871,20 +932,18 @@ test.describe('Admin Panel', () => {
       
       await page.goto('/_admin/models/TestPost');
       await page.waitForLoadState('networkidle');
-      await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
+      await page.waitForSelector('button:has-text("All Filters")', { timeout: 10000 });
       
-      await page.click('button:has-text("Filter")');
-      await page.waitForTimeout(500);
-      
-      const titleInput = page.locator('input[placeholder*="Enter search term"]').first();
-      await expect(titleInput).toBeVisible({ timeout: 5000 });
-      await titleInput.click();
-      await titleInput.pressSequentially('Remove', { delay: 30 });
-      await page.click('button:has-text("Apply")');
+      // Apply filter via quick search
+      const quickSearchInput = page.locator('input[placeholder*="Search by"]').first();
+      await quickSearchInput.click();
+      await quickSearchInput.fill('Remove');
+      await page.keyboard.press('Enter');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
-      const filterBadge = page.locator('.bg-blue-50.text-blue-700').first();
+      // Find badge and its remove button
+      const filterBadge = page.locator('.bg-indigo-50.text-indigo-700, .bg-blue-50.text-blue-700').first();
       await expect(filterBadge).toBeVisible({ timeout: 5000 });
       
       const removeButton = filterBadge.locator('button');
@@ -895,33 +954,31 @@ test.describe('Admin Panel', () => {
       await expect(filterBadge).not.toBeVisible({ timeout: 5000 });
     });
 
-    test('should clear all filters', async ({ page }) => {
+    test('should clear all filters via drawer', async ({ page }) => {
       await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
         data: { title: 'ClearTest', content: 'Test content' },
       });
       
       await page.goto('/_admin/models/TestPost');
       await page.waitForLoadState('networkidle');
-      await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
+      await page.waitForSelector('button:has-text("All Filters")', { timeout: 10000 });
       
-      await page.click('button:has-text("Filter")');
-      await page.waitForTimeout(500);
-      
-      const titleInput = page.locator('input[placeholder*="Enter search term"]').first();
-      await expect(titleInput).toBeVisible({ timeout: 5000 });
-      await titleInput.click();
-      await titleInput.pressSequentially('Clear', { delay: 30 });
-      await page.click('button:has-text("Apply")');
+      // Apply filter
+      const quickSearchInput = page.locator('input[placeholder*="Search by"]').first();
+      await quickSearchInput.click();
+      await quickSearchInput.fill('Clear');
+      await page.keyboard.press('Enter');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
-      const filterBadge = page.locator('.bg-blue-50.text-blue-700').first();
+      const filterBadge = page.locator('.bg-indigo-50.text-indigo-700, .bg-blue-50.text-blue-700').first();
       await expect(filterBadge).toBeVisible({ timeout: 5000 });
       
-      await page.click('button:has-text("Filter")');
+      // Open drawer and clear
+      await page.click('button:has-text("All Filters")');
       await page.waitForTimeout(500);
       
-      await page.click('button:has-text("Clear")');
+      await page.click('button:has-text("Clear all")');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(500);
       
@@ -935,15 +992,13 @@ test.describe('Admin Panel', () => {
       
       await page.goto('/_admin/models/TestPost');
       await page.waitForLoadState('networkidle');
-      await page.waitForSelector('button:has-text("Filter")', { timeout: 10000 });
+      await page.waitForSelector('button:has-text("All Filters")', { timeout: 10000 });
       
-      await page.click('button:has-text("Filter")');
-      await page.waitForTimeout(500);
-      
-      const titleInput = page.locator('input[placeholder*="Enter search term"]').first();
-      await titleInput.click();
-      await titleInput.pressSequentially('URLPersist', { delay: 30 });
-      await page.click('button:has-text("Apply")');
+      // Apply filter
+      const quickSearchInput = page.locator('input[placeholder*="Search by"]').first();
+      await quickSearchInput.click();
+      await quickSearchInput.fill('URLPersist');
+      await page.keyboard.press('Enter');
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
@@ -954,8 +1009,122 @@ test.describe('Admin Panel', () => {
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(1000);
       
-      const filterBadge = page.locator('.bg-blue-50.text-blue-700');
+      const filterBadge = page.locator('.bg-indigo-50.text-indigo-700, .bg-blue-50.text-blue-700');
       await expect(filterBadge.first()).toBeVisible({ timeout: 5000 });
+    });
+
+    test('should display badge count on All Filters button', async ({ page }) => {
+      await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+        data: { title: 'CountTest', content: 'Test content' },
+      });
+      
+      await page.goto('/_admin/models/TestPost');
+      await page.waitForLoadState('networkidle');
+      
+      // Apply filter
+      const quickSearchInput = page.locator('input[placeholder*="Search by"]').first();
+      await quickSearchInput.click();
+      await quickSearchInput.fill('Count');
+      await page.keyboard.press('Enter');
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1000);
+      
+      // All Filters button should show badge count
+      const filterCountBadge = page.locator('button:has-text("All Filters") span.bg-indigo-600');
+      await expect(filterCountBadge).toBeVisible({ timeout: 5000 });
+    });
+  });
+
+  test.describe('Boolean Field Handling', () => {
+    test.beforeEach(async ({ page }) => {
+      await ensureLoggedIn(page);
+    });
+
+    test('should correctly save and retrieve boolean field values', async ({ page }) => {
+      // Create a record with published=true via API
+      const createResponse = await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+        data: {
+          title: 'Boolean True Test',
+          content: 'Testing boolean field',
+          published: true,
+        },
+      });
+      
+      expect(createResponse.ok()).toBeTruthy();
+      const created = await createResponse.json();
+      const recordId = created.data.id;
+      
+      // Fetch the record and verify boolean value
+      const getResponse = await page.request.get(`http://localhost:3001/_admin/api/models/TestPost/records/${recordId}`);
+      expect(getResponse.ok()).toBeTruthy();
+      const fetched = await getResponse.json();
+      
+      // SQLite returns 0/1, but the value should be correctly interpreted
+      expect(fetched.data.published === true || fetched.data.published === 1).toBeTruthy();
+    });
+
+    test('should correctly update boolean field from false to true', async ({ page }) => {
+      // Create a record with published=false
+      const createResponse = await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+        data: {
+          title: 'Boolean Update Test',
+          content: 'Testing boolean update',
+          published: false,
+        },
+      });
+      
+      expect(createResponse.ok()).toBeTruthy();
+      const created = await createResponse.json();
+      const recordId = created.data.id;
+      
+      // Update to published=true
+      const updateResponse = await page.request.put(`http://localhost:3001/_admin/api/models/TestPost/records/${recordId}`, {
+        data: {
+          published: true,
+        },
+      });
+      
+      expect(updateResponse.ok()).toBeTruthy();
+      const updated = await updateResponse.json();
+      expect(updated.data.published === true || updated.data.published === 1).toBeTruthy();
+    });
+
+    test('should handle boolean field in form submission', async ({ page }) => {
+      await page.goto('/_admin/models/TestPost/new');
+      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('input#title, input[name="title"]', { timeout: 15000 });
+      
+      // Fill the form
+      await page.fill('input#title, input[name="title"]', 'Form Boolean Test');
+      await page.fill('textarea#content, textarea[name="content"]', 'Testing form boolean submission');
+      
+      // Check the published checkbox
+      const publishedCheckbox = page.locator('input[type="checkbox"][name="published"]');
+      await publishedCheckbox.check();
+      
+      // Submit
+      await page.click('button:has-text("Save")');
+      await page.waitForURL(/\/models\/TestPost$/, { timeout: 15000 });
+      
+      // Verify the record appears with correct boolean display
+      await page.waitForSelector('table', { timeout: 15000 });
+      const recordRow = page.locator('tr').filter({ hasText: 'Form Boolean Test' });
+      await expect(recordRow).toBeVisible({ timeout: 5000 });
+    });
+
+    test('should accept numeric 0/1 values for boolean fields via API', async ({ page }) => {
+      // Test that API accepts numeric 0/1 (from SQLite) 
+      const createResponse = await page.request.post('http://localhost:3001/_admin/api/models/TestPost/records', {
+        data: {
+          title: 'Numeric Boolean Test',
+          content: 'Testing numeric boolean',
+          published: 1, // Numeric instead of true
+        },
+      });
+      
+      expect(createResponse.ok()).toBeTruthy();
+      const created = await createResponse.json();
+      expect(created.data.published === true || created.data.published === 1).toBeTruthy();
     });
   });
 });

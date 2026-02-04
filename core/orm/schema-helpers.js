@@ -477,7 +477,15 @@ function createSchemaHelpers(z) {
      */
     boolean(options = {}) {
       const { nullable = false, default: defaultValue, ...rest } = options;
-      let schema = z.boolean();
+      // Use preprocess to handle numeric 0/1 from SQLite and string values
+      let schema = z.preprocess(
+        (val) => {
+          if (val === 0 || val === '0' || val === 'false') return false;
+          if (val === 1 || val === '1' || val === 'true') return true;
+          return val;
+        },
+        z.boolean()
+      );
       if (defaultValue !== undefined) {
         schema = schema.default(defaultValue);
       }

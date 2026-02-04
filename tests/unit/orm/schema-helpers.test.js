@@ -198,6 +198,39 @@ describe('Schema Helpers', () => {
         
         expect(meta.default).toBe(true);
       });
+
+      it('should coerce numeric 0/1 to boolean (SQLite compatibility)', () => {
+        const builder = zdb.boolean();
+        const schema = builder._finalize();
+        
+        // SQLite stores boolean as 0/1
+        expect(schema.parse(0)).toBe(false);
+        expect(schema.parse(1)).toBe(true);
+        
+        // Should also work with actual booleans
+        expect(schema.parse(false)).toBe(false);
+        expect(schema.parse(true)).toBe(true);
+      });
+
+      it('should coerce string values to boolean', () => {
+        const builder = zdb.boolean();
+        const schema = builder._finalize();
+        
+        // String values from form submissions
+        expect(schema.parse('0')).toBe(false);
+        expect(schema.parse('1')).toBe(true);
+        expect(schema.parse('false')).toBe(false);
+        expect(schema.parse('true')).toBe(true);
+      });
+
+      it('should handle nullable boolean with numeric values', () => {
+        const builder = zdb.boolean({ nullable: true });
+        const schema = builder._finalize();
+        
+        expect(schema.parse(null)).toBe(null);
+        expect(schema.parse(0)).toBe(false);
+        expect(schema.parse(1)).toBe(true);
+      });
     });
 
     describe('timestamp()', () => {
