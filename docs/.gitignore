@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Production build
+build/
+.docusaurus/
+
+# Generated files
+.cache-loader/
+
+# Misc
+.DS_Store
+*.log
+
+# Local env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
