@@ -6,6 +6,7 @@
 const express = require('express');
 const helmet = require('helmet');
 const nunjucks = require('nunjucks');
+const timeout = require('connect-timeout');
 
 const { mountPages } = require('./file-router');
 const { configureAssets } = require('./helpers');
@@ -110,6 +111,40 @@ function default500Html(err, isDev) {
 }
 
 /**
+ * Default 503 (timeout) page HTML
+ */
+function default503Html() {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <title>503 - Service Unavailable</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
+    .container { text-align: center; }
+    h1 { font-size: 4rem; margin: 0; color: #333; }
+    p { color: #666; margin: 1rem 0; }
+    a { color: #0066cc; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>503</h1>
+    <p>Request timed out. Please try again.</p>
+    <a href="/">← Back to Home</a>
+  </div>
+</body>
+</html>`;
+}
+
+/**
+ * Middleware to halt processing if request has timed out
+ */
+function haltOnTimedout(req, res, next) {
+  if (!req.timedout) next();
+}
+
+/**
  * Create and configure the Express app
  * @param {Object} options - Configuration options
  * @param {string} options.pagesDir - Path to pages directory
@@ -126,6 +161,8 @@ function default500Html(err, isDev) {
  * @param {Object} options.errorPages - Custom error page handlers
  * @param {Function|string} options.errorPages.notFound - Custom 404 handler or template path
  * @param {Function|string} options.errorPages.serverError - Custom 500 handler or template path
+ * @param {Function|string} options.errorPages.timeout - Custom timeout handler or template path
+ * @param {string|boolean} options.timeout - Request timeout (default: '30s', false to disable)
  * @returns {Object} { app, nunjucksEnv, pluginManager }
  */
 function createApp(options = {}) {
@@ -142,7 +179,8 @@ function createApp(options = {}) {
     middlewares = {},
     plugins = [],
     assets: assetsConfig = {},
-    errorPages = {}
+    errorPages = {},
+    timeout: timeoutConfig = '30s'
   } = options;
   
   // Create plugin manager
@@ -170,12 +208,22 @@ function createApp(options = {}) {
     app.use(helmet(finalConfig));
   }
   
+  // Request timeout middleware
+  if (timeoutConfig !== false) {
+    app.use(timeout(timeoutConfig));
+  }
+  
   // Trust proxy (for correct req.ip, req.protocol behind reverse proxy)
   app.set('trust proxy', 1);
   
   // JSON body parser for API routes
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  
+  // Halt processing if request has timed out (after body parsers)
+  if (timeoutConfig !== false) {
+    app.use(haltOnTimedout);
+  }
   
   // Static files (if publicDir provided)
   if (publicDir) {
@@ -306,6 +354,37 @@ function createApp(options = {}) {
   
   // Error handler
   app.use((err, req, res, next) => {
+    // Handle timeout errors
+    if (req.timedout) {
+      console.error('Request timed out:', req.method, req.url);
+      res.status(503);
+      
+      // Custom timeout handler
+      if (typeof errorPages.timeout === 'function') {
+        return errorPages.timeout(req, res);
+      }
+      
+      // Custom timeout template
+      if (typeof errorPages.timeout === 'string') {
+        try {
+          const html = nunjucksEnv.render(errorPages.timeout, {
+            url: req.url,
+            method: req.method
+          });
+          return res.send(html);
+        } catch (e) {
+          console.error('Error rendering timeout template:', e);
+        }
+      }
+      
+      // Default timeout response
+      if (req.accepts('html')) {
+        return res.send(default503Html());
+      } else {
+        return res.json({ error: 'Request Timeout', status: 503 });
+      }
+    }
+    
     console.error('Server error:', err);
     res.status(err.status || 500);
     

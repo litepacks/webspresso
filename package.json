@@ -1,6 +1,6 @@
 {
   "name": "webspresso",
-  "version": "0.0.26",
+  "version": "0.0.27",
   "description": "Minimal, production-ready SSR framework for Node.js with file-based routing, Nunjucks templating, built-in i18n, and CLI tooling",
   "main": "index.js",
   "bin": {
@@ -46,6 +46,7 @@
   "dependencies": {
     "bcrypt": "^5.1.1",
     "commander": "^11.1.0",
+    "connect-timeout": "^1.9.1",
     "dayjs": "^1.11.19",
     "express": "^4.18.2",
     "express-session": "^1.18.0",
