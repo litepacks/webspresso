@@ -9,7 +9,7 @@ const nunjucks = require('nunjucks');
 const timeout = require('connect-timeout');
 
 const { mountPages } = require('./file-router');
-const { configureAssets } = require('./helpers');
+const { configureAssets, createHelpers, getScriptInjector } = require('./helpers');
 const { createPluginManager } = require('./plugin-manager');
 
 /**
@@ -322,22 +322,42 @@ function createApp(options = {}) {
     }
   }
   
+  // Helper to create error page context with fsy
+  function createErrorContext(req, extraData = {}) {
+    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const locale = req.query?.lang || process.env.DEFAULT_LOCALE || 'en';
+    
+    // Create fsy helpers
+    const fsy = createHelpers({ req, res: {}, baseUrl, locale });
+    
+    // Merge plugin helpers
+    const pluginHelpers = pluginManager.getHelpers();
+    Object.assign(fsy, pluginHelpers);
+    
+    return {
+      fsy,
+      locale,
+      isDev,
+      url: req.url,
+      method: req.method,
+      ...extraData
+    };
+  }
+  
   // 404 handler
   app.use((req, res) => {
     res.status(404);
+    const ctx = createErrorContext(req);
     
     // Custom handler function
     if (typeof errorPages.notFound === 'function') {
-      return errorPages.notFound(req, res);
+      return errorPages.notFound(req, res, ctx);
     }
     
     // Custom template
     if (typeof errorPages.notFound === 'string') {
       try {
-        const html = nunjucksEnv.render(errorPages.notFound, {
-          url: req.url,
-          method: req.method
-        });
+        const html = nunjucksEnv.render(errorPages.notFound, ctx);
         return res.send(html);
       } catch (e) {
         console.error('Error rendering 404 template:', e);
@@ -358,19 +378,17 @@ function createApp(options = {}) {
     if (req.timedout) {
       console.error('Request timed out:', req.method, req.url);
       res.status(503);
+      const ctx = createErrorContext(req);
       
       // Custom timeout handler
       if (typeof errorPages.timeout === 'function') {
-        return errorPages.timeout(req, res);
+        return errorPages.timeout(req, res, ctx);
       }
       
       // Custom timeout template
       if (typeof errorPages.timeout === 'string') {
         try {
-          const html = nunjucksEnv.render(errorPages.timeout, {
-            url: req.url,
-            method: req.method
-          });
+          const html = nunjucksEnv.render(errorPages.timeout, ctx);
           return res.send(html);
         } catch (e) {
           console.error('Error rendering timeout template:', e);
@@ -387,20 +405,20 @@ function createApp(options = {}) {
     
     console.error('Server error:', err);
     res.status(err.status || 500);
+    const ctx = createErrorContext(req, {
+      error: isDev ? err : { message: 'Internal Server Error' },
+      status: err.status || 500
+    });
     
     // Custom handler function
     if (typeof errorPages.serverError === 'function') {
-      return errorPages.serverError(err, req, res);
+      return errorPages.serverError(err, req, res, ctx);
     }
     
     // Custom template
     if (typeof errorPages.serverError === 'string') {
       try {
-        const html = nunjucksEnv.render(errorPages.serverError, {
-          error: isDev ? err : { message: 'Internal Server Error' },
-          status: err.status || 500,
-          isDev
-        });
+        const html = nunjucksEnv.render(errorPages.serverError, ctx);
         return res.send(html);
       } catch (e) {
         console.error('Error rendering 500 template:', e);
