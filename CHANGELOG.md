@@ -9,6 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Sitemap Plugin v2.0 - Dynamic Database Content
+- **Dynamic Sources**: Generate sitemap URLs from database records using `dynamicSources` option
+- **Model-based URLs**: Automatically fetch records from ORM models and generate URLs
+- **Custom Query Support**: Use custom query functions for complex filtering and joins
+- **URL Pattern Placeholders**: Support for `:param` and `[param]` style placeholders
+- **Field Mapping**: Map URL placeholders to different database field names
+- **Filter Function**: Filter which records appear in sitemap
+- **Transform Function**: Transform records before URL generation
+- **Caching**: Configurable cache with `cacheMaxAge` option (default: 5 minutes)
+- **Cache Invalidation**: `api.invalidateCache()` method for manual cache clearing
+- **New API Methods**: `addDynamicSource()`, `getDynamicSources()`, `invalidateCache()`
+- **Per-source i18n Control**: Disable i18n for specific sources with `i18n: false`
+
+#### Server Enhancements
+- **Request Timeout**: Added `connect-timeout` middleware with configurable timeout (default: 30s)
+- **Timeout Options**: `timeout` option in `createApp()` to configure or disable request timeout
+- **Timeout Error Pages**: Custom 503 error page support via `errorPages.timeout`
+- **Graceful Timeout Handling**: Proper request termination with `haltOnTimedout` helper
+
+#### Admin Panel Filter Redesign
+- **Descriptive Filter Operators**: Changed symbols (~, =, >, etc.) to readable text (Contains, Equals, Greater than)
+- **Quick Filters Bar**: Search input and "All Filters" button above table
+- **Filter Drawer**: Slide-in panel for advanced filtering options
+- **Boolean Filter UI**: Radio buttons (Yes/No/Any) for boolean field filtering
+- **Active Filters Display**: Badge-style display of currently applied filters
+
+### Fixed
+
+#### ORM Boolean Field Handling
+- **SQLite Boolean Coercion**: Fixed `z.boolean()` validation failing with SQLite's 0/1 values
+- **String Boolean Support**: Added support for string values ('true', 'false', '0', '1')
+- **Preprocess Integration**: Used `z.preprocess()` for automatic type conversion before validation
+
+### Changed
+- **Sitemap Plugin Version**: Bumped to 2.0.0 with breaking changes in dynamic URL handling
+
 #### W-Runtime (Experimental)
 - **Resumability**: Zero JavaScript execution on page load, islands hydrate lazily on first interaction
 - **Event Delegation**: Only 3 global event listeners (click, input, submit) instead of N listeners per element

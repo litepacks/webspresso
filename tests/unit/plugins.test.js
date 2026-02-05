@@ -283,7 +283,7 @@ describe('Sitemap Plugin', () => {
   it('should create plugin with default options', () => {
     const plugin = sitemapPlugin();
     expect(plugin.name).toBe('sitemap');
-    expect(plugin.version).toBe('1.0.0');
+    expect(plugin.version).toBe('2.0.0');
   });
 
   it('should expose API for dynamic URLs', () => {

@@ -318,7 +318,10 @@ const { app } = createApp({
     },
     
     // Option 2: Template path (rendered with Nunjucks)
-    serverError: 'errors/500.njk'
+    serverError: 'errors/500.njk',
+    
+    // Timeout error page (503)
+    timeout: 'errors/503.njk'
   }
 });
 ```
@@ -326,6 +329,20 @@ const { app } = createApp({
 Error templates receive these variables:
 - `404.njk`: `{ url, method }`
 - `500.njk`: `{ error, status, isDev }`
+- `503.njk`: `{ url, method, isDev }`
+
+**Request Timeout:**
+
+Configure request timeout with `connect-timeout`:
+
+```javascript
+const { app } = createApp({
+  pagesDir: './pages',
+  timeout: '30s',  // Default: 30 seconds
+  // timeout: '1m',  // 1 minute
+  // timeout: false, // Disable timeout
+});
+```
 
 **Asset Management:**
 
@@ -455,9 +472,36 @@ Options:
 
 **Sitemap Plugin:**
 - Generates `/sitemap.xml` from routes automatically
+- **Dynamic Database Content**: Generate URLs from database records
 - Excludes dynamic routes and API endpoints
 - Supports i18n with hreflang tags
 - Generates `/robots.txt`
+- Configurable caching for performance
+
+```javascript
+sitemapPlugin({
+  hostname: 'https://example.com',
+  db, // Database instance
+  dynamicSources: [
+    {
+      model: 'Post',                    // Model name
+      urlPattern: '/blog/:slug',        // URL pattern
+      lastmodField: 'updated_at',       // Field for lastmod
+      filter: (r) => r.published,       // Filter records
+      priority: 0.9,
+    },
+    {
+      // Custom query function
+      query: async (db) => {
+        return db.getRepository('Product')
+          .query()
+          .where('active', true)
+          .list();
+      },
+      urlPattern: '/products/:slug',
+    },
+  ],
+})
 
 **Analytics Plugin:**
 - Google Analytics (GA4) and Google Ads
