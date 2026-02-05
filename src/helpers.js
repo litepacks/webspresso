@@ -581,8 +581,377 @@ function createHelpers(ctx) {
     dateEndOf(date, unit = 'day') {
       if (!date) return dayjs();
       return dayjs(date).endOf(unit);
+    },
+
+    // ============================================
+    // Script Injection Helpers
+    // ============================================
+
+    /**
+     * Get injected head content
+     * @returns {string} HTML content for head section
+     */
+    injectHead() {
+      const injector = getScriptInjector();
+      let content = '';
+      
+      // Add styles
+      const styles = injector.getStylesContent();
+      if (styles) {
+        content += `<style id="webspresso-injected-styles">\n${styles}\n</style>\n`;
+      }
+      
+      // Add head scripts
+      content += injector.getHeadContent();
+      
+      return content;
+    },
+
+    /**
+     * Get injected body content (for end of body)
+     * @returns {string} HTML content for body end
+     */
+    injectBody() {
+      return getScriptInjector().getBodyContent();
+    },
+
+    /**
+     * Get dev toolbar HTML (only in development mode)
+     * @param {Object} options - { plugins: Array, customLinks: Array }
+     * @returns {string} Dev toolbar HTML
+     */
+    devToolbar(options = {}) {
+      const injector = getScriptInjector();
+      const registeredPlugins = injector.getPlugins();
+      return generateDevToolbar({
+        ...options,
+        plugins: [...registeredPlugins, ...(options.plugins || [])]
+      });
+    },
+
+    /**
+     * Get the script injector instance for advanced usage
+     * @returns {ScriptInjector}
+     */
+    getInjector() {
+      return getScriptInjector();
     }
   };
+}
+
+/**
+ * Script Injector - manages script/style injection for templates
+ */
+class ScriptInjector {
+  constructor() {
+    this.headScripts = [];
+    this.bodyScripts = [];
+    this.styles = [];
+    this.plugins = [];
+  }
+
+  /**
+   * Add content to head section
+   * @param {string} content - HTML/script content
+   * @param {Object} options - { priority: number, id: string }
+   */
+  addHead(content, options = {}) {
+    this.headScripts.push({
+      content,
+      priority: options.priority || 0,
+      id: options.id || null
+    });
+  }
+
+  /**
+   * Add content to body end section
+   * @param {string} content - HTML/script content
+   * @param {Object} options - { priority: number, id: string }
+   */
+  addBody(content, options = {}) {
+    this.bodyScripts.push({
+      content,
+      priority: options.priority || 0,
+      id: options.id || null
+    });
+  }
+
+  /**
+   * Add CSS styles
+   * @param {string} css - CSS content
+   * @param {Object} options - { id: string }
+   */
+  addStyle(css, options = {}) {
+    this.styles.push({
+      content: css,
+      id: options.id || null
+    });
+  }
+
+  /**
+   * Register a plugin for dev toolbar
+   * @param {Object} plugin - { name, path, icon, description }
+   */
+  registerPlugin(plugin) {
+    this.plugins.push(plugin);
+  }
+
+  /**
+   * Get head content sorted by priority
+   */
+  getHeadContent() {
+    const sorted = [...this.headScripts].sort((a, b) => b.priority - a.priority);
+    return sorted.map(s => s.content).join('\n');
+  }
+
+  /**
+   * Get body content sorted by priority
+   */
+  getBodyContent() {
+    const sorted = [...this.bodyScripts].sort((a, b) => b.priority - a.priority);
+    return sorted.map(s => s.content).join('\n');
+  }
+
+  /**
+   * Get styles content
+   */
+  getStylesContent() {
+    return this.styles.map(s => s.content).join('\n');
+  }
+
+  /**
+   * Get registered plugins
+   */
+  getPlugins() {
+    return [...this.plugins];
+  }
+
+  /**
+   * Clear all injections
+   */
+  clear() {
+    this.headScripts = [];
+    this.bodyScripts = [];
+    this.styles = [];
+  }
+}
+
+// Global script injector instance
+let globalInjector = new ScriptInjector();
+
+/**
+ * Get or create the global script injector
+ */
+function getScriptInjector() {
+  return globalInjector;
+}
+
+/**
+ * Reset the global script injector (useful for testing)
+ */
+function resetScriptInjector() {
+  globalInjector = new ScriptInjector();
+  return globalInjector;
+}
+
+/**
+ * Generate dev toolbar HTML
+ * @param {Object} options - { plugins: Array, routes: Array }
+ */
+function generateDevToolbar(options = {}) {
+  const { plugins = [], customLinks = [] } = options;
+  const isDev = process.env.NODE_ENV !== 'production';
+  
+  if (!isDev) return '';
+
+  // Default plugin links
+  const defaultPlugins = [
+    { name: 'Dashboard', path: '/_webspresso', icon: '📊', description: 'Development Dashboard' },
+    { name: 'Admin', path: '/_admin', icon: '⚙️', description: 'Admin Panel' },
+    { name: 'Schema', path: '/_schema', icon: '🗂️', description: 'Schema Explorer' },
+  ];
+
+  const allPlugins = [...defaultPlugins, ...plugins, ...customLinks];
+
+  const toolbarStyles = `
+    <style id="webspresso-dev-toolbar-styles">
+      #webspresso-dev-toolbar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        border-top: 1px solid #0f3460;
+        padding: 0;
+        z-index: 99999;
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+        font-size: 12px;
+        transform: translateY(calc(100% - 32px));
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      #webspresso-dev-toolbar:hover,
+      #webspresso-dev-toolbar.expanded {
+        transform: translateY(0);
+      }
+      #webspresso-dev-toolbar-toggle {
+        position: absolute;
+        top: -24px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        border: 1px solid #0f3460;
+        border-bottom: none;
+        border-radius: 8px 8px 0 0;
+        padding: 4px 16px;
+        cursor: pointer;
+        color: #e94560;
+        font-weight: 600;
+        font-size: 10px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+      }
+      #webspresso-dev-toolbar-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 16px;
+        border-bottom: 1px solid #0f3460;
+        background: rgba(0,0,0,0.2);
+      }
+      #webspresso-dev-toolbar-brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #e94560;
+        font-weight: 700;
+        font-size: 11px;
+        letter-spacing: 0.5px;
+      }
+      #webspresso-dev-toolbar-brand svg {
+        width: 16px;
+        height: 16px;
+      }
+      #webspresso-dev-toolbar-info {
+        color: #a1a1aa;
+        font-size: 10px;
+      }
+      #webspresso-dev-toolbar-content {
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+        padding: 0;
+        overflow-x: auto;
+      }
+      .webspresso-dev-toolbar-section {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 12px 16px;
+        border-right: 1px solid #0f3460;
+      }
+      .webspresso-dev-toolbar-section:last-child {
+        border-right: none;
+      }
+      .webspresso-dev-toolbar-section-title {
+        color: #a1a1aa;
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-right: 8px;
+      }
+      .webspresso-dev-toolbar-link {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        background: rgba(233, 69, 96, 0.1);
+        border: 1px solid rgba(233, 69, 96, 0.2);
+        border-radius: 6px;
+        color: #f1f1f1;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+      }
+      .webspresso-dev-toolbar-link:hover {
+        background: rgba(233, 69, 96, 0.2);
+        border-color: #e94560;
+        color: #fff;
+        transform: translateY(-1px);
+      }
+      .webspresso-dev-toolbar-link-icon {
+        font-size: 14px;
+      }
+      .webspresso-dev-toolbar-link-text {
+        font-weight: 500;
+      }
+      .webspresso-dev-toolbar-close {
+        background: none;
+        border: none;
+        color: #a1a1aa;
+        cursor: pointer;
+        padding: 4px 8px;
+        font-size: 16px;
+        transition: color 0.2s;
+      }
+      .webspresso-dev-toolbar-close:hover {
+        color: #e94560;
+      }
+      @media (max-width: 768px) {
+        #webspresso-dev-toolbar {
+          font-size: 11px;
+        }
+        .webspresso-dev-toolbar-link {
+          padding: 4px 8px;
+        }
+      }
+    </style>
+  `;
+
+  const pluginLinks = allPlugins.map(p => `
+    <a href="${p.path}" class="webspresso-dev-toolbar-link" title="${p.description || p.name}">
+      <span class="webspresso-dev-toolbar-link-icon">${p.icon || '🔗'}</span>
+      <span class="webspresso-dev-toolbar-link-text">${p.name}</span>
+    </a>
+  `).join('');
+
+  const toolbarHtml = `
+    ${toolbarStyles}
+    <div id="webspresso-dev-toolbar">
+      <div id="webspresso-dev-toolbar-toggle">⚡ DEV</div>
+      <div id="webspresso-dev-toolbar-header">
+        <div id="webspresso-dev-toolbar-brand">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor" opacity="0.3"/>
+            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          WEBSPRESSO DEV
+        </div>
+        <div id="webspresso-dev-toolbar-info">
+          Node ${process.version} | ${new Date().toLocaleTimeString()}
+        </div>
+      </div>
+      <div id="webspresso-dev-toolbar-content">
+        <div class="webspresso-dev-toolbar-section">
+          <span class="webspresso-dev-toolbar-section-title">Quick Links</span>
+          ${pluginLinks}
+        </div>
+      </div>
+    </div>
+    <script>
+      (function() {
+        const toolbar = document.getElementById('webspresso-dev-toolbar');
+        const toggle = document.getElementById('webspresso-dev-toolbar-toggle');
+        if (toolbar && toggle) {
+          toggle.addEventListener('click', function() {
+            toolbar.classList.toggle('expanded');
+          });
+        }
+      })();
+    </script>
+  `;
+
+  return toolbarHtml;
 }
 
 /**
@@ -637,6 +1006,10 @@ module.exports = {
   utils,
   AssetManager,
   configureAssets,
-  getAssetManager
+  getAssetManager,
+  ScriptInjector,
+  getScriptInjector,
+  resetScriptInjector,
+  generateDevToolbar
 };
 

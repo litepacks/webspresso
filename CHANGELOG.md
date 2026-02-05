@@ -28,6 +28,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Timeout Error Pages**: Custom 503 error page support via `errorPages.timeout`
 - **Graceful Timeout Handling**: Proper request termination with `haltOnTimedout` helper
 
+#### Script Injection System
+- **ScriptInjector Class**: New class for managing dynamic content injection into templates
+- **Head Injection**: `fsy.injectHead()` helper to inject content into `<head>` section
+- **Body Injection**: `fsy.injectBody()` helper to inject content at end of `<body>`
+- **Style Injection**: Inject CSS styles dynamically from plugins
+- **Priority Sorting**: Content sorted by priority (higher priority first)
+- **Plugin API**: `ctx.injectHead()`, `ctx.injectBody()`, `ctx.injectStyle()` methods for plugins
+
+#### Dev Toolbar
+- **Development Toolbar**: Fixed toolbar at bottom of page in development mode
+- **Quick Links**: Default links to Dashboard, Admin Panel, Schema Explorer
+- **Plugin Registration**: Plugins can register custom links via `ctx.registerDevLink()`
+- **Hover Expand**: Toolbar expands on hover, minimized by default
+- **Modern Design**: Dark theme with gradient background and smooth animations
+- **Auto-hide in Production**: Toolbar automatically hidden in production mode
+
 #### Admin Panel Filter Redesign
 - **Descriptive Filter Operators**: Changed symbols (~, =, >, etc.) to readable text (Contains, Equals, Greater than)
 - **Quick Filters Bar**: Search input and "All Filters" button above table

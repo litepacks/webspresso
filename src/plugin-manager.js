@@ -333,6 +333,8 @@ class PluginManager {
    */
   _createPluginContext(plugin, context) {
     const self = this;
+    // Import script injector
+    const { getScriptInjector } = require('./helpers');
 
     return {
       app: context.app,
@@ -372,6 +374,52 @@ class PluginManager {
        */
       get routes() {
         return self.routes;
+      },
+
+      // ============================================
+      // Script Injection API
+      // ============================================
+
+      /**
+       * Inject content into head section
+       * @param {string} content - HTML/script content
+       * @param {Object} options - { priority: number, id: string }
+       */
+      injectHead(content, options = {}) {
+        getScriptInjector().addHead(content, options);
+      },
+
+      /**
+       * Inject content into body end section
+       * @param {string} content - HTML/script content
+       * @param {Object} options - { priority: number, id: string }
+       */
+      injectBody(content, options = {}) {
+        getScriptInjector().addBody(content, options);
+      },
+
+      /**
+       * Inject CSS styles
+       * @param {string} css - CSS content
+       * @param {Object} options - { id: string }
+       */
+      injectStyle(css, options = {}) {
+        getScriptInjector().addStyle(css, options);
+      },
+
+      /**
+       * Register a link for the dev toolbar
+       * @param {Object} link - { name, path, icon, description }
+       */
+      registerDevLink(link) {
+        getScriptInjector().registerPlugin(link);
+      },
+
+      /**
+       * Get the script injector instance for advanced usage
+       */
+      getScriptInjector() {
+        return getScriptInjector();
       }
     };
   }

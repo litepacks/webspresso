@@ -2,7 +2,14 @@
  * Unit Tests for src/helpers.js
  */
 
-const { createHelpers, utils } = require('../../src/helpers');
+const { 
+  createHelpers, 
+  utils, 
+  ScriptInjector, 
+  getScriptInjector, 
+  resetScriptInjector,
+  generateDevToolbar 
+} = require('../../src/helpers');
 
 describe('helpers.js', () => {
   describe('utils (pure functions)', () => {
@@ -252,6 +259,196 @@ describe('helpers.js', () => {
         expect(helpers.isPath('/tools/*')).toBe(true);
         expect(helpers.isPath('/about/*')).toBe(false);
       });
+    });
+
+    describe('injectHead', () => {
+      beforeEach(() => {
+        resetScriptInjector();
+      });
+
+      it('should return injected head content', () => {
+        const injector = getScriptInjector();
+        injector.addHead('<script>console.log("test")</script>');
+        
+        const content = helpers.injectHead();
+        expect(content).toContain('<script>console.log("test")</script>');
+      });
+
+      it('should include injected styles', () => {
+        const injector = getScriptInjector();
+        injector.addStyle('.test { color: red; }');
+        
+        const content = helpers.injectHead();
+        expect(content).toContain('.test { color: red; }');
+        expect(content).toContain('webspresso-injected-styles');
+      });
+    });
+
+    describe('injectBody', () => {
+      beforeEach(() => {
+        resetScriptInjector();
+      });
+
+      it('should return injected body content', () => {
+        const injector = getScriptInjector();
+        injector.addBody('<div id="modal"></div>');
+        
+        const content = helpers.injectBody();
+        expect(content).toContain('<div id="modal"></div>');
+      });
+    });
+
+    describe('devToolbar', () => {
+      const originalEnv = process.env.NODE_ENV;
+
+      afterEach(() => {
+        process.env.NODE_ENV = originalEnv;
+        resetScriptInjector();
+      });
+
+      it('should return toolbar HTML in development mode', () => {
+        process.env.NODE_ENV = 'development';
+        
+        const toolbar = helpers.devToolbar();
+        expect(toolbar).toContain('webspresso-dev-toolbar');
+        expect(toolbar).toContain('Dashboard');
+        expect(toolbar).toContain('Admin');
+        expect(toolbar).toContain('Schema');
+      });
+
+      it('should return empty string in production mode', () => {
+        process.env.NODE_ENV = 'production';
+        
+        const toolbar = helpers.devToolbar();
+        expect(toolbar).toBe('');
+      });
+
+      it('should include registered plugins', () => {
+        process.env.NODE_ENV = 'development';
+        
+        const injector = getScriptInjector();
+        injector.registerPlugin({ 
+          name: 'Custom Plugin', 
+          path: '/custom', 
+          icon: '🔧',
+          description: 'Test plugin'
+        });
+        
+        const toolbar = helpers.devToolbar();
+        expect(toolbar).toContain('Custom Plugin');
+        expect(toolbar).toContain('/custom');
+        expect(toolbar).toContain('🔧');
+      });
+    });
+  });
+
+  describe('ScriptInjector', () => {
+    let injector;
+
+    beforeEach(() => {
+      injector = new ScriptInjector();
+    });
+
+    describe('addHead', () => {
+      it('should add content to head scripts', () => {
+        injector.addHead('<meta name="test" content="value">');
+        
+        const content = injector.getHeadContent();
+        expect(content).toContain('<meta name="test" content="value">');
+      });
+
+      it('should sort by priority (higher first)', () => {
+        injector.addHead('low', { priority: 1 });
+        injector.addHead('high', { priority: 10 });
+        injector.addHead('medium', { priority: 5 });
+        
+        const content = injector.getHeadContent();
+        expect(content.indexOf('high')).toBeLessThan(content.indexOf('medium'));
+        expect(content.indexOf('medium')).toBeLessThan(content.indexOf('low'));
+      });
+    });
+
+    describe('addBody', () => {
+      it('should add content to body scripts', () => {
+        injector.addBody('<script src="/app.js"></script>');
+        
+        const content = injector.getBodyContent();
+        expect(content).toContain('<script src="/app.js"></script>');
+      });
+    });
+
+    describe('addStyle', () => {
+      it('should add CSS styles', () => {
+        injector.addStyle('body { margin: 0; }');
+        
+        const content = injector.getStylesContent();
+        expect(content).toContain('body { margin: 0; }');
+      });
+    });
+
+    describe('registerPlugin', () => {
+      it('should register plugin for dev toolbar', () => {
+        injector.registerPlugin({ name: 'Test', path: '/test' });
+        
+        const plugins = injector.getPlugins();
+        expect(plugins).toHaveLength(1);
+        expect(plugins[0].name).toBe('Test');
+      });
+    });
+
+    describe('clear', () => {
+      it('should clear all injections', () => {
+        injector.addHead('head');
+        injector.addBody('body');
+        injector.addStyle('style');
+        
+        injector.clear();
+        
+        expect(injector.getHeadContent()).toBe('');
+        expect(injector.getBodyContent()).toBe('');
+        expect(injector.getStylesContent()).toBe('');
+      });
+    });
+  });
+
+  describe('generateDevToolbar', () => {
+    const originalEnv = process.env.NODE_ENV;
+
+    afterEach(() => {
+      process.env.NODE_ENV = originalEnv;
+    });
+
+    it('should generate toolbar with default plugins', () => {
+      process.env.NODE_ENV = 'development';
+      
+      const toolbar = generateDevToolbar();
+      expect(toolbar).toContain('Dashboard');
+      expect(toolbar).toContain('/_webspresso');
+      expect(toolbar).toContain('Admin');
+      expect(toolbar).toContain('/_admin');
+      expect(toolbar).toContain('Schema');
+      expect(toolbar).toContain('/_schema');
+    });
+
+    it('should include custom links', () => {
+      process.env.NODE_ENV = 'development';
+      
+      const toolbar = generateDevToolbar({
+        customLinks: [
+          { name: 'Docs', path: '/docs', icon: '📚' }
+        ]
+      });
+      
+      expect(toolbar).toContain('Docs');
+      expect(toolbar).toContain('/docs');
+      expect(toolbar).toContain('📚');
+    });
+
+    it('should return empty in production', () => {
+      process.env.NODE_ENV = 'production';
+      
+      const toolbar = generateDevToolbar();
+      expect(toolbar).toBe('');
     });
   });
 });

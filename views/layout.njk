@@ -107,6 +107,9 @@
     }
   </style>
   
+  {# Injected head content from plugins #}
+  {{ fsy.injectHead() | safe }}
+  
   {% block head %}{% endblock %}
 </head>
 <body class="bg-ink-50 text-ink-800 min-h-screen flex flex-col">
@@ -161,6 +164,12 @@
   </footer>
   
   {% block scripts %}{% endblock %}
+  
+  {# Injected body content from plugins #}
+  {{ fsy.injectBody() | safe }}
+  
+  {# Dev toolbar (only visible in development mode) #}
+  {{ fsy.devToolbar() | safe }}
 </body>
 </html>
 
