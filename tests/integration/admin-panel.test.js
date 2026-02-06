@@ -380,7 +380,29 @@ describe('Admin Panel Integration', () => {
   });
 
   describe('Filtering', () => {
+    let adminCookie;
+    let testRepo;
+
     beforeEach(async () => {
+      // Setup admin user first
+      const setupRes = await request(app)
+        .post('/_admin/api/auth/setup')
+        .send({
+          email: 'filteradmin@test.com',
+          password: 'password123',
+          name: 'Filter Admin',
+        });
+
+      const loginRes = await request(app)
+        .post('/_admin/api/auth/login')
+        .send({
+          email: 'filteradmin@test.com',
+          password: 'password123',
+        });
+
+      adminCookie = loginRes.headers['set-cookie'];
+      testRepo = db.getRepository('TestModel');
+
       // Create test records with different values
       await testRepo.create({ name: 'Apple', email: 'apple@test.com', active: true });
       await testRepo.create({ name: 'Banana', email: 'banana@test.com', active: false });
@@ -416,7 +438,8 @@ describe('Admin Panel Integration', () => {
         .expect(200);
 
       expect(res.body).toHaveProperty('data');
-      expect(res.body.data.every(r => r.active === true)).toBe(true);
+      // SQLite returns 0/1 for boolean, so use Boolean() or truthy check
+      expect(res.body.data.every(r => Boolean(r.active))).toBe(true);
     });
 
     it('should filter with multiple conditions', async () => {
@@ -426,7 +449,8 @@ describe('Admin Panel Integration', () => {
         .expect(200);
 
       expect(res.body).toHaveProperty('data');
-      expect(res.body.data.every(r => r.name.toLowerCase().includes('a') && r.active === true)).toBe(true);
+      // SQLite returns 0/1 for boolean, so use Boolean() or truthy check
+      expect(res.body.data.every(r => r.name.toLowerCase().includes('a') && Boolean(r.active))).toBe(true);
     });
 
     it('should return empty results when filter matches nothing', async () => {

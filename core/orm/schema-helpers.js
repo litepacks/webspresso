@@ -682,9 +682,22 @@ function extractColumnsFromSchema(schema) {
   const shape = schema.shape;
 
   for (const [key, fieldSchema] of Object.entries(shape)) {
+    let schemaToCheck = fieldSchema;
+    
+    // Handle SchemaBuilder instances - finalize them first to get metadata
+    if (fieldSchema && typeof fieldSchema._finalize === 'function') {
+      schemaToCheck = fieldSchema._finalize();
+    }
+    
+    // Also check if it's a SchemaBuilder with _baseMeta (for unfinalized builders)
+    if (fieldSchema && fieldSchema._baseMeta) {
+      columns.set(key, fieldSchema._baseMeta);
+      continue;
+    }
+    
     // Unwrap optional/nullable wrappers to get to the base schema
-    let current = fieldSchema;
-    while (current._def) {
+    let current = schemaToCheck;
+    while (current && current._def) {
       if (current._def.innerType) {
         current = current._def.innerType;
       } else if (current._def.schema) {
@@ -694,8 +707,8 @@ function extractColumnsFromSchema(schema) {
       }
     }
 
-    // Check the original field schema for metadata
-    const meta = getColumnMeta(fieldSchema) || getColumnMeta(current);
+    // Check the schema for metadata
+    const meta = getColumnMeta(schemaToCheck) || (current ? getColumnMeta(current) : null);
     if (meta) {
       columns.set(key, meta);
     }

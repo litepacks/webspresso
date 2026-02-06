@@ -12,7 +12,7 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 - **Lifecycle Hooks**: Global and route-level hooks for request processing
 - **Template Helpers**: Laravel-inspired helper functions available in templates
 - **Plugin System**: Extensible architecture with version control and inter-plugin communication
-- **Built-in Plugins**: Development dashboard, sitemap generator, analytics integration (Google, Yandex, Bing)
+- **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing)
 
 ## Installation
 
@@ -526,6 +526,49 @@ Template helpers from analytics plugin:
 ```
 
 Individual helpers: `gtag()`, `gtm()`, `gtmNoscript()`, `yandexMetrika()`, `bingUET()`, `facebookPixel()`, `allAnalytics()`
+
+**SEO Checker Plugin:**
+- Client-side SEO analysis tool (inspired by django-check-seo)
+- Integrated with dev toolbar
+- 40+ SEO checks across 7 categories
+- Real-time analysis with score calculation
+- Only active in development mode
+
+```javascript
+const { seoCheckerPlugin } = require('webspresso/plugins');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  plugins: [
+    seoCheckerPlugin({
+      settings: {
+        titleLength: [30, 60],        // Min/max title length
+        descriptionLength: [50, 160], // Min/max description length
+        minContentWords: 300,         // Minimum content words
+        minInternalLinks: 1,          // Minimum internal links
+        minExternalLinks: 1,          // Minimum external links
+        maxUrlLength: 75,             // Maximum URL length
+        maxUrlDepth: 3                // Maximum URL depth
+      }
+    })
+  ]
+});
+```
+
+SEO Check Categories:
+| Category | Checks |
+|----------|--------|
+| **Meta** | Title, Description, Canonical, Viewport, Robots, Charset, Lang |
+| **Headings** | H1 existence, Single H1, Hierarchy, Non-empty headings |
+| **Content** | Word count, Paragraphs, Keyword usage, Keywords early |
+| **Links** | Internal links, External links, Nofollow, Anchor text |
+| **Images** | Alt text, Descriptive alt, Dimensions, Lazy loading |
+| **Structured** | Open Graph, Twitter Card, JSON-LD, Hreflang |
+| **URL** | Length, Depth, Readability, HTTPS |
+
+The SEO Checker panel appears as a floating widget and can be opened via:
+- Dev toolbar "SEO Check" button
+- Floating toggle button (🔍) in bottom-right corner
 
 ### Creating Custom Plugins
 

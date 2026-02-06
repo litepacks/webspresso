@@ -51,6 +51,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boolean Filter UI**: Radio buttons (Yes/No/Any) for boolean field filtering
 - **Active Filters Display**: Badge-style display of currently applied filters
 
+#### SEO Checker Plugin (New)
+- **Client-side SEO Analysis**: Inspired by django-check-seo, performs 40+ SEO checks in browser
+- **7 Check Categories**: Meta, Headings, Content, Links, Images, Structured Data, URL
+- **Meta Checks**: Title/description length, canonical, viewport, robots, charset, language
+- **Heading Checks**: H1 existence/uniqueness, heading hierarchy, non-empty headings
+- **Content Checks**: Word count, paragraph structure, keyword usage and placement
+- **Link Checks**: Internal/external links, nofollow analysis, anchor text quality
+- **Image Checks**: Alt text, descriptive alt, dimensions, lazy loading
+- **Structured Data Checks**: Open Graph, Twitter Card, JSON-LD, hreflang
+- **URL Checks**: Length, depth, readability, HTTPS
+- **Score Calculation**: Overall SEO score (0-100) based on weighted checks
+- **Dev Toolbar Integration**: "SEO Check" button in dev toolbar
+- **Floating Panel**: Beautiful dark-themed floating panel with category tabs
+- **Configurable Settings**: Customize thresholds for title length, word count, etc.
+- **Auto-disabled in Production**: Only active in development mode
+
 ### Fixed
 
 #### ORM Boolean Field Handling

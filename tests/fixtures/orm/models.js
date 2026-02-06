@@ -3,14 +3,13 @@
  * User belongs to Company, User has many Posts
  */
 
-const { z } = require('zod');
 const { zdb, defineModel, clearRegistry, hasModel, getModel } = require('../../../core/orm');
 
 // ============================================================================
 // Company Model
 // ============================================================================
 
-const CompanySchema = z.object({
+const CompanySchema = zdb.schema({
   id: zdb.id(),
   name: zdb.string({ maxLength: 255 }),
   slug: zdb.string({ maxLength: 100, unique: true }),
@@ -22,7 +21,7 @@ const CompanySchema = z.object({
 // User Model
 // ============================================================================
 
-const UserSchema = z.object({
+const UserSchema = zdb.schema({
   id: zdb.id(),
   email: zdb.string({ maxLength: 255, unique: true, index: true }),
   name: zdb.string({ maxLength: 255 }),
@@ -37,7 +36,7 @@ const UserSchema = z.object({
 // Post Model
 // ============================================================================
 
-const PostSchema = z.object({
+const PostSchema = zdb.schema({
   id: zdb.id(),
   title: zdb.string({ maxLength: 255 }),
   content: zdb.text({ nullable: true }),
