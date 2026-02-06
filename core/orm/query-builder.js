@@ -7,6 +7,66 @@
 const { applyScopes, createScopeContext } = require('./scopes');
 
 /**
+ * Get JSON column names from model
+ * @param {import('./types').ModelDefinition} model - Model definition
+ * @returns {Set<string>} Set of JSON column names
+ */
+function getJsonColumns(model) {
+  const jsonCols = new Set();
+  if (model.columns) {
+    for (const [name, meta] of model.columns) {
+      if (meta.type === 'json') {
+        jsonCols.add(name);
+      }
+    }
+  }
+  return jsonCols;
+}
+
+/**
+ * Serialize JSON fields for database storage
+ * @param {Object} data - Data to serialize
+ * @param {Set<string>} jsonColumns - JSON column names
+ * @returns {Object} Serialized data
+ */
+function serializeJsonFields(data, jsonColumns) {
+  if (jsonColumns.size === 0) return data;
+  
+  const serialized = { ...data };
+  for (const col of jsonColumns) {
+    if (col in serialized && serialized[col] !== null && serialized[col] !== undefined) {
+      if (typeof serialized[col] !== 'string') {
+        serialized[col] = JSON.stringify(serialized[col]);
+      }
+    }
+  }
+  return serialized;
+}
+
+/**
+ * Deserialize JSON fields from database
+ * @param {Object} record - Record from database
+ * @param {Set<string>} jsonColumns - JSON column names
+ * @returns {Object} Deserialized record
+ */
+function deserializeJsonFields(record, jsonColumns) {
+  if (!record || jsonColumns.size === 0) return record;
+  
+  for (const col of jsonColumns) {
+    if (col in record && record[col] !== null && record[col] !== undefined) {
+      if (typeof record[col] === 'string') {
+        try {
+          record[col] = JSON.parse(record[col]);
+        } catch {
+          // If parsing fails, keep the original string value
+        }
+      }
+    }
+  }
+  return record;
+}
+
+/**
  * Create a new query builder
  * @param {import('./types').ModelDefinition} model - Model definition
  * @param {import('knex').Knex|import('knex').Knex.Transaction} knex - Knex instance or transaction
@@ -31,6 +91,7 @@ class QueryBuilder {
     this.model = model;
     this.knex = knex;
     this.scopeContext = initialContext || createScopeContext();
+    this.jsonColumns = getJsonColumns(model);
     
     /** @type {import('./types').QueryState} */
     this.state = {
@@ -315,7 +376,11 @@ class QueryBuilder {
   async first() {
     const qb = this.toKnex().first();
     const result = await qb;
-    return result || null;
+    if (!result) return null;
+    
+    // Deserialize JSON fields
+    deserializeJsonFields(result, this.jsonColumns);
+    return result;
   }
 
   /**
@@ -323,7 +388,21 @@ class QueryBuilder {
    * @returns {Promise<Object[]>}
    */
   async list() {
-    return this.toKnex();
+    const results = await this.toKnex();
+    
+    // Deserialize JSON fields
+    for (const record of results) {
+      deserializeJsonFields(record, this.jsonColumns);
+    }
+    return results;
+  }
+
+  /**
+   * Alias for list()
+   * @returns {Promise<Object[]>}
+   */
+  async get() {
+    return this.list();
   }
 
   /**
@@ -362,6 +441,11 @@ class QueryBuilder {
     const offset = (page - 1) * perPage;
     const data = await this.toKnex().limit(perPage).offset(offset);
 
+    // Deserialize JSON fields
+    for (const record of data) {
+      deserializeJsonFields(record, this.jsonColumns);
+    }
+
     return {
       data,
       total,
@@ -385,7 +469,9 @@ class QueryBuilder {
    * @returns {Promise<number>} Number of updated records
    */
   async update(data) {
-    return this.toKnex().update(data);
+    // Serialize JSON fields
+    const serialized = serializeJsonFields(data, this.jsonColumns);
+    return this.toKnex().update(serialized);
   }
 
   /**
@@ -410,6 +496,7 @@ class QueryBuilder {
    */
   clone() {
     const cloned = new QueryBuilder(this.model, this.knex, { ...this.scopeContext });
+    cloned.jsonColumns = this.jsonColumns;
     cloned.state = {
       wheres: [...this.state.wheres],
       orderBys: [...this.state.orderBys],

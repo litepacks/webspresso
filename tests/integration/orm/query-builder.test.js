@@ -351,5 +351,114 @@ describe('Query Builder Integration', () => {
       expect(clonedResults.length).toBe(2);
     });
   });
+
+  describe('JSON field handling', () => {
+    it('should deserialize JSON fields with first()', async () => {
+      const metadata = { theme: 'dark', locale: 'tr' };
+      
+      // Create user with JSON metadata
+      await UserRepo.create({
+        email: 'json-qb@test.com',
+        name: 'JSON QB User',
+        metadata,
+      });
+
+      // Query using query builder
+      const user = await UserRepo.query()
+        .where({ email: 'json-qb@test.com' })
+        .first();
+
+      expect(user).not.toBeNull();
+      expect(typeof user.metadata).toBe('object');
+      expect(user.metadata.theme).toBe('dark');
+      expect(user.metadata.locale).toBe('tr');
+    });
+
+    it('should deserialize JSON fields with list()', async () => {
+      const metadata1 = { role: 'admin' };
+      const metadata2 = { role: 'user' };
+
+      await UserRepo.create({ email: 'json-list1@test.com', name: 'User 1', metadata: metadata1 });
+      await UserRepo.create({ email: 'json-list2@test.com', name: 'User 2', metadata: metadata2 });
+
+      const users = await UserRepo.query()
+        .where('email', 'like', 'json-list%')
+        .list();
+
+      expect(users.length).toBe(2);
+      expect(typeof users[0].metadata).toBe('object');
+      expect(typeof users[1].metadata).toBe('object');
+    });
+
+    it('should deserialize JSON fields with get() alias', async () => {
+      await UserRepo.create({
+        email: 'json-get@test.com',
+        name: 'Get User',
+        metadata: { test: true },
+      });
+
+      const users = await UserRepo.query()
+        .where({ email: 'json-get@test.com' })
+        .get();
+
+      expect(users.length).toBe(1);
+      expect(typeof users[0].metadata).toBe('object');
+      expect(users[0].metadata.test).toBe(true);
+    });
+
+    it('should deserialize JSON fields with paginate()', async () => {
+      await UserRepo.create({ email: 'json-page1@test.com', name: 'Page 1', metadata: { page: 1 } });
+      await UserRepo.create({ email: 'json-page2@test.com', name: 'Page 2', metadata: { page: 2 } });
+
+      const result = await UserRepo.query()
+        .where('email', 'like', 'json-page%')
+        .paginate(1, 10);
+
+      expect(result.data.length).toBe(2);
+      expect(typeof result.data[0].metadata).toBe('object');
+      expect(typeof result.data[1].metadata).toBe('object');
+    });
+
+    it('should serialize JSON fields with update()', async () => {
+      const user = await UserRepo.create({
+        email: 'json-update-qb@test.com',
+        name: 'Update QB User',
+        metadata: { version: 1 },
+      });
+
+      await UserRepo.query()
+        .where({ id: user.id })
+        .update({ metadata: { version: 2, updated: true } });
+
+      const updated = await UserRepo.findById(user.id);
+      expect(typeof updated.metadata).toBe('object');
+      expect(updated.metadata.version).toBe(2);
+      expect(updated.metadata.updated).toBe(true);
+    });
+
+    it('should handle complex nested JSON with query builder', async () => {
+      const complexData = {
+        settings: {
+          notifications: { email: true, push: false },
+          privacy: { profile: 'public' },
+        },
+        tags: ['vip', 'verified'],
+      };
+
+      await UserRepo.create({
+        email: 'json-complex@test.com',
+        name: 'Complex User',
+        metadata: complexData,
+      });
+
+      const user = await UserRepo.query()
+        .where({ email: 'json-complex@test.com' })
+        .first();
+
+      expect(user.metadata).toEqual(complexData);
+      expect(user.metadata.settings.notifications.email).toBe(true);
+      expect(user.metadata.tags).toContain('vip');
+    });
+  });
 });
 
