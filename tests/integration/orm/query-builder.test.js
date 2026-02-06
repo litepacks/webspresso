@@ -352,6 +352,60 @@ describe('Query Builder Integration', () => {
     });
   });
 
+  describe('whereRaw / orWhereRaw', () => {
+    it('should handle raw WHERE clause', async () => {
+      const users = await UserRepo.query()
+        .whereRaw('name LIKE ?', ['%Doe%'])
+        .list();
+
+      expect(users.length).toBe(1);
+      expect(users[0].name).toBe('John Doe');
+    });
+
+    it('should handle raw WHERE with multiple bindings', async () => {
+      const users = await UserRepo.query()
+        .whereRaw('status = ? AND company_id = ?', ['active', 1])
+        .list();
+
+      expect(users.length).toBe(2);
+    });
+
+    it('should handle OR raw WHERE clause', async () => {
+      const users = await UserRepo.query()
+        .where('status', 'inactive')
+        .orWhereRaw('name LIKE ?', ['%Doe%'])
+        .list();
+
+      // Bob is inactive, John Doe matches the raw clause
+      expect(users.length).toBe(2);
+    });
+
+    it('should handle raw WHERE without bindings', async () => {
+      const users = await UserRepo.query()
+        .whereRaw("status = 'active'")
+        .list();
+
+      expect(users.length).toBe(2);
+    });
+
+    it('should work with JSON functions (SQLite json_extract)', async () => {
+      // Create user with JSON metadata containing tags
+      await UserRepo.create({
+        email: 'json-raw@test.com',
+        name: 'JSON Raw User',
+        metadata: { tags: ['developer', 'admin'], role: 'superuser' },
+      });
+
+      // Query using json_extract (SQLite syntax)
+      const users = await UserRepo.query()
+        .whereRaw("json_extract(metadata, '$.role') = ?", ['superuser'])
+        .list();
+
+      expect(users.length).toBe(1);
+      expect(users[0].email).toBe('json-raw@test.com');
+    });
+  });
+
   describe('JSON field handling', () => {
     it('should deserialize JSON fields with first()', async () => {
       const metadata = { theme: 'dark', locale: 'tr' };

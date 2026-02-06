@@ -176,6 +176,38 @@ class QueryBuilder {
   }
 
   /**
+   * Add a raw WHERE clause
+   * @param {string} sql - Raw SQL expression
+   * @param {Array} [bindings=[]] - Parameter bindings
+   * @returns {this}
+   */
+  whereRaw(sql, bindings = []) {
+    this.state.wheres.push({
+      raw: true,
+      sql,
+      bindings,
+      boolean: 'and',
+    });
+    return this;
+  }
+
+  /**
+   * Add a raw OR WHERE clause
+   * @param {string} sql - Raw SQL expression
+   * @param {Array} [bindings=[]] - Parameter bindings
+   * @returns {this}
+   */
+  orWhereRaw(sql, bindings = []) {
+    this.state.wheres.push({
+      raw: true,
+      sql,
+      bindings,
+      boolean: 'or',
+    });
+    return this;
+  }
+
+  /**
    * Add a WHERE IN clause
    * @param {string} column - Column name
    * @param {Array} values - Values array
@@ -323,6 +355,14 @@ class QueryBuilder {
 
     // Apply wheres
     for (const where of this.state.wheres) {
+      // Handle raw where clauses
+      if (where.raw) {
+        qb = where.boolean === 'or'
+          ? qb.orWhereRaw(where.sql, where.bindings)
+          : qb.whereRaw(where.sql, where.bindings);
+        continue;
+      }
+
       const method = where.boolean === 'or' ? 'orWhere' : 'where';
       
       switch (where.operator) {
