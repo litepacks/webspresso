@@ -46,18 +46,11 @@ function seoCheckerPlugin(options = {}) {
         icon: '🔍',
         description: 'Analyze page SEO'
       });
-    },
 
-    /**
-     * Called before page render - inject SEO checker panel
-     */
-    onBeforeRender(ctx) {
-      if (!isEnabled) return;
-
-      // Inject panel styles
+      // Inject panel styles into head
       ctx.injectHead(generatePanelStyles(), { priority: 100 });
 
-      // Inject panel HTML and analyzer script
+      // Inject panel HTML and analyzer script into body
       ctx.injectBody(`
         ${generatePanelHtml(checkDefinitions)}
         <script>

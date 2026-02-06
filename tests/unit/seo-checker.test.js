@@ -21,7 +21,6 @@ describe('SEO Checker Plugin', () => {
       const plugin = seoCheckerPlugin();
       
       expect(typeof plugin.register).toBe('function');
-      expect(typeof plugin.onBeforeRender).toBe('function');
     });
 
     it('should expose API methods', () => {
@@ -80,7 +79,9 @@ describe('SEO Checker Plugin', () => {
     it('should register dev link when enabled', () => {
       const plugin = seoCheckerPlugin({ enabled: true });
       const ctx = {
-        registerDevLink: vi.fn()
+        registerDevLink: vi.fn(),
+        injectHead: vi.fn(),
+        injectBody: vi.fn()
       };
       
       plugin.register(ctx);
@@ -96,24 +97,25 @@ describe('SEO Checker Plugin', () => {
     it('should not register dev link when disabled', () => {
       const plugin = seoCheckerPlugin({ enabled: false });
       const ctx = {
-        registerDevLink: vi.fn()
+        registerDevLink: vi.fn(),
+        injectHead: vi.fn(),
+        injectBody: vi.fn()
       };
       
       plugin.register(ctx);
       
       expect(ctx.registerDevLink).not.toHaveBeenCalled();
     });
-  });
 
-  describe('onBeforeRender Hook', () => {
     it('should inject styles and scripts when enabled', () => {
       const plugin = seoCheckerPlugin({ enabled: true });
       const ctx = {
+        registerDevLink: vi.fn(),
         injectHead: vi.fn(),
         injectBody: vi.fn()
       };
       
-      plugin.onBeforeRender(ctx);
+      plugin.register(ctx);
       
       expect(ctx.injectHead).toHaveBeenCalled();
       expect(ctx.injectBody).toHaveBeenCalled();
@@ -122,11 +124,12 @@ describe('SEO Checker Plugin', () => {
     it('should not inject when disabled', () => {
       const plugin = seoCheckerPlugin({ enabled: false });
       const ctx = {
+        registerDevLink: vi.fn(),
         injectHead: vi.fn(),
         injectBody: vi.fn()
       };
       
-      plugin.onBeforeRender(ctx);
+      plugin.register(ctx);
       
       expect(ctx.injectHead).not.toHaveBeenCalled();
       expect(ctx.injectBody).not.toHaveBeenCalled();
@@ -136,11 +139,12 @@ describe('SEO Checker Plugin', () => {
       const plugin = seoCheckerPlugin({ enabled: true });
       let injectedBody = '';
       const ctx = {
+        registerDevLink: vi.fn(),
         injectHead: vi.fn(),
         injectBody: vi.fn((content) => { injectedBody = content; })
       };
       
-      plugin.onBeforeRender(ctx);
+      plugin.register(ctx);
       
       expect(injectedBody).toContain('window.__SEO_CHECKER_SETTINGS__');
       expect(injectedBody).toContain('window.__SEO_CHECKER_CHECKS__');

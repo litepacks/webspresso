@@ -75,7 +75,7 @@ async function createTestProject() {
 
     // Create server.js with in-memory database for tests
     const serverJs = `const { createApp, createDatabase } = require('webspresso');
-const { adminPanelPlugin } = require('webspresso/plugins');
+const { adminPanelPlugin, seoCheckerPlugin } = require('webspresso/plugins');
 const path = require('path');
 
 const db = createDatabase({
@@ -118,6 +118,9 @@ const db = createDatabase({
           path: '/_admin',
           db,
         }),
+        seoCheckerPlugin({
+          enabled: true,
+        }),
       ],
     });
 
@@ -140,12 +143,33 @@ const db = createDatabase({
     // Create pages directory
     fs.mkdirSync(path.join(projectPath, 'pages'), { recursive: true });
     
-    // Create index page
+    // Create index page with SEO elements for testing
     const indexPage = `{% extends "layout.njk" %}
 
+{% set title = "Welcome to Webspresso - Test Site" %}
+{% set description = "This is a test project for E2E testing of Webspresso framework features." %}
+
 {% block content %}
-<h1>Welcome to Webspresso</h1>
-<p>This is a test project for E2E tests.</p>
+<main>
+  <h1>Welcome to Webspresso</h1>
+  <p>This is a test project for E2E tests. It includes various features for testing the framework.</p>
+  
+  <h2>Features</h2>
+  <ul>
+    <li>Admin Panel</li>
+    <li>SEO Checker</li>
+    <li>Database Integration</li>
+  </ul>
+  
+  <article>
+    <h3>Getting Started</h3>
+    <p>Webspresso is a powerful Node.js SSR framework that makes it easy to build modern web applications with great SEO out of the box.</p>
+    <a href="/about">Learn more about us</a>
+    <a href="https://example.com" target="_blank" rel="noopener">External Link</a>
+  </article>
+  
+  <img src="/images/test.jpg" alt="Test image for SEO checker" width="200" height="150">
+</main>
 {% endblock %}
 `;
 
@@ -160,9 +184,13 @@ const db = createDatabase({
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ title or 'Webspresso' }}</title>
+  <meta name="description" content="{{ description or 'Test page for Webspresso E2E tests' }}">
+  {{ fsy.injectHead() | safe }}
 </head>
 <body>
   {% block content %}{% endblock %}
+  {{ fsy.injectBody() | safe }}
+  {{ fsy.devToolbar() | safe }}
 </body>
 </html>
 `;
