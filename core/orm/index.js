@@ -12,6 +12,7 @@ const { createRepository } = require('./repository');
 const { createMigrationManager } = require('./migrations');
 const { createSeeder } = require('./seeder');
 const { createScopeContext } = require('./scopes');
+const { ModelEvents, Hooks, HookCancellationError, createEventContext } = require('./events');
 
 /**
  * Create a database instance
@@ -271,4 +272,9 @@ module.exports = {
   // Column utilities
   extractColumnsFromSchema,
   getColumnMeta,
+  // Events/Signals
+  ModelEvents,
+  Hooks,
+  HookCancellationError,
+  createEventContext,
 };

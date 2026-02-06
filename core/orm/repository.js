@@ -14,6 +14,7 @@ const {
   applyScopes,
 } = require('./scopes');
 const { ensureArray } = require('./utils');
+const { ModelEvents, createEventContext, Hooks, HookCancellationError } = require('./events');
 
 /**
  * Get JSON column names from model
@@ -101,10 +102,21 @@ function createRepository(model, knex, initialContext) {
    * Find a record by primary key
    * @param {number|string} id - Primary key value
    * @param {import('./types').FindOptions} [options={}] - Find options
+   * @param {boolean} [emitEvents=true] - Whether to emit find events
    * @returns {Promise<Object|null>}
    */
-  async function findById(id, options = {}) {
+  async function findById(id, options = {}, emitEvents = true) {
     const { with: withs = [], select } = options;
+    const ctx = createEventContext(model.name, 'find');
+    const query = { [model.primaryKey]: id };
+
+    // Emit beforeFind
+    if (emitEvents) {
+      await ModelEvents.emitAsync(model.name, Hooks.BEFORE_FIND, query, ctx);
+      if (ctx.isCancelled) {
+        throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_FIND);
+      }
+    }
 
     let qb = baseQuery().where(model.primaryKey, id);
     
@@ -126,6 +138,11 @@ function createRepository(model, knex, initialContext) {
       await loadRelations([record], ensureArray(withs), model, knex, scopeContext);
     }
 
+    // Emit afterFind
+    if (emitEvents) {
+      ModelEvents.emit(model.name, Hooks.AFTER_FIND, record, ctx);
+    }
+
     return record;
   }
 
@@ -137,6 +154,13 @@ function createRepository(model, knex, initialContext) {
    */
   async function findOne(conditions, options = {}) {
     const { with: withs = [], select } = options;
+    const ctx = createEventContext(model.name, 'find');
+
+    // Emit beforeFind
+    await ModelEvents.emitAsync(model.name, Hooks.BEFORE_FIND, conditions, ctx);
+    if (ctx.isCancelled) {
+      throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_FIND);
+    }
 
     let qb = baseQuery();
 
@@ -162,6 +186,9 @@ function createRepository(model, knex, initialContext) {
       await loadRelations([record], ensureArray(withs), model, knex, scopeContext);
     }
 
+    // Emit afterFind
+    ModelEvents.emit(model.name, Hooks.AFTER_FIND, record, ctx);
+
     return record;
   }
 
@@ -172,6 +199,13 @@ function createRepository(model, knex, initialContext) {
    */
   async function findAll(options = {}) {
     const { with: withs = [], select } = options;
+    const ctx = createEventContext(model.name, 'find');
+
+    // Emit beforeFind
+    await ModelEvents.emitAsync(model.name, Hooks.BEFORE_FIND, {}, ctx);
+    if (ctx.isCancelled) {
+      throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_FIND);
+    }
 
     let qb = baseQuery();
 
@@ -191,6 +225,11 @@ function createRepository(model, knex, initialContext) {
       await loadRelations(records, ensureArray(withs), model, knex, scopeContext);
     }
 
+    // Emit afterFind for each record
+    for (const record of records) {
+      ModelEvents.emit(model.name, Hooks.AFTER_FIND, record, ctx);
+    }
+
     return records;
   }
 
@@ -200,8 +239,32 @@ function createRepository(model, knex, initialContext) {
    * @returns {Promise<Object>}
    */
   async function create(data) {
+    const ctx = createEventContext(model.name, 'create', knex.isTransaction ? knex : null);
+    let workingData = { ...data };
+
+    // Emit beforeValidation
+    await ModelEvents.emitAsync(model.name, Hooks.BEFORE_VALIDATION, workingData, ctx);
+    if (ctx.isCancelled) {
+      throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_VALIDATION);
+    }
+
     // Validate with Zod schema (partial for insert - allows auto fields to be missing)
-    const validated = model.schema.partial().parse(data);
+    const validated = model.schema.partial().parse(workingData);
+
+    // Emit afterValidation
+    ModelEvents.emit(model.name, Hooks.AFTER_VALIDATION, validated, ctx);
+
+    // Emit beforeSave (common for create and update)
+    await ModelEvents.emitAsync(model.name, Hooks.BEFORE_SAVE, validated, ctx);
+    if (ctx.isCancelled) {
+      throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_SAVE);
+    }
+
+    // Emit beforeCreate
+    await ModelEvents.emitAsync(model.name, Hooks.BEFORE_CREATE, validated, ctx);
+    if (ctx.isCancelled) {
+      throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_CREATE);
+    }
 
     // Apply insert modifiers (timestamps, tenant)
     let insertData = applyInsertModifiers(validated, scopeContext, model);
@@ -215,8 +278,16 @@ function createRepository(model, knex, initialContext) {
     // For databases that don't support returning (SQLite), id might be the row itself
     const insertedId = typeof id === 'object' ? id[model.primaryKey] : id;
 
-    // Fetch the created record
-    return findById(insertedId);
+    // Fetch the created record (without emitting find events)
+    const record = await findById(insertedId, {}, false);
+
+    // Emit afterCreate
+    ModelEvents.emit(model.name, Hooks.AFTER_CREATE, record, ctx);
+
+    // Emit afterSave
+    ModelEvents.emit(model.name, Hooks.AFTER_SAVE, record, ctx);
+
+    return record;
   }
 
   /**
@@ -242,11 +313,38 @@ function createRepository(model, knex, initialContext) {
    * @returns {Promise<Object|null>}
    */
   async function update(id, data) {
+    const ctx = createEventContext(model.name, 'update', knex.isTransaction ? knex : null);
+    let workingData = { ...data, [model.primaryKey]: id };
+
+    // Emit beforeValidation
+    await ModelEvents.emitAsync(model.name, Hooks.BEFORE_VALIDATION, workingData, ctx);
+    if (ctx.isCancelled) {
+      throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_VALIDATION);
+    }
+
     // Validate with Zod schema (partial for update)
-    const validated = model.schema.partial().parse(data);
+    const validated = model.schema.partial().parse(workingData);
+
+    // Emit afterValidation
+    ModelEvents.emit(model.name, Hooks.AFTER_VALIDATION, validated, ctx);
+
+    // Emit beforeSave
+    await ModelEvents.emitAsync(model.name, Hooks.BEFORE_SAVE, validated, ctx);
+    if (ctx.isCancelled) {
+      throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_SAVE);
+    }
+
+    // Emit beforeUpdate
+    await ModelEvents.emitAsync(model.name, Hooks.BEFORE_UPDATE, validated, ctx);
+    if (ctx.isCancelled) {
+      throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_UPDATE);
+    }
 
     // Apply update modifiers (timestamps)
     let updateData = applyUpdateModifiers(validated, model);
+
+    // Remove primary key from update data
+    delete updateData[model.primaryKey];
 
     // Serialize JSON fields
     updateData = serializeJsonFields(updateData, jsonColumns);
@@ -260,8 +358,16 @@ function createRepository(model, knex, initialContext) {
       return null;
     }
 
-    // Fetch and return the updated record
-    return findById(id);
+    // Fetch and return the updated record (without emitting find events)
+    const record = await findById(id, {}, false);
+
+    // Emit afterUpdate
+    ModelEvents.emit(model.name, Hooks.AFTER_UPDATE, record, ctx);
+
+    // Emit afterSave
+    ModelEvents.emit(model.name, Hooks.AFTER_SAVE, record, ctx);
+
+    return record;
   }
 
   /**
@@ -295,19 +401,42 @@ function createRepository(model, knex, initialContext) {
    * @returns {Promise<boolean>}
    */
   async function del(id) {
+    const ctx = createEventContext(model.name, 'delete', knex.isTransaction ? knex : null);
+    
+    // Get the record before deletion for hooks
+    const record = await findById(id);
+    if (!record) {
+      return false;
+    }
+
+    // Emit beforeDelete
+    await ModelEvents.emitAsync(model.name, Hooks.BEFORE_DELETE, record, ctx);
+    if (ctx.isCancelled) {
+      throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_DELETE);
+    }
+
+    let success = false;
+
     // Soft delete if enabled
     if (model.scopes.softDelete) {
       const updated = await baseQuery()
         .where(model.primaryKey, id)
         .update(getSoftDeleteData());
-      return updated > 0;
+      success = updated > 0;
+    } else {
+      // Hard delete
+      const deleted = await baseQuery()
+        .where(model.primaryKey, id)
+        .delete();
+      success = deleted > 0;
     }
 
-    // Hard delete
-    const deleted = await baseQuery()
-      .where(model.primaryKey, id)
-      .delete();
-    return deleted > 0;
+    if (success) {
+      // Emit afterDelete
+      ModelEvents.emit(model.name, Hooks.AFTER_DELETE, record, ctx);
+    }
+
+    return success;
   }
 
   /**
@@ -333,6 +462,24 @@ function createRepository(model, knex, initialContext) {
       throw new Error(`Model "${model.name}" does not have soft delete enabled`);
     }
 
+    const ctx = createEventContext(model.name, 'restore', knex.isTransaction ? knex : null);
+
+    // Get the trashed record for hooks (bypass soft delete scope)
+    const trashedRecord = await knex(model.table)
+      .where(model.primaryKey, id)
+      .whereNotNull('deleted_at')
+      .first();
+
+    if (!trashedRecord) {
+      return null;
+    }
+
+    // Emit beforeRestore
+    await ModelEvents.emitAsync(model.name, Hooks.BEFORE_RESTORE, trashedRecord, ctx);
+    if (ctx.isCancelled) {
+      throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_RESTORE);
+    }
+
     // Update directly without scopes (to find trashed record)
     const updated = await knex(model.table)
       .where(model.primaryKey, id)
@@ -343,7 +490,12 @@ function createRepository(model, knex, initialContext) {
       return null;
     }
 
-    return findById(id);
+    const record = await findById(id, {}, false);
+
+    // Emit afterRestore
+    ModelEvents.emit(model.name, Hooks.AFTER_RESTORE, record, ctx);
+
+    return record;
   }
 
   /**

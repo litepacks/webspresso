@@ -5,6 +5,7 @@
  */
 
 const { extractColumnsFromSchema } = require('./schema-helpers');
+const { ModelEvents, Hooks } = require('./events');
 
 /**
  * Global model registry
@@ -26,6 +27,7 @@ function defineModel(options) {
     relations = {},
     scopes = {},
     admin = {},
+    hooks = {},
   } = options;
 
   // Validate required fields
@@ -86,12 +88,39 @@ function defineModel(options) {
       customFields: admin.customFields || {},
       queries: admin.queries || {},
     },
+    hooks: {},
   };
 
   // Register model
   modelRegistry.set(name, model);
 
+  // Register model-level hooks with ModelEvents
+  registerModelHooks(name, hooks);
+
   return model;
+}
+
+/**
+ * Register model-level hooks with the global ModelEvents
+ * @param {string} modelName - Model name
+ * @param {Object} hooks - Hooks object
+ */
+function registerModelHooks(modelName, hooks) {
+  const validHooks = Object.values(Hooks);
+  
+  for (const [hookName, callback] of Object.entries(hooks)) {
+    if (!validHooks.includes(hookName)) {
+      console.warn(`Unknown hook "${hookName}" in model "${modelName}". Valid hooks: ${validHooks.join(', ')}`);
+      continue;
+    }
+    
+    if (typeof callback !== 'function') {
+      console.warn(`Hook "${hookName}" in model "${modelName}" must be a function`);
+      continue;
+    }
+
+    ModelEvents.on(`${modelName}.${hookName}`, callback);
+  }
 }
 
 /**
