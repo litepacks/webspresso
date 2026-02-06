@@ -34,9 +34,9 @@ function seoCheckerPlugin(options = {}) {
     description: 'Client-side SEO analysis tool for development',
 
     /**
-     * Called when plugin is initialized
+     * Called when plugin is registered
      */
-    onInit(ctx) {
+    register(ctx) {
       if (!isEnabled) return;
 
       // Register dev link in toolbar

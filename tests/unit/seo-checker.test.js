@@ -20,7 +20,7 @@ describe('SEO Checker Plugin', () => {
     it('should have required lifecycle hooks', () => {
       const plugin = seoCheckerPlugin();
       
-      expect(typeof plugin.onInit).toBe('function');
+      expect(typeof plugin.register).toBe('function');
       expect(typeof plugin.onBeforeRender).toBe('function');
     });
 
@@ -76,14 +76,14 @@ describe('SEO Checker Plugin', () => {
     });
   });
 
-  describe('onInit Hook', () => {
+  describe('register Hook', () => {
     it('should register dev link when enabled', () => {
       const plugin = seoCheckerPlugin({ enabled: true });
       const ctx = {
         registerDevLink: vi.fn()
       };
       
-      plugin.onInit(ctx);
+      plugin.register(ctx);
       
       expect(ctx.registerDevLink).toHaveBeenCalledWith({
         name: 'SEO Check',
@@ -99,7 +99,7 @@ describe('SEO Checker Plugin', () => {
         registerDevLink: vi.fn()
       };
       
-      plugin.onInit(ctx);
+      plugin.register(ctx);
       
       expect(ctx.registerDevLink).not.toHaveBeenCalled();
     });
