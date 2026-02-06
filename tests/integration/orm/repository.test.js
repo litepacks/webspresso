@@ -294,5 +294,123 @@ describe('Repository Integration', () => {
       expect(exists).toBe(false);
     });
   });
+
+  describe('JSON field handling', () => {
+    it('should store and retrieve JSON object correctly', async () => {
+      const metadata = {
+        preferences: { theme: 'dark', notifications: true },
+        tags: ['developer', 'admin'],
+        lastLogin: '2024-01-15T10:30:00Z',
+      };
+
+      const user = await UserRepo.create({
+        email: 'json-test@test.com',
+        name: 'JSON User',
+        metadata,
+      });
+
+      expect(user.id).toBeDefined();
+
+      // Fetch and verify JSON is properly parsed
+      const fetched = await UserRepo.findById(user.id);
+      expect(fetched.metadata).toEqual(metadata);
+      expect(typeof fetched.metadata).toBe('object');
+      expect(fetched.metadata.preferences.theme).toBe('dark');
+      expect(fetched.metadata.tags).toContain('developer');
+    });
+
+    it('should update JSON field correctly', async () => {
+      const user = await UserRepo.create({
+        email: 'json-update@test.com',
+        name: 'JSON Update User',
+        metadata: { version: 1 },
+      });
+
+      const updatedMetadata = { version: 2, updated: true };
+      const updated = await UserRepo.update(user.id, {
+        metadata: updatedMetadata,
+      });
+
+      expect(updated.metadata).toEqual(updatedMetadata);
+      expect(updated.metadata.version).toBe(2);
+    });
+
+    it('should handle null JSON field', async () => {
+      const user = await UserRepo.create({
+        email: 'json-null@test.com',
+        name: 'JSON Null User',
+        metadata: null,
+      });
+
+      const fetched = await UserRepo.findById(user.id);
+      expect(fetched.metadata).toBeNull();
+    });
+
+    it('should handle empty object in JSON field', async () => {
+      const user = await UserRepo.create({
+        email: 'json-empty@test.com',
+        name: 'JSON Empty User',
+        metadata: {},
+      });
+
+      const fetched = await UserRepo.findById(user.id);
+      expect(fetched.metadata).toEqual({});
+    });
+
+    it('should handle array in JSON field', async () => {
+      const user = await UserRepo.create({
+        email: 'json-array@test.com',
+        name: 'JSON Array User',
+        metadata: ['item1', 'item2', { nested: true }],
+      });
+
+      const fetched = await UserRepo.findById(user.id);
+      expect(Array.isArray(fetched.metadata)).toBe(true);
+      expect(fetched.metadata.length).toBe(3);
+      expect(fetched.metadata[2].nested).toBe(true);
+    });
+
+    it('should handle nested objects in JSON field', async () => {
+      const deepNested = {
+        level1: {
+          level2: {
+            level3: {
+              value: 'deep',
+              array: [1, 2, 3],
+            },
+          },
+        },
+      };
+
+      const user = await UserRepo.create({
+        email: 'json-nested@test.com',
+        name: 'JSON Nested User',
+        metadata: deepNested,
+      });
+
+      const fetched = await UserRepo.findById(user.id);
+      expect(fetched.metadata.level1.level2.level3.value).toBe('deep');
+      expect(fetched.metadata.level1.level2.level3.array).toEqual([1, 2, 3]);
+    });
+
+    it('should handle special characters in JSON field', async () => {
+      const specialChars = {
+        quote: 'He said "Hello"',
+        backslash: 'Path: C:\\Users',
+        unicode: '日本語テスト',
+        newline: 'Line1\nLine2',
+        html: '<script>alert("xss")</script>',
+      };
+
+      const user = await UserRepo.create({
+        email: 'json-special@test.com',
+        name: 'JSON Special User',
+        metadata: specialChars,
+      });
+
+      const fetched = await UserRepo.findById(user.id);
+      expect(fetched.metadata).toEqual(specialChars);
+    });
+  });
 });
 

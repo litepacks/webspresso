@@ -27,6 +27,7 @@ const UserSchema = zdb.schema({
   name: zdb.string({ maxLength: 255 }),
   status: zdb.enum(['active', 'inactive', 'banned'], { default: 'active' }),
   company_id: zdb.foreignKey('companies', { nullable: true }),
+  metadata: zdb.json({ nullable: true }),
   created_at: zdb.timestamp({ auto: 'create' }),
   updated_at: zdb.timestamp({ auto: 'update' }),
   deleted_at: zdb.timestamp({ nullable: true }),
@@ -157,6 +158,7 @@ async function createTestSchema(knex) {
     table.enum('status', ['active', 'inactive', 'banned']).defaultTo('active');
     table.bigInteger('company_id').unsigned().nullable();
     table.foreign('company_id').references('id').inTable('companies');
+    table.json('metadata').nullable();
     table.timestamp('created_at').defaultTo(knex.fn.now());
     table.timestamp('updated_at').defaultTo(knex.fn.now());
     table.timestamp('deleted_at').nullable();

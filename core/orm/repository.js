@@ -16,6 +16,68 @@ const {
 const { ensureArray } = require('./utils');
 
 /**
+ * Get JSON column names from model
+ * @param {import('./types').ModelDefinition} model - Model definition
+ * @returns {Set<string>} Set of JSON column names
+ */
+function getJsonColumns(model) {
+  const jsonCols = new Set();
+  if (model.columns) {
+    for (const [name, meta] of model.columns) {
+      if (meta.type === 'json') {
+        jsonCols.add(name);
+      }
+    }
+  }
+  return jsonCols;
+}
+
+/**
+ * Serialize JSON fields for database storage
+ * @param {Object} data - Data to serialize
+ * @param {Set<string>} jsonColumns - JSON column names
+ * @returns {Object} Serialized data
+ */
+function serializeJsonFields(data, jsonColumns) {
+  if (jsonColumns.size === 0) return data;
+  
+  const serialized = { ...data };
+  for (const col of jsonColumns) {
+    if (col in serialized && serialized[col] !== null && serialized[col] !== undefined) {
+      // Only stringify if it's not already a string
+      if (typeof serialized[col] !== 'string') {
+        serialized[col] = JSON.stringify(serialized[col]);
+      }
+    }
+  }
+  return serialized;
+}
+
+/**
+ * Deserialize JSON fields from database
+ * @param {Object} record - Record from database
+ * @param {Set<string>} jsonColumns - JSON column names
+ * @returns {Object} Deserialized record
+ */
+function deserializeJsonFields(record, jsonColumns) {
+  if (!record || jsonColumns.size === 0) return record;
+  
+  for (const col of jsonColumns) {
+    if (col in record && record[col] !== null && record[col] !== undefined) {
+      // Only parse if it's a string
+      if (typeof record[col] === 'string') {
+        try {
+          record[col] = JSON.parse(record[col]);
+        } catch {
+          // If parsing fails, keep the original string value
+        }
+      }
+    }
+  }
+  return record;
+}
+
+/**
  * Create a repository for a model
  * @param {import('./types').ModelDefinition} model - Model definition
  * @param {import('knex').Knex|import('knex').Knex.Transaction} knex - Knex instance
@@ -24,6 +86,7 @@ const { ensureArray } = require('./utils');
  */
 function createRepository(model, knex, initialContext) {
   const scopeContext = initialContext || createScopeContext();
+  const jsonColumns = getJsonColumns(model);
 
   /**
    * Get base query builder
@@ -54,6 +117,9 @@ function createRepository(model, knex, initialContext) {
     if (!record) {
       return null;
     }
+
+    // Deserialize JSON fields
+    deserializeJsonFields(record, jsonColumns);
 
     // Load relations if requested
     if (withs.length > 0) {
@@ -88,6 +154,9 @@ function createRepository(model, knex, initialContext) {
       return null;
     }
 
+    // Deserialize JSON fields
+    deserializeJsonFields(record, jsonColumns);
+
     // Load relations if requested
     if (withs.length > 0) {
       await loadRelations([record], ensureArray(withs), model, knex, scopeContext);
@@ -112,6 +181,11 @@ function createRepository(model, knex, initialContext) {
 
     const records = await qb;
 
+    // Deserialize JSON fields
+    for (const record of records) {
+      deserializeJsonFields(record, jsonColumns);
+    }
+
     // Load relations if requested
     if (withs.length > 0 && records.length > 0) {
       await loadRelations(records, ensureArray(withs), model, knex, scopeContext);
@@ -130,7 +204,10 @@ function createRepository(model, knex, initialContext) {
     const validated = model.schema.partial().parse(data);
 
     // Apply insert modifiers (timestamps, tenant)
-    const insertData = applyInsertModifiers(validated, scopeContext, model);
+    let insertData = applyInsertModifiers(validated, scopeContext, model);
+
+    // Serialize JSON fields
+    insertData = serializeJsonFields(insertData, jsonColumns);
 
     // Insert and return the record
     const [id] = await knex(model.table).insert(insertData).returning(model.primaryKey);
@@ -169,7 +246,10 @@ function createRepository(model, knex, initialContext) {
     const validated = model.schema.partial().parse(data);
 
     // Apply update modifiers (timestamps)
-    const updateData = applyUpdateModifiers(validated, model);
+    let updateData = applyUpdateModifiers(validated, model);
+
+    // Serialize JSON fields
+    updateData = serializeJsonFields(updateData, jsonColumns);
 
     // Update the record
     const updated = await baseQuery()
@@ -195,7 +275,10 @@ function createRepository(model, knex, initialContext) {
     const validated = model.schema.partial().parse(data);
 
     // Apply update modifiers (timestamps)
-    const updateData = applyUpdateModifiers(validated, model);
+    let updateData = applyUpdateModifiers(validated, model);
+
+    // Serialize JSON fields
+    updateData = serializeJsonFields(updateData, jsonColumns);
 
     let qb = baseQuery();
     
