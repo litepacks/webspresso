@@ -1212,46 +1212,7 @@ const SetupForm = {
   ]),
 };
 
-// Layout Component
-const Layout = {
-  view: (vnode) => {
-    const breadcrumbs = vnode.attrs.breadcrumbs || [];
-    
-    return m('.min-h-screen.bg-gray-100.flex.flex-col', [
-      // Sticky header
-      m('.bg-white.shadow.sticky.top-0.z-50', [
-        m('.max-w-7xl.mx-auto.px-4.py-4', [
-          m('.flex.items-center.justify-between', [
-            m('a.text-xl.font-bold.hover:text-blue-600', {
-              href: '/',
-              onclick: (e) => {
-                e.preventDefault();
-                m.route.set('/');
-              }
-            }, 'Admin Panel'),
-            state.user ? m('.flex.items-center.gap-4', [
-              m('span.text-sm.text-gray-600', state.user.name || state.user.email),
-              m('button.text-sm.text-red-600.hover:text-red-800', {
-                onclick: async () => {
-                  await api.post('/auth/logout');
-                  state.user = null;
-                  m.route.set('/login');
-                }
-              }, 'Logout'),
-            ]) : null,
-          ]),
-        ]),
-      ]),
-      // Content area
-      m('.max-w-7xl.mx-auto.px-4.py-6.flex-1.w-full', [
-        // Breadcrumb
-        breadcrumbs.length > 0 ? m(Breadcrumb, { items: breadcrumbs }) : null,
-        // Page content
-        vnode.children,
-      ]),
-    ]);
-  },
-};
+// Layout Component is defined in menu.js module (uses Sidebar)
 
 // Model List Component
 const ModelList = {

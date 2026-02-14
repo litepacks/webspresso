@@ -163,7 +163,8 @@ function haltOnTimedout(req, res, next) {
  * @param {Function|string} options.errorPages.serverError - Custom 500 handler or template path
  * @param {Function|string} options.errorPages.timeout - Custom timeout handler or template path
  * @param {string|boolean} options.timeout - Request timeout (default: '30s', false to disable)
- * @returns {Object} { app, nunjucksEnv, pluginManager }
+ * @param {Object} options.auth - Authentication manager instance (from createAuth)
+ * @returns {Object} { app, nunjucksEnv, pluginManager, authMiddleware }
  */
 function createApp(options = {}) {
   const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -180,7 +181,8 @@ function createApp(options = {}) {
     plugins = [],
     assets: assetsConfig = {},
     errorPages = {},
-    timeout: timeoutConfig = '30s'
+    timeout: timeoutConfig = '30s',
+    auth: authManager = null,
   } = options;
   
   // Create plugin manager
@@ -223,6 +225,17 @@ function createApp(options = {}) {
   // Halt processing if request has timed out (after body parsers)
   if (timeoutConfig !== false) {
     app.use(haltOnTimedout);
+  }
+  
+  // Authentication middleware (if auth manager provided)
+  let authMiddleware = null;
+  if (authManager) {
+    const { setupAuthMiddleware } = require('../core/auth');
+    authMiddleware = setupAuthMiddleware(app, authManager);
+    
+    // Add auth middleware to named middlewares for route config
+    middlewares.auth = authMiddleware.auth;
+    middlewares.guest = authMiddleware.guest;
   }
   
   // Static files (if publicDir provided)
@@ -437,7 +450,7 @@ function createApp(options = {}) {
     }
   });
   
-  return { app, nunjucksEnv, pluginManager };
+  return { app, nunjucksEnv, pluginManager, authMiddleware };
 }
 
 // Export for use as library

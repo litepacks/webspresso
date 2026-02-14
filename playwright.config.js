@@ -29,7 +29,7 @@ module.exports = defineConfig({
   webServer: {
     command: 'node tests/e2e/fixtures/test-server.js',
     port: 3001,
-    reuseExistingServer: false, // Always start fresh server for clean state
+    reuseExistingServer: !process.env.CI, // Reuse existing server in dev, fresh in CI
     timeout: 120 * 1000, // 2 minutes for npm install
   },
 

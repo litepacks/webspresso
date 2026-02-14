@@ -314,7 +314,10 @@ function createRepository(model, knex, initialContext) {
    */
   async function update(id, data) {
     const ctx = createEventContext(model.name, 'update', knex.isTransaction ? knex : null);
-    let workingData = { ...data, [model.primaryKey]: id };
+    // Don't include primary key in working data for validation
+    // to avoid type mismatch issues (URL params come as strings)
+    let workingData = { ...data };
+    delete workingData[model.primaryKey]; // Remove if passed in data
 
     // Emit beforeValidation
     await ModelEvents.emitAsync(model.name, Hooks.BEFORE_VALIDATION, workingData, ctx);
