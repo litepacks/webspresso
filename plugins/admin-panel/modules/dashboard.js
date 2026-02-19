@@ -13,7 +13,7 @@
 function registerDashboardWidgets(options) {
   const { registry, db } = options;
 
-  // Model stats widget (shows all admin-enabled model counts)
+  // Model stats widget (shows all admin-enabled model counts with extended info)
   registry.registerWidget('model-stats', {
     title: 'Overview',
     size: 'full',
@@ -30,17 +30,52 @@ function registerDashboardWidgets(options) {
           try {
             const repo = db.getRepository(model.name);
             const count = await repo.count();
+            
+            // Get column count
+            const columnCount = model.columns ? model.columns.size : 0;
+            
+            // Get last updated/created timestamp
+            let lastCreated = null;
+            let lastUpdated = null;
+            
+            const createdAtCol = model.columns?.has('created_at') ? 'created_at' : 
+                                 model.columns?.has('createdAt') ? 'createdAt' : null;
+            const updatedAtCol = model.columns?.has('updated_at') ? 'updated_at' : 
+                                 model.columns?.has('updatedAt') ? 'updatedAt' : null;
+            
+            if (createdAtCol) {
+              try {
+                const lastRecord = await repo.query().orderBy(createdAtCol, 'desc').first();
+                if (lastRecord && lastRecord[createdAtCol]) {
+                  lastCreated = lastRecord[createdAtCol];
+                }
+              } catch (e) { /* ignore */ }
+            }
+            
+            if (updatedAtCol) {
+              try {
+                const lastRecord = await repo.query().orderBy(updatedAtCol, 'desc').first();
+                if (lastRecord && lastRecord[updatedAtCol]) {
+                  lastUpdated = lastRecord[updatedAtCol];
+                }
+              } catch (e) { /* ignore */ }
+            }
+            
             stats.push({
               name: model.name,
               label: model.admin.label || model.name,
-              icon: model.admin.icon || 'database',
+              icon: model.admin.icon,
               count,
+              columnCount,
+              table: model.table,
+              lastCreated,
+              lastUpdated,
             });
           } catch (e) {
             stats.push({
               name: model.name,
               label: model.admin.label || model.name,
-              icon: model.admin.icon || 'database',
+              icon: model.admin.icon,
               count: 0,
               error: e.message,
             });
@@ -107,27 +142,73 @@ function registerDashboardWidgets(options) {
  */
 function generateDashboardComponent() {
   return `
+// Format relative time
+function formatRelativeTime(date) {
+  if (!date) return null;
+  const now = new Date();
+  const d = new Date(date);
+  const diff = now - d;
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  
+  if (days > 30) {
+    return d.toLocaleDateString();
+  } else if (days > 0) {
+    return days + ' day' + (days > 1 ? 's' : '') + ' ago';
+  } else if (hours > 0) {
+    return hours + ' hour' + (hours > 1 ? 's' : '') + ' ago';
+  } else if (minutes > 0) {
+    return minutes + ' min' + (minutes > 1 ? 's' : '') + ' ago';
+  } else {
+    return 'Just now';
+  }
+}
+
 // Dashboard Widget Renderers
 const WidgetRenderers = {
-  // Model stats (cards grid)
+  // Model stats (cards grid with extended info)
   'model-stats': {
     render: (data) => {
       if (!data || !Array.isArray(data)) return m('div.text-gray-500', 'No data');
-      return m('div.grid.grid-cols-2.md:grid-cols-3.lg:grid-cols-4.gap-4', data.map(stat => 
-        m('a.block.bg-white.rounded-lg.shadow.p-4.hover:shadow-md.transition-shadow', {
+      return m('div.grid.grid-cols-1.md:grid-cols-2.lg:grid-cols-3.gap-4', data.map(stat => 
+        m('a.block.bg-white.rounded-lg.shadow.hover:shadow-md.transition-shadow.overflow-hidden', {
           href: '/models/' + stat.name,
           onclick: (e) => {
             e.preventDefault();
             m.route.set('/models/' + stat.name);
           }
         }, [
-          m('div.flex.items-center.justify-between', [
+          // Header with icon and count
+          m('div.p-4.flex.items-center.justify-between.border-b.border-gray-100', [
             m('div', [
-              m('p.text-sm.text-gray-500', stat.label),
-              m('p.text-2xl.font-bold.text-gray-900', stat.count.toLocaleString()),
+              m('p.text-sm.font-medium.text-gray-500', stat.label),
+              m('p.text-3xl.font-bold.text-gray-900', (stat.count || 0).toLocaleString()),
             ]),
-            m('div.w-12.h-12.bg-blue-100.rounded-full.flex.items-center.justify-center', [
-              m(Icon, { name: stat.icon || 'database', class: 'w-6 h-6 text-blue-600' }),
+            m('div.w-14.h-14.bg-blue-100.rounded-xl.flex.items-center.justify-center', [
+              stat.icon 
+                ? m('span.text-2xl', stat.icon)
+                : m(Icon, { name: 'database', class: 'w-7 h-7 text-blue-600' }),
+            ]),
+          ]),
+          // Stats row
+          m('div.px-4.py-3.bg-gray-50.grid.grid-cols-3.gap-2.text-center', [
+            m('div', [
+              m('p.text-xs.text-gray-400.uppercase', 'Columns'),
+              m('p.text-sm.font-semibold.text-gray-700', stat.columnCount || '-'),
+            ]),
+            m('div', [
+              m('p.text-xs.text-gray-400.uppercase', 'Table'),
+              m('p.text-sm.font-semibold.text-gray-700.truncate', { title: stat.table }, stat.table || '-'),
+            ]),
+            m('div', [
+              m('p.text-xs.text-gray-400.uppercase', 'Last Update'),
+              m('p.text-sm.font-semibold.text-gray-700', 
+                stat.lastUpdated || stat.lastCreated 
+                  ? formatRelativeTime(stat.lastUpdated || stat.lastCreated)
+                  : '-'
+              ),
             ]),
           ]),
         ])

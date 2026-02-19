@@ -386,7 +386,7 @@ function createExtensionApiHandlers(options) {
   }
 
   /**
-   * Dashboard stats
+   * Dashboard stats - includes count, last updated, column count for each model
    */
   async function dashboardStatsHandler(req, res) {
     try {
@@ -402,19 +402,100 @@ function createExtensionApiHandlers(options) {
           try {
             const repo = db.getRepository(model.name);
             const count = await repo.count();
+            
+            // Get column count
+            const columnCount = model.columns ? model.columns.size : 0;
+            
+            // Get last created/updated record
+            let lastCreated = null;
+            let lastUpdated = null;
+            
+            // Try to get the most recently created record
+            const createdAtCol = model.columns?.has('created_at') ? 'created_at' : 
+                                 model.columns?.has('createdAt') ? 'createdAt' : null;
+            const updatedAtCol = model.columns?.has('updated_at') ? 'updated_at' : 
+                                 model.columns?.has('updatedAt') ? 'updatedAt' : null;
+            
+            if (createdAtCol) {
+              try {
+                const lastRecord = await repo.query()
+                  .orderBy(createdAtCol, 'desc')
+                  .first();
+                if (lastRecord && lastRecord[createdAtCol]) {
+                  lastCreated = lastRecord[createdAtCol];
+                }
+              } catch (e) {
+                // Column might not exist or be queryable
+              }
+            }
+            
+            if (updatedAtCol) {
+              try {
+                const lastRecord = await repo.query()
+                  .orderBy(updatedAtCol, 'desc')
+                  .first();
+                if (lastRecord && lastRecord[updatedAtCol]) {
+                  lastUpdated = lastRecord[updatedAtCol];
+                }
+              } catch (e) {
+                // Column might not exist or be queryable
+              }
+            }
+            
             stats[model.name] = {
               name: model.name,
               label: model.admin.label || model.name,
               icon: model.admin.icon,
               count,
+              columnCount,
+              lastCreated,
+              lastUpdated,
+              table: model.table,
             };
           } catch (e) {
-            stats[model.name] = { name: model.name, count: 0, error: e.message };
+            stats[model.name] = { 
+              name: model.name, 
+              label: model.admin?.label || model.name,
+              count: 0, 
+              error: e.message 
+            };
           }
         }
       }
 
       res.json({ stats });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Get admin settings
+   */
+  function settingsGetHandler(req, res) {
+    try {
+      const settings = registry.settings || {};
+      res.json({ settings });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Update admin settings
+   */
+  function settingsUpdateHandler(req, res) {
+    try {
+      const updates = req.body || {};
+      
+      // Merge with existing settings
+      const currentSettings = registry.settings || {};
+      const newSettings = { ...currentSettings, ...updates };
+      
+      // Update registry settings
+      registry.configure({ settings: newSettings });
+      
+      res.json({ success: true, settings: registry.settings });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -546,6 +627,8 @@ function createExtensionApiHandlers(options) {
     dashboardStatsHandler,
     exportHandler,
     activityLogHandler,
+    settingsGetHandler,
+    settingsUpdateHandler,
   };
 }
 

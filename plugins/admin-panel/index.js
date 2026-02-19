@@ -190,6 +190,10 @@ function adminPanelPlugin(options = {}) {
       ctx.addRoute('post', `${adminPath}/api/extensions/export/:model`, requireAuth, extensionHandlers.exportHandler);
       ctx.addRoute('post', `${adminPath}/api/extensions/export`, requireAuth, extensionHandlers.exportHandler);
       ctx.addRoute('get', `${adminPath}/api/extensions/activity`, requireAuth, extensionHandlers.activityLogHandler);
+      
+      // Settings API routes
+      ctx.addRoute('get', `${adminPath}/api/extensions/settings`, requireAuth, extensionHandlers.settingsGetHandler);
+      ctx.addRoute('post', `${adminPath}/api/extensions/settings`, requireAuth, extensionHandlers.settingsUpdateHandler);
 
       // Custom pages API routes
       ctx.addRoute('get', `${adminPath}/api/extensions/pages/:pageId/data`, requireAuth, pageHandlers.getPageData);
