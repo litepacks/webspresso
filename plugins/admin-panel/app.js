@@ -75,6 +75,16 @@ m.route(document.getElementById('app'), '/', {
       return SetupForm;
     }
   },
+  '/settings': {
+    onmatch: async () => {
+      const isAuth = await checkAuth();
+      if (!isAuth) {
+        m.route.set('/login');
+        return;
+      }
+      return SettingsPage;
+    }
+  },
   '/models/:model': {
     onmatch: async () => {
       const isAuth = await checkAuth();

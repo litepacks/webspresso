@@ -68,6 +68,10 @@ const state = {
   filters: {}, // Active filters { column: { op, value, from, to } }
   filterPanelOpen: false, // Filter panel visibility (deprecated)
   filterDrawerOpen: false, // Filter drawer visibility
+  bulkFields: [], // Bulk-updatable fields (enum/boolean)
+  bulkFieldDropdownOpen: false, // Bulk field dropdown visibility
+  selectedBulkField: null, // Currently selected bulk field for update
+  selectAllMode: false, // true = all records selected (not just current page)
 };
 
 // Breadcrumb Component
@@ -1303,6 +1307,165 @@ function formatCellValue(value, col) {
   }
 }
 
+// Load bulk-updatable fields for a model
+async function loadBulkFields(modelName) {
+  try {
+    const response = await api.get('/extensions/bulk-fields/' + modelName);
+    state.bulkFields = response.fields || [];
+    m.redraw();
+  } catch (err) {
+    console.error('Failed to load bulk fields:', err);
+    state.bulkFields = [];
+  }
+}
+
+// Execute bulk field update
+async function executeBulkFieldUpdate(modelName, field, value, ids) {
+  try {
+    const response = await api.post('/extensions/bulk-update/' + modelName, {
+      ids: ids,
+      field: field,
+      value: value,
+    });
+    return response;
+  } catch (err) {
+    throw err;
+  }
+}
+
+// Execute bulk field update
+async function executeBulkFieldUpdateWithSelectAll(modelName, field, value, selectedIds, selectAllMode, filters) {
+  try {
+    const payload = selectAllMode 
+      ? { selectAll: true, filters: filters, field: field, value: value }
+      : { ids: selectedIds, field: field, value: value };
+    const response = await api.post('/extensions/bulk-update/' + modelName, payload);
+    return response;
+  } catch (err) {
+    throw err;
+  }
+}
+
+// Bulk Field Update Dropdown Component
+const BulkFieldUpdateDropdown = {
+  view: (vnode) => {
+    const { modelName, selectedIds, selectAllMode, filters, onComplete } = vnode.attrs;
+    
+    if (!state.bulkFields || state.bulkFields.length === 0) {
+      return null;
+    }
+    
+    return m('.relative.inline-block', [
+      // Dropdown trigger
+      m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-purple-600.bg-white.border.border-purple-200.rounded.hover:bg-purple-50.transition-colors', {
+        disabled: state.bulkActionInProgress,
+        onclick: (e) => {
+          e.stopPropagation();
+          state.bulkFieldDropdownOpen = !state.bulkFieldDropdownOpen;
+          state.selectedBulkField = null;
+          m.redraw();
+        },
+      }, [
+        m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+          m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' })
+        ),
+        'Set Field',
+        m('svg.w-4.h-4.ml-1', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+          m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M19 9l-7 7-7-7' })
+        ),
+      ]),
+      
+      // Dropdown menu
+      state.bulkFieldDropdownOpen && m('.absolute.z-50.mt-1.w-64.bg-white.rounded-lg.shadow-lg.border.border-gray-200.overflow-hidden', {
+        style: 'left: 0; top: 100%;',
+        onclick: (e) => e.stopPropagation(),
+      }, [
+        // Close button area click handler
+        m('.fixed.inset-0.z-40', {
+          onclick: () => {
+            state.bulkFieldDropdownOpen = false;
+            state.selectedBulkField = null;
+            m.redraw();
+          },
+        }),
+        
+        // Dropdown content
+        m('.relative.z-50.bg-white', [
+          // Header
+          m('.px-3.py-2.bg-gray-50.border-b.border-gray-200', [
+            m('span.text-xs.font-medium.text-gray-500.uppercase.tracking-wider', 
+              state.selectedBulkField ? 'Select Value' : 'Select Field'
+            ),
+          ]),
+          
+          // Field list or value list
+          m('.max-h-64.overflow-y-auto', [
+            state.selectedBulkField 
+              // Show values for selected field
+              ? state.selectedBulkField.options.map(option => 
+                  m('button.w-full.px-3.py-2.text-left.text-sm.hover:bg-purple-50.flex.items-center.justify-between.transition-colors', {
+                    onclick: async () => {
+                      state.bulkActionInProgress = true;
+                      state.bulkFieldDropdownOpen = false;
+                      m.redraw();
+                      
+                      try {
+                        await executeBulkFieldUpdateWithSelectAll(modelName, state.selectedBulkField.name, option.value, selectedIds, selectAllMode, filters);
+                        state.selectedBulkField = null;
+                        if (onComplete) onComplete();
+                      } catch (err) {
+                        alert('Error: ' + err.message);
+                      } finally {
+                        state.bulkActionInProgress = false;
+                        m.redraw();
+                      }
+                    },
+                  }, [
+                    m('span.text-gray-700', String(option.label)),
+                    state.selectedBulkField.type === 'boolean' && m('span.ml-2', 
+                      option.value === true 
+                        ? m('span.inline-flex.items-center.px-2.py-0.5.rounded-full.text-xs.font-medium.bg-green-100.text-green-800', '✓')
+                        : m('span.inline-flex.items-center.px-2.py-0.5.rounded-full.text-xs.font-medium.bg-gray-100.text-gray-600', '✗')
+                    ),
+                  ])
+                )
+              // Show field list
+              : state.bulkFields.map(field =>
+                  m('button.w-full.px-3.py-2.text-left.text-sm.hover:bg-purple-50.flex.items-center.justify-between.transition-colors', {
+                    onclick: () => {
+                      state.selectedBulkField = field;
+                      m.redraw();
+                    },
+                  }, [
+                    m('.flex.items-center.gap-2', [
+                      m('span.text-gray-700', formatColumnLabel(field.label || field.name)),
+                      m('span.text-xs.text-gray-400.uppercase', field.type),
+                    ]),
+                    m('svg.w-4.h-4.text-gray-400', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+                      m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M9 5l7 7-7 7' })
+                    ),
+                  ])
+                ),
+            
+            // Back button when viewing values
+            state.selectedBulkField && m('button.w-full.px-3.py-2.text-left.text-sm.text-gray-500.hover:bg-gray-50.border-t.border-gray-100.flex.items-center.gap-1', {
+              onclick: () => {
+                state.selectedBulkField = null;
+                m.redraw();
+              },
+            }, [
+              m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+                m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M15 19l-7-7 7-7' })
+              ),
+              'Back to fields',
+            ]),
+          ]),
+        ]),
+      ]),
+    ]);
+  },
+};
+
 // Get columns to display in table (limit to reasonable number)
 function getDisplayColumns(columns) {
   if (!columns || columns.length === 0) return [];
@@ -1454,34 +1617,56 @@ function loadRecords(modelName, page = 1, filters = null) {
     });
 }
 
+// Initialize model data
+function initializeModelView(modelName) {
+  state.records = [];
+  state.currentModelMeta = null;
+  state.pagination = { page: 1, perPage: 20, total: 0, totalPages: 0 };
+  state.filterPanelOpen = false;
+  state.filterDrawerOpen = false;
+  state.selectedRecords = new Set(); // Bulk selection
+  state.selectAllMode = false; // Reset select all mode
+  state.bulkActionInProgress = false;
+  state.bulkFields = []; // Reset bulk fields
+  state.bulkFieldDropdownOpen = false;
+  state.selectedBulkField = null;
+  state._currentModelName = modelName;
+  
+  // Parse filters from URL query string
+  const urlParams = new URLSearchParams(window.location.search);
+  const page = parseInt(urlParams.get('page')) || 1;
+  state.filters = parseFilterQuery(window.location.search);
+  
+  // Load model metadata first, then records
+  state.loading = true;
+  api.get('/models/' + modelName)
+    .then(modelMeta => {
+      state.currentModelMeta = modelMeta;
+      state.currentModel = modelMeta;
+      // Load bulk-updatable fields for this model
+      loadBulkFields(modelName);
+      return loadRecords(modelName, page, state.filters);
+    })
+    .catch(err => {
+      state.error = err.message;
+      state.loading = false;
+      m.redraw();
+    });
+}
+
 // Record List Component - displays records with dynamic columns
 const RecordList = {
   oninit: () => {
     const modelName = m.route.param('model');
-    state.records = [];
-    state.currentModelMeta = null;
-    state.pagination = { page: 1, perPage: 20, total: 0, totalPages: 0 };
-    state.filterPanelOpen = false;
-    state.filterDrawerOpen = false;
-    
-    // Parse filters from URL query string
-    const urlParams = new URLSearchParams(window.location.search);
-    const page = parseInt(urlParams.get('page')) || 1;
-    state.filters = parseFilterQuery(window.location.search);
-    
-    // Load model metadata first, then records
-    state.loading = true;
-    api.get('/models/' + modelName)
-      .then(modelMeta => {
-        state.currentModelMeta = modelMeta;
-        state.currentModel = modelMeta;
-        return loadRecords(modelName, page, state.filters);
-      })
-      .catch(err => {
-        state.error = err.message;
-        state.loading = false;
-        m.redraw();
-      });
+    initializeModelView(modelName);
+  },
+  onbeforeupdate: () => {
+    // Check if model changed (navigation between different models)
+    const modelName = m.route.param('model');
+    if (state._currentModelName !== modelName) {
+      initializeModelView(modelName);
+    }
+    return true;
   },
   view: () => {
     const modelName = m.route.param('model');
@@ -1601,12 +1786,164 @@ const RecordList = {
               m('p.text-gray-500', activeFilterCount > 0 ? 'Try adjusting your filters' : 'Get started by creating your first record'),
             ])
           : m('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.overflow-hidden', [
+            // Bulk Actions Toolbar (shown when items selected)
+            (state.selectedRecords && state.selectedRecords.size > 0) || state.selectAllMode ? m('.bg-indigo-50.border-b.border-indigo-100.px-4.py-3.flex.items-center.justify-between', [
+              m('.flex.items-center.gap-3', [
+                m('span.text-sm.text-indigo-700.font-medium', 
+                  state.selectAllMode 
+                    ? 'All ' + state.pagination.total + ' records selected'
+                    : state.selectedRecords.size + ' record' + (state.selectedRecords.size > 1 ? 's' : '') + ' selected'
+                ),
+                // Show "Select all X records" option when current page is fully selected
+                !state.selectAllMode && state.selectedRecords.size === state.records.length && state.pagination.total > state.records.length && m('button.text-sm.text-indigo-600.hover:text-indigo-800.underline.font-medium', {
+                  onclick: () => {
+                    state.selectAllMode = true;
+                    m.redraw();
+                  },
+                }, 'Select all ' + state.pagination.total + ' records'),
+                // Show "Select only this page" when in selectAllMode
+                state.selectAllMode && m('button.text-sm.text-indigo-600.hover:text-indigo-800.underline', {
+                  onclick: () => {
+                    state.selectAllMode = false;
+                    m.redraw();
+                  },
+                }, 'Select only this page (' + state.selectedRecords.size + ')'),
+              ]),
+              m('.flex.items-center.gap-2', [
+                m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-red-600.bg-white.border.border-red-200.rounded.hover:bg-red-50.transition-colors', {
+                  disabled: state.bulkActionInProgress,
+                  onclick: async () => {
+                    const count = state.selectAllMode ? state.pagination.total : state.selectedRecords.size;
+                    if (!confirm('Are you sure you want to delete ' + count + ' records? This action cannot be undone.')) return;
+                    state.bulkActionInProgress = true;
+                    m.redraw();
+                    try {
+                      const payload = state.selectAllMode 
+                        ? { selectAll: true, filters: state.filters }
+                        : { ids: Array.from(state.selectedRecords) };
+                      await api.post('/extensions/bulk-actions/bulk-delete/' + modelName, payload);
+                      state.selectedRecords = new Set();
+                      state.selectAllMode = false;
+                      loadRecords(modelName, 1);
+                    } catch (err) {
+                      alert('Error: ' + err.message);
+                    } finally {
+                      state.bulkActionInProgress = false;
+                      m.redraw();
+                    }
+                  },
+                }, [
+                  m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+                    m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' })
+                  ),
+                  'Delete',
+                ]),
+                m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-blue-600.bg-white.border.border-blue-200.rounded.hover:bg-blue-50.transition-colors', {
+                  disabled: state.bulkActionInProgress,
+                  onclick: async () => {
+                    state.bulkActionInProgress = true;
+                    m.redraw();
+                    try {
+                      const payload = state.selectAllMode 
+                        ? { selectAll: true, filters: state.filters }
+                        : { ids: Array.from(state.selectedRecords) };
+                      const response = await api.post('/extensions/export?model=' + modelName + '&format=json', payload);
+                      // Download as file
+                      const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = modelName + '-export.json';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (err) {
+                      alert('Error: ' + err.message);
+                    } finally {
+                      state.bulkActionInProgress = false;
+                      m.redraw();
+                    }
+                  },
+                }, [
+                  m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+                    m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' })
+                  ),
+                  'Export JSON',
+                ]),
+                m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-green-600.bg-white.border.border-green-200.rounded.hover:bg-green-50.transition-colors', {
+                  disabled: state.bulkActionInProgress,
+                  onclick: async () => {
+                    state.bulkActionInProgress = true;
+                    m.redraw();
+                    try {
+                      const payload = state.selectAllMode 
+                        ? { selectAll: true, filters: state.filters }
+                        : { ids: Array.from(state.selectedRecords) };
+                      const response = await api.post('/extensions/export?model=' + modelName + '&format=csv', payload);
+                      // Download as file
+                      const blob = new Blob([response.data], { type: 'text/csv' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = modelName + '-export.csv';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (err) {
+                      alert('Error: ' + err.message);
+                    } finally {
+                      state.bulkActionInProgress = false;
+                      m.redraw();
+                    }
+                  },
+                }, [
+                  m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+                    m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' })
+                  ),
+                  'Export CSV',
+                ]),
+                // Bulk Field Update Dropdown
+                m(BulkFieldUpdateDropdown, {
+                  modelName: modelName,
+                  selectedIds: state.selectAllMode ? null : Array.from(state.selectedRecords),
+                  selectAllMode: state.selectAllMode,
+                  filters: state.filters,
+                  onComplete: () => {
+                    state.selectedRecords = new Set();
+                    state.selectAllMode = false;
+                    loadRecords(modelName, state.pagination.page);
+                  },
+                }),
+                m('button.px-3.py-1.5.text-sm.text-gray-500.hover:text-gray-700', {
+                  onclick: () => {
+                    state.selectedRecords = new Set();
+                    state.selectAllMode = false;
+                    state.bulkFieldDropdownOpen = false;
+                    state.selectedBulkField = null;
+                    m.redraw();
+                  },
+                }, 'Clear'),
+              ]),
+            ]) : null,
             // Table container with sticky header and actions
             m('.overflow-x-auto.max-h-[calc(100vh-380px)]', { style: 'position: relative;' }, [
               m('table.w-full.border-collapse', { style: 'min-width: 100%;' }, [
                 // Sticky header
                 m('thead.bg-gray-50', { style: 'position: sticky; top: 0; z-index: 10;' }, [
                   m('tr', [
+                    // Checkbox column header
+                    m('th.px-4.py-3.text-left.bg-gray-50.border-b.border-gray-200', { style: 'width: 40px;' }, [
+                      m('input[type=checkbox].rounded.border-gray-300.text-indigo-600.focus:ring-indigo-500', {
+                        checked: state.records.length > 0 && state.selectedRecords && state.selectedRecords.size === state.records.length,
+                        indeterminate: state.selectedRecords && state.selectedRecords.size > 0 && state.selectedRecords.size < state.records.length,
+                        onchange: (e) => {
+                          if (e.target.checked) {
+                            state.selectedRecords = new Set(state.records.map(r => r[primaryKey]));
+                          } else {
+                            state.selectedRecords = new Set();
+                          }
+                          m.redraw();
+                        },
+                      }),
+                    ]),
                     // Dynamic column headers
                     ...displayColumns.map(col => 
                       m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500.uppercase.tracking-wider.whitespace-nowrap.bg-gray-50.border-b.border-gray-200', 
@@ -1620,7 +1957,24 @@ const RecordList = {
                   ]),
                 ]),
                 m('tbody.divide-y.divide-gray-100', state.records.map(record => 
-                  m('tr.hover:bg-gray-50.transition-colors', [
+                  m('tr.hover:bg-gray-50.transition-colors', {
+                    class: state.selectedRecords && state.selectedRecords.has(record[primaryKey]) ? 'bg-indigo-50' : '',
+                  }, [
+                    // Checkbox cell
+                    m('td.px-4.py-3', [
+                      m('input[type=checkbox].rounded.border-gray-300.text-indigo-600.focus:ring-indigo-500', {
+                        checked: state.selectedRecords && state.selectedRecords.has(record[primaryKey]),
+                        onchange: (e) => {
+                          if (!state.selectedRecords) state.selectedRecords = new Set();
+                          if (e.target.checked) {
+                            state.selectedRecords.add(record[primaryKey]);
+                          } else {
+                            state.selectedRecords.delete(record[primaryKey]);
+                          }
+                          m.redraw();
+                        },
+                      }),
+                    ]),
                     // Dynamic cell values
                     ...displayColumns.map(col => 
                       m('td.px-4.py-3.text-sm.whitespace-nowrap.text-gray-700', 

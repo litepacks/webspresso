@@ -104,6 +104,7 @@ const db = createDatabase({
       table.string('title');
       table.text('content');
       table.text('body');
+      table.string('status').defaultTo('draft');
       table.boolean('published').defaultTo(false);
       table.timestamp('created_at');
       table.timestamp('updated_at');
@@ -225,6 +226,10 @@ module.exports = defineModel({
     body: zdb.text({ nullable: true }).config({
       label: 'Body',
       hint: 'Rich text content',
+    }),
+    status: zdb.enum(['draft', 'pending', 'published', 'archived'], { default: 'draft' }).config({
+      label: 'Status',
+      hint: 'Post status',
     }),
     published: zdb.boolean({ default: false }).config({
       label: 'Published',

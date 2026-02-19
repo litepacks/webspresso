@@ -263,6 +263,221 @@ test.describe('Admin Panel v2.0 API', () => {
     });
   });
 
+  test.describe('Bulk Field Update API', () => {
+    
+    test('should return bulk-updatable fields for model', async ({ page }) => {
+      await ensureLoggedIn(page);
+      
+      const response = await page.request.get(`${BASE_URL}/_admin/api/extensions/bulk-fields/TestPost`);
+      
+      expect(response.status()).toBe(200);
+      const data = await response.json();
+      
+      expect(data).toHaveProperty('fields');
+      expect(Array.isArray(data.fields)).toBe(true);
+      
+      // Should have status (enum) and published (boolean) fields
+      const fieldNames = data.fields.map(f => f.name);
+      expect(fieldNames).toContain('published');
+      expect(fieldNames).toContain('status');
+      
+      // Check field structure
+      const statusField = data.fields.find(f => f.name === 'status');
+      expect(statusField.type).toBe('enum');
+      expect(statusField.options).toEqual([
+        { value: 'draft', label: 'draft' },
+        { value: 'pending', label: 'pending' },
+        { value: 'published', label: 'published' },
+        { value: 'archived', label: 'archived' },
+      ]);
+      
+      const publishedField = data.fields.find(f => f.name === 'published');
+      expect(publishedField.type).toBe('boolean');
+      expect(publishedField.options).toEqual([
+        { value: true, label: 'True' },
+        { value: false, label: 'False' },
+      ]);
+    });
+
+    test('should bulk update boolean field', async ({ page }) => {
+      await ensureLoggedIn(page);
+      
+      // Create test records with published=false
+      const ids = [];
+      for (let i = 1; i <= 3; i++) {
+        const response = await page.request.post(`${BASE_URL}/_admin/api/models/TestPost/records`, {
+          data: {
+            title: `Bulk Bool Test ${i}`,
+            content: 'Content for bulk boolean test',
+            published: false,
+            status: 'draft',
+          },
+        });
+        const data = await response.json();
+        ids.push(data.data.id);
+      }
+      
+      // Execute bulk update to set published=true
+      const updateResponse = await page.request.post(
+        `${BASE_URL}/_admin/api/extensions/bulk-update/TestPost`,
+        { data: { ids, field: 'published', value: true } }
+      );
+      
+      expect(updateResponse.status()).toBe(200);
+      const result = await updateResponse.json();
+      expect(result.success).toBe(true);
+      expect(result.affected).toBe(3);
+      expect(result.result.field).toBe('published');
+      expect(result.result.value).toBe(true);
+      
+      // Verify records are updated
+      for (const id of ids) {
+        const getResponse = await page.request.get(`${BASE_URL}/_admin/api/models/TestPost/records/${id}`);
+        const record = await getResponse.json();
+        expect(record.data.published).toBe(1); // SQLite returns 1 for true
+      }
+      
+      // Cleanup
+      for (const id of ids) {
+        await page.request.delete(`${BASE_URL}/_admin/api/models/TestPost/records/${id}`);
+      }
+    });
+
+    test('should bulk update enum field', async ({ page }) => {
+      await ensureLoggedIn(page);
+      
+      // Create test records with status=draft
+      const ids = [];
+      for (let i = 1; i <= 3; i++) {
+        const response = await page.request.post(`${BASE_URL}/_admin/api/models/TestPost/records`, {
+          data: {
+            title: `Bulk Enum Test ${i}`,
+            content: 'Content for bulk enum test',
+            published: false,
+            status: 'draft',
+          },
+        });
+        const data = await response.json();
+        ids.push(data.data.id);
+      }
+      
+      // Execute bulk update to set status=published
+      const updateResponse = await page.request.post(
+        `${BASE_URL}/_admin/api/extensions/bulk-update/TestPost`,
+        { data: { ids, field: 'status', value: 'published' } }
+      );
+      
+      expect(updateResponse.status()).toBe(200);
+      const result = await updateResponse.json();
+      expect(result.success).toBe(true);
+      expect(result.affected).toBe(3);
+      expect(result.result.field).toBe('status');
+      expect(result.result.value).toBe('published');
+      
+      // Verify records are updated
+      for (const id of ids) {
+        const getResponse = await page.request.get(`${BASE_URL}/_admin/api/models/TestPost/records/${id}`);
+        const record = await getResponse.json();
+        expect(record.data.status).toBe('published');
+      }
+      
+      // Cleanup
+      for (const id of ids) {
+        await page.request.delete(`${BASE_URL}/_admin/api/models/TestPost/records/${id}`);
+      }
+    });
+
+    test('should return 400 for invalid enum value', async ({ page }) => {
+      await ensureLoggedIn(page);
+      
+      // Create a test record
+      const createResponse = await page.request.post(`${BASE_URL}/_admin/api/models/TestPost/records`, {
+        data: {
+          title: 'Invalid Enum Test',
+          content: 'Content for invalid enum test',
+          status: 'draft',
+        },
+      });
+      const created = await createResponse.json();
+      const id = created.data.id;
+      
+      // Try to update with invalid enum value
+      const updateResponse = await page.request.post(
+        `${BASE_URL}/_admin/api/extensions/bulk-update/TestPost`,
+        { data: { ids: [id], field: 'status', value: 'invalid_status' } }
+      );
+      
+      expect(updateResponse.status()).toBe(400);
+      const result = await updateResponse.json();
+      expect(result.error).toContain('Invalid value');
+      
+      // Cleanup
+      await page.request.delete(`${BASE_URL}/_admin/api/models/TestPost/records/${id}`);
+    });
+
+    test('should return 400 for non-enum/boolean field', async ({ page }) => {
+      await ensureLoggedIn(page);
+      
+      // Create a test record
+      const createResponse = await page.request.post(`${BASE_URL}/_admin/api/models/TestPost/records`, {
+        data: {
+          title: 'Non-Enum Field Test',
+          content: 'Content for non-enum field test',
+        },
+      });
+      const created = await createResponse.json();
+      const id = created.data.id;
+      
+      // Try to bulk update a string field
+      const updateResponse = await page.request.post(
+        `${BASE_URL}/_admin/api/extensions/bulk-update/TestPost`,
+        { data: { ids: [id], field: 'title', value: 'New Title' } }
+      );
+      
+      expect(updateResponse.status()).toBe(400);
+      const result = await updateResponse.json();
+      expect(result.error).toContain('not an enum or boolean');
+      
+      // Cleanup
+      await page.request.delete(`${BASE_URL}/_admin/api/models/TestPost/records/${id}`);
+    });
+
+    test('should return 400 when field not provided', async ({ page }) => {
+      await ensureLoggedIn(page);
+      
+      const response = await page.request.post(
+        `${BASE_URL}/_admin/api/extensions/bulk-update/TestPost`,
+        { data: { ids: [1, 2, 3], value: 'test' } }
+      );
+      
+      expect(response.status()).toBe(400);
+      const result = await response.json();
+      expect(result.error).toContain('Field name is required');
+    });
+
+    test('should return 400 when no IDs provided for bulk update', async ({ page }) => {
+      await ensureLoggedIn(page);
+      
+      const response = await page.request.post(
+        `${BASE_URL}/_admin/api/extensions/bulk-update/TestPost`,
+        { data: { field: 'status', value: 'published' } }
+      );
+      
+      expect(response.status()).toBe(400);
+      const result = await response.json();
+      expect(result.error).toContain('No records selected');
+    });
+
+    test('should return error for non-existent model', async ({ page }) => {
+      await ensureLoggedIn(page);
+      
+      const response = await page.request.get(`${BASE_URL}/_admin/api/extensions/bulk-fields/NonExistentModel`);
+      
+      // Either 404 (not found) or 500 (model lookup error) is acceptable
+      expect([404, 500]).toContain(response.status());
+    });
+  });
+
   test.describe('Custom Actions API', () => {
     
     test('should return 404 for non-existent action', async ({ page }) => {
@@ -719,5 +934,154 @@ test.describe('Admin Panel v2.0 UI', () => {
     // Logout button should be visible (in new layout it's an icon button with title="Logout")
     const logoutBtn = page.locator('button[title="Logout"], button:has-text("Logout")').first();
     await expect(logoutBtn).toBeVisible({ timeout: 10000 });
+  });
+
+  test('should show bulk actions toolbar when records selected', async ({ page }) => {
+    // First create some test records
+    await page.request.post(`${BASE_URL}/_admin/api/models/TestPost/records`, {
+      data: {
+        title: 'UI Bulk Test 1',
+        content: 'Content for UI bulk test',
+        status: 'draft',
+        published: false,
+      },
+    });
+    await page.request.post(`${BASE_URL}/_admin/api/models/TestPost/records`, {
+      data: {
+        title: 'UI Bulk Test 2',
+        content: 'Content for UI bulk test',
+        status: 'draft',
+        published: false,
+      },
+    });
+    
+    await page.goto(`${BASE_URL}/_admin/models/TestPost`);
+    await page.waitForLoadState('networkidle');
+    
+    // Wait for table to load
+    await page.waitForSelector('table', { timeout: 15000 });
+    
+    // Select first checkbox
+    const firstCheckbox = page.locator('td input[type="checkbox"]').first();
+    await expect(firstCheckbox).toBeVisible({ timeout: 5000 });
+    await firstCheckbox.click();
+    
+    // Bulk actions toolbar should appear
+    const bulkToolbar = page.locator('text=record selected').or(page.locator('text=records selected')).first();
+    await expect(bulkToolbar).toBeVisible({ timeout: 5000 });
+    
+    // Delete button should be visible
+    const deleteBtn = page.locator('button:has-text("Delete")').first();
+    await expect(deleteBtn).toBeVisible({ timeout: 5000 });
+    
+    // Export buttons should be visible
+    const exportJsonBtn = page.locator('button:has-text("Export JSON")');
+    await expect(exportJsonBtn).toBeVisible({ timeout: 5000 });
+  });
+
+  test('should show Set Field dropdown in bulk actions', async ({ page }) => {
+    // First create some test records
+    await page.request.post(`${BASE_URL}/_admin/api/models/TestPost/records`, {
+      data: {
+        title: 'Set Field Test 1',
+        content: 'Content for set field test',
+        status: 'draft',
+        published: false,
+      },
+    });
+    
+    await page.goto(`${BASE_URL}/_admin/models/TestPost`);
+    await page.waitForLoadState('networkidle');
+    
+    // Wait for table to load
+    await page.waitForSelector('table', { timeout: 15000 });
+    
+    // Select first checkbox
+    const firstCheckbox = page.locator('td input[type="checkbox"]').first();
+    await expect(firstCheckbox).toBeVisible({ timeout: 5000 });
+    await firstCheckbox.click();
+    
+    // Set Field dropdown button should be visible
+    const setFieldBtn = page.locator('button:has-text("Set Field")');
+    await expect(setFieldBtn).toBeVisible({ timeout: 5000 });
+  });
+
+  test('should open Set Field dropdown and show fields', async ({ page }) => {
+    // First create some test records
+    await page.request.post(`${BASE_URL}/_admin/api/models/TestPost/records`, {
+      data: {
+        title: 'Dropdown Test',
+        content: 'Content for dropdown test',
+        status: 'draft',
+        published: false,
+      },
+    });
+    
+    await page.goto(`${BASE_URL}/_admin/models/TestPost`);
+    await page.waitForLoadState('networkidle');
+    
+    // Wait for table to load
+    await page.waitForSelector('table', { timeout: 15000 });
+    
+    // Select first checkbox
+    const firstCheckbox = page.locator('td input[type="checkbox"]').first();
+    await expect(firstCheckbox).toBeVisible({ timeout: 5000 });
+    await firstCheckbox.click();
+    
+    // Click Set Field dropdown
+    const setFieldBtn = page.locator('button:has-text("Set Field")');
+    await setFieldBtn.click();
+    
+    // Dropdown should open and show fields
+    const dropdown = page.locator('text=Select Field');
+    await expect(dropdown).toBeVisible({ timeout: 5000 });
+    
+    // Should see the status and published fields
+    const statusField = page.locator('button:has-text("Status")').or(page.locator('text=status'));
+    const publishedField = page.locator('button:has-text("Published")').or(page.locator('text=published'));
+    
+    await expect(statusField.first()).toBeVisible({ timeout: 5000 });
+    await expect(publishedField.first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('should clear selection when Clear button clicked', async ({ page }) => {
+    await page.goto(`${BASE_URL}/_admin/models/TestPost`);
+    await page.waitForLoadState('networkidle');
+    
+    // Wait for table to load
+    await page.waitForSelector('table', { timeout: 15000 });
+    
+    // Select first checkbox
+    const firstCheckbox = page.locator('td input[type="checkbox"]').first();
+    await expect(firstCheckbox).toBeVisible({ timeout: 5000 });
+    await firstCheckbox.click();
+    
+    // Verify selection appeared
+    const selectedText = page.locator('text=1 record selected, text=1 records selected').first();
+    await expect(selectedText).toBeVisible({ timeout: 5000 });
+    
+    // Click clear button
+    const clearBtn = page.locator('button:has-text("Clear")').first();
+    await clearBtn.click();
+    
+    // Selection should be cleared
+    await expect(selectedText).not.toBeVisible({ timeout: 5000 });
+  });
+
+  test('should select all with header checkbox', async ({ page }) => {
+    await page.goto(`${BASE_URL}/_admin/models/TestPost`);
+    await page.waitForLoadState('networkidle');
+    
+    // Wait for table to load
+    await page.waitForSelector('table', { timeout: 15000 });
+    
+    // Click header checkbox to select all
+    const headerCheckbox = page.locator('th input[type="checkbox"]');
+    await expect(headerCheckbox).toBeVisible({ timeout: 5000 });
+    await headerCheckbox.click();
+    
+    // Bulk actions toolbar should show multiple records selected
+    const selectedText = page.locator('text=/\\d+ record(s)? selected/');
+    await expect(selectedText).toBeVisible({ timeout: 5000 });
   });
 });

@@ -58,6 +58,12 @@ function adminPanelPlugin(options = {}) {
     name: 'admin-panel',
     version: '2.0.0',
     description: 'Modular admin panel for Webspresso with extensions support',
+    
+    // CSP requirements for Quill.js rich text editor
+    csp: {
+      styleSrc: ['https://cdn.quilljs.com'],
+      scriptSrc: ['https://cdn.quilljs.com'],
+    },
     enabled,
     registry, // Expose registry for external configuration
 
@@ -177,7 +183,12 @@ function adminPanelPlugin(options = {}) {
       ctx.addRoute('get', `${adminPath}/api/extensions/dashboard/stats`, requireAuth, extensionHandlers.dashboardStatsHandler);
       ctx.addRoute('post', `${adminPath}/api/extensions/actions/:actionId/:model/:id`, requireAuth, extensionHandlers.actionHandler);
       ctx.addRoute('post', `${adminPath}/api/extensions/bulk-actions/:actionId/:model`, requireAuth, extensionHandlers.bulkActionHandler);
+      ctx.addRoute('get', `${adminPath}/api/extensions/bulk-fields/:model`, requireAuth, extensionHandlers.bulkFieldsHandler);
+      ctx.addRoute('post', `${adminPath}/api/extensions/bulk-update/:model`, requireAuth, extensionHandlers.bulkUpdateFieldHandler);
       ctx.addRoute('get', `${adminPath}/api/extensions/export/:model`, requireAuth, extensionHandlers.exportHandler);
+      ctx.addRoute('get', `${adminPath}/api/extensions/export`, requireAuth, extensionHandlers.exportHandler);
+      ctx.addRoute('post', `${adminPath}/api/extensions/export/:model`, requireAuth, extensionHandlers.exportHandler);
+      ctx.addRoute('post', `${adminPath}/api/extensions/export`, requireAuth, extensionHandlers.exportHandler);
       ctx.addRoute('get', `${adminPath}/api/extensions/activity`, requireAuth, extensionHandlers.activityLogHandler);
 
       // Custom pages API routes

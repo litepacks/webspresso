@@ -122,6 +122,7 @@ class PluginManager {
     this.registeredFilters = new Map(); // name -> filter function
     this.routes = [];                   // Collected route metadata
     this.customRoutes = [];             // Routes added by plugins
+    this.cspDirectives = new Map();     // directive -> Set of sources (from plugins)
     this.app = null;
     this.nunjucksEnv = null;
   }
@@ -263,6 +264,11 @@ class PluginManager {
       this.pluginAPIs.set(plugin.name, boundAPI);
     }
 
+    // Collect CSP requirements from plugin
+    if (plugin.csp) {
+      this._collectCspDirectives(plugin.csp);
+    }
+
     // Call register hook
     if (typeof plugin.register === 'function') {
       await plugin.register(ctx);
@@ -293,6 +299,11 @@ class PluginManager {
         boundAPI[key] = typeof value === 'function' ? value.bind(plugin) : value;
       }
       this.pluginAPIs.set(plugin.name, boundAPI);
+    }
+
+    // Collect CSP requirements from plugin
+    if (plugin.csp) {
+      this._collectCspDirectives(plugin.csp);
     }
 
     // Call register hook (sync - if plugin has async register, it won't wait)
@@ -434,6 +445,35 @@ class PluginManager {
     for (const [name, fn] of this.registeredFilters) {
       this.nunjucksEnv.addFilter(name, fn);
     }
+  }
+
+  /**
+   * Collect CSP directives from a plugin
+   * @param {Object} csp - CSP directives object { styleSrc: [...], scriptSrc: [...], ... }
+   */
+  _collectCspDirectives(csp) {
+    for (const [directive, sources] of Object.entries(csp)) {
+      if (!this.cspDirectives.has(directive)) {
+        this.cspDirectives.set(directive, new Set());
+      }
+      const directiveSet = this.cspDirectives.get(directive);
+      const sourceArray = Array.isArray(sources) ? sources : [sources];
+      for (const source of sourceArray) {
+        directiveSet.add(source);
+      }
+    }
+  }
+
+  /**
+   * Get merged CSP directives from all plugins
+   * @returns {Object} CSP directives object to merge with helmet config
+   */
+  getCspDirectives() {
+    const directives = {};
+    for (const [directive, sources] of this.cspDirectives) {
+      directives[directive] = Array.from(sources);
+    }
+    return directives;
   }
 
   /**

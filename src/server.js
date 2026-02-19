@@ -203,9 +203,44 @@ function createApp(options = {}) {
   // Security headers with Helmet
   if (helmetConfig !== false) {
     const defaultConfig = getDefaultHelmetConfig(isDev);
-    const finalConfig = helmetConfig === undefined || helmetConfig === true
+    let finalConfig = helmetConfig === undefined || helmetConfig === true
       ? defaultConfig
       : { ...defaultConfig, ...helmetConfig };
+    
+    // Collect CSP requirements from plugins (before they're fully registered)
+    if (plugins && Array.isArray(plugins) && finalConfig.contentSecurityPolicy) {
+      const pluginCspSources = {
+        styleSrc: new Set(),
+        scriptSrc: new Set(),
+        imgSrc: new Set(),
+        fontSrc: new Set(),
+        connectSrc: new Set(),
+        frameSrc: new Set(),
+      };
+      
+      for (const plugin of plugins) {
+        if (plugin && plugin.csp) {
+          for (const [directive, sources] of Object.entries(plugin.csp)) {
+            if (pluginCspSources[directive]) {
+              const sourceArray = Array.isArray(sources) ? sources : [sources];
+              for (const source of sourceArray) {
+                pluginCspSources[directive].add(source);
+              }
+            }
+          }
+        }
+      }
+      
+      // Merge plugin CSP sources with default config
+      if (finalConfig.contentSecurityPolicy && finalConfig.contentSecurityPolicy.directives) {
+        const directives = finalConfig.contentSecurityPolicy.directives;
+        for (const [directive, sources] of Object.entries(pluginCspSources)) {
+          if (sources.size > 0 && directives[directive]) {
+            directives[directive] = [...directives[directive], ...Array.from(sources)];
+          }
+        }
+      }
+    }
     
     app.use(helmet(finalConfig));
   }
