@@ -50,7 +50,7 @@ m.route(document.getElementById('app'), '/', {
       if (!isAuth) {
         return LoginForm;
       }
-      return ModelList;
+      return Dashboard;
     }
   },
   '/login': {
