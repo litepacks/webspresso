@@ -12,7 +12,7 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 - **Lifecycle Hooks**: Global and route-level hooks for request processing
 - **Template Helpers**: Laravel-inspired helper functions available in templates
 - **Plugin System**: Extensible architecture with version control and inter-plugin communication
-- **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing)
+- **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing), self-hosted site analytics
 
 ## Installation
 
@@ -526,6 +526,47 @@ Template helpers from analytics plugin:
 ```
 
 Individual helpers: `gtag()`, `gtm()`, `gtmNoscript()`, `yandexMetrika()`, `bingUET()`, `facebookPixel()`, `allAnalytics()`
+
+**Site Analytics Plugin:**
+- Self-hosted page view analytics (no external services required)
+- Automatic page view tracking via Express middleware
+- Bot detection (40+ patterns: Googlebot, GPTBot, curl, etc.)
+- Country detection (CDN headers, Accept-Language fallback)
+- Admin panel dashboard with Chart.js visualizations
+- Privacy-first: IP addresses are hashed, no cookies required
+
+```javascript
+const { siteAnalyticsPlugin, adminPanelPlugin } = require('webspresso/plugins');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  plugins: [
+    adminPanelPlugin({ db }),
+    siteAnalyticsPlugin({
+      db,
+      excludePaths: ['/health', '/favicon.ico'],
+      trackBots: true,  // Record bot visits separately (default: true)
+    }),
+  ]
+});
+```
+
+Admin panel analytics page includes:
+- **Summary cards**: Total views, unique visitors, unique pages, sessions
+- **Views over time**: Line chart (Chart.js) with daily views/visitors/sessions
+- **Bot activity**: Bot request counts with horizontal bar visualization
+- **Top pages**: Most viewed pages sorted by view count
+- **Recent activity**: Latest page views with country flags and timestamps
+- **Country stats**: Country breakdown with flag emojis and bar charts
+- **Date filtering**: Last 7, 30, or 90 days toggle
+
+Options:
+- `db` (required) - Database instance
+- `excludePaths` - Additional paths to exclude from tracking (admin, API, and static files are auto-excluded)
+- `trackBots` - Whether to record bot visits (default: `true`)
+- `tableName` - Custom table name (default: `analytics_page_views`)
+
+The `analytics_page_views` table is automatically created on first request.
 
 **SEO Checker Plugin:**
 - Client-side SEO analysis tool (inspired by django-check-seo)

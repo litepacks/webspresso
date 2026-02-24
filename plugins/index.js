@@ -9,6 +9,7 @@ const dashboardPlugin = require('./dashboard/index');
 const schemaExplorerPlugin = require('./schema-explorer');
 const adminPanelPlugin = require('./admin-panel');
 const seoCheckerPlugin = require('./seo-checker');
+const siteAnalyticsPlugin = require('./site-analytics');
 
 module.exports = {
   sitemapPlugin,
@@ -17,5 +18,6 @@ module.exports = {
   schemaExplorerPlugin,
   adminPanelPlugin,
   seoCheckerPlugin,
+  siteAnalyticsPlugin,
 };
 

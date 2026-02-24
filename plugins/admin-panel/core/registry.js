@@ -43,6 +43,9 @@ class AdminRegistry {
     
     // Field renderers: custom field display/edit components
     this.fieldRenderers = new Map();
+
+    // Client components: JS code strings for custom page rendering
+    this.clientComponents = new Map();
     
     // Hooks: lifecycle hooks
     this.hooks = {
@@ -261,6 +264,24 @@ class AdminRegistry {
   }
 
   /**
+   * Register a client-side component for a custom page
+   * @param {string} pageId - Page ID (must match a registered page)
+   * @param {string} jsCode - JavaScript code string that defines the component.
+   *   The code should assign a Mithril component to window.__customPages[pageId].
+   */
+  registerClientComponent(pageId, jsCode) {
+    this.clientComponents.set(pageId, jsCode);
+    return this;
+  }
+
+  /**
+   * Get all client component code strings concatenated
+   */
+  getClientComponents() {
+    return Array.from(this.clientComponents.values()).join('\n');
+  }
+
+  /**
    * Register a hook
    * @param {string} hookName - Hook name
    * @param {Function} callback - Hook callback
@@ -389,6 +410,7 @@ class AdminRegistry {
         path: p.path,
         icon: p.icon,
         permission: p.permission,
+        hasClientComponent: this.clientComponents.has(p.id),
       })),
       widgets: this.getWidgets().map(w => ({
         id: w.id,
@@ -431,6 +453,7 @@ class AdminRegistry {
     this.menuItems = [];
     this.menuGroups.clear();
     this.fieldRenderers.clear();
+    this.clientComponents.clear();
     Object.keys(this.hooks).forEach(k => this.hooks[k] = []);
   }
 }

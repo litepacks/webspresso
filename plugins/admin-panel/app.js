@@ -35,17 +35,14 @@ async function checkSetupNeeded() {
   }
 }
 
-// Router
-m.route(document.getElementById('app'), '/', {
+// Build routes
+var routes = {
   '/': {
     onmatch: async () => {
-      // Check if setup is needed first
       const needsSetup = await checkSetupNeeded();
       if (needsSetup) {
         return SetupForm;
       }
-      
-      // Check if user is authenticated
       const isAuth = await checkAuth();
       if (!isAuth) {
         return LoginForm;
@@ -55,7 +52,6 @@ m.route(document.getElementById('app'), '/', {
   },
   '/login': {
     onmatch: async () => {
-      // If already logged in, redirect to home
       const isAuth = await checkAuth();
       if (isAuth) {
         m.route.set('/');
@@ -66,7 +62,6 @@ m.route(document.getElementById('app'), '/', {
   },
   '/setup': {
     onmatch: async () => {
-      // If admin exists, redirect to login
       const needsSetup = await checkSetupNeeded();
       if (!needsSetup) {
         m.route.set('/login');
@@ -115,5 +110,29 @@ m.route(document.getElementById('app'), '/', {
       return RecordForm;
     }
   },
-});
+};
+
+// Dynamic routes for custom pages registered via plugins
+var config = window.__ADMIN_CONFIG__;
+if (config && config.pages) {
+  config.pages.forEach(function(page) {
+    if (!routes[page.path]) {
+      routes[page.path] = {
+        onmatch: async () => {
+          const isAuth = await checkAuth();
+          if (!isAuth) {
+            m.route.set('/login');
+            return;
+          }
+          if (window.__customPages && window.__customPages[page.id]) {
+            return window.__customPages[page.id];
+          }
+          return createCustomPage(page);
+        }
+      };
+    }
+  });
+}
+
+m.route(document.getElementById('app'), '/', routes);
 `;

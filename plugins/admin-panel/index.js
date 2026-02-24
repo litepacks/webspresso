@@ -54,6 +54,11 @@ function adminPanelPlugin(options = {}) {
   const session = require('express-session');
   const bcrypt = require('bcrypt');
 
+  const serveAdminPanel = (req, res) => {
+    res.type('text/html');
+    res.send(generateAdminPanelHtml(adminPath, registry));
+  };
+
   return {
     name: 'admin-panel',
     version: '2.0.0',
@@ -66,6 +71,14 @@ function adminPanelPlugin(options = {}) {
     },
     enabled,
     registry, // Expose registry for external configuration
+
+    api: {
+      getRegistry() { return registry; },
+      getAdminPath() { return adminPath; },
+      serveAdminPanel,
+      requireAuth,
+      optionalAuth,
+    },
 
     /**
      * Register hook - called when plugin is registered
@@ -235,11 +248,6 @@ function adminPanelPlugin(options = {}) {
       // HTML Endpoints
       // ==========================================
 
-      const serveAdminPanel = (req, res) => {
-        res.type('text/html');
-        res.send(generateAdminPanelHtml(adminPath, registry));
-      };
-
       // Root admin path
       ctx.addRoute('get', adminPath, optionalAuth, serveAdminPanel);
 
@@ -329,6 +337,10 @@ function generateAdminPanelHtml(adminPath, registry) {
     ${dashboardComponent}
     ${bulkActionsComponent}
     ${customPageComponent}
+
+    // Custom page components container
+    window.__customPages = window.__customPages || {};
+    ${registry.getClientComponents()}
   </script>
   <script>${appScript}</script>
 </body>

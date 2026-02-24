@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Site Analytics Plugin (New)
+- **Self-hosted Analytics**: Privacy-first page view tracking with no external dependencies
+- **Tracking Middleware**: Non-blocking Express middleware that records page views asynchronously
+- **Bot Detection**: 40+ user-agent patterns (Googlebot, GPTBot, curl, Python, WhatsApp, etc.)
+- **Country Detection**: Automatic country identification via CDN headers (Cloudflare, Vercel) with Accept-Language fallback
+- **IP Hashing**: Privacy-first design - IP addresses are SHA-256 hashed before storage
+- **Session Tracking**: Cookie-free visitor fingerprinting (IP + User-Agent hash) with 30-minute session windows
+- **Auto-migration**: `analytics_page_views` table created automatically on first request
+- **Admin Dashboard Page**: Full analytics page in the admin panel with:
+  - Summary cards (views, visitors, unique pages, sessions)
+  - Views over time chart (Chart.js line chart with daily breakdown)
+  - Bot activity list with horizontal bar visualization
+  - Top pages ranked by view count
+  - Recent activity feed with country flags and timestamps
+  - Country statistics with flag emojis and distribution bars
+  - Date range filter (Last 7 / 30 / 90 days)
+- **6 API Endpoints**: `/stats`, `/views-over-time`, `/top-pages`, `/bot-activity`, `/countries`, `/recent`
+- **Database Agnostic**: Works with SQLite, PostgreSQL, and MySQL via Knex
+- **Configurable**: `excludePaths`, `trackBots`, custom `tableName` options
+
+#### Admin Panel Extensibility
+- **Plugin API**: Admin panel now exposes `api` property for inter-plugin communication (`getRegistry()`, `getAdminPath()`, `serveAdminPanel`, `requireAuth`, `optionalAuth`)
+- **Client Components**: New `registerClientComponent(pageId, jsCode)` method on registry for injecting custom Mithril.js page components from external plugins
+- **Dynamic Page Routing**: Mithril.js router now automatically creates routes for custom pages registered via the registry
+- **`hasClientComponent` Flag**: `toClientConfig()` includes `hasClientComponent` field for each page
+
 #### Sitemap Plugin v2.0 - Dynamic Database Content
 - **Dynamic Sources**: Generate sitemap URLs from database records using `dynamicSources` option
 - **Model-based URLs**: Automatically fetch records from ORM models and generate URLs
@@ -177,7 +203,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Version History
 
 - **0.0.7**: Core framework with routing, ORM, plugins
-- **Unreleased**: W-Runtime (experimental), CLI improvements
+- **Unreleased**: W-Runtime (experimental), CLI improvements, site analytics plugin, admin panel extensibility
 
 ---
 
