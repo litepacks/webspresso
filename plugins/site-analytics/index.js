@@ -37,6 +37,7 @@ function siteAnalyticsPlugin(options = {}) {
 
     csp: {
       scriptSrc: ['https://cdn.jsdelivr.net'],
+      connectSrc: ['https://cdn.jsdelivr.net'],
     },
 
     register(ctx) {
