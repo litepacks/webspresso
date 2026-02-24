@@ -75,4 +75,25 @@ describe('Analytics Admin Component', () => {
     expect(code).toContain('(function()');
     expect(code).toContain('})()');
   });
+
+  describe('scrollable sections', () => {
+    it('should apply max-height and overflow-y-auto to Top Pages', () => {
+      expect(code).toContain("'max-height:480px'");
+      const topPagesIdx = code.indexOf("'Top Pages'");
+      const topPagesContainer = code.lastIndexOf('max-height:480px', topPagesIdx);
+      expect(topPagesContainer).toBeGreaterThan(-1);
+    });
+
+    it('should apply max-height and overflow-y-auto to Recent Activity', () => {
+      const recentIdx = code.indexOf("'Recent Activity'");
+      const recentContainer = code.lastIndexOf('max-height:480px', recentIdx);
+      expect(recentContainer).toBeGreaterThan(-1);
+    });
+
+    it('should use flex-col layout with shrink-0 headers for scroll containers', () => {
+      expect(code).toContain('flex.flex-col');
+      expect(code).toContain('shrink-0');
+      expect(code).toContain('overflow-y-auto.flex-1');
+    });
+  });
 });

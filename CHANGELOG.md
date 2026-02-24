@@ -21,8 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Summary cards (views, visitors, unique pages, sessions)
   - Views over time chart (Chart.js line chart with daily breakdown)
   - Bot activity list with horizontal bar visualization
-  - Top pages ranked by view count
-  - Recent activity feed with country flags and timestamps
+  - Top pages ranked by view count (scrollable, max-height container)
+  - Recent activity feed with country flags and timestamps (scrollable, max-height container)
   - Country statistics with flag emojis and distribution bars
   - Date range filter (Last 7 / 30 / 90 days)
 - **6 API Endpoints**: `/stats`, `/views-over-time`, `/top-pages`, `/bot-activity`, `/countries`, `/recent`
@@ -34,6 +34,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Client Components**: New `registerClientComponent(pageId, jsCode)` method on registry for injecting custom Mithril.js page components from external plugins
 - **Dynamic Page Routing**: Mithril.js router now automatically creates routes for custom pages registered via the registry
 - **`hasClientComponent` Flag**: `toClientConfig()` includes `hasClientComponent` field for each page
+
+#### Admin Panel - Mobile Responsive Sidebar
+- **Hamburger Menu**: Mobile header with hamburger button for sidebar toggle on small screens
+- **Slide-in Sidebar**: Sidebar slides in from the left with `translate-x` animation on mobile
+- **Backdrop Overlay**: Semi-transparent dark overlay behind sidebar when open on mobile
+- **Close Button**: X button in sidebar header for closing on mobile (visible only on `< lg`)
+- **Auto-close on Navigation**: Sidebar automatically closes when a menu item is clicked
+- **Responsive Layout**: Main content area uses `lg:ml-64` (desktop sidebar offset) and `pt-20` (mobile header offset) for proper responsive spacing
+- **Z-index Layering**: Proper stacking order - mobile header (z-20), backdrop (z-30), sidebar (z-40)
 
 #### Sitemap Plugin v2.0 - Dynamic Database Content
 - **Dynamic Sources**: Generate sitemap URLs from database records using `dynamicSources` option

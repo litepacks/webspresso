@@ -326,11 +326,11 @@ var AnalyticsPage = {
           // Top Pages + Recent Activity row
           m('div.grid.grid-cols-1.lg:grid-cols-2.gap-4.mb-6', [
             // Top Pages
-            m('div.bg-white.rounded-lg.shadow', [
-              m('div.px-5.py-4.border-b.border-gray-100', [
+            m('div.bg-white.rounded-lg.shadow.flex.flex-col', { style: 'max-height:480px' }, [
+              m('div.px-5.py-4.border-b.border-gray-100.shrink-0', [
                 m('h3.text-sm.font-semibold.text-gray-900', 'Top Pages'),
               ]),
-              m('div.divide-y.divide-gray-50', [
+              m('div.divide-y.divide-gray-50.overflow-y-auto.flex-1', [
                 s.topPages.length === 0
                   ? m('p.text-gray-400.text-sm.text-center.py-6', 'No page views yet')
                   : (function() {
@@ -356,12 +356,12 @@ var AnalyticsPage = {
             ]),
 
             // Recent Activity
-            m('div.bg-white.rounded-lg.shadow', [
-              m('div.px-5.py-4.border-b.border-gray-100.flex.items-center.justify-between', [
+            m('div.bg-white.rounded-lg.shadow.flex.flex-col', { style: 'max-height:480px' }, [
+              m('div.px-5.py-4.border-b.border-gray-100.flex.items-center.justify-between.shrink-0', [
                 m('h3.text-sm.font-semibold.text-gray-900', 'Recent Activity'),
                 m('span.text-xs.text-gray-400', 'Live'),
               ]),
-              m('div.divide-y.divide-gray-50', [
+              m('div.divide-y.divide-gray-50.overflow-y-auto.flex-1', [
                 s.recent.length === 0
                   ? m('p.text-gray-400.text-sm.text-center.py-6', 'No recent activity')
                   : s.recent.slice(0, 10).map(function(item) {

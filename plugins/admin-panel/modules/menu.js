@@ -125,6 +125,7 @@ const MenuItem = {
         : 'text-gray-700 hover:bg-gray-100',
       onclick: (e) => {
         e.preventDefault();
+        sidebarOpen = false;
         m.route.set(item.path);
       },
     }, [
@@ -182,6 +183,9 @@ const MenuGroup = {
   },
 };
 
+// Global sidebar state (shared between Sidebar, Layout, and MobileHeader)
+var sidebarOpen = false;
+
 // Sidebar Component
 const Sidebar = {
   oninit(vnode) {
@@ -207,53 +211,79 @@ const Sidebar = {
     const { menu, settings, loading } = vnode.state;
     const currentPath = m.route.get() || '/';
     
-    return m('aside.w-64.bg-white.border-r.border-gray-200.flex.flex-col.h-screen.fixed.left-0.top-0', [
-      // Logo/Title
-      m('div.h-16.flex.items-center.px-4.border-b.border-gray-200', [
-        m('a.flex.items-center.gap-2.text-lg.font-bold.text-gray-900', {
-          href: '/',
-          onclick: (e) => { e.preventDefault(); m.route.set('/'); },
-        }, [
-          m('div.w-8.h-8.bg-blue-600.rounded-lg.flex.items-center.justify-center', [
-            m('span.text-white.font-bold', 'A'),
+    return [
+      // Backdrop overlay (mobile only)
+      sidebarOpen && m('div.fixed.inset-0.bg-black.bg-opacity-50.z-30.lg:hidden', {
+        onclick: () => { sidebarOpen = false; },
+      }),
+
+      m('aside.w-64.bg-white.border-r.border-gray-200.flex.flex-col.h-screen.fixed.left-0.top-0.z-40.transition-transform.duration-200', {
+        class: sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+      }, [
+        // Logo/Title
+        m('div.h-16.flex.items-center.justify-between.px-4.border-b.border-gray-200', [
+          m('a.flex.items-center.gap-2.text-lg.font-bold.text-gray-900', {
+            href: '/',
+            onclick: (e) => { e.preventDefault(); sidebarOpen = false; m.route.set('/'); },
+          }, [
+            m('div.w-8.h-8.bg-blue-600.rounded-lg.flex.items-center.justify-center', [
+              m('span.text-white.font-bold', 'A'),
+            ]),
+            m('span', settings?.title || 'Admin'),
           ]),
-          m('span', settings?.title || 'Admin'),
+          // Close button (mobile only)
+          m('button.p-1.text-gray-400.hover:text-gray-600.lg:hidden', {
+            onclick: () => { sidebarOpen = false; },
+          }, m(Icon, { name: 'x', class: 'w-5 h-5' })),
+        ]),
+
+        // Menu
+        m('nav.flex-1.overflow-y-auto.p-4.space-y-2', [
+          loading 
+            ? m('div.flex.justify-center.py-4', m(Spinner))
+            : menu.map(item => 
+                item.items 
+                  ? m(MenuGroup, { key: item.id, group: item, currentPath })
+                  : m(MenuItem, { key: item.id, item, active: item.path === currentPath })
+              ),
+        ]),
+
+        // User section
+        state.user && m('div.p-4.border-t.border-gray-200', [
+          m('div.flex.items-center.gap-3', [
+            m('div.w-8.h-8.bg-gray-200.rounded-full.flex.items-center.justify-center', [
+              m('span.text-sm.font-medium.text-gray-600', 
+                (state.user.name || state.user.email || 'A').charAt(0).toUpperCase()
+              ),
+            ]),
+            m('div.flex-1.min-w-0', [
+              m('p.text-sm.font-medium.text-gray-900.truncate', state.user.name || 'Admin'),
+              m('p.text-xs.text-gray-500.truncate', state.user.email),
+            ]),
+            m('button.p-1.text-gray-400.hover:text-gray-600', {
+              title: 'Logout',
+              onclick: async () => {
+                await api.post('/auth/logout');
+                state.user = null;
+                sidebarOpen = false;
+                m.route.set('/login');
+              },
+            }, m(Icon, { name: 'logout', class: 'w-5 h-5' })),
+          ]),
         ]),
       ]),
+    ];
+  },
+};
 
-      // Menu
-      m('nav.flex-1.overflow-y-auto.p-4.space-y-2', [
-        loading 
-          ? m('div.flex.justify-center.py-4', m(Spinner))
-          : menu.map(item => 
-              item.items 
-                ? m(MenuGroup, { key: item.id, group: item, currentPath })
-                : m(MenuItem, { key: item.id, item, active: item.path === currentPath })
-            ),
-      ]),
-
-      // User section
-      state.user && m('div.p-4.border-t.border-gray-200', [
-        m('div.flex.items-center.gap-3', [
-          m('div.w-8.h-8.bg-gray-200.rounded-full.flex.items-center.justify-center', [
-            m('span.text-sm.font-medium.text-gray-600', 
-              (state.user.name || state.user.email || 'A').charAt(0).toUpperCase()
-            ),
-          ]),
-          m('div.flex-1.min-w-0', [
-            m('p.text-sm.font-medium.text-gray-900.truncate', state.user.name || 'Admin'),
-            m('p.text-xs.text-gray-500.truncate', state.user.email),
-          ]),
-          m('button.p-1.text-gray-400.hover:text-gray-600', {
-            title: 'Logout',
-            onclick: async () => {
-              await api.post('/auth/logout');
-              state.user = null;
-              m.route.set('/login');
-            },
-          }, m(Icon, { name: 'logout', class: 'w-5 h-5' })),
-        ]),
-      ]),
+// Mobile Header with hamburger button
+const MobileHeader = {
+  view(vnode) {
+    return m('div.lg:hidden.fixed.top-0.left-0.right-0.h-14.bg-white.border-b.border-gray-200.flex.items-center.px-4.z-20', [
+      m('button.p-2.-ml-1.text-gray-600.hover:text-gray-900.rounded-lg.hover:bg-gray-100', {
+        onclick: () => { sidebarOpen = true; },
+      }, m(Icon, { name: 'menu', class: 'w-6 h-6' })),
+      m('span.ml-3.text-lg.font-semibold.text-gray-900', 'Admin'),
     ]);
   },
 };
@@ -262,8 +292,9 @@ const Sidebar = {
 const Layout = {
   view(vnode) {
     return m('div.min-h-screen.bg-gray-50', [
+      m(MobileHeader),
       m(Sidebar),
-      m('main.ml-64.p-6', vnode.children),
+      m('main.lg:ml-64.p-6.pt-20.lg:pt-6', vnode.children),
     ]);
   },
 };

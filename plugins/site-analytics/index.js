@@ -35,6 +35,10 @@ function siteAnalyticsPlugin(options = {}) {
     description: 'Self-hosted page view analytics with admin dashboard',
     dependencies: { 'admin-panel': '*' },
 
+    csp: {
+      scriptSrc: ['https://cdn.jsdelivr.net'],
+    },
+
     register(ctx) {
       const knex = db.knex || db;
 
