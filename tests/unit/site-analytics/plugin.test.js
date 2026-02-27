@@ -39,9 +39,14 @@ describe('Site Analytics Plugin', () => {
   });
 
   describe('onRoutesReady()', () => {
-    it('should register page, menu item, client component, and API routes', () => {
+    it('should register page, menu item, client component, and API routes via registerModule', () => {
       const registry = new AdminRegistry();
       const routes = [];
+      const requireAuthFn = (req, res, next) => next();
+      const optionalAuthFn = (req, res, next) => next();
+      const serveAdminPanelFn = (req, res) => res.send('ok');
+
+      const { registerModule } = require('../../../plugins/admin-panel/core/admin-module');
 
       const ctx = {
         usePlugin: (name) => {
@@ -49,9 +54,17 @@ describe('Site Analytics Plugin', () => {
             return {
               getRegistry: () => registry,
               getAdminPath: () => '/_admin',
-              requireAuth: (req, res, next) => next(),
-              optionalAuth: (req, res, next) => next(),
-              serveAdminPanel: (req, res) => res.send('ok'),
+              requireAuth: requireAuthFn,
+              optionalAuth: optionalAuthFn,
+              serveAdminPanel: serveAdminPanelFn,
+              registerModule: (config) => registerModule(config, {
+                registry,
+                adminPath: '/_admin',
+                ctx,
+                requireAuth: requireAuthFn,
+                optionalAuth: optionalAuthFn,
+                serveAdminPanel: serveAdminPanelFn,
+              }),
             };
           }
           return null;

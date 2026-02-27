@@ -35,6 +35,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dynamic Page Routing**: Mithril.js router now automatically creates routes for custom pages registered via the registry
 - **`hasClientComponent` Flag**: `toClientConfig()` includes `hasClientComponent` field for each page
 
+#### Admin Module Registration System (New)
+- **`registerModule(config)` API**: Declarative method on admin panel API for registering pages, menu items, API routes, widgets, and menu groups in a single call
+- **Pages**: Register custom admin pages with optional Mithril.js client component code; SPA routes are created automatically
+- **Menu Items & Groups**: Register sidebar menu items and collapsible groups
+- **API Routes**: Define API endpoints with configurable prefix, HTTP methods, and per-route auth control (`auth: true/false`)
+- **Widgets**: Register dashboard widgets with data loaders
+- **Config Validation**: Clear error messages for missing or invalid configuration fields
+- **Non-breaking**: Existing manual registry/route registration APIs remain fully supported; `registerModule` is a convenience layer on top
+- **Site Analytics Refactored**: `site-analytics` plugin now uses `registerModule` internally, reducing ~20 lines of boilerplate to a single declarative config object
+
 #### Admin Panel - Mobile Responsive Sidebar
 - **Hamburger Menu**: Mobile header with hamburger button for sidebar toggle on small screens
 - **Slide-in Sidebar**: Sidebar slides in from the left with `translate-x` animation on mobile

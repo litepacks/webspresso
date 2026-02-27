@@ -60,42 +60,40 @@ function siteAnalyticsPlugin(options = {}) {
         return;
       }
 
-      const registry = adminApi.getRegistry();
-      const adminPath = adminApi.getAdminPath();
-      const { requireAuth } = adminApi;
       const knex = db.knex || db;
-
-      // Register admin page
-      registry.registerPage('analytics', {
-        title: 'Analytics',
-        path: '/analytics',
-        icon: 'chart',
-      });
-
-      // Register menu item
-      registry.registerMenuItem({
-        id: 'analytics',
-        label: 'Analytics',
-        path: '/analytics',
-        icon: 'chart',
-        order: 2,
-      });
-
-      // Register client-side component
-      registry.registerClientComponent('analytics', generateAnalyticsComponent());
-
-      // API routes
       const handlers = createAnalyticsApiHandlers({ knex, tableName });
 
-      ctx.addRoute('get', `${adminPath}/api/analytics/stats`, requireAuth, handlers.getStats);
-      ctx.addRoute('get', `${adminPath}/api/analytics/views-over-time`, requireAuth, handlers.getViewsOverTime);
-      ctx.addRoute('get', `${adminPath}/api/analytics/top-pages`, requireAuth, handlers.getTopPages);
-      ctx.addRoute('get', `${adminPath}/api/analytics/bot-activity`, requireAuth, handlers.getBotActivity);
-      ctx.addRoute('get', `${adminPath}/api/analytics/countries`, requireAuth, handlers.getCountries);
-      ctx.addRoute('get', `${adminPath}/api/analytics/recent`, requireAuth, handlers.getRecent);
+      adminApi.registerModule({
+        id: 'analytics',
 
-      // Serve admin SPA for the analytics route
-      ctx.addRoute('get', `${adminPath}/analytics`, adminApi.optionalAuth, adminApi.serveAdminPanel);
+        pages: [{
+          id: 'analytics',
+          title: 'Analytics',
+          path: '/analytics',
+          icon: 'chart',
+          component: generateAnalyticsComponent(),
+        }],
+
+        menu: [{
+          id: 'analytics',
+          label: 'Analytics',
+          path: '/analytics',
+          icon: 'chart',
+          order: 2,
+        }],
+
+        api: {
+          prefix: '/analytics',
+          routes: [
+            { method: 'get', path: '/stats', handler: handlers.getStats },
+            { method: 'get', path: '/views-over-time', handler: handlers.getViewsOverTime },
+            { method: 'get', path: '/top-pages', handler: handlers.getTopPages },
+            { method: 'get', path: '/bot-activity', handler: handlers.getBotActivity },
+            { method: 'get', path: '/countries', handler: handlers.getCountries },
+            { method: 'get', path: '/recent', handler: handlers.getRecent },
+          ],
+        },
+      });
     },
   };
 }

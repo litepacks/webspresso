@@ -15,6 +15,7 @@ const { registerDashboardWidgets, generateDashboardComponent } = require('./modu
 const { registerDefaultBulkActions, generateBulkActionsComponent } = require('./modules/bulk-actions');
 const { registerDefaultPages, createCustomPageApiHandlers, generateCustomPageComponent } = require('./modules/custom-pages');
 const { registerModelMenuItems, registerSystemMenuItems, generateMenuComponent } = require('./modules/menu');
+const { registerModule } = require('./core/admin-module');
 
 /**
  * Admin Panel Plugin Factory
@@ -78,6 +79,20 @@ function adminPanelPlugin(options = {}) {
       serveAdminPanel,
       requireAuth,
       optionalAuth,
+      registerModule(config) {
+        if (!this._ctx) {
+          throw new Error('registerModule can only be called during or after onRoutesReady');
+        }
+        return registerModule(config, {
+          registry,
+          adminPath,
+          ctx: this._ctx,
+          requireAuth,
+          optionalAuth,
+          serveAdminPanel,
+        });
+      },
+      _ctx: null,
     },
 
     /**
@@ -101,6 +116,7 @@ function adminPanelPlugin(options = {}) {
         return;
       }
 
+      this.api._ctx = ctx;
       const { app } = ctx;
 
       // Create and register AdminUser model
