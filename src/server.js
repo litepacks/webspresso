@@ -164,6 +164,7 @@ function haltOnTimedout(req, res, next) {
  * @param {Function|string} options.errorPages.timeout - Custom timeout handler or template path
  * @param {string|boolean} options.timeout - Request timeout (default: '30s', false to disable)
  * @param {Object} options.auth - Authentication manager instance (from createAuth)
+ * @param {Object} options.db - Database instance (exposed as ctx.db to plugins)
  * @returns {Object} { app, nunjucksEnv, pluginManager, authMiddleware }
  */
 function createApp(options = {}) {
@@ -340,7 +341,8 @@ function createApp(options = {}) {
     nunjucks: nunjucksEnv,
     middlewares,
     pluginManager,
-    silent: isTest
+    silent: isTest,
+    db: options.db ?? null
   });
   
   // Set route metadata in plugin manager
@@ -354,6 +356,7 @@ function createApp(options = {}) {
         app,
         nunjucksEnv,
         options,
+        db: options.db ?? null,
         routes: pluginManager.routes,
         usePlugin: (n) => pluginManager.getPluginAPI(n),
         addHelper: (n, fn) => pluginManager.registeredHelpers.set(n, fn),

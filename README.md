@@ -254,6 +254,7 @@ Creates and configures the Express app.
 - `pagesDir` (required): Path to pages directory
 - `viewsDir` (optional): Path to views/layouts directory
 - `publicDir` (optional): Path to public/static directory
+- `db` (optional): Database instance — exposed as `ctx.db` in plugin hooks (`register`, `onRoutesReady`) and in page `load`/`meta` functions
 - `logging` (optional): Enable request logging (default: true in development)
 - `helmet` (optional): Helmet security configuration
   - `true` or `undefined`: Use default secure configuration
@@ -633,6 +634,11 @@ const myPlugin = {
     // Access Express app
     ctx.app.use((req, res, next) => next());
     
+    // Access database (when createApp({ db }) is used)
+    if (ctx.db) {
+      // Use ctx.db.getRepository('Model'), ctx.db.knex, etc.
+    }
+    
     // Add template helpers
     ctx.addHelper('myHelper', () => 'Hello!');
     
@@ -645,6 +651,7 @@ const myPlugin = {
   
   // Called after all routes are mounted
   onRoutesReady(ctx) {
+    // ctx.db available when createApp({ db }) is used
     // Access route metadata
     console.log('Routes:', ctx.routes);
     
@@ -777,6 +784,11 @@ module.exports = {
   
   // Load data for SSR
   async load(req, ctx) {
+    // ctx.db is available when createApp({ db }) is used
+    if (ctx.db) {
+      const posts = await ctx.db.getRepository('Post').query().limit(10);
+      return { posts };
+    }
     return { tools: await fetchTools() };
   },
   
@@ -1042,6 +1054,8 @@ const db = createDatabase({
 // Models are automatically loaded, use getRepository with model name
 const UserRepo = db.getRepository('User');
 ```
+
+Pass `db` to `createApp({ db })` to expose it as `ctx.db` in plugin hooks and page `load`/`meta` functions.
 
 **Model File Structure:**
 - Place model files in `models/` directory (or custom path via `config.models`)

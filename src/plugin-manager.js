@@ -351,6 +351,7 @@ class PluginManager {
       app: context.app,
       options: plugin._options || {},
       nunjucksEnv: context.nunjucksEnv,
+      db: context.options?.db ?? null,
 
       /**
        * Get another plugin's API

@@ -65,10 +65,15 @@ function adminPanelPlugin(options = {}) {
     version: '2.0.0',
     description: 'Modular admin panel for Webspresso with extensions support',
     
-    // CSP requirements for Quill.js rich text editor
+    // CSP requirements for admin panel scripts
     csp: {
       styleSrc: ['https://cdn.quilljs.com'],
-      scriptSrc: ['https://cdn.quilljs.com'],
+      scriptSrc: [
+        'https://cdn.quilljs.com',
+        'https://unpkg.com',
+        'https://cdn.tailwindcss.com',
+      ],
+      connectSrc: ['https://unpkg.com', 'https://cdn.tailwindcss.com'],
     },
     enabled,
     registry, // Expose registry for external configuration

@@ -312,10 +312,11 @@ function resolveMiddlewares(middlewareConfig, middlewareRegistry = {}) {
  * @param {Object} options.middlewares - Named middleware registry
  * @param {Object} options.pluginManager - Plugin manager instance
  * @param {boolean} options.silent - Suppress console output
+ * @param {Object} options.db - Database instance (exposed as ctx.db in load/meta)
  * @returns {Array} Route metadata for plugins
  */
 function mountPages(app, options) {
-  const { pagesDir, nunjucks, middlewares = {}, pluginManager = null, silent = false } = options;
+  const { pagesDir, nunjucks, middlewares = {}, pluginManager = null, silent = false, db = null } = options;
   const isDev = process.env.NODE_ENV !== 'production';
   const log = silent ? () => {} : console.log.bind(console);
   
@@ -453,6 +454,7 @@ function mountPages(app, options) {
         const ctx = {
           req,
           res,
+          db,
           path: route.routePath,
           file: route.file,
           routeDir: route.routeDir,

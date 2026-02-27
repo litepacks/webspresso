@@ -45,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Non-breaking**: Existing manual registry/route registration APIs remain fully supported; `registerModule` is a convenience layer on top
 - **Site Analytics Refactored**: `site-analytics` plugin now uses `registerModule` internally, reducing ~20 lines of boilerplate to a single declarative config object
 
+#### ctx.db - Database Access in Plugins and Pages
+- **Plugin Context**: `ctx.db` available in `register(ctx)` and `onRoutesReady(ctx)` when `createApp({ db })` is used
+- **Page load/meta**: `ctx.db` passed to `load(req, ctx)` and `meta(req, ctx)` in SSR route configs
+- **No imports required**: Plugins and pages access the database through context without importing `createDatabase` or passing db in plugin options
+- **Nullable**: `ctx.db` is `null` when db is not passed to createApp — check `if (ctx.db)` before use
+
 #### Admin Panel - Mobile Responsive Sidebar
 - **Hamburger Menu**: Mobile header with hamburger button for sidebar toggle on small screens
 - **Slide-in Sidebar**: Sidebar slides in from the left with `translate-x` animation on mobile
