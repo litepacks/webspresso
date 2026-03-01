@@ -124,6 +124,18 @@ function adminPanelPlugin(options = {}) {
       this.api._ctx = ctx;
       const { app } = ctx;
 
+      // Check if admin_users table exists (migration run)
+      db.knex.schema.hasTable('admin_users').then((hasAdminTable) => {
+        if (!hasAdminTable) {
+          console.warn(
+            '\n⚠️  [admin-panel] admin_users table not found. Run: webspresso admin:setup\n' +
+            '   Or create the table manually via migration. See: AdminUser model / getMigrationTemplate()\n'
+          );
+        }
+      }).catch((err) => {
+        console.warn('[admin-panel] Could not check admin_users table:', err.message);
+      });
+
       // Create and register AdminUser model
       const { hasModel: hasGlobalModel, getModel: getGlobalModel } = require('../../core/orm/model');
       let AdminUser;

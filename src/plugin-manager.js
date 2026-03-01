@@ -194,10 +194,12 @@ class PluginManager {
     // Build graph
     for (const plugin of plugins) {
       if (!plugin.name) {
-        throw new Error('Plugin must have a name');
+        console.warn('[plugin-manager] Skipping plugin without name:', plugin);
+        continue;
       }
       if (pluginMap.has(plugin.name)) {
-        throw new Error(`Duplicate plugin name: ${plugin.name}`);
+        console.warn(`[plugin-manager] Duplicate plugin name "${plugin.name}" - skipping`);
+        continue;
       }
       pluginMap.set(plugin.name, plugin);
       graph.set(plugin.name, new Set(Object.keys(plugin.dependencies || {})));
@@ -232,10 +234,12 @@ class PluginManager {
       }
     }
 
-    // Check for cycles
-    if (sorted.length !== plugins.length) {
-      const remaining = plugins.filter(p => !sorted.includes(p)).map(p => p.name);
-      throw new Error(`Circular dependency detected in plugins: ${remaining.join(', ')}`);
+    // Check for cycles - warn and exclude circular plugins
+    if (sorted.length !== pluginMap.size) {
+      const remaining = Array.from(pluginMap.keys()).filter(name => !sorted.find(p => p.name === name));
+      console.warn(
+        `[plugin-manager] Circular dependency detected. Skipping plugins: ${remaining.join(', ')}`
+      );
     }
 
     return sorted;
@@ -271,7 +275,14 @@ class PluginManager {
 
     // Call register hook
     if (typeof plugin.register === 'function') {
-      await plugin.register(ctx);
+      try {
+        await plugin.register(ctx);
+      } catch (err) {
+        console.warn(`[plugin-manager] Plugin "${plugin.name}" register() failed:`, err.message);
+        this.plugins.delete(plugin.name);
+        if (plugin.api) this.pluginAPIs.delete(plugin.name);
+        return;
+      }
     }
 
     // Apply registered helpers to nunjucks
@@ -308,7 +319,14 @@ class PluginManager {
 
     // Call register hook (sync - if plugin has async register, it won't wait)
     if (typeof plugin.register === 'function') {
-      plugin.register(ctx);
+      try {
+        plugin.register(ctx);
+      } catch (err) {
+        console.warn(`[plugin-manager] Plugin "${plugin.name}" register() failed:`, err.message);
+        this.plugins.delete(plugin.name);
+        if (plugin.api) this.pluginAPIs.delete(plugin.name);
+        return;
+      }
     }
 
     // Apply registered helpers to nunjucks
@@ -316,24 +334,26 @@ class PluginManager {
   }
 
   /**
-   * Validate plugin dependencies
+   * Validate plugin dependencies - logs warning instead of throwing
    */
   _validateDependencies(plugin) {
     if (!plugin.dependencies) return;
 
     for (const [depName, versionRange] of Object.entries(plugin.dependencies)) {
       const dep = this.plugins.get(depName);
-      
+
       if (!dep) {
-        throw new Error(
-          `Plugin "${plugin.name}" requires "${depName}" but it's not loaded`
+        console.warn(
+          `[plugin-manager] Plugin "${plugin.name}" requires "${depName}" but it's not loaded. ` +
+          'Plugin may not work correctly.'
         );
+        continue;
       }
 
       if (dep.version && !semver.satisfies(dep.version, versionRange)) {
-        throw new Error(
-          `Plugin "${plugin.name}" requires "${depName}@${versionRange}" ` +
-          `but found v${dep.version}`
+        console.warn(
+          `[plugin-manager] Plugin "${plugin.name}" requires "${depName}@${versionRange}" ` +
+          `but found v${dep.version}. Plugin may not work correctly.`
         );
       }
     }

@@ -1109,59 +1109,71 @@ function isRichTextEmpty(value) {
 
 // Login Form Component
 const LoginForm = {
-  view: () => m('.max-w-md.mx-auto.mt-16', [
-    m('h1.text-3xl.font-bold.mb-6', 'Admin Login'),
-    m('form', {
-      onsubmit: async (e) => {
-        e.preventDefault();
-        state.loading = true;
-        state.error = null;
-        try {
-          const data = new FormData(e.target);
-          const result = await api.post('/auth/login', {
-            email: data.get('email'),
-            password: data.get('password'),
-          });
-          state.user = result.user;
-          m.route.set('/');
-        } catch (err) {
-          state.error = err.message;
-        } finally {
-          state.loading = false;
-        }
-      }
-    }, [
-      state.error ? m('.bg-red-100.border.border-red-400.text-red-700.px-4.py-3.rounded.mb-4', state.error) : null,
-      m('.mb-4', [
-        m('label.block.text-sm.font-medium.mb-2', { for: 'email' }, 'Email'),
-        m('input#email.w-full.px-3.py-2.border.border-gray-300.rounded', {
-          type: 'email',
-          name: 'email',
-          required: true,
-        }),
+  view: () => m('.min-h-screen.flex.items-center.justify-center.p-4.sm:p-6.bg-gradient-to-br.from-blue-600.via-indigo-600.to-purple-700', [
+    m('.w-full.max-w-md', [
+      m('.bg-white.rounded-2xl.shadow-2xl.p-6.sm:p-8', [
+        m('div.text-center.mb-6', [
+          m('h1.text-2xl.sm:text-3xl.font-bold.text-gray-900', 'Admin Login'),
+          m('p.text-gray-500.text-sm.mt-1', 'Sign in to your account'),
+        ]),
+        m('form', {
+          onsubmit: async (e) => {
+            e.preventDefault();
+            state.loading = true;
+            state.error = null;
+            try {
+              const data = new FormData(e.target);
+              const result = await api.post('/auth/login', {
+                email: data.get('email'),
+                password: data.get('password'),
+              });
+              state.user = result.user;
+              m.route.set('/');
+            } catch (err) {
+              state.error = err.message;
+            } finally {
+              state.loading = false;
+            }
+          }
+        }, [
+          state.error ? m('.bg-red-50.border.border-red-200.text-red-700.px-4.py-3.rounded-lg.mb-4.text-sm', state.error) : null,
+          m('.mb-4', [
+            m('label.block.text-sm.font-medium.text-gray-700.mb-2', { for: 'email' }, 'Email'),
+            m('input#email.w-full.px-3.py-2.5.border.border-gray-300.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
+              type: 'email',
+              name: 'email',
+              required: true,
+              placeholder: 'admin@example.com',
+            }),
+          ]),
+          m('.mb-6', [
+            m('label.block.text-sm.font-medium.text-gray-700.mb-2', { for: 'password' }, 'Password'),
+            m('input#password.w-full.px-3.py-2.5.border.border-gray-300.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
+              type: 'password',
+              name: 'password',
+              required: true,
+            }),
+          ]),
+          m('button.w-full.bg-blue-600.text-white.py-2.5.px-4.rounded-lg.font-medium.hover:bg-blue-700.focus:ring-2.focus:ring-blue-500.focus:ring-offset-2.disabled:opacity-50.transition-colors', {
+            type: 'submit',
+            disabled: state.loading,
+          }, state.loading ? 'Logging in...' : 'Sign in'),
+        ]),
       ]),
-      m('.mb-4', [
-        m('label.block.text-sm.font-medium.mb-2', { for: 'password' }, 'Password'),
-        m('input#password.w-full.px-3.py-2.border.border-gray-300.rounded', {
-          type: 'password',
-          name: 'password',
-          required: true,
-        }),
-      ]),
-      m('button.w-full.bg-blue-600.text-white.py-2.px-4.rounded.hover:bg-blue-700', {
-        type: 'submit',
-        disabled: state.loading,
-      }, state.loading ? 'Logging in...' : 'Login'),
     ]),
   ]),
 };
 
 // Setup Form Component
 const SetupForm = {
-  view: () => m('.max-w-md.mx-auto.mt-16', [
-    m('h1.text-3xl.font-bold.mb-6', 'Setup Admin Account'),
-    m('p.text-gray-600.mb-6', 'Create the first admin user account.'),
-    m('form', {
+  view: () => m('.min-h-screen.flex.items-center.justify-center.p-4.sm:p-6.bg-gradient-to-br.from-blue-600.via-indigo-600.to-purple-700', [
+    m('.w-full.max-w-md', [
+      m('.bg-white.rounded-2xl.shadow-2xl.p-6.sm:p-8', [
+        m('div.text-center.mb-6', [
+          m('h1.text-2xl.sm:text-3xl.font-bold.text-gray-900', 'Setup Admin Account'),
+          m('p.text-gray-500.text-sm.mt-1', 'Create the first admin user account.'),
+        ]),
+        m('form', {
       onsubmit: async (e) => {
         e.preventDefault();
         state.loading = true;
@@ -1183,35 +1195,38 @@ const SetupForm = {
         }
       }
     }, [
-      state.error ? m('.bg-red-100.border.border-red-400.text-red-700.px-4.py-3.rounded.mb-4', state.error) : null,
-      m('.mb-4', [
-        m('label.block.text-sm.font-medium.mb-2', { for: 'name' }, 'Name'),
-        m('input#name.w-full.px-3.py-2.border.border-gray-300.rounded', {
-          type: 'text',
-          name: 'name',
-          required: true,
-        }),
+      state.error ? m('.bg-red-50.border.border-red-200.text-red-700.px-4.py-3.rounded-lg.mb-4.text-sm', state.error) : null,
+          m('.mb-4', [
+            m('label.block.text-sm.font-medium.text-gray-700.mb-2', { for: 'name' }, 'Name'),
+            m('input#name.w-full.px-3.py-2.5.border.border-gray-300.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
+              type: 'text',
+              name: 'name',
+              required: true,
+            }),
+          ]),
+          m('.mb-4', [
+            m('label.block.text-sm.font-medium.text-gray-700.mb-2', { for: 'email' }, 'Email'),
+            m('input#email.w-full.px-3.py-2.5.border.border-gray-300.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
+              type: 'email',
+              name: 'email',
+              required: true,
+              placeholder: 'admin@example.com',
+            }),
+          ]),
+          m('.mb-6', [
+            m('label.block.text-sm.font-medium.text-gray-700.mb-2', { for: 'password' }, 'Password'),
+            m('input#password.w-full.px-3.py-2.5.border.border-gray-300.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
+              type: 'password',
+              name: 'password',
+              required: true,
+            }),
+          ]),
+          m('button.w-full.bg-blue-600.text-white.py-2.5.px-4.rounded-lg.font-medium.hover:bg-blue-700.focus:ring-2.focus:ring-blue-500.focus:ring-offset-2.disabled:opacity-50.transition-colors', {
+            type: 'submit',
+            disabled: state.loading,
+          }, state.loading ? 'Creating...' : 'Create Admin Account'),
+        ]),
       ]),
-      m('.mb-4', [
-        m('label.block.text-sm.font-medium.mb-2', { for: 'email' }, 'Email'),
-        m('input#email.w-full.px-3.py-2.border.border-gray-300.rounded', {
-          type: 'email',
-          name: 'email',
-          required: true,
-        }),
-      ]),
-      m('.mb-4', [
-        m('label.block.text-sm.font-medium.mb-2', { for: 'password' }, 'Password'),
-        m('input#password.w-full.px-3.py-2.border.border-gray-300.rounded', {
-          type: 'password',
-          name: 'password',
-          required: true,
-        }),
-      ]),
-      m('button.w-full.bg-blue-600.text-white.py-2.px-4.rounded.hover:bg-blue-700', {
-        type: 'submit',
-        disabled: state.loading,
-      }, state.loading ? 'Creating...' : 'Create Admin Account'),
     ]),
   ]),
 };

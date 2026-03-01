@@ -412,6 +412,8 @@ Works with Vite and Webpack manifest formats:
 
 Webspresso has a built-in plugin system with version control and dependency management.
 
+**Error handling:** On plugin errors (missing dependencies, version mismatch, `register()` or `onRoutesReady()` failure), the app does not crash; only a `console.warn` is logged and other plugins continue to run.
+
 ### Using Plugins
 
 ```javascript
@@ -679,6 +681,19 @@ function myPluginFactory(options = {}) {
   };
 }
 ```
+
+### Plugin Error Handling
+
+The plugin system does not crash the app on errors; it only logs warnings:
+
+- **Missing dependency**: If a plugin in `dependencies` is not loaded → warning, plugin still loads
+- **Version mismatch**: If a dependent plugin version is incompatible → warning, plugin still loads
+- **Circular dependency**: If two plugins depend on each other → warning, plugins in the cycle are skipped
+- **Duplicate plugin name**: Two plugins with the same name → warning, second one is skipped
+- **`register()` error**: If `register(ctx)` throws → warning, plugin is removed from the registry
+- **`onRoutesReady()` error**: If the hook throws → warning, server stays up
+
+A single faulty plugin does not block the entire application.
 
 ## File-Based Routing
 

@@ -233,6 +233,35 @@ describe('applySchema.js', () => {
         expect(req.input.query).toEqual({ draft: true });
       });
 
+      it('should support README-style destructuring: req.input.body and req.input.query', () => {
+        const req = {
+          body: { title: 'My Post', content: 'Hello world', tags: ['js', 'node'] },
+          params: {},
+          query: { draft: 'true' }
+        };
+
+        const schema = {
+          body: z.object({
+            title: z.string().min(3).max(100),
+            content: z.string(),
+            tags: z.array(z.string()).optional()
+          }),
+          query: z.object({
+            draft: z.coerce.boolean().default(false)
+          })
+        };
+
+        applySchema(req, schema);
+
+        const { title, content, tags } = req.input.body;
+        const { draft } = req.input.query;
+
+        expect(title).toBe('My Post');
+        expect(content).toBe('Hello world');
+        expect(tags).toEqual(['js', 'node']);
+        expect(draft).toBe(true);
+      });
+
       it('should not modify any original req properties', () => {
         const originalBody = { title: 'Test' };
         const originalParams = { id: '1' };

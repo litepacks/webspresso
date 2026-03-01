@@ -369,7 +369,11 @@ function createApp(options = {}) {
           app[method.toLowerCase()](path, ...handlers);
         }
       };
-      plugin.onRoutesReady(ctx);
+      try {
+        plugin.onRoutesReady(ctx);
+      } catch (err) {
+        console.warn(`[plugin-manager] Plugin "${name}" onRoutesReady() failed:`, err.message);
+      }
     }
   }
   

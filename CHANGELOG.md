@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Plugin Error Handling (Graceful Degradation)
+- **Warning instead of crash**: Plugin errors do not crash the app; only `console.warn` is logged
+- **Missing / incompatible dependencies**: Warning instead of throw for missing or version-mismatched `dependencies`; plugin still loads
+- **Circular dependency**: Warning instead of throw when detected; plugins in the cycle are skipped
+- **Duplicate / nameless plugin**: Warning instead of throw for duplicate name or missing `name`
+- **`register()` and `onRoutesReady()` errors**: Wrapped in try/catch; on error a warning is logged and the server stays up
+- A single faulty plugin no longer blocks the entire application
+
 #### Site Analytics Plugin (New)
 - **Self-hosted Analytics**: Privacy-first page view tracking with no external dependencies
 - **Tracking Middleware**: Non-blocking Express middleware that records page views asynchronously

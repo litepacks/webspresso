@@ -35,19 +35,33 @@ describe('Plugin System', () => {
       expect(plugin.register).toHaveBeenCalled();
     });
 
-    it('should throw on duplicate plugin names', async () => {
+    it('should warn on duplicate plugin names instead of throwing', async () => {
       const plugin1 = { name: 'test', version: '1.0.0' };
       const plugin2 = { name: 'test', version: '2.0.0' };
 
-      await expect(pm.register([plugin1, plugin2], {}))
-        .rejects.toThrow('Duplicate plugin name');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await pm.register([plugin1, plugin2], {});
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Duplicate plugin name')
+      );
+      expect(pm.hasPlugin('test')).toBe(true);
+      warnSpy.mockRestore();
     });
 
-    it('should throw on missing plugin name', async () => {
+    it('should warn on missing plugin name instead of throwing', async () => {
       const plugin = { version: '1.0.0' };
 
-      await expect(pm.register([plugin], {}))
-        .rejects.toThrow('must have a name');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await pm.register([plugin], {});
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('without name'),
+        expect.anything()
+      );
+      warnSpy.mockRestore();
     });
 
     it('should resolve dependencies in correct order', async () => {
@@ -72,18 +86,25 @@ describe('Plugin System', () => {
       expect(order).toEqual(['b', 'a']);
     });
 
-    it('should throw on missing dependency', async () => {
+    it('should warn on missing dependency instead of throwing', async () => {
       const plugin = {
         name: 'test',
         version: '1.0.0',
         dependencies: { 'missing': '^1.0.0' }
       };
 
-      await expect(pm.register([plugin], {}))
-        .rejects.toThrow('requires "missing"');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await pm.register([plugin], {});
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('requires "missing"')
+      );
+      expect(pm.hasPlugin('test')).toBe(true);
+      warnSpy.mockRestore();
     });
 
-    it('should throw on version mismatch', async () => {
+    it('should warn on version mismatch instead of throwing', async () => {
       const pluginA = {
         name: 'plugin-a',
         version: '1.0.0',
@@ -95,11 +116,19 @@ describe('Plugin System', () => {
         version: '1.0.0'
       };
 
-      await expect(pm.register([pluginA, pluginB], {}))
-        .rejects.toThrow('requires "plugin-b@^2.0.0"');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await pm.register([pluginA, pluginB], {});
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('requires "plugin-b@^2.0.0"')
+      );
+      expect(pm.hasPlugin('plugin-a')).toBe(true);
+      expect(pm.hasPlugin('plugin-b')).toBe(true);
+      warnSpy.mockRestore();
     });
 
-    it('should detect circular dependencies', async () => {
+    it('should warn on circular dependencies instead of throwing', async () => {
       const pluginA = {
         name: 'plugin-a',
         version: '1.0.0',
@@ -112,8 +141,14 @@ describe('Plugin System', () => {
         dependencies: { 'plugin-a': '^1.0.0' }
       };
 
-      await expect(pm.register([pluginA, pluginB], {}))
-        .rejects.toThrow('Circular dependency');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await pm.register([pluginA, pluginB], {});
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Circular dependency')
+      );
+      warnSpy.mockRestore();
     });
 
     it('should expose plugin API', async () => {
