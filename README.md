@@ -530,6 +530,100 @@ Template helpers from analytics plugin:
 
 Individual helpers: `gtag()`, `gtm()`, `gtmNoscript()`, `yandexMetrika()`, `bingUET()`, `facebookPixel()`, `allAnalytics()`
 
+**Admin Panel Plugin:**
+- Modular admin panel with SPA (Mithril.js)
+- Model CRUD UI (auto-generated from ORM)
+- Extensible via custom pages, menu items, API routes, and dashboard widgets
+- Other plugins (e.g. site-analytics) can register their own admin pages
+
+```javascript
+const { adminPanelPlugin } = require('webspresso/plugins');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  plugins: [
+    adminPanelPlugin({
+      db,
+      path: '/_admin',           // Admin URL (default: /_admin)
+      auth: authManager,         // Optional: for user management
+      userManagement: { enabled: true, model: 'User' },
+    })
+  ]
+});
+```
+
+Options:
+- `db` (required) - Database instance
+- `path` - Admin panel path (default: `/_admin`)
+- `auth` - Auth manager for user management
+- `userManagement` - User management config (`enabled`, `model`, `fields`)
+- `configure` - Callback `(registry) => void` for manual setup
+
+**Custom Admin Pages (registerModule):**
+
+Plugins can add custom admin pages using `registerModule` in `onRoutesReady`:
+
+```javascript
+// In your plugin's onRoutesReady(ctx)
+const adminApi = ctx.usePlugin('admin-panel');
+if (adminApi) {
+  adminApi.registerModule({
+    id: 'my-module',
+
+    pages: [{
+      id: 'reports',
+      title: 'Reports',
+      path: '/reports',
+      icon: 'chart',
+      description: 'View reports',
+      component: `window.__customPages["reports"] = { view: () => m("div", "My Report") };`,  // Mithril.js
+    }],
+
+    menu: [{ id: 'reports', label: 'Reports', path: '/reports', icon: 'chart', order: 5 }],
+
+    api: {
+      prefix: '/reports',
+      routes: [
+        { method: 'get', path: '/summary', handler: getSummaryHandler, auth: true },
+      ],
+    },
+
+    widgets: [{
+      id: 'reports-widget',
+      title: 'Quick Stats',
+      dataLoader: async () => ({ count: 42 }),
+    }],
+
+    menuGroups: [{ id: 'analytics', label: 'Analytics', order: 2 }],
+  });
+}
+```
+
+**registerModule config:**
+| Field | Description |
+|-------|-------------|
+| `id` | Unique module identifier (required) |
+| `pages` | Custom admin pages (each: `id`, `title`, `path`, `icon`, `description`, optional `component`) |
+| `menu` | Sidebar menu items (`id`, `label`, `path`, `icon`, `order`) |
+| `menuGroups` | Collapsible menu groups (`id`, `label`, `order`) |
+| `api` | API routes (`prefix`, `routes`: `method`, `path`, `handler`, `auth`) |
+| `widgets` | Dashboard widgets (`id`, `title`, `dataLoader`) |
+
+For pages with `component`: provide Mithril.js code that assigns to `window.__customPages[pageId]`. Without `component`, the page shows a static placeholder.
+
+**Manual registry API** (alternative to registerModule):
+
+```javascript
+adminPanelPlugin({
+  db,
+  configure(registry) {
+    registry.registerPage('custom', { title: 'Custom', path: '/custom', icon: 'tool' });
+    registry.registerClientComponent('custom', 'window.__customPages["custom"] = { view: () => m("p","Hi") };');
+    registry.registerMenuItem({ id: 'custom', label: 'Custom', path: '/custom', icon: 'tool' });
+  },
+})
+```
+
 **Site Analytics Plugin:**
 - Self-hosted page view analytics (no external services required)
 - Automatic page view tracking via Express middleware

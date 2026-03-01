@@ -1590,6 +1590,9 @@ function loadRecords(modelName, page = 1, filters = null) {
   // Update URL with filters
   const queryParams = new URLSearchParams();
   queryParams.set('page', page);
+  if (state.trashedView) {
+    queryParams.set('trashed', 'only');
+  }
   if (Object.keys(activeFilters).length > 0) {
     for (const [col, filter] of Object.entries(activeFilters)) {
       if (!filter || (filter.value === '' && !filter.from && !filter.to)) continue;
@@ -1613,7 +1616,8 @@ function loadRecords(modelName, page = 1, filters = null) {
   const newUrl = window.location.pathname + (queryParams.toString() ? '?' + queryParams.toString() : '');
   window.history.replaceState({}, '', newUrl);
   
-  api.get('/models/' + modelName + '/records?page=' + page + '&perPage=' + perPage + filterQuery)
+  const trashedParam = state.trashedView ? '&trashed=only' : '';
+  api.get('/models/' + modelName + '/records?page=' + page + '&perPage=' + perPage + trashedParam + filterQuery)
     .then(result => {
       state.records = result.data || [];
       state.pagination = {
@@ -1641,6 +1645,7 @@ function initializeModelView(modelName) {
   state.filterDrawerOpen = false;
   state.selectedRecords = new Set(); // Bulk selection
   state.selectAllMode = false; // Reset select all mode
+  state.trashedView = false; // Soft delete: show trashed records
   state.bulkActionInProgress = false;
   state.bulkFields = []; // Reset bulk fields
   state.bulkFieldDropdownOpen = false;
@@ -1725,8 +1730,26 @@ const RecordList = {
     return m(Layout, { breadcrumbs }, [
       // Header
       m('.flex.items-center.justify-between.mb-4', [
-        m('h2.text-2xl.font-bold', modelMeta?.label || modelName),
-        m('button.inline-flex.items-center.gap-2.px-4.py-2.text-sm.font-medium.text-white.bg-indigo-600.rounded-lg.hover:bg-indigo-700.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+        m('.flex.items-center.gap-3', [
+          m('h2.text-2xl.font-bold', modelMeta?.label || modelName),
+          modelMeta?.softDelete ? m('.flex.rounded-lg.border.border-gray-200.p-0.5', [
+            m('button.px-3.py-1.5.text-sm.font-medium.rounded-md.transition-colors', {
+              class: !state.trashedView ? 'bg-indigo-600.text-white' : 'text-gray-600.hover:text-gray-900',
+              onclick: () => {
+                state.trashedView = false;
+                loadRecords(modelName, 1);
+              },
+            }, 'Active'),
+            m('button.px-3.py-1.5.text-sm.font-medium.rounded-md.transition-colors', {
+              class: state.trashedView ? 'bg-indigo-600.text-white' : 'text-gray-600.hover:text-gray-900',
+              onclick: () => {
+                state.trashedView = true;
+                loadRecords(modelName, 1);
+              },
+            }, 'Trash'),
+          ]) : null,
+        ]),
+        !state.trashedView ? m('button.inline-flex.items-center.gap-2.px-4.py-2.text-sm.font-medium.text-white.bg-indigo-600.rounded-lg.hover:bg-indigo-700.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
           onclick: () => {
             state.currentRecord = null;
             state.editing = true;
@@ -1737,7 +1760,7 @@ const RecordList = {
             m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M12 4v16m8-8H4' }),
           ]),
           'New Record',
-        ]),
+        ]) : null,
       ]),
       
       // Quick Filters Bar
@@ -1825,35 +1848,63 @@ const RecordList = {
                 }, 'Select only this page (' + state.selectedRecords.size + ')'),
               ]),
               m('.flex.items-center.gap-2', [
-                m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-red-600.bg-white.border.border-red-200.rounded.hover:bg-red-50.transition-colors', {
-                  disabled: state.bulkActionInProgress,
-                  onclick: async () => {
-                    const count = state.selectAllMode ? state.pagination.total : state.selectedRecords.size;
-                    if (!confirm('Are you sure you want to delete ' + count + ' records? This action cannot be undone.')) return;
-                    state.bulkActionInProgress = true;
-                    m.redraw();
-                    try {
-                      const payload = state.selectAllMode 
-                        ? { selectAll: true, filters: state.filters }
-                        : { ids: Array.from(state.selectedRecords) };
-                      await api.post('/extensions/bulk-actions/bulk-delete/' + modelName, payload);
-                      state.selectedRecords = new Set();
-                      state.selectAllMode = false;
-                      loadRecords(modelName, 1);
-                    } catch (err) {
-                      alert('Error: ' + err.message);
-                    } finally {
-                      state.bulkActionInProgress = false;
-                      m.redraw();
-                    }
-                  },
-                }, [
-                  m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
-                    m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' })
-                  ),
-                  'Delete',
-                ]),
-                m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-blue-600.bg-white.border.border-blue-200.rounded.hover:bg-blue-50.transition-colors', {
+                state.trashedView && modelMeta?.softDelete
+                  ? m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-green-600.bg-white.border.border-green-200.rounded.hover:bg-green-50.transition-colors', {
+                      disabled: state.bulkActionInProgress,
+                      onclick: async () => {
+                        if (!confirm('Restore the selected records?')) return;
+                        state.bulkActionInProgress = true;
+                        m.redraw();
+                        try {
+                          const payload = state.selectAllMode
+                            ? { selectAll: true, filters: state.filters, trashed: true }
+                            : { ids: Array.from(state.selectedRecords), trashed: true };
+                          await api.post('/extensions/bulk-actions/bulk-restore/' + modelName, payload);
+                          state.selectedRecords = new Set();
+                          state.selectAllMode = false;
+                          loadRecords(modelName, 1);
+                        } catch (err) {
+                          alert('Error: ' + err.message);
+                        } finally {
+                          state.bulkActionInProgress = false;
+                          m.redraw();
+                        }
+                      },
+                    }, [
+                      m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+                        m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M5 13l4 4L19 7' })
+                      ),
+                      'Restore',
+                    ])
+                  : m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-red-600.bg-white.border.border-red-200.rounded.hover:bg-red-50.transition-colors', {
+                      disabled: state.bulkActionInProgress,
+                      onclick: async () => {
+                        const count = state.selectAllMode ? state.pagination.total : state.selectedRecords.size;
+                        if (!confirm('Are you sure you want to delete ' + count + ' records? This action cannot be undone.')) return;
+                        state.bulkActionInProgress = true;
+                        m.redraw();
+                        try {
+                          const payload = state.selectAllMode 
+                            ? { selectAll: true, filters: state.filters }
+                            : { ids: Array.from(state.selectedRecords) };
+                          await api.post('/extensions/bulk-actions/bulk-delete/' + modelName, payload);
+                          state.selectedRecords = new Set();
+                          state.selectAllMode = false;
+                          loadRecords(modelName, 1);
+                        } catch (err) {
+                          alert('Error: ' + err.message);
+                        } finally {
+                          state.bulkActionInProgress = false;
+                          m.redraw();
+                        }
+                      },
+                    }, [
+                      m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+                        m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' })
+                      ),
+                      'Delete',
+                    ]),
+                !state.trashedView ? m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-blue-600.bg-white.border.border-blue-200.rounded.hover:bg-blue-50.transition-colors', {
                   disabled: state.bulkActionInProgress,
                   onclick: async () => {
                     state.bulkActionInProgress = true;
@@ -1883,8 +1934,8 @@ const RecordList = {
                     m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' })
                   ),
                   'Export JSON',
-                ]),
-                m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-green-600.bg-white.border.border-green-200.rounded.hover:bg-green-50.transition-colors', {
+                ]) : null,
+                !state.trashedView ? m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-green-600.bg-white.border.border-green-200.rounded.hover:bg-green-50.transition-colors', {
                   disabled: state.bulkActionInProgress,
                   onclick: async () => {
                     state.bulkActionInProgress = true;
@@ -1914,9 +1965,8 @@ const RecordList = {
                     m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' })
                   ),
                   'Export CSV',
-                ]),
-                // Bulk Field Update Dropdown
-                m(BulkFieldUpdateDropdown, {
+                ]) : null,
+                !state.trashedView ? m(BulkFieldUpdateDropdown, {
                   modelName: modelName,
                   selectedIds: state.selectAllMode ? null : Array.from(state.selectedRecords),
                   selectAllMode: state.selectAllMode,
@@ -1926,7 +1976,7 @@ const RecordList = {
                     state.selectAllMode = false;
                     loadRecords(modelName, state.pagination.page);
                   },
-                }),
+                }) : null,
                 m('button.px-3.py-1.5.text-sm.text-gray-500.hover:text-gray-700', {
                   onclick: () => {
                     state.selectedRecords = new Set();
@@ -1938,14 +1988,14 @@ const RecordList = {
                 }, 'Clear'),
               ]),
             ]) : null,
-            // Table container with sticky header and actions
-            m('.overflow-x-auto.max-h-[calc(100vh-380px)]', { style: 'position: relative;' }, [
+            // Table container with sticky header, fixed columns, and overflow scroll
+            m('.overflow-auto.max-h-[calc(100vh-380px)]', { style: 'position: relative;' }, [
               m('table.w-full.border-collapse', { style: 'min-width: 100%;' }, [
                 // Sticky header
-                m('thead.bg-gray-50', { style: 'position: sticky; top: 0; z-index: 10;' }, [
+                m('thead.bg-gray-50', { style: 'position: sticky; top: 0; z-index: 20; background: #f9fafb;' }, [
                   m('tr', [
-                    // Checkbox column header
-                    m('th.px-4.py-3.text-left.bg-gray-50.border-b.border-gray-200', { style: 'width: 40px;' }, [
+                    // Checkbox column header (sticky left, box-shadow on right)
+                    m('th.px-4.py-3.text-left.bg-gray-50.border-b.border-gray-200', { style: 'width: 40px; position: sticky; left: 0; z-index: 15; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' }, [
                       m('input[type=checkbox].rounded.border-gray-300.text-indigo-600.focus:ring-indigo-500', {
                         checked: state.records.length > 0 && state.selectedRecords && state.selectedRecords.size === state.records.length,
                         indeterminate: state.selectedRecords && state.selectedRecords.size > 0 && state.selectedRecords.size < state.records.length,
@@ -1959,15 +2009,16 @@ const RecordList = {
                         },
                       }),
                     ]),
-                    // Dynamic column headers
-                    ...displayColumns.map(col => 
+                    // Dynamic column headers (first column sticky left with box-shadow)
+                    ...displayColumns.map((col, i) => 
                       m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500.uppercase.tracking-wider.whitespace-nowrap.bg-gray-50.border-b.border-gray-200', 
+                        i === 0 ? { style: 'position: sticky; left: 40px; z-index: 15; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' } : {},
                         formatColumnLabel(col.name)
                       )
                     ),
-                    // Sticky actions header
+                    // Sticky actions header (sticky right, box-shadow on left)
                     m('th.px-4.py-3.text-right.text-xs.font-medium.text-gray-500.uppercase.tracking-wider.bg-gray-50.border-b.border-gray-200', {
-                      style: 'position: sticky; right: 0; min-width: 120px;',
+                      style: 'position: sticky; right: 0; min-width: 120px; z-index: 15; box-shadow: -4px 0 8px -4px rgba(0,0,0,0.08);',
                     }, 'Actions'),
                   ]),
                 ]),
@@ -1975,8 +2026,10 @@ const RecordList = {
                   m('tr.hover:bg-gray-50.transition-colors', {
                     class: state.selectedRecords && state.selectedRecords.has(record[primaryKey]) ? 'bg-indigo-50' : '',
                   }, [
-                    // Checkbox cell
-                    m('td.px-4.py-3', [
+                    // Checkbox cell (sticky left, box-shadow on right)
+                    m('td.px-4.py-3.bg-white', {
+                      style: 'position: sticky; left: 0; z-index: 5; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);',
+                    }, [
                       m('input[type=checkbox].rounded.border-gray-300.text-indigo-600.focus:ring-indigo-500', {
                         checked: state.selectedRecords && state.selectedRecords.has(record[primaryKey]),
                         onchange: (e) => {
@@ -1990,35 +2043,49 @@ const RecordList = {
                         },
                       }),
                     ]),
-                    // Dynamic cell values
-                    ...displayColumns.map(col => 
-                      m('td.px-4.py-3.text-sm.whitespace-nowrap.text-gray-700', 
+                    // Dynamic cell values (first column sticky left with box-shadow)
+                    ...displayColumns.map((col, i) => 
+                      m('td.px-4.py-3.text-sm.whitespace-nowrap.text-gray-700.bg-white',
+                        i === 0 ? { style: 'position: sticky; left: 40px; z-index: 5; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' } : {},
                         formatCellValue(record[col.name], col)
                       )
                     ),
-                    // Sticky actions cell
+                    // Sticky actions cell (sticky right, box-shadow on left)
                     m('td.px-4.py-3.text-sm.text-right.whitespace-nowrap.bg-white', {
-                      style: 'position: sticky; right: 0; box-shadow: -4px 0 8px -4px rgba(0,0,0,0.05);',
+                      style: 'position: sticky; right: 0; z-index: 5; box-shadow: -4px 0 8px -4px rgba(0,0,0,0.08);',
                     }, [
-                      m('button.inline-flex.items-center.px-2.py-1.text-sm.text-indigo-600.hover:text-indigo-800.hover:bg-indigo-50.rounded.mr-1.transition-colors', {
-                        onclick: () => {
-                          state.currentRecord = record;
-                          state.editing = true;
-                          m.route.set('/models/' + modelName + '/edit/' + record[primaryKey]);
-                        }
-                      }, 'Edit'),
-                      m('button.inline-flex.items-center.px-2.py-1.text-sm.text-red-600.hover:text-red-800.hover:bg-red-50.rounded.transition-colors', {
-                        onclick: async () => {
-                          if (confirm('Are you sure you want to delete this record?')) {
-                            try {
-                              await api.delete('/models/' + modelName + '/records/' + record[primaryKey]);
-                              loadRecords(modelName, state.pagination.page);
-                            } catch (err) {
-                              alert('Error: ' + err.message);
-                            }
-                          }
-                        }
-                      }, 'Delete'),
+                      state.trashedView && modelMeta?.softDelete
+                        ? m('button.inline-flex.items-center.px-2.py-1.text-sm.text-green-600.hover:text-green-800.hover:bg-green-50.rounded.transition-colors', {
+                            onclick: async () => {
+                              try {
+                                await api.post('/models/' + modelName + '/records/' + record[primaryKey] + '/restore');
+                                loadRecords(modelName, state.pagination.page);
+                              } catch (err) {
+                                alert('Error: ' + err.message);
+                              }
+                            },
+                          }, 'Restore')
+                        : [
+                            m('button.inline-flex.items-center.px-2.py-1.text-sm.text-indigo-600.hover:text-indigo-800.hover:bg-indigo-50.rounded.mr-1.transition-colors', {
+                              onclick: () => {
+                                state.currentRecord = record;
+                                state.editing = true;
+                                m.route.set('/models/' + modelName + '/edit/' + record[primaryKey]);
+                              },
+                            }, 'Edit'),
+                            m('button.inline-flex.items-center.px-2.py-1.text-sm.text-red-600.hover:text-red-800.hover:bg-red-50.rounded.transition-colors', {
+                              onclick: async () => {
+                                if (confirm('Are you sure you want to delete this record?')) {
+                                  try {
+                                    await api.delete('/models/' + modelName + '/records/' + record[primaryKey]);
+                                    loadRecords(modelName, state.pagination.page);
+                                  } catch (err) {
+                                    alert('Error: ' + err.message);
+                                  }
+                                }
+                              },
+                            }, 'Delete'),
+                          ],
                     ]),
                   ])
                 )),

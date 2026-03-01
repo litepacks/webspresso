@@ -227,6 +227,7 @@ function createApiHandlers(options) {
         columns,
         relations: Object.keys(model.relations),
         queries: Object.keys(model.admin.queries || {}),
+        softDelete: !!model.scopes?.softDelete,
       });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -250,9 +251,19 @@ function createApiHandlers(options) {
       const perPage = parseInt(req.query.perPage) || 15;
       const offset = (page - 1) * perPage;
 
-      // Build query
+      // Build query (with soft delete scope if applicable)
       let query = repo.query();
       let countQuery = repo.query();
+      if (model.scopes?.softDelete) {
+        const trashed = req.query.trashed;
+        if (trashed === 'only') {
+          query = query.onlyTrashed();
+          countQuery = countQuery.onlyTrashed();
+        } else if (trashed === 'include') {
+          query = query.withTrashed();
+          countQuery = countQuery.withTrashed();
+        }
+      }
 
       // Parse filter parameters from query string
       // Express's qs library automatically parses filter[column][prop] into nested objects
@@ -492,7 +503,7 @@ function createApiHandlers(options) {
   }
 
   /**
-   * Delete record
+   * Delete record (soft delete if model has softDelete scope)
    */
   async function deleteRecordHandler(req, res) {
     try {
@@ -511,6 +522,35 @@ function createApiHandlers(options) {
       }
 
       res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Restore soft-deleted record
+   */
+  async function restoreRecordHandler(req, res) {
+    try {
+      const { model: modelName, id } = req.params;
+      const model = getModelFromDb(modelName);
+
+      if (!model || !model.admin || model.admin.enabled !== true) {
+        return res.status(404).json({ error: 'Model not found or not enabled' });
+      }
+
+      if (!model.scopes?.softDelete) {
+        return res.status(400).json({ error: 'Model does not support soft delete' });
+      }
+
+      const repo = db.getRepository(model.name);
+      const record = await repo.restore(id);
+
+      if (!record) {
+        return res.status(404).json({ error: 'Record not found in trash' });
+      }
+
+      res.json({ success: true, data: record });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -615,6 +655,7 @@ function createApiHandlers(options) {
     createRecordHandler,
     updateRecordHandler,
     deleteRecordHandler,
+    restoreRecordHandler,
     relationHandler,
     queryHandler,
     resetHandler,

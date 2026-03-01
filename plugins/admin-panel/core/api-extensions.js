@@ -8,10 +8,15 @@
  * Build query with filters applied
  * @param {Object} repo - Repository instance
  * @param {Object} filters - Filter object from frontend
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.onlyTrashed] - For soft delete: only trashed records
  * @returns {Object} Query builder with filters applied
  */
-function buildFilteredQuery(repo, filters) {
+function buildFilteredQuery(repo, filters, options = {}) {
   let query = repo.query();
+  if (options.onlyTrashed) {
+    query = query.onlyTrashed();
+  }
   
   if (!filters || Object.keys(filters).length === 0) {
     return query;
@@ -20,7 +25,7 @@ function buildFilteredQuery(repo, filters) {
   for (const [column, filter] of Object.entries(filters)) {
     if (!filter || (filter.value === '' && !filter.from && !filter.to)) continue;
     
-    const op = filter.op || 'contains';
+    const op = filter.op || filter.operator || 'contains';
     
     switch (op) {
       case 'contains':
@@ -67,13 +72,14 @@ function buildFilteredQuery(repo, filters) {
 
 /**
  * Get all record IDs matching filters (for selectAll mode)
- * @param {Object} repo - Repository instance  
+ * @param {Object} repo - Repository instance
  * @param {Object} filters - Filter object
  * @param {string} primaryKey - Primary key column name
+ * @param {Object} [options] - Options (onlyTrashed for soft delete)
  * @returns {Promise<Array>} Array of IDs
  */
-async function getAllMatchingIds(repo, filters, primaryKey = 'id') {
-  const query = buildFilteredQuery(repo, filters);
+async function getAllMatchingIds(repo, filters, primaryKey = 'id', options = {}) {
+  const query = buildFilteredQuery(repo, filters, options);
   const records = await query.select(primaryKey).list();
   return records.map(r => r[primaryKey]);
 }
@@ -178,7 +184,7 @@ function createExtensionApiHandlers(options) {
   async function bulkActionHandler(req, res) {
     try {
       const { actionId, model: modelName } = req.params;
-      const { ids, selectAll, filters } = req.body;
+      const { ids, selectAll, filters, trashed } = req.body;
 
       const action = registry.bulkActions.get(actionId);
 
@@ -194,17 +200,20 @@ function createExtensionApiHandlers(options) {
         }
       }
 
-      // Get repository
+      const { getModel } = require('../../../core/orm/model');
+      const model = db.getModel ? db.getModel(modelName) : getModel(modelName);
+      const primaryKey = model?.primaryKey || 'id';
       const repo = db.getRepository(modelName);
-      
+
+      // Options for getAllMatchingIds (e.g. onlyTrashed for bulk-restore)
+      const fetchOptions = (actionId === 'bulk-restore' && trashed && model?.scopes?.softDelete)
+        ? { onlyTrashed: true }
+        : {};
+
       // Determine IDs to process
       let recordIds;
       if (selectAll) {
-        // Get all matching record IDs based on filters
-        const { getModel } = require('../../../core/orm/model');
-        const model = db.getModel ? db.getModel(modelName) : getModel(modelName);
-        const primaryKey = model?.primaryKey || 'id';
-        recordIds = await getAllMatchingIds(repo, filters, primaryKey);
+        recordIds = await getAllMatchingIds(repo, filters, primaryKey, fetchOptions);
       } else {
         if (!ids || !Array.isArray(ids) || ids.length === 0) {
           return res.status(400).json({ error: 'No records selected' });
@@ -216,12 +225,15 @@ function createExtensionApiHandlers(options) {
         return res.status(400).json({ error: 'No records match the criteria' });
       }
 
-      // Get records
-      const records = [];
-      for (const id of recordIds) {
-        const record = await repo.findById(id);
-        if (record) {
-          records.push(record);
+      // Get records (for bulk-restore with trashed, findById won't find them - pass minimal { id })
+      let records;
+      if (actionId === 'bulk-restore' && trashed && model?.scopes?.softDelete) {
+        records = recordIds.map(id => ({ id }));
+      } else {
+        records = [];
+        for (const id of recordIds) {
+          const record = await repo.findById(id);
+          if (record) records.push(record);
         }
       }
 
@@ -488,12 +500,10 @@ function createExtensionApiHandlers(options) {
     try {
       const updates = req.body || {};
       
-      // Merge with existing settings
+      // Merge with existing settings (configure expects flat key-value at top level)
       const currentSettings = registry.settings || {};
       const newSettings = { ...currentSettings, ...updates };
-      
-      // Update registry settings
-      registry.configure({ settings: newSettings });
+      registry.settings = newSettings;
       
       res.json({ success: true, settings: registry.settings });
     } catch (error) {
@@ -511,8 +521,19 @@ function createExtensionApiHandlers(options) {
       // Support both path param and query param for model name
       const modelName = req.params.model || req.query.model;
       const format = req.query.format || 'json';
-      const { selectAll, filters } = req.body || {};
-      
+      // Support selectAll and filters from body (POST) or query (GET)
+      const body = req.body || {};
+      let selectAll = body.selectAll ?? req.query.selectAll;
+      let filters = body.filters ?? req.query.filters;
+      if (typeof selectAll === 'string') selectAll = selectAll === 'true';
+      if (typeof filters === 'string') {
+        try {
+          filters = JSON.parse(filters);
+        } catch {
+          filters = undefined;
+        }
+      }
+
       // Support IDs from query string (GET) or body (POST)
       let idList = null;
       if (req.body?.ids && Array.isArray(req.body.ids)) {

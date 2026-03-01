@@ -69,7 +69,7 @@ test.describe('Auth E2E Tests', () => {
       scopes: { timestamps: true },
     });
 
-    db.registerModel({ name: 'User', table: 'users' });
+    // Don't overwrite - getRepository will use model from defineModel via getModel()
     const UserRepo = db.getRepository('User');
 
     // Create test user

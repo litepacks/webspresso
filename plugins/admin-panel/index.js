@@ -270,6 +270,7 @@ function adminPanelPlugin(options = {}) {
       ctx.addRoute('post', `${adminPath}/api/models/:model/records`, requireAuth, apiHandlers.createRecordHandler);
       ctx.addRoute('put', `${adminPath}/api/models/:model/records/:id`, requireAuth, apiHandlers.updateRecordHandler);
       ctx.addRoute('delete', `${adminPath}/api/models/:model/records/:id`, requireAuth, apiHandlers.deleteRecordHandler);
+      ctx.addRoute('post', `${adminPath}/api/models/:model/records/:id/restore`, requireAuth, apiHandlers.restoreRecordHandler);
 
       // Relation API routes (auth required)
       ctx.addRoute('get', `${adminPath}/api/models/:model/relations/:relation`, requireAuth, apiHandlers.relationHandler);

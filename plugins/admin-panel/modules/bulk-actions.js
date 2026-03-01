@@ -13,6 +13,34 @@
 function registerDefaultBulkActions(options) {
   const { registry, db } = options;
 
+  // Bulk restore (soft delete models only - use with trashed view)
+  registry.registerBulkAction('bulk-restore', {
+    label: 'Restore Selected',
+    icon: 'check',
+    color: 'green',
+    models: '*',
+    confirm: true,
+    confirmMessage: 'Restore the selected records?',
+    handler: async (records, modelName, { db }) => {
+      const { getModel } = require('../../../core/orm/model');
+      const model = db.getModel ? db.getModel(modelName) : getModel(modelName);
+      if (!model?.scopes?.softDelete) {
+        return { message: 'Model does not support restore', error: true };
+      }
+      const repo = db.getRepository(modelName);
+      let restored = 0;
+      for (const record of records) {
+        try {
+          const result = await repo.restore(record.id);
+          if (result) restored++;
+        } catch (e) {
+          console.error(`Failed to restore record ${record.id}:`, e.message);
+        }
+      }
+      return { message: `${restored} of ${records.length} records restored`, restored };
+    },
+  });
+
   // Bulk delete
   registry.registerBulkAction('bulk-delete', {
     label: 'Delete Selected',
