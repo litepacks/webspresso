@@ -1484,12 +1484,15 @@ const BulkFieldUpdateDropdown = {
 // Get columns to display in table (limit to reasonable number)
 function getDisplayColumns(columns) {
   if (!columns || columns.length === 0) return [];
-  
+
+  // Filter out hidden columns (password_hash, api_token, etc.)
+  const visible = [...columns].filter((col) => !col.hidden);
+
   // Prioritize: id, name/title, then others (excluding long text/json fields)
   const priority = ['id', 'name', 'title', 'email', 'slug', 'status', 'published', 'created_at'];
   const exclude = ['password', 'content', 'body', 'description']; // Usually too long
-  
-  const sorted = [...columns].sort((a, b) => {
+
+  const sorted = visible.sort((a, b) => {
     const aIdx = priority.indexOf(a.name);
     const bIdx = priority.indexOf(b.name);
     if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;

@@ -114,9 +114,37 @@ function deepClone(obj) {
   return cloned;
 }
 
+/**
+ * Remove hidden columns from a record for safe API/template output
+ * @param {Object} record - Record from database
+ * @param {import('./types').ModelDefinition} model - Model definition with hidden columns
+ * @returns {Object} Record without hidden columns
+ */
+function omitHiddenColumns(record, model) {
+  if (!record) return record;
+  if (!model?.hidden?.length) return record;
+  return omit(record, model.hidden);
+}
+
+/**
+ * Remove hidden columns from records (array or single) for safe output
+ * @param {Object|Object[]} records - Record(s) from database
+ * @param {import('./types').ModelDefinition} model - Model definition
+ * @returns {Object|Object[]} Sanitized record(s)
+ */
+function sanitizeForOutput(records, model) {
+  if (!model?.hidden?.length) return records;
+  if (Array.isArray(records)) {
+    return records.map((r) => omit(r, model.hidden));
+  }
+  return omit(records, model.hidden);
+}
+
 module.exports = {
   pick,
   omit,
+  omitHiddenColumns,
+  sanitizeForOutput,
   formatDateForDb,
   generateMigrationTimestamp,
   snakeToCamel,

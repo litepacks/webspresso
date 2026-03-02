@@ -4,6 +4,8 @@
  * @module plugins/admin-panel/core/api-extensions
  */
 
+const { sanitizeForOutput } = require('../../../core/orm/utils');
+
 /**
  * Build query with filters applied
  * @param {Object} repo - Repository instance
@@ -573,8 +575,9 @@ function createExtensionApiHandlers(options) {
       }
 
       if (format === 'csv') {
-        // CSV export
-        const columns = Array.from(model.columns.keys());
+        // CSV export (exclude hidden columns)
+        const hiddenSet = new Set(model.hidden || []);
+        const columns = Array.from(model.columns.keys()).filter((c) => !hiddenSet.has(c));
         const header = columns.join(',');
         const rows = records.map(record => {
           return columns.map(col => {
@@ -595,8 +598,8 @@ function createExtensionApiHandlers(options) {
         res.setHeader('Content-Disposition', `attachment; filename="${modelName}_export.csv"`);
         res.json({ data: csvContent, format: 'csv' });
       } else {
-        // JSON export
-        res.json({ data: records, model: modelName, exportedAt: new Date().toISOString() });
+        // JSON export (exclude hidden columns)
+        res.json({ data: sanitizeForOutput(records, model), model: modelName, exportedAt: new Date().toISOString() });
       }
     } catch (error) {
       console.error('Export error:', error);

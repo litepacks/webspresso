@@ -147,6 +147,7 @@
  * @property {RelationsMap} [relations={}] - Relation definitions
  * @property {ScopeOptions} [scopes={}] - Scope options
  * @property {AdminMetadata} [admin] - Admin panel metadata
+ * @property {string[]} [hidden=[]] - Column names to never expose in API/templates (e.g. password_hash, api_token)
  */
 
 /**
@@ -159,6 +160,7 @@
  * @property {ScopeOptions} scopes - Scope options
  * @property {Map<string, ColumnMeta>} columns - Parsed column metadata
  * @property {AdminMetadata} [admin] - Admin panel metadata
+ * @property {string[]} hidden - Column names never exposed in API/templates
  */
 
 // ============================================================================

@@ -28,6 +28,7 @@ function defineModel(options) {
     scopes = {},
     admin = {},
     hooks = {},
+    hidden = [],
   } = options;
 
   // Validate required fields
@@ -88,6 +89,7 @@ function defineModel(options) {
       customFields: admin.customFields || {},
       queries: admin.queries || {},
     },
+    hidden: Array.isArray(hidden) ? hidden : [],
     hooks: {},
   };
 

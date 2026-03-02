@@ -1164,8 +1164,12 @@ const User = defineModel({
     timestamps: true,     // Auto-manage created_at/updated_at
     tenant: 'tenant_id',  // Multi-tenant column (optional)
   },
+
+  hidden: ['password_hash', 'api_token'],  // Never expose in API/templates (security)
 });
 ```
+
+**Hidden columns:** Add column names to `hidden` so they are never exposed in admin API responses, exports, or when passing to templates. Use for sensitive data like `password_hash`, `api_token`, `secret_key`. The admin panel will exclude these from list views and forms automatically.
 
 ### Auto-Loading Models
 

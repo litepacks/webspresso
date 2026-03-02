@@ -5,6 +5,7 @@
  */
 
 const { getAllModels, getModel } = require('../../core/orm/model');
+const { sanitizeForOutput } = require('../../core/orm/utils');
 const { checkAdminExists, setupAdmin, login, logout, requireAuth } = require('./auth');
 
 /**
@@ -198,9 +199,11 @@ function createApiHandlers(options) {
         return res.status(403).json({ error: 'Model not enabled in admin panel' });
       }
 
-      // Build column metadata
+      // Build column metadata (hidden columns excluded from list/forms for security)
+      const hiddenSet = new Set(model.hidden || []);
       const columns = [];
       for (const [name, meta] of model.columns) {
+        const isHidden = hiddenSet.has(name);
         columns.push({
           name,
           type: meta.type,
@@ -214,7 +217,8 @@ function createApiHandlers(options) {
           autoIncrement: meta.autoIncrement || false,
           customField: model.admin.customFields?.[name] || null,
           validations: meta.validations || null,
-          ui: meta.ui || null,
+          ui: meta.ui ? { ...meta.ui, hidden: isHidden || meta.ui.hidden } : (isHidden ? { hidden: true } : null),
+          hidden: isHidden, // Excluded from list display and API responses
         });
       }
 
@@ -394,7 +398,7 @@ function createApiHandlers(options) {
       const records = await query.list();
 
       res.json({
-        data: records,
+        data: sanitizeForOutput(records, model),
         pagination: {
           page,
           perPage,
@@ -426,7 +430,7 @@ function createApiHandlers(options) {
         return res.status(404).json({ error: 'Record not found' });
       }
 
-      res.json({ data: record });
+      res.json({ data: sanitizeForOutput(record, model) });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -459,7 +463,7 @@ function createApiHandlers(options) {
       const repo = db.getRepository(model.name);
       const record = await repo.create(req.body);
 
-      res.status(201).json({ data: record });
+      res.status(201).json({ data: sanitizeForOutput(record, model) });
     } catch (error) {
       res.status(400).json({ error: error.message });
     }
@@ -496,7 +500,7 @@ function createApiHandlers(options) {
         return res.status(404).json({ error: 'Record not found' });
       }
 
-      res.json({ data: record });
+      res.json({ data: sanitizeForOutput(record, model) });
     } catch (error) {
       res.status(400).json({ error: error.message });
     }
@@ -550,7 +554,7 @@ function createApiHandlers(options) {
         return res.status(404).json({ error: 'Record not found in trash' });
       }
 
-      res.json({ success: true, data: record });
+      res.json({ success: true, data: sanitizeForOutput(record, model) });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -579,7 +583,7 @@ function createApiHandlers(options) {
       // Get all related records (for dropdown/select)
       const records = await relatedRepo.findAll();
 
-      res.json({ data: records });
+      res.json({ data: sanitizeForOutput(records, relatedModel) });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

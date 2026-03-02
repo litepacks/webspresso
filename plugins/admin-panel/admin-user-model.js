@@ -33,6 +33,7 @@ function createAdminUserModel() {
     scopes: {
       timestamps: true,
     },
+    hidden: ['password'], // Never expose in API/templates
   });
 }
 

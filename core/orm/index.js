@@ -13,6 +13,7 @@ const { createMigrationManager } = require('./migrations');
 const { createSeeder } = require('./seeder');
 const { createScopeContext } = require('./scopes');
 const { ModelEvents, Hooks, HookCancellationError, createEventContext } = require('./events');
+const { omitHiddenColumns, sanitizeForOutput } = require('./utils');
 
 /**
  * Create a database instance
@@ -272,6 +273,9 @@ module.exports = {
   // Column utilities
   extractColumnsFromSchema,
   getColumnMeta,
+  // Output sanitization (exclude hidden columns from API/templates)
+  omitHiddenColumns,
+  sanitizeForOutput,
   // Events/Signals
   ModelEvents,
   Hooks,
