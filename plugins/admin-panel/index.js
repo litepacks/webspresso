@@ -85,13 +85,15 @@ function adminPanelPlugin(options = {}) {
       requireAuth,
       optionalAuth,
       registerModule(config) {
-        if (!this._ctx) {
+        // When bound to plugin, "this" is the plugin; _ctx lives on this.api
+        const ctx = this.api?._ctx ?? this._ctx;
+        if (!ctx) {
           throw new Error('registerModule can only be called during or after onRoutesReady');
         }
         return registerModule(config, {
           registry,
           adminPath,
-          ctx: this._ctx,
+          ctx,
           requireAuth,
           optionalAuth,
           serveAdminPanel,
