@@ -6,9 +6,11 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const sharp = require('sharp');
 
 const CLI_PATH = path.join(__dirname, '../../bin/webspresso.js');
 const TEST_DIR = path.join(__dirname, '../fixtures/cli-test-projects');
+const FAVICON_TEST_DIR = path.join(__dirname, '../fixtures/favicon-test');
 
 // Helper to run CLI commands
 // For interactive commands, pipes answers to skip prompts
@@ -719,6 +721,165 @@ describe('CLI', () => {
       expect(result.stdout).toContain('--setup');
       expect(result.stdout).toContain('--config');
       expect(result.stdout).toContain('--env');
+    });
+  });
+
+  describe.sequential('Favicon Generate Command', () => {
+    let faviconTestDir;
+
+    beforeAll(async () => {
+      faviconTestDir = path.join(FAVICON_TEST_DIR, 'project');
+      fs.mkdirSync(faviconTestDir, { recursive: true });
+
+      // Create test PNG with sharp
+      await sharp({
+        create: { width: 512, height: 512, channels: 4, background: { r: 34, g: 197, b: 94, alpha: 1 } },
+      })
+        .png()
+        .toFile(path.join(faviconTestDir, 'logo.png'));
+    });
+
+    afterAll(() => {
+      if (fs.existsSync(FAVICON_TEST_DIR)) {
+        fs.rmSync(FAVICON_TEST_DIR, { recursive: true, force: true });
+      }
+    });
+
+    beforeEach(() => {
+      // Clean generated files before each test
+      const publicDir = path.join(faviconTestDir, 'public');
+      const partialsDir = path.join(faviconTestDir, 'views', 'partials');
+      const layoutPath = path.join(faviconTestDir, 'views', 'layout.njk');
+
+      if (fs.existsSync(publicDir)) {
+        fs.rmSync(publicDir, { recursive: true, force: true });
+      }
+      if (fs.existsSync(partialsDir)) {
+        fs.unlinkSync(path.join(partialsDir, 'favicons.njk'));
+        if (fs.readdirSync(partialsDir).length === 0) {
+          fs.rmdirSync(partialsDir);
+        }
+      }
+      // Reset layout to state without favicons include
+      if (fs.existsSync(layoutPath)) {
+        const content = fs.readFileSync(layoutPath, 'utf8');
+        fs.writeFileSync(layoutPath, content.replace(/\s*{% include "partials\/favicons\.njk" %}\n?/g, ''));
+      }
+    });
+
+    it('should display favicon:generate help', () => {
+      const result = runCli('favicon:generate --help');
+      expect(result.stdout).toContain('Generate favicon PNGs');
+      expect(result.stdout).toContain('--output-dir');
+      expect(result.stdout).toContain('--theme-color');
+      expect(result.stdout).toContain('--no-layout');
+      expect(result.exitCode).toBe(0);
+    });
+
+    it('should generate favicon files from PNG source', () => {
+      const result = runCli('favicon:generate logo.png', { cwd: faviconTestDir });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Generating favicons from');
+      expect(result.stdout).toContain('Favicons generated successfully');
+
+      const publicDir = path.join(faviconTestDir, 'public');
+      expect(fs.existsSync(path.join(publicDir, 'apple-icon-57x57.png'))).toBe(true);
+      expect(fs.existsSync(path.join(publicDir, 'apple-icon-180x180.png'))).toBe(true);
+      expect(fs.existsSync(path.join(publicDir, 'android-icon-192x192.png'))).toBe(true);
+      expect(fs.existsSync(path.join(publicDir, 'favicon-32x32.png'))).toBe(true);
+      expect(fs.existsSync(path.join(publicDir, 'ms-icon-144x144.png'))).toBe(true);
+      expect(fs.existsSync(path.join(publicDir, 'manifest.json'))).toBe(true);
+    });
+
+    it('should create favicons.njk partial', () => {
+      runCli('favicon:generate logo.png', { cwd: faviconTestDir });
+
+      const partialPath = path.join(faviconTestDir, 'views', 'partials', 'favicons.njk');
+      expect(fs.existsSync(partialPath)).toBe(true);
+
+      const content = fs.readFileSync(partialPath, 'utf8');
+      expect(content).toContain('apple-touch-icon');
+      expect(content).toContain('apple-icon-57x57.png');
+      expect(content).toContain('android-icon-192x192.png');
+      expect(content).toContain('favicon-32x32.png');
+      expect(content).toContain('manifest.json');
+      expect(content).toContain('msapplication-TileColor');
+      expect(content).toContain('theme-color');
+    });
+
+    it('should create manifest.json with correct structure', () => {
+      runCli('favicon:generate logo.png --name "Test App" --short-name "Test"', { cwd: faviconTestDir });
+
+      const manifestPath = path.join(faviconTestDir, 'public', 'manifest.json');
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+
+      expect(manifest.name).toBe('Test App');
+      expect(manifest.short_name).toBe('Test');
+      expect(manifest.icons).toBeDefined();
+      expect(manifest.icons.length).toBeGreaterThan(0);
+      expect(manifest.theme_color).toBeDefined();
+      expect(manifest.background_color).toBeDefined();
+    });
+
+    it('should use custom theme-color in output', () => {
+      runCli('favicon:generate logo.png --theme-color "#1a1a2e"', { cwd: faviconTestDir });
+
+      const partialPath = path.join(faviconTestDir, 'views', 'partials', 'favicons.njk');
+      const content = fs.readFileSync(partialPath, 'utf8');
+      expect(content).toContain('#1a1a2e');
+    });
+
+    it('should add include to layout.njk when layout exists', () => {
+      fs.mkdirSync(path.join(faviconTestDir, 'views'), { recursive: true });
+      fs.writeFileSync(
+        path.join(faviconTestDir, 'views', 'layout.njk'),
+        '<!DOCTYPE html><html><head><title>Test</title></head><body></body></html>'
+      );
+
+      runCli('favicon:generate logo.png', { cwd: faviconTestDir });
+
+      const layoutContent = fs.readFileSync(path.join(faviconTestDir, 'views', 'layout.njk'), 'utf8');
+      expect(layoutContent).toContain('{% include "partials/favicons.njk" %}');
+    });
+
+    it('should not modify layout when --no-layout is used', () => {
+      fs.mkdirSync(path.join(faviconTestDir, 'views'), { recursive: true });
+      const layoutPath = path.join(faviconTestDir, 'views', 'layout.njk');
+      const originalContent = '<!DOCTYPE html><html><head><title>Test</title></head><body></body></html>';
+      fs.writeFileSync(layoutPath, originalContent);
+
+      runCli('favicon:generate logo.png --no-layout', { cwd: faviconTestDir });
+
+      const layoutContent = fs.readFileSync(layoutPath, 'utf8');
+      expect(layoutContent).not.toContain('favicons.njk');
+      expect(layoutContent).toBe(originalContent);
+    });
+
+    it('should fail when source file does not exist', () => {
+      const result = runCli('favicon:generate non-existent.png', { cwd: faviconTestDir });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr || result.stdout).toContain('Source file not found');
+    });
+
+    it('should fail when source is not PNG', () => {
+      fs.writeFileSync(path.join(faviconTestDir, 'logo.jpg'), 'fake jpeg');
+      const result = runCli('favicon:generate logo.jpg', { cwd: faviconTestDir });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr || result.stdout).toContain('Source must be a PNG file');
+    });
+
+    it('should use custom output-dir', () => {
+      runCli('favicon:generate logo.png -o static', { cwd: faviconTestDir });
+
+      const staticDir = path.join(faviconTestDir, 'static');
+      expect(fs.existsSync(path.join(staticDir, 'apple-icon-57x57.png'))).toBe(true);
+      expect(fs.existsSync(path.join(staticDir, 'manifest.json'))).toBe(true);
+
+      const partialContent = fs.readFileSync(path.join(faviconTestDir, 'views', 'partials', 'favicons.njk'), 'utf8');
+      expect(partialContent).toContain('/static/');
     });
   });
 });

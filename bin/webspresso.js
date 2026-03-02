@@ -26,6 +26,7 @@ const { registerCommand: registerDbMake } = require('./commands/db-make');
 const { registerCommand: registerSeed } = require('./commands/seed');
 const { registerCommand: registerAdminSetup } = require('./commands/admin-setup');
 const { registerCommand: registerAdminPassword } = require('./commands/admin-password');
+const { registerCommand: registerFaviconGenerate } = require('./commands/favicon-generate');
 
 registerNew(program);
 registerPage(program);
@@ -40,6 +41,7 @@ registerDbMake(program);
 registerSeed(program);
 registerAdminSetup(program);
 registerAdminPassword(program);
+registerFaviconGenerate(program);
 
 // Parse arguments
 program.parse();

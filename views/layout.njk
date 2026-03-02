@@ -111,6 +111,7 @@
   {{ fsy.injectHead() | safe }}
   
   {% block head %}{% endblock %}
+  {% include "partials/favicons.njk" %}
 </head>
 <body class="bg-ink-50 text-ink-800 min-h-screen flex flex-col">
   <!-- Navigation -->

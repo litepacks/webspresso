@@ -215,6 +215,40 @@ npm run watch:css      # Watch and rebuild CSS on changes
 npm run dev            # Starts both CSS watch and dev server
 ```
 
+### `webspresso favicon:generate <source.png>`
+
+Generate favicon PNG files and `favicons.njk` partial from a single source PNG.
+
+```bash
+# Basic usage (creates files in public/, views/partials/)
+webspresso favicon:generate logo.png
+
+# With PWA manifest options
+webspresso favicon:generate logo.png --name "My App" --short-name "App" --theme-color "#22c55e"
+
+# Custom output directory
+webspresso favicon:generate logo.png -o static
+
+# Skip adding include to layout.njk
+webspresso favicon:generate logo.png --no-layout
+```
+
+This command will:
+- Resize the source PNG to all required sizes (Apple touch 57–180px, Android 192px, favicon 16/32/96px, MS Tile 144px)
+- Write PNGs to `public/` (or `-o` path)
+- Create `public/manifest.json` (PWA format)
+- Create `views/partials/favicons.njk` with `<link>` and `<meta>` tags
+- Add `{% include "partials/favicons.njk" %}` to `views/layout.njk` (unless `--no-layout`)
+
+**Options:**
+- `-o, --output-dir <path>` – Output directory for PNGs (default: `public`)
+- `--partial-dir <path>` – Directory for favicons.njk (default: `views/partials`)
+- `--layout-file <path>` – Layout file to update (default: `views/layout.njk`)
+- `--theme-color <hex>` – theme-color and msapplication-TileColor (default: `#ffffff`)
+- `--name <string>` – manifest.json `name` (PWA)
+- `--short-name <string>` – manifest.json `short_name` (PWA)
+- `--no-layout` – Do not add include to layout.njk
+
 ## Project Structure
 
 Create your app with this structure:

@@ -1,6 +1,6 @@
 {
   "name": "webspresso",
-  "version": "0.0.50",
+  "version": "0.0.51",
   "description": "Minimal, production-ready SSR framework for Node.js with file-based routing, Nunjucks templating, built-in i18n, and CLI tooling",
   "main": "index.js",
   "bin": {
@@ -55,6 +55,7 @@
     "inquirer": "^8.2.6",
     "knex": "^3.1.0",
     "nunjucks": "^3.2.4",
+    "sharp": "^0.33.5",
     "zod": "^3.23.0"
   },
   "peerDependencies": {
