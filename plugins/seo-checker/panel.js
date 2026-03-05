@@ -172,34 +172,44 @@ function generatePanelStyles() {
   .seo-tabs {
     display: flex;
     padding: 0 12px;
-    gap: 2px;
+    gap: 4px;
     background: rgba(0,0,0,0.2);
     border-bottom: 1px solid rgba(255,255,255,0.06);
     overflow-x: auto;
-    scrollbar-width: none;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: #3f3f46 transparent;
   }
   
   .seo-tabs::-webkit-scrollbar {
-    display: none;
+    height: 4px;
+  }
+  
+  .seo-tabs::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .seo-tabs::-webkit-scrollbar-thumb {
+    background: #3f3f46;
+    border-radius: 2px;
   }
   
   .seo-tab {
-    flex: 1;
-    min-width: 0;
-    padding: 12px 8px;
+    flex: 0 0 auto;
+    padding: 10px 10px;
     background: none;
     border: none;
     color: #71717a;
     font-size: 10px;
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
     cursor: pointer;
     transition: all 0.2s;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     border-bottom: 2px solid transparent;
     white-space: nowrap;
   }
@@ -400,7 +410,8 @@ function generatePanelStyles() {
     }
     
     .seo-tab {
-      padding: 10px 6px;
+      flex: 0 0 auto;
+      padding: 8px 8px;
       font-size: 9px;
     }
     
