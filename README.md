@@ -249,6 +249,25 @@ This command will:
 - `--short-name <string>` – manifest.json `short_name` (PWA)
 - `--no-layout` – Do not add include to layout.njk
 
+### Admin Panel Commands
+
+```bash
+# Create admin_users table migration
+webspresso admin:setup
+
+# List all admin users
+webspresso admin:list
+
+# Reset admin password (interactive)
+webspresso admin:password
+
+# Reset with options
+webspresso admin:password -e admin@example.com -p yeni_sifre123
+webspresso admin:password -c ./webspresso.db.js -E production
+```
+
+> **Note:** Requires `webspresso.db.js` or `knexfile.js` in project root. Run from project directory.
+
 ## Project Structure
 
 Create your app with this structure:
@@ -1339,8 +1358,32 @@ webspresso db:make create_posts_table
 webspresso db:make create_users_table --model User
 
 # Admin Panel Setup
-webspresso admin:setup  # Create admin_users migration
+webspresso admin:setup   # Create admin_users migration
+webspresso admin:list    # List all admin users
+webspresso admin:password  # Reset admin password (interactive or -e -p)
 ```
+
+**Admin CLI Commands:**
+
+```bash
+# Create admin_users table migration
+webspresso admin:setup
+
+# List all admin users
+webspresso admin:list
+
+# Reset admin password (interactive: prompts for email and password)
+webspresso admin:password
+
+# Reset with options
+webspresso admin:password -e admin@example.com -p yeni_sifre123
+
+# Use custom config or environment
+webspresso admin:password -c ./webspresso.db.js -E production
+webspresso admin:list -c ./webspresso.db.js
+```
+
+> **Note:** Database config is loaded from `webspresso.db.js` or `knexfile.js` in the project root. Run commands from your project directory.
 
 **Database Config File (`webspresso.db.js`):**
 

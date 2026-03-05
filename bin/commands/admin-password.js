@@ -3,9 +3,8 @@
  * Reset admin user password via CLI
  */
 
-const fs = require('fs');
-const path = require('path');
 const readline = require('readline');
+const { loadDbConfig, createDbInstance } = require('../utils/db');
 
 function registerCommand(program) {
   program
@@ -13,41 +12,13 @@ function registerCommand(program) {
     .description('Reset admin user password')
     .option('-e, --email <email>', 'Admin user email')
     .option('-p, --password <password>', 'New password (not recommended, use interactive mode)')
-    .option('-c, --config <path>', 'Path to database config file')
+    .option('-c, --config <path>', 'Path to database config file (webspresso.db.js or knexfile.js)')
+    .option('-E, --env <environment>', 'Environment (development, production)', 'development')
     .action(async (options) => {
       try {
-        // Find project root and load database
-        const cwd = process.cwd();
-        
-        // Try to find and load the database config
-        let dbConfig = null;
-        const configPaths = [
-          options.config,
-          path.join(cwd, 'webspresso.config.js'),
-          path.join(cwd, 'database.config.js'),
-          path.join(cwd, 'db.config.js'),
-        ].filter(Boolean);
-        
-        for (const configPath of configPaths) {
-          if (fs.existsSync(configPath)) {
-            const config = require(configPath);
-            dbConfig = config.database || config;
-            break;
-          }
-        }
-        
-        if (!dbConfig) {
-          console.error('❌ Error: Could not find database configuration.');
-          console.error('   Please run this command from your project root.');
-          process.exit(1);
-        }
-        
-        // Lazy load dependencies
-        const bcrypt = require('bcrypt');
-        const knex = require('knex');
-        
-        // Initialize database connection
-        const db = knex(dbConfig);
+        const { config, path: configPath } = loadDbConfig(options.config);
+        const db = await createDbInstance(config, options.env);
+        console.log(`\n📦 Using config: ${configPath}\n`);
         
         // Check if admin_users table exists
         const hasTable = await db.schema.hasTable('admin_users');
@@ -174,35 +145,13 @@ function registerCommand(program) {
   program
     .command('admin:list')
     .description('List all admin users')
-    .option('-c, --config <path>', 'Path to database config file')
+    .option('-c, --config <path>', 'Path to database config file (webspresso.db.js or knexfile.js)')
+    .option('-E, --env <environment>', 'Environment (development, production)', 'development')
     .action(async (options) => {
       try {
-        const cwd = process.cwd();
-        
-        // Try to find and load the database config
-        let dbConfig = null;
-        const configPaths = [
-          options.config,
-          path.join(cwd, 'webspresso.config.js'),
-          path.join(cwd, 'database.config.js'),
-          path.join(cwd, 'db.config.js'),
-        ].filter(Boolean);
-        
-        for (const configPath of configPaths) {
-          if (fs.existsSync(configPath)) {
-            const config = require(configPath);
-            dbConfig = config.database || config;
-            break;
-          }
-        }
-        
-        if (!dbConfig) {
-          console.error('❌ Error: Could not find database configuration.');
-          process.exit(1);
-        }
-        
-        const knex = require('knex');
-        const db = knex(dbConfig);
+        const { config, path: configPath } = loadDbConfig(options.config);
+        const db = await createDbInstance(config, options.env);
+        console.log(`\n📦 Using config: ${configPath}\n`);
         
         // Check if admin_users table exists
         const hasTable = await db.schema.hasTable('admin_users');
