@@ -218,6 +218,7 @@ var AnalyticsPage = {
       analyticsApi('top-pages', days),
       analyticsApi('bot-activity', days),
       analyticsApi('countries', days),
+      analyticsApi('client-errors', days),
       analyticsApi('recent', days),
     ]).then(function(results) {
       vnode.state.stats = results[0];
@@ -225,7 +226,8 @@ var AnalyticsPage = {
       vnode.state.topPages = results[2];
       vnode.state.botActivity = results[3];
       vnode.state.countries = results[4];
-      vnode.state.recent = results[5];
+      vnode.state.clientErrors = results[5];
+      vnode.state.recent = results[6];
       vnode.state.loading = false;
 
       if (chartInstance) {
@@ -381,6 +383,33 @@ var AnalyticsPage = {
                     ]);
                   }),
               ]),
+            ]),
+          ]),
+
+          // Client Errors
+          m('div.bg-white.rounded-lg.shadow.mb-6', [
+            m('div.px-5.py-4.border-b.border-gray-100.flex.items-center.justify-between', [
+              m('h3.text-sm.font-semibold.text-gray-900.flex.items-center.gap-2', [
+                m('span', '⚠️'),
+                'Client Errors',
+              ]),
+              m('span.text-xs.text-gray-400', 'Last ' + s.days + ' days'),
+            ]),
+            m('div.p-4.max-h-64.overflow-y-auto', [
+              !s.clientErrors || s.clientErrors.length === 0
+                ? m('p.text-gray-400.text-sm.text-center.py-6', 'No client errors')
+                : s.clientErrors.slice(0, 15).map(function(err) {
+                    return m('div.border-b.border-gray-50.pb-3.mb-3.last:border-0.last:mb-0.last:pb-0', [
+                      m('div.flex.items-start.gap-2', [
+                        m('span.text-xs.px-1.5.py-0.5.rounded.bg-red-100.text-red-700', err.error_type || 'error'),
+                        m('span.text-xs.text-gray-500', relativeTime(err.created_at)),
+                      ]),
+                      m('p.text-sm.text-gray-800.font-mono.break-all.mt-1', {
+                        title: err.stack || err.message,
+                      }, (err.message || '').slice(0, 120) + (err.message && err.message.length > 120 ? '…' : '')),
+                      err.path && m('p.text-xs.text-gray-500.mt-0.5', err.path),
+                    ]);
+                  }),
             ]),
           ]),
 

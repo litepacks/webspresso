@@ -36,6 +36,8 @@ function getClientIp(req) {
  * @param {string[]} [options.excludePaths] - Paths to exclude from tracking
  * @param {boolean} [options.trackBots=true] - Whether to record bot visits
  * @param {string} [options.tableName='analytics_page_views'] - DB table name
+ * @param {number} [options.batchSize=20] - Flush when queue reaches this size
+ * @param {number} [options.flushIntervalMs=3000] - Flush interval for low traffic
  */
 function createTrackingMiddleware(options) {
   const {
@@ -43,10 +45,14 @@ function createTrackingMiddleware(options) {
     excludePaths = [],
     trackBots = true,
     tableName = 'analytics_page_views',
+    batchSize = 20,
+    flushIntervalMs = 3000,
   } = options;
 
   const allExcludes = [...DEFAULT_EXCLUDE, ...excludePaths];
   let tableReady = false;
+  const queue = [];
+  let flushScheduled = false;
 
   async function ensureTable() {
     if (tableReady) return;
@@ -101,6 +107,37 @@ function createTrackingMiddleware(options) {
     return sessionId;
   }
 
+  async function flushQueue() {
+    if (queue.length === 0) return;
+    const batch = queue.splice(0, queue.length);
+
+    try {
+      await ensureTable();
+      for (const row of batch) {
+        row.created_at = knex.fn.now();
+      }
+      await knex(tableName).insert(batch);
+    } catch (e) {
+      console.error('[site-analytics] Batch insert failed:', e.message);
+      // Re-queue failed items (optional - could drop to avoid loops)
+      queue.unshift(...batch);
+    }
+  }
+
+  function scheduleFlush() {
+    if (flushScheduled || queue.length === 0) return;
+    flushScheduled = true;
+    setTimeout(() => {
+      flushScheduled = false;
+      flushQueue().catch(() => {});
+    }, flushIntervalMs);
+  }
+
+  // Periodic flush (catches low-traffic case)
+  setInterval(() => {
+    if (queue.length > 0) flushQueue().catch(() => {});
+  }, flushIntervalMs).unref();
+
   return async function trackingMiddleware(req, res, next) {
     next();
 
@@ -111,8 +148,6 @@ function createTrackingMiddleware(options) {
     if (allExcludes.some(prefix => path.startsWith(prefix))) return;
 
     try {
-      await ensureTable();
-
       const userAgent = req.headers['user-agent'] || '';
       const ip = getClientIp(req);
       const { isBot, botName } = detectBot(userAgent);
@@ -125,7 +160,7 @@ function createTrackingMiddleware(options) {
       const country = detectCountry(req);
       const referrer = req.headers['referer'] || req.headers['referrer'] || null;
 
-      await knex(tableName).insert({
+      queue.push({
         session_id: sessionId,
         visitor_id: visitorId,
         path,
@@ -135,8 +170,13 @@ function createTrackingMiddleware(options) {
         country,
         is_bot: isBot,
         bot_name: botName,
-        created_at: knex.fn.now(),
       });
+
+      if (queue.length >= batchSize) {
+        flushQueue().catch(() => {});
+      } else {
+        scheduleFlush();
+      }
     } catch (e) {
       // Non-blocking: don't let tracking errors affect the app
     }

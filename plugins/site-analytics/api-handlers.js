@@ -11,7 +11,11 @@
  * @param {string} [options.tableName='analytics_page_views']
  */
 function createAnalyticsApiHandlers(options) {
-  const { knex, tableName = 'analytics_page_views' } = options;
+  const {
+    knex,
+    tableName = 'analytics_page_views',
+    errorsTableName = 'analytics_client_errors',
+  } = options;
 
   function parseDays(req) {
     const days = parseInt(req.query.days) || 30;
@@ -209,6 +213,32 @@ function createAnalyticsApiHandlers(options) {
   }
 
   /**
+   * GET /client-errors - Recent client-side JS errors
+   */
+  async function getClientErrors(req, res) {
+    try {
+      const days = parseDays(req);
+      const since = sinceDate(days);
+      const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+
+      const hasTable = await knex.schema.hasTable(errorsTableName);
+      if (!hasTable) {
+        return res.json([]);
+      }
+
+      const rows = await knex(errorsTableName)
+        .select('id', 'error_type', 'message', 'stack', 'path', 'created_at')
+        .where('created_at', '>=', since)
+        .orderBy('created_at', 'desc')
+        .limit(limit);
+
+      res.json(rows);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  }
+
+  /**
    * GET /recent - Recent page views
    */
   async function getRecent(req, res) {
@@ -233,6 +263,7 @@ function createAnalyticsApiHandlers(options) {
     getTopPages,
     getBotActivity,
     getCountries,
+    getClientErrors,
     getRecent,
   };
 }

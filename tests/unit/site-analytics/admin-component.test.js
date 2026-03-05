@@ -38,6 +38,7 @@ describe('Analytics Admin Component', () => {
     expect(code).toContain('Bot Activity');
     expect(code).toContain('Top Pages');
     expect(code).toContain('Recent Activity');
+    expect(code).toContain('Client Errors');
     expect(code).toContain('Country Stats');
   });
 
@@ -57,6 +58,7 @@ describe('Analytics Admin Component', () => {
     expect(code).toContain("analyticsApi('top-pages'");
     expect(code).toContain("analyticsApi('bot-activity'");
     expect(code).toContain("analyticsApi('countries'");
+    expect(code).toContain("analyticsApi('client-errors'");
     expect(code).toContain("analyticsApi('recent'");
   });
 

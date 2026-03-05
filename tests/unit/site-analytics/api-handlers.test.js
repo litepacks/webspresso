@@ -31,7 +31,20 @@ describe('Analytics API Handlers', () => {
       table.timestamp('created_at').defaultTo(knex.fn.now());
     });
 
-    handlers = createAnalyticsApiHandlers({ knex, tableName: TABLE });
+    await knex.schema.createTable('analytics_client_errors', (table) => {
+      table.bigIncrements('id').primary();
+      table.string('error_type', 50);
+      table.string('message', 500);
+      table.text('stack');
+      table.string('path', 500);
+      table.timestamp('created_at').defaultTo(knex.fn.now());
+    });
+
+    handlers = createAnalyticsApiHandlers({
+      knex,
+      tableName: TABLE,
+      errorsTableName: 'analytics_client_errors',
+    });
   });
 
   afterAll(async () => {
@@ -40,6 +53,9 @@ describe('Analytics API Handlers', () => {
 
   beforeEach(async () => {
     await knex(TABLE).del();
+    if (await knex.schema.hasTable('analytics_client_errors')) {
+      await knex('analytics_client_errors').del();
+    }
   });
 
   function mockRes() {
@@ -291,6 +307,45 @@ describe('Analytics API Handlers', () => {
 
       expect(res._body.length).toBe(1);
       expect(res._body[0].country).toBe('US');
+    });
+  });
+
+  describe('getClientErrors', () => {
+    it('should return empty array when no errors', async () => {
+      const res = mockRes();
+      await handlers.getClientErrors(mockReq({ days: '30' }), res);
+      expect(res._body).toEqual([]);
+    });
+
+    it('should return client errors sorted by created_at desc', async () => {
+      await knex('analytics_client_errors').insert([
+        { error_type: 'error', message: 'TypeError: x is null', path: '/', created_at: new Date(Date.now() - 60000).toISOString() },
+        { error_type: 'unhandledrejection', message: 'Failed to fetch', path: '/about', created_at: new Date().toISOString() },
+      ]);
+
+      const res = mockRes();
+      await handlers.getClientErrors(mockReq({ days: '30' }), res);
+
+      expect(res._body.length).toBe(2);
+      expect(res._body[0].message).toBe('Failed to fetch');
+      expect(res._body[0].path).toBe('/about');
+      expect(res._body[1].message).toBe('TypeError: x is null');
+      expect(res._body[1].path).toBe('/');
+    });
+
+    it('should filter by days', async () => {
+      const oldDate = new Date();
+      oldDate.setDate(oldDate.getDate() - 45);
+      await knex('analytics_client_errors').insert({
+        error_type: 'error',
+        message: 'Old error',
+        path: '/',
+        created_at: oldDate.toISOString(),
+      });
+
+      const res = mockRes();
+      await handlers.getClientErrors(mockReq({ days: '30' }), res);
+      expect(res._body).toEqual([]);
     });
   });
 

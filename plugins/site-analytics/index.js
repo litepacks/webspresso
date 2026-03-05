@@ -7,6 +7,8 @@
 const { createTrackingMiddleware } = require('./tracking');
 const { createAnalyticsApiHandlers } = require('./api-handlers');
 const { generateAnalyticsComponent } = require('./admin-component');
+const { generateErrorTrackerScript } = require('./client-error-tracker');
+const { createErrorReportHandler } = require('./client-error-handler');
 
 /**
  * Site Analytics Plugin Factory
@@ -15,6 +17,10 @@ const { generateAnalyticsComponent } = require('./admin-component');
  * @param {string[]} [options.excludePaths=[]] - Extra paths to exclude from tracking
  * @param {boolean} [options.trackBots=true] - Record bot visits (still counted separately)
  * @param {string} [options.tableName='analytics_page_views'] - DB table name
+ * @param {number} [options.batchSize=20] - Flush page view queue when it reaches this size
+ * @param {number} [options.flushIntervalMs=3000] - Flush interval for low traffic
+ * @param {boolean} [options.trackClientErrors=true] - Capture and report client-side JS errors
+ * @param {string} [options.errorsTableName='analytics_client_errors'] - Client errors table
  * @returns {Object} Plugin definition
  */
 function siteAnalyticsPlugin(options = {}) {
@@ -23,6 +29,8 @@ function siteAnalyticsPlugin(options = {}) {
     excludePaths = [],
     trackBots = true,
     tableName = 'analytics_page_views',
+    trackClientErrors = true,
+    errorsTableName = 'analytics_client_errors',
   } = options;
 
   if (!db) {
@@ -48,9 +56,20 @@ function siteAnalyticsPlugin(options = {}) {
         excludePaths,
         trackBots,
         tableName,
+        batchSize: options.batchSize ?? 20,
+        flushIntervalMs: options.flushIntervalMs ?? 3000,
       });
 
       ctx.app.use(trackingMiddleware);
+
+      // Client error tracking: public POST endpoint + inject script
+      if (trackClientErrors) {
+        const errorHandler = createErrorReportHandler({ knex, tableName: errorsTableName });
+        ctx.addRoute('post', '/_analytics/report-error', errorHandler);
+
+        const script = generateErrorTrackerScript({ endpoint: '/_analytics/report-error' });
+        ctx.injectBody(`<script>${script}</script>`, { id: 'site-analytics-error-tracker', priority: 5 });
+      }
     },
 
     onRoutesReady(ctx) {
@@ -61,7 +80,11 @@ function siteAnalyticsPlugin(options = {}) {
       }
 
       const knex = db.knex || db;
-      const handlers = createAnalyticsApiHandlers({ knex, tableName });
+      const handlers = createAnalyticsApiHandlers({
+        knex,
+        tableName,
+        errorsTableName,
+      });
 
       adminApi.registerModule({
         id: 'analytics',
@@ -90,6 +113,7 @@ function siteAnalyticsPlugin(options = {}) {
             { method: 'get', path: '/top-pages', handler: handlers.getTopPages },
             { method: 'get', path: '/bot-activity', handler: handlers.getBotActivity },
             { method: 'get', path: '/countries', handler: handlers.getCountries },
+            { method: 'get', path: '/client-errors', handler: handlers.getClientErrors },
             { method: 'get', path: '/recent', handler: handlers.getRecent },
           ],
         },

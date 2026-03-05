@@ -24,6 +24,8 @@ describe('Site Analytics Plugin', () => {
     it('should add tracking middleware to the app', () => {
       const useCalls = [];
       const mockApp = { use: (mw) => useCalls.push(mw) };
+      const addRouteCalls = [];
+      const injectBodyCalls = [];
       const mockKnex = {
         client: { config: { client: 'better-sqlite3' } },
         schema: { hasTable: () => Promise.resolve(true) },
@@ -31,10 +33,21 @@ describe('Site Analytics Plugin', () => {
       };
 
       const plugin = siteAnalyticsPlugin({ db: { knex: mockKnex } });
-      plugin.register({ app: mockApp, usePlugin: () => null });
+      plugin.register({
+        app: mockApp,
+        usePlugin: () => null,
+        addRoute: (method, path, ...handlers) => addRouteCalls.push({ method, path }),
+        injectBody: (content) => injectBodyCalls.push(content),
+      });
 
       expect(useCalls.length).toBe(1);
       expect(typeof useCalls[0]).toBe('function');
+      expect(addRouteCalls.length).toBe(1);
+      expect(addRouteCalls[0].method).toBe('post');
+      expect(addRouteCalls[0].path).toBe('/_analytics/report-error');
+      expect(injectBodyCalls.length).toBe(1);
+      expect(injectBodyCalls[0]).toContain('window.onerror');
+      expect(injectBodyCalls[0]).toContain('unhandledrejection');
     });
   });
 
@@ -99,14 +112,15 @@ describe('Site Analytics Plugin', () => {
       const componentCode = registry.clientComponents.get('analytics');
       expect(componentCode).toContain('AnalyticsPage');
 
-      // Check API routes registered (6 data routes + 1 SPA route)
-      expect(routes.length).toBe(7);
+      // Check API routes registered (7 data routes + 1 SPA route)
+      expect(routes.length).toBe(8);
       const apiPaths = routes.map(r => r.path);
       expect(apiPaths).toContain('/_admin/api/analytics/stats');
       expect(apiPaths).toContain('/_admin/api/analytics/views-over-time');
       expect(apiPaths).toContain('/_admin/api/analytics/top-pages');
       expect(apiPaths).toContain('/_admin/api/analytics/bot-activity');
       expect(apiPaths).toContain('/_admin/api/analytics/countries');
+      expect(apiPaths).toContain('/_admin/api/analytics/client-errors');
       expect(apiPaths).toContain('/_admin/api/analytics/recent');
       expect(apiPaths).toContain('/_admin/analytics');
     });

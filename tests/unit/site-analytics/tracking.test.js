@@ -20,9 +20,10 @@ describe('Tracking Middleware', () => {
     };
 
     const chainable = {
-      insert: vi.fn((row) => {
-        inserted.push(row);
-        return Promise.resolve([1]);
+      insert: vi.fn((data) => {
+        const rows = Array.isArray(data) ? data : [data];
+        inserted.push(...rows);
+        return Promise.resolve([rows.length]);
       }),
     };
     knex.__chainable = chainable;
@@ -53,8 +54,10 @@ describe('Tracking Middleware', () => {
     };
   }
 
+  const trackingOpts = (opts = {}) => ({ knex, batchSize: 1, flushIntervalMs: 10, ...opts });
+
   it('should call next() immediately (non-blocking)', async () => {
-    const middleware = createTrackingMiddleware({ knex });
+    const middleware = createTrackingMiddleware(trackingOpts());
     const next = vi.fn();
     const req = mockReq();
 
@@ -63,7 +66,7 @@ describe('Tracking Middleware', () => {
   });
 
   it('should skip non-GET requests', async () => {
-    const middleware = createTrackingMiddleware({ knex });
+    const middleware = createTrackingMiddleware(trackingOpts());
     const next = vi.fn();
     const req = mockReq({ method: 'POST' });
 
@@ -74,7 +77,7 @@ describe('Tracking Middleware', () => {
   });
 
   it('should skip static file extensions', async () => {
-    const middleware = createTrackingMiddleware({ knex });
+    const middleware = createTrackingMiddleware(trackingOpts());
     const next = vi.fn();
 
     for (const ext of ['.js', '.css', '.png', '.jpg', '.ico', '.woff2', '.svg']) {
@@ -85,7 +88,7 @@ describe('Tracking Middleware', () => {
   });
 
   it('should skip admin paths by default', async () => {
-    const middleware = createTrackingMiddleware({ knex });
+    const middleware = createTrackingMiddleware(trackingOpts());
     const next = vi.fn();
 
     await middleware(mockReq({ path: '/_admin/dashboard' }), {}, next);
@@ -94,7 +97,7 @@ describe('Tracking Middleware', () => {
   });
 
   it('should skip API paths by default', async () => {
-    const middleware = createTrackingMiddleware({ knex });
+    const middleware = createTrackingMiddleware(trackingOpts());
     const next = vi.fn();
 
     await middleware(mockReq({ path: '/api/users' }), {}, next);
@@ -103,7 +106,7 @@ describe('Tracking Middleware', () => {
   });
 
   it('should skip custom excludePaths', async () => {
-    const middleware = createTrackingMiddleware({ knex, excludePaths: ['/health', '/robots'] });
+    const middleware = createTrackingMiddleware(trackingOpts({ excludePaths: ['/health', '/robots'] }));
     const next = vi.fn();
 
     await middleware(mockReq({ path: '/health' }), {}, next);
@@ -113,7 +116,7 @@ describe('Tracking Middleware', () => {
   });
 
   it('should record a page view for valid GET request', async () => {
-    const middleware = createTrackingMiddleware({ knex });
+    const middleware = createTrackingMiddleware(trackingOpts());
     const next = vi.fn();
     const req = mockReq({ path: '/blog/hello' });
 
@@ -129,7 +132,7 @@ describe('Tracking Middleware', () => {
   });
 
   it('should detect bots and set is_bot and bot_name', async () => {
-    const middleware = createTrackingMiddleware({ knex });
+    const middleware = createTrackingMiddleware(trackingOpts());
     const next = vi.fn();
     const req = mockReq({
       path: '/page',
@@ -145,7 +148,7 @@ describe('Tracking Middleware', () => {
   });
 
   it('should skip bots when trackBots is false', async () => {
-    const middleware = createTrackingMiddleware({ knex, trackBots: false });
+    const middleware = createTrackingMiddleware(trackingOpts({ trackBots: false }));
     const next = vi.fn();
     const req = mockReq({
       path: '/page',
@@ -158,7 +161,7 @@ describe('Tracking Middleware', () => {
   });
 
   it('should detect country from headers', async () => {
-    const middleware = createTrackingMiddleware({ knex });
+    const middleware = createTrackingMiddleware(trackingOpts());
     const next = vi.fn();
     const req = mockReq({
       path: '/page',
@@ -176,7 +179,7 @@ describe('Tracking Middleware', () => {
   });
 
   it('should hash IP address (not store raw IP)', async () => {
-    const middleware = createTrackingMiddleware({ knex });
+    const middleware = createTrackingMiddleware(trackingOpts());
     const next = vi.fn();
     const req = mockReq({ path: '/page', ip: '192.168.1.100' });
 
@@ -189,7 +192,7 @@ describe('Tracking Middleware', () => {
   });
 
   it('should get IP from x-forwarded-for header', async () => {
-    const middleware = createTrackingMiddleware({ knex });
+    const middleware = createTrackingMiddleware(trackingOpts());
     const next = vi.fn();
     const req = mockReq({
       path: '/page',
@@ -208,7 +211,7 @@ describe('Tracking Middleware', () => {
   });
 
   it('should generate same visitor_id for same IP+UA combination', async () => {
-    const middleware = createTrackingMiddleware({ knex });
+    const middleware = createTrackingMiddleware(trackingOpts());
     const next = vi.fn();
     const req1 = mockReq({ path: '/page1', ip: '1.2.3.4' });
     const req2 = mockReq({ path: '/page2', ip: '1.2.3.4' });
@@ -223,7 +226,7 @@ describe('Tracking Middleware', () => {
   });
 
   it('should reuse session_id within 30min window', async () => {
-    const middleware = createTrackingMiddleware({ knex });
+    const middleware = createTrackingMiddleware(trackingOpts());
     const next = vi.fn();
     const req1 = mockReq({ path: '/page1', ip: '1.2.3.4' });
     const req2 = mockReq({ path: '/page2', ip: '1.2.3.4' });
@@ -238,7 +241,7 @@ describe('Tracking Middleware', () => {
   });
 
   it('should truncate long referrer and user_agent', async () => {
-    const middleware = createTrackingMiddleware({ knex });
+    const middleware = createTrackingMiddleware(trackingOpts());
     const next = vi.fn();
     const longStr = 'x'.repeat(2000);
     const req = mockReq({
@@ -261,7 +264,7 @@ describe('Tracking Middleware', () => {
     knex.schema.hasTable = vi.fn().mockResolvedValue(false);
     knex.schema.createTable = vi.fn().mockResolvedValue(undefined);
 
-    const middleware = createTrackingMiddleware({ knex });
+    const middleware = createTrackingMiddleware(trackingOpts());
     const next = vi.fn();
 
     await middleware(mockReq({ path: '/page' }), {}, next);
