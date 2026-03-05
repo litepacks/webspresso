@@ -62,17 +62,20 @@ function siteAnalyticsPlugin(options = {}) {
 
       ctx.app.use(trackingMiddleware);
 
-      // Client error tracking: public POST endpoint + inject script
       if (trackClientErrors) {
-        const errorHandler = createErrorReportHandler({ knex, tableName: errorsTableName });
-        ctx.addRoute('post', '/_analytics/report-error', errorHandler);
-
         const script = generateErrorTrackerScript({ endpoint: '/_analytics/report-error' });
         ctx.injectBody(`<script>${script}</script>`, { id: 'site-analytics-error-tracker', priority: 5 });
       }
     },
 
     onRoutesReady(ctx) {
+      // Client error report endpoint (must be in onRoutesReady - addRoute only mounts there)
+      if (trackClientErrors) {
+        const knex = db.knex || db;
+        const errorHandler = createErrorReportHandler({ knex, tableName: errorsTableName });
+        ctx.addRoute('post', '/_analytics/report-error', errorHandler);
+      }
+
       const adminApi = ctx.usePlugin('admin-panel');
       if (!adminApi) {
         console.warn('[site-analytics] admin-panel plugin not found, skipping admin page registration');
