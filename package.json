@@ -38,7 +38,8 @@
     "src/",
     "utils/",
     "core/",
-    "plugins/"
+    "plugins/",
+    "templates/"
   ],
   "dependencies": {
     "bcrypt": "^5.1.1",

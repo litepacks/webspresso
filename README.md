@@ -191,6 +191,32 @@ webspresso start
 webspresso start --port 3000
 ```
 
+### `webspresso doctor`
+
+Check Node.js version, `package.json` / `engines.node`, typical project files (`server.js`, `pages/`), and whether `webspresso.db.js` or `knexfile.js` exists. Use `--db` to run a quick connection test when a config is present. Warnings alone exit with code `0`; pass `--strict` to fail (exit `1`) on any warning—useful in CI.
+
+```bash
+webspresso doctor
+webspresso doctor --db
+webspresso doctor --strict
+```
+
+### `webspresso skill`
+
+Scaffold a **Cursor Agent Skill**: creates `.cursor/skills/<name>/SKILL.md` with valid YAML frontmatter (`name`, `description`) and a short markdown template for AI tooling. Use `--global` to write under `~/.cursor/skills/` instead of the current project.
+
+**Bundled preset:** `--preset webspresso` copies the full **Webspresso usage** reference skill (framework routing, ORM, plugins, CLI, pitfalls) into `.cursor/skills/webspresso-usage/SKILL.md` — no prompts.
+
+```bash
+webspresso skill my-workflow
+webspresso skill review-pr --description "Runs PR review checklist. Use when reviewing pull requests."
+webspresso skill deploy-check -g
+
+# Install the bundled Webspresso agent reference (same content shipped in templates/skills/)
+webspresso skill --preset webspresso
+webspresso skill -p webspresso --global
+```
+
 ### `webspresso add tailwind`
 
 Add Tailwind CSS to your project with build process.

@@ -28,6 +28,8 @@ const { registerCommand: registerAdminSetup } = require('./commands/admin-setup'
 const { registerCommand: registerAdminPassword } = require('./commands/admin-password');
 const { registerCommand: registerFaviconGenerate } = require('./commands/favicon-generate');
 const { registerCommand: registerAuditPrune } = require('./commands/audit-prune');
+const { registerCommand: registerDoctor } = require('./commands/doctor');
+const { registerCommand: registerSkill } = require('./commands/skill');
 
 registerNew(program);
 registerPage(program);
@@ -44,6 +46,8 @@ registerAdminSetup(program);
 registerAdminPassword(program);
 registerFaviconGenerate(program);
 registerAuditPrune(program);
+registerDoctor(program);
+registerSkill(program);
 
 // Parse arguments
 program.parse();
