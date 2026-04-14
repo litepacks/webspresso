@@ -117,8 +117,8 @@ function registerApiRoutes(moduleId, apiConfig, deps) {
   }
 
   for (const route of apiConfig.routes) {
-    if (!route.path || typeof route.handler !== 'function') {
-      throw new Error(`Module "${moduleId}": each API route requires path and handler`);
+    if (typeof route.path !== 'string' || typeof route.handler !== 'function') {
+      throw new Error(`Module "${moduleId}": each API route requires path (string, use "" for prefix root) and handler`);
     }
 
     const method = (route.method || 'get').toLowerCase();

@@ -75,7 +75,7 @@ async function createTestProject() {
 
     // Create server.js with in-memory database for tests
     const serverJs = `const { createApp, createDatabase } = require('webspresso');
-const { adminPanelPlugin, seoCheckerPlugin } = require('webspresso/plugins');
+const { adminPanelPlugin, auditLogPlugin, seoCheckerPlugin } = require('webspresso/plugins');
 const path = require('path');
 
 const db = createDatabase({
@@ -110,6 +110,21 @@ const db = createDatabase({
       table.timestamp('updated_at');
     });
 
+    await db.knex.schema.createTableIfNotExists('audit_logs', (table) => {
+      table.bigIncrements('id');
+      table.timestamp('created_at').defaultTo(db.knex.fn.now()).index();
+      table.bigInteger('actor_id').nullable().index();
+      table.string('actor_email', 255).nullable();
+      table.string('action', 32).notNullable();
+      table.string('resource_model', 255).notNullable();
+      table.string('resource_id', 255).nullable();
+      table.string('http_method', 16).notNullable();
+      table.string('path', 2000).notNullable();
+      table.string('ip', 64).nullable();
+      table.text('user_agent').nullable();
+      table.json('metadata').nullable();
+    });
+
     const { app } = createApp({
       pagesDir: path.join(__dirname, 'pages'),
       viewsDir: path.join(__dirname, 'views'),
@@ -118,6 +133,10 @@ const db = createDatabase({
         adminPanelPlugin({
           path: '/_admin',
           db,
+        }),
+        auditLogPlugin({
+          db,
+          adminPath: '/_admin',
         }),
         seoCheckerPlugin({
           enabled: true,

@@ -27,6 +27,7 @@ const { registerCommand: registerSeed } = require('./commands/seed');
 const { registerCommand: registerAdminSetup } = require('./commands/admin-setup');
 const { registerCommand: registerAdminPassword } = require('./commands/admin-password');
 const { registerCommand: registerFaviconGenerate } = require('./commands/favicon-generate');
+const { registerCommand: registerAuditPrune } = require('./commands/audit-prune');
 
 registerNew(program);
 registerPage(program);
@@ -42,6 +43,7 @@ registerSeed(program);
 registerAdminSetup(program);
 registerAdminPassword(program);
 registerFaviconGenerate(program);
+registerAuditPrune(program);
 
 // Parse arguments
 program.parse();

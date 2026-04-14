@@ -10,6 +10,7 @@ const schemaExplorerPlugin = require('./schema-explorer');
 const adminPanelPlugin = require('./admin-panel');
 const seoCheckerPlugin = require('./seo-checker');
 const siteAnalyticsPlugin = require('./site-analytics');
+const auditLogPlugin = require('./audit-log');
 
 module.exports = {
   sitemapPlugin,
@@ -19,5 +20,6 @@ module.exports = {
   adminPanelPlugin,
   seoCheckerPlugin,
   siteAnalyticsPlugin,
+  auditLogPlugin,
 };
 

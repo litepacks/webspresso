@@ -249,6 +249,7 @@ webspresso dev --no-css   # skip CSS watch if Tailwind is configured</code></pre
             <tr><td><code class="whitespace-nowrap">admin:setup</code></td><td>Emit admin_users migration for admin plugin</td></tr>
             <tr><td><code class="whitespace-nowrap">admin:list</code></td><td>List admin users (needs migrated <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">admin_users</code>)</td></tr>
             <tr><td><code class="whitespace-nowrap">admin:password</code></td><td>Reset admin password (interactive or <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">-e</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">-p</code>)</td></tr>
+            <tr><td><code class="whitespace-nowrap">audit:prune</code></td><td>Delete audit log rows older than <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--days</code> (optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--table</code>)</td></tr>
             <tr><td><code class="whitespace-nowrap">favicon:generate &lt;source&gt;</code></td><td>PNG favicons, PWA manifest, Nunjucks partial</td></tr>
           </tbody>
         </table>
@@ -500,7 +501,7 @@ module.exports = {
             <tr><td>Templates &amp; assets</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createHelpers</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">AssetManager</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">configureAssets</code></td></tr>
             <tr><td>Plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">PluginManager</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createPluginManager</code></td></tr>
             <tr><td>ORM</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineModel</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createDatabase</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb</code>, …</td></tr>
-            <tr><td>Convenience plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schemaExplorerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">siteAnalyticsPlugin</code></td></tr>
+            <tr><td>Convenience plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schemaExplorerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">siteAnalyticsPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auditLogPlugin</code></td></tr>
           </tbody>
         </table>
       </div>

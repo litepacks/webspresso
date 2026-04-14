@@ -42,9 +42,7 @@ describe('Site Analytics Plugin', () => {
 
       expect(useCalls.length).toBe(1);
       expect(typeof useCalls[0]).toBe('function');
-      expect(addRouteCalls.length).toBe(1);
-      expect(addRouteCalls[0].method).toBe('post');
-      expect(addRouteCalls[0].path).toBe('/_analytics/report-error');
+      expect(addRouteCalls.length).toBe(0);
       expect(injectBodyCalls.length).toBe(1);
       expect(injectBodyCalls[0]).toContain('window.onerror');
       expect(injectBodyCalls[0]).toContain('unhandledrejection');
@@ -112,8 +110,9 @@ describe('Site Analytics Plugin', () => {
       const componentCode = registry.clientComponents.get('analytics');
       expect(componentCode).toContain('AnalyticsPage');
 
-      // Check API routes registered (7 data routes + 1 SPA route)
-      expect(routes.length).toBe(8);
+      // report-error + 7 data routes + 1 SPA route
+      expect(routes.length).toBe(9);
+      expect(routes.some((r) => r.path === '/_analytics/report-error' && r.method === 'post')).toBe(true);
       const apiPaths = routes.map(r => r.path);
       expect(apiPaths).toContain('/_admin/api/analytics/stats');
       expect(apiPaths).toContain('/_admin/api/analytics/views-over-time');
@@ -133,7 +132,7 @@ describe('Site Analytics Plugin', () => {
       };
 
       const mockKnex = { client: { config: {} }, schema: {}, fn: {} };
-      const plugin = siteAnalyticsPlugin({ db: { knex: mockKnex } });
+      const plugin = siteAnalyticsPlugin({ db: { knex: mockKnex }, trackClientErrors: false });
       plugin.onRoutesReady(ctx);
 
       expect(warnSpy).toHaveBeenCalledWith(

@@ -402,14 +402,27 @@ describe('registerModule', () => {
         api: {
           routes: [{ path: '/data' }],
         },
-      }, deps)).toThrow('requires path and handler');
+      }, deps)).toThrow(/requires path \(string/);
 
       expect(() => registerModule({
         id: 'test2',
         api: {
           routes: [{ handler: () => {} }],
         },
-      }, deps)).toThrow('requires path and handler');
+      }, deps)).toThrow(/requires path \(string/);
+    });
+
+    it('should allow empty string path for prefix root', () => {
+      const handler = (req, res) => {};
+      const deps = createMockDeps();
+      registerModule({
+        id: 'audit',
+        api: {
+          prefix: '/audit-logs',
+          routes: [{ method: 'get', path: '', handler }],
+        },
+      }, deps);
+      expect(deps._routes[0].path).toBe('/_admin/api/audit-logs');
     });
   });
 

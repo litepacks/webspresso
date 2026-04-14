@@ -718,6 +718,36 @@ Options:
 
 The `analytics_page_views` table is automatically created on first request.
 
+**Audit log plugin:**
+- Records successful (`2xx`) admin panel model mutations: `create`, `update`, `delete`, `restore` on `${adminPath}/api/models/:model/records…`
+- Actor from `req.session.adminUser` after login; optional IP / user-agent; update metadata stores changed field names only (not full body)
+- `GET ${adminPath}/api/audit-logs` with pagination and filters (`page`, `perPage`, `model`, `action`, `from`, `to`) — use from custom admin pages or the bundled Mithril list (`includeDefaultPage` default `true`)
+- Run `webspresso db:migrate` after adding the migration (see `plugins/audit-log/migration-template.js` or the example under `migrations/`). Prune old rows with the CLI (recommended on a schedule):
+
+```bash
+npx webspresso audit:prune --days 90
+```
+
+```javascript
+const { adminPanelPlugin, auditLogPlugin } = require('webspresso/plugins');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  plugins: [
+    adminPanelPlugin({ db }),
+    auditLogPlugin({
+      db,
+      // adminPath: '/_admin', // must match admin panel `path`
+      // tableName: 'audit_logs',
+      // includeDefaultPage: true,
+      // apiPrefix: '/audit-logs',
+    }),
+  ],
+});
+```
+
+Programmatic API (other plugins): `ctx.usePlugin('audit-log')` exposes `queryLogs`, `purgeAuditLogs`, and `getMigrationTemplate()`.
+
 **SEO Checker Plugin:**
 - Client-side SEO analysis tool (inspired by django-check-seo)
 - Integrated with dev toolbar
