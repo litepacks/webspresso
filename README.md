@@ -1,5 +1,8 @@
 # Webspresso
 
+[![npm version](https://img.shields.io/npm/v/webspresso.svg?style=flat-square)](https://www.npmjs.com/package/webspresso)
+[![vulnerabilities](https://npmx.dev/api/registry/badge/vulnerabilities/webspresso?style=shieldsio)](https://npmx.dev/package/webspresso)
+
 A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 
 ## Features
