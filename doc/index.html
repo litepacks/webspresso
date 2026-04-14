@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="description" content="webspresso — minimal SSR framework for Node.js: file-based routing, Nunjucks, Zod, Knex ORM, plugins, CLI. Full single-page reference." />
+  <title>webspresso — documentation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: 'class' }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
+  <style>
+    html { scroll-behavior: smooth; }
+    pre { tab-size: 2; margin: 0; }
+    pre code { padding: 0; background: transparent; }
+    code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.9em; }
+    .doc-section { scroll-margin-top: 2rem; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #e7e5e4; padding: 0.5rem 0.75rem; text-align: left; }
+    th { background: #f5f5f4; font-weight: 600; }
+    .dark th, .dark td { border-color: #334155; }
+    .dark th { background: #1e293b; }
+    .ascii { font-family: ui-monospace, monospace; font-size: 0.65rem; line-height: 1.35; overflow-x: auto; }
+    @media (min-width: 640px) { .ascii { font-size: 0.72rem; } }
+    @media (min-width: 1024px) { .ascii { font-size: 0.75rem; } }
+  </style>
+</head>
+<body class="bg-stone-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100 transition-colors">
+  <div class="max-w-5xl mx-auto px-6 py-12">
+    <div class="flex items-center justify-between mb-10 gap-4 flex-wrap">
+      <nav class="flex flex-wrap gap-x-3 gap-y-2 text-sm leading-snug" aria-label="Page sections">
+        <a href="#overview" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Overview</a>
+        <a href="#features" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Features</a>
+        <a href="#installation" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Install</a>
+        <a href="#peers" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Peers</a>
+        <a href="#quick-start" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Quick start</a>
+        <a href="#project-structure" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Structure</a>
+        <a href="#environment" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Env</a>
+        <a href="#cli" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">CLI</a>
+        <a href="#create-app" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">createApp</a>
+        <a href="#routing" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Routing</a>
+        <a href="#plugins" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Plugins</a>
+        <a href="#database" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">ORM</a>
+        <a href="#i18n-templates" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">i18n</a>
+        <a href="#hooks" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Hooks</a>
+        <a href="#tooling" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Tooling</a>
+        <a href="#request-flow" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Request flow</a>
+        <a href="#architecture" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Architecture</a>
+        <a href="#testing" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Testing</a>
+      </nav>
+      <button id="theme-toggle" type="button" class="p-2 rounded-lg text-slate-500 hover:bg-stone-200 hover:text-cyan-800 dark:hover:bg-slate-800 dark:text-slate-400 dark:hover:text-cyan-300 shrink-0" aria-label="Toggle dark mode">
+        <svg class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+        <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+      </button>
+    </div>
+
+    <header class="mb-14 flex items-start gap-5">
+      <div class="flex-shrink-0 w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-500/25 via-cyan-500/15 to-sky-800/20 dark:from-teal-400/20 dark:via-cyan-500/10 dark:to-slate-900/40 border border-teal-500/35 dark:border-cyan-500/25 flex items-center justify-center shadow-md shadow-teal-900/5 dark:shadow-cyan-900/20" aria-hidden="true">
+        <!-- Espresso cup + steam (brand); stroke aligns with teal/cyan palette -->
+        <svg class="w-[2.6rem] h-[2.6rem] text-teal-800 dark:text-cyan-300" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M8.5 3.2c.35-.85 1.35-.95 1.75-.25.35.55.15 1.25-.25 1.75M12 2.3c.25-.65 1.05-.75 1.35-.2.25.45.05 1-.3 1.45M15.5 3.2c.3-.75 1.15-.85 1.55-.2.3.5.1 1.1-.35 1.55" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.75"/>
+          <path d="M6.5 9.5c0-1.38 1.12-2.5 2.5-2.5h6.5c1.38 0 2.5 1.12 2.5 2.5v5.8c0 2.05-1.65 3.7-3.7 3.7h-4.6c-2.05 0-3.7-1.65-3.7-3.7V9.5z" stroke="currentColor" stroke-width="1.55" stroke-linejoin="round"/>
+          <path d="M18 10.2h.9c1 0 1.85.8 1.85 1.85v1.1c0 1-.85 1.85-1.85 1.85H18" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4.5 20.2h15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.9"/>
+          <ellipse cx="12" cy="9.3" rx="3.8" ry="1.05" stroke="currentColor" stroke-width="1" opacity="0.4"/>
+        </svg>
+      </div>
+      <div class="min-w-0">
+        <h1 class="text-4xl font-bold tracking-tight text-slate-900 dark:text-white">webspresso</h1>
+        <p class="mt-2 text-xl text-slate-600 dark:text-slate-400">
+          Minimal, production-ready SSR framework for Node.js with file-based routing, Nunjucks templating, built-in i18n, and CLI tooling.
+        </p>
+        <p class="mt-3 text-slate-600 dark:text-slate-400 text-[15px] max-w-3xl leading-relaxed">
+          You describe routes as files under <code class="bg-stone-200/90 dark:bg-slate-800 px-1 rounded">pages/</code>, render with Nunjucks, validate HTTP input with Zod, and optionally plug in Knex-backed models, migrations, and first-party plugins (dashboard, sitemap, analytics, admin, and more). This page is a condensed reference; the authoritative source is the
+          <a href="https://github.com/everytools/webspresso/blob/main/README.md" class="text-cyan-800 dark:text-cyan-400 hover:underline font-medium">README.md</a> in the repository.
+        </p>
+        <p class="mt-2 text-slate-500 dark:text-slate-500 text-sm">
+          Stack: <code class="bg-stone-200/80 dark:bg-slate-800 px-1 rounded">Express</code> ·
+          <code class="bg-stone-200/80 dark:bg-slate-800 px-1 rounded">Nunjucks</code> ·
+          <code class="bg-stone-200/80 dark:bg-slate-800 px-1 rounded">Knex</code> ·
+          <code class="bg-stone-200/80 dark:bg-slate-800 px-1 rounded">Zod</code>
+          · Node <strong class="text-slate-700 dark:text-slate-300">18+</strong>
+        </p>
+      </div>
+    </header>
+
+    <section id="overview" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">At a glance</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
+        Webspresso is an opinionated, batteries-included server-side toolkit: one CLI scaffolds projects, watches your <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/</code> tree to build Express routes, and optional plugins add SEO, analytics, and an admin UI without bolting on a separate meta-framework. It targets teams who want Laravel- or Rails-like ergonomics on Node with transparent files on disk instead of a hidden compiler graph.
+      </p>
+      <div class="grid sm:grid-cols-2 gap-3 text-sm">
+        <div class="rounded-xl border border-stone-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 p-4">
+          <h3 class="font-semibold text-slate-800 dark:text-slate-200 mb-2">When it fits</h3>
+          <ul class="list-disc pl-4 text-slate-600 dark:text-slate-400 space-y-1">
+            <li>Content-heavy sites and internal tools with SSR</li>
+            <li>JSON APIs colocated with HTML routes</li>
+            <li>PostgreSQL / MySQL / SQLite with a small ORM</li>
+          </ul>
+        </div>
+        <div class="rounded-xl border border-stone-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 p-4">
+          <h3 class="font-semibold text-slate-800 dark:text-slate-200 mb-2">Core ideas</h3>
+          <ul class="list-disc pl-4 text-slate-600 dark:text-slate-400 space-y-1">
+            <li>Convention over configuration for URLs</li>
+            <li>Validation and types via Zod at the edge</li>
+            <li>Plugins fail soft (warn) so one bad plugin does not stop the app</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Features</h2>
+      <ul class="list-disc pl-5 text-slate-600 dark:text-slate-400 space-y-3">
+        <li><strong class="text-slate-800 dark:text-slate-200">File-based routing</strong> — map <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.njk</code> files under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/</code> to GET routes; nested folders become path segments.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Dynamic segments</strong> — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">[slug]</code> for params, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">[...rest]</code> for catch-all routes.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">API routes</strong> — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/api/</code> with optional method suffixes (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.get.js</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.post.js</code>, …).</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Schema validation</strong> — export a <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schema</code> factory using Zod; validated payloads appear on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.input</code>.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">i18n</strong> — JSON dictionaries in <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/locales/</code> plus per-route overrides; <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">t('key')</code> in templates.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Hooks</strong> — global <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">_hooks.js</code> and per-route hooks for load/render pipeline control.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Template helpers</strong> — the <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fsy</code> object (URLs, dates via dayjs, SEO helpers, assets, …).</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Plugin system</strong> — versioned plugins, optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dependencies</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">register</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">onRoutesReady</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">onReady</code>.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Built-in plugins</strong> — dev route dashboard, XML sitemap + robots, tag managers &amp; analytics pixels, self-hosted page analytics, admin CRUD (Mithril), SEO checker (dev), schema explorer (OpenAPI-style JSON).</li>
+      </ul>
+    </section>
+
+    <section id="installation" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Installation</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-3">Requires <strong class="text-slate-800 dark:text-slate-200">Node.js 18+</strong>. Install the CLI globally or add the framework as a project dependency.</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-6"><code class="language-bash">npm install -g webspresso
+# or, inside a project:
+npm install webspresso</code></pre>
+      <p class="text-slate-600 dark:text-slate-400 mb-2 text-sm">After <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">npm install webspresso</code>, use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">npx webspresso</code> or define an npm script if the binary is not on your PATH.</p>
+    </section>
+
+    <section id="peers" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Peer dependencies</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">Database drivers, Faker, and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dotenv</code> are <strong class="text-slate-800 dark:text-slate-200">optional peers</strong> — install only what you use so production images stay lean.</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead><tr><th>Package</th><th>Typical use</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">pg</code></td><td>PostgreSQL via Knex</td></tr>
+            <tr><td><code class="whitespace-nowrap">mysql2</code></td><td>MySQL / MariaDB</td></tr>
+            <tr><td><code class="whitespace-nowrap">better-sqlite3</code></td><td>SQLite (local dev, embedded)</td></tr>
+            <tr><td><code class="whitespace-nowrap">dotenv</code></td><td>Load <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.env</code> in development</td></tr>
+            <tr><td><code class="whitespace-nowrap">@faker-js/faker</code></td><td>Seed scripts and factories</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="quick-start" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Quick start</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4">New projects ship with <strong class="text-slate-800 dark:text-slate-200">Tailwind CSS</strong>, a starter layout, i18n (e.g. en/tr), and npm scripts. Pass <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--no-tailwind</code> to skip Tailwind.</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-8"><code class="language-bash">webspresso new my-app
+cd my-app
+npm install
+npm run build:css
+webspresso dev
+# or: npm run dev</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2"><code class="text-base">webspresso new</code> flows</h3>
+      <ul class="list-disc pl-5 text-slate-600 dark:text-slate-400 space-y-2 mb-6">
+        <li><strong class="text-slate-800 dark:text-slate-200">No arguments</strong> — interactive: current vs new directory, project name, optional database (SQLite / PostgreSQL / MySQL), optional seeds, install deps, start dev server.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--install</code> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">-i</code>)</strong> — runs <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">npm install</code> and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">npm run build:css</code>, then optionally starts the dev server.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Database</strong> — adds driver to <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">package.json</code>, creates <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso.db.js</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">migrations/</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">models/</code>, and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">DATABASE_URL</code> in <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.env.example</code>.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Seeds</strong> — optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">@faker-js/faker</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">seeds/index.js</code>, and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">npm run seed</code>.</li>
+      </ul>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Development server</h3>
+      <p class="text-slate-600 dark:text-slate-400 mb-2 text-sm"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso dev</code> expects a <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">server.js</code> in the project root, uses Node’s watch mode on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">models</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">views</code> when present, and can run Tailwind <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">watch:css</code> alongside.</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto"><code class="language-bash">webspresso dev
+webspresso dev --port 3001
+webspresso dev --no-css   # skip CSS watch if Tailwind is configured</code></pre>
+    </section>
+
+    <section id="project-structure" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Project structure</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4">Typical application layout (database pieces appear after you opt in or add them manually):</p>
+      <pre class="bg-slate-900 text-slate-100 p-4 rounded-xl ascii border border-slate-700"><code>my-app/
+├── pages/
+│   ├── locales/              # global i18n (en.json, tr.json, …)
+│   ├── _hooks.js             # global lifecycle hooks
+│   ├── index.njk             # GET /
+│   ├── about/
+│   │   ├── index.njk
+│   │   └── locales/          # route-level overrides
+│   ├── tools/
+│   │   ├── index.njk
+│   │   ├── index.js          # load(), meta(), middleware, hooks
+│   │   ├── [slug].njk
+│   │   └── [slug].js
+│   └── api/
+│       ├── health.get.js
+│       └── echo.post.js
+├── views/
+│   └── layout.njk
+├── public/                   # static assets
+├── models/                   # optional ORM models
+├── migrations/               # Knex migrations
+├── seeds/                    # optional seed entry (seeds/index.js)
+├── webspresso.db.js          # optional Knex config
+└── server.js                 # createApp() entry</code></pre>
+    </section>
+
+    <section id="environment" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Environment variables</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">NODE_ENV</code></td><td><code>development</code></td><td>Controls logging, plugin defaults (e.g. dashboard)</td></tr>
+            <tr><td><code class="whitespace-nowrap">DEFAULT_LOCALE</code></td><td><code>en</code></td><td>Fallback locale</td></tr>
+            <tr><td><code class="whitespace-nowrap">SUPPORTED_LOCALES</code></td><td><code>en</code></td><td>Comma-separated list (e.g. <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">en,tr</code>)</td></tr>
+            <tr><td><code class="whitespace-nowrap">BASE_URL</code></td><td><code>http://localhost:3000</code></td><td>Canonical URLs, sitemap, metadata</td></tr>
+            <tr><td><code class="whitespace-nowrap">DATABASE_URL</code></td><td>—</td><td>Connection string for Knex / ORM</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-slate-500 dark:text-slate-500 text-sm mt-3"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso start</code> sets <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">NODE_ENV=production</code> and honors <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">PORT</code> via the <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--port</code> flag.</p>
+    </section>
+
+    <section id="cli" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">CLI commands</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4">Entry: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso</code> (<a href="https://github.com/everytools/webspresso/blob/main/bin/webspresso.js" class="text-cyan-800 dark:text-cyan-400 hover:underline">bin/webspresso.js</a>). Use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--help</code> on any subcommand for flags.</p>
+      <div class="overflow-x-auto mb-8">
+        <table class="w-full text-sm">
+          <thead><tr><th>Command</th><th>Description</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">new [project-name]</code></td><td>Scaffold a project (Tailwind, i18n, scripts; optional DB + seeds)</td></tr>
+            <tr><td><code class="whitespace-nowrap">page</code></td><td>Interactive: add SSR page + optional route config + locales</td></tr>
+            <tr><td><code class="whitespace-nowrap">api</code></td><td>Interactive: add API route + HTTP method</td></tr>
+            <tr><td><code class="whitespace-nowrap">dev</code></td><td>Development server (Node watch, optional CSS watch)</td></tr>
+            <tr><td><code class="whitespace-nowrap">start</code></td><td>Production server via <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">server.js</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">add tailwind</code></td><td>Add Tailwind, PostCSS, build + watch scripts</td></tr>
+            <tr><td><code class="whitespace-nowrap">db:migrate</code></td><td>Run pending migrations</td></tr>
+            <tr><td><code class="whitespace-nowrap">db:rollback</code></td><td>Rollback last migration batch</td></tr>
+            <tr><td><code class="whitespace-nowrap">db:status</code></td><td>Show migration status</td></tr>
+            <tr><td><code class="whitespace-nowrap">db:make &lt;name&gt;</code></td><td>Create migration file (optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--model</code> scaffold)</td></tr>
+            <tr><td><code class="whitespace-nowrap">seed</code></td><td>Run <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">seeds/index.js</code> (Faker-based fake data)</td></tr>
+            <tr><td><code class="whitespace-nowrap">admin:setup</code></td><td>Emit admin_users migration for admin plugin</td></tr>
+            <tr><td><code class="whitespace-nowrap">admin:list</code></td><td>List admin users (needs migrated <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">admin_users</code>)</td></tr>
+            <tr><td><code class="whitespace-nowrap">admin:password</code></td><td>Reset admin password (interactive or <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">-e</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">-p</code>)</td></tr>
+            <tr><td><code class="whitespace-nowrap">favicon:generate &lt;source&gt;</code></td><td>PNG favicons, PWA manifest, Nunjucks partial</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Selected flags</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead><tr><th>Command</th><th>Flags / notes</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code>new</code></td><td><code>-i, --install</code> · <code>--no-tailwind</code></td></tr>
+            <tr><td><code>dev</code> / <code>start</code></td><td><code>-p, --port</code> (default 3000) · <code>dev --no-css</code></td></tr>
+            <tr><td><code>seed</code></td><td><code>--setup</code> · <code>--config</code> · <code>--env</code></td></tr>
+            <tr><td><code>admin:password</code> / <code>admin:list</code></td><td><code>-c, --config</code> · <code>-E, --env</code></td></tr>
+            <tr><td><code>favicon:generate</code></td><td><code>-o</code> · <code>--no-layout</code> · PWA <code>--name</code> / <code>--short-name</code> / <code>--theme-color</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="create-app" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">API — <code class="text-xl">createApp(options)</code></h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4">Returns <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">{ app, nunjucksEnv, pluginManager, authMiddleware }</code> (auth helper may be no-op if auth is not configured). Express is preconfigured with sensible security headers (Helmet), sessions when needed, static files, and the file router.</p>
+      <div class="overflow-x-auto mb-6">
+        <table class="w-full text-sm">
+          <thead><tr><th>Option</th><th>Role</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">pagesDir</code></td><td>Required. Root of routes and templates resolution.</td></tr>
+            <tr><td><code class="whitespace-nowrap">viewsDir</code></td><td>Nunjucks views / layouts.</td></tr>
+            <tr><td><code class="whitespace-nowrap">publicDir</code></td><td>Static files (default <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">public</code>).</td></tr>
+            <tr><td><code class="whitespace-nowrap">db</code></td><td>ORM instance → <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">ctx.db</code> in hooks and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">load()</code>.</td></tr>
+            <tr><td><code class="whitespace-nowrap">plugins</code></td><td>Array of plugin factories or objects.</td></tr>
+            <tr><td><code class="whitespace-nowrap">middlewares</code></td><td>Named map referenced from route configs (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">middleware: ['auth']</code>).</td></tr>
+            <tr><td><code class="whitespace-nowrap">helmet</code></td><td><code>true</code> / <code>false</code> / custom Helmet options object.</td></tr>
+            <tr><td><code class="whitespace-nowrap">logging</code></td><td>HTTP logging (on by default in development).</td></tr>
+            <tr><td><code class="whitespace-nowrap">timeout</code></td><td>String duration (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">'30s'</code>) or <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">false</code> — uses <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">connect-timeout</code>.</td></tr>
+            <tr><td><code class="whitespace-nowrap">errorPages</code></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">notFound</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">serverError</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">timeout</code> — handler fn or template path.</td></tr>
+            <tr><td><code class="whitespace-nowrap">assets</code></td><td>Version string or manifest path for cache-busted <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fsy.asset()</code> URLs.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">const { createApp } = require('webspresso');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  viewsDir: './views',
+  middlewares: {
+    auth: (req, res, next) => {
+      if (!req.session?.user) return res.redirect('/login');
+      next();
+    },
+  },
+  errorPages: {
+    notFound: 'errors/404.njk',
+    serverError: 'errors/500.njk',
+  },
+});</code></pre>
+    </section>
+
+    <section id="routing" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">File-based routing</h2>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">SSR pages</h3>
+      <div class="overflow-x-auto mb-6">
+        <table class="w-full text-sm">
+          <thead><tr><th>File path</th><th>Route</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">pages/index.njk</code></td><td><code>GET /</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">pages/about/index.njk</code></td><td><code>GET /about</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">pages/tools/[slug].njk</code></td><td><code>GET /tools/:slug</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">pages/docs/[...rest].njk</code></td><td><code>GET /docs/*</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">API routes</h3>
+      <div class="overflow-x-auto mb-4">
+        <table class="w-full text-sm">
+          <thead><tr><th>File path</th><th>Route</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">pages/api/health.get.js</code></td><td><code>GET /api/health</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">pages/api/echo.post.js</code></td><td><code>POST /api/echo</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">pages/api/users/[id].get.js</code></td><td><code>GET /api/users/:id</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Route config (<code class="font-mono text-base font-normal">pages/.../*.js</code> next to <code class="font-mono text-base font-normal">.njk</code>)</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">module.exports = {
+  middleware: ['auth'],
+  async load(req, ctx) {
+    const posts = await ctx.db.getRepository('Post').query().limit(10).list();
+    return { posts };
+  },
+  meta(req, ctx) {
+    return { title: 'Blog', description: 'Latest posts' };
+  },
+  hooks: { beforeLoad: async () => {}, afterRender: async () => {} },
+};</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Zod schemas (API)</h3>
+      <div class="overflow-x-auto mb-4">
+        <table class="w-full text-sm">
+          <thead><tr><th>Key</th><th>Validates</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code>body</code></td><td><code>POST</code> / <code>PUT</code> / <code>PATCH</code> JSON body</td></tr>
+            <tr><td><code>params</code></td><td>Path params (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">:id</code>, …)</td></tr>
+            <tr><td><code>query</code></td><td>Query string</td></tr>
+            <tr><td><code>response</code></td><td>Documentation only (not enforced at runtime)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-slate-500 dark:text-slate-500 text-sm">Validated values are exposed on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.input</code>; invalid requests surface as <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">ZodError</code> for your error handler.</p>
+    </section>
+
+    <section id="plugins" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Plugin system</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">Plugins can register Express middleware, template helpers/filters, routes in <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">onRoutesReady</code>, and expose an <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">api</code> object for other plugins. Errors during registration generally log a warning instead of crashing the process.</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead><tr><th>Built-in (require path)</th><th>Purpose</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">webspresso/plugins</code> → <code class="whitespace-nowrap">dashboardPlugin</code></td><td>Dev-only route browser at <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_webspresso</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">sitemapPlugin</code></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/sitemap.xml</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/robots.txt</code>, optional DB-driven URLs</td></tr>
+            <tr><td><code class="whitespace-nowrap">analyticsPlugin</code></td><td>GA4, GTM, Yandex, Bing UET, Facebook Pixel, verification meta tags</td></tr>
+            <tr><td><code class="whitespace-nowrap">siteAnalyticsPlugin</code></td><td>Self-hosted page views + admin charts</td></tr>
+            <tr><td><code class="whitespace-nowrap">adminPanelPlugin</code></td><td>CRUD admin SPA (Mithril), auth hooks, custom modules</td></tr>
+            <tr><td><code class="whitespace-nowrap">seoCheckerPlugin</code></td><td>Dev toolbar SEO audit (40+ checks)</td></tr>
+            <tr><td><code class="whitespace-nowrap">schemaExplorerPlugin</code></td><td>JSON schema of models + OpenAPI export</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="database" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">ORM &amp; database</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">The ORM layers Knex with Zod: column metadata lives on Zod schemas via <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb</code> helpers (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb.id()</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb.string()</code>, relations, soft deletes, …). Repositories provide <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">findById</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">query()</code> with pagination, transactions, and migrations via the same Knex instance.</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">const { zdb, defineModel, createDatabase } = require('webspresso');
+
+const User = defineModel({
+  name: 'User',
+  table: 'users',
+  schema: zdb.schema({
+    id: zdb.id(),
+    email: zdb.string({ unique: true }),
+    created_at: zdb.timestamp({ auto: 'create' }),
+  }),
+});
+
+const db = createDatabase({
+  client: 'pg',
+  connection: process.env.DATABASE_URL,
+  models: './models',
+});</code></pre>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-bash">npm install pg mysql2 better-sqlite3   # pick one
+webspresso db:migrate
+webspresso db:make add_posts_table --model Post
+webspresso seed</code></pre>
+      <p class="text-slate-600 dark:text-slate-400 text-sm">Migrations live under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">migrations/</code> as usual for Knex; <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso.db.js</code> (or <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">knexfile.js</code>) is loaded for all DB CLI commands.</p>
+    </section>
+
+    <section id="i18n-templates" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">i18n &amp; template helpers</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-3">Locales merge: global JSON in <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/locales/</code>, then route-specific folders override keys for that subtree.</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-6"><code class="language-json">{
+  "nav": { "home": "Home", "about": "About" }
+}</code></pre>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-xml">&lt;h1&gt;{{ t('nav.home') }}&lt;/h1&gt;
+{{ fsy.canonical() | safe }}
+{{ fsy.url('/blog', { page: 2 }) }}</code></pre>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-2"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fsy</code> groups include URL builders, request accessors, slugify/truncate/pretty bytes, dayjs-powered dates, dev flag, JSON-LD helper, and asset tags when <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">assets</code> is configured — see README for the exhaustive list.</p>
+    </section>
+
+    <section id="hooks" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Lifecycle hooks</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-3">Global hook module:</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-6"><code class="language-javascript">// pages/_hooks.js
+module.exports = {
+  onRequest(ctx) {},
+  beforeLoad(ctx) {},
+  afterLoad(ctx) {},
+  beforeRender(ctx) {},
+  afterRender(ctx) {},
+  onError(ctx, err) {},
+};</code></pre>
+      <p class="text-slate-600 dark:text-slate-400 mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">Execution order (SSR)</p>
+      <ol class="list-decimal pl-5 text-slate-600 dark:text-slate-400 space-y-1 text-sm">
+        <li>Global <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">onRequest</code> → route <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">onRequest</code></li>
+        <li><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">beforeMiddleware</code> → middleware chain → <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">afterMiddleware</code></li>
+        <li><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">beforeLoad</code> → <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">load</code> → <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">afterLoad</code></li>
+        <li><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">beforeRender</code> → Nunjucks render → <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">afterRender</code></li>
+      </ol>
+    </section>
+
+    <section id="tooling" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Tooling &amp; developer experience</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">Webspresso bundles the pieces you usually wire by hand: a CLI for scaffolding and DB tasks, a dev runner that restarts the process when routes or templates change, and optional first-party UI for routes and SEO. Below is how those tools fit together.</p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">CLI &amp; project automation</h3>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed">The <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso</code> binary (<strong class="text-slate-800 dark:text-slate-200">Commander</strong>) exposes subcommands for projects, APIs, Tailwind, Knex migrations, seeds, admin maintenance, and favicon/PWA asset generation. Interactive flows use <strong class="text-slate-800 dark:text-slate-200">Inquirer</strong> when you run commands without full arguments (e.g. <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso new</code> with no name).</p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Local development server</h3>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso dev</code> runs your project’s <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">server.js</code> under <strong class="text-slate-800 dark:text-slate-200">Node’s <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--watch</code></strong> and adds <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--watch-path</code> for <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">models/</code>, and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">views/</code> when those directories exist, so route files and Nunjucks layouts reload without manual restarts. With Tailwind enabled, the same command can spawn <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">watch:css</code>; use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--no-css</code> to skip that subprocess.</p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">CSS &amp; front-end pipeline</h3>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed">Scaffolded apps use <strong class="text-slate-800 dark:text-slate-200">Tailwind CSS</strong> with <strong class="text-slate-800 dark:text-slate-200">PostCSS</strong> and <strong class="text-slate-800 dark:text-slate-200">Autoprefixer</strong> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso add tailwind</code> or the default <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">new</code> template). Compiled CSS is written under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">public/css/</code> and linked from the layout. For cache-busted assets in SSR, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp({ assets })</code> supports a static version string or a <strong class="text-slate-800 dark:text-slate-200">Vite/Webpack-style manifest</strong> so <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fsy.asset()</code> resolves hashed filenames.</p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">In-browser dev tools</h3>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed">Enable <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dashboardPlugin()</code> to get a <strong class="text-slate-800 dark:text-slate-200">route inventory</strong> at <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_webspresso</code> (development only by default). The <strong class="text-slate-800 dark:text-slate-200">SEO checker</strong> plugin adds a dev-only panel with many automated HTML/metadata checks. These tools stay out of production unless you explicitly force them on.</p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Images &amp; PWA assets</h3>
+      <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso favicon:generate</code> uses <strong class="text-slate-800 dark:text-slate-200">sharp</strong> to resize a master PNG into Apple/Android/favicon sizes, writes a <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">manifest.json</code>, and can inject a Nunjucks partial into your layout — useful for consistent branding across devices.</p>
+    </section>
+
+    <section id="request-flow" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Request flow (conceptual)</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 text-sm leading-relaxed">Incoming HTTP traffic passes through Express middleware registered by the framework and by plugins, then the <strong class="text-slate-800 dark:text-slate-200">file router</strong> decides whether the request targets an API module under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/api</code> or an SSR page. API handlers may run Zod first; SSR routes run <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">load()</code> then Nunjucks with globals (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fsy</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">t</code>, …).</p>
+      <pre class="bg-slate-900 text-slate-100 p-4 rounded-xl ascii border border-slate-700"><code>  Client
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│ Express stack: cookie/session, helmet,  │
+│ body parsers, timeout, static files     │
+│ Plugin register(ctx) — extend app       │
+└─────────────────┬───────────────────────┘
+                  ▼
+         mountPages (file-router)
+                  │
+      ┌───────────┴───────────┐
+      ▼                       ▼
+ pages/api/*.js          pages/*.njk + route *.js
+ Zod → handler           load() → Nunjucks → HTML
+      │                       │
+      └───────────┬───────────┘
+                  ▼
+            HTTP response</code></pre>
+    </section>
+
+    <section id="architecture" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Architecture</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">Two layers matter: <strong class="text-slate-800 dark:text-slate-200">your application</strong> (a small <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">server.js</code> that calls <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code>, plus <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">views/</code>, optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">models/</code>) and the <strong class="text-slate-800 dark:text-slate-200">webspresso package</strong>, which implements routing, rendering, plugins, and ORM primitives. The public API surface is re-exported from <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.js</code> so consumers rarely import deep paths.</p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2"><code class="text-base">index.js</code> — public exports</h3>
+      <div class="overflow-x-auto mb-6">
+        <table class="w-full text-sm">
+          <thead><tr><th>Export area</th><th>Examples</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td>App</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code></td></tr>
+            <tr><td>Router utilities</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">mountPages</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">filePathToRoute</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">scanDirectory</code>, i18n helpers</td></tr>
+            <tr><td>Templates &amp; assets</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createHelpers</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">AssetManager</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">configureAssets</code></td></tr>
+            <tr><td>Plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">PluginManager</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createPluginManager</code></td></tr>
+            <tr><td>ORM</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineModel</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createDatabase</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb</code>, …</td></tr>
+            <tr><td>Convenience plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schemaExplorerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">siteAnalyticsPlugin</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2"><code class="text-base">src/server.js</code> — <code class="text-base">createApp</code> pipeline</h3>
+      <ol class="list-decimal pl-5 text-slate-600 dark:text-slate-400 space-y-2 text-sm mb-6">
+        <li>Build the Express app and apply <strong class="text-slate-800 dark:text-slate-200">Helmet</strong> (CSP enabled in production; relaxed in dev for hot editing).</li>
+        <li>Attach sessions, parsers, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">connect-timeout</code> when configured, and static file serving.</li>
+        <li>Instantiate <strong class="text-slate-800 dark:text-slate-200">PluginManager</strong>, run each plugin’s <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">register(ctx)</code> (templates, middleware, helpers).</li>
+        <li>Configure Nunjucks with <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">configureAssets</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createHelpers</code> for <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fsy</code>.</li>
+        <li>Call <strong class="text-slate-800 dark:text-slate-200"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">mountPages</code></strong> from <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">file-router.js</code> to register SSR and API routes from disk.</li>
+        <li>Run <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">onRoutesReady</code> on plugins so they can add routes or read the route table.</li>
+        <li>Invoke <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">onReady</code> when the server starts listening.</li>
+      </ol>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Source modules (published package)</h3>
+      <div class="overflow-x-auto mb-6">
+        <table class="w-full text-sm">
+          <thead><tr><th>Path</th><th>Responsibility</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">src/server.js</code></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code>, Express stack, error pages, plugin orchestration</td></tr>
+            <tr><td><code class="whitespace-nowrap">src/file-router.js</code></td><td>Scan <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/</code>, map files to routes, wire API handlers and SSR</td></tr>
+            <tr><td><code class="whitespace-nowrap">src/helpers.js</code></td><td>Nunjucks globals (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fsy</code>), asset URL resolution</td></tr>
+            <tr><td><code class="whitespace-nowrap">src/plugin-manager.js</code></td><td>Plugin registry, dependency metadata, lifecycle hooks</td></tr>
+            <tr><td><code class="whitespace-nowrap">core/orm/</code></td><td>Models, repositories, Knex query builder, migrations, seeding</td></tr>
+            <tr><td><code class="whitespace-nowrap">core/auth/</code></td><td>Session-aware helpers for protected routes / admin</td></tr>
+            <tr><td><code class="whitespace-nowrap">core/compileSchema.js</code> / <code class="whitespace-nowrap">applySchema.js</code></td><td>Zod schema compilation for validation layers</td></tr>
+            <tr><td><code class="whitespace-nowrap">plugins/</code></td><td>Built-in dashboard, sitemap, analytics, admin, SEO checker, …</td></tr>
+            <tr><td><code class="whitespace-nowrap">utils/</code></td><td>Shared helpers (e.g. schema cache)</td></tr>
+            <tr><td><code class="whitespace-nowrap">bin/</code></td><td>CLI commands (Commander)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Package layout (<code class="text-base">package.json</code> <code class="text-base">files</code>)</h3>
+      <pre class="bg-slate-100 dark:bg-slate-900/80 border border-stone-200 dark:border-slate-700 rounded-xl p-4 text-sm text-slate-700 dark:text-slate-300 overflow-x-auto font-mono">index.js           # re-exports createApp, router utils, ORM, plugins
+bin/               # webspresso CLI
+core/              # ORM, auth, Zod compile/apply
+plugins/           # first-party plugins
+src/               # server.js, file-router, helpers, plugin-manager
+utils/             # shared utilities</pre>
+    </section>
+
+    <section id="testing" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Development &amp; testing</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-3">The framework repository uses Vitest for unit/integration tests and Playwright for end-to-end CLI and browser flows.</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto"><code class="language-bash">npm test              # vitest run
+npm run test:watch
+npm run test:coverage
+npm run test:e2e      # playwright test</code></pre>
+    </section>
+
+    <footer class="pt-10 border-t border-stone-200 dark:border-slate-800 text-sm text-slate-500 dark:text-slate-500">
+      <p><a href="https://github.com/everytools/webspresso" class="text-cyan-800 dark:text-cyan-400 hover:underline">github.com/everytools/webspresso</a> · MIT</p>
+    </footer>
+  </div>
+
+  <script>
+    hljs.highlightAll();
+    (function(){
+      var themeKey = 'webspresso-docs-theme';
+      var stored = localStorage.getItem(themeKey);
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (stored === 'dark' || (!stored && prefersDark)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      document.getElementById('theme-toggle').addEventListener('click', function(){
+        var isDark = document.documentElement.classList.toggle('dark');
+        localStorage.setItem(themeKey, isDark ? 'dark' : 'light');
+      });
+    })();
+  </script>
+</body>
+</html>
