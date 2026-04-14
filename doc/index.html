@@ -187,7 +187,7 @@ webspresso dev --no-css   # skip CSS watch if Tailwind is configured</code></pre
       <p class="text-slate-600 dark:text-slate-400 mb-4">Typical application layout (database pieces appear after you opt in or add them manually):</p>
       <pre class="bg-slate-900 text-slate-100 p-4 rounded-xl ascii border border-slate-700"><code>my-app/
 ├── pages/
-│   ├── locales/              # global i18n (en.json, tr.json, …)
+│   ├── locales/              # global i18n (en.json, de.json, …)
 │   ├── _hooks.js             # global lifecycle hooks
 │   ├── index.njk             # GET /
 │   ├── about/
@@ -219,7 +219,7 @@ webspresso dev --no-css   # skip CSS watch if Tailwind is configured</code></pre
           <tbody class="text-slate-600 dark:text-slate-400">
             <tr><td><code class="whitespace-nowrap">NODE_ENV</code></td><td><code>development</code></td><td>Controls logging, plugin defaults (e.g. dashboard)</td></tr>
             <tr><td><code class="whitespace-nowrap">DEFAULT_LOCALE</code></td><td><code>en</code></td><td>Fallback locale</td></tr>
-            <tr><td><code class="whitespace-nowrap">SUPPORTED_LOCALES</code></td><td><code>en</code></td><td>Comma-separated list (e.g. <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">en,tr</code>)</td></tr>
+            <tr><td><code class="whitespace-nowrap">SUPPORTED_LOCALES</code></td><td><code>en</code></td><td>Comma-separated list (e.g. <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">en,de</code>)</td></tr>
             <tr><td><code class="whitespace-nowrap">BASE_URL</code></td><td><code>http://localhost:3000</code></td><td>Canonical URLs, sitemap, metadata</td></tr>
             <tr><td><code class="whitespace-nowrap">DATABASE_URL</code></td><td>—</td><td>Connection string for Knex / ORM</td></tr>
           </tbody>
@@ -501,7 +501,7 @@ module.exports = {
             <tr><td>Templates &amp; assets</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createHelpers</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">AssetManager</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">configureAssets</code></td></tr>
             <tr><td>Plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">PluginManager</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createPluginManager</code></td></tr>
             <tr><td>ORM</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineModel</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createDatabase</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb</code>, …</td></tr>
-            <tr><td>Convenience plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schemaExplorerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">siteAnalyticsPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auditLogPlugin</code></td></tr>
+            <tr><td>Convenience plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schemaExplorerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">siteAnalyticsPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auditLogPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">recaptchaPlugin</code></td></tr>
           </tbody>
         </table>
       </div>

@@ -105,7 +105,7 @@ describe('Sitemap Plugin', () => {
             loc: 'https://example.com/', 
             alternates: [
               { lang: 'en', href: 'https://example.com/?lang=en' },
-              { lang: 'tr', href: 'https://example.com/?lang=tr' }
+              { lang: 'de', href: 'https://example.com/?lang=de' }
             ]
           }
         ];
@@ -113,7 +113,7 @@ describe('Sitemap Plugin', () => {
         const xml = generateSitemapXml(urls, { hostname: 'https://example.com' });
         expect(xml).toContain('xmlns:xhtml="http://www.w3.org/1999/xhtml"');
         expect(xml).toContain('hreflang="en"');
-        expect(xml).toContain('hreflang="tr"');
+        expect(xml).toContain('hreflang="de"');
       });
 
       it('should use default values for changefreq and priority', () => {
@@ -604,7 +604,7 @@ describe('Sitemap Plugin', () => {
       const plugin = sitemapPlugin({
         hostname: 'https://example.com',
         i18n: true,
-        locales: ['en', 'tr', 'de'],
+        locales: ['en', 'de', 'fr'],
         dynamicSources: [
           {
             query: () => Promise.resolve([{ slug: 'test-post' }]),
@@ -636,15 +636,15 @@ describe('Sitemap Plugin', () => {
       await sitemapHandler(mockReq, mockRes);
       
       expect(responseBody).toContain('hreflang="en"');
-      expect(responseBody).toContain('hreflang="tr"');
       expect(responseBody).toContain('hreflang="de"');
+      expect(responseBody).toContain('hreflang="fr"');
     });
 
     it('should not add alternates when source has i18n: false', async () => {
       const plugin = sitemapPlugin({
         hostname: 'https://example.com',
         i18n: true,
-        locales: ['en', 'tr'],
+        locales: ['en', 'de'],
         dynamicSources: [
           {
             query: () => Promise.resolve([{ slug: 'no-i18n-post' }]),

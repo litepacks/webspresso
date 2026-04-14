@@ -30,12 +30,12 @@ describe('i18n System Integration', () => {
       expect(translations.site).toHaveProperty('name', 'Webspresso');
     });
 
-    it('should load global Turkish translations', () => {
-      const translations = loadI18n(PAGES_DIR, PAGES_DIR, 'tr');
+    it('should load global German translations', () => {
+      const translations = loadI18n(PAGES_DIR, PAGES_DIR, 'de');
       
       expect(translations).toHaveProperty('site');
       expect(translations).toHaveProperty('nav');
-      expect(translations.nav.home).toBe('Ana Sayfa');
+      expect(translations.nav.home).toBe('Startseite');
     });
 
     it('should merge route-specific translations', () => {
@@ -98,20 +98,20 @@ describe('i18n System Integration', () => {
 
     it('should respect lang query parameter', async () => {
       const res = await request(app)
-        .get('/?lang=tr')
+        .get('/?lang=de')
         .expect(200);
 
-      expect(res.text).toContain('lang="tr"');
+      expect(res.text).toContain('lang="de"');
     });
 
-    it('should show Turkish navigation with lang=tr', async () => {
+    it('should show German navigation with lang=de', async () => {
       const res = await request(app)
-        .get('/?lang=tr')
+        .get('/?lang=de')
         .expect(200);
 
-      expect(res.text).toContain('Ana Sayfa');
-      expect(res.text).toContain('Araçlar');
-      expect(res.text).toContain('Hakkında');
+      expect(res.text).toContain('Startseite');
+      expect(res.text).toContain('Werkzeuge');
+      expect(res.text).toContain('Über');
     });
 
     it('should show English content by default', async () => {
@@ -142,12 +142,12 @@ describe('i18n System Integration', () => {
       expect(res.text).toContain('About');
     });
 
-    it('should apply Turkish translations to tools page', async () => {
+    it('should apply German translations to tools page', async () => {
       const res = await request(app)
-        .get('/tools?lang=tr')
+        .get('/tools?lang=de')
         .expect(200);
 
-      expect(res.text).toContain('Geliştirici Araçları');
+      expect(res.text).toContain('Entwicklerwerkzeuge');
     });
   });
 
@@ -183,12 +183,12 @@ describe('i18n System Integration', () => {
       expect(res.text).toBeDefined();
     });
 
-    it('should accept Turkish as supported locale', async () => {
+    it('should accept German as supported locale', async () => {
       const res = await request(app)
-        .get('/?lang=tr')
+        .get('/?lang=de')
         .expect(200);
 
-      expect(res.text).toContain('lang="tr"');
+      expect(res.text).toContain('lang="de"');
     });
   });
 });

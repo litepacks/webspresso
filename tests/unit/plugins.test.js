@@ -388,7 +388,7 @@ describe('Sitemap Plugin', () => {
         sitemapPlugin({ 
           hostname: 'https://example.com',
           i18n: true,
-          locales: ['en', 'tr']
+          locales: ['en', 'de']
         })
       ]
     });
@@ -398,7 +398,7 @@ describe('Sitemap Plugin', () => {
     expect(res.text).toContain('xmlns:xhtml');
     expect(res.text).toContain('xhtml:link');
     expect(res.text).toContain('hreflang="en"');
-    expect(res.text).toContain('hreflang="tr"');
+    expect(res.text).toContain('hreflang="de"');
   });
 });
 

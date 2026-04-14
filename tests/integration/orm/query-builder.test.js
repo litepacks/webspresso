@@ -408,7 +408,7 @@ describe('Query Builder Integration', () => {
 
   describe('JSON field handling', () => {
     it('should deserialize JSON fields with first()', async () => {
-      const metadata = { theme: 'dark', locale: 'tr' };
+      const metadata = { theme: 'dark', locale: 'de' };
       
       // Create user with JSON metadata
       await UserRepo.create({
@@ -425,7 +425,7 @@ describe('Query Builder Integration', () => {
       expect(user).not.toBeNull();
       expect(typeof user.metadata).toBe('object');
       expect(user.metadata.theme).toBe('dark');
-      expect(user.metadata.locale).toBe('tr');
+      expect(user.metadata.locale).toBe('de');
     });
 
     it('should deserialize JSON fields with list()', async () => {

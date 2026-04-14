@@ -110,18 +110,18 @@ function registerCommand(program) {
           JSON.stringify(enContent, null, 2) + '\n'
         );
         
-        const trContent = {
+        const deContent = {
           title: route,
-          description: 'Sayfa açıklaması',
+          description: 'Seitenbeschreibung',
           meta: {
             title: `${route} - Webspresso`,
-            description: 'Sayfa açıklaması'
+            description: 'Seitenbeschreibung'
           }
         };
         
         fs.writeFileSync(
-          path.join(localesDir, 'tr.json'),
-          JSON.stringify(trContent, null, 2) + '\n'
+          path.join(localesDir, 'de.json'),
+          JSON.stringify(deContent, null, 2) + '\n'
         );
         
         console.log(`✅ Created locale files in ${localesDir}`);

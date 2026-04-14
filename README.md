@@ -143,7 +143,7 @@ The project includes:
 - Tailwind CSS with build process
 - Optimized layout template with navigation and footer
 - Responsive starter page
-- i18n setup (en/tr)
+- i18n setup (e.g. en/de)
 - Development and production scripts
 
 ### `webspresso page`
@@ -277,7 +277,7 @@ my-app/
 ├── pages/
 │   ├── locales/          # Global i18n translations
 │   │   ├── en.json
-│   │   └── tr.json
+│   │   └── de.json
 │   ├── _hooks.js         # Global lifecycle hooks
 │   ├── index.njk         # Home page (GET /)
 │   ├── about/
@@ -482,7 +482,7 @@ const { app } = createApp({
       hostname: 'https://example.com',
       exclude: ['/admin/*', '/api/*'],
       i18n: true,
-      locales: ['en', 'tr']
+      locales: ['en', 'de']
     }),
     analyticsPlugin({
       google: {
@@ -747,6 +747,55 @@ const { app } = createApp({
 ```
 
 Programmatic API (other plugins): `ctx.usePlugin('audit-log')` exposes `queryLogs`, `purgeAuditLogs`, and `getMigrationTemplate()`.
+
+**reCAPTCHA plugin:**
+- Google reCAPTCHA **v2** (checkbox) or **v3** (score): server verification via `https://www.google.com/recaptcha/api/siteverify` (no extra npm dependency; Node 18+ `fetch`)
+- Registers CSP entries for Google scripts/iframes; Nunjucks helpers: `recaptchaScript`, `recaptchaWidget` (v2), `recaptchaV3Token` (hidden input + execute for v3 — use with `version: 'v3'` and `recaptchaScript` loads `api.js?render=siteKey`)
+- Secret key: `options.secretKey` or env `RECAPTCHA_SECRET_KEY` (never expose to templates)
+
+```javascript
+const {
+  recaptchaPlugin,
+  createRecaptchaMiddleware,
+  resolveRecaptchaMiddlewareParams,
+} = require('webspresso/plugins/recaptcha');
+
+const recaptchaConfig = {
+  siteKey: process.env.RECAPTCHA_SITE_KEY,
+  secretKey: process.env.RECAPTCHA_SECRET_KEY,
+  version: 'v2', // or 'v3'
+  minScore: 0.5,
+  expectedAction: 'contact', // v3 verification only
+  defaultV3Action: 'submit', // for recaptchaV3Token helper
+};
+
+const { app } = createApp({
+  pagesDir: './pages',
+  plugins: [recaptchaPlugin(recaptchaConfig)],
+  middlewares: {
+    recaptcha: createRecaptchaMiddleware({
+      ...resolveRecaptchaMiddlewareParams(recaptchaConfig),
+      bodyField: 'g-recaptcha-response',
+    }),
+  },
+});
+```
+
+**File-based API** (`pages/api/...post.js`): use the named middleware instead of duplicating verification in the handler; on success, `req.recaptcha` contains a short summary of Google’s response.
+
+```javascript
+// pages/api/contact.post.js
+module.exports = async function post(req, res) {
+  // recaptcha middleware already returned 400 if token invalid
+  return res.json({ ok: true, hostname: req.recaptcha.hostname });
+};
+
+module.exports.middleware = ['recaptcha'];
+```
+
+Optional: after `createApp`, use `pluginManager.getPluginAPI('recaptcha').createMiddleware({ bodyField: '...' })` to override plugin defaults and attach to the `app.use` chain (after body parsers).
+
+Low-level usage (without middleware): import `verifyRecaptcha` / `getRemoteIp` from `webspresso/plugins/recaptcha/verify`.
 
 **SEO Checker Plugin:**
 - Client-side SEO analysis tool (inspired by django-check-seo)

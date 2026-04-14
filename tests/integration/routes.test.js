@@ -133,17 +133,16 @@ describe('SSR Routes Integration', () => {
   describe('Locale handling', () => {
     it('should respect lang query parameter', async () => {
       const res = await request(app)
-        .get('/?lang=tr')
+        .get('/?lang=de')
         .expect(200);
 
-      // Turkish content should be rendered
-      expect(res.text).toContain('lang="tr"');
+      expect(res.text).toContain('lang="de"');
     });
 
     it('should respect Accept-Language header', async () => {
       const res = await request(app)
         .get('/')
-        .set('Accept-Language', 'tr-TR,tr;q=0.9')
+        .set('Accept-Language', 'de-DE,de;q=0.9')
         .expect(200);
 
       expect(res.text).toBeDefined();

@@ -1,0 +1,75 @@
+{
+  "site": {
+    "name": "Webspresso"
+  },
+  "nav": {
+    "home": "Startseite",
+    "tools": "Werkzeuge",
+    "about": "Über"
+  },
+  "footer": {
+    "copyright": "© 2025 Webspresso. All rights reserved.",
+    "poweredBy": "Bereitgestellt von"
+  },
+  "meta": {
+    "title": "Webspresso - Minimal SSR Framework",
+    "description": "Ein minimales, dateibasiertes SSR-Framework für Node.js mit Nunjucks-Templating."
+  },
+  "hero": {
+    "badge": "Produktionsreifes SSR",
+    "title": "Schnell entwickeln, schneller ausliefern",
+    "description": "Webspresso ist ein minimales, dateibasiertes SSR-Framework für Node.js. Blade-ähnliches Templating mit Nunjucks, automatisches Routing und eingebaute i18n.",
+    "cta": "Werkzeuge erkunden",
+    "secondary": "Mehr erfahren"
+  },
+  "features": {
+    "routing": {
+      "title": "Dateibasiertes Routing",
+      "description": "Seiten durch Hinzufügen von .njk-Dateien. Dynamische Parameter mit [slug], Catch-all mit [...rest]."
+    },
+    "i18n": {
+      "title": "Eingebaute i18n",
+      "description": "JSON-basierte Übersetzungen mit automatischer Locale-Erkennung. Globale und route-spezifische Overrides."
+    },
+    "hooks": {
+      "title": "Lifecycle-Hooks",
+      "description": "Hängen Sie sich mit beforeLoad, afterRender und mehr in den Request-Lifecycle ein. Global oder pro Route."
+    }
+  },
+  "quickstart": {
+    "title": "Schnellstart"
+  },
+  "tools": {
+    "title": "Entwicklerwerkzeuge",
+    "description": "Eine Sammlung nützlicher Werkzeuge für mehr Produktivität.",
+    "tryNow": "Jetzt ausprobieren",
+    "empty": "Noch keine Werkzeuge verfügbar.",
+    "meta": {
+      "title": "Entwicklerwerkzeuge - Webspresso",
+      "description": "Eine Sammlung nützlicher Entwicklerwerkzeuge für mehr Produktivität."
+    }
+  },
+  "tool": {
+    "interface": "Werkzeugoberfläche",
+    "comingSoon": "Demnächst",
+    "placeholder": "Diese Werkzeugoberfläche befindet sich in der Entwicklung. Schauen Sie bald wieder vorbei!",
+    "related": "Verwandte Werkzeuge"
+  },
+  "about": {
+    "title": "Über Webspresso",
+    "intro": "Webspresso ist ein minimales, produktionsorientiertes Node.js-SSR-Framework nach der Philosophie „wenige Dateien, maximaler Output“.",
+    "philosophy": {
+      "title": "Unsere Philosophie",
+      "item1": "Dateibasiertes Routing für eine intuitive Projektstruktur",
+      "item2": "Blade-ähnliches Templating mit Nunjucks",
+      "item3": "Eingebaute i18n mit JSON-Dateien",
+      "item4": "CommonJS für geringe Reibung"
+    },
+    "stack": {
+      "title": "Tech-Stack"
+    },
+    "features": {
+      "title": "Kernfunktionen"
+    }
+  }
+}

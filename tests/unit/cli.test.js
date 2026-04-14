@@ -209,10 +209,10 @@ describe('CLI', () => {
       runCli(`new ${projectName}`);
       
       const enPath = path.join(TEST_DIR, projectName, 'pages', 'locales', 'en.json');
-      const trPath = path.join(TEST_DIR, projectName, 'pages', 'locales', 'tr.json');
+      const dePath = path.join(TEST_DIR, projectName, 'pages', 'locales', 'de.json');
       
       const enJson = JSON.parse(fs.readFileSync(enPath, 'utf-8'));
-      const trJson = JSON.parse(fs.readFileSync(trPath, 'utf-8'));
+      const deJson = JSON.parse(fs.readFileSync(dePath, 'utf-8'));
       
       // Check English
       expect(enJson.site.name).toBe('Webspresso');
@@ -221,12 +221,12 @@ describe('CLI', () => {
       expect(enJson.welcome).toContain('Welcome');
       expect(enJson.description).toBeDefined();
       
-      // Check Turkish
-      expect(trJson.site.name).toBe('Webspresso');
-      expect(trJson.nav.home).toBe('Ana Sayfa');
-      expect(trJson.footer.copyright).toContain('Webspresso');
-      expect(trJson.welcome).toContain('Hoş Geldiniz');
-      expect(trJson.description).toBeDefined();
+      // Check German locale file
+      expect(deJson.site.name).toBe('Webspresso');
+      expect(deJson.nav.home).toBe('Startseite');
+      expect(deJson.footer.copyright).toContain('Webspresso');
+      expect(deJson.welcome).toContain('Willkommen');
+      expect(deJson.description).toBeDefined();
     });
 
     it('should create Tailwind config files', () => {

@@ -11,6 +11,7 @@ const adminPanelPlugin = require('./admin-panel');
 const seoCheckerPlugin = require('./seo-checker');
 const siteAnalyticsPlugin = require('./site-analytics');
 const auditLogPlugin = require('./audit-log');
+const recaptchaPlugin = require('./recaptcha');
 
 module.exports = {
   sitemapPlugin,
@@ -21,5 +22,6 @@ module.exports = {
   seoCheckerPlugin,
   siteAnalyticsPlugin,
   auditLogPlugin,
+  recaptchaPlugin,
 };
 

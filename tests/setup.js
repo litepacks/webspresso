@@ -9,7 +9,7 @@ const path = require('path');
 process.env.NODE_ENV = 'test';
 process.env.PORT = '3001';
 process.env.DEFAULT_LOCALE = 'en';
-process.env.SUPPORTED_LOCALES = 'en,tr';
+process.env.SUPPORTED_LOCALES = 'en,de';
 process.env.BASE_URL = 'http://localhost:3001';
 
 // Paths for test fixtures

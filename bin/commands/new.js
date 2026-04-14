@@ -227,7 +227,7 @@ app.listen(PORT, () => {
       let envExample = `PORT=3000
 NODE_ENV=development
 DEFAULT_LOCALE=en
-SUPPORTED_LOCALES=en,tr
+SUPPORTED_LOCALES=en,de
 BASE_URL=http://localhost:3000
 `;
       
@@ -454,23 +454,23 @@ coverage/
         JSON.stringify(enJson, null, 2) + '\n'
       );
       
-      const trJson = {
+      const deJson = {
         site: {
           name: 'Webspresso'
         },
         nav: {
-          home: 'Ana Sayfa'
+          home: 'Startseite'
         },
         footer: {
-          copyright: '© 2025 Webspresso. Tüm hakları saklıdır.'
+          copyright: '© 2025 Webspresso. All rights reserved.'
         },
-        welcome: 'Webspresso\'ya Hoş Geldiniz',
-        description: 'SSR uygulamanızı oluşturmaya başlayın!'
+        welcome: 'Willkommen bei Webspresso',
+        description: 'Start building your SSR app!'
       };
       
       fs.writeFileSync(
-        path.join(projectPath, 'pages', 'locales', 'tr.json'),
-        JSON.stringify(trJson, null, 2) + '\n'
+        path.join(projectPath, 'pages', 'locales', 'de.json'),
+        JSON.stringify(deJson, null, 2) + '\n'
       );
       
       // Create README

@@ -1,0 +1,27 @@
+{
+  "site": {
+    "name": "Webspresso"
+  },
+  "nav": {
+    "home": "Startseite",
+    "tools": "Werkzeuge",
+    "about": "Über",
+    "test": "Test"
+  },
+  "footer": {
+    "copyright": "© 2025 Webspresso. All rights reserved.",
+    "poweredBy": "Powered by"
+  },
+  "test": {
+    "title": "Test Startseite",
+    "description": "Test fixture page for unit tests"
+  },
+  "features": {
+    "routing": {
+      "title": "Dateibasierte Routen",
+      "description": "Automatische Routen aus der Dateistruktur"
+    }
+  },
+  "welcome": "Willkommen bei Webspresso",
+  "description": "Ein minimales SSR-Framework für Node.js"
+}

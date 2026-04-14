@@ -162,19 +162,19 @@ describe('file-router.js', () => {
   describe('detectLocale', () => {
     it('should prefer query parameter', () => {
       const req = global.testUtils.createMockRequest({
-        query: { lang: 'tr' },
+        query: { lang: 'de' },
         headers: { 'accept-language': 'en-US' }
       });
-      expect(detectLocale(req)).toBe('tr');
+      expect(detectLocale(req)).toBe('de');
     });
 
     it('should use Accept-Language header', () => {
       const req = global.testUtils.createMockRequest({
-        headers: { 'accept-language': 'tr-TR,tr;q=0.9,en;q=0.8' }
+        headers: { 'accept-language': 'de-DE,de;q=0.9,en;q=0.8' }
       });
       // Note: This depends on SUPPORTED_LOCALES env var
       const result = detectLocale(req);
-      expect(['tr', 'en']).toContain(result);
+      expect(['de', 'en']).toContain(result);
     });
 
     it('should fall back to default locale', () => {
@@ -186,10 +186,10 @@ describe('file-router.js', () => {
 
     it('should use DEFAULT_LOCALE from env', () => {
       const originalLocale = process.env.DEFAULT_LOCALE;
-      process.env.DEFAULT_LOCALE = 'tr';
+      process.env.DEFAULT_LOCALE = 'de';
       
       const req = global.testUtils.createMockRequest({});
-      expect(detectLocale(req)).toBe('tr');
+      expect(detectLocale(req)).toBe('de');
       
       process.env.DEFAULT_LOCALE = originalLocale;
     });
