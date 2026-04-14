@@ -250,6 +250,8 @@ webspresso dev --no-css   # skip CSS watch if Tailwind is configured</code></pre
             <tr><td><code class="whitespace-nowrap">admin:list</code></td><td>List admin users (needs migrated <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">admin_users</code>)</td></tr>
             <tr><td><code class="whitespace-nowrap">admin:password</code></td><td>Reset admin password (interactive or <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">-e</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">-p</code>)</td></tr>
             <tr><td><code class="whitespace-nowrap">audit:prune</code></td><td>Delete audit log rows older than <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--days</code> (optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--table</code>)</td></tr>
+            <tr><td><code class="whitespace-nowrap">doctor</code></td><td>Sanity checks: Node version vs <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">package.json</code> engines, expected project files, optional DB ping — run from your app root</td></tr>
+            <tr><td><code class="whitespace-nowrap">skill [name]</code></td><td>Create an <strong class="text-slate-800 dark:text-slate-200">Agent Skill</strong> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">SKILL.md</code>) for Cursor and similar tools — interactive name/description, or use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--preset webspresso</code> to install the bundled Webspresso reference skill under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.cursor/skills/</code></td></tr>
             <tr><td><code class="whitespace-nowrap">favicon:generate &lt;source&gt;</code></td><td>PNG favicons, PWA manifest, Nunjucks partial</td></tr>
           </tbody>
         </table>
@@ -264,6 +266,8 @@ webspresso dev --no-css   # skip CSS watch if Tailwind is configured</code></pre
             <tr><td><code>seed</code></td><td><code>--setup</code> · <code>--config</code> · <code>--env</code></td></tr>
             <tr><td><code>admin:password</code> / <code>admin:list</code></td><td><code>-c, --config</code> · <code>-E, --env</code></td></tr>
             <tr><td><code>favicon:generate</code></td><td><code>-o</code> · <code>--no-layout</code> · PWA <code>--name</code> / <code>--short-name</code> / <code>--theme-color</code></td></tr>
+            <tr><td><code>doctor</code></td><td><code>--db</code> (test DB when <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso.db.js</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">knexfile.js</code> exists) · <code>--strict</code> (exit 1 on warnings) · <code>-e, --env</code> (with <code>--db</code>)</td></tr>
+            <tr><td><code>skill</code></td><td><code>-g, --global</code> (write to <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">~/.cursor/skills/</code>) · <code>-d, --description</code> · <code>-f, --force</code> · <code>-p, --preset &lt;name&gt;</code> (e.g. <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso</code>)</td></tr>
           </tbody>
         </table>
       </div>
@@ -448,7 +452,7 @@ module.exports = {
       <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">Webspresso bundles the pieces you usually wire by hand: a CLI for scaffolding and DB tasks, a dev runner that restarts the process when routes or templates change, and optional first-party UI for routes and SEO. Below is how those tools fit together.</p>
 
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">CLI &amp; project automation</h3>
-      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed">The <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso</code> binary (<strong class="text-slate-800 dark:text-slate-200">Commander</strong>) exposes subcommands for projects, APIs, Tailwind, Knex migrations, seeds, admin maintenance, and favicon/PWA asset generation. Interactive flows use <strong class="text-slate-800 dark:text-slate-200">Inquirer</strong> when you run commands without full arguments (e.g. <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso new</code> with no name).</p>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed">The <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso</code> binary (<strong class="text-slate-800 dark:text-slate-200">Commander</strong>) exposes subcommands for projects, APIs, Tailwind, Knex migrations, seeds, admin maintenance, audit pruning, <strong class="text-slate-800 dark:text-slate-200">environment checks</strong> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">doctor</code>), <strong class="text-slate-800 dark:text-slate-200">Cursor Agent Skills</strong> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">skill</code>, including a bundled Webspresso preset), and favicon/PWA asset generation. Interactive flows use <strong class="text-slate-800 dark:text-slate-200">Inquirer</strong> when you run commands without full arguments (e.g. <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso new</code> with no name).</p>
 
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Local development server</h3>
       <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso dev</code> runs your project’s <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">server.js</code> under <strong class="text-slate-800 dark:text-slate-200">Node’s <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--watch</code></strong> and adds <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--watch-path</code> for <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">models/</code>, and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">views/</code> when those directories exist, so route files and Nunjucks layouts reload without manual restarts. With Tailwind enabled, the same command can spawn <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">watch:css</code>; use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--no-css</code> to skip that subprocess.</p>
@@ -547,11 +551,20 @@ utils/             # shared utilities</pre>
 
     <section id="testing" class="doc-section mb-14">
       <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Development &amp; testing</h2>
-      <p class="text-slate-600 dark:text-slate-400 mb-3">The framework repository uses Vitest for unit/integration tests and Playwright for end-to-end CLI and browser flows.</p>
-      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto"><code class="language-bash">npm test              # vitest run
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">The framework repository runs <strong class="text-slate-800 dark:text-slate-200">Vitest</strong> for fast unit and integration tests (CLI, ORM, routing, plugins, etc.) and <strong class="text-slate-800 dark:text-slate-200">Playwright</strong> for end-to-end checks in a real browser: admin panel APIs and UI, auth flows, audit log, CLI project scaffold, and the SEO checker plugin.</p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Unit &amp; integration (Vitest)</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-6"><code class="language-bash">npm test                 # vitest run
 npm run test:watch
-npm run test:coverage
-npm run test:e2e      # playwright test</code></pre>
+npm run test:coverage</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">End-to-end (Playwright)</h3>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed">Specs live under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">tests/e2e/</code>; the runner starts a temporary app and exercises HTTP + DOM (Chromium by default). Use UI or headed mode when debugging flaky selectors.</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-bash">npm run test:e2e           # playwright test
+npm run test:e2e:ui      # Playwright UI
+npm run test:e2e:debug
+npm run test:e2e:headed</code></pre>
+      <p class="text-slate-500 dark:text-slate-500 text-sm leading-relaxed">CI tip: run <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">npm test</code> and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">npm run test:e2e</code> before release. For a quick local health pass on an app directory, use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso doctor</code> (add <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--db</code> to verify database connectivity).</p>
     </section>
 
     <footer class="pt-10 border-t border-stone-200 dark:border-slate-800 text-sm text-slate-500 dark:text-slate-500">
