@@ -266,6 +266,28 @@ describe('Query Builder Integration', () => {
       expect(result.data.length).toBe(1);
       expect(result.data[0].id).toBe(3);
     });
+
+    it('should ignore builder limit/offset when counting total', async () => {
+      const result = await UserRepo.query()
+        .orderBy('id', 'asc')
+        .limit(1)
+        .offset(0)
+        .paginate(1, 10);
+
+      expect(result.total).toBe(3);
+      expect(result.data.length).toBe(3);
+    });
+  });
+
+  describe('count with limit', () => {
+    it('should count all matching rows ignoring limit', async () => {
+      const n = await UserRepo.query()
+        .where('status', 'active')
+        .limit(1)
+        .count();
+
+      expect(n).toBe(2);
+    });
   });
 
   describe('withTrashed / onlyTrashed', () => {
@@ -289,13 +311,33 @@ describe('Query Builder Integration', () => {
 
   describe('with (eager loading)', () => {
     it('should load belongsTo relation', async () => {
-      // First verify user exists
       const rawUser = await db.knex('users').where('id', 1).first();
       expect(rawUser).toBeDefined();
       expect(rawUser.deleted_at).toBeNull();
-      
-      // Need to use repository's query since it handles eager loading
+
       const user = await UserRepo.findById(1, { with: ['company'] });
+
+      expect(user).not.toBeNull();
+      expect(user.company).not.toBeNull();
+      expect(user.company.name).toBe('Acme Corp');
+    });
+
+    it('should load belongsTo via query builder list()', async () => {
+      const users = await UserRepo.query()
+        .where('id', 1)
+        .with('company')
+        .list();
+
+      expect(users.length).toBe(1);
+      expect(users[0].company).not.toBeNull();
+      expect(users[0].company.name).toBe('Acme Corp');
+    });
+
+    it('should load belongsTo via query builder first()', async () => {
+      const user = await UserRepo.query()
+        .where('id', 1)
+        .with('company')
+        .first();
 
       expect(user).not.toBeNull();
       expect(user.company).not.toBeNull();
@@ -310,12 +352,35 @@ describe('Query Builder Integration', () => {
       expect(user.posts.length).toBe(2);
     });
 
+    it('should load hasMany via query builder', async () => {
+      const user = await UserRepo.query()
+        .where('id', 1)
+        .with('posts')
+        .first();
+
+      expect(user).not.toBeNull();
+      expect(user.posts).toBeInstanceOf(Array);
+      expect(user.posts.length).toBe(2);
+    });
+
     it('should load multiple relations', async () => {
       const user = await UserRepo.findById(1, { with: ['company', 'posts'] });
 
       expect(user).not.toBeNull();
       expect(user.company).not.toBeNull();
       expect(user.posts.length).toBe(2);
+    });
+
+    it('should load multiple relations via query builder paginate()', async () => {
+      const result = await UserRepo.query()
+        .where('id', 1)
+        .with('company', 'posts')
+        .paginate(1, 10);
+
+      expect(result.data.length).toBe(1);
+      expect(result.total).toBe(1);
+      expect(result.data[0].company.name).toBe('Acme Corp');
+      expect(result.data[0].posts.length).toBe(2);
     });
   });
 

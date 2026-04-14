@@ -5,66 +5,14 @@
  */
 
 const { applyScopes, createScopeContext } = require('./scopes');
-
-/**
- * Get JSON column names from model
- * @param {import('./types').ModelDefinition} model - Model definition
- * @returns {Set<string>} Set of JSON column names
- */
-function getJsonColumns(model) {
-  const jsonCols = new Set();
-  if (model.columns) {
-    for (const [name, meta] of model.columns) {
-      if (meta.type === 'json') {
-        jsonCols.add(name);
-      }
-    }
-  }
-  return jsonCols;
-}
-
-/**
- * Serialize JSON fields for database storage
- * @param {Object} data - Data to serialize
- * @param {Set<string>} jsonColumns - JSON column names
- * @returns {Object} Serialized data
- */
-function serializeJsonFields(data, jsonColumns) {
-  if (jsonColumns.size === 0) return data;
-  
-  const serialized = { ...data };
-  for (const col of jsonColumns) {
-    if (col in serialized && serialized[col] !== null && serialized[col] !== undefined) {
-      if (typeof serialized[col] !== 'string') {
-        serialized[col] = JSON.stringify(serialized[col]);
-      }
-    }
-  }
-  return serialized;
-}
-
-/**
- * Deserialize JSON fields from database
- * @param {Object} record - Record from database
- * @param {Set<string>} jsonColumns - JSON column names
- * @returns {Object} Deserialized record
- */
-function deserializeJsonFields(record, jsonColumns) {
-  if (!record || jsonColumns.size === 0) return record;
-  
-  for (const col of jsonColumns) {
-    if (col in record && record[col] !== null && record[col] !== undefined) {
-      if (typeof record[col] === 'string') {
-        try {
-          record[col] = JSON.parse(record[col]);
-        } catch {
-          // If parsing fails, keep the original string value
-        }
-      }
-    }
-  }
-  return record;
-}
+const { loadRelations } = require('./eager-loader');
+const { ensureArray } = require('./utils');
+const { ModelEvents, createEventContext, Hooks, HookCancellationError } = require('./events');
+const {
+  getJsonColumns,
+  serializeJsonFields,
+  deserializeJsonFields,
+} = require('./json-fields');
 
 /**
  * Create a new query builder
@@ -92,7 +40,7 @@ class QueryBuilder {
     this.knex = knex;
     this.scopeContext = initialContext || createScopeContext();
     this.jsonColumns = getJsonColumns(model);
-    
+
     /** @type {import('./types').QueryState} */
     this.state = {
       wheres: [],
@@ -167,7 +115,7 @@ class QueryBuilder {
   orWhere(columnOrConditions, operatorOrValue, value) {
     const startIndex = this.state.wheres.length;
     this.where(columnOrConditions, operatorOrValue, value);
-    
+
     // Mark the new clauses as OR
     for (let i = startIndex; i < this.state.wheres.length; i++) {
       this.state.wheres[i].boolean = 'or';
@@ -339,10 +287,21 @@ class QueryBuilder {
   }
 
   /**
+   * Transaction handle for lifecycle hooks (matches repository pattern)
+   * @returns {import('knex').Knex.Transaction|null}
+   */
+  _hookTrx() {
+    return this.knex.isTransaction ? this.knex : null;
+  }
+
+  /**
    * Build the Knex query
+   * @param {Object} [options]
+   * @param {boolean} [options.includeLimitOffset=true] - When false, omit LIMIT/OFFSET (for aggregates / pagination)
    * @returns {import('knex').Knex.QueryBuilder}
    */
-  toKnex() {
+  toKnex(options = {}) {
+    const { includeLimitOffset = true } = options;
     let qb = this.knex(this.model.table);
 
     // Apply global scopes
@@ -364,10 +323,10 @@ class QueryBuilder {
       }
 
       const method = where.boolean === 'or' ? 'orWhere' : 'where';
-      
+
       switch (where.operator) {
         case 'in':
-          qb = where.boolean === 'or' 
+          qb = where.boolean === 'or'
             ? qb.orWhereIn(where.column, where.value)
             : qb.whereIn(where.column, where.value);
           break;
@@ -396,14 +355,16 @@ class QueryBuilder {
       qb = qb.orderBy(orderBy.column, orderBy.direction);
     }
 
-    // Apply limit
-    if (this.state.limitValue !== undefined) {
-      qb = qb.limit(this.state.limitValue);
-    }
+    if (includeLimitOffset) {
+      // Apply limit
+      if (this.state.limitValue !== undefined) {
+        qb = qb.limit(this.state.limitValue);
+      }
 
-    // Apply offset
-    if (this.state.offsetValue !== undefined) {
-      qb = qb.offset(this.state.offsetValue);
+      // Apply offset
+      if (this.state.offsetValue !== undefined) {
+        qb = qb.offset(this.state.offsetValue);
+      }
     }
 
     return qb;
@@ -414,12 +375,24 @@ class QueryBuilder {
    * @returns {Promise<Object|null>}
    */
   async first() {
+    const ctx = createEventContext(this.model.name, 'find', this._hookTrx());
+    await ModelEvents.emitAsync(this.model.name, Hooks.BEFORE_FIND, {}, ctx);
+    if (ctx.isCancelled) {
+      throw new HookCancellationError(ctx.cancelReason, this.model.name, Hooks.BEFORE_FIND);
+    }
+
     const qb = this.toKnex().first();
     const result = await qb;
     if (!result) return null;
-    
-    // Deserialize JSON fields
+
     deserializeJsonFields(result, this.jsonColumns);
+
+    const withs = this.getWiths();
+    if (withs.length > 0) {
+      await loadRelations([result], ensureArray(withs), this.model, this.knex, this.scopeContext);
+    }
+
+    ModelEvents.emit(this.model.name, Hooks.AFTER_FIND, result, ctx);
     return result;
   }
 
@@ -428,11 +401,25 @@ class QueryBuilder {
    * @returns {Promise<Object[]>}
    */
   async list() {
+    const ctx = createEventContext(this.model.name, 'find', this._hookTrx());
+    await ModelEvents.emitAsync(this.model.name, Hooks.BEFORE_FIND, {}, ctx);
+    if (ctx.isCancelled) {
+      throw new HookCancellationError(ctx.cancelReason, this.model.name, Hooks.BEFORE_FIND);
+    }
+
     const results = await this.toKnex();
-    
-    // Deserialize JSON fields
+
     for (const record of results) {
       deserializeJsonFields(record, this.jsonColumns);
+    }
+
+    const withs = this.getWiths();
+    if (withs.length > 0 && results.length > 0) {
+      await loadRelations(results, ensureArray(withs), this.model, this.knex, this.scopeContext);
+    }
+
+    for (const record of results) {
+      ModelEvents.emit(this.model.name, Hooks.AFTER_FIND, record, ctx);
     }
     return results;
   }
@@ -450,7 +437,7 @@ class QueryBuilder {
    * @returns {Promise<number>}
    */
   async count() {
-    const result = await this.toKnex().count('* as count').first();
+    const result = await this.toKnex({ includeLimitOffset: false }).count('* as count').first();
     return parseInt(result?.count || 0, 10);
   }
 
@@ -470,20 +457,31 @@ class QueryBuilder {
    * @returns {Promise<import('./types').PaginatedResult>}
    */
   async paginate(page = 1, perPage = 15) {
-    // Clone state for count query
-    const countQb = this.toKnex().clone();
-    
-    // Get total count
-    const countResult = await countQb.count('* as count').first();
+    const ctx = createEventContext(this.model.name, 'find', this._hookTrx());
+    await ModelEvents.emitAsync(this.model.name, Hooks.BEFORE_FIND, {}, ctx);
+    if (ctx.isCancelled) {
+      throw new HookCancellationError(ctx.cancelReason, this.model.name, Hooks.BEFORE_FIND);
+    }
+
+    const base = this.toKnex({ includeLimitOffset: false });
+
+    const countResult = await base.clone().count('* as count').first();
     const total = parseInt(countResult?.count || 0, 10);
 
-    // Get paginated data
     const offset = (page - 1) * perPage;
-    const data = await this.toKnex().limit(perPage).offset(offset);
+    const data = await base.clone().limit(perPage).offset(offset);
 
-    // Deserialize JSON fields
     for (const record of data) {
       deserializeJsonFields(record, this.jsonColumns);
+    }
+
+    const withs = this.getWiths();
+    if (withs.length > 0 && data.length > 0) {
+      await loadRelations(data, ensureArray(withs), this.model, this.knex, this.scopeContext);
+    }
+
+    for (const record of data) {
+      ModelEvents.emit(this.model.name, Hooks.AFTER_FIND, record, ctx);
     }
 
     return {
@@ -509,7 +507,6 @@ class QueryBuilder {
    * @returns {Promise<number>} Number of updated records
    */
   async update(data) {
-    // Serialize JSON fields
     const serialized = serializeJsonFields(data, this.jsonColumns);
     return this.toKnex().update(serialized);
   }
@@ -554,4 +551,3 @@ module.exports = {
   createQueryBuilder,
   QueryBuilder,
 };
-

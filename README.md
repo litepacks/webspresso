@@ -1398,6 +1398,10 @@ await UserRepo.query().onlyTrashed().list();   // Only deleted
 await UserRepo.query().forTenant(tenantId).list();
 ```
 
+`list()`, `first()`, and `paginate()` emit the same `beforeFind` / `afterFind` lifecycle hooks as `findAll` / `findOne` (one `afterFind` per row). `count()` ignores any `.limit()` / `.offset()` on the builder so it returns the full matching row count.
+
+`query().delete()` runs a SQL `DELETE` for matching rows. On models with soft deletes, use `UserRepo.delete(id)` (or equivalent) to set `deleted_at`; the query builder does not convert deletes to soft deletes.
+
 ### Transactions
 
 ```javascript

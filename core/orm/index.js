@@ -186,7 +186,7 @@ function createDatabase(config) {
    * Get query builder for a model
    * @param {string} modelName - Model name
    * @param {import('./types').ScopeContext} [scopeContext] - Scope context
-   * @returns {import('knex').Knex.QueryBuilder}
+   * @returns {import('./query-builder').QueryBuilder}
    */
   function query(modelName, scopeContext) {
     const model = getModelInstance(modelName);

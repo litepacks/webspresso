@@ -165,6 +165,7 @@ function haltOnTimedout(req, res, next) {
  * @param {string|boolean} options.timeout - Request timeout (default: '30s', false to disable)
  * @param {Object} options.auth - Authentication manager instance (from createAuth)
  * @param {Object} options.db - Database instance (exposed as ctx.db to plugins)
+ * @param {function(import('express').Express, Object): void} [options.setupRoutes] - Called after file routes and plugins, before 404 handler
  * @returns {Object} { app, nunjucksEnv, pluginManager, authMiddleware }
  */
 function createApp(options = {}) {
@@ -184,6 +185,7 @@ function createApp(options = {}) {
     errorPages = {},
     timeout: timeoutConfig = '30s',
     auth: authManager = null,
+    setupRoutes,
   } = options;
   
   // Create plugin manager
@@ -375,6 +377,15 @@ function createApp(options = {}) {
         console.warn(`[plugin-manager] Plugin "${name}" onRoutesReady() failed:`, err.message);
       }
     }
+  }
+
+  if (typeof setupRoutes === 'function') {
+    setupRoutes(app, {
+      nunjucksEnv,
+      authMiddleware,
+      pluginManager,
+      options,
+    });
   }
   
   // Helper to create error page context with fsy

@@ -15,7 +15,6 @@ const os = require('os');
 let server;
 let db;
 let baseURL;
-const PORT = 3099;
 
 test.describe('Auth E2E Tests', () => {
   test.beforeAll(async () => {
@@ -134,8 +133,10 @@ test.describe('Auth E2E Tests', () => {
 </html>
     `);
 
+    // Templates live in viewsDir only so file-router does not register GET /, /login, /dashboard
+    // before setupRoutes (those would win and skip auth middleware / session user).
     // Create login page
-    fs.writeFileSync(path.join(pagesDir, 'login.njk'), `
+    fs.writeFileSync(path.join(viewsDir, 'login.njk'), `
 {% extends "layout.njk" %}
 {% block content %}
 <h1>Login</h1>
@@ -156,7 +157,7 @@ test.describe('Auth E2E Tests', () => {
     `);
 
     // Create dashboard page
-    fs.writeFileSync(path.join(pagesDir, 'dashboard.njk'), `
+    fs.writeFileSync(path.join(viewsDir, 'dashboard.njk'), `
 {% extends "layout.njk" %}
 {% block content %}
 <h1 data-testid="welcome">Welcome, {{ user.name }}</h1>
@@ -168,7 +169,7 @@ test.describe('Auth E2E Tests', () => {
     `);
 
     // Create home page
-    fs.writeFileSync(path.join(pagesDir, 'index.njk'), `
+    fs.writeFileSync(path.join(viewsDir, 'index.njk'), `
 {% extends "layout.njk" %}
 {% block content %}
 <h1>Home</h1>
@@ -182,48 +183,52 @@ test.describe('Auth E2E Tests', () => {
 {% endblock %}
     `);
 
-    // Create app with routes
-    const { app, authMiddleware } = createApp({
+    // Routes must be registered via setupRoutes (before createApp's 404 handler), not after createApp()
+    const { app } = createApp({
       pagesDir,
       viewsDir,
       auth,
+      setupRoutes: (expressApp, { authMiddleware: am }) => {
+        expressApp.get('/login', am.requireGuest(), (req, res) => {
+          res.render('login.njk', { title: 'Login' });
+        });
+
+        expressApp.post('/login', async (req, res) => {
+          const { email, password, remember } = req.body;
+          const user = await req.auth.attempt(email, password, { remember: remember === 'on' });
+
+          if (user) {
+            return res.redirect('/dashboard');
+          }
+
+          res.render('login.njk', { title: 'Login', error: 'Invalid credentials' });
+        });
+
+        expressApp.get('/dashboard', am.requireAuth(), (req, res) => {
+          res.render('dashboard.njk', { title: 'Dashboard', user: req.user });
+        });
+
+        expressApp.post('/logout', async (req, res) => {
+          await req.auth.logout();
+          res.redirect('/');
+        });
+
+        expressApp.get('/', (req, res) => {
+          res.render('index.njk', { title: 'Home', user: req.user });
+        });
+      },
     });
 
-    // Login route
-    app.get('/login', authMiddleware.requireGuest(), (req, res) => {
-      res.render('login.njk', { title: 'Login' });
+    // Start server on an ephemeral port (avoids EADDRINUSE with stale or parallel processes)
+    await new Promise((resolve, reject) => {
+      server = app.listen(0);
+      server.once('error', reject);
+      server.once('listening', () => {
+        const addr = server.address();
+        baseURL = `http://localhost:${typeof addr === 'object' ? addr.port : addr}`;
+        resolve(undefined);
+      });
     });
-
-    app.post('/login', async (req, res) => {
-      const { email, password, remember } = req.body;
-      const user = await req.auth.attempt(email, password, { remember: remember === 'on' });
-      
-      if (user) {
-        return res.redirect('/dashboard');
-      }
-      
-      res.render('login.njk', { title: 'Login', error: 'Invalid credentials' });
-    });
-
-    // Dashboard route (protected)
-    app.get('/dashboard', authMiddleware.requireAuth(), (req, res) => {
-      res.render('dashboard.njk', { title: 'Dashboard', user: req.user });
-    });
-
-    // Logout route
-    app.post('/logout', async (req, res) => {
-      await req.auth.logout();
-      res.redirect('/');
-    });
-
-    // Home route
-    app.get('/', (req, res) => {
-      res.render('index.njk', { title: 'Home', user: req.user });
-    });
-
-    // Start server
-    server = app.listen(PORT);
-    baseURL = `http://localhost:${PORT}`;
   });
 
   test.afterAll(async () => {
