@@ -127,7 +127,7 @@
         <li><strong class="text-slate-800 dark:text-slate-200">Hooks</strong> — global <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">_hooks.js</code> and per-route hooks for load/render pipeline control.</li>
         <li><strong class="text-slate-800 dark:text-slate-200">Template helpers</strong> — the <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fsy</code> object (URLs, dates via dayjs, SEO helpers, assets, …).</li>
         <li><strong class="text-slate-800 dark:text-slate-200">Plugin system</strong> — versioned plugins, optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dependencies</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">register</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">onRoutesReady</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">onReady</code>.</li>
-        <li><strong class="text-slate-800 dark:text-slate-200">Built-in plugins</strong> — dev route dashboard, XML sitemap + robots, tag managers &amp; analytics pixels, self-hosted page analytics, admin CRUD (Mithril), SEO checker (dev), schema explorer (OpenAPI-style JSON).</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Built-in plugins</strong> — dev route dashboard, XML sitemap + robots, tag managers &amp; analytics pixels, self-hosted page analytics, admin CRUD (Mithril), SEO checker (dev), schema explorer (ORM metadata), Swagger UI + OpenAPI for HTTP APIs (dev by default), HTTP <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/health</code> probe.</li>
       </ul>
     </section>
 
@@ -381,7 +381,9 @@ const { app } = createApp({
             <tr><td><code class="whitespace-nowrap">siteAnalyticsPlugin</code></td><td>Self-hosted page views + admin charts</td></tr>
             <tr><td><code class="whitespace-nowrap">adminPanelPlugin</code></td><td>CRUD admin SPA (Mithril), auth hooks, custom modules</td></tr>
             <tr><td><code class="whitespace-nowrap">seoCheckerPlugin</code></td><td>Dev toolbar SEO audit (40+ checks)</td></tr>
-            <tr><td><code class="whitespace-nowrap">schemaExplorerPlugin</code></td><td>JSON schema of models + OpenAPI export</td></tr>
+            <tr><td><code class="whitespace-nowrap">schemaExplorerPlugin</code></td><td>JSON schema of models + ORM components OpenAPI export</td></tr>
+            <tr><td><code class="whitespace-nowrap">swaggerPlugin</code></td><td>OpenAPI 3 for <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/api</code> + Zod; Swagger UI (dev by default)</td></tr>
+            <tr><td><code class="whitespace-nowrap">healthCheckPlugin</code></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">GET /health</code> probe (optional DB checks, custom path)</td></tr>
           </tbody>
         </table>
       </div>
@@ -505,7 +507,7 @@ module.exports = {
             <tr><td>Templates &amp; assets</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createHelpers</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">AssetManager</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">configureAssets</code></td></tr>
             <tr><td>Plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">PluginManager</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createPluginManager</code></td></tr>
             <tr><td>ORM</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineModel</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createDatabase</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb</code>, …</td></tr>
-            <tr><td>Convenience plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schemaExplorerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">siteAnalyticsPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auditLogPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">recaptchaPlugin</code></td></tr>
+            <tr><td>Convenience plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schemaExplorerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">swaggerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">healthCheckPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">siteAnalyticsPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auditLogPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">recaptchaPlugin</code></td></tr>
           </tbody>
         </table>
       </div>

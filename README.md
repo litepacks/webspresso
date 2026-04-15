@@ -15,7 +15,7 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 - **Lifecycle Hooks**: Global and route-level hooks for request processing
 - **Template Helpers**: Laravel-inspired helper functions available in templates
 - **Plugin System**: Extensible architecture with version control and inter-plugin communication
-- **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing), self-hosted site analytics
+- **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing), self-hosted site analytics, optional Swagger UI for HTTP APIs, configurable HTTP health probe endpoint
 
 ## Installation
 
@@ -1778,6 +1778,64 @@ const models = plugin.api.getModels();       // All models
 const user = plugin.api.getModel('User');    // Single model
 const names = plugin.api.getModelNames();    // Model names
 ```
+
+### Health check plugin
+
+Exposes a lightweight **GET** endpoint for load balancers and orchestrators (Kubernetes, Docker healthcheck, etc.). **Enabled by default** in all environments; set `enabled: false` to turn it off.
+
+**Setup:**
+
+```javascript
+const { createApp, healthCheckPlugin } = require('webspresso');
+
+const app = createApp({
+  plugins: [
+    healthCheckPlugin({
+      path: '/health',              // default
+      verbose: true,                // timestamp, uptime, NODE_ENV, framework name/version
+      authorize: (req) => true,     // optional — restrict who can read the endpoint
+      checks: async ({ db }) => {
+        if (db) await db.knex.raw('select 1');
+        return { database: 'ok' };
+      },
+    }),
+  ],
+});
+```
+
+- **`checks`**: If this function throws, the handler responds with **503** and `{ status: 'unhealthy', error, ... }`. Return a plain object to merge into `checks` on success (e.g. dependency status).
+- Use a **custom `path`** if your app already serves `GET /health` from `pages/`.
+
+### Swagger / OpenAPI plugin
+
+Serves **OpenAPI 3** for file-based `pages/api` routes and optional [Zod](https://zod.dev) `schema` exports, plus a **Swagger UI** page. Defaults to **development only** (same idea as the schema explorer).
+
+**Setup:**
+
+```javascript
+const { createApp, swaggerPlugin } = require('webspresso');
+
+const app = createApp({
+  plugins: [
+    swaggerPlugin({
+      path: '/_swagger',           // UI: GET /_swagger, spec: GET /_swagger/openapi.json
+      enabled: true,               // default: true in development, false in production
+      title: 'My API',             // optional OpenAPI info.title
+      serverUrl: 'https://api.example.com', // optional servers[0].url (else BASE_URL or localhost)
+      includeOrmSchemas: false,    // merge ORM model schemas into components.schemas
+      ormExclude: ['Secret'],      // when includeOrmSchemas is true
+      authorize: (req) => true,  // optional gate for both UI and JSON
+    }),
+  ],
+});
+```
+
+**Endpoints:**
+
+- `GET /_swagger/openapi.json` — Full OpenAPI document (`paths` from API routes; request/response shapes from exported `schema({ z })` when present).
+- `GET /_swagger` — Swagger UI (loads the JSON above; requires network access for CDN assets).
+
+In production, keep the plugin disabled or protect it with `authorize` / your own middleware.
 
 ## Development
 

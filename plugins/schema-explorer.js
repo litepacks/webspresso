@@ -6,6 +6,7 @@
 
 const { getAllModels, getModel } = require('../core/orm/model');
 const { getColumnMeta } = require('../core/orm/schema-helpers');
+const { generateOrmOpenApiSchemas } = require('../core/openapi/orm-components');
 
 /**
  * Create Schema Explorer plugin
@@ -99,7 +100,7 @@ function schemaExplorerPlugin(options = {}) {
           return res.status(403).json({ error: 'Forbidden' });
         }
 
-        const openApiSchemas = generateOpenApiSchemas({ exclude });
+        const openApiSchemas = generateOrmOpenApiSchemas({ exclude });
 
         res.json({
           openapi: '3.0.0',
@@ -257,138 +258,6 @@ function serializeRelations(relations) {
       foreignKey: relation.foreignKey,
       localKey: relation.localKey || 'id',
     });
-  }
-
-  return result;
-}
-
-/**
- * Generate OpenAPI schemas from models
- * @param {Object} options
- * @returns {Object}
- */
-function generateOpenApiSchemas(options) {
-  const { exclude } = options;
-  const models = getAllModels();
-  const schemas = {};
-
-  for (const [name, model] of models) {
-    if (exclude.includes(name)) continue;
-
-    const properties = {};
-    const required = [];
-
-    if (model.columns) {
-      for (const [colName, meta] of model.columns) {
-        properties[colName] = columnToOpenApiType(meta);
-        
-        if (!meta.nullable && !meta.autoIncrement && meta.default === undefined) {
-          required.push(colName);
-        }
-      }
-    }
-
-    schemas[name] = {
-      type: 'object',
-      properties,
-      required: required.length > 0 ? required : undefined,
-    };
-
-    // Add input schema (without auto fields)
-    const inputProperties = {};
-    const inputRequired = [];
-
-    if (model.columns) {
-      for (const [colName, meta] of model.columns) {
-        // Skip auto-generated fields for input
-        if (meta.autoIncrement || meta.auto) continue;
-
-        inputProperties[colName] = columnToOpenApiType(meta);
-        
-        if (!meta.nullable && meta.default === undefined) {
-          inputRequired.push(colName);
-        }
-      }
-    }
-
-    schemas[`${name}Input`] = {
-      type: 'object',
-      properties: inputProperties,
-      required: inputRequired.length > 0 ? inputRequired : undefined,
-    };
-  }
-
-  return schemas;
-}
-
-/**
- * Convert column metadata to OpenAPI type
- * @param {Object} meta - Column metadata
- * @returns {Object}
- */
-function columnToOpenApiType(meta) {
-  const result = {};
-
-  switch (meta.type) {
-    case 'bigint':
-    case 'integer':
-      result.type = 'integer';
-      if (meta.type === 'bigint') result.format = 'int64';
-      break;
-
-    case 'float':
-    case 'decimal':
-      result.type = 'number';
-      if (meta.type === 'decimal') result.format = 'double';
-      break;
-
-    case 'boolean':
-      result.type = 'boolean';
-      break;
-
-    case 'date':
-      result.type = 'string';
-      result.format = 'date';
-      break;
-
-    case 'datetime':
-    case 'timestamp':
-      result.type = 'string';
-      result.format = 'date-time';
-      break;
-
-    case 'uuid':
-      result.type = 'string';
-      result.format = 'uuid';
-      break;
-
-    case 'json':
-      result.type = 'object';
-      break;
-
-    case 'enum':
-      result.type = 'string';
-      if (meta.enumValues) {
-        result.enum = meta.enumValues;
-      }
-      break;
-
-    case 'text':
-    case 'string':
-    default:
-      result.type = 'string';
-      if (meta.maxLength) {
-        result.maxLength = meta.maxLength;
-      }
-      break;
-  }
-
-  if (meta.nullable) {
-    result.nullable = true;
-  }
-
-  if (meta.default !== undefined) {
-    result.default = meta.default;
   }
 
   return result;

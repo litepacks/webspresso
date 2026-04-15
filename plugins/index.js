@@ -12,6 +12,8 @@ const seoCheckerPlugin = require('./seo-checker');
 const siteAnalyticsPlugin = require('./site-analytics');
 const auditLogPlugin = require('./audit-log');
 const recaptchaPlugin = require('./recaptcha');
+const swaggerPlugin = require('./swagger');
+const healthCheckPlugin = require('./health-check');
 
 module.exports = {
   sitemapPlugin,
@@ -23,5 +25,7 @@ module.exports = {
   siteAnalyticsPlugin,
   auditLogPlugin,
   recaptchaPlugin,
+  swaggerPlugin,
+  healthCheckPlugin,
 };
 
