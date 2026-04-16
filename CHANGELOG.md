@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### App context (`req.db`, `getDb()`, `attachDbMiddleware`)
+- **`req.db`** — set on each **`pages/api/*`** request when **`createApp({ db })`** is used (before handler and per-route **`middleware`**)
+- **`getDb()`**, **`hasDb()`**, **`getAppContext()`** — same instance for scripts/jobs/tests; registry filled by **`createApp`**
+- **`attachDbMiddleware`** — use in **`setupRoutes`** for manually registered routes that need **`req.db`**
+- **`resetAppContext()`** / **`setAppContext()`** — testing and advanced use
+
 #### ORM: Nanoid column type
 - **`zdb.nanoid()`** / **`zdb.nanoid({ maxLength })`**: URL-safe string primary key (VARCHAR in migrations; default length 21).
 - **`zdb.foreignNanoid(table, opts)`**: Foreign key to a nanoid primary key (`referenceColumn`, `nullable`, `maxLength`).

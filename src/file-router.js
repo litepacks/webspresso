@@ -397,6 +397,11 @@ function mountPages(app, options) {
     
     app[route.method](route.routePath, async (req, res, next) => {
       try {
+        // Same instance as createApp({ db }) / getAppContext().db — available to handler & route middleware
+        if (db != null) {
+          req.db = db;
+        }
+
         // Reload handler in dev mode
         if (isDev && require.cache[require.resolve(route.fullPath)]) {
           delete require.cache[require.resolve(route.fullPath)];

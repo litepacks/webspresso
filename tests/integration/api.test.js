@@ -154,4 +154,25 @@ describe('API Routes Integration', () => {
       expect(typeof res.body).toBe('object');
     });
   });
+
+  describe('req.db (createApp with db)', () => {
+    let appWithDb;
+
+    beforeAll(() => {
+      const fakeDb = { __fixtureMarker: true };
+      const result = createApp({
+        pagesDir: PAGES_DIR,
+        viewsDir: VIEWS_DIR,
+        db: fakeDb,
+      });
+      appWithDb = result.app;
+    });
+
+    it('should attach db to req before handler and middleware', async () => {
+      const res = await request(appWithDb).get('/api/db-context').expect(200);
+
+      expect(res.body.hasRequestDb).toBe(true);
+      expect(res.body.marker).toBe(true);
+    });
+  });
 });

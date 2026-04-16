@@ -8,6 +8,7 @@ const helmet = require('helmet');
 const nunjucks = require('nunjucks');
 const timeout = require('connect-timeout');
 
+const { setAppContext } = require('./app-context');
 const { mountPages } = require('./file-router');
 const { configureAssets, createHelpers, getScriptInjector } = require('./helpers');
 const { createPluginManager } = require('./plugin-manager');
@@ -200,6 +201,8 @@ function createApp(options = {}) {
   if (!pagesDir) {
     throw new Error('pagesDir is required');
   }
+
+  setAppContext({ db: options.db ?? null });
   
   const app = express();
   

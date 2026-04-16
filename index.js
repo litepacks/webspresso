@@ -3,6 +3,14 @@
  */
 
 const { createApp } = require('./src/server');
+const {
+  attachDbMiddleware,
+  getAppContext,
+  getDb,
+  hasDb,
+  resetAppContext,
+  setAppContext,
+} = require('./src/app-context');
 const { 
   mountPages, 
   filePathToRoute, 
@@ -35,6 +43,13 @@ const { schemaExplorerPlugin, adminPanelPlugin, siteAnalyticsPlugin, auditLogPlu
 module.exports = {
   // Main API
   createApp,
+
+  attachDbMiddleware,
+  getAppContext,
+  getDb,
+  hasDb,
+  resetAppContext,
+  setAppContext,
   
   // Router utilities (for advanced use)
   mountPages,

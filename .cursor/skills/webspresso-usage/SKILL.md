@@ -162,7 +162,7 @@ Analytics plugin adds `fsy.analyticsHead`, `fsy.verificationTags`, etc., when co
 
 **Transactions:** `db.transaction(async (trx) => { trx.getRepository('User') })`.
 
-Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and plugins.
+Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and plugins. **`pages/api/`** handlers receive **`req.db`** (and route **`middleware`** runs after it). Outside requests, use **`getDb()`** / **`hasDb()`**; for **`setupRoutes`**-only routes, use **`attachDbMiddleware`**.
 
 ---
 

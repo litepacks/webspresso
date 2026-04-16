@@ -336,7 +336,7 @@ Creates and configures the Express app.
 - `pagesDir` (required): Path to pages directory
 - `viewsDir` (optional): Path to views/layouts directory
 - `publicDir` (optional): Path to public/static directory
-- `db` (optional): Database instance — exposed as `ctx.db` in plugin hooks (`register`, `onRoutesReady`) and in page `load`/`meta` functions
+- `db` (optional): Database instance — exposed as `ctx.db` in plugin hooks (`register`, `onRoutesReady`) and in page `load`/`meta` functions; also registered for [`getDb()` / `getAppContext()`](#app-context-getdb-hasdb-getappcontext) below
 - `logging` (optional): Enable request logging (default: true in development)
 - `helmet` (optional): Helmet security configuration
   - `true` or `undefined`: Use default secure configuration
@@ -385,6 +385,54 @@ module.exports = {
   handler: (req, res) => res.json({ data: 'protected' })
 };
 ```
+
+### App context (`req.db`, `getDb`, `attachDbMiddleware`)
+
+With **`createApp({ db })`**, file-based **API** routes (`pages/api/*.js`) get the same ORM instance on **`req.db`** before your **`middleware`** array and the handler run — no extra `require` in the handler:
+
+```javascript
+module.exports = async function handler(req, res) {
+  if (!req.db) {
+    return res.status(503).json({ error: 'Database not configured' });
+  }
+  const posts = await req.db.getRepository('Post').query().limit(10).list();
+  res.json(posts);
+};
+
+module.exports.middleware = ['auth']; // can use req.db too
+```
+
+The framework also registers that instance for **non-request** code (scripts, jobs) and for tests:
+
+```javascript
+const { getDb, hasDb } = require('webspresso');
+// hasDb() / getDb() — getDb() throws if createApp had no db
+```
+
+For routes you add manually in **`setupRoutes`**, run **`attachDbMiddleware`** early so those handlers get `req.db`:
+
+```javascript
+const { createApp, attachDbMiddleware } = require('webspresso');
+
+createApp({
+  pagesDir: './pages',
+  db,
+  setupRoutes(app) {
+    app.use(attachDbMiddleware);
+    app.get('/custom/api', (req, res) => res.json({ ok: !!req.db }));
+  },
+});
+```
+
+| Export | Role |
+|--------|------|
+| `req.db` | Set on each API request when `createApp({ db })` was used (file-based API routes + after `attachDbMiddleware`) |
+| `getDb()` | Same instance as `req.db`; **throws** if no `db` was passed to `createApp` |
+| `hasDb()` | `true` if `createApp` was given `db` |
+| `getAppContext()` | `{ db }` — `db` may be `null` |
+| `attachDbMiddleware` | Express middleware to populate `req.db` for non–file-router routes |
+| `resetAppContext()` | Clears context (mainly for tests) |
+| `setAppContext(partial)` | Low-level merge; normally only `createApp` uses this |
 
 **Custom Error Pages:**
 
