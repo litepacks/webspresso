@@ -3,7 +3,7 @@
  */
 
 module.exports = async function handler(req, res) {
-  res.json({ ok: true, title: req.body?.title });
+  res.json({ ok: true, title: req.input.body.title });
 };
 
 module.exports.schema = ({ z }) => ({

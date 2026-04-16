@@ -155,6 +155,83 @@ describe('API Routes Integration', () => {
     });
   });
 
+  describe('Zod schema (req.input)', () => {
+    it('should populate req.input.body when schema validates', async () => {
+      const res = await request(app)
+        .post('/api/doc-demo')
+        .send({ title: 'Hello' })
+        .set('Content-Type', 'application/json')
+        .expect(200);
+
+      expect(res.body).toEqual({ ok: true, title: 'Hello' });
+    });
+
+    it('should return 400 when body fails schema', async () => {
+      const res = await request(app)
+        .post('/api/doc-demo')
+        .send({})
+        .set('Content-Type', 'application/json')
+        .expect(400);
+
+      expect(res.body.error).toBe('Validation Error');
+      expect(Array.isArray(res.body.issues)).toBe(true);
+    });
+  });
+
+  describe('API object export (middleware + handler + schema)', () => {
+    let appWithAuth;
+
+    beforeAll(() => {
+      const result = createApp({
+        pagesDir: PAGES_DIR,
+        viewsDir: VIEWS_DIR,
+        middlewares: {
+          fixtureRequireAuth: (req, res, next) => {
+            if (req.get('x-test-auth') !== 'yes') {
+              return res.status(401).json({ error: 'Unauthorized' });
+            }
+            next();
+          },
+        },
+      });
+      appWithAuth = result.app;
+    });
+
+    it('should validate body before named middleware (400 before 401)', async () => {
+      await request(appWithAuth)
+        .post('/api/object-auth')
+        .set('x-test-auth', 'yes')
+        .send({})
+        .set('Content-Type', 'application/json')
+        .expect(400);
+    });
+
+    it('should reject when auth middleware fails after valid body', async () => {
+      const res = await request(appWithAuth)
+        .post('/api/object-auth')
+        .send({ q: 'hi' })
+        .set('Content-Type', 'application/json')
+        .expect(401);
+
+      expect(res.body.error).toBe('Unauthorized');
+    });
+
+    it('should run handler with req.input after schema and middleware', async () => {
+      const res = await request(appWithAuth)
+        .post('/api/object-auth')
+        .set('x-test-auth', 'yes')
+        .send({ q: 'search' })
+        .set('Content-Type', 'application/json')
+        .expect(200);
+
+      expect(res.body).toEqual({
+        results: [],
+        q: 'search',
+        mode: 'object-export',
+      });
+    });
+  });
+
   describe('req.db (createApp with db)', () => {
     let appWithDb;
 

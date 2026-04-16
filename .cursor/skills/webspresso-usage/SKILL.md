@@ -102,9 +102,11 @@ project/
 **Shapes**
 
 1. **Function** — `module.exports = async (req, res) => { ... }`
-2. **Object** — `schema`, `handler`, optional `middleware`
+2. **Object** — **`handler`**, optional **`middleware`** (names from **`createApp({ middlewares })`**), optional **`schema`**
 
-**Zod** — `schema: ({ z }) => ({ body, query, params, response })` → validated data on **`req.input`**.
+**Order:** `req.db` (if any) → **Zod** `schema` → **`middleware`** → **`handler`**.
+
+**Zod** — `schema: ({ z }) => ({ body, query, params, response })` → **`req.input`**; invalid → **400** `{ error: 'Validation Error', issues }`.
 
 ---
 
@@ -150,7 +152,7 @@ Analytics plugin adds `fsy.analyticsHead`, `fsy.verificationTags`, etc., when co
 - **Relations:** `belongsTo`, `hasMany`, `hasOne` with `model: () => OtherModel`.
 - **Scopes:** `softDelete`, `timestamps`, optional `tenant` column.
 - **`hidden`:** columns never exposed in admin/API (e.g. `password_hash`).
-- **Nanoid PK:** `zdb.nanoid()` / `zdb.nanoid({ maxLength: 12 })` — string primary key; migrations use `string(length)`. On **`create()`**, omitting the PK auto-fills a URL-safe id (built-in generator, same alphabet as `nanoid`). Use **`zdb.foreignNanoid('table', { maxLength })`** when the parent uses nanoid PKs; **`generateNanoid`** is exported from `webspresso` for manual ids.
+- **Nanoid PK:** `zdb.nanoid()` / `zdb.nanoid({ maxLength: 12 })` — string primary key; migrations use `string(length)`. On **`create()`**, omitting the PK auto-fills a URL-safe id (built-in generator, same alphabet as `nanoid`). Use **`zdb.foreignNanoid('table', { maxLength })`** when the parent uses nanoid PKs; **`generateNanoid`** is exported from `webspresso` for manual ids. In API **`schema`**, use **`z.nanoid()`** / **`z.nanoid(12)`** / **`z.nanoid({ maxLength })`** (the `z` from `schema: ({ z })` is extended by Webspresso). **`zodNanoid`** / **`extendZ`** are also exported for non-route use.
 
 **Database:** `createDatabase({ client, connection, models: './models' })` — auto-loads `models/*.js` (ignore `_prefix`).
 

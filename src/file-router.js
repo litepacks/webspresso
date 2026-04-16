@@ -5,6 +5,9 @@
 
 const fs = require('fs');
 const path = require('path');
+const { ZodError } = require('zod');
+const { compileSchema, invalidateSchema } = require('../core/compileSchema');
+const { applySchema } = require('../core/applySchema');
 const { createHelpers } = require('./helpers');
 
 // Cache for i18n files (key: filePath, value: { mtime, data })
@@ -412,6 +415,30 @@ function mountPages(app, options) {
         const fn = typeof currentHandler === 'function' 
           ? currentHandler 
           : currentHandler.default || currentHandler.handler;
+
+        if (isDev) {
+          invalidateSchema(route.fullPath);
+        }
+        let compiledSchema;
+        try {
+          compiledSchema = compileSchema(route.fullPath, currentHandler);
+        } catch (schemaErr) {
+          console.error(`API schema compile error ${route.routePath}:`, schemaErr);
+          res.status(500).json({ error: 'Internal Server Error', message: schemaErr.message });
+          return;
+        }
+
+        try {
+          applySchema(req, compiledSchema);
+        } catch (err) {
+          if (err instanceof ZodError) {
+            return res.status(400).json({
+              error: 'Validation Error',
+              issues: err.issues,
+            });
+          }
+          throw err;
+        }
         
         // Run middleware if defined
         const mwConfig = isDev ? currentHandler.middleware : routeMiddleware;

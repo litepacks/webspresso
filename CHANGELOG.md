@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### API routes: runtime Zod + object export
+- **`schema`** on `pages/api/*.js` is applied before **`middleware`** and **`handler`**; validated data on **`req.input`**; failures **`400`** `{ error: 'Validation Error', issues }`
+- Documented **object export**: `{ middleware: ['name'], schema, handler }` with **`createApp({ middlewares: { name } })`**
+
 #### App context (`req.db`, `getDb()`, `attachDbMiddleware`)
 - **`req.db`** — set on each **`pages/api/*`** request when **`createApp({ db })`** is used (before handler and per-route **`middleware`**)
 - **`getDb()`**, **`hasDb()`**, **`getAppContext()`** — same instance for scripts/jobs/tests; registry filled by **`createApp`**
@@ -19,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`zdb.nanoid()`** / **`zdb.nanoid({ maxLength })`**: URL-safe string primary key (VARCHAR in migrations; default length 21).
 - **`zdb.foreignNanoid(table, opts)`**: Foreign key to a nanoid primary key (`referenceColumn`, `nullable`, `maxLength`).
 - **Auto-fill on create:** Omitting the PK on `repository.create()` generates an id via built-in **`generateNanoid`** (same default alphabet as the `nanoid` package; no extra npm dependency). **`generateNanoid`** is exported from `webspresso`.
+- **`zodNanoid(z, size?)`**: Zod helper for API `schema` validation (params/query/body) matching the same alphabet and length as **`generateNanoid`** / **`zdb.nanoid({ maxLength })`**.
+- **`z.nanoid()`** on the `z` passed to **`schema: ({ z }) => …`**: same as **`zodNanoid`**, via **`extendZ`** (also exported). Supports **`z.nanoid()`**, **`z.nanoid(12)`**, **`z.nanoid({ maxLength: 12 })`**.
 - OpenAPI, admin field renderers, and seeders recognize the `nanoid` column type.
 
 #### Plugin Error Handling (Graceful Degradation)

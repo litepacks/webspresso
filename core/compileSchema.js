@@ -4,7 +4,11 @@
  */
 
 const z = require('zod');
+const { extendZ } = require('./orm/utils/nanoid');
 const schemaCache = require('../utils/schemaCache');
+
+/** Zod plus `z.nanoid()` for API schemas (does not mutate the global `z`). */
+const zForApi = extendZ(z);
 
 /**
  * Compile schema from an API module
@@ -32,8 +36,8 @@ function compileSchema(filePath, apiModule) {
     throw new Error(`Schema in ${filePath} must be a function`);
   }
 
-  // Call schema function with { z }
-  const compiled = schemaFn({ z });
+  // Call schema function with { z } (extended with z.nanoid, same as generateNanoid / zdb.nanoid)
+  const compiled = schemaFn({ z: zForApi });
 
   // Validate compiled schema structure
   if (compiled !== null && typeof compiled !== 'object') {

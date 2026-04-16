@@ -102,9 +102,11 @@ project/
 **Shapes**
 
 1. **Function** — `module.exports = async (req, res) => { ... }`
-2. **Object** — `schema`, `handler`, optional `middleware`
+2. **Object** — **`handler`**, optional **`middleware`** (names from **`createApp({ middlewares })`**), optional **`schema`**
 
-**Zod** — `schema: ({ z }) => ({ body, query, params, response })` → validated data on **`req.input`**.
+**Order:** `req.db` (if any) → **Zod** `schema` → **`middleware`** → **`handler`**.
+
+**Zod** — `schema: ({ z }) => ({ body, query, params, response })` → **`req.input`**; invalid → **400** `{ error: 'Validation Error', issues }`.
 
 ---
 

@@ -1030,7 +1030,40 @@ module.exports = async function handler(req, res) {
 };
 ```
 
-**With Schema Validation:**
+**Object export (`handler`, `middleware`, `schema`):**
+
+Use a single export object when you need **named middleware** from `createApp({ middlewares })` and/or a **Zod** `schema`. Order at runtime: **`req.db`** (if configured) → **schema** (`req.input`) → **middleware** chain → **handler**.
+
+```javascript
+// pages/api/search.post.js
+module.exports = {
+  middleware: ['requireAuth'],
+  schema: ({ z }) => ({
+    body: z.object({ q: z.string() }),
+  }),
+  handler: async (req, res) => {
+    const { q } = req.input.body;
+    const results = [];
+    return res.json({ results, q });
+  },
+};
+```
+
+Register `requireAuth` (and any other names) on the app:
+
+```javascript
+createApp({
+  pagesDir: './pages',
+  middlewares: {
+    requireAuth: (req, res, next) => {
+      if (!req.session?.user) return res.status(401).json({ error: 'Unauthorized' });
+      next();
+    },
+  },
+});
+```
+
+**With Schema Validation (same object shape):**
 
 ```javascript
 // pages/api/posts.post.js
@@ -1066,7 +1099,25 @@ module.exports = {
 | `query` | Validates query string parameters |
 | `response` | Response schema (for documentation, not enforced) |
 
-All schemas use [Zod](https://zod.dev) for validation. Invalid requests throw a `ZodError` which can be caught by error handlers.
+All schemas use [Zod](https://zod.dev) for validation. Invalid requests receive **`400 JSON`**: `{ error: 'Validation Error', issues: [...] }` (no `handler` / `middleware` run).
+
+For **nanoid** route parameters (same alphabet and default length as **`generateNanoid`** / **`zdb.nanoid()`**), use **`z.nanoid()`** on the `z` passed into your API schema (Webspresso extends it; no extra import). Optional: **`z.nanoid(12)`** or **`z.nanoid({ maxLength: 12 })`** (matches **`zdb.nanoid({ maxLength })`**). For scripts or tests outside `schema: ({ z })`, **`zodNanoid(z, size?)`** and **`extendZ(z)`** are exported from `webspresso`.
+
+```javascript
+module.exports = {
+  schema: ({ z }) => ({
+    params: z.object({
+      id: z.nanoid(),                  // default 21 chars
+      shortId: z.nanoid(12),           // numeric length
+      other: z.nanoid({ maxLength: 8 }), // zdb-style options
+    }),
+  }),
+  async handler(req, res) {
+    const { id } = req.input.params;
+    // ...
+  },
+};
+```
 
 **Dynamic Route with Params Validation:**
 

@@ -110,6 +110,24 @@ describe('compileSchema.js', () => {
       expect(typeof receivedZ.object).toBe('function');
       expect(typeof receivedZ.string).toBe('function');
       expect(typeof receivedZ.number).toBe('function');
+      expect(typeof receivedZ.nanoid).toBe('function');
+    });
+
+    it('should compile params using z.nanoid()', () => {
+      const { generateNanoid } = require('../../core/orm/utils/nanoid');
+      const apiModule = {
+        schema: ({ z }) => ({
+          params: z.object({
+            id: z.nanoid(),
+            shortId: z.nanoid({ maxLength: 10 }),
+          }),
+        }),
+      };
+      const compiled = compileSchema('/path/to/api/nanoid.js', apiModule);
+      const id = generateNanoid();
+      const shortId = generateNanoid(10);
+      expect(compiled.params.safeParse({ id, shortId }).success).toBe(true);
+      expect(compiled.params.safeParse({ id: 'bad', shortId }).success).toBe(false);
     });
 
     it('should cache different schemas for different file paths', () => {

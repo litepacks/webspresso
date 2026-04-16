@@ -353,6 +353,20 @@ const { app } = createApp({
   hooks: { beforeLoad: async () => {}, afterRender: async () => {} },
 };</code></pre>
 
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">API module shapes</h3>
+      <ul class="list-disc pl-5 text-slate-600 dark:text-slate-400 text-sm mb-4 space-y-1">
+        <li><strong class="text-slate-700 dark:text-slate-300">Function</strong> — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">module.exports = async (req, res) => { }</code></li>
+        <li><strong class="text-slate-700 dark:text-slate-300">Object</strong> — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">handler</code>, optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">middleware</code> (names from <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp({ middlewares })</code>), optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schema</code></li>
+      </ul>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-3">Per request: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.db</code> (if configured) → Zod <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schema</code> → <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">middleware</code> → <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">handler</code>.</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">module.exports = {
+  middleware: ['requireAuth'],
+  schema: ({ z }) => ({ body: z.object({ q: z.string() }) }),
+  handler: async (req, res) => {
+    return res.json({ q: req.input.body.q, results: [] });
+  },
+};</code></pre>
+
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Zod schemas (API)</h3>
       <div class="overflow-x-auto mb-4">
         <table class="w-full text-sm">
@@ -365,7 +379,7 @@ const { app } = createApp({
           </tbody>
         </table>
       </div>
-      <p class="text-slate-500 dark:text-slate-500 text-sm">Validated values are exposed on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.input</code>; invalid requests surface as <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">ZodError</code> for your error handler.</p>
+      <p class="text-slate-500 dark:text-slate-500 text-sm">Validated values are on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.input</code>; failures return <strong class="text-slate-700 dark:text-slate-300">400</strong> JSON <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">{ error: 'Validation Error', issues }</code>.</p>
     </section>
 
     <section id="plugins" class="doc-section mb-14">
@@ -421,7 +435,7 @@ const { app } = createApp({
           </tbody>
         </table>
       </div>
-      <p class="text-slate-600 dark:text-slate-400 mb-4 text-sm leading-relaxed"><strong class="text-slate-800 dark:text-slate-200">Nanoid columns:</strong> migration scaffolding uses <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">table.string(column, maxLength)</code>. For a <strong class="text-slate-800 dark:text-slate-200">nanoid primary key</strong>, omitting the PK on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">repository.create()</code> fills it with a cryptographically random ID (same default alphabet as the <a href="https://github.com/ai/nanoid" class="text-cyan-800 dark:text-cyan-400 hover:underline">nanoid</a> package; built into Webspresso, no extra npm dependency). Use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">generateNanoid</code> from <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso</code> when you need the same generator manually.</p>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 text-sm leading-relaxed"><strong class="text-slate-800 dark:text-slate-200">Nanoid columns:</strong> migration scaffolding uses <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">table.string(column, maxLength)</code>. For a <strong class="text-slate-800 dark:text-slate-200">nanoid primary key</strong>, omitting the PK on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">repository.create()</code> fills it with a cryptographically random ID (same default alphabet as the <a href="https://github.com/ai/nanoid" class="text-cyan-800 dark:text-cyan-400 hover:underline">nanoid</a> package; built into Webspresso, no extra npm dependency). Use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">generateNanoid</code> from <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso</code> when you need the same generator manually. For API <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schema</code> validation (params, query, body), use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">z.nanoid()</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">z.nanoid(n)</code>, or <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">z.nanoid({ maxLength })</code> on the <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">z</code> from your route schema (or <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zodNanoid</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">extendZ</code> outside compiled routes).</p>
 
       <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">const { zdb, defineModel, createDatabase } = require('webspresso');
 
@@ -537,7 +551,7 @@ module.exports = {
             <tr><td>Router utilities</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">mountPages</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">filePathToRoute</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">scanDirectory</code>, i18n helpers</td></tr>
             <tr><td>Templates &amp; assets</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createHelpers</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">AssetManager</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">configureAssets</code></td></tr>
             <tr><td>Plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">PluginManager</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createPluginManager</code></td></tr>
-            <tr><td>ORM</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineModel</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createDatabase</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">generateNanoid</code>, …</td></tr>
+            <tr><td>ORM</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineModel</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createDatabase</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">generateNanoid</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zodNanoid</code>, …</td></tr>
             <tr><td>Convenience plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schemaExplorerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">swaggerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">healthCheckPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">siteAnalyticsPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auditLogPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">recaptchaPlugin</code></td></tr>
           </tbody>
         </table>
