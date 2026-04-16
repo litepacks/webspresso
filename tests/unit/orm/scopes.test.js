@@ -8,6 +8,7 @@ const {
   applyInsertTimestamps,
   applyUpdateTimestamps,
   applyInsertTenant,
+  applyInsertNanoidPrimary,
   applyInsertModifiers,
   applyUpdateModifiers,
   getSoftDeleteData,
@@ -61,6 +62,16 @@ const modelWithNone = {
   table: 'logs',
   primaryKey: 'id',
   scopes: { softDelete: false, timestamps: false, tenant: null },
+};
+
+const modelWithNanoidPk = {
+  name: 'Nano',
+  table: 'nanos',
+  primaryKey: 'id',
+  scopes: { softDelete: false, timestamps: false, tenant: null },
+  columns: new Map([
+    ['id', { type: 'nanoid', primary: true, maxLength: 21 }],
+  ]),
 };
 
 describe('Scopes', () => {
@@ -209,6 +220,23 @@ describe('Scopes', () => {
     });
   });
 
+  describe('applyInsertNanoidPrimary', () => {
+    it('should generate nanoid when primary key is missing', () => {
+      const data = { title: 'Hello' };
+      const result = applyInsertNanoidPrimary(data, modelWithNanoidPk);
+      expect(result.title).toBe('Hello');
+      expect(result.id).toBeDefined();
+      expect(result.id).toHaveLength(21);
+      expect(result.id).toMatch(/^[A-Za-z0-9_-]+$/);
+    });
+
+    it('should not override existing primary key', () => {
+      const data = { id: 'custom_id_value_12345', title: 'Hi' };
+      const result = applyInsertNanoidPrimary(data, modelWithNanoidPk);
+      expect(result.id).toBe('custom_id_value_12345');
+    });
+  });
+
   describe('applyInsertModifiers', () => {
     it('should apply all insert modifiers', () => {
       const data = { name: 'Test' };
@@ -220,6 +248,13 @@ describe('Scopes', () => {
       expect(result.created_at).toBeInstanceOf(Date);
       expect(result.updated_at).toBeInstanceOf(Date);
       expect(result.tenant_id).toBe(100);
+    });
+
+    it('should generate nanoid primary for nanoid models', () => {
+      const data = { label: 'x' };
+      const result = applyInsertModifiers(data, createScopeContext(), modelWithNanoidPk);
+      expect(result.label).toBe('x');
+      expect(result.id).toHaveLength(21);
     });
   });
 

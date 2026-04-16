@@ -101,6 +101,13 @@ function columnToOpenApiType(meta) {
       result.format = 'uuid';
       break;
 
+    case 'nanoid':
+      result.type = 'string';
+      if (meta.maxLength) {
+        result.maxLength = meta.maxLength;
+      }
+      break;
+
     case 'json':
       result.type = 'object';
       break;

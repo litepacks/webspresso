@@ -91,6 +91,25 @@ describe('Schema Helpers', () => {
       });
     });
 
+    describe('nanoid()', () => {
+      it('should create a nanoid primary key column', () => {
+        const builder = zdb.nanoid();
+        const schema = builder._finalize();
+        const meta = getColumnMeta(schema);
+        
+        expect(meta.type).toBe('nanoid');
+        expect(meta.primary).toBe(true);
+        expect(meta.maxLength).toBe(21);
+      });
+
+      it('should accept custom maxLength', () => {
+        const builder = zdb.nanoid({ maxLength: 12 });
+        const schema = builder._finalize();
+        const meta = getColumnMeta(schema);
+        expect(meta.maxLength).toBe(12);
+      });
+    });
+
     describe('string()', () => {
       it('should create a string column with default maxLength', () => {
         const builder = zdb.string();
@@ -307,6 +326,18 @@ describe('Schema Helpers', () => {
         
         expect(meta.type).toBe('uuid');
         expect(meta.references).toBe('users');
+      });
+    });
+
+    describe('foreignNanoid()', () => {
+      it('should create a nanoid foreign key column', () => {
+        const builder = zdb.foreignNanoid('posts');
+        const schema = builder._finalize();
+        const meta = getColumnMeta(schema);
+        
+        expect(meta.type).toBe('nanoid');
+        expect(meta.references).toBe('posts');
+        expect(meta.maxLength).toBe(21);
       });
     });
 

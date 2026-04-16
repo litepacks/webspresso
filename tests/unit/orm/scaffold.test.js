@@ -121,6 +121,27 @@ describe('Migration Scaffold', () => {
       expect(line).toContain("table.uuid('id')");
       expect(line).toContain('.primary()');
     });
+
+    it('should generate nanoid primary column as varchar', () => {
+      const meta = { type: 'nanoid', primary: true, maxLength: 21 };
+      const { line } = generateColumnLine('id', meta);
+      
+      expect(line).toContain("table.string('id', 21)");
+      expect(line).toContain('.primary()');
+    });
+
+    it('should generate nanoid foreign key', () => {
+      const meta = {
+        type: 'nanoid',
+        references: 'posts',
+        referenceColumn: 'id',
+        maxLength: 12,
+      };
+      const { line, fkLine } = generateColumnLine('post_id', meta);
+      
+      expect(line).toContain("table.string('post_id', 12)");
+      expect(fkLine).toContain("references('id').inTable('posts')");
+    });
   });
 
   describe('scaffoldMigration', () => {

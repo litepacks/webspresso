@@ -360,6 +360,30 @@ function createSchemaHelpers(z) {
     },
 
     /**
+     * Nanoid primary key column (URL-safe string, default length 21)
+     * @param {Partial<import('./types').ColumnMeta>} [options={}]
+     * @returns {SchemaBuilder}
+     */
+    nanoid(options = {}) {
+      const { maxLength = 21, ...rest } = options;
+      const schema = z
+        .string()
+        .length(maxLength)
+        .regex(/^[A-Za-z0-9_-]+$/)
+        .optional();
+      return createSchemaBuilder(
+        schema,
+        {
+          type: 'nanoid',
+          primary: true,
+          maxLength,
+          ...rest,
+        },
+        z
+      );
+    },
+
+    /**
      * String column (varchar)
      * @param {Partial<import('./types').ColumnMeta>} [options={}]
      * @returns {SchemaBuilder}
@@ -664,6 +688,36 @@ function createSchemaHelpers(z) {
         references,
         referenceColumn,
         nullable,
+        ...rest,
+      }, z);
+    },
+
+    /**
+     * Nanoid foreign key column
+     * @param {string} references - Referenced table name
+     * @param {Partial<import('./types').ColumnMeta>} [options={}]
+     * @returns {SchemaBuilder}
+     */
+    foreignNanoid(references, options = {}) {
+      const {
+        referenceColumn = 'id',
+        nullable = false,
+        maxLength = 21,
+        ...rest
+      } = options;
+      let schema = z
+        .string()
+        .length(maxLength)
+        .regex(/^[A-Za-z0-9_-]+$/);
+      if (nullable) {
+        schema = schema.nullable().optional();
+      }
+      return createSchemaBuilder(schema, {
+        type: 'nanoid',
+        references,
+        referenceColumn,
+        nullable,
+        maxLength,
         ...rest,
       }, z);
     },

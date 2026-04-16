@@ -199,6 +199,7 @@ describe('Schema Explorer Plugin Integration', () => {
         birth_date: zdb.date(),
         metadata: zdb.json({ nullable: true }),
         content: zdb.text(),
+        parent_id: zdb.foreignNanoid('parents', { nullable: true }),
       });
 
       defineModel({ name: 'Test', table: 'tests', schema });
@@ -219,6 +220,8 @@ describe('Schema Explorer Plugin Integration', () => {
       expect(props.birth_date.format).toBe('date');
       expect(props.metadata.type).toBe('object');
       expect(props.content.type).toBe('string');
+      expect(props.parent_id.type).toBe('string');
+      expect(props.parent_id.maxLength).toBe(21);
     });
   });
 

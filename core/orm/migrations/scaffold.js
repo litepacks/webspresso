@@ -164,6 +164,19 @@ function generateColumnLine(columnName, meta) {
       }
       break;
 
+    case 'nanoid': {
+      const nanoLen = meta.maxLength || 21;
+      if (meta.primary) {
+        parts.push(`table.string('${columnName}', ${nanoLen})`);
+      } else if (meta.references) {
+        parts.push(`table.string('${columnName}', ${nanoLen})`);
+        fkLine = `table.foreign('${columnName}').references('${meta.referenceColumn || 'id'}').inTable('${meta.references}');`;
+      } else {
+        parts.push(`table.string('${columnName}', ${nanoLen})`);
+      }
+      break;
+    }
+
     default:
       parts.push(`table.string('${columnName}')`);
   }

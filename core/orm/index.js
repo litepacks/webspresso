@@ -14,6 +14,7 @@ const { createSeeder } = require('./seeder');
 const { createScopeContext } = require('./scopes');
 const { ModelEvents, Hooks, HookCancellationError, createEventContext } = require('./events');
 const { omitHiddenColumns, sanitizeForOutput } = require('./utils');
+const { generateNanoid } = require('./utils/nanoid');
 
 /**
  * Create a database instance
@@ -273,6 +274,7 @@ module.exports = {
   // Column utilities
   extractColumnsFromSchema,
   getColumnMeta,
+  generateNanoid,
   // Output sanitization (exclude hidden columns from API/templates)
   omitHiddenColumns,
   sanitizeForOutput,

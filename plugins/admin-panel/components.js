@@ -1083,6 +1083,7 @@ function getFieldRenderer(col, modelMeta) {
     json: 'json',
     array: 'array',
     uuid: 'string',
+    nanoid: 'string',
   };
   return FieldRenderers[typeMap[col.type] || 'string'];
 }

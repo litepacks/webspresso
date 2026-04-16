@@ -5,6 +5,7 @@
  */
 
 const { getModel, getAllModels } = require('./model');
+const { generateNanoid } = require('./utils/nanoid');
 
 /**
  * @typedef {Object} SeederOptions
@@ -188,6 +189,9 @@ function createSeeder(faker, knex) {
 
       case 'uuid':
         return faker.string.uuid();
+
+      case 'nanoid':
+        return generateNanoid(meta.maxLength || 21);
 
       case 'json':
         return { key: faker.lorem.word(), value: faker.lorem.sentence() };

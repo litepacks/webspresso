@@ -143,13 +143,14 @@ Analytics plugin adds `fsy.analyticsHead`, `fsy.verificationTags`, etc., when co
 
 ## 9. ORM overview
 
-**Define schema** with **`zdb`** (`zdb.id()`, `zdb.string({...})`, `zdb.foreignKey`, `zdb.timestamp`, `zdb.json`, …).
+**Define schema** with **`zdb`** (`zdb.id()`, `zdb.uuid()`, `zdb.nanoid()`, `zdb.string({...})`, `zdb.foreignKey`, `zdb.foreignUuid`, `zdb.foreignNanoid`, `zdb.timestamp`, `zdb.json`, …).
 
 **Define model** with **`defineModel({ name, table, schema, relations, scopes, hidden, admin })`**.
 
 - **Relations:** `belongsTo`, `hasMany`, `hasOne` with `model: () => OtherModel`.
 - **Scopes:** `softDelete`, `timestamps`, optional `tenant` column.
 - **`hidden`:** columns never exposed in admin/API (e.g. `password_hash`).
+- **Nanoid PK:** `zdb.nanoid()` / `zdb.nanoid({ maxLength: 12 })` — string primary key; migrations use `string(length)`. On **`create()`**, omitting the PK auto-fills a URL-safe id (built-in generator, same alphabet as `nanoid`). Use **`zdb.foreignNanoid('table', { maxLength })`** when the parent uses nanoid PKs; **`generateNanoid`** is exported from `webspresso` for manual ids.
 
 **Database:** `createDatabase({ client, connection, models: './models' })` — auto-loads `models/*.js` (ignore `_prefix`).
 

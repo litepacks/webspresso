@@ -391,7 +391,38 @@ const { app } = createApp({
 
     <section id="database" class="doc-section mb-14">
       <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">ORM &amp; database</h2>
-      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">The ORM layers Knex with Zod: column metadata lives on Zod schemas via <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb</code> helpers (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb.id()</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb.string()</code>, relations, soft deletes, …). Repositories provide <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">findById</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">query()</code> with pagination, transactions, and migrations via the same Knex instance.</p>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">The ORM layers Knex with Zod: column metadata lives on Zod schemas via <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb</code> helpers (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb.id()</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb.uuid()</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb.nanoid()</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb.string()</code>, foreign keys, relations, soft deletes, …). Repositories provide <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">findById</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">query()</code> with pagination, transactions, and migrations via the same Knex instance.</p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Schema helpers (<code class="font-mono text-base font-normal">zdb</code>)</h3>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm">Helpers wrap Zod with database column metadata (same surface as <a href="https://github.com/litepacks/webspresso/blob/main/README.md#schema-helpers-zdb" class="text-cyan-800 dark:text-cyan-400 hover:underline">README — Schema helpers</a>).</p>
+      <div class="overflow-x-auto mb-4">
+        <table class="w-full text-sm">
+          <thead><tr><th>Helper</th><th>Description</th><th>Options</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">zdb.id()</code></td><td>Primary key (bigint, auto-increment)</td><td>—</td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.uuid()</code></td><td>UUID primary key</td><td>—</td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.nanoid(opts)</code></td><td>Nanoid primary key (URL-safe string, VARCHAR)</td><td><code class="whitespace-nowrap">maxLength</code> (default <code class="whitespace-nowrap">21</code>)</td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.string(opts)</code></td><td>VARCHAR column</td><td><code class="whitespace-nowrap">maxLength</code>, <code class="whitespace-nowrap">unique</code>, <code class="whitespace-nowrap">index</code>, <code class="whitespace-nowrap">nullable</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.text(opts)</code></td><td>TEXT column</td><td><code class="whitespace-nowrap">nullable</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.integer(opts)</code></td><td>INTEGER column</td><td><code class="whitespace-nowrap">nullable</code>, <code class="whitespace-nowrap">default</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.bigint(opts)</code></td><td>BIGINT column</td><td><code class="whitespace-nowrap">nullable</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.float(opts)</code></td><td>FLOAT column</td><td><code class="whitespace-nowrap">nullable</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.decimal(opts)</code></td><td>DECIMAL column</td><td><code class="whitespace-nowrap">precision</code>, <code class="whitespace-nowrap">scale</code>, <code class="whitespace-nowrap">nullable</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.boolean(opts)</code></td><td>BOOLEAN column</td><td><code class="whitespace-nowrap">default</code>, <code class="whitespace-nowrap">nullable</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.date(opts)</code></td><td>DATE column</td><td><code class="whitespace-nowrap">nullable</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.datetime(opts)</code></td><td>DATETIME column</td><td><code class="whitespace-nowrap">nullable</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.timestamp(opts)</code></td><td>TIMESTAMP column</td><td><code class="whitespace-nowrap">auto: 'create'|'update'</code>, <code class="whitespace-nowrap">nullable</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.json(opts)</code></td><td>JSON column</td><td><code class="whitespace-nowrap">nullable</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.array(itemSchema, opts)</code></td><td>ARRAY column (stored as JSON)</td><td><code class="whitespace-nowrap">nullable</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.enum(values, opts)</code></td><td>ENUM column</td><td><code class="whitespace-nowrap">default</code>, <code class="whitespace-nowrap">nullable</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.foreignKey(table, opts)</code></td><td>Foreign key (bigint)</td><td><code class="whitespace-nowrap">referenceColumn</code>, <code class="whitespace-nowrap">nullable</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.foreignUuid(table, opts)</code></td><td>Foreign key (uuid)</td><td><code class="whitespace-nowrap">referenceColumn</code>, <code class="whitespace-nowrap">nullable</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">zdb.foreignNanoid(table, opts)</code></td><td>Foreign key (nanoid string)</td><td><code class="whitespace-nowrap">referenceColumn</code>, <code class="whitespace-nowrap">nullable</code>, <code class="whitespace-nowrap">maxLength</code> (match referenced PK)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 text-sm leading-relaxed"><strong class="text-slate-800 dark:text-slate-200">Nanoid columns:</strong> migration scaffolding uses <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">table.string(column, maxLength)</code>. For a <strong class="text-slate-800 dark:text-slate-200">nanoid primary key</strong>, omitting the PK on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">repository.create()</code> fills it with a cryptographically random ID (same default alphabet as the <a href="https://github.com/ai/nanoid" class="text-cyan-800 dark:text-cyan-400 hover:underline">nanoid</a> package; built into Webspresso, no extra npm dependency). Use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">generateNanoid</code> from <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso</code> when you need the same generator manually.</p>
+
       <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">const { zdb, defineModel, createDatabase } = require('webspresso');
 
 const User = defineModel({
@@ -506,7 +537,7 @@ module.exports = {
             <tr><td>Router utilities</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">mountPages</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">filePathToRoute</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">scanDirectory</code>, i18n helpers</td></tr>
             <tr><td>Templates &amp; assets</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createHelpers</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">AssetManager</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">configureAssets</code></td></tr>
             <tr><td>Plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">PluginManager</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createPluginManager</code></td></tr>
-            <tr><td>ORM</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineModel</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createDatabase</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb</code>, …</td></tr>
+            <tr><td>ORM</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineModel</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createDatabase</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">generateNanoid</code>, …</td></tr>
             <tr><td>Convenience plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schemaExplorerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">swaggerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">healthCheckPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">siteAnalyticsPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auditLogPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">recaptchaPlugin</code></td></tr>
           </tbody>
         </table>

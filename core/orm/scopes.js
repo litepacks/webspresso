@@ -4,6 +4,8 @@
  * @module core/orm/scopes
  */
 
+const { generateNanoid } = require('./utils/nanoid');
+
 /**
  * Apply soft delete scope to a query builder
  * @param {import('knex').Knex.QueryBuilder} qb - Knex query builder
@@ -116,6 +118,29 @@ function applyInsertTenant(data, context, model) {
 }
 
 /**
+ * Generate nanoid primary key when missing on insert
+ * @param {Object} data - Data to insert
+ * @param {import('./types').ModelDefinition} model - Model definition
+ * @returns {Object}
+ */
+function applyInsertNanoidPrimary(data, model) {
+  const pk = model.primaryKey;
+  const meta = model.columns && model.columns.get(pk);
+  if (!meta || meta.type !== 'nanoid') {
+    return data;
+  }
+  const val = data[pk];
+  if (val !== undefined && val !== null && val !== '') {
+    return data;
+  }
+  const len = meta.maxLength || 21;
+  return {
+    ...data,
+    [pk]: generateNanoid(len),
+  };
+}
+
+/**
  * Get soft delete data (for UPDATE instead of DELETE)
  * @returns {Object} Soft delete update data
  */
@@ -142,6 +167,7 @@ function applyInsertModifiers(data, context, model) {
   let modified = { ...data };
   modified = applyInsertTimestamps(modified, model);
   modified = applyInsertTenant(modified, context, model);
+  modified = applyInsertNanoidPrimary(modified, model);
   return modified;
 }
 
@@ -174,6 +200,7 @@ module.exports = {
   applyInsertTimestamps,
   applyUpdateTimestamps,
   applyInsertTenant,
+  applyInsertNanoidPrimary,
   applyInsertModifiers,
   applyUpdateModifiers,
   getSoftDeleteData,

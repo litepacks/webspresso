@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### ORM: Nanoid column type
+- **`zdb.nanoid()`** / **`zdb.nanoid({ maxLength })`**: URL-safe string primary key (VARCHAR in migrations; default length 21).
+- **`zdb.foreignNanoid(table, opts)`**: Foreign key to a nanoid primary key (`referenceColumn`, `nullable`, `maxLength`).
+- **Auto-fill on create:** Omitting the PK on `repository.create()` generates an id via built-in **`generateNanoid`** (same default alphabet as the `nanoid` package; no extra npm dependency). **`generateNanoid`** is exported from `webspresso`.
+- OpenAPI, admin field renderers, and seeders recognize the `nanoid` column type.
+
 #### Plugin Error Handling (Graceful Degradation)
 - **Warning instead of crash**: Plugin errors do not crash the app; only `console.warn` is logged
 - **Missing / incompatible dependencies**: Warning instead of throw for missing or version-mismatched `dependencies`; plugin still loads

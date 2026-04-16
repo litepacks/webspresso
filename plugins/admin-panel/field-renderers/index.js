@@ -68,6 +68,7 @@ function initializeDefaultRenderers() {
   registerFieldRenderer('timestamp', basicRenderers.DateTimeField);
   registerFieldRenderer('enum', basicRenderers.SelectField);
   registerFieldRenderer('uuid', basicRenderers.TextField);
+  registerFieldRenderer('nanoid', basicRenderers.TextField);
   registerFieldRenderer('id', basicRenderers.NumberField);
   
   // Complex types

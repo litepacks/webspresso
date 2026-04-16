@@ -1240,6 +1240,7 @@ The `zdb` helpers wrap Zod schemas with database column metadata:
 |--------|-------------|---------|
 | `zdb.id()` | Primary key (bigint, auto-increment) | |
 | `zdb.uuid()` | UUID primary key | |
+| `zdb.nanoid(opts)` | Nanoid primary key (URL-safe string, stored as VARCHAR) | `maxLength` (default `21`) |
 | `zdb.string(opts)` | VARCHAR column | `maxLength`, `unique`, `index`, `nullable` |
 | `zdb.text(opts)` | TEXT column | `nullable` |
 | `zdb.integer(opts)` | INTEGER column | `nullable`, `default` |
@@ -1255,6 +1256,9 @@ The `zdb` helpers wrap Zod schemas with database column metadata:
 | `zdb.enum(values, opts)` | ENUM column | `default`, `nullable` |
 | `zdb.foreignKey(table, opts)` | Foreign key (bigint) | `referenceColumn`, `nullable` |
 | `zdb.foreignUuid(table, opts)` | Foreign key (uuid) | `referenceColumn`, `nullable` |
+| `zdb.foreignNanoid(table, opts)` | Foreign key (nanoid string) | `referenceColumn`, `nullable`, `maxLength` (must match referenced PK) |
+
+**Nanoid columns:** Migration scaffolding emits `table.string(column, maxLength)`. For a **nanoid primary key**, if you omit the primary key on `repository.create()`, Webspresso fills it with a cryptographically random ID using the same default alphabet as the [`nanoid`](https://github.com/ai/nanoid) package (implemented in-framework; no extra dependency). You can also call **`generateNanoid`** (exported from `webspresso`) anywhere you need the same generator.
 
 ### Model Definition
 
