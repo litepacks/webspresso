@@ -66,14 +66,16 @@ function adminPanelPlugin(options = {}) {
     description: 'Modular admin panel for Webspresso with extensions support',
     
     // CSP requirements for admin panel scripts
+    // Note: cdn.quilljs.com 301-redirects to cdn.jsdelivr.net; CSP is enforced on the final URL.
     csp: {
-      styleSrc: ['https://cdn.quilljs.com'],
+      styleSrc: ['https://cdn.quilljs.com', 'https://cdn.jsdelivr.net'],
       scriptSrc: [
         'https://cdn.quilljs.com',
+        'https://cdn.jsdelivr.net',
         'https://unpkg.com',
         'https://cdn.tailwindcss.com',
       ],
-      connectSrc: ['https://unpkg.com', 'https://cdn.tailwindcss.com'],
+      connectSrc: ['https://unpkg.com', 'https://cdn.tailwindcss.com', 'https://cdn.jsdelivr.net'],
     },
     enabled,
     registry, // Expose registry for external configuration
@@ -338,19 +340,48 @@ function generateAdminPanelHtml(adminPath, registry) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${settings.title || 'Admin Panel'}</title>
+  <script>
+  (function () {
+    var K = 'webspresso-admin-theme';
+    function sync() {
+      try {
+        var v = localStorage.getItem(K);
+        var dark = (v === 'dark') || ((v !== 'light') && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.toggle('dark', dark);
+      } catch (e) {}
+    }
+    sync();
+    window.__syncAdminTheme = sync;
+    try {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+        var v = localStorage.getItem(K);
+        if (v === 'light' || v === 'dark') return;
+        sync();
+      });
+    } catch (e) {}
+  })();
+  </script>
   <script src="https://unpkg.com/mithril/mithril.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
   <style>
     body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
+    html.dark { color-scheme: dark; }
     :root {
       --primary-color: ${settings.primaryColor || '#3B82F6'};
     }
     .bg-primary { background-color: var(--primary-color); }
     .text-primary { color: var(--primary-color); }
     .border-primary { border-color: var(--primary-color); }
+    .dark .ql-toolbar.ql-snow { border-color: #475569; background: #1e293b; }
+    .dark .ql-container.ql-snow { border-color: #475569; background: #0f172a; }
+    .dark .ql-editor { color: #f1f5f9; min-height: 8rem; }
+    .dark .ql-snow .ql-stroke { stroke: #94a3b8; }
+    .dark .ql-snow .ql-fill { fill: #94a3b8; }
+    .dark .ql-picker { color: #cbd5e1; }
   </style>
 </head>
-<body>
+<body class="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-slate-100 antialiased">
   <div id="app"></div>
   <script>
     window.__ADMIN_PATH__ = ${JSON.stringify(adminPath)};
@@ -366,7 +397,7 @@ function generateAdminPanelHtml(adminPath, registry) {
 
     // Spinner Component
     const Spinner = {
-      view: () => m('div.animate-spin.rounded-full.h-6.w-6.border-2.border-blue-500.border-t-transparent'),
+      view: () => m('div.animate-spin.rounded-full.h-6.w-6.border-2.border-blue-500.dark:border-blue-400.border-t-transparent'),
     };
 
     ${menuComponent}

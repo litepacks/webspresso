@@ -14,10 +14,10 @@ module.exports = {
           meta.label || name,
           required ? m('span.text-red-500', ' *') : null
         ),
-        m('.border.border-gray-300.rounded.p-4', [
+        m('.border.border-gray-300 dark:border-slate-600.rounded.p-4', [
           items.map((item, index) =>
             m('.flex.items-center.gap-2.mb-2', [
-              m('input.flex-1.px-3.py-2.border.border-gray-300.rounded', {
+              m('input.flex-1.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded', {
                 type: 'text',
                 value: String(item),
                 oninput: (e) => {

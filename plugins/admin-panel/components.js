@@ -84,7 +84,7 @@ const Breadcrumb = {
       m('ol.flex.items-center.space-x-2.text-sm', [
         // Home link
         m('li', [
-          m('a.text-gray-500.hover:text-gray-700', {
+          m('a.text-gray-500 dark:text-slate-400.hover:text-gray-700 dark:hover:text-slate-200 dark:hover:text-slate-200', {
             href: '/',
             onclick: (e) => {
               e.preventDefault();
@@ -99,12 +99,12 @@ const Breadcrumb = {
         // Dynamic items
         ...items.map((item, idx) => [
           m('li.flex.items-center', [
-            m('svg.w-4.h-4.text-gray-400.mx-1', { fill: 'currentColor', viewBox: '0 0 20 20' }, [
+            m('svg.w-4.h-4.text-gray-400 dark:text-slate-500.mx-1', { fill: 'currentColor', viewBox: '0 0 20 20' }, [
               m('path', { 'fill-rule': 'evenodd', d: 'M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z', 'clip-rule': 'evenodd' }),
             ]),
             idx === items.length - 1
-              ? m('span.text-gray-700.font-medium', item.label)
-              : m('a.text-gray-500.hover:text-gray-700', {
+              ? m('span.text-gray-700 dark:text-slate-300.font-medium', item.label)
+              : m('a.text-gray-500 dark:text-slate-400.hover:text-gray-700 dark:hover:text-slate-200 dark:hover:text-slate-200', {
                   href: item.href,
                   onclick: (e) => {
                     e.preventDefault();
@@ -211,12 +211,12 @@ const ActiveFiltersBar = {
     if (filterEntries.length === 0) return null;
     
     return m('.flex.items-center.gap-2.py-2.flex-wrap', [
-      m('span.text-xs.font-medium.text-gray-500.uppercase.tracking-wide', 'Active filters:'),
+      m('span.text-xs.font-medium.text-gray-500 dark:text-slate-400.uppercase.tracking-wide', 'Active filters:'),
       ...filterEntries.map(([colName, filter]) => {
         const col = modelMeta?.columns?.find(c => c.name === colName);
         return m(FilterBadge, { colName, filter, colMeta: col, onRemove });
       }),
-      filterEntries.length > 1 ? m('button.text-xs.text-gray-500.hover:text-gray-700.underline.ml-2', {
+      filterEntries.length > 1 ? m('button.text-xs.text-gray-500 dark:text-slate-400.hover:text-gray-700 dark:hover:text-slate-200 dark:hover:text-slate-200.underline.ml-2', {
         onclick: onClearAll,
         type: 'button',
       }, 'Clear all') : null,
@@ -235,13 +235,13 @@ const QuickFilterInput = {
           m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z' }),
         ]),
       ]),
-      m('input.block.w-full.pl-9.pr-8.py-2.text-sm.border.border-gray-300.rounded-lg.bg-white.placeholder-gray-400.focus:outline-none.focus:ring-2.focus:ring-indigo-500.focus:border-transparent', {
+      m('input.block.w-full.pl-9.pr-8.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.bg-white dark:bg-slate-800.placeholder-gray-400 dark:placeholder-slate-500.focus:outline-none.focus:ring-2.focus:ring-indigo-500.focus:border-transparent', {
         type: 'text',
         placeholder: placeholder || 'Quick search...',
         value: value || '',
         oninput: (e) => onChange(e.target.value),
       }),
-      value ? m('button.absolute.inset-y-0.right-0.pr-3.flex.items-center.text-gray-400.hover:text-gray-600', {
+      value ? m('button.absolute.inset-y-0.right-0.pr-3.flex.items-center.text-gray-400 dark:text-slate-500.hover:text-gray-600 dark:hover:text-slate-300 dark:hover:text-slate-300', {
         onclick: onClear,
         type: 'button',
       }, [
@@ -271,7 +271,7 @@ const QuickFiltersBar = {
     const quickSearchCol = searchableColumns[0];
     const quickSearchFilter = quickSearchCol ? filters[quickSearchCol.name] : null;
     
-    return m('.bg-white.border.border-gray-200.rounded-lg.p-3.mb-4.shadow-sm', [
+    return m('.bg-white dark:bg-slate-800.border.border-gray-200 dark:border-slate-600.rounded-lg.p-3.mb-4.shadow-sm', [
       m('.flex.items-center.gap-3.flex-wrap', [
         quickSearchCol ? m(QuickFilterInput, {
           placeholder: 'Search by ' + (quickSearchCol.ui?.label || formatColumnLabel(quickSearchCol.name)).toLowerCase() + '...',
@@ -297,14 +297,14 @@ const QuickFiltersBar = {
               m('button.px-2.py-1.text-xs.rounded-md.transition-colors', {
                 class: !currentValue 
                   ? 'bg-gray-200 text-gray-800' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
+                  : 'bg-gray-100 text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-600 dark:hover:bg-slate-600',
                 onclick: () => onFilterChange(col.name, null),
               }, 'All'),
               ...col.enumValues.map(val => 
                 m('button.px-2.py-1.text-xs.rounded-md.transition-colors', {
                   class: currentValue === val 
                     ? 'bg-indigo-600 text-white' 
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
+                    : 'bg-gray-100 text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-600 dark:hover:bg-slate-600',
                   onclick: () => onFilterChange(col.name, { op: 'equals', value: val }),
                 }, val)
               ),
@@ -314,7 +314,7 @@ const QuickFiltersBar = {
         
         m('.flex-1'),
         
-        m('button.inline-flex.items-center.gap-2.px-3.py-2.text-sm.font-medium.text-gray-700.bg-white.border.border-gray-300.rounded-lg.hover:bg-gray-50.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+        m('button.inline-flex.items-center.gap-2.px-3.py-2.text-sm.font-medium.text-gray-700 dark:text-slate-300.bg-white dark:bg-slate-800.border.border-gray-300 dark:border-slate-600.rounded-lg.hover:bg-gray-50 dark:hover:bg-slate-800/50 dark:hover:bg-slate-800/50.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
           onclick: onOpenDrawer,
           type: 'button',
         }, [
@@ -343,7 +343,7 @@ const FilterField = {
           ['true', 'false', ''].map((val, idx) => {
             const labels = ['Yes', 'No', 'Any'];
             return m('label.inline-flex.items-center.cursor-pointer', [
-              m('input.w-4.h-4.text-indigo-600.border-gray-300.focus:ring-indigo-500', {
+              m('input.w-4.h-4.text-indigo-600.border-gray-300 dark:border-slate-600.focus:ring-indigo-500', {
                 type: 'radio',
                 name: 'filter_bool_' + col.name,
                 checked: (currentFilter.value || '') === val,
@@ -370,7 +370,7 @@ const FilterField = {
               type: 'button',
               class: isSelected 
                 ? 'bg-indigo-100 border-indigo-300 text-indigo-700' 
-                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50',
+                : 'bg-white border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800/50 dark:hover:bg-slate-800/50',
               onclick: () => {
                 const newSelected = isSelected 
                   ? selectedValues.filter(v => v !== val)
@@ -390,7 +390,7 @@ const FilterField = {
       return m('.space-y-2', [
         m('label.block.text-sm.font-medium.text-gray-700', label),
         m('.flex.items-start.gap-2.flex-wrap', [
-          m('select.px-3.py-2.text-sm.border.border-gray-300.rounded-lg.bg-white.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+          m('select.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.bg-white dark:bg-slate-800.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
               value: currentFilter.op || 'eq',
               onchange: (e) => {
                 const op = e.target.value;
@@ -402,18 +402,18 @@ const FilterField = {
             },
           }, ops.map(o => m('option', { value: o.value }, o.label))),
             currentFilter.op === 'between' ? [
-            m('input.flex-1.min-w-32.px-3.py-2.text-sm.border.border-gray-300.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+            m('input.flex-1.min-w-32.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
               type: inputType,
                 value: currentFilter.from || '',
               oninput: (e) => onChange({ op: 'between', from: e.target.value, to: currentFilter.to || '' }),
             }),
-            m('span.text-gray-400.self-center', 'to'),
-            m('input.flex-1.min-w-32.px-3.py-2.text-sm.border.border-gray-300.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+            m('span.text-gray-400 dark:text-slate-500.self-center', 'to'),
+            m('input.flex-1.min-w-32.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
               type: inputType,
                 value: currentFilter.to || '',
               oninput: (e) => onChange({ op: 'between', from: currentFilter.from || '', to: e.target.value }),
             }),
-          ] : m('input.flex-1.px-3.py-2.text-sm.border.border-gray-300.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+          ] : m('input.flex-1.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
             type: inputType,
               value: currentFilter.value || '',
             oninput: (e) => onChange({ op: currentFilter.op || 'eq', value: e.target.value }),
@@ -428,7 +428,7 @@ const FilterField = {
       return m('.space-y-2', [
         m('label.block.text-sm.font-medium.text-gray-700', label),
         m('.flex.items-start.gap-2', [
-          m('select.px-3.py-2.text-sm.border.border-gray-300.rounded-lg.bg-white.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+          m('select.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.bg-white dark:bg-slate-800.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
               value: currentFilter.op || 'eq',
               onchange: (e) => {
                 const op = e.target.value;
@@ -440,20 +440,20 @@ const FilterField = {
             },
           }, ops.map(o => m('option', { value: o.value }, o.label))),
             currentFilter.op === 'between' ? [
-            m('input.w-24.px-3.py-2.text-sm.border.border-gray-300.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+            m('input.w-24.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
                 type: 'number',
                 value: currentFilter.from || '',
                 placeholder: 'Min',
               oninput: (e) => onChange({ op: 'between', from: e.target.value, to: currentFilter.to || '' }),
             }),
-            m('span.text-gray-400.self-center', 'to'),
-            m('input.w-24.px-3.py-2.text-sm.border.border-gray-300.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+            m('span.text-gray-400 dark:text-slate-500.self-center', 'to'),
+            m('input.w-24.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
                 type: 'number',
                 value: currentFilter.to || '',
                 placeholder: 'Max',
               oninput: (e) => onChange({ op: 'between', from: currentFilter.from || '', to: e.target.value }),
             }),
-          ] : m('input.flex-1.px-3.py-2.text-sm.border.border-gray-300.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+          ] : m('input.flex-1.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
               type: 'number',
               value: currentFilter.value || '',
             placeholder: 'Enter value',
@@ -469,11 +469,11 @@ const FilterField = {
     return m('.space-y-2', [
       m('label.block.text-sm.font-medium.text-gray-700', label),
       m('.flex.items-center.gap-2', [
-        m('select.px-3.py-2.text-sm.border.border-gray-300.rounded-lg.bg-white.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+        m('select.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.bg-white dark:bg-slate-800.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
               value: currentFilter.op || 'contains',
           onchange: (e) => onChange({ op: e.target.value, value: currentFilter.value || '' }),
         }, ops.map(o => m('option', { value: o.value }, o.label))),
-        m('input.flex-1.px-3.py-2.text-sm.border.border-gray-300.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+        m('input.flex-1.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
               type: 'text',
               value: currentFilter.value || '',
               placeholder: 'Enter search term',
@@ -506,7 +506,7 @@ const FilterDrawer = {
     const renderGroup = (title, columns) => {
       if (columns.length === 0) return null;
       return m('.mb-6', [
-        m('h4.text-xs.font-semibold.text-gray-400.uppercase.tracking-wider.mb-3', title),
+        m('h4.text-xs.font-semibold.text-gray-400 dark:text-slate-500.uppercase.tracking-wider.mb-3', title),
         m('.space-y-4', columns.map(col => 
           m(FilterField, {
             col,
@@ -519,7 +519,7 @@ const FilterDrawer = {
     
     return [
       m('.fixed.inset-0.bg-black.bg-opacity-25.z-40.transition-opacity', { onclick: onClose }),
-      m('.fixed.inset-y-0.right-0.w-full.max-w-md.bg-white.shadow-xl.z-50.flex.flex-col', {
+      m('.fixed.inset-y-0.right-0.w-full.max-w-md.bg-white dark:bg-slate-800.shadow-xl.z-50.flex.flex-col', {
         style: 'animation: filterDrawerSlideIn 0.2s ease-out;',
       }, [
         m('.flex.items-center.justify-between.px-6.py-4.border-b.border-gray-200', [
@@ -527,7 +527,7 @@ const FilterDrawer = {
             m('h3.text-lg.font-semibold.text-gray-900', 'Advanced Filters'),
             m('p.text-sm.text-gray-500', 'Filter records by multiple criteria'),
           ]),
-          m('button.p-2.text-gray-400.hover:text-gray-600.rounded-lg.hover:bg-gray-100', {
+          m('button.p-2.text-gray-400 dark:text-slate-500.hover:text-gray-600 dark:hover:text-slate-300 dark:hover:text-slate-300.rounded-lg.hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:bg-slate-700', {
             onclick: onClose,
             type: 'button',
           }, [
@@ -542,13 +542,13 @@ const FilterDrawer = {
           renderGroup('Numbers', numericColumns),
           renderGroup('Dates', dateColumns),
         ]),
-        m('.flex.items-center.justify-between.gap-3.px-6.py-4.border-t.border-gray-200.bg-gray-50', [
-          m('button.px-4.py-2.text-sm.font-medium.text-gray-700.hover:text-gray-900', {
+        m('.flex.items-center.justify-between.gap-3.px-6.py-4.border-t.border-gray-200 dark:border-slate-600.bg-gray-50', [
+          m('button.px-4.py-2.text-sm.font-medium.text-gray-700 dark:text-slate-300.hover:text-gray-900 dark:hover:text-slate-100 dark:hover:text-slate-100', {
           onclick: onClear,
             type: 'button',
           }, 'Clear all'),
           m('.flex.gap-3', [
-            m('button.px-4.py-2.text-sm.font-medium.text-gray-700.bg-white.border.border-gray-300.rounded-lg.hover:bg-gray-50', {
+            m('button.px-4.py-2.text-sm.font-medium.text-gray-700 dark:text-slate-300.bg-white dark:bg-slate-800.border.border-gray-300 dark:border-slate-600.rounded-lg.hover:bg-gray-50 dark:hover:bg-slate-800/50 dark:hover:bg-slate-800/50', {
               onclick: onClose,
               type: 'button',
             }, 'Cancel'),
@@ -592,7 +592,7 @@ const Pagination = {
       pages.push(i);
     }
     
-    return m('.flex.items-center.justify-between.px-4.py-3.bg-white.border-t', [
+    return m('.flex.items-center.justify-between.px-4.py-3.bg-white dark:bg-slate-800.border-t', [
       m('.text-sm.text-gray-700', [
         'Showing ',
         m('span.font-medium', ((page - 1) * perPage) + 1),
@@ -606,13 +606,13 @@ const Pagination = {
         // Previous button
         m('button.px-3.py-1.rounded.border.text-sm', {
           disabled: page <= 1,
-          class: page <= 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100',
+          class: page <= 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:bg-slate-700',
           onclick: () => page > 1 && onPageChange(page - 1),
         }, '← Prev'),
         
         // Page numbers
         start > 1 ? [
-          m('button.px-3.py-1.rounded.text-sm.text-gray-700.hover:bg-gray-100', {
+          m('button.px-3.py-1.rounded.text-sm.text-gray-700 dark:text-slate-300.hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:bg-slate-700', {
             onclick: () => onPageChange(1),
           }, '1'),
           start > 2 ? m('span.px-2.text-gray-400', '...') : null,
@@ -622,14 +622,14 @@ const Pagination = {
           m('button.px-3.py-1.rounded.text-sm', {
             class: p === page 
               ? 'bg-blue-600 text-white' 
-              : 'text-gray-700 hover:bg-gray-100',
+              : 'text-gray-700 hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:bg-slate-700',
             onclick: () => onPageChange(p),
           }, p)
         ),
         
         end < totalPages ? [
           end < totalPages - 1 ? m('span.px-2.text-gray-400', '...') : null,
-          m('button.px-3.py-1.rounded.text-sm.text-gray-700.hover:bg-gray-100', {
+          m('button.px-3.py-1.rounded.text-sm.text-gray-700 dark:text-slate-300.hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:bg-slate-700', {
             onclick: () => onPageChange(totalPages),
           }, totalPages),
         ] : null,
@@ -637,7 +637,7 @@ const Pagination = {
         // Next button
         m('button.px-3.py-1.rounded.border.text-sm', {
           disabled: page >= totalPages,
-          class: page >= totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100',
+          class: page >= totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:bg-slate-700',
           onclick: () => page < totalPages && onPageChange(page + 1),
         }, 'Next →'),
       ]),
@@ -657,8 +657,8 @@ const FieldRenderers = {
     const hint = ui.hint || '';
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
+      m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
         type: inputType,
@@ -673,7 +673,7 @@ const FieldRenderers = {
         class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value),
       }),
-      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
+      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
     ]);
   },
 
@@ -687,8 +687,8 @@ const FieldRenderers = {
     const rows = ui.rows || 4;
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
-      m('textarea.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
+      m('textarea.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
         rows: rows,
@@ -701,7 +701,7 @@ const FieldRenderers = {
         class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value),
       }, value || ''),
-      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
+      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
     ]);
   },
 
@@ -714,8 +714,8 @@ const FieldRenderers = {
     const hint = ui.hint || '';
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
+      m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
         type: 'number',
@@ -730,7 +730,7 @@ const FieldRenderers = {
         class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value === '' ? null : parseInt(e.target.value, 10)),
       }),
-      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
+      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
     ]);
   },
 
@@ -743,8 +743,8 @@ const FieldRenderers = {
     const hint = ui.hint || '';
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
+      m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
         type: 'number',
@@ -759,7 +759,7 @@ const FieldRenderers = {
         class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value === '' ? null : parseFloat(e.target.value)),
       }),
-      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
+      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
     ]);
   },
 
@@ -780,7 +780,7 @@ const FieldRenderers = {
         }),
         m('span.text-sm.font-medium.text-gray-700', label),
       ]),
-      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
+      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
     ]);
   },
 
@@ -794,8 +794,8 @@ const FieldRenderers = {
     const dateValue = value ? new Date(value).toISOString().split('T')[0] : '';
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
+      m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
         type: 'date',
@@ -809,7 +809,7 @@ const FieldRenderers = {
         class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value),
       }),
-      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
+      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
     ]);
   },
 
@@ -823,8 +823,8 @@ const FieldRenderers = {
     const dateTimeValue = value ? new Date(value).toISOString().slice(0, 16) : '';
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
+      m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
         type: 'datetime-local',
@@ -838,7 +838,7 @@ const FieldRenderers = {
         class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value),
       }),
-      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
+      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
     ]);
   },
 
@@ -850,8 +850,8 @@ const FieldRenderers = {
     const options = col.enumValues || [];
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
-      m('select.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
+      m('select.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
         value: value || '',
@@ -863,7 +863,7 @@ const FieldRenderers = {
         col.nullable ? m('option', { value: '' }, '-- Select --') : null,
         ...options.map(opt => m('option', { value: opt, selected: value === opt }, opt)),
       ]),
-      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
+      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
     ]);
   },
 
@@ -877,8 +877,8 @@ const FieldRenderers = {
     const jsonString = value ? (typeof value === 'string' ? value : JSON.stringify(value, null, 2)) : '';
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
-      m('textarea.w-full.px-3.py-2.border.border-gray-300.rounded.font-mono.text-sm.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
+      m('textarea.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.font-mono.text-sm.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
         rows: rows,
@@ -896,7 +896,7 @@ const FieldRenderers = {
           }
         },
       }, jsonString),
-      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
+      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
     ]);
   },
 
@@ -910,8 +910,8 @@ const FieldRenderers = {
     const arrayValue = Array.isArray(value) ? value.join(', ') : (value || '');
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
+      m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
         id: col.name,
         name: col.name,
         type: 'text',
@@ -928,7 +928,7 @@ const FieldRenderers = {
           onChange(arr);
         },
       }),
-      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
+      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
     ]);
   },
 };
@@ -1030,11 +1030,11 @@ const RichTextField = {
     const required = !col.nullable && !readonly;
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: name },
+      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: name },
         label,
         required ? m('span.text-red-500', ' *') : null
       ),
-      m('div.border.border-gray-300.rounded', {
+      m('div.border.border-gray-300 dark:border-slate-600.rounded', {
         id: editorId,
         class: readonly ? 'bg-gray-100 opacity-50' : '',
         style: 'min-height: 200px;'
@@ -1044,7 +1044,7 @@ const RichTextField = {
         id: name + '-value',
         value: value || '',
       }),
-      hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
+      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
     ]);
   }
 };
@@ -1112,10 +1112,10 @@ function isRichTextEmpty(value) {
 const LoginForm = {
   view: () => m('.min-h-screen.flex.items-center.justify-center.p-4.sm:p-6.bg-gradient-to-br.from-blue-600.via-indigo-600.to-purple-700', [
     m('.w-full.max-w-md', [
-      m('.bg-white.rounded-2xl.shadow-2xl.p-6.sm:p-8', [
+      m('.bg-white dark:bg-slate-800.rounded-2xl.shadow-2xl.p-6.sm:p-8', [
         m('div.text-center.mb-6', [
           m('h1.text-2xl.sm:text-3xl.font-bold.text-gray-900', 'Admin Login'),
-          m('p.text-gray-500.text-sm.mt-1', 'Sign in to your account'),
+          m('p.text-gray-500 dark:text-slate-400.text-sm.mt-1', 'Sign in to your account'),
         ]),
         m('form', {
           onsubmit: async (e) => {
@@ -1139,8 +1139,8 @@ const LoginForm = {
         }, [
           state.error ? m('.bg-red-50.border.border-red-200.text-red-700.px-4.py-3.rounded-lg.mb-4.text-sm', state.error) : null,
           m('.mb-4', [
-            m('label.block.text-sm.font-medium.text-gray-700.mb-2', { for: 'email' }, 'Email'),
-            m('input#email.w-full.px-3.py-2.5.border.border-gray-300.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
+            m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-2', { for: 'email' }, 'Email'),
+            m('input#email.w-full.px-3.py-2.5.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
               type: 'email',
               name: 'email',
               required: true,
@@ -1148,8 +1148,8 @@ const LoginForm = {
             }),
           ]),
           m('.mb-6', [
-            m('label.block.text-sm.font-medium.text-gray-700.mb-2', { for: 'password' }, 'Password'),
-            m('input#password.w-full.px-3.py-2.5.border.border-gray-300.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
+            m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-2', { for: 'password' }, 'Password'),
+            m('input#password.w-full.px-3.py-2.5.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
               type: 'password',
               name: 'password',
               required: true,
@@ -1169,10 +1169,10 @@ const LoginForm = {
 const SetupForm = {
   view: () => m('.min-h-screen.flex.items-center.justify-center.p-4.sm:p-6.bg-gradient-to-br.from-blue-600.via-indigo-600.to-purple-700', [
     m('.w-full.max-w-md', [
-      m('.bg-white.rounded-2xl.shadow-2xl.p-6.sm:p-8', [
+      m('.bg-white dark:bg-slate-800.rounded-2xl.shadow-2xl.p-6.sm:p-8', [
         m('div.text-center.mb-6', [
           m('h1.text-2xl.sm:text-3xl.font-bold.text-gray-900', 'Setup Admin Account'),
-          m('p.text-gray-500.text-sm.mt-1', 'Create the first admin user account.'),
+          m('p.text-gray-500 dark:text-slate-400.text-sm.mt-1', 'Create the first admin user account.'),
         ]),
         m('form', {
       onsubmit: async (e) => {
@@ -1198,16 +1198,16 @@ const SetupForm = {
     }, [
       state.error ? m('.bg-red-50.border.border-red-200.text-red-700.px-4.py-3.rounded-lg.mb-4.text-sm', state.error) : null,
           m('.mb-4', [
-            m('label.block.text-sm.font-medium.text-gray-700.mb-2', { for: 'name' }, 'Name'),
-            m('input#name.w-full.px-3.py-2.5.border.border-gray-300.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
+            m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-2', { for: 'name' }, 'Name'),
+            m('input#name.w-full.px-3.py-2.5.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
               type: 'text',
               name: 'name',
               required: true,
             }),
           ]),
           m('.mb-4', [
-            m('label.block.text-sm.font-medium.text-gray-700.mb-2', { for: 'email' }, 'Email'),
-            m('input#email.w-full.px-3.py-2.5.border.border-gray-300.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
+            m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-2', { for: 'email' }, 'Email'),
+            m('input#email.w-full.px-3.py-2.5.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
               type: 'email',
               name: 'email',
               required: true,
@@ -1215,8 +1215,8 @@ const SetupForm = {
             }),
           ]),
           m('.mb-6', [
-            m('label.block.text-sm.font-medium.text-gray-700.mb-2', { for: 'password' }, 'Password'),
-            m('input#password.w-full.px-3.py-2.5.border.border-gray-300.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
+            m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-2', { for: 'password' }, 'Password'),
+            m('input#password.w-full.px-3.py-2.5.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
               type: 'password',
               name: 'password',
               required: true,
@@ -1260,7 +1260,7 @@ const ModelList = {
         ? m('p.text-gray-600', 'No models enabled in admin panel. Make sure your models have admin: { enabled: true }')
         : m('.grid.grid-cols-1.md:grid-cols-2.lg:grid-cols-3.gap-4', 
             state.models.map(model => 
-              m('a.bg-white.p-6.rounded.shadow.hover:shadow-lg.transition', {
+              m('a.bg-white dark:bg-slate-800.p-6.rounded.shadow.hover:shadow-lg.transition', {
                 href: '/models/' + model.name,
                 onclick: (e) => {
                   e.preventDefault();
@@ -1269,7 +1269,7 @@ const ModelList = {
               }, [
                 model.icon ? m('span.text-2xl.mb-2.block', model.icon) : null,
                 m('h3.font-semibold.text-lg', model.label || model.name),
-                m('p.text-sm.text-gray-600.mt-2', model.table),
+                m('p.text-sm.text-gray-600 dark:text-slate-400.mt-2', model.table),
               ])
             )
           ),
@@ -1279,14 +1279,14 @@ const ModelList = {
 // Format cell value based on column type
 function formatCellValue(value, col) {
   if (value === null || value === undefined) {
-    return m('span.text-gray-400.italic', 'null');
+    return m('span.text-gray-400 dark:text-slate-500.italic', 'null');
   }
   
   switch (col?.type) {
     case 'boolean':
       return value 
         ? m('span.inline-flex.items-center.px-2.py-1.rounded-full.text-xs.font-medium.bg-green-100.text-green-800', '✓ Yes')
-        : m('span.inline-flex.items-center.px-2.py-1.rounded-full.text-xs.font-medium.bg-gray-100.text-gray-600', '✗ No');
+        : m('span.inline-flex.items-center.px-2.py-1.rounded-full.text-xs.font-medium.bg-gray-100 dark:bg-slate-800.text-gray-600', '✗ No');
     
     case 'datetime':
     case 'timestamp':
@@ -1305,11 +1305,11 @@ function formatCellValue(value, col) {
     case 'array':
       if (Array.isArray(value)) {
         return value.length > 0 
-          ? m('span.text-xs.bg-gray-100.px-2.py-1.rounded', value.slice(0, 3).join(', ') + (value.length > 3 ? '...' : ''))
+          ? m('span.text-xs.bg-gray-100 dark:bg-slate-800.px-2.py-1.rounded', value.slice(0, 3).join(', ') + (value.length > 3 ? '...' : ''))
           : m('span.text-gray-400', '[]');
       }
       if (typeof value === 'object') {
-        return m('span.text-xs.bg-gray-100.px-2.py-1.rounded.font-mono', '{...}');
+        return m('span.text-xs.bg-gray-100 dark:bg-slate-800.px-2.py-1.rounded.font-mono', '{...}');
       }
       return String(value);
     
@@ -1373,7 +1373,7 @@ const BulkFieldUpdateDropdown = {
     
     return m('.relative.inline-block', [
       // Dropdown trigger
-      m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-purple-600.bg-white.border.border-purple-200.rounded.hover:bg-purple-50.transition-colors', {
+      m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-purple-600.bg-white dark:bg-slate-800.border.border-purple-200.rounded.hover:bg-purple-50.transition-colors', {
         disabled: state.bulkActionInProgress,
         onclick: (e) => {
           e.stopPropagation();
@@ -1392,7 +1392,7 @@ const BulkFieldUpdateDropdown = {
       ]),
       
       // Dropdown menu
-      state.bulkFieldDropdownOpen && m('.absolute.z-50.mt-1.w-64.bg-white.rounded-lg.shadow-lg.border.border-gray-200.overflow-hidden', {
+      state.bulkFieldDropdownOpen && m('.absolute.z-50.mt-1.w-64.bg-white dark:bg-slate-800.rounded-lg.shadow-lg.border.border-gray-200 dark:border-slate-600.overflow-hidden', {
         style: 'left: 0; top: 100%;',
         onclick: (e) => e.stopPropagation(),
       }, [
@@ -1408,8 +1408,8 @@ const BulkFieldUpdateDropdown = {
         // Dropdown content
         m('.relative.z-50.bg-white', [
           // Header
-          m('.px-3.py-2.bg-gray-50.border-b.border-gray-200', [
-            m('span.text-xs.font-medium.text-gray-500.uppercase.tracking-wider', 
+          m('.px-3.py-2.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200', [
+            m('span.text-xs.font-medium.text-gray-500 dark:text-slate-400.uppercase.tracking-wider', 
               state.selectedBulkField ? 'Select Value' : 'Select Field'
             ),
           ]),
@@ -1441,7 +1441,7 @@ const BulkFieldUpdateDropdown = {
                     state.selectedBulkField.type === 'boolean' && m('span.ml-2', 
                       option.value === true 
                         ? m('span.inline-flex.items-center.px-2.py-0.5.rounded-full.text-xs.font-medium.bg-green-100.text-green-800', '✓')
-                        : m('span.inline-flex.items-center.px-2.py-0.5.rounded-full.text-xs.font-medium.bg-gray-100.text-gray-600', '✗')
+                        : m('span.inline-flex.items-center.px-2.py-0.5.rounded-full.text-xs.font-medium.bg-gray-100 dark:bg-slate-800.text-gray-600', '✗')
                     ),
                   ])
                 )
@@ -1455,7 +1455,7 @@ const BulkFieldUpdateDropdown = {
                   }, [
                     m('.flex.items-center.gap-2', [
                       m('span.text-gray-700', formatColumnLabel(field.label || field.name)),
-                      m('span.text-xs.text-gray-400.uppercase', field.type),
+                      m('span.text-xs.text-gray-400 dark:text-slate-500.uppercase', field.type),
                     ]),
                     m('svg.w-4.h-4.text-gray-400', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
                       m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M9 5l7 7-7 7' })
@@ -1464,7 +1464,7 @@ const BulkFieldUpdateDropdown = {
                 ),
             
             // Back button when viewing values
-            state.selectedBulkField && m('button.w-full.px-3.py-2.text-left.text-sm.text-gray-500.hover:bg-gray-50.border-t.border-gray-100.flex.items-center.gap-1', {
+            state.selectedBulkField && m('button.w-full.px-3.py-2.text-left.text-sm.text-gray-500 dark:text-slate-400.hover:bg-gray-50 dark:hover:bg-slate-800/50 dark:hover:bg-slate-800/50.border-t.border-gray-100 dark:border-slate-700.flex.items-center.gap-1', {
               onclick: () => {
                 state.selectedBulkField = null;
                 m.redraw();
@@ -1736,16 +1736,16 @@ const RecordList = {
       m('.flex.items-center.justify-between.mb-4', [
         m('.flex.items-center.gap-3', [
           m('h2.text-2xl.font-bold', modelMeta?.label || modelName),
-          modelMeta?.softDelete ? m('.flex.rounded-lg.border.border-gray-200.p-0.5', [
+          modelMeta?.softDelete ? m('.flex.rounded-lg.border.border-gray-200 dark:border-slate-600.p-0.5', [
             m('button.px-3.py-1.5.text-sm.font-medium.rounded-md.transition-colors', {
-              class: !state.trashedView ? 'bg-indigo-600.text-white' : 'text-gray-600.hover:text-gray-900',
+              class: !state.trashedView ? 'bg-indigo-600.text-white' : 'text-gray-600.hover:text-gray-900 dark:hover:text-slate-100 dark:hover:text-slate-100',
               onclick: () => {
                 state.trashedView = false;
                 loadRecords(modelName, 1);
               },
             }, 'Active'),
             m('button.px-3.py-1.5.text-sm.font-medium.rounded-md.transition-colors', {
-              class: state.trashedView ? 'bg-indigo-600.text-white' : 'text-gray-600.hover:text-gray-900',
+              class: state.trashedView ? 'bg-indigo-600.text-white' : 'text-gray-600.hover:text-gray-900 dark:hover:text-slate-100 dark:hover:text-slate-100',
               onclick: () => {
                 state.trashedView = true;
                 loadRecords(modelName, 1);
@@ -1820,14 +1820,14 @@ const RecordList = {
             m('.animate-spin.rounded-full.h-8.w-8.border-b-2.border-indigo-600'),
           ])
         : state.records.length === 0
-          ? m('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-12.text-center', [
-              m('svg.w-12.h-12.mx-auto.text-gray-400.mb-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' }, [
+          ? m('.bg-white dark:bg-slate-800.rounded-lg.shadow-sm.border.border-gray-200 dark:border-slate-600.p-12.text-center', [
+              m('svg.w-12.h-12.mx-auto.text-gray-400 dark:text-slate-500.mb-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' }, [
                 m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '1.5', d: 'M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4' }),
               ]),
-              m('h3.text-lg.font-medium.text-gray-900.mb-1', 'No records found'),
+              m('h3.text-lg.font-medium.text-gray-900 dark:text-slate-100.mb-1', 'No records found'),
               m('p.text-gray-500', activeFilterCount > 0 ? 'Try adjusting your filters' : 'Get started by creating your first record'),
             ])
-          : m('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.overflow-hidden', [
+          : m('.bg-white dark:bg-slate-800.rounded-lg.shadow-sm.border.border-gray-200 dark:border-slate-600.overflow-hidden', [
             // Bulk Actions Toolbar (shown when items selected)
             (state.selectedRecords && state.selectedRecords.size > 0) || state.selectAllMode ? m('.bg-indigo-50.border-b.border-indigo-100.px-4.py-3.flex.items-center.justify-between', [
               m('.flex.items-center.gap-3', [
@@ -1853,7 +1853,7 @@ const RecordList = {
               ]),
               m('.flex.items-center.gap-2', [
                 state.trashedView && modelMeta?.softDelete
-                  ? m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-green-600.bg-white.border.border-green-200.rounded.hover:bg-green-50.transition-colors', {
+                  ? m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-green-600.bg-white dark:bg-slate-800.border.border-green-200.rounded.hover:bg-green-50.transition-colors', {
                       disabled: state.bulkActionInProgress,
                       onclick: async () => {
                         if (!confirm('Restore the selected records?')) return;
@@ -1880,7 +1880,7 @@ const RecordList = {
                       ),
                       'Restore',
                     ])
-                  : m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-red-600.bg-white.border.border-red-200.rounded.hover:bg-red-50.transition-colors', {
+                  : m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-red-600.bg-white dark:bg-slate-800.border.border-red-200.rounded.hover:bg-red-50.transition-colors', {
                       disabled: state.bulkActionInProgress,
                       onclick: async () => {
                         const count = state.selectAllMode ? state.pagination.total : state.selectedRecords.size;
@@ -1908,7 +1908,7 @@ const RecordList = {
                       ),
                       'Delete',
                     ]),
-                !state.trashedView ? m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-blue-600.bg-white.border.border-blue-200.rounded.hover:bg-blue-50.transition-colors', {
+                !state.trashedView ? m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-blue-600.bg-white dark:bg-slate-800.border.border-blue-200.rounded.hover:bg-blue-50.transition-colors', {
                   disabled: state.bulkActionInProgress,
                   onclick: async () => {
                     state.bulkActionInProgress = true;
@@ -1939,7 +1939,7 @@ const RecordList = {
                   ),
                   'Export JSON',
                 ]) : null,
-                !state.trashedView ? m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-green-600.bg-white.border.border-green-200.rounded.hover:bg-green-50.transition-colors', {
+                !state.trashedView ? m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-green-600.bg-white dark:bg-slate-800.border.border-green-200.rounded.hover:bg-green-50.transition-colors', {
                   disabled: state.bulkActionInProgress,
                   onclick: async () => {
                     state.bulkActionInProgress = true;
@@ -1981,7 +1981,7 @@ const RecordList = {
                     loadRecords(modelName, state.pagination.page);
                   },
                 }) : null,
-                m('button.px-3.py-1.5.text-sm.text-gray-500.hover:text-gray-700', {
+                m('button.px-3.py-1.5.text-sm.text-gray-500 dark:text-slate-400.hover:text-gray-700 dark:hover:text-slate-200 dark:hover:text-slate-200', {
                   onclick: () => {
                     state.selectedRecords = new Set();
                     state.selectAllMode = false;
@@ -1996,11 +1996,11 @@ const RecordList = {
             m('.overflow-auto.max-h-[calc(100vh-380px)]', { style: 'position: relative;' }, [
               m('table.w-full.border-collapse', { style: 'min-width: 100%;' }, [
                 // Sticky header
-                m('thead.bg-gray-50', { style: 'position: sticky; top: 0; z-index: 20; background: #f9fafb;' }, [
+                m('thead.bg-gray-50.dark:bg-slate-900', { style: 'position: sticky; top: 0; z-index: 20;' }, [
                   m('tr', [
                     // Checkbox column header (sticky left, box-shadow on right)
-                    m('th.px-4.py-3.text-left.bg-gray-50.border-b.border-gray-200', { style: 'width: 40px; position: sticky; left: 0; z-index: 15; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' }, [
-                      m('input[type=checkbox].rounded.border-gray-300.text-indigo-600.focus:ring-indigo-500', {
+                    m('th.px-4.py-3.text-left.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200', { style: 'width: 40px; position: sticky; left: 0; z-index: 15; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' }, [
+                      m('input[type=checkbox].rounded.border-gray-300 dark:border-slate-600.text-indigo-600.focus:ring-indigo-500', {
                         checked: state.records.length > 0 && state.selectedRecords && state.selectedRecords.size === state.records.length,
                         indeterminate: state.selectedRecords && state.selectedRecords.size > 0 && state.selectedRecords.size < state.records.length,
                         onchange: (e) => {
@@ -2015,26 +2015,26 @@ const RecordList = {
                     ]),
                     // Dynamic column headers (first column sticky left with box-shadow)
                     ...displayColumns.map((col, i) => 
-                      m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500.uppercase.tracking-wider.whitespace-nowrap.bg-gray-50.border-b.border-gray-200', 
+                      m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500 dark:text-slate-400.uppercase.tracking-wider.whitespace-nowrap.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200', 
                         i === 0 ? { style: 'position: sticky; left: 40px; z-index: 15; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' } : {},
                         formatColumnLabel(col.name)
                       )
                     ),
                     // Sticky actions header (sticky right, box-shadow on left)
-                    m('th.px-4.py-3.text-right.text-xs.font-medium.text-gray-500.uppercase.tracking-wider.bg-gray-50.border-b.border-gray-200', {
+                    m('th.px-4.py-3.text-right.text-xs.font-medium.text-gray-500 dark:text-slate-400.uppercase.tracking-wider.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200', {
                       style: 'position: sticky; right: 0; min-width: 120px; z-index: 15; box-shadow: -4px 0 8px -4px rgba(0,0,0,0.08);',
                     }, 'Actions'),
                   ]),
                 ]),
                 m('tbody.divide-y.divide-gray-100', state.records.map(record => 
-                  m('tr.hover:bg-gray-50.transition-colors', {
+                  m('tr.hover:bg-gray-50 dark:hover:bg-slate-800/50 dark:hover:bg-slate-800/50.transition-colors', {
                     class: state.selectedRecords && state.selectedRecords.has(record[primaryKey]) ? 'bg-indigo-50' : '',
                   }, [
                     // Checkbox cell (sticky left, box-shadow on right)
                     m('td.px-4.py-3.bg-white', {
                       style: 'position: sticky; left: 0; z-index: 5; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);',
                     }, [
-                      m('input[type=checkbox].rounded.border-gray-300.text-indigo-600.focus:ring-indigo-500', {
+                      m('input[type=checkbox].rounded.border-gray-300 dark:border-slate-600.text-indigo-600.focus:ring-indigo-500', {
                         checked: state.selectedRecords && state.selectedRecords.has(record[primaryKey]),
                         onchange: (e) => {
                           if (!state.selectedRecords) state.selectedRecords = new Set();
@@ -2049,7 +2049,7 @@ const RecordList = {
                     ]),
                     // Dynamic cell values (first column sticky left with box-shadow)
                     ...displayColumns.map((col, i) => 
-                      m('td.px-4.py-3.text-sm.whitespace-nowrap.text-gray-700.bg-white',
+                      m('td.px-4.py-3.text-sm.whitespace-nowrap.text-gray-700 dark:text-slate-300.bg-white',
                         i === 0 ? { style: 'position: sticky; left: 40px; z-index: 5; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' } : {},
                         formatCellValue(record[col.name], col)
                       )
@@ -2172,7 +2172,7 @@ const RecordForm = {
       state.loading ? m('p.text-gray-600', 'Loading...') :
       state.error && !modelMeta ? m('.bg-red-100.border.border-red-400.text-red-700.px-4.py-3.rounded', state.error) :
       
-      m('form.bg-white.rounded.shadow.flex.flex-col', {
+      m('form.bg-white dark:bg-slate-800.rounded.shadow.flex.flex-col', {
         style: 'min-height: calc(100vh - 280px);',
         onsubmit: async (e) => {
           e.preventDefault();
@@ -2261,16 +2261,16 @@ const RecordForm = {
             };
             
             return renderer(col, value, onChange, isReadonly);
-          }) : m('p.text-gray-600.mb-4', 'Loading form fields...'),
+          }) : m('p.text-gray-600 dark:text-slate-400.mb-4', 'Loading form fields...'),
         ]),
         
         // Sticky footer buttons
-        m('.flex.gap-4.p-4.border-t.bg-gray-50.sticky.bottom-0', [
+        m('.flex.gap-4.p-4.border-t.bg-gray-50 dark:bg-slate-900.sticky.bottom-0', [
           m('button.bg-blue-600.text-white.px-6.py-2.rounded.hover:bg-blue-700.disabled:opacity-50', {
             type: 'submit',
             disabled: state.loading,
           }, state.loading ? 'Saving...' : 'Save'),
-          m('button.bg-gray-200.text-gray-800.px-6.py-2.rounded.hover:bg-gray-300[type=button]', {
+          m('button.bg-gray-200 dark:bg-slate-700.text-gray-800 dark:text-slate-200.px-6.py-2.rounded.hover:bg-gray-300 dark:hover:bg-slate-600 dark:hover:bg-slate-600[type=button]', {
             onclick: () => m.route.set('/models/' + modelName),
           }, 'Cancel'),
         ]),

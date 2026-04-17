@@ -22,7 +22,7 @@ module.exports = {
           meta.label || name,
           required ? m('span.text-red-500', ' *') : null
         ),
-        m('textarea.w-full.px-3.py-2.border.border-gray-300.rounded.font-mono.text-sm', {
+        m('textarea.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.font-mono.text-sm', {
           rows: 10,
           value: jsonString,
           oninput: (e) => {

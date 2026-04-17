@@ -182,7 +182,7 @@ function createCustomPage(pageConfig) {
 
         m('div.mb-6', [
           m('h1.text-2xl.font-bold.text-gray-900', pageConfig.title),
-          pageConfig.description && m('p.text-gray-500.mt-1', pageConfig.description),
+          pageConfig.description && m('p.text-gray-500 dark:text-slate-400.mt-1', pageConfig.description),
         ]),
 
         loading 
@@ -191,7 +191,7 @@ function createCustomPage(pageConfig) {
             ? m('div.bg-red-50.border.border-red-200.rounded.p-4.text-red-700', error)
             : pageConfig.render
               ? pageConfig.render(data, vnode)
-              : m('div.bg-white.rounded-lg.shadow.p-6', [
+              : m('div.bg-white dark:bg-slate-800.rounded-lg.shadow.p-6', [
                   data 
                     ? m('pre.text-sm.overflow-auto', JSON.stringify(data, null, 2))
                     : m('p.text-gray-500', 'No content'),
@@ -239,11 +239,11 @@ const SettingsPage = {
 
       error && m('div.bg-red-50.border.border-red-200.rounded.p-4.text-red-700.mb-4', error),
 
-      m('div.bg-white.rounded-lg.shadow', [
+      m('div.bg-white dark:bg-slate-800.rounded-lg.shadow', [
         m('div.p-6.space-y-4', [
           m('div', [
             m('label.block.text-sm.font-medium.text-gray-700', 'Panel Title'),
-            m('input.mt-1.block.w-full.rounded.border-gray-300.shadow-sm.focus:border-blue-500.focus:ring-blue-500', {
+            m('input.mt-1.block.w-full.rounded.border-gray-300 dark:border-slate-600.shadow-sm.focus:border-blue-500.focus:ring-blue-500', {
               type: 'text',
               value: formData.title || '',
               oninput: (e) => { formData.title = e.target.value; },
@@ -252,7 +252,7 @@ const SettingsPage = {
 
           m('div', [
             m('label.block.text-sm.font-medium.text-gray-700', 'Primary Color'),
-            m('input.mt-1.block.w-24.h-10.rounded.border-gray-300.shadow-sm', {
+            m('input.mt-1.block.w-24.h-10.rounded.border-gray-300 dark:border-slate-600.shadow-sm', {
               type: 'color',
               value: formData.primaryColor || '#3B82F6',
               oninput: (e) => { formData.primaryColor = e.target.value; },
@@ -261,7 +261,7 @@ const SettingsPage = {
 
           m('div', [
             m('label.block.text-sm.font-medium.text-gray-700', 'Records Per Page'),
-            m('input.mt-1.block.w-32.rounded.border-gray-300.shadow-sm.focus:border-blue-500.focus:ring-blue-500', {
+            m('input.mt-1.block.w-32.rounded.border-gray-300 dark:border-slate-600.shadow-sm.focus:border-blue-500.focus:ring-blue-500', {
               type: 'number',
               min: 5,
               max: 100,
@@ -271,7 +271,7 @@ const SettingsPage = {
           ]),
         ]),
 
-        m('div.bg-gray-50.px-6.py-4.flex.justify-end.gap-3.rounded-b-lg', [
+        m('div.bg-gray-50 dark:bg-slate-900.px-6.py-4.flex.justify-end.gap-3.rounded-b-lg', [
           m('button.px-4.py-2.text-sm.font-medium.text-white.bg-blue-600.rounded.hover:bg-blue-700.disabled:opacity-50', {
             disabled: saving,
             onclick: async () => {

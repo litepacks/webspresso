@@ -163,13 +163,13 @@ const BulkActionsBar = {
     
     if (selectedCount === 0) return null;
 
-    return m('div.fixed.bottom-0.left-0.right-0.bg-white.border-t.shadow-lg.p-4.z-50', [
+    return m('div.fixed.bottom-0.left-0.right-0.bg-white dark:bg-slate-800.border-t.shadow-lg.p-4.z-50', [
       m('div.max-w-7xl.mx-auto.flex.items-center.justify-between', [
         m('div.flex.items-center.gap-4', [
           m('span.text-sm.font-medium.text-gray-700', 
             selectedCount + ' record' + (selectedCount !== 1 ? 's' : '') + ' selected'
           ),
-          m('button.text-sm.text-gray-500.hover:text-gray-700.underline', {
+          m('button.text-sm.text-gray-500 dark:text-slate-400.hover:text-gray-700 dark:hover:text-slate-200 dark:hover:text-slate-200.underline', {
             onclick: onClearSelection,
           }, 'Clear selection'),
         ]),
@@ -182,7 +182,7 @@ const BulkActionsBar = {
                   ? 'bg-green-100 text-green-700 hover:bg-green-200'
                   : action.color === 'blue'
                     ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+                    : 'bg-gray-100 text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-600 dark:hover:bg-slate-600',
               onclick: () => onAction(action),
             }, [
               action.icon && m(Icon, { name: action.icon, class: 'w-4 h-4' }),
@@ -205,13 +205,13 @@ const ConfirmModal = {
         if (e.target === e.currentTarget) onCancel();
       },
     }, [
-      m('div.bg-white.rounded-lg.shadow-xl.max-w-md.w-full.mx-4', [
+      m('div.bg-white dark:bg-slate-800.rounded-lg.shadow-xl.max-w-md.w-full.mx-4', [
         m('div.p-6', [
           m('h3.text-lg.font-medium.text-gray-900', title || 'Confirm Action'),
           m('p.mt-2.text-sm.text-gray-500', message),
         ]),
-        m('div.bg-gray-50.px-6.py-4.flex.justify-end.gap-3.rounded-b-lg', [
-          m('button.px-4.py-2.text-sm.font-medium.text-gray-700.bg-white.border.border-gray-300.rounded.hover:bg-gray-50', {
+        m('div.bg-gray-50 dark:bg-slate-900.px-6.py-4.flex.justify-end.gap-3.rounded-b-lg', [
+          m('button.px-4.py-2.text-sm.font-medium.text-gray-700 dark:text-slate-300.bg-white dark:bg-slate-800.border.border-gray-300 dark:border-slate-600.rounded.hover:bg-gray-50 dark:hover:bg-slate-800/50 dark:hover:bg-slate-800/50', {
             onclick: onCancel,
           }, 'Cancel'),
           m('button.px-4.py-2.text-sm.font-medium.text-white.rounded', {

@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`z.nanoid()`** on the `z` passed to **`schema: ({ z }) => …`**: same as **`zodNanoid`**, via **`extendZ`** (also exported). Supports **`z.nanoid()`**, **`z.nanoid(12)`**, **`z.nanoid({ maxLength: 12 })`**.
 - OpenAPI, admin field renderers, and seeders recognize the `nanoid` column type.
 
+#### Admin panel: dark mode
+- **Tailwind `darkMode: 'class'`** on `<html>` with **`localStorage`** key **`webspresso-admin-theme`**: **system** (default, follows `prefers-color-scheme`), **light**, or **dark**.
+- **Theme toggle** (monitor / sun / moon) in the **sidebar header** and **mobile top bar**; initial theme script in the admin HTML avoids flash.
+- **UI**: `dark:` variants across admin Mithril views; **Quill** rich-text toolbar/editor styled in dark mode via scoped CSS.
+
 #### Plugin Error Handling (Graceful Degradation)
 - **Warning instead of crash**: Plugin errors do not crash the app; only `console.warn` is logged
 - **Missing / incompatible dependencies**: Warning instead of throw for missing or version-mismatched `dependencies`; plugin still loads
@@ -145,6 +150,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Auto-disabled in Production**: Only active in development mode
 
 ### Fixed
+
+#### Admin panel: Quill / CSP
+- **jsDelivr in CSP**: `cdn.quilljs.com` now redirects to `cdn.jsdelivr.net`; plugin CSP includes **`https://cdn.jsdelivr.net`** for `style-src`, `script-src`, and `connect-src` so the rich-text editor (Quill) loads in production.
 
 #### ORM Boolean Field Handling
 - **SQLite Boolean Coercion**: Fixed `z.boolean()` validation failing with SQLite's 0/1 values

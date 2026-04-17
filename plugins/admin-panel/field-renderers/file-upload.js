@@ -63,7 +63,7 @@ module.exports = {
           meta.label || name,
           required ? m('span.text-red-500', ' *') : null
         ),
-        m('div#drop-zone-' + name + '.border-2.border-dashed.border-gray-300.rounded.p-8.text-center', {
+        m('div#drop-zone-' + name + '.border-2.border-dashed.border-gray-300 dark:border-slate-600.rounded.p-8.text-center', {
           style: 'cursor: pointer;'
         }, [
           m('input[type=file]', {
@@ -77,7 +77,7 @@ module.exports = {
             }
           }),
           m('div', [
-            m('p.text-gray-600.mb-2', 'Drag and drop a file here, or'),
+            m('p.text-gray-600 dark:text-slate-400.mb-2', 'Drag and drop a file here, or'),
             m('label.text-blue-600.hover:text-blue-800.cursor-pointer', {
               for: 'file-input-' + name
             }, 'browse'),

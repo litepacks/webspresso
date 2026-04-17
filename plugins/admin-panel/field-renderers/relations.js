@@ -18,7 +18,7 @@ module.exports = {
           meta.label || name,
           required ? m('span.text-red-500', ' *') : null
         ),
-        m('select.w-full.px-3.py-2.border.border-gray-300.rounded', {
+        m('select.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded', {
           name,
           value: value ? String(value) : '',
           required,
@@ -58,7 +58,7 @@ module.exports = {
           meta.label || name,
           required ? m('span.text-red-500', ' *') : null
         ),
-        m('.border.border-gray-300.rounded.p-4.max-h-64.overflow-y-auto', [
+        m('.border.border-gray-300 dark:border-slate-600.rounded.p-4.max-h-64.overflow-y-auto', [
           relationData.map(item => {
             const itemValue = String(item[valueKey]);
             const itemDisplay = item[displayKey] || itemValue;

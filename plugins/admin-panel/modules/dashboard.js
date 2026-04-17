@@ -173,7 +173,7 @@ const WidgetRenderers = {
     render: (data) => {
       if (!data || !Array.isArray(data)) return m('div.text-gray-500', 'No data');
       return m('div.grid.grid-cols-1.md:grid-cols-2.lg:grid-cols-3.gap-4', data.map(stat => 
-        m('a.block.bg-white.rounded-lg.shadow.hover:shadow-md.transition-shadow.overflow-hidden', {
+        m('a.block.bg-white dark:bg-slate-800.rounded-lg.shadow.hover:shadow-md dark:hover:shadow-slate-900/40 dark:hover:shadow-slate-900/40.transition-shadow.overflow-hidden', {
           href: '/models/' + stat.name,
           onclick: (e) => {
             e.preventDefault();
@@ -193,17 +193,17 @@ const WidgetRenderers = {
             ]),
           ]),
           // Stats row
-          m('div.px-4.py-3.bg-gray-50.grid.grid-cols-3.gap-2.text-center', [
+          m('div.px-4.py-3.bg-gray-50 dark:bg-slate-900.grid.grid-cols-3.gap-2.text-center', [
             m('div', [
-              m('p.text-xs.text-gray-400.uppercase', 'Columns'),
+              m('p.text-xs.text-gray-400 dark:text-slate-500.uppercase', 'Columns'),
               m('p.text-sm.font-semibold.text-gray-700', stat.columnCount || '-'),
             ]),
             m('div', [
-              m('p.text-xs.text-gray-400.uppercase', 'Table'),
-              m('p.text-sm.font-semibold.text-gray-700.truncate', { title: stat.table }, stat.table || '-'),
+              m('p.text-xs.text-gray-400 dark:text-slate-500.uppercase', 'Table'),
+              m('p.text-sm.font-semibold.text-gray-700 dark:text-slate-300.truncate', { title: stat.table }, stat.table || '-'),
             ]),
             m('div', [
-              m('p.text-xs.text-gray-400.uppercase', 'Last Update'),
+              m('p.text-xs.text-gray-400 dark:text-slate-500.uppercase', 'Last Update'),
               m('p.text-sm.font-semibold.text-gray-700', 
                 stat.lastUpdated || stat.lastCreated 
                   ? formatRelativeTime(stat.lastUpdated || stat.lastCreated)
@@ -220,10 +220,10 @@ const WidgetRenderers = {
   'recent-activity': {
     render: (data) => {
       if (!data?.enabled) {
-        return m('div.text-gray-500.text-center.py-4', 'Activity logging not enabled');
+        return m('div.text-gray-500 dark:text-slate-400.text-center.py-4', 'Activity logging not enabled');
       }
       if (!data.activities?.length) {
-        return m('div.text-gray-500.text-center.py-4', 'No recent activity');
+        return m('div.text-gray-500 dark:text-slate-400.text-center.py-4', 'No recent activity');
       }
       return m('div.divide-y', data.activities.map(activity =>
         m('div.py-3.flex.items-center.gap-3', [
@@ -240,7 +240,7 @@ const WidgetRenderers = {
             }),
           ]),
           m('div.flex-1.min-w-0', [
-            m('p.text-sm.text-gray-900.truncate', activity.description || \`\${activity.action} on \${activity.model}\`),
+            m('p.text-sm.text-gray-900 dark:text-slate-100.truncate', activity.description || \`\${activity.action} on \${activity.model}\`),
             m('p.text-xs.text-gray-500', formatDate(activity.created_at)),
           ]),
           activity.user_name && m('span.text-xs.text-gray-400', activity.user_name),
@@ -253,10 +253,10 @@ const WidgetRenderers = {
   'quick-actions': {
     render: (data) => {
       if (!data || !Array.isArray(data) || data.length === 0) {
-        return m('div.text-gray-500.text-center.py-4', 'No quick actions available');
+        return m('div.text-gray-500 dark:text-slate-400.text-center.py-4', 'No quick actions available');
       }
       return m('div.space-y-2', data.map(action =>
-        m('a.flex.items-center.gap-2.px-3.py-2.bg-gray-50.rounded.hover:bg-gray-100.transition-colors', {
+        m('a.flex.items-center.gap-2.px-3.py-2.bg-gray-50 dark:bg-slate-900.rounded.hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:bg-slate-700.transition-colors', {
           href: action.path,
           onclick: (e) => {
             e.preventDefault();
@@ -299,7 +299,7 @@ const WidgetRenderers = {
   default: {
     render: (data) => {
       if (!data) return m('div.text-gray-500', 'No data');
-      return m('pre.text-xs.bg-gray-50.p-2.rounded.overflow-auto', JSON.stringify(data, null, 2));
+      return m('pre.text-xs.bg-gray-50 dark:bg-slate-900.p-2.rounded.overflow-auto', JSON.stringify(data, null, 2));
     },
   },
 };
@@ -340,7 +340,7 @@ const Widget = {
       full: 'col-span-full',
     };
 
-    return m('div.bg-white.rounded-lg.shadow', {
+    return m('div.bg-white dark:bg-slate-800.rounded-lg.shadow', {
       class: sizeClasses[widget.size] || sizeClasses.md,
     }, [
       m('div.px-4.py-3.border-b.border-gray-200', [
@@ -391,7 +391,7 @@ const Dashboard = {
     return m(Layout, [
       m('div.mb-6', [
         m('h1.text-2xl.font-bold.text-gray-900', config?.settings?.title || 'Dashboard'),
-        m('p.text-gray-500.mt-1', 'Welcome back, ' + (state.user?.name || 'Admin')),
+        m('p.text-gray-500 dark:text-slate-400.mt-1', 'Welcome back, ' + (state.user?.name || 'Admin')),
       ]),
 
       widgets.length > 0

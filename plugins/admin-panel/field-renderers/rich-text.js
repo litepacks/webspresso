@@ -95,11 +95,11 @@ module.exports = {
       const editorId = 'quill-editor-' + name;
       
       return m('.mb-4', [
-        m('label.block.text-sm.font-medium.text-gray-700.mb-1', { for: name },
+        m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: name },
           label,
           required ? m('span.text-red-500', ' *') : null
         ),
-        m('div.border.border-gray-300.rounded', {
+        m('div.border.border-gray-300 dark:border-slate-600.rounded', {
           id: editorId,
           style: 'min-height: 200px;'
         }),
@@ -108,7 +108,7 @@ module.exports = {
           id: name + '-value',
           value: value || '',
         }),
-        hint ? m('p.text-xs.text-gray-500.mt-1', hint) : null,
+        hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
       ]);
     }
   },

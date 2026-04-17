@@ -15,7 +15,7 @@ module.exports = {
           meta.label || name,
           required ? m('span.text-red-500', ' *') : null
         ),
-        m('input.w-full.px-3.py-2.border.border-gray-300.rounded', {
+        m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded', {
           id: name,
           name,
           type: 'text',
@@ -43,7 +43,7 @@ module.exports = {
           meta.label || name,
           required ? m('span.text-red-500', ' *') : null
         ),
-        m('textarea.w-full.px-3.py-2.border.border-gray-300.rounded', {
+        m('textarea.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded', {
           id: name,
           name,
           rows: meta.rows || 5,
@@ -69,7 +69,7 @@ module.exports = {
           meta.label || name,
           required ? m('span.text-red-500', ' *') : null
         ),
-        m('input.w-full.px-3.py-2.border.border-gray-300.rounded', {
+        m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded', {
           id: name,
           name,
           type: 'number',
@@ -127,7 +127,7 @@ module.exports = {
           meta.label || name,
           required ? m('span.text-red-500', ' *') : null
         ),
-        m('input.w-full.px-3.py-2.border.border-gray-300.rounded', {
+        m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded', {
           id: name,
           name,
           type: 'date',
@@ -155,7 +155,7 @@ module.exports = {
           meta.label || name,
           required ? m('span.text-red-500', ' *') : null
         ),
-        m('input.w-full.px-3.py-2.border.border-gray-300.rounded', {
+        m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded', {
           id: name,
           name,
           type: 'datetime-local',
@@ -183,7 +183,7 @@ module.exports = {
           meta.label || name,
           required ? m('span.text-red-500', ' *') : null
         ),
-        m('select.w-full.px-3.py-2.border.border-gray-300.rounded', {
+        m('select.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded', {
           id: name,
           name,
           value: String(value || ''),
