@@ -29,10 +29,10 @@ export default defineConfig({
     // Coverage configuration
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
+      reporter: ['text', 'json', 'json-summary', 'html', 'lcov'],
       reportsDirectory: './coverage',
-      include: ['src/**/*.js', 'utils/**/*.js', 'core/**/*.js'],
-      exclude: ['src/**/*.test.js', 'node_modules']
+      include: ['src/**/*.js', 'utils/**/*.js', 'core/**/*.js', 'plugins/**/*.js'],
+      exclude: ['src/**/*.test.js', 'node_modules'],
     },
     
     // Watch mode settings

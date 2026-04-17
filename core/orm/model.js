@@ -27,6 +27,7 @@ function defineModel(options) {
     relations = {},
     scopes = {},
     admin = {},
+    rest = {},
     hooks = {},
     hidden = [],
   } = options;
@@ -88,6 +89,11 @@ function defineModel(options) {
       icon: admin.icon || null,
       customFields: admin.customFields || {},
       queries: admin.queries || {},
+    },
+    rest: {
+      enabled: rest.enabled === true,
+      path: typeof rest.path === 'string' && rest.path.length > 0 ? rest.path.replace(/^\/+|\/+$/g, '') : null,
+      allowInclude: Array.isArray(rest.allowInclude) ? rest.allowInclude.filter((x) => typeof x === 'string') : null,
     },
     hidden: Array.isArray(hidden) ? hidden : [],
     hooks: {},

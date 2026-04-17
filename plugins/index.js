@@ -14,6 +14,7 @@ const auditLogPlugin = require('./audit-log');
 const recaptchaPlugin = require('./recaptcha');
 const swaggerPlugin = require('./swagger');
 const healthCheckPlugin = require('./health-check');
+const restResourcePlugin = require('./rest-resources');
 
 module.exports = {
   sitemapPlugin,
@@ -27,5 +28,6 @@ module.exports = {
   recaptchaPlugin,
   swaggerPlugin,
   healthCheckPlugin,
+  restResourcePlugin,
 };
 

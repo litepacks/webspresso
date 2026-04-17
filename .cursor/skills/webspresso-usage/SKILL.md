@@ -180,6 +180,7 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `auditLogPlugin` | Admin mutation audit trail |
 | `recaptchaPlugin` | v2/v3 + middleware |
 | `seoCheckerPlugin` | Dev SEO panel |
+| `restResourcePlugin` | Opt-in REST CRUD from models; `?include=` uses ORM eager load (single-level relations only) |
 
 **Custom plugin:** `name`, `version`, `register(ctx)`, `onRoutesReady(ctx)` — use `ctx.app`, `ctx.db`, `ctx.addHelper`, `ctx.addRoute`, `ctx.usePlugin('other')`. Plugin failures **warn**; app keeps running.
 

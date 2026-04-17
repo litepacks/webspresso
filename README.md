@@ -15,7 +15,7 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 - **Lifecycle Hooks**: Global and route-level hooks for request processing
 - **Template Helpers**: Laravel-inspired helper functions available in templates
 - **Plugin System**: Extensible architecture with version control and inter-plugin communication
-- **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing), self-hosted site analytics, optional Swagger UI for HTTP APIs, configurable HTTP health probe endpoint
+- **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing), self-hosted site analytics, optional Swagger UI for HTTP APIs, configurable HTTP health probe endpoint, optional REST CRUD routes from ORM models
 
 ## Installation
 
@@ -1881,6 +1881,34 @@ const models = plugin.api.getModels();       // All models
 const user = plugin.api.getModel('User');    // Single model
 const names = plugin.api.getModelNames();    // Model names
 ```
+
+### REST resources plugin
+
+Registers **REST-style CRUD** routes for ORM models (`GET` list, `GET /:id`, `POST`, `PATCH /:id`, `DELETE /:id`). Relations are eager-loaded only when the client passes **`?include=relation1,relation2`**; loading uses the ORM batch eager loader (no classic N+1 from relation queries). **Nested includes** (e.g. `posts.comments`) are **not** supported—only top-level relation names defined on the model.
+
+**Model opt-in** via `defineModel({ ..., rest: { enabled: true, path: 'optional-segment', allowInclude: ['company'] } })`. If you pass **`models: ['User', 'Post']`** to the plugin, those names are exposed even when `rest.enabled` is false.
+
+**Setup:**
+
+```javascript
+const { createApp, restResourcePlugin } = require('webspresso');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  db,
+  plugins: [
+    restResourcePlugin({
+      path: '/api/rest',
+      middleware: [], // optional Express handlers (e.g. auth) — `attachDbMiddleware` is applied after these
+      models: null,   // optional whitelist of model names; when omitted, only `rest.enabled` models are exposed
+      excludeModels: [],
+      filter: null,   // optional (model) => boolean
+    }),
+  ],
+});
+```
+
+List query parameters: `page`, `perPage`, `sort`, `order`, `include`, `trashed` (`only` / `include` when the model uses soft delete), plus **equality filters** on real columns (unknown keys are ignored).
 
 ### Health check plugin
 

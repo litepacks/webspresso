@@ -90,6 +90,9 @@ function initModels(forceReset = false) {
     scopes: {
       timestamps: true,
     },
+    rest: {
+      enabled: false,
+    },
   });
 
   User = defineModel({
@@ -113,6 +116,11 @@ function initModels(forceReset = false) {
       softDelete: true,
       timestamps: true,
     },
+    hidden: ['metadata'],
+    rest: {
+      enabled: true,
+      allowInclude: ['company'],
+    },
   });
 
   Post = defineModel({
@@ -130,6 +138,9 @@ function initModels(forceReset = false) {
     scopes: {
       softDelete: true,
       timestamps: true,
+    },
+    rest: {
+      enabled: true,
     },
   });
 

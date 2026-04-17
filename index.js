@@ -38,7 +38,7 @@ const {
 const orm = require('./core/orm');
 
 // Built-in plugins
-const { schemaExplorerPlugin, adminPanelPlugin, siteAnalyticsPlugin, auditLogPlugin, recaptchaPlugin, swaggerPlugin, healthCheckPlugin } = require('./plugins');
+const { schemaExplorerPlugin, adminPanelPlugin, siteAnalyticsPlugin, auditLogPlugin, recaptchaPlugin, swaggerPlugin, healthCheckPlugin, restResourcePlugin } = require('./plugins');
 
 module.exports = {
   // Main API
@@ -89,4 +89,5 @@ module.exports = {
   recaptchaPlugin,
   swaggerPlugin,
   healthCheckPlugin,
+  restResourcePlugin,
 };

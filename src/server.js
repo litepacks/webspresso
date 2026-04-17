@@ -56,27 +56,117 @@ function getDefaultHelmetConfig(isDev) {
 }
 
 /**
+ * Shared CSS for built-in HTML error pages (viewport-safe, fluid type, dark mode)
+ */
+function defaultErrorPageStyles() {
+  return `
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+      background: #f5f5f5;
+      color: #1a1a1a;
+      -webkit-text-size-adjust: 100%;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #121212; color: #e8e8e8; }
+      .card { background: #1e1e1e; border-color: #333; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+      h1 { color: #f5f5f5; }
+      .muted { color: #a3a3a3; }
+      a { color: #7cc4ff; }
+      pre { background: #0d0d0d; color: #e5e5e5; border-color: #333; }
+    }
+    .container {
+      width: 100%;
+      max-width: min(100%, 26rem);
+      text-align: center;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e5e5e5;
+      border-radius: 12px;
+      padding: clamp(1.25rem, 5vw, 2rem);
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    h1 {
+      font-size: clamp(2.5rem, 12vw, 4rem);
+      font-weight: 700;
+      line-height: 1.05;
+      margin: 0 0 0.35rem;
+      letter-spacing: -0.02em;
+      color: #262626;
+    }
+    .muted {
+      margin: 0 0 1rem;
+      line-height: 1.55;
+      color: #525252;
+      font-size: clamp(0.9375rem, 3.8vw, 1.0625rem);
+    }
+    a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      margin-top: 0.25rem;
+      color: #0066cc;
+      text-decoration: none;
+      font-weight: 500;
+      font-size: clamp(0.875rem, 3.5vw, 1rem);
+      min-height: 44px;
+      padding: 0.25rem 0.5rem;
+    }
+    a:hover { text-decoration: underline; }
+    a:focus-visible {
+      outline: 2px solid currentColor;
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+    pre {
+      margin: 1rem 0 0;
+      padding: clamp(0.75rem, 3vw, 1rem);
+      border-radius: 8px;
+      text-align: left;
+      font-size: clamp(0.625rem, 2.75vw, 0.8125rem);
+      line-height: 1.45;
+      overflow-x: auto;
+      max-width: 100%;
+      width: 100%;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #fff;
+      border: 1px solid #e5e5e5;
+      -webkit-overflow-scrolling: touch;
+    }
+  `;
+}
+
+/**
  * Default 404 page HTML
  */
 function default404Html() {
   return `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>404 - Not Found</title>
-  <style>
-    body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
-    .container { text-align: center; }
-    h1 { font-size: 4rem; margin: 0; color: #333; }
-    p { color: #666; margin: 1rem 0; }
-    a { color: #0066cc; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-  </style>
+  <style>${defaultErrorPageStyles()}
+ </style>
 </head>
 <body>
   <div class="container">
-    <h1>404</h1>
-    <p>Page not found</p>
-    <a href="/">← Back to Home</a>
+    <div class="card">
+      <h1>404</h1>
+      <p class="muted">Page not found</p>
+      <a href="/">← Back to Home</a>
+    </div>
   </div>
 </body>
 </html>`;
@@ -86,26 +176,30 @@ function default404Html() {
  * Default 500 page HTML
  */
 function default500Html(err, isDev) {
+  const detail =
+    isDev && err
+      ? `<pre>${String(err.stack || err.message)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')}</pre>`
+      : '';
   return `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>500 - Server Error</title>
-  <style>
-    body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
-    .container { text-align: center; }
-    h1 { font-size: 4rem; margin: 0; color: #333; }
-    p { color: #666; margin: 1rem 0; }
-    pre { background: #fff; padding: 1rem; border-radius: 4px; text-align: left; overflow: auto; max-width: 600px; }
-    a { color: #0066cc; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+  <style>${defaultErrorPageStyles()}
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>500</h1>
-    <p>Internal Server Error</p>
-    ${isDev && err ? `<pre>${err.stack || err.message}</pre>` : ''}
-    <a href="/">← Back to Home</a>
+    <div class="card">
+      <h1>500</h1>
+      <p class="muted">Internal Server Error</p>
+      ${detail}
+      <a href="/">← Back to Home</a>
+    </div>
   </div>
 </body>
 </html>`;
@@ -116,23 +210,21 @@ function default500Html(err, isDev) {
  */
 function default503Html() {
   return `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>503 - Service Unavailable</title>
-  <style>
-    body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
-    .container { text-align: center; }
-    h1 { font-size: 4rem; margin: 0; color: #333; }
-    p { color: #666; margin: 1rem 0; }
-    a { color: #0066cc; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+  <style>${defaultErrorPageStyles()}
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>503</h1>
-    <p>Request timed out. Please try again.</p>
-    <a href="/">← Back to Home</a>
+    <div class="card">
+      <h1>503</h1>
+      <p class="muted">Request timed out. Please try again.</p>
+      <a href="/">← Back to Home</a>
+    </div>
   </div>
 </body>
 </html>`;
