@@ -174,5 +174,9 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Playwright (local runs + CI artifact extract)
 playwright-report/
+test-results/
+blob-report/
 
