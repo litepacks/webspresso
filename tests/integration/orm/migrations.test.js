@@ -2,8 +2,11 @@
  * Migration Integration Tests
  */
 
+const path = require('path');
 const { createDatabase } = require('../../../core/orm');
 const { createMigrationManager } = require('../../../core/orm/migrations');
+
+const FIXTURE_MIGRATIONS_DIR = path.join(__dirname, '../../fixtures/migrations');
 
 describe('Migration Integration', () => {
   let db;
@@ -15,7 +18,7 @@ describe('Migration Integration', () => {
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
       migrations: {
-        directory: './tests/fixtures/migrations',
+        directory: FIXTURE_MIGRATIONS_DIR,
         tableName: 'test_migrations',
       },
     });
