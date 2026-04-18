@@ -187,6 +187,7 @@ var AnalyticsPage = {
     vnode.state.viewsOverTime = [];
     vnode.state.topPages = [];
     vnode.state.botActivity = [];
+    vnode.state.referrerSources = [];
     vnode.state.countries = [];
     vnode.state.recent = [];
     vnode.state.chartLoaded = false;
@@ -217,6 +218,7 @@ var AnalyticsPage = {
       analyticsApi('views-over-time', days),
       analyticsApi('top-pages', days),
       analyticsApi('bot-activity', days),
+      analyticsApi('referrer-sources', days),
       analyticsApi('countries', days),
       analyticsApi('client-errors', days),
       analyticsApi('recent', days),
@@ -225,9 +227,10 @@ var AnalyticsPage = {
       vnode.state.viewsOverTime = results[1];
       vnode.state.topPages = results[2];
       vnode.state.botActivity = results[3];
-      vnode.state.countries = results[4];
-      vnode.state.clientErrors = results[5];
-      vnode.state.recent = results[6];
+      vnode.state.referrerSources = results[4];
+      vnode.state.countries = results[5];
+      vnode.state.clientErrors = results[6];
+      vnode.state.recent = results[7];
       vnode.state.loading = false;
 
       if (chartInstance) {
@@ -279,11 +282,13 @@ var AnalyticsPage = {
         ? m('div.flex.justify-center.py-24', m(Spinner))
         : [
           // Stat cards
-          m('div.grid.grid-cols-1.sm:grid-cols-2.lg:grid-cols-4.gap-4.mb-6', [
+          m('div.grid.grid-cols-2.sm:grid-cols-3.lg:grid-cols-3.xl:grid-cols-6.gap-4.mb-6', [
             m(StatCard, { icon: '👁', label: 'Views', value: s.stats?.views, bgClass: 'bg-blue-100' }),
             m(StatCard, { icon: '👤', label: 'Visitors', value: s.stats?.visitors, bgClass: 'bg-green-100' }),
             m(StatCard, { icon: '📄', label: 'Unique Pages', value: s.stats?.uniquePages, bgClass: 'bg-yellow-100' }),
             m(StatCard, { icon: '🔗', label: 'Sessions', value: s.stats?.sessions, bgClass: 'bg-purple-100' }),
+            m(StatCard, { icon: '🏠', label: 'Direct traffic', value: s.stats?.directViews, bgClass: 'bg-slate-100' }),
+            m(StatCard, { icon: '🌐', label: 'With referrer', value: s.stats?.referredViews, bgClass: 'bg-cyan-100' }),
           ]),
 
           // Chart + Bot Activity row
@@ -410,6 +415,31 @@ var AnalyticsPage = {
                       err.path && m('p.text-xs.text-gray-500.mt-0.5', err.path),
                     ]);
                   }),
+            ]),
+          ]),
+
+          // Referrer sources (hostname-level)
+          m('div.bg-white.rounded-lg.shadow.mb-6', [
+            m('div.px-5.py-4.border-b.border-gray-100.flex.items-center.justify-between', [
+              m('h3.text-sm.font-semibold.text-gray-900', 'Referrer sources'),
+              m('span.text-xs.text-gray-400', 'By hostname · last ' + s.days + ' days'),
+            ]),
+            m('div.p-4', [
+              !s.referrerSources || s.referrerSources.length === 0
+                ? m('p.text-gray-400.text-sm.text-center.py-4', 'No external referrer data (direct visits or missing Referer header)')
+                : (function() {
+                  var maxV = s.referrerSources[0]?.views || 1;
+                  return m('div.grid.grid-cols-1.sm:grid-cols-2.gap-x-8.gap-y-2', s.referrerSources.map(function(r) {
+                    return m('div.flex.items-center.gap-3.py-1', [
+                      m('span.text-sm.text-gray-700.flex-1.min-w-0.truncate', { title: r.source }, r.source),
+                      m('div.w-32.shrink-0', m(HBar, {
+                        pct: (r.views / maxV) * 100,
+                        color: 'bg-sky-500',
+                      })),
+                      m('span.text-xs.text-gray-500.w-12.text-right.tabular-nums', formatNumber(r.views)),
+                    ]);
+                  }));
+                })(),
             ]),
           ]),
 

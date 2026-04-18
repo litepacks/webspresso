@@ -115,6 +115,7 @@ function siteAnalyticsPlugin(options = {}) {
             { method: 'get', path: '/views-over-time', handler: handlers.getViewsOverTime },
             { method: 'get', path: '/top-pages', handler: handlers.getTopPages },
             { method: 'get', path: '/bot-activity', handler: handlers.getBotActivity },
+            { method: 'get', path: '/referrer-sources', handler: handlers.getReferrerSources },
             { method: 'get', path: '/countries', handler: handlers.getCountries },
             { method: 'get', path: '/client-errors', handler: handlers.getClientErrors },
             { method: 'get', path: '/recent', handler: handlers.getRecent },

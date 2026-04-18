@@ -30,6 +30,24 @@ function createAnalyticsApiHandlers(options) {
   }
 
   /**
+   * Extract registrable hostname from Referer URL (strip www.)
+   * @param {string|null|undefined} referrer
+   * @returns {string|null}
+   */
+  function hostnameFromReferrer(referrer) {
+    if (!referrer || typeof referrer !== 'string' || !referrer.trim()) return null;
+    try {
+      const u = new URL(referrer);
+      const h = u.hostname;
+      if (!h) return null;
+      const norm = h.replace(/^www\./i, '').toLowerCase();
+      return norm || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * GET /stats - Summary statistics
    */
   async function getStats(req, res) {
@@ -41,6 +59,18 @@ function createAnalyticsApiHandlers(options) {
         .where('created_at', '>=', since)
         .where('is_bot', false)
         .count('id as count');
+
+      const totalViews = parseInt(views.count) || 0;
+
+      const [directRow] = await knex(tableName)
+        .where('created_at', '>=', since)
+        .where('is_bot', false)
+        .where((qb) => {
+          qb.whereNull('referrer').orWhere('referrer', '');
+        })
+        .count('id as count');
+
+      const directViews = parseInt(directRow.count) || 0;
 
       const [visitors] = await knex(tableName)
         .where('created_at', '>=', since)
@@ -58,7 +88,9 @@ function createAnalyticsApiHandlers(options) {
         .countDistinct('session_id as count');
 
       res.json({
-        views: parseInt(views.count) || 0,
+        views: totalViews,
+        directViews,
+        referredViews: Math.max(0, totalViews - directViews),
         visitors: parseInt(visitors.count) || 0,
         uniquePages: parseInt(uniquePages.count) || 0,
         sessions: parseInt(sessions.count) || 0,
@@ -184,6 +216,46 @@ function createAnalyticsApiHandlers(options) {
   }
 
   /**
+   * GET /referrer-sources - Top referrer hostnames (aggregated from full Referer URLs)
+   */
+  async function getReferrerSources(req, res) {
+    try {
+      const days = parseDays(req);
+      const since = sinceDate(days);
+      const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+      /** Max distinct full Referer URLs read before hostname merge (long tail capped). */
+      const referrerGroupLimit = 400;
+
+      const rows = await knex(tableName)
+        .select('referrer')
+        .where('created_at', '>=', since)
+        .where('is_bot', false)
+        .whereNotNull('referrer')
+        .where('referrer', '!=', '')
+        .count('id as views')
+        .groupBy('referrer')
+        .orderBy('views', 'desc')
+        .limit(referrerGroupLimit);
+
+      const byHost = new Map();
+      for (const r of rows) {
+        const host = hostnameFromReferrer(r.referrer) || 'Other';
+        const n = parseInt(r.views) || 0;
+        byHost.set(host, (byHost.get(host) || 0) + n);
+      }
+
+      const list = [...byHost.entries()]
+        .map(([source, views]) => ({ source, views }))
+        .sort((a, b) => b.views - a.views)
+        .slice(0, limit);
+
+      res.json(list);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  }
+
+  /**
    * GET /countries - Country breakdown
    */
   async function getCountries(req, res) {
@@ -262,6 +334,7 @@ function createAnalyticsApiHandlers(options) {
     getViewsOverTime,
     getTopPages,
     getBotActivity,
+    getReferrerSources,
     getCountries,
     getClientErrors,
     getRecent,

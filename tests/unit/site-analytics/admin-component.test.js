@@ -40,6 +40,7 @@ describe('Analytics Admin Component', () => {
     expect(code).toContain('Recent Activity');
     expect(code).toContain('Client Errors');
     expect(code).toContain('Country Stats');
+    expect(code).toContain('Referrer sources');
   });
 
   it('should include day filter buttons (7, 30, 90)', () => {
@@ -57,6 +58,7 @@ describe('Analytics Admin Component', () => {
     expect(code).toContain("analyticsApi('views-over-time'");
     expect(code).toContain("analyticsApi('top-pages'");
     expect(code).toContain("analyticsApi('bot-activity'");
+    expect(code).toContain("analyticsApi('referrer-sources'");
     expect(code).toContain("analyticsApi('countries'");
     expect(code).toContain("analyticsApi('client-errors'");
     expect(code).toContain("analyticsApi('recent'");
@@ -67,6 +69,8 @@ describe('Analytics Admin Component', () => {
     expect(code).toContain('Visitors');
     expect(code).toContain('Unique Pages');
     expect(code).toContain('Sessions');
+    expect(code).toContain('Direct traffic');
+    expect(code).toContain('With referrer');
   });
 
   it('should include HBar component for progress bars', () => {

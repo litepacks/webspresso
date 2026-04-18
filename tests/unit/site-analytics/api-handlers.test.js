@@ -97,6 +97,8 @@ describe('Analytics API Handlers', () => {
       await handlers.getStats(req, res);
 
       expect(res._body.views).toBe(0);
+      expect(res._body.directViews).toBe(0);
+      expect(res._body.referredViews).toBe(0);
       expect(res._body.visitors).toBe(0);
       expect(res._body.uniquePages).toBe(0);
       expect(res._body.sessions).toBe(0);
@@ -113,6 +115,8 @@ describe('Analytics API Handlers', () => {
       await handlers.getStats(mockReq({ days: '30' }), res);
 
       expect(res._body.views).toBe(3);
+      expect(res._body.directViews).toBe(3);
+      expect(res._body.referredViews).toBe(0);
       expect(res._body.visitors).toBe(2);
       expect(res._body.uniquePages).toBe(2);
       expect(res._body.sessions).toBe(2);
@@ -128,6 +132,21 @@ describe('Analytics API Handlers', () => {
       await handlers.getStats(mockReq({ days: '30' }), res);
 
       expect(res._body.views).toBe(1);
+    });
+
+    it('should split direct vs referred views', async () => {
+      await seedPageViews([
+        { path: '/a', referrer: null },
+        { path: '/b', referrer: '' },
+        { path: '/c', referrer: 'https://example.com/landing' },
+      ]);
+
+      const res = mockRes();
+      await handlers.getStats(mockReq({ days: '30' }), res);
+
+      expect(res._body.views).toBe(3);
+      expect(res._body.directViews).toBe(2);
+      expect(res._body.referredViews).toBe(1);
     });
 
     it('should filter by days parameter', async () => {
@@ -244,6 +263,48 @@ describe('Analytics API Handlers', () => {
       await handlers.getTopPages(mockReq({ days: '30' }), res);
       expect(res._body.length).toBe(1);
       expect(res._body[0].path).toBe('/human');
+    });
+  });
+
+  describe('getReferrerSources', () => {
+    it('should return empty array when no referrer data', async () => {
+      await seedPageViews([{ path: '/', referrer: null }, { path: '/a' }]);
+
+      const res = mockRes();
+      await handlers.getReferrerSources(mockReq({ days: '30' }), res);
+
+      expect(res._body).toEqual([]);
+    });
+
+    it('should aggregate views by hostname across paths', async () => {
+      await seedPageViews([
+        { path: '/x', referrer: 'https://www.google.com/search?q=1' },
+        { path: '/y', referrer: 'https://google.com/foo' },
+        { path: '/z', referrer: 'https://news.example.org/article' },
+      ]);
+
+      const res = mockRes();
+      await handlers.getReferrerSources(mockReq({ days: '30' }), res);
+
+      expect(res._body.length).toBe(2);
+      expect(res._body[0].source).toBe('google.com');
+      expect(res._body[0].views).toBe(2);
+      expect(res._body[1].source).toBe('news.example.org');
+      expect(res._body[1].views).toBe(1);
+    });
+
+    it('should exclude bots', async () => {
+      await seedPageViews([
+        { path: '/', referrer: 'https://twitter.com/x', is_bot: false },
+        { path: '/', referrer: 'https://twitter.com/y', is_bot: true },
+      ]);
+
+      const res = mockRes();
+      await handlers.getReferrerSources(mockReq({ days: '30' }), res);
+
+      expect(res._body.length).toBe(1);
+      expect(res._body[0].source).toBe('twitter.com');
+      expect(res._body[0].views).toBe(1);
     });
   });
 

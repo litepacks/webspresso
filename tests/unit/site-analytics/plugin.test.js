@@ -110,14 +110,15 @@ describe('Site Analytics Plugin', () => {
       const componentCode = registry.clientComponents.get('analytics');
       expect(componentCode).toContain('AnalyticsPage');
 
-      // report-error + 7 data routes + 1 SPA route
-      expect(routes.length).toBe(9);
+      // report-error + 8 data routes + 1 SPA route
+      expect(routes.length).toBe(10);
       expect(routes.some((r) => r.path === '/_analytics/report-error' && r.method === 'post')).toBe(true);
       const apiPaths = routes.map(r => r.path);
       expect(apiPaths).toContain('/_admin/api/analytics/stats');
       expect(apiPaths).toContain('/_admin/api/analytics/views-over-time');
       expect(apiPaths).toContain('/_admin/api/analytics/top-pages');
       expect(apiPaths).toContain('/_admin/api/analytics/bot-activity');
+      expect(apiPaths).toContain('/_admin/api/analytics/referrer-sources');
       expect(apiPaths).toContain('/_admin/api/analytics/countries');
       expect(apiPaths).toContain('/_admin/api/analytics/client-errors');
       expect(apiPaths).toContain('/_admin/api/analytics/recent');
