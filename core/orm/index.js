@@ -15,6 +15,7 @@ const { createScopeContext } = require('./scopes');
 const { ModelEvents, Hooks, HookCancellationError, createEventContext } = require('./events');
 const { omitHiddenColumns, sanitizeForOutput } = require('./utils');
 const { generateNanoid, zodNanoid, extendZ } = require('./utils/nanoid');
+const { createOrmCacheFromConfig, unregisterOrmCacheListeners } = require('./cache');
 
 /**
  * Create a database instance
@@ -92,6 +93,10 @@ function createDatabase(config) {
   // Create migration manager
   const migrationConfig = config.migrations || {};
   const migrate = createMigrationManager(knexInstance, migrationConfig);
+
+  const { layer: ormCacheLayer, publicApi: ormCachePublicApi } = createOrmCacheFromConfig(
+    config.cache
+  );
 
   // Auto-load models from models directory
   const modelsDir = config.models || './models';
@@ -180,7 +185,7 @@ function createDatabase(config) {
     const model = getModelInstance(modelName);
     // Always create fresh scope context if not provided to avoid shared state
     const ctx = scopeContext || createScopeContext();
-    return createRepository(model, knexInstance, ctx);
+    return createRepository(model, knexInstance, ctx, ormCacheLayer);
   }
 
   /**
@@ -192,7 +197,7 @@ function createDatabase(config) {
   function query(modelName, scopeContext) {
     const model = getModelInstance(modelName);
     const ctx = scopeContext || createScopeContext();
-    const repo = createRepository(model, knexInstance, ctx);
+    const repo = createRepository(model, knexInstance, ctx, ormCacheLayer);
     return repo.query();
   }
 
@@ -212,7 +217,7 @@ function createDatabase(config) {
    */
   function createRepositoryFromModel(model, scopeContext) {
     const ctx = scopeContext || createScopeContext();
-    return createRepository(model, knexInstance, ctx);
+    return createRepository(model, knexInstance, ctx, ormCacheLayer);
   }
 
   /**
@@ -228,11 +233,11 @@ function createDatabase(config) {
         getRepository(modelName, scopeContext) {
           const model = getModelInstance(modelName);
           const ctx = scopeContext || createScopeContext();
-          return createRepository(model, trx, ctx);
+          return createRepository(model, trx, ctx, ormCacheLayer);
         },
         createRepository(model, scopeContext) {
           const ctx = scopeContext || createScopeContext();
-          return createRepository(model, trx, ctx);
+          return createRepository(model, trx, ctx, ormCacheLayer);
         },
       };
       return callback(trxContext);
@@ -251,7 +256,11 @@ function createDatabase(config) {
     query,
     transaction,
     createSeeder: createSeederInstance,
-    destroy: () => knexInstance.destroy(),
+    cache: ormCachePublicApi,
+    destroy: () => {
+      if (ormCacheLayer) unregisterOrmCacheListeners(ormCacheLayer);
+      return knexInstance.destroy();
+    },
   };
 }
 
@@ -262,6 +271,10 @@ const zdb = z ? createSchemaHelpers(z) : null;
 module.exports = {
   // Main factory
   createDatabase,
+  // ORM cache (provider + layer utilities)
+  createMemoryCacheProvider: require('./cache/memory-provider').createMemoryCacheProvider,
+  OrmCacheLayer: require('./cache/layer').OrmCacheLayer,
+  createOrmCacheFromConfig: require('./cache').createOrmCacheFromConfig,
   // Schema helpers
   zdb,
   createSchemaHelpers,

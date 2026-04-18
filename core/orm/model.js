@@ -30,6 +30,7 @@ function defineModel(options) {
     rest = {},
     hooks = {},
     hidden = [],
+    cache: cacheOption,
   } = options;
 
   // Validate required fields
@@ -97,6 +98,7 @@ function defineModel(options) {
     },
     hidden: Array.isArray(hidden) ? hidden : [],
     hooks: {},
+    cache: cacheOption,
   };
 
   // Register model

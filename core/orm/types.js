@@ -156,6 +156,7 @@
  * @property {AdminMetadata} [admin] - Admin panel metadata
  * @property {RestMetadata} [rest] - REST resource plugin metadata
  * @property {string[]} [hidden=[]] - Column names to never expose in API/templates (e.g. password_hash, api_token)
+ * @property {boolean|'auto'|'smart'|{strategy:'auto'|'smart'}} [cache] - Per-model query cache when DB cache is enabled (`true` uses DB defaultStrategy)
  */
 
 /**
@@ -170,6 +171,7 @@
  * @property {AdminMetadata} [admin] - Admin panel metadata
  * @property {RestMetadata} rest - REST resource plugin metadata
  * @property {string[]} hidden - Column names never exposed in API/templates
+ * @property {boolean|'auto'|'smart'|{strategy:'auto'|'smart'}|undefined} [cache] - Query cache strategy for this model
  */
 
 // ============================================================================
@@ -265,6 +267,15 @@
  * @property {string|Object} connection - Connection string or config object
  * @property {MigrationConfig} [migrations] - Migration configuration
  * @property {Object} [pool] - Connection pool settings
+ * @property {boolean|OrmDatabaseCacheConfig} [cache] - Enable ORM read cache (memory provider by default)
+ */
+
+/**
+ * @typedef {Object} OrmDatabaseCacheConfig
+ * @property {boolean} [enabled=true]
+ * @property {'auto'|'smart'} [defaultStrategy='auto'] - Default when model.cache is unspecified
+ * @property {import('./cache/types').CacheProvider} [provider] - Custom provider (e.g. Redis)
+ * @property {Object} [memory] - Options for built-in memory provider (maxEntries, defaultTtlMs)
  */
 
 /**
@@ -274,6 +285,16 @@
  * @property {function(function(TransactionContext): Promise): Promise} transaction - Run in transaction
  * @property {MigrationManager} migrate - Migration manager
  * @property {function(): Promise<void>} destroy - Close all connections
+ * @property {OrmCachePublicApi|null} [cache] - Cache controls when enabled
+ */
+
+/**
+ * @typedef {Object} OrmCachePublicApi
+ * @property {() => void} purge
+ * @property {(tags: string[]) => void} invalidateTags
+ * @property {(modelName: string) => void} invalidateModel
+ * @property {() => object} getMetrics
+ * @property {() => void} resetMetrics
  */
 
 /**

@@ -15,7 +15,7 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 - **Lifecycle Hooks**: Global and route-level hooks for request processing
 - **Template Helpers**: Laravel-inspired helper functions available in templates
 - **Plugin System**: Extensible architecture with version control and inter-plugin communication
-- **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing), self-hosted site analytics, optional Swagger UI for HTTP APIs, configurable HTTP health probe endpoint, optional REST CRUD routes from ORM models
+- **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing), self-hosted site analytics, optional Swagger UI for HTTP APIs, configurable HTTP health probe endpoint, optional REST CRUD routes from ORM models, optional admin UI for ORM query cache metrics and purge
 - **TypeScript**: Published **`index.d.ts`** (via `package.json` `"types"`) for `createApp`, ORM, plugins, and router helpers — use from TS/JS with IDE autocomplete; runtime stays CommonJS
 
 ## Installation
@@ -838,6 +838,23 @@ const { app } = createApp({
 
 Programmatic API (other plugins): `ctx.usePlugin('audit-log')` exposes `queryLogs`, `purgeAuditLogs`, and `getMigrationTemplate()`.
 
+**ORM cache admin plugin:**
+- Depends on **`adminPanelPlugin`** and a database instance created with **`createDatabase({ cache: true | { … } })`** so **`db.cache`** is non-null
+- Registers an **ORM Cache** admin page (metrics, full purge, per-model invalidation, reset counters) backed by **`db.cache`**
+- If `db.cache` is disabled, the plugin logs a warning and skips registration
+
+```javascript
+const { adminPanelPlugin, ormCacheAdminPlugin } = require('webspresso');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  plugins: [
+    adminPanelPlugin({ db }),
+    ormCacheAdminPlugin({ db }),
+  ],
+});
+```
+
 **reCAPTCHA plugin:**
 - Google reCAPTCHA **v2** (checkbox) or **v3** (score): server verification via `https://www.google.com/recaptcha/api/siteverify` (no extra npm dependency; Node 18+ `fetch`)
 - Registers CSP entries for Google scripts/iframes; Nunjucks helpers: `recaptchaScript`, `recaptchaWidget` (v2), `recaptchaV3Token` (hidden input + execute for v3 — use with `version: 'v3'` and `recaptchaScript` loads `api.js?render=siteKey`)
@@ -1561,6 +1578,52 @@ await db.transaction(async (trx) => {
   // Rolled back on error
 });
 ```
+
+**ORM reads inside `db.transaction()` always bypass the query cache** (Knex transaction client), so you never serve stale rows mid-transaction.
+
+### ORM query cache (optional)
+
+Enable an in-process, tag-based cache for common read paths. Default provider is in-memory (`createMemoryCacheProvider`); you can pass a custom **`provider`** with the same shape (`get`, `set` with optional `tags` / `ttlMs`, `invalidateTags`, `clear`, `getSizeStats`).
+
+**Turn it on:**
+
+```javascript
+const db = createDatabase({
+  client: 'pg',
+  connection: process.env.DATABASE_URL,
+  models: './models',
+  cache: true, // same as { enabled: true, defaultStrategy: 'auto', memory provider }
+  // cache: {
+  //   enabled: true,
+  //   defaultStrategy: 'auto', // or 'smart'
+  //   memory: { maxEntries: 50_000, defaultTtlMs: undefined },
+  //   // provider: myRedisLikeAdapter,
+  // },
+});
+```
+
+When enabled, **`db.cache`** exposes **`purge()`**, **`invalidateTags(string[])`**, **`invalidateModel('ModelName')`**, **`getMetrics()`**, and **`resetMetrics()`**. When the cache is off, **`db.cache`** is **`null`**.
+
+**Per-model opt-in / strategy** (inherits the database **`defaultStrategy`** when set to `true`):
+
+```javascript
+defineModel({
+  name: 'User',
+  table: 'users',
+  schema: UserSchema,
+  cache: true,              // use db defaultStrategy
+  // cache: 'auto', // invalidate all cached reads for this model on any row change
+  // cache: 'smart', // finer-grained tags: PK reads vs list/collection queries
+  // cache: { strategy: 'smart' },
+  // cache: false,         // never cache this model
+});
+```
+
+**What gets cached:** **`findById`**, **`findOne`**, **`findAll`**, and query builder **`first`**, **`list`**, **`count`**, **`paginate`** — only when the model participates in caching and the read is not on a transaction connection. Some query shapes are never cached (e.g. raw `where` fragments); the layer increments a **`bypassed`** metric for those.
+
+**Invalidation:** Hooks on **`afterCreate`**, **`afterUpdate`**, **`afterDelete`**, and **`afterRestore`** schedule tag invalidation after the Knex transaction commits (when applicable). With **`auto`**, every mutation clears all cache entries tagged for that model. With **`smart`**, creates invalidate collection query tags; updates/deletes target the row’s primary key tag plus collection tags when the record exposes an id (falls back to full-model invalidation if the id is missing). Bulk **`updateWhere`** / query-builder **`update`** / **`delete`** that affect rows call **`invalidateModelAll`** for safety.
+
+**Exports:** **`createMemoryCacheProvider`**, **`OrmCacheLayer`**, and **`createOrmCacheFromConfig`** are available from **`webspresso`** for advanced/testing setups.
 
 ### Migrations
 

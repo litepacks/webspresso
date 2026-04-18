@@ -22,9 +22,10 @@ const { getJsonColumns, serializeJsonFields, deserializeJsonFields } = require('
  * @param {import('./types').ModelDefinition} model - Model definition
  * @param {import('knex').Knex|import('knex').Knex.Transaction} knex - Knex instance
  * @param {import('./types').ScopeContext} [initialContext] - Initial scope context
+ * @param {import('./cache/layer').OrmCacheLayer|null} [cacheLayer] - Optional ORM cache layer
  * @returns {import('./types').Repository}
  */
-function createRepository(model, knex, initialContext) {
+function createRepository(model, knex, initialContext, cacheLayer = null) {
   const scopeContext = initialContext || createScopeContext();
   const jsonColumns = getJsonColumns(model);
 
@@ -49,40 +50,59 @@ function createRepository(model, knex, initialContext) {
     const ctx = createEventContext(model.name, 'find');
     const query = { [model.primaryKey]: id };
 
-    // Emit beforeFind
-    if (emitEvents) {
-      await ModelEvents.emitAsync(model.name, Hooks.BEFORE_FIND, query, ctx);
-      if (ctx.isCancelled) {
-        throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_FIND);
+    async function loadFromDb() {
+      if (emitEvents) {
+        await ModelEvents.emitAsync(model.name, Hooks.BEFORE_FIND, query, ctx);
+        if (ctx.isCancelled) {
+          throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_FIND);
+        }
       }
+
+      let qb = baseQuery().where(model.primaryKey, id);
+
+      if (select && select.length > 0) {
+        qb = qb.select(select);
+      }
+
+      const record = await qb.first();
+
+      if (!record) {
+        return null;
+      }
+
+      deserializeJsonFields(record, jsonColumns);
+
+      if (withs.length > 0) {
+        await loadRelations([record], ensureArray(withs), model, knex, scopeContext);
+      }
+
+      if (emitEvents) {
+        ModelEvents.emit(model.name, Hooks.AFTER_FIND, record, ctx);
+      }
+
+      return record;
     }
 
-    let qb = baseQuery().where(model.primaryKey, id);
-    
-    if (select && select.length > 0) {
-      qb = qb.select(select);
+    if (cacheLayer && emitEvents && cacheLayer.strategyFor(model)) {
+      const strat = cacheLayer.strategyFor(model);
+      const kind = withs.length > 0 ? 'collection' : 'pk';
+      const fingerprint = cacheLayer.findByIdFingerprint(
+        model,
+        scopeContext,
+        id,
+        select || [],
+        withs
+      );
+      const tags = cacheLayer.buildReadTags(
+        model,
+        strat,
+        kind,
+        kind === 'pk' ? id : null
+      );
+      return cacheLayer.wrapRead(model, knex, scopeContext, fingerprint, tags, loadFromDb, (r) => r != null);
     }
 
-    const record = await qb.first();
-
-    if (!record) {
-      return null;
-    }
-
-    // Deserialize JSON fields
-    deserializeJsonFields(record, jsonColumns);
-
-    // Load relations if requested
-    if (withs.length > 0) {
-      await loadRelations([record], ensureArray(withs), model, knex, scopeContext);
-    }
-
-    // Emit afterFind
-    if (emitEvents) {
-      ModelEvents.emit(model.name, Hooks.AFTER_FIND, record, ctx);
-    }
-
-    return record;
+    return loadFromDb();
   }
 
   /**
@@ -95,40 +115,65 @@ function createRepository(model, knex, initialContext) {
     const { with: withs = [], select } = options;
     const ctx = createEventContext(model.name, 'find');
 
-    // Emit beforeFind
-    await ModelEvents.emitAsync(model.name, Hooks.BEFORE_FIND, conditions, ctx);
-    if (ctx.isCancelled) {
-      throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_FIND);
+    const condKeys = Object.keys(conditions);
+    const isPkOnly =
+      withs.length === 0 &&
+      condKeys.length === 1 &&
+      condKeys[0] === model.primaryKey;
+
+    async function loadFromDb() {
+      await ModelEvents.emitAsync(model.name, Hooks.BEFORE_FIND, conditions, ctx);
+      if (ctx.isCancelled) {
+        throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_FIND);
+      }
+
+      let qb = baseQuery();
+
+      for (const [key, value] of Object.entries(conditions)) {
+        qb = qb.where(key, value);
+      }
+
+      if (select && select.length > 0) {
+        qb = qb.select(select);
+      }
+
+      const record = await qb.first();
+
+      if (!record) {
+        return null;
+      }
+
+      deserializeJsonFields(record, jsonColumns);
+
+      if (withs.length > 0) {
+        await loadRelations([record], ensureArray(withs), model, knex, scopeContext);
+      }
+
+      ModelEvents.emit(model.name, Hooks.AFTER_FIND, record, ctx);
+
+      return record;
     }
 
-    let qb = baseQuery();
-
-    for (const [key, value] of Object.entries(conditions)) {
-      qb = qb.where(key, value);
+    if (cacheLayer && cacheLayer.strategyFor(model)) {
+      const strat = cacheLayer.strategyFor(model);
+      const kind = isPkOnly ? 'pk' : 'collection';
+      const fingerprint = cacheLayer.findOneFingerprint(
+        model,
+        scopeContext,
+        conditions,
+        select || [],
+        withs
+      );
+      const tags = cacheLayer.buildReadTags(
+        model,
+        strat,
+        kind,
+        kind === 'pk' ? conditions[model.primaryKey] : null
+      );
+      return cacheLayer.wrapRead(model, knex, scopeContext, fingerprint, tags, loadFromDb, (r) => r != null);
     }
 
-    if (select && select.length > 0) {
-      qb = qb.select(select);
-    }
-
-    const record = await qb.first();
-
-    if (!record) {
-      return null;
-    }
-
-    // Deserialize JSON fields
-    deserializeJsonFields(record, jsonColumns);
-
-    // Load relations if requested
-    if (withs.length > 0) {
-      await loadRelations([record], ensureArray(withs), model, knex, scopeContext);
-    }
-
-    // Emit afterFind
-    ModelEvents.emit(model.name, Hooks.AFTER_FIND, record, ctx);
-
-    return record;
+    return loadFromDb();
   }
 
   /**
@@ -140,36 +185,43 @@ function createRepository(model, knex, initialContext) {
     const { with: withs = [], select } = options;
     const ctx = createEventContext(model.name, 'find');
 
-    // Emit beforeFind
-    await ModelEvents.emitAsync(model.name, Hooks.BEFORE_FIND, {}, ctx);
-    if (ctx.isCancelled) {
-      throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_FIND);
+    async function loadFromDb() {
+      await ModelEvents.emitAsync(model.name, Hooks.BEFORE_FIND, {}, ctx);
+      if (ctx.isCancelled) {
+        throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_FIND);
+      }
+
+      let qb = baseQuery();
+
+      if (select && select.length > 0) {
+        qb = qb.select(select);
+      }
+
+      const records = await qb;
+
+      for (const record of records) {
+        deserializeJsonFields(record, jsonColumns);
+      }
+
+      if (withs.length > 0 && records.length > 0) {
+        await loadRelations(records, ensureArray(withs), model, knex, scopeContext);
+      }
+
+      for (const record of records) {
+        ModelEvents.emit(model.name, Hooks.AFTER_FIND, record, ctx);
+      }
+
+      return records;
     }
 
-    let qb = baseQuery();
-
-    if (select && select.length > 0) {
-      qb = qb.select(select);
+    if (cacheLayer && cacheLayer.strategyFor(model)) {
+      const strat = cacheLayer.strategyFor(model);
+      const fingerprint = cacheLayer.findAllFingerprint(model, scopeContext, select || []);
+      const tags = cacheLayer.buildReadTags(model, strat, 'collection', null);
+      return cacheLayer.wrapRead(model, knex, scopeContext, fingerprint, tags, loadFromDb, () => true);
     }
 
-    const records = await qb;
-
-    // Deserialize JSON fields
-    for (const record of records) {
-      deserializeJsonFields(record, jsonColumns);
-    }
-
-    // Load relations if requested
-    if (withs.length > 0 && records.length > 0) {
-      await loadRelations(records, ensureArray(withs), model, knex, scopeContext);
-    }
-
-    // Emit afterFind for each record
-    for (const record of records) {
-      ModelEvents.emit(model.name, Hooks.AFTER_FIND, record, ctx);
-    }
-
-    return records;
+    return loadFromDb();
   }
 
   /**
@@ -334,7 +386,11 @@ function createRepository(model, knex, initialContext) {
       qb = qb.where(key, value);
     }
 
-    return qb.update(updateData);
+    const updated = await qb.update(updateData);
+    if (cacheLayer && updated > 0) {
+      cacheLayer.invalidateModelAll(model);
+    }
+    return updated;
   }
 
   /**
@@ -391,6 +447,9 @@ function createRepository(model, knex, initialContext) {
     const deleted = await knex(model.table)
       .where(model.primaryKey, id)
       .delete();
+    if (cacheLayer && deleted > 0) {
+      cacheLayer.invalidateModelAll(model);
+    }
     return deleted > 0;
   }
 
@@ -445,7 +504,7 @@ function createRepository(model, knex, initialContext) {
    * @returns {import('./query-builder').QueryBuilder}
    */
   function query() {
-    return createQueryBuilder(model, knex, scopeContext);
+    return createQueryBuilder(model, knex, scopeContext, cacheLayer);
   }
 
   /**

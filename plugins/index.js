@@ -15,6 +15,7 @@ const recaptchaPlugin = require('./recaptcha');
 const swaggerPlugin = require('./swagger');
 const healthCheckPlugin = require('./health-check');
 const restResourcePlugin = require('./rest-resources');
+const ormCacheAdminPlugin = require('./orm-cache-admin');
 
 module.exports = {
   sitemapPlugin,
@@ -29,5 +30,6 @@ module.exports = {
   swaggerPlugin,
   healthCheckPlugin,
   restResourcePlugin,
+  ormCacheAdminPlugin,
 };
 

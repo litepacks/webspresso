@@ -220,6 +220,7 @@ export interface ModelOptions {
   rest?: RestMetadata;
   hooks?: Record<string, (...args: unknown[]) => unknown>;
   hidden?: string[];
+  cache?: boolean | 'auto' | 'smart' | { strategy: 'auto' | 'smart' };
 }
 
 export interface ModelDefinition {
@@ -248,6 +249,7 @@ export interface ModelDefinition {
   };
   hidden: string[];
   hooks: Record<string, unknown>;
+  cache?: boolean | 'auto' | 'smart' | { strategy: 'auto' | 'smart' };
 }
 
 export function defineModel(options: ModelOptions): ModelDefinition;
@@ -343,6 +345,24 @@ export interface MigrationConfig {
   tableName?: string;
 }
 
+export interface OrmMemoryCacheOptions {
+  maxEntries?: number;
+  defaultTtlMs?: number;
+}
+
+export interface OrmDatabaseCacheConfig {
+  enabled?: boolean;
+  defaultStrategy?: 'auto' | 'smart';
+  provider?: {
+    get(key: string): unknown;
+    set(key: string, value: unknown, opts?: { tags?: string[]; ttlMs?: number }): void;
+    invalidateTags(tags: string[]): void;
+    clear(): void;
+    getSizeStats(): { entries: number; tags: number };
+  };
+  memory?: OrmMemoryCacheOptions;
+}
+
 export interface DatabaseConfig {
   client?: string;
   connection?: string | Record<string, unknown>;
@@ -350,7 +370,16 @@ export interface DatabaseConfig {
   migrations?: MigrationConfig;
   pool?: Record<string, unknown>;
   useNullAsDefault?: boolean;
+  cache?: boolean | OrmDatabaseCacheConfig;
   [key: string]: unknown;
+}
+
+export interface OrmCachePublicApi {
+  purge(): void;
+  invalidateTags(tags: string[]): void;
+  invalidateModel(modelName: string): void;
+  getMetrics(): Record<string, unknown>;
+  resetMetrics(): void;
 }
 
 export interface MigrationStatus {
@@ -402,10 +431,19 @@ export interface DatabaseInstance {
   query(modelName: string, scopeContext?: ScopeContext): QueryBuilder;
   transaction<T>(callback: (ctx: TransactionContext) => Promise<T>): Promise<T>;
   createSeeder(): unknown;
+  cache: OrmCachePublicApi | null;
   destroy(): Promise<void>;
 }
 
 export function createDatabase(config: DatabaseConfig): DatabaseInstance;
+
+export function createMemoryCacheProvider(options?: OrmMemoryCacheOptions): {
+  get(key: string): unknown;
+  set(key: string, value: unknown, opts?: { tags?: string[]; ttlMs?: number }): void;
+  invalidateTags(tags: string[]): void;
+  clear(): void;
+  getSizeStats(): { entries: number; tags: number };
+};
 
 // --- ORM: nanoid / zod ---
 
@@ -480,3 +518,5 @@ export interface RestResourcePluginOptions {
 }
 
 export function restResourcePlugin(options?: RestResourcePluginOptions): WebspressoPlugin;
+
+export function ormCacheAdminPlugin(options: { db: DatabaseInstance }): WebspressoPlugin;

@@ -164,6 +164,8 @@ Analytics plugin adds `fsy.analyticsHead`, `fsy.verificationTags`, etc., when co
 
 **Transactions:** `db.transaction(async (trx) => { trx.getRepository('User') })`.
 
+**Query cache (optional):** `createDatabase({ ..., cache: true })` or `cache: { defaultStrategy: 'auto'|'smart', memory: { maxEntries, defaultTtlMs }, provider?: custom }`. Opt-in per model: `defineModel({ ..., cache: 'auto'|'smart'|true })`. API: `db.cache` → `getMetrics()`, `purge()`, `invalidateModel(name)`, `invalidateTags(tags[])`, `resetMetrics()`. Reads bypass cache when using a transaction knex. Admin UI: `ormCacheAdminPlugin({ db })` (needs `admin-panel` and `cache` enabled).
+
 Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and plugins. **`pages/api/`** handlers receive **`req.db`** (and route **`middleware`** runs after it). Outside requests, use **`getDb()`** / **`hasDb()`**; for **`setupRoutes`**-only routes, use **`attachDbMiddleware`**.
 
 ---
@@ -181,6 +183,7 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `recaptchaPlugin` | v2/v3 + middleware |
 | `seoCheckerPlugin` | Dev SEO panel |
 | `restResourcePlugin` | Opt-in REST CRUD from models; `?include=` uses ORM eager load (single-level relations only) |
+| `ormCacheAdminPlugin` | Admin page for ORM cache metrics / purge / invalidate (`db.cache` required) |
 
 **Custom plugin:** `name`, `version`, `register(ctx)`, `onRoutesReady(ctx)` — use `ctx.app`, `ctx.db`, `ctx.addHelper`, `ctx.addRoute`, `ctx.usePlugin('other')`. Plugin failures **warn**; app keeps running.
 

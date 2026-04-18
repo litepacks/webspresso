@@ -21,8 +21,8 @@ const {
  * @param {import('./types').ScopeContext} [initialContext] - Initial scope context
  * @returns {QueryBuilder}
  */
-function createQueryBuilder(model, knex, initialContext) {
-  return new QueryBuilder(model, knex, initialContext);
+function createQueryBuilder(model, knex, initialContext, cacheLayer = null) {
+  return new QueryBuilder(model, knex, initialContext, cacheLayer);
 }
 
 /**
@@ -34,11 +34,13 @@ class QueryBuilder {
    * @param {import('./types').ModelDefinition} model
    * @param {import('knex').Knex|import('knex').Knex.Transaction} knex
    * @param {import('./types').ScopeContext} [initialContext]
+   * @param {import('./cache/layer').OrmCacheLayer|null} [cacheLayer]
    */
-  constructor(model, knex, initialContext) {
+  constructor(model, knex, initialContext, cacheLayer = null) {
     this.model = model;
     this.knex = knex;
     this.scopeContext = initialContext || createScopeContext();
+    this.cacheLayer = cacheLayer;
     this.jsonColumns = getJsonColumns(model);
 
     /** @type {import('./types').QueryState} */
@@ -376,24 +378,64 @@ class QueryBuilder {
    */
   async first() {
     const ctx = createEventContext(this.model.name, 'find', this._hookTrx());
-    await ModelEvents.emitAsync(this.model.name, Hooks.BEFORE_FIND, {}, ctx);
-    if (ctx.isCancelled) {
-      throw new HookCancellationError(ctx.cancelReason, this.model.name, Hooks.BEFORE_FIND);
+    const self = this;
+
+    async function loadFromDb() {
+      await ModelEvents.emitAsync(self.model.name, Hooks.BEFORE_FIND, {}, ctx);
+      if (ctx.isCancelled) {
+        throw new HookCancellationError(ctx.cancelReason, self.model.name, Hooks.BEFORE_FIND);
+      }
+
+      const qb = self.toKnex().first();
+      const result = await qb;
+      if (!result) return null;
+
+      deserializeJsonFields(result, self.jsonColumns);
+
+      const withs = self.getWiths();
+      if (withs.length > 0) {
+        await loadRelations([result], ensureArray(withs), self.model, self.knex, self.scopeContext);
+      }
+
+      ModelEvents.emit(self.model.name, Hooks.AFTER_FIND, result, ctx);
+      return result;
     }
 
-    const qb = this.toKnex().first();
-    const result = await qb;
-    if (!result) return null;
-
-    deserializeJsonFields(result, this.jsonColumns);
-
-    const withs = this.getWiths();
-    if (withs.length > 0) {
-      await loadRelations([result], ensureArray(withs), this.model, this.knex, this.scopeContext);
+    if (
+      self.cacheLayer &&
+      self.cacheLayer.strategyFor(self.model)
+    ) {
+      const strat = self.cacheLayer.strategyFor(self.model);
+      const classification = self.cacheLayer.classifyQueryBuilder(self.model, self.state, 'first');
+      if (!classification.cacheable) {
+        self.cacheLayer.metrics.bypassed += 1;
+        return loadFromDb();
+      }
+      const kind = classification.kind === 'pk' ? 'pk' : 'collection';
+      const fingerprint = self.cacheLayer.queryBuilderFingerprint(
+        self.model,
+        self.scopeContext,
+        self.state,
+        'first'
+      );
+      const tags = self.cacheLayer.buildReadTags(
+        self.model,
+        strat,
+        kind,
+        classification.kind === 'pk' ? classification.pkValue : null
+      );
+      return self.cacheLayer.wrapRead(
+        self.model,
+        self.knex,
+        self.scopeContext,
+        fingerprint,
+        tags,
+        loadFromDb,
+        (r) => r != null
+      );
     }
 
-    ModelEvents.emit(this.model.name, Hooks.AFTER_FIND, result, ctx);
-    return result;
+    return loadFromDb();
   }
 
   /**
@@ -402,26 +444,57 @@ class QueryBuilder {
    */
   async list() {
     const ctx = createEventContext(this.model.name, 'find', this._hookTrx());
-    await ModelEvents.emitAsync(this.model.name, Hooks.BEFORE_FIND, {}, ctx);
-    if (ctx.isCancelled) {
-      throw new HookCancellationError(ctx.cancelReason, this.model.name, Hooks.BEFORE_FIND);
+    const self = this;
+
+    async function loadFromDb() {
+      await ModelEvents.emitAsync(self.model.name, Hooks.BEFORE_FIND, {}, ctx);
+      if (ctx.isCancelled) {
+        throw new HookCancellationError(ctx.cancelReason, self.model.name, Hooks.BEFORE_FIND);
+      }
+
+      const results = await self.toKnex();
+
+      for (const record of results) {
+        deserializeJsonFields(record, self.jsonColumns);
+      }
+
+      const withs = self.getWiths();
+      if (withs.length > 0 && results.length > 0) {
+        await loadRelations(results, ensureArray(withs), self.model, self.knex, self.scopeContext);
+      }
+
+      for (const record of results) {
+        ModelEvents.emit(self.model.name, Hooks.AFTER_FIND, record, ctx);
+      }
+      return results;
     }
 
-    const results = await this.toKnex();
-
-    for (const record of results) {
-      deserializeJsonFields(record, this.jsonColumns);
+    if (self.cacheLayer && self.cacheLayer.strategyFor(self.model)) {
+      const strat = self.cacheLayer.strategyFor(self.model);
+      const classification = self.cacheLayer.classifyQueryBuilder(self.model, self.state, 'list');
+      if (!classification.cacheable) {
+        self.cacheLayer.metrics.bypassed += 1;
+        return loadFromDb();
+      }
+      const fingerprint = self.cacheLayer.queryBuilderFingerprint(
+        self.model,
+        self.scopeContext,
+        self.state,
+        'list'
+      );
+      const tags = self.cacheLayer.buildReadTags(self.model, strat, 'collection', null);
+      return self.cacheLayer.wrapRead(
+        self.model,
+        self.knex,
+        self.scopeContext,
+        fingerprint,
+        tags,
+        loadFromDb,
+        () => true
+      );
     }
 
-    const withs = this.getWiths();
-    if (withs.length > 0 && results.length > 0) {
-      await loadRelations(results, ensureArray(withs), this.model, this.knex, this.scopeContext);
-    }
-
-    for (const record of results) {
-      ModelEvents.emit(this.model.name, Hooks.AFTER_FIND, record, ctx);
-    }
-    return results;
+    return loadFromDb();
   }
 
   /**
@@ -437,8 +510,42 @@ class QueryBuilder {
    * @returns {Promise<number>}
    */
   async count() {
-    const result = await this.toKnex({ includeLimitOffset: false }).count('* as count').first();
-    return parseInt(result?.count || 0, 10);
+    const self = this;
+
+    async function loadFromDb() {
+      const result = await self
+        .toKnex({ includeLimitOffset: false })
+        .count('* as count')
+        .first();
+      return parseInt(result?.count || 0, 10);
+    }
+
+    if (self.cacheLayer && self.cacheLayer.strategyFor(self.model)) {
+      const strat = self.cacheLayer.strategyFor(self.model);
+      const classification = self.cacheLayer.classifyQueryBuilder(self.model, self.state, 'count');
+      if (!classification.cacheable) {
+        self.cacheLayer.metrics.bypassed += 1;
+        return loadFromDb();
+      }
+      const fingerprint = self.cacheLayer.queryBuilderFingerprint(
+        self.model,
+        self.scopeContext,
+        self.state,
+        'count'
+      );
+      const tags = self.cacheLayer.buildReadTags(self.model, strat, 'collection', null);
+      return self.cacheLayer.wrapRead(
+        self.model,
+        self.knex,
+        self.scopeContext,
+        fingerprint,
+        tags,
+        loadFromDb,
+        () => true
+      );
+    }
+
+    return loadFromDb();
   }
 
   /**
@@ -458,39 +565,71 @@ class QueryBuilder {
    */
   async paginate(page = 1, perPage = 15) {
     const ctx = createEventContext(this.model.name, 'find', this._hookTrx());
-    await ModelEvents.emitAsync(this.model.name, Hooks.BEFORE_FIND, {}, ctx);
-    if (ctx.isCancelled) {
-      throw new HookCancellationError(ctx.cancelReason, this.model.name, Hooks.BEFORE_FIND);
+    const self = this;
+
+    async function loadFromDb() {
+      await ModelEvents.emitAsync(self.model.name, Hooks.BEFORE_FIND, {}, ctx);
+      if (ctx.isCancelled) {
+        throw new HookCancellationError(ctx.cancelReason, self.model.name, Hooks.BEFORE_FIND);
+      }
+
+      const base = self.toKnex({ includeLimitOffset: false });
+
+      const countResult = await base.clone().count('* as count').first();
+      const total = parseInt(countResult?.count || 0, 10);
+
+      const offset = (page - 1) * perPage;
+      const data = await base.clone().limit(perPage).offset(offset);
+
+      for (const record of data) {
+        deserializeJsonFields(record, self.jsonColumns);
+      }
+
+      const withs = self.getWiths();
+      if (withs.length > 0 && data.length > 0) {
+        await loadRelations(data, ensureArray(withs), self.model, self.knex, self.scopeContext);
+      }
+
+      for (const record of data) {
+        ModelEvents.emit(self.model.name, Hooks.AFTER_FIND, record, ctx);
+      }
+
+      return {
+        data,
+        total,
+        page,
+        perPage,
+        totalPages: Math.ceil(total / perPage),
+      };
     }
 
-    const base = this.toKnex({ includeLimitOffset: false });
-
-    const countResult = await base.clone().count('* as count').first();
-    const total = parseInt(countResult?.count || 0, 10);
-
-    const offset = (page - 1) * perPage;
-    const data = await base.clone().limit(perPage).offset(offset);
-
-    for (const record of data) {
-      deserializeJsonFields(record, this.jsonColumns);
+    if (self.cacheLayer && self.cacheLayer.strategyFor(self.model)) {
+      const strat = self.cacheLayer.strategyFor(self.model);
+      const classification = self.cacheLayer.classifyQueryBuilder(self.model, self.state, 'paginate');
+      if (!classification.cacheable) {
+        self.cacheLayer.metrics.bypassed += 1;
+        return loadFromDb();
+      }
+      const fingerprint = self.cacheLayer.queryBuilderFingerprint(
+        self.model,
+        self.scopeContext,
+        self.state,
+        'paginate',
+        { page, perPage }
+      );
+      const tags = self.cacheLayer.buildReadTags(self.model, strat, 'collection', null);
+      return self.cacheLayer.wrapRead(
+        self.model,
+        self.knex,
+        self.scopeContext,
+        fingerprint,
+        tags,
+        loadFromDb,
+        () => true
+      );
     }
 
-    const withs = this.getWiths();
-    if (withs.length > 0 && data.length > 0) {
-      await loadRelations(data, ensureArray(withs), this.model, this.knex, this.scopeContext);
-    }
-
-    for (const record of data) {
-      ModelEvents.emit(this.model.name, Hooks.AFTER_FIND, record, ctx);
-    }
-
-    return {
-      data,
-      total,
-      page,
-      perPage,
-      totalPages: Math.ceil(total / perPage),
-    };
+    return loadFromDb();
   }
 
   /**
@@ -498,7 +637,11 @@ class QueryBuilder {
    * @returns {Promise<number>} Number of deleted records
    */
   async delete() {
-    return this.toKnex().delete();
+    const n = await this.toKnex().delete();
+    if (this.cacheLayer && n > 0) {
+      this.cacheLayer.invalidateModelAll(this.model);
+    }
+    return n;
   }
 
   /**
@@ -508,7 +651,11 @@ class QueryBuilder {
    */
   async update(data) {
     const serialized = serializeJsonFields(data, this.jsonColumns);
-    return this.toKnex().update(serialized);
+    const n = await this.toKnex().update(serialized);
+    if (this.cacheLayer && n > 0) {
+      this.cacheLayer.invalidateModelAll(this.model);
+    }
+    return n;
   }
 
   /**
@@ -532,7 +679,7 @@ class QueryBuilder {
    * @returns {QueryBuilder}
    */
   clone() {
-    const cloned = new QueryBuilder(this.model, this.knex, { ...this.scopeContext });
+    const cloned = new QueryBuilder(this.model, this.knex, { ...this.scopeContext }, this.cacheLayer);
     cloned.jsonColumns = this.jsonColumns;
     cloned.state = {
       wheres: [...this.state.wheres],
