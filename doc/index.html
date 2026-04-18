@@ -128,6 +128,7 @@
         <li><strong class="text-slate-800 dark:text-slate-200">Template helpers</strong> — the <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fsy</code> object (URLs, dates via dayjs, SEO helpers, assets, …).</li>
         <li><strong class="text-slate-800 dark:text-slate-200">Plugin system</strong> — versioned plugins, optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dependencies</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">register</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">onRoutesReady</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">onReady</code>.</li>
         <li><strong class="text-slate-800 dark:text-slate-200">Built-in plugins</strong> — dev route dashboard, XML sitemap + robots, tag managers &amp; analytics pixels, self-hosted page analytics, admin CRUD (Mithril), SEO checker (dev), schema explorer (ORM metadata), Swagger UI + OpenAPI for HTTP APIs (dev by default), HTTP <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/health</code> probe, optional <strong class="text-slate-800 dark:text-slate-200">REST CRUD</strong> routes from ORM models (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">restResourcePlugin</code>) with batched <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">?include=</code> relations.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">TypeScript</strong> — npm package includes <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.d.ts</code> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">package.json</code> <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">types</code>); import <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code>, ORM, plugins from TypeScript. Add <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">@types/express</code> in your app for richer Express types.</li>
       </ul>
     </section>
 
@@ -138,6 +139,7 @@
 # or, inside a project:
 npm install webspresso</code></pre>
       <p class="text-slate-600 dark:text-slate-400 mb-2 text-sm">After <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">npm install webspresso</code>, use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">npx webspresso</code> or define an npm script if the binary is not on your PATH.</p>
+      <p class="text-slate-600 dark:text-slate-400 mb-2 text-sm"><strong class="text-slate-800 dark:text-slate-200">TypeScript:</strong> the package ships <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.d.ts</code> for the public API. Example: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">import { createApp, defineModel } from 'webspresso'</code>. Optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">@types/express</code> improves typing for Express <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">app</code> / middleware.</p>
     </section>
 
     <section id="peers" class="doc-section mb-14">
@@ -559,7 +561,7 @@ module.exports = {
 
     <section id="architecture" class="doc-section mb-14">
       <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Architecture</h2>
-      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">Two layers matter: <strong class="text-slate-800 dark:text-slate-200">your application</strong> (a small <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">server.js</code> that calls <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code>, plus <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">views/</code>, optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">models/</code>) and the <strong class="text-slate-800 dark:text-slate-200">webspresso package</strong>, which implements routing, rendering, plugins, and ORM primitives. The public API surface is re-exported from <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.js</code> so consumers rarely import deep paths.</p>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">Two layers matter: <strong class="text-slate-800 dark:text-slate-200">your application</strong> (a small <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">server.js</code> that calls <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code>, plus <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">views/</code>, optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">models/</code>) and the <strong class="text-slate-800 dark:text-slate-200">webspresso package</strong>, which implements routing, rendering, plugins, and ORM primitives. The public API surface is re-exported from <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.js</code> with matching <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.d.ts</code> for TypeScript tooling.</p>
 
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2"><code class="text-base">index.js</code> — public exports</h3>
       <div class="overflow-x-auto mb-6">
@@ -572,6 +574,7 @@ module.exports = {
             <tr><td>Plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">PluginManager</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createPluginManager</code></td></tr>
             <tr><td>ORM</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineModel</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createDatabase</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">generateNanoid</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zodNanoid</code>, …</td></tr>
             <tr><td>Convenience plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schemaExplorerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">swaggerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">healthCheckPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">restResourcePlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">siteAnalyticsPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auditLogPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">recaptchaPlugin</code></td></tr>
+            <tr><td>TypeScript</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.d.ts</code> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">package.json</code> <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">types</code>)</td></tr>
           </tbody>
         </table>
       </div>
@@ -608,6 +611,7 @@ module.exports = {
 
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Package layout (<code class="text-base">package.json</code> <code class="text-base">files</code>)</h3>
       <pre class="bg-slate-100 dark:bg-slate-900/80 border border-stone-200 dark:border-slate-700 rounded-xl p-4 text-sm text-slate-700 dark:text-slate-300 overflow-x-auto font-mono">index.js           # re-exports createApp, router utils, ORM, plugins
+index.d.ts         # TypeScript declarations (public API)
 bin/               # webspresso CLI
 core/              # ORM, auth, Zod compile/apply
 plugins/           # first-party plugins
@@ -623,6 +627,9 @@ utils/             # shared utilities</pre>
       <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-6"><code class="language-bash">npm test                 # vitest run
 npm run test:watch
 npm run test:coverage</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">TypeScript declarations</h3>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed">In this repository, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">npm run check:types</code> runs <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">tsc --noEmit</code> on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">tests/ts-smoke/</code> so <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.d.ts</code> stays aligned with exports. Consumers only need the published <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.d.ts</code> from npm.</p>
 
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">End-to-end (Playwright)</h3>
       <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed">Specs live under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">tests/e2e/</code>; the runner starts a temporary app and exercises HTTP + DOM (Chromium by default). Use UI or headed mode when debugging flaky selectors.</p>

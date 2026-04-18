@@ -16,6 +16,7 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 - **Template Helpers**: Laravel-inspired helper functions available in templates
 - **Plugin System**: Extensible architecture with version control and inter-plugin communication
 - **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing), self-hosted site analytics, optional Swagger UI for HTTP APIs, configurable HTTP health probe endpoint, optional REST CRUD routes from ORM models
+- **TypeScript**: Published **`index.d.ts`** (via `package.json` `"types"`) for `createApp`, ORM, plugins, and router helpers — use from TS/JS with IDE autocomplete; runtime stays CommonJS
 
 ## Installation
 
@@ -24,6 +25,18 @@ npm install -g webspresso
 # or
 npm install webspresso
 ```
+
+## TypeScript
+
+The npm package ships with **[`index.d.ts`](index.d.ts)** so consumers get typings for the public API (`createApp`, `defineModel`, `createDatabase`, `zdb`, plugins, etc.). No extra `@types/webspresso` package is required.
+
+```typescript
+import { createApp, defineModel, zdb } from 'webspresso';
+```
+
+Install **`@types/express`** in your app if you want full **`Express.Application`** / **`Request`** / **`Response`** inference when you touch `createApp().app` or write middleware. **`knex`** and **`zod`** bring their own types.
+
+Framework development (this repo): run **`npm run check:types`** to typecheck the declarations against a small smoke file (`tests/ts-smoke/`).
 
 ## Quick Start
 
