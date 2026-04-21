@@ -402,6 +402,27 @@ module.exports = {
 };
 ```
 
+**Parameterized named middleware:** entries in `middlewares` can be **factories** `(options) => (req, res, next) => …`. A bare string calls the factory with `{}`; a **tuple** passes options:
+
+```javascript
+// pages/api/account.get.js
+module.exports = {
+  middleware: [['auth', { api: true }], 'rateLimit'], // JSON 401 instead of redirect when using createApp({ auth })
+  handler: (req, res) => res.json({ ok: true }),
+};
+
+// server.js — custom factory
+middlewares: {
+  oauth: (opts) => (req, res, next) => {
+    if (opts.google && !req.headers['x-google']) return res.status(401).end();
+    next();
+  },
+};
+// pages/example/index.js → middleware: [['oauth', { google: true }], 'auth']
+```
+
+Plain `(req, res, next) => …` handlers still work as today. Tuple form **requires** a factory for that name (you get a clear error if you mix a plain handler with `['name', opts]`).
+
 ### App context (`req.db`, `getDb`, `attachDbMiddleware`)
 
 With **`createApp({ db })`**, file-based **API** routes (`pages/api/*.js`) get the same ORM instance on **`req.db`** before your **`middleware`** array and the handler run — no extra `require` in the handler:

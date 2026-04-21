@@ -6,6 +6,11 @@ import type { Application, NextFunction, Request, RequestHandler, Response } fro
 import type { Knex } from 'knex';
 import type { ZodObject, ZodTypeAny } from 'zod';
 
+/** Registered as createApp middlewares[name]: plain handler or (options) => handler (for middleware: ['name', options]). */
+export type WebspressoRegisteredMiddleware =
+  | RequestHandler
+  | ((options: unknown) => RequestHandler);
+
 // --- Express / app ---
 
 export interface ErrorPageContext {
@@ -23,7 +28,7 @@ export interface CreateAppOptions {
   publicDir?: string;
   logging?: boolean;
   helmet?: boolean | Record<string, unknown>;
-  middlewares?: Record<string, RequestHandler>;
+  middlewares?: Record<string, WebspressoRegisteredMiddleware>;
   plugins?: WebspressoPlugin[];
   assets?: {
     version?: string;

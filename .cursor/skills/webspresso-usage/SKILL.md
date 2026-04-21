@@ -97,7 +97,7 @@ Longer narrative: **[`doc/index.html#authentication`](../../../doc/index.html#au
 
 **Route config** — sibling `.js` file (e.g. `pages/tools/index.js`):
 
-- `middleware` — array of functions or **names** from `createApp({ middlewares })`.
+- `middleware` — array of Express functions, **string names** from `createApp({ middlewares })`, or **`['name', options]` tuples** when the registry entry is a **factory** `(options) => (req, res, next) => …` (bare string calls the factory with `{}`). Built-in **`auth`** / **`guest`** (with `createApp({ auth })`) are factories — e.g. **`['auth', { api: true }]`** for JSON 401 on APIs.
 - `load(req, ctx)` — async; return object merged into template context; use **`ctx.db`** when `createApp({ db })` is set.
 - `meta(req, ctx)` — title, description, etc.
 - `hooks` — `beforeLoad`, `afterRender`, etc. (see hook order below).
@@ -115,7 +115,7 @@ Longer narrative: **[`doc/index.html#authentication`](../../../doc/index.html#au
 **Shapes**
 
 1. **Function** — `module.exports = async (req, res) => { ... }`
-2. **Object** — **`handler`**, optional **`middleware`** (names from **`createApp({ middlewares })`**), optional **`schema`**
+2. **Object** — **`handler`**, optional **`middleware`** (names, functions, or **`['name', options]`** tuples with factory registry entries), optional **`schema`**
 
 **Order:** `req.db` (if any) → **Zod** `schema` → **`middleware`** → **`handler`**.
 

@@ -72,6 +72,43 @@ describe('Middleware Configuration', () => {
       expect(resolveMiddlewares(null, {})).toEqual([]);
       expect(resolveMiddlewares(undefined, {})).toEqual([]);
     });
+
+    it('should resolve [name, options] tuple via middleware factory', () => {
+      const registry = {
+        auth: (opts) => (req, res, next) => {
+          req._authOpts = opts;
+          next();
+        },
+      };
+      const resolved = resolveMiddlewares([['auth', { api: true }]], registry);
+      expect(resolved).toHaveLength(1);
+      const req = {};
+      const res = {};
+      let nextCalled = false;
+      resolved[0](req, res, () => { nextCalled = true; });
+      expect(nextCalled).toBe(true);
+      expect(req._authOpts).toEqual({ api: true });
+    });
+
+    it('should call factory with {} for bare string name', () => {
+      const registry = {
+        auth: (opts) => (req, res, next) => {
+          req._opts = opts;
+          next();
+        },
+      };
+      const resolved = resolveMiddlewares(['auth'], registry);
+      const req = {};
+      resolved[0](req, {}, () => {});
+      expect(req._opts).toEqual({});
+    });
+
+    it('should throw when tuple is used with non-factory registry entry', () => {
+      const registry = { auth: (req, res, next) => next() };
+      expect(() => {
+        resolveMiddlewares([['auth', { api: true }]], registry);
+      }).toThrow('must be a factory');
+    });
   });
 
   describe('Named Middleware Integration', () => {

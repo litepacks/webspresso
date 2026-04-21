@@ -223,9 +223,9 @@ function createAuthMiddleware(authManager) {
     // Utility
     parseMiddlewareString,
     
-    // Aliases for route config
-    auth: requireAuth(),
-    guest: requireGuest(),
+    // Aliases for route config (factories — file-router calls requireAuth(opts) / requireGuest(opts))
+    auth: requireAuth,
+    guest: requireGuest,
   };
 }
 
