@@ -45,6 +45,7 @@
         <a href="#environment" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Env</a>
         <a href="#cli" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">CLI</a>
         <a href="#create-app" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">createApp</a>
+        <a href="#authentication" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Auth</a>
         <a href="#routing" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Routing</a>
         <a href="#plugins" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Plugins</a>
         <a href="#database" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">ORM</a>
@@ -128,6 +129,7 @@
         <li><strong class="text-slate-800 dark:text-slate-200">Template helpers</strong> — the <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fsy</code> object (URLs, dates via dayjs, SEO helpers, assets, …).</li>
         <li><strong class="text-slate-800 dark:text-slate-200">Plugin system</strong> — versioned plugins, optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dependencies</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">register</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">onRoutesReady</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">onReady</code>.</li>
         <li><strong class="text-slate-800 dark:text-slate-200">ORM query cache</strong> — optional tag-based read cache: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createDatabase({ cache: true })</code>, per-model <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineModel({ cache: 'auto' | 'smart' | false, … })</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">db.cache</code> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">purge</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">invalidateModel</code>, metrics); reads on Knex transactions bypass the cache.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Session authentication</strong> — optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createAuth</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">quickAuth</code> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso/core/auth</code>), <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp({ auth })</code>, remember-me tokens, policies/gates, route middleware <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auth</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">guest</code>. Details: <a href="#authentication" class="text-cyan-800 dark:text-cyan-400 hover:underline font-medium">Authentication</a>.</li>
         <li><strong class="text-slate-800 dark:text-slate-200">Built-in plugins</strong> — dev route dashboard, XML sitemap + robots, tag managers &amp; analytics pixels, self-hosted page analytics, admin CRUD (Mithril), optional admin page for ORM cache metrics (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">ormCacheAdminPlugin</code>), SEO checker (dev), schema explorer (ORM metadata), Swagger UI + OpenAPI for HTTP APIs (dev by default), HTTP <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/health</code> probe, optional <strong class="text-slate-800 dark:text-slate-200">REST CRUD</strong> routes from ORM models (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">restResourcePlugin</code>) with batched <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">?include=</code> relations.</li>
         <li><strong class="text-slate-800 dark:text-slate-200">TypeScript</strong> — npm package includes <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.d.ts</code> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">package.json</code> <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">types</code>); import <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code>, ORM, plugins from TypeScript. Add <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">@types/express</code> in your app for richer Express types.</li>
       </ul>
@@ -294,6 +296,8 @@ webspresso dev --no-css   # skip CSS watch if Tailwind is configured</code></pre
             <tr><td><code class="whitespace-nowrap">timeout</code></td><td>String duration (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">'30s'</code>) or <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">false</code> — uses <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">connect-timeout</code>.</td></tr>
             <tr><td><code class="whitespace-nowrap">errorPages</code></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">notFound</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">serverError</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">timeout</code> — handler fn or template path.</td></tr>
             <tr><td><code class="whitespace-nowrap">assets</code></td><td>Version string or manifest path for cache-busted <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fsy.asset()</code> URLs.</td></tr>
+            <tr><td><code class="whitespace-nowrap">auth</code></td><td>Optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">AuthManager</code> from <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso/core/auth</code> — session stack, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.auth</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.user</code>, named <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">middleware: ['auth' | 'guest']</code>. See <a href="#authentication" class="text-cyan-800 dark:text-cyan-400 hover:underline">Authentication</a>.</td></tr>
+            <tr><td><code class="whitespace-nowrap">setupRoutes</code></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">(app, ctx) =&gt; {}</code> — custom Express routes after file routes / plugin <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">onRoutesReady</code>, before 404. <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">ctx.authMiddleware</code> when <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auth</code> is set.</td></tr>
           </tbody>
         </table>
       </div>
@@ -313,6 +317,94 @@ const { app } = createApp({
     serverError: 'errors/500.njk',
   },
 });</code></pre>
+    </section>
+
+    <section id="authentication" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Authentication (session)</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
+        Webspresso ships an optional, adapter-style session auth layer in <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">core/auth</code>. It is <strong class="text-slate-800 dark:text-slate-200">not</strong> re-exported from the package root — import from <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso/core/auth</code> (the <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">core/</code> tree is published on npm). Pass an <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">AuthManager</code> to <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp({ auth })</code> so the framework mounts cookie parser, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">express-session</code>, and a per-request <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">authenticate</code> middleware that fills <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.user</code> and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.auth</code>.
+      </p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Public API (<code class="font-mono text-base font-normal">webspresso/core/auth</code>)</h3>
+      <div class="overflow-x-auto mb-6">
+        <table class="w-full text-sm">
+          <thead><tr><th>Export</th><th>Role</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">createAuth(config)</code></td><td>Builds <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">AuthManager</code> with your <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">findUserById</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">findUserByCredentials</code>, optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">rememberTokens</code> adapter, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">session</code> options, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">rememberMe</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">routes</code> (login / redirect defaults).</td></tr>
+            <tr><td><code class="whitespace-nowrap">quickAuth({ db, ... })</code></td><td>Opinionated <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createAuth</code> wired to <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">getRepository</code> — default user model <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">User</code>, email + password fields, optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">remember_tokens</code> table via Knex.</td></tr>
+            <tr><td><code class="whitespace-nowrap">setupAuthMiddleware(app, authManager)</code></td><td>Applies <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">cookie</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">session</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">authenticate</code> on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">app</code>; returns guards (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">requireAuth</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">requireGuest</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">requireCan</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">requireVerified</code>, …) plus <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auth</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">guest</code> for route configs.</td></tr>
+            <tr><td><code class="whitespace-nowrap">hash</code> / <code class="whitespace-nowrap">verify</code></td><td>Bcrypt password helpers used by credentials adapters.</td></tr>
+            <tr><td><code class="whitespace-nowrap">createRememberTokensTable(knex)</code></td><td>Migration-style helper for the default <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">remember_tokens</code> shape (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">user_id</code>, hashed token, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">expires_at</code>).</td></tr>
+            <tr><td><code class="whitespace-nowrap">PolicyManager</code></td><td>Define <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">definePolicy</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineGate</code>; <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">AuthManager</code> exposes the same via <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">definePolicy</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineGate</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">beforePolicy</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Wiring with <code class="font-mono text-base font-normal">createApp</code></h3>
+      <ul class="list-disc pl-5 text-slate-600 dark:text-slate-400 text-sm mb-4 space-y-2">
+        <li><strong class="text-slate-700 dark:text-slate-300">Session secret</strong> — set <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">session.secret</code> on the auth config (or ensure env vars your app reads into that field). Without a secret, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">getSessionConfig()</code> throws.</li>
+        <li><strong class="text-slate-700 dark:text-slate-300">Named middleware</strong> — when <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auth</code> is passed to <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code>, the framework registers <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">middlewares.auth</code> and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">middlewares.guest</code> to the session guards. Avoid defining your own middleware under those names if you use built-in auth.</li>
+        <li><strong class="text-slate-700 dark:text-slate-300">Return value</strong> — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code> returns <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">authMiddleware</code> (or <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">null</code>). Use it inside <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">setupRoutes(app, { authMiddleware })</code> for custom login/logout routes or <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">requireAuth({ api: true })</code> on JSON APIs.</li>
+      </ul>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-6"><code class="language-javascript">const { createApp } = require('webspresso');
+const { createAuth, verify } = require('webspresso/core/auth');
+
+const auth = createAuth({
+  findUserById: (id) => userRepo.findById(id),
+  findUserByCredentials: async (email, password) => {
+    const user = await userRepo.findOne({ email });
+    if (user &amp;&amp; (await verify(password, user.password))) return user;
+    return null;
+  },
+  session: { secret: process.env.SESSION_SECRET },
+});
+
+const { app, authMiddleware } = createApp({
+  pagesDir: './pages',
+  viewsDir: './views',
+  db,
+  auth,
+  setupRoutes(expressApp, ctx) {
+    const am = ctx.authMiddleware;
+    if (!am) return;
+    expressApp.get('/login', am.requireGuest(), (req, res) =&gt; res.render('login.njk'));
+    expressApp.post('/login', async (req, res) =&gt; {
+      const user = await req.auth.attempt(req.body.email, req.body.password);
+      if (user) return res.redirect('/');
+      res.redirect('/login');
+    });
+  },
+});</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Request helpers (<code class="font-mono text-base font-normal">req.auth</code>)</h3>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-3">Bound per request after <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">authenticate</code> runs:</p>
+      <div class="overflow-x-auto mb-6">
+        <table class="w-full text-sm">
+          <thead><tr><th>Method</th><th>Role</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">attempt(id, password, { remember })</code></td><td>Validate credentials, log in, optional remember-me cookie when adapter configured.</td></tr>
+            <tr><td><code class="whitespace-nowrap">login(user, options)</code></td><td>Session login without re-checking password (user must have <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">id</code>).</td></tr>
+            <tr><td><code class="whitespace-nowrap">logout({ everywhere })</code></td><td>Destroy session; clear / revoke remember token(s).</td></tr>
+            <tr><td><code class="whitespace-nowrap">check()</code> / <code class="whitespace-nowrap">guest()</code></td><td>Boolean auth state.</td></tr>
+            <tr><td><code class="whitespace-nowrap">user()</code> / <code class="whitespace-nowrap">id()</code></td><td>Current user object or id.</td></tr>
+            <tr><td><code class="whitespace-nowrap">can</code> / <code class="whitespace-nowrap">cannot</code> / <code class="whitespace-nowrap">authorize</code></td><td>Policy / gate checks (throws <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">AuthorizationError</code> on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">authorize</code>).</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Guards and file-router ordering</h3>
+      <ul class="list-disc pl-5 text-slate-600 dark:text-slate-400 text-sm mb-4 space-y-2">
+        <li>SSR pages use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">middleware: ['auth']</code> or <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">['guest']</code> in the sibling <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.js</code> route config.</li>
+        <li>For login <strong class="text-slate-800 dark:text-slate-200">GET</strong> routes, if a <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/login.njk</code> exists it may be registered <strong class="text-slate-800 dark:text-slate-200">before</strong> your <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">setupRoutes</code> handler and skip <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">requireGuest</code>. Prefer registering login in <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">setupRoutes</code> and keep the template only under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">views/</code>, or omit <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/login.njk</code> — see <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">tests/e2e/auth.spec.js</code>.</li>
+        <li><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">requireAuth({ api: true })</code> returns <strong class="text-slate-800 dark:text-slate-200">401 JSON</strong> instead of redirecting — use on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/api/*</code> handlers you mount manually.</li>
+        <li><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">requireVerified({ field: 'email_verified_at' })</code> enforces an optional “verified” column pattern.</li>
+      </ul>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Remember-me tokens</h3>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-3">If you pass a <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">rememberTokens</code> adapter, the manager stores a <strong class="text-slate-800 dark:text-slate-200">hashed</strong> token in the database and a signed cookie with the raw token. Call <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createRememberTokensTable(knex)</code> or mirror its columns in a migration. <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">quickAuth</code> can wire the default Knex table when <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">rememberMe: true</code>.</p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Admin panel auth (separate)</h3>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-0 leading-relaxed">The <strong class="text-slate-800 dark:text-slate-200">admin panel</strong> plugin uses its own <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">express-session</code> stack and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.session.adminUser</code> with routes under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/api/auth/*</code>. It does not replace <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp({ auth })</code> for your public site users — use both if you need CMS staff and end-user sessions.</p>
     </section>
 
     <section id="routing" class="doc-section mb-14">

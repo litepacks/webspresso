@@ -16,6 +16,7 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 - **Template Helpers**: Laravel-inspired helper functions available in templates
 - **Plugin System**: Extensible architecture with version control and inter-plugin communication
 - **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing), self-hosted site analytics, optional Swagger UI for HTTP APIs, configurable HTTP health probe endpoint, optional REST CRUD routes from ORM models, optional admin UI for ORM query cache metrics and purge
+- **Session authentication** (optional): `createAuth` / `quickAuth` in **`webspresso/core/auth`** — pass the manager to **`createApp({ auth })`** for `express-session`, `req.user` / `req.auth`, remember-me tokens, and policy-style authorization. Full walkthrough: **[`doc/index.html#authentication`](doc/index.html#authentication)**.
 - **TypeScript**: Published **`index.d.ts`** (via `package.json` `"types"`) for `createApp`, ORM, plugins, and router helpers — use from TS/JS with IDE autocomplete; runtime stays CommonJS
 
 ## Installation
@@ -356,6 +357,8 @@ Creates and configures the Express app.
   - `false`: Disable Helmet
   - `Object`: Custom Helmet configuration (merged with defaults)
 - `middlewares` (optional): Named middleware registry for routes
+- `auth` (optional): `AuthManager` from **`createAuth()`** / **`quickAuth()`** (`require('webspresso/core/auth')`). Registers session + cookie parsing, attaches **`req.auth`** / **`req.user`**, and injects named route middleware **`auth`** and **`guest`** (do not reuse those names for custom handlers if you pass `auth`). See **[`doc/index.html#authentication`](doc/index.html#authentication)**.
+- `setupRoutes(app, ctx)` (optional): Register custom Express routes after file routes and plugin `onRoutesReady`, before the 404 handler — use for login/logout handlers when using the auth module; **`ctx.authMiddleware`** exposes `requireAuth`, `requireGuest`, etc.
 
 **Example with middlewares:**
 
@@ -549,7 +552,15 @@ Works with Vite and Webpack manifest formats:
 }
 ```
 
-**Returns:** `{ app, nunjucksEnv, pluginManager }`
+**Returns:** `{ app, nunjucksEnv, pluginManager, authMiddleware }` — `authMiddleware` is `null` when `auth` was not passed.
+
+### Authentication (session)
+
+Optional **session-based** auth lives under **`webspresso/core/auth`**: **`createAuth`**, **`quickAuth`**, **`hash`** / **`verify`**, **`setupAuthMiddleware`**, **`createRememberTokensTable`**, and policy helpers. Pass the manager to **`createApp({ auth })`** so routes can use **`middleware: ['auth']`** or **`['guest']`** and handlers can call **`req.auth.attempt()`**, **`req.auth.logout()`**, **`req.auth.can()`**, etc.
+
+The **admin panel** plugin uses its **own** session and `/api/auth/*` routes (`req.session.adminUser`) — it is separate from **`createApp({ auth })`**.
+
+For integration patterns (remember-me table, `setupRoutes`, file-router ordering), see **[`doc/index.html#authentication`](doc/index.html#authentication)**.
 
 ## Plugin System
 

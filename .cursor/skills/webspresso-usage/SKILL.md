@@ -2,11 +2,12 @@
 name: webspresso-usage
 description: >-
   Comprehensive Webspresso framework reference: file-based SSR and API routing,
-  createApp options, Nunjucks/fsy helpers, i18n, lifecycle hooks, Zod API validation,
+  createApp options, session auth (createAuth, quickAuth, webspresso/core/auth),
+  Nunjucks/fsy helpers, i18n, lifecycle hooks, Zod API validation,
   ORM (zdb, defineModel, repository, query builder, migrations), plugins (admin,
   analytics, sitemap, SEO, audit, recaptcha), CLI, env vars, and testing. Use when
   working in this repo or any Webspresso app—adding routes, APIs, models, plugins,
-  or debugging routing, ctx.db, or templates.
+  auth, or debugging routing, ctx.db, session, or templates.
 ---
 
 # Webspresso — agent reference
@@ -19,7 +20,7 @@ description: >-
 - **ORM**: Knex-backed layer in `core/orm` — `defineModel`, `zdb` schema helpers, repositories, query builder, migrations.
 - **Plugins**: Register in `createApp({ plugins })`; optional `db` passed as `ctx.db`.
 
-Public API surface: `require('webspresso')` / [`index.js`](../../../index.js) — `createApp`, file-router utilities, `createHelpers`, plugin manager, ORM exports, built-in plugins.
+Public API surface: `require('webspresso')` / [`index.js`](../../../index.js) — `createApp`, file-router utilities, `createHelpers`, plugin manager, ORM exports, built-in plugins. **Session auth** lives in [`core/auth`](../../../core/auth) — import **`require('webspresso/core/auth')`** (`createAuth`, `quickAuth`, `hash`, `verify`, `setupAuthMiddleware`, `createRememberTokensTable`, policy helpers); wire with **`createApp({ auth })`**.
 
 ---
 
@@ -66,10 +67,22 @@ project/
 | `timeout` | e.g. `'30s'` or `false` |
 | `helmet` | `true` / `false` / object |
 | `assets` | `{ version, manifestPath, prefix }` for `fsy.asset` / `fsy.css` / `fsy.js` |
-| `auth` | Auth manager from `createAuth` (session routes) |
-| `setupRoutes(app, ctx)` | **Register custom Express routes here** — runs **after** file routes and plugins’ `onRoutesReady`, **before** 404. Do not rely on `app.get` *after* `createApp` returns unless routes are appended before the 404 middleware (see [`src/server.js`](../../../src/server.js)). |
+| `auth` | `AuthManager` from **`createAuth()`** / **`quickAuth()`** (`webspresso/core/auth`). Mounts cookie parser + **`express-session`** + per-request **`authenticate`**; sets **`req.user`**, **`req.auth`**. Injects named route middleware **`auth`** and **`guest`** (overwrites same keys in `middlewares` if you passed both — avoid reusing those names for custom handlers). |
+| `setupRoutes(app, ctx)` | **Register custom Express routes here** — runs **after** file routes and plugins’ `onRoutesReady`, **before** 404. **`ctx.authMiddleware`** is set when `auth` was passed (guards: `requireAuth`, `requireGuest`, `requireCan`, `requireVerified`, …). Do not rely on `app.get` *after* `createApp` returns unless routes are appended before the 404 middleware (see [`src/server.js`](../../../src/server.js)). |
 
-**Returns:** `{ app, nunjucksEnv, pluginManager, authMiddleware? }` (and related).
+**Returns:** `{ app, nunjucksEnv, pluginManager, authMiddleware }` — `authMiddleware` is **`null`** when `auth` was not configured.
+
+### Session authentication — essentials
+
+- **Import:** `const { createAuth, quickAuth, hash, verify, createRememberTokensTable } = require('webspresso/core/auth')` (published `core/` tree on npm; **not** re-exported from package root).
+- **`createAuth({ findUserById, findUserByCredentials, session: { secret }, rememberTokens?, ... })`** — adapter pattern; optional **remember-me** via `rememberTokens: { create, find, delete, deleteAllForUser }` + **`createRememberTokensTable(knex)`** for the default table shape.
+- **`quickAuth({ db, userModel, identifierField, passwordField, rememberMe })`** — wires **`getRepository`** + bcrypt **`verify`**; optional Knex **`remember_tokens`** when `rememberMe: true`.
+- **Request API** (after global authenticate): **`req.auth.attempt(id, password, { remember })`**, **`login`**, **`logout`**, **`check`**, **`guest`**, **`user`**, **`id`**, **`can` / `cannot` / `authorize`** (policies: **`auth.definePolicy`**, **`defineGate`**, **`beforePolicy`**).
+- **Route config:** `middleware: ['auth']` (must be logged in) or `['guest']` (logged-out only). For JSON APIs mounted in **`setupRoutes`**, use **`ctx.authMiddleware.requireAuth({ api: true })`** for 401 JSON instead of redirect.
+- **Login page pitfall:** a **`pages/login.njk`** can register **before** `setupRoutes` and bypass **`requireGuest`**. Prefer login GET/POST in **`setupRoutes`** with templates under **`views/`** only, or omit **`pages/login.njk`** — see [`tests/e2e/auth.spec.js`](../../../tests/e2e/auth.spec.js).
+- **Admin panel** uses a **separate** session (`req.session.adminUser`, `/_admin/api/auth/*`); it does **not** replace **`createApp({ auth })`** for site users.
+
+Longer narrative: **[`doc/index.html#authentication`](../../../doc/index.html#authentication)** · README **Authentication (session)**.
 
 ---
 
@@ -217,6 +230,7 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `SUPPORTED_LOCALES` | Comma-separated |
 | `BASE_URL` | Canonical / links |
 | `DATABASE_URL` | DB connection |
+| `SESSION_SECRET` | Session cookie signing — set on auth config **`session.secret`** or read from env in app code |
 
 ---
 
@@ -236,13 +250,15 @@ Touching **CLI**, **ORM**, or **server routing** — run the relevant suite.
 3. **`ctx.db` is undefined** unless `createApp({ db })` receives a `createDatabase()` instance.
 4. **ORM hidden fields** — never return `hidden` columns to clients; use explicit selects if needed.
 5. **Zod on API** — invalid input surfaces as validation errors; handlers should assume **`req.input`** is validated when schema is set.
+6. **Built-in `auth` option** — if you pass **`createApp({ auth })`**, do not expect a custom **`middlewares.auth`** to apply; the framework assigns **`auth`** / **`guest`** to the session guards.
+7. **Login route vs file router** — **`pages/login.njk`** can shadow custom login handlers; align with **`setupRoutes`** + **`views/`** pattern above.
 
 ---
 
 ## 15. When to load this skill
 
-- Adding or changing **pages**, **API routes**, **models**, **migrations**, **plugins**, or **locales**.
+- Adding or changing **pages**, **API routes**, **models**, **migrations**, **plugins**, **locales**, or **session auth** (`createAuth`, `createApp({ auth })`, policies).
 - Explaining **Webspresso** behavior vs plain Express.
 - Debugging **404 order**, **i18n**, **session/auth**, **ORM**, or **admin** integration.
 
-For authoritative long-form detail, see **[README.md](../../../README.md)** in the repo.
+For authoritative long-form detail, see **[README.md](../../../README.md)** and **[`doc/index.html`](../../../doc/index.html)** (e.g. **Authentication**) in the repo.
