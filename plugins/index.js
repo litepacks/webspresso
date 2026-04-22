@@ -16,6 +16,7 @@ const swaggerPlugin = require('./swagger');
 const healthCheckPlugin = require('./health-check');
 const restResourcePlugin = require('./rest-resources');
 const ormCacheAdminPlugin = require('./orm-cache-admin');
+const { uploadPlugin, createLocalFileProvider } = require('./upload');
 
 module.exports = {
   sitemapPlugin,
@@ -31,5 +32,7 @@ module.exports = {
   healthCheckPlugin,
   restResourcePlugin,
   ormCacheAdminPlugin,
+  uploadPlugin,
+  createLocalFileProvider,
 };
 

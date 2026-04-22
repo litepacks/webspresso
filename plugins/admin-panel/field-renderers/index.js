@@ -78,6 +78,7 @@ function initializeDefaultRenderers() {
   // Custom field types
   registerFieldRenderer('rich-text', richTextRenderer.RichTextField);
   registerFieldRenderer('file-upload', fileUploadRenderer.FileUploadField);
+  registerFieldRenderer('file', fileUploadRenderer.FileUploadField);
   
   // Relation types
   registerFieldRenderer('belongsTo', relationRenderers.BelongsToField);

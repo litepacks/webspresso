@@ -79,6 +79,14 @@ describe('Migration Scaffold', () => {
       expect(line).toContain("table.enum('status', ['active', 'inactive'])");
     });
 
+    it('should generate string column for file type (URL storage)', () => {
+      const meta = { type: 'file', maxLength: 2048, nullable: true };
+      const { line } = generateColumnLine('attachment', meta);
+
+      expect(line).toContain("table.string('attachment', 2048)");
+      expect(line).toContain('.nullable()');
+    });
+
     it('should generate default value for string', () => {
       const meta = { type: 'string', maxLength: 50, default: 'draft', nullable: false };
       const { line } = generateColumnLine('state', meta);

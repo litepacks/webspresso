@@ -421,6 +421,25 @@ function createSchemaHelpers(z) {
     },
 
     /**
+     * File / URL column (stored as varchar; value is public URL or path from upload)
+     * @param {Partial<import('./types').ColumnMeta>} [options={}]
+     * @returns {SchemaBuilder}
+     */
+    file(options = {}) {
+      const { maxLength = 2048, nullable = false, ...rest } = options;
+      let schema = z.string().max(maxLength);
+      if (nullable) {
+        schema = schema.nullable().optional();
+      }
+      return createSchemaBuilder(schema, {
+        type: 'file',
+        maxLength,
+        nullable,
+        ...rest,
+      }, z);
+    },
+
+    /**
      * Integer column
      * @param {Partial<import('./types').ColumnMeta>} [options={}]
      * @returns {SchemaBuilder}

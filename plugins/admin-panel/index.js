@@ -30,6 +30,7 @@ const { registerModule } = require('./core/admin-module');
  * @param {string} [options.userManagement.model='User'] - User model name
  * @param {Object} [options.userManagement.fields] - Field mappings
  * @param {Function} [options.configure] - Configuration callback (registry) => void
+ * @param {string} [options.uploadUrl] - POST URL for file uploads (overrides app.get('webspresso.uploadPath') from uploadPlugin)
  * @returns {Object} Plugin definition
  */
 function adminPanelPlugin(options = {}) {
@@ -41,6 +42,7 @@ function adminPanelPlugin(options = {}) {
     auth,
     userManagement: userMgmtConfig,
     configure,
+    uploadUrl: uploadUrlOption,
   } = options;
 
   // Validate required options
@@ -127,6 +129,12 @@ function adminPanelPlugin(options = {}) {
 
       this.api._ctx = ctx;
       const { app } = ctx;
+
+      const uploadUrlResolved =
+        uploadUrlOption || app.get('webspresso.uploadPath') || null;
+      if (uploadUrlResolved) {
+        registry.configure({ uploadUrl: uploadUrlResolved });
+      }
 
       // Check if admin_users table exists (migration run)
       db.knex.schema.hasTable('admin_users').then((hasAdminTable) => {

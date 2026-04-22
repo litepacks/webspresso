@@ -2052,6 +2052,45 @@ const { app } = createApp({
 
 List query parameters: `page`, `perPage`, `sort`, `order`, `include`, `trashed` (`only` / `include` when the model uses soft delete), plus **equality filters** on real columns (unknown keys are ignored).
 
+### File upload plugin
+
+Registers **POST** `multipart/form-data` (field name **`file`** by default) and stores the file via a pluggable provider. The framework ships with **`createLocalFileProvider({ destDir, publicBasePath })`** (writes to disk and returns a public URL path). Use **`mimeAllowlist`** / **`extensionAllowlist`** and **`maxBytes`** (default **10 MiB**) on the server; production apps should prefer an explicit MIME allowlist.
+
+**Setup:**
+
+```javascript
+const { createApp, uploadPlugin, adminPanelPlugin } = require('webspresso');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  publicDir: './public',
+  db,
+  plugins: [
+    uploadPlugin({
+      path: '/api/upload',
+      local: {
+        destDir: './public/uploads',
+        publicBasePath: '/uploads',
+      },
+      maxBytes: 10 * 1024 * 1024,
+      mimeAllowlist: ['image/jpeg', 'image/png', 'application/pdf'],
+      extensionAllowlist: ['jpg', 'jpeg', 'png', 'pdf'],
+      middleware: [], // optional Express handlers (e.g. session auth)
+      fieldName: 'file',
+    }),
+    adminPanelPlugin({
+      db,
+      // uploadUrl optional: defaults to app.get('webspresso.uploadPath') set by uploadPlugin
+    }),
+  ],
+});
+```
+
+- **ORM:** `zdb.file({ maxLength: 2048, nullable: true })` — string column for the stored public URL or path; migrations use `table.string(..., maxLength)`.
+- **Admin:** the panel reads **`settings.uploadUrl`** from the registry (set automatically when `uploadPlugin` is registered **before** `adminPanelPlugin`, or pass **`adminPanelPlugin({ uploadUrl: '/api/upload' })`**). File fields (`type: 'file'` or `customFields` type `file-upload`) POST to that URL with credentials.
+- **Response:** `{ url, publicUrl, key? }` — clients typically persist **`url`** / **`publicUrl`** in the model.
+- **Custom storage:** `uploadPlugin({ provider: { async put({ buffer, originalName, mimeType, size, req }) { return { publicUrl: '...' }; } } })`.
+
 ### Health check plugin
 
 Exposes a lightweight **GET** endpoint for load balancers and orchestrators (Kubernetes, Docker healthcheck, etc.). **Enabled by default** in all environments; set `enabled: false` to turn it off.

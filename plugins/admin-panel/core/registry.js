@@ -67,6 +67,7 @@ class AdminRegistry {
       perPage: 20,
       dateFormat: 'YYYY-MM-DD',
       timeFormat: 'HH:mm',
+      uploadUrl: null,
     };
     
     // User management config

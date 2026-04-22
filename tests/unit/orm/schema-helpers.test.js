@@ -150,6 +150,18 @@ describe('Schema Helpers', () => {
       });
     });
 
+    describe('file()', () => {
+      it('should create a file column storing URL/path string', () => {
+        const builder = zdb.file();
+        const schema = builder._finalize();
+        const meta = getColumnMeta(schema);
+
+        expect(meta.type).toBe('file');
+        expect(meta.maxLength).toBe(2048);
+        expect(schema.parse('/uploads/x.png')).toBe('/uploads/x.png');
+      });
+    });
+
     describe('integer()', () => {
       it('should create an integer column', () => {
         const builder = zdb.integer();

@@ -308,8 +308,8 @@ function createApiHandlers(options) {
         } else if (value !== undefined && value !== null && value !== '') {
           switch (op) {
             case 'contains':
-              // Apply LIKE for string/text types, or if type is unknown
-              if (colType === 'string' || colType === 'text' || !colMeta) {
+              // Apply LIKE for string/text/file types, or if type is unknown
+              if (colType === 'string' || colType === 'text' || colType === 'file' || !colMeta) {
                 query = query.where(colName, 'like', `%${value}%`);
                 countQuery = countQuery.where(colName, 'like', `%${value}%`);
               }
@@ -319,13 +319,13 @@ function createApiHandlers(options) {
               countQuery = countQuery.where(colName, '=', value);
               break;
             case 'starts_with':
-              if (colType === 'string' || colType === 'text' || !colMeta) {
+              if (colType === 'string' || colType === 'text' || colType === 'file' || !colMeta) {
                 query = query.where(colName, 'like', `${value}%`);
                 countQuery = countQuery.where(colName, 'like', `${value}%`);
               }
               break;
             case 'ends_with':
-              if (colType === 'string' || colType === 'text' || !colMeta) {
+              if (colType === 'string' || colType === 'text' || colType === 'file' || !colMeta) {
                 query = query.where(colName, 'like', `%${value}`);
                 countQuery = countQuery.where(colName, 'like', `%${value}`);
               }
@@ -359,7 +359,7 @@ function createApiHandlers(options) {
       if (req.query.search) {
         const searchTerm = `%${req.query.search}%`;
         const stringColumns = Array.from(model.columns.entries())
-          .filter(([_, meta]) => meta.type === 'string' || meta.type === 'text')
+          .filter(([_, meta]) => meta.type === 'string' || meta.type === 'text' || meta.type === 'file')
           .map(([name]) => name);
 
         if (stringColumns.length > 0) {

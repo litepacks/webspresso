@@ -495,6 +495,7 @@ const FilterDrawer = {
       if (col.primary || col.autoIncrement) return false;
       if (col.auto === 'create' || col.auto === 'update') return false;
       if (col.type === 'json') return false;
+      if (col.type === 'file') return false;
       return true;
     });
     
@@ -1049,6 +1050,155 @@ const RichTextField = {
   }
 };
 
+// File upload field (multipart POST to settings.uploadUrl; field name "file")
+const FileUploadField = {
+  oncreate: (vnode) => {
+    const col = vnode.attrs.col;
+    const readonly = vnode.attrs.readonly;
+    if (readonly) return;
+    var cfg = window.__ADMIN_CONFIG__;
+    var uploadUrl = (cfg && cfg.settings && cfg.settings.uploadUrl) ? String(cfg.settings.uploadUrl) : '';
+    if (!uploadUrl) return;
+    const dropZoneId = 'drop-zone-' + col.name;
+    const dropZone = document.getElementById(dropZoneId);
+    if (!dropZone) return;
+    const meta = col.ui || {};
+    const onChange = vnode.attrs.onChange;
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function (eventName) {
+      dropZone.addEventListener(eventName, function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    });
+    ['dragenter', 'dragover'].forEach(function (eventName) {
+      dropZone.addEventListener(eventName, function () {
+        dropZone.classList.add('border-blue-500', 'bg-blue-50', 'dark:bg-slate-800');
+      });
+    });
+    ['dragleave', 'drop'].forEach(function (eventName) {
+      dropZone.addEventListener(eventName, function () {
+        dropZone.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-slate-800');
+      });
+    });
+    dropZone.addEventListener('drop', function (e) {
+      var files = e.dataTransfer.files;
+      if (files.length > 0) {
+        handleAdminFileUpload(files[0], onChange, meta);
+      }
+    });
+    var fileInput = dropZone.querySelector('input[type=file]');
+    if (fileInput) {
+      fileInput.addEventListener('change', function (e) {
+        if (e.target.files.length > 0) {
+          handleAdminFileUpload(e.target.files[0], onChange, meta);
+        }
+      });
+    }
+  },
+  view: (vnode) => {
+    const col = vnode.attrs.col;
+    const value = vnode.attrs.value || '';
+    const onChange = vnode.attrs.onChange;
+    const readonly = vnode.attrs.readonly || false;
+    const meta = col.ui || {};
+    const label = meta.label || formatColumnLabel(col.name);
+    const hint = meta.hint || '';
+    const required = !col.nullable && !readonly;
+    var uploadUrl = '';
+    try {
+      var cfg2 = window.__ADMIN_CONFIG__;
+      uploadUrl = (cfg2 && cfg2.settings && cfg2.settings.uploadUrl) ? String(cfg2.settings.uploadUrl) : '';
+    } catch (e) { uploadUrl = ''; }
+    var maxSize = meta.maxSize || meta.maxBytes || (10 * 1024 * 1024);
+    var accept = meta.accept || '*/*';
+    var dropZoneId = 'drop-zone-' + col.name;
+    if (readonly) {
+      return m('.mb-4', [
+        m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', label, required ? m('span.text-red-500', ' *') : null),
+        value ? m('a.text-indigo-600.break-all', { href: value, target: '_blank', rel: 'noopener noreferrer' }, value) : m('span.text-gray-400', '—'),
+        hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null,
+      ]);
+    }
+    if (!uploadUrl) {
+      return m('.mb-4', [
+        m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', { for: col.name }, label, required ? m('span.text-red-500', ' *') : null),
+        m('p.text-xs.text-amber-700.dark:text-amber-400.mb-2', 'Upload URL is not configured. Enter a public URL or path manually.'),
+        m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded.bg-white.dark:bg-slate-800', {
+          type: 'text',
+          id: col.name,
+          name: col.name,
+          value: value,
+          placeholder: 'https://… or /uploads/…',
+          required: required,
+          oninput: function (e) { if (onChange) onChange(e.target.value); },
+        }),
+        hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null,
+      ]);
+    }
+    return m('.mb-4', [
+      m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', label, required ? m('span.text-red-500', ' *') : null),
+      m('div#' + dropZoneId + '.border-2.border-dashed.border-gray-300.dark:border-slate-600.rounded.p-8.text-center', { style: 'cursor: pointer;' }, [
+        m('input[type=file].hidden', {
+          id: 'file-input-' + col.name,
+          accept: accept,
+          onchange: function (e) {
+            if (e.target.files.length > 0) {
+              handleAdminFileUpload(e.target.files[0], onChange, meta);
+            }
+          },
+        }),
+        m('div', [
+          m('p.text-gray-600.dark:text-slate-400.mb-2', 'Drag and drop a file here, or'),
+          m('label.text-blue-600.hover:text-blue-800.dark:text-blue-400.cursor-pointer', { for: 'file-input-' + col.name }, 'browse'),
+        ]),
+        value ? m('.mt-4.text-left', [
+          m('p.text-sm.text-gray-600.dark:text-slate-400.break-all', 'Current: ' + value),
+          m('button.text-red-600.hover:text-red-800.text-sm.mt-2', {
+            type: 'button',
+            onclick: function () { if (onChange) onChange(''); },
+          }, 'Remove'),
+        ]) : null,
+      ]),
+      m('input[type=hidden]', { name: col.name, value: typeof value === 'string' ? value : '' }),
+      m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', 'Max ' + Math.round(maxSize / 1024 / 1024) + ' MB (server enforces limits)'),
+      hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null,
+    ]);
+  },
+};
+
+async function handleAdminFileUpload(file, onChange, meta) {
+  var uploadUrl = '';
+  try {
+    var cfg = window.__ADMIN_CONFIG__;
+    uploadUrl = (cfg && cfg.settings && cfg.settings.uploadUrl) ? String(cfg.settings.uploadUrl) : '';
+  } catch (e) {}
+  if (!uploadUrl) {
+    alert('Upload URL is not configured.');
+    return;
+  }
+  var maxSize = meta.maxSize || meta.maxBytes || (10 * 1024 * 1024);
+  if (file.size > maxSize) {
+    alert('File too large (max ' + Math.round(maxSize / 1024 / 1024) + ' MB).');
+    return;
+  }
+  var fd = new FormData();
+  fd.append('file', file);
+  try {
+    var res = await fetch(uploadUrl, { method: 'POST', body: fd, credentials: 'include' });
+    var data = {};
+    try { data = await res.json(); } catch (e2) { data = {}; }
+    if (!res.ok) {
+      alert(data.message || data.error || ('Upload failed (' + res.status + ')'));
+      return;
+    }
+    var url = data.url || data.publicUrl || '';
+    if (onChange) onChange(url);
+    m.redraw();
+  } catch (err) {
+    alert(err.message || 'Upload failed');
+  }
+}
+
 // Get appropriate renderer for a column type
 function getFieldRenderer(col, modelMeta) {
   // Check for custom field first
@@ -1064,7 +1214,28 @@ function getFieldRenderer(col, modelMeta) {
         });
       };
     }
+    if (col.customField.type === 'file-upload') {
+      return (col, value, onChange, readonly) => {
+        return m(FileUploadField, {
+          col,
+          value: value || '',
+          onChange,
+          readonly: readonly || false,
+        });
+      };
+    }
     // Add other custom field types here if needed
+  }
+
+  if (col.type === 'file') {
+    return (col, value, onChange, readonly) => {
+      return m(FileUploadField, {
+        col,
+        value: value || '',
+        onChange,
+        readonly: readonly || false,
+      });
+    };
   }
   
   // Fallback to standard type renderers
@@ -1316,6 +1487,19 @@ function formatCellValue(value, col) {
     case 'text':
       const textStr = String(value);
       return textStr.length > 50 ? textStr.substring(0, 50) + '...' : textStr;
+
+    case 'file': {
+      const s = String(value);
+      const short = s.length > 72 ? s.substring(0, 72) + '…' : s;
+      if (/^https?:\/\//.test(s) || s.startsWith('/')) {
+        return m('a.text-indigo-600.dark:text-indigo-400.hover:underline.break-all', {
+          href: s,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+        }, short);
+      }
+      return short || m('span.text-gray-400', '—');
+    }
     
     default:
       const str = String(value);

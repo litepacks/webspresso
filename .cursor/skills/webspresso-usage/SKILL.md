@@ -6,7 +6,7 @@ description: >-
   session auth (createAuth, quickAuth, webspresso/core/auth), Nunjucks/fsy helpers,
   i18n, lifecycle hooks, Zod API validation, ORM (zdb, defineModel, repository,
   query builder, migrations), plugins (admin, analytics, sitemap, SEO, audit,
-  recaptcha, rest resources), CLI, env vars, and testing. Use when working in this
+  recaptcha, rest resources, file upload), CLI, env vars, and testing. Use when working in this
   repo or any Webspresso app—adding routes, APIs, models, plugins, auth, client-side
   sprinkles or page transitions, or debugging routing, ctx.db, session, or templates.
 ---
@@ -168,7 +168,7 @@ Analytics plugin adds `fsy.analyticsHead`, `fsy.verificationTags`, etc., when co
 
 ## 9. ORM overview
 
-**Define schema** with **`zdb`** (`zdb.id()`, `zdb.uuid()`, `zdb.nanoid()`, `zdb.string({...})`, `zdb.foreignKey`, `zdb.foreignUuid`, `zdb.foreignNanoid`, `zdb.timestamp`, `zdb.json`, …).
+**Define schema** with **`zdb`** (`zdb.id()`, `zdb.uuid()`, `zdb.nanoid()`, `zdb.string({...})`, **`zdb.file({ maxLength, nullable })`** — URL/path string for uploaded assets, `zdb.foreignKey`, `zdb.foreignUuid`, `zdb.foreignNanoid`, `zdb.timestamp`, `zdb.json`, …).
 
 **Define model** with **`defineModel({ name, table, schema, relations, scopes, hidden, admin })`**.
 
@@ -200,13 +200,16 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `dashboardPlugin` | Dev route `/_webspresso` — route list |
 | `sitemapPlugin` | `/sitemap.xml`, robots; optional DB-driven URLs |
 | `analyticsPlugin` | GA / GTM / Yandex / Bing / Facebook — `fsy` helpers |
-| `adminPanelPlugin` | SPA admin CRUD — needs `db` |
+| `adminPanelPlugin` | SPA admin CRUD — needs `db`; optional `uploadUrl` or infer from `uploadPlugin` order |
+| `uploadPlugin` | `POST` multipart (`multer`), `createLocalFileProvider` or custom `provider`; set **`mimeAllowlist`** / **`maxBytes`** in production |
 | `siteAnalyticsPlugin` | Self-hosted page views + admin charts |
 | `auditLogPlugin` | Admin mutation audit trail |
 | `recaptchaPlugin` | v2/v3 + middleware |
 | `seoCheckerPlugin` | Dev SEO panel |
 | `restResourcePlugin` | Opt-in REST CRUD from models; `?include=` uses ORM eager load (single-level relations only) |
 | `ormCacheAdminPlugin` | Admin page for ORM cache metrics / purge / invalidate (`db.cache` required) |
+
+**File uploads:** `require('webspresso').uploadPlugin` / `createLocalFileProvider` — response `{ url, publicUrl, key? }`; admin reads **`settings.uploadUrl`** when `uploadPlugin` is registered before `adminPanelPlugin` (or pass **`adminPanelPlugin({ uploadUrl })`**). Docs: README **File upload plugin**, **`doc/index.html#plugins`**.
 
 **Custom plugin:** `name`, `version`, `register(ctx)`, `onRoutesReady(ctx)` — use `ctx.app`, `ctx.db`, `ctx.addHelper`, `ctx.addRoute`, `ctx.usePlugin('other')`. Plugin failures **warn**; app keeps running.
 

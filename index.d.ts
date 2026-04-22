@@ -531,3 +531,33 @@ export interface RestResourcePluginOptions {
 export function restResourcePlugin(options?: RestResourcePluginOptions): WebspressoPlugin;
 
 export function ormCacheAdminPlugin(options: { db: DatabaseInstance }): WebspressoPlugin;
+
+/** Multipart upload storage (e.g. local disk or S3). */
+export interface UploadStorageProvider {
+  put(args: {
+    buffer?: Buffer;
+    stream?: NodeJS.ReadableStream;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    req: Request;
+  }): Promise<{ publicUrl: string; key?: string }>;
+}
+
+export interface UploadPluginOptions {
+  path?: string;
+  provider?: UploadStorageProvider;
+  local?: { destDir?: string; publicBasePath?: string };
+  maxBytes?: number;
+  mimeAllowlist?: string[] | null;
+  extensionAllowlist?: string[] | null;
+  middleware?: RequestHandler | RequestHandler[];
+  fieldName?: string;
+}
+
+export function uploadPlugin(options?: UploadPluginOptions): WebspressoPlugin;
+
+export function createLocalFileProvider(options?: {
+  destDir?: string;
+  publicBasePath?: string;
+}): UploadStorageProvider;

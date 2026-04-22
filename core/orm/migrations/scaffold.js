@@ -112,6 +112,12 @@ function generateColumnLine(columnName, meta) {
       parts.push(`table.text('${columnName}')`);
       break;
 
+    case 'file': {
+      const fileLen = meta.maxLength || 2048;
+      parts.push(`table.string('${columnName}', ${fileLen})`);
+      break;
+    }
+
     case 'float':
       parts.push(`table.float('${columnName}')`);
       break;
