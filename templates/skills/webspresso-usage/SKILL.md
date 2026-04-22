@@ -66,8 +66,9 @@ project/
 | `timeout` | e.g. `'30s'` or `false` |
 | `helmet` | `true` / `false` / object |
 | `assets` | `{ version, manifestPath, prefix }` for `fsy.asset` / `fsy.css` / `fsy.js` |
+| `clientRuntime` | Opt-in `{ alpine?, swup? }` — serves `/__webspresso/client-runtime/*`, template `clientRuntime`, partial `views/partials/webspresso-client-runtime.njk`, `<main id="swup">` when swup on. Env: `WEBSPRESSO_ALPINE`, `WEBSPRESSO_SWUP`. |
 | `auth` | Auth manager from `createAuth` (session routes) |
-| `setupRoutes(app, ctx)` | **Register custom Express routes here** — runs **after** file routes and plugins’ `onRoutesReady`, **before** 404. Do not rely on `app.get` *after* `createApp` returns unless routes are appended before the 404 middleware (see [`src/server.js`](../../../src/server.js)). |
+| `setupRoutes(app, ctx)` | **Register custom Express routes here** — runs **after** file routes and plugins’ `onRoutesReady`, **before** 404. `ctx.clientRuntime` included. Do not rely on `app.get` *after* `createApp` returns unless routes are appended before the 404 middleware (see [`src/server.js`](../../../src/server.js)). |
 
 **Returns:** `{ app, nunjucksEnv, pluginManager, authMiddleware? }` (and related).
 

@@ -17,6 +17,7 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 - **Plugin System**: Extensible architecture with version control and inter-plugin communication
 - **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing), self-hosted site analytics, optional Swagger UI for HTTP APIs, configurable HTTP health probe endpoint, optional REST CRUD routes from ORM models, optional admin UI for ORM query cache metrics and purge
 - **Session authentication** (optional): `createAuth` / `quickAuth` in **`webspresso/core/auth`** — pass the manager to **`createApp({ auth })`** for `express-session`, `req.user` / `req.auth`, remember-me tokens, and policy-style authorization. Full walkthrough: **[`doc/index.html#authentication`](doc/index.html#authentication)**.
+- **Optional client runtime** (Alpine.js + [swup](https://swup.js.org/)): **`createApp({ clientRuntime: { alpine, swup } })`** serves scripts under **`/__webspresso/client-runtime/`** and exposes **`clientRuntime`** in Nunjucks; layouts can include **`views/partials/webspresso-client-runtime.njk`**. Env overrides: **`WEBSPRESSO_ALPINE`**, **`WEBSPRESSO_SWUP`**. Demo: **`examples/alpine-swup-demo/`**. Details: **[`doc/index.html#client-runtime`](doc/index.html#client-runtime)**.
 - **TypeScript**: Published **`index.d.ts`** (via `package.json` `"types"`) for `createApp`, ORM, plugins, and router helpers — use from TS/JS with IDE autocomplete; runtime stays CommonJS
 
 ## Installation
@@ -357,8 +358,9 @@ Creates and configures the Express app.
   - `false`: Disable Helmet
   - `Object`: Custom Helmet configuration (merged with defaults)
 - `middlewares` (optional): Named middleware registry for routes
+- `clientRuntime` (optional): **`{ alpine?: boolean | object, swup?: boolean | object }`**. When either flag is enabled, mounts vendored Alpine 3 / swup 4 (+ Head + Scripts plugins) at **`/__webspresso/client-runtime/*`** and passes resolved **`{ alpine, swup }`** into SSR templates as **`clientRuntime`**. Override with env **`WEBSPRESSO_ALPINE`** / **`WEBSPRESSO_SWUP`** (`1` or `true`). Package exports **`resolveClientRuntime`** and **`CLIENT_RUNTIME_BASE`**. See **[Client runtime](#client-runtime)** below and **[`doc/index.html#client-runtime`](doc/index.html#client-runtime)**.
 - `auth` (optional): `AuthManager` from **`createAuth()`** / **`quickAuth()`** (`require('webspresso/core/auth')`). Registers session + cookie parsing, attaches **`req.auth`** / **`req.user`**, and injects named route middleware **`auth`** and **`guest`** (do not reuse those names for custom handlers if you pass `auth`). See **[`doc/index.html#authentication`](doc/index.html#authentication)**.
-- `setupRoutes(app, ctx)` (optional): Register custom Express routes after file routes and plugin `onRoutesReady`, before the 404 handler — use for login/logout handlers when using the auth module; **`ctx.authMiddleware`** exposes `requireAuth`, `requireGuest`, etc.
+- `setupRoutes(app, ctx)` (optional): Register custom Express routes after file routes and plugin `onRoutesReady`, before the 404 handler — use for login/logout handlers when using the auth module; **`ctx.authMiddleware`** exposes `requireAuth`, `requireGuest`, etc.; **`ctx.clientRuntime`** is **`{ alpine, swup }`**
 
 **Example with middlewares:**
 
@@ -422,6 +424,27 @@ middlewares: {
 ```
 
 Plain `(req, res, next) => …` handlers still work as today. Tuple form **requires** a factory for that name (you get a clear error if you mix a plain handler with `['name', opts]`).
+
+### Client runtime
+
+Alpine.js + swup — opt-in progressive enhancement for SSR pages:
+
+- **`clientRuntime: { alpine: true, swup: true }`** (each can be toggled independently). Default is off; no scripts are injected when both are disabled.
+- Include **`{% include "partials/webspresso-client-runtime.njk" %}`** in your layout (copy from the npm package’s **`views/partials/`** or the framework repo). When **swup** is on, wrap the main content in **`<main id="swup">…</main>`** so transitions replace the correct region.
+- **swup** uses Head + Scripts plugins; **Alpine** is re-bound after each visit via **`Alpine.initTree`** on the container. Use **`data-no-swup`** on links for a full page load. Paths **`/_admin`** and **`/_webspresso`** are ignored by the default bootstrap; the admin panel and dev dashboard stay separate Mithril apps.
+- Dynamic UI can call **`pages/api/*`** from Alpine with **`fetch`** (see **`examples/alpine-swup-demo/`**).
+- **Helmet / CSP**: production **`script-src 'self'`** works for **`/__webspresso/client-runtime/`**; some Alpine builds may need **`unsafe-eval`** — validate for your version or use a stricter build.
+
+```javascript
+const { createApp } = require('webspresso');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  viewsDir: './views',
+  publicDir: './public',
+  clientRuntime: { alpine: true, swup: true },
+});
+```
 
 ### App context (`req.db`, `getDb`, `attachDbMiddleware`)
 

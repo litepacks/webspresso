@@ -142,8 +142,8 @@
     </div>
   </nav>
   
-  <!-- Main Content -->
-  <main class="flex-1">
+  <!-- Main Content (swup replaces #swup when clientRuntime.swup is enabled) -->
+  <main {% if clientRuntime and clientRuntime.swup %}id="swup"{% endif %} class="flex-1">
     {% block content %}{% endblock %}
   </main>
   
@@ -164,6 +164,8 @@
     </div>
   </footer>
   
+  {% include "partials/webspresso-client-runtime.njk" %}
+
   {% block scripts %}{% endblock %}
   
   {# Injected body content from plugins #}

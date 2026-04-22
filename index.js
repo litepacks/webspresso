@@ -3,6 +3,8 @@
  */
 
 const { createApp } = require('./src/server');
+const { resolveClientRuntime } = require('./src/client-runtime/resolve');
+const { CLIENT_RUNTIME_BASE } = require('./src/client-runtime/mount');
 const {
   attachDbMiddleware,
   getAppContext,
@@ -43,6 +45,8 @@ const { schemaExplorerPlugin, adminPanelPlugin, siteAnalyticsPlugin, auditLogPlu
 module.exports = {
   // Main API
   createApp,
+  resolveClientRuntime,
+  CLIENT_RUNTIME_BASE,
 
   attachDbMiddleware,
   getAppContext,

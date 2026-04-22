@@ -9,6 +9,8 @@ const nunjucks = require('nunjucks');
 const timeout = require('connect-timeout');
 
 const { setAppContext } = require('./app-context');
+const { mountClientRuntime } = require('./client-runtime/mount');
+const { resolveClientRuntime } = require('./client-runtime/resolve');
 const { mountPages } = require('./file-router');
 const { configureAssets, createHelpers, getScriptInjector } = require('./helpers');
 const { createPluginManager } = require('./plugin-manager');
@@ -258,6 +260,7 @@ function haltOnTimedout(req, res, next) {
  * @param {string|boolean} options.timeout - Request timeout (default: '30s', false to disable)
  * @param {Object} options.auth - Authentication manager instance (from createAuth)
  * @param {Object} options.db - Database instance (exposed as ctx.db to plugins)
+ * @param {Object} [options.clientRuntime] - Optional client assets: `{ alpine?: boolean|object, swup?: boolean|object }`. Overridable by env `WEBSPRESSO_ALPINE` / `WEBSPRESSO_SWUP` (=1 or true). Serves `/__webspresso/client-runtime/*` when either flag is on.
  * @param {function(import('express').Express, Object): void} [options.setupRoutes] - Called after file routes and plugins, before 404 handler
  * @returns {Object} { app, nunjucksEnv, pluginManager, authMiddleware }
  */
@@ -293,6 +296,8 @@ function createApp(options = {}) {
   if (!pagesDir) {
     throw new Error('pagesDir is required');
   }
+
+  const clientRuntime = resolveClientRuntime(options);
 
   setAppContext({ db: options.db ?? null });
   
@@ -378,7 +383,9 @@ function createApp(options = {}) {
       etag: true
     }));
   }
-  
+
+  mountClientRuntime(app, clientRuntime);
+
   // Configure Nunjucks
   const templateDirs = viewsDir ? [pagesDir, viewsDir] : [pagesDir];
   
@@ -439,7 +446,8 @@ function createApp(options = {}) {
     middlewares,
     pluginManager,
     silent: isTest,
-    db: options.db ?? null
+    db: options.db ?? null,
+    clientRuntime,
   });
   
   // Set route metadata in plugin manager
@@ -480,6 +488,7 @@ function createApp(options = {}) {
       authMiddleware,
       pluginManager,
       options,
+      clientRuntime,
     });
   }
   

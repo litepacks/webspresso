@@ -365,10 +365,22 @@ function resolveMiddlewares(middlewareConfig, middlewareRegistry = {}) {
  * @param {Object} options.pluginManager - Plugin manager instance
  * @param {boolean} options.silent - Suppress console output
  * @param {Object} options.db - Database instance (exposed as ctx.db in load/meta)
+ * @param {{ alpine?: boolean, swup?: boolean }} [options.clientRuntime] - Passed to Nunjucks as `clientRuntime` (default both false)
  * @returns {Array} Route metadata for plugins
  */
 function mountPages(app, options) {
-  const { pagesDir, nunjucks, middlewares = {}, pluginManager = null, silent = false, db = null } = options;
+  const {
+    pagesDir,
+    nunjucks,
+    middlewares = {},
+    pluginManager = null,
+    silent = false,
+    db = null,
+    clientRuntime: clientRuntimeOpt = null,
+  } = options;
+  const clientRuntime = clientRuntimeOpt && typeof clientRuntimeOpt === 'object'
+    ? { alpine: !!clientRuntimeOpt.alpine, swup: !!clientRuntimeOpt.swup }
+    : { alpine: false, swup: false };
   const isDev = process.env.NODE_ENV !== 'production';
   const log = silent ? () => {} : console.log.bind(console);
   
@@ -548,7 +560,8 @@ function mountPages(app, options) {
             indexable: true,
             canonical: null
           },
-          fsy: { ...baseHelpers, ...pluginHelpers }
+          fsy: { ...baseHelpers, ...pluginHelpers },
+          clientRuntime,
         };
         
         // Execute hooks: onRequest
@@ -612,6 +625,7 @@ function mountPages(app, options) {
           locale: ctx.locale,
           t: ctx.t,
           fsy: ctx.fsy,
+          clientRuntime: ctx.clientRuntime,
           req: {
             path: req.path,
             query: req.query,

@@ -139,7 +139,7 @@
   </nav>
   
   <!-- Main Content -->
-  <main class="flex-1">
+  <main {% if clientRuntime and clientRuntime.swup %}id="swup"{% endif %} class="flex-1">
     {% block content %}{% endblock %}
   </main>
   
@@ -160,6 +160,8 @@
     </div>
   </footer>
   
+  {% include "partials/webspresso-client-runtime.njk" %}
+
   {% block scripts %}{% endblock %}
 </body>
 </html>

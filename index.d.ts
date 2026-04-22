@@ -45,6 +45,11 @@ export interface CreateAppOptions {
   timeout?: string | false;
   auth?: unknown;
   db?: DatabaseInstance | null;
+  /** Opt-in Alpine / swup assets under `/__webspresso/client-runtime/*`. Env: WEBSPRESSO_ALPINE, WEBSPRESSO_SWUP. */
+  clientRuntime?: {
+    alpine?: boolean | Record<string, unknown>;
+    swup?: boolean | Record<string, unknown>;
+  };
   setupRoutes?: (app: Application, ctx: SetupRoutesContext) => void;
   [key: string]: unknown;
 }
@@ -54,6 +59,7 @@ export interface SetupRoutesContext {
   authMiddleware?: RequestHandler;
   pluginManager: PluginManager;
   options: CreateAppOptions;
+  clientRuntime: { alpine: boolean; swup: boolean };
 }
 
 export interface CreateAppResult {

@@ -1,0 +1,15 @@
+{# Served by createApp when clientRuntime.alpine / .swup are enabled. See src/client-runtime/. #}
+{% if clientRuntime and clientRuntime.alpine %}
+<style>[x-cloak] { display: none !important; }</style>
+<script defer src="/__webspresso/client-runtime/alpine.min.js"></script>
+{% endif %}
+{% if clientRuntime and clientRuntime.swup %}
+<script defer src="/__webspresso/client-runtime/swup.umd.js"></script>
+<script defer src="/__webspresso/client-runtime/swup-head-plugin.umd.js"></script>
+<script defer src="/__webspresso/client-runtime/swup-scripts-plugin.umd.js"></script>
+{% if clientRuntime.alpine %}
+<script defer src="/__webspresso/client-runtime/bootstrap-alpine-swup.js"></script>
+{% else %}
+<script defer src="/__webspresso/client-runtime/bootstrap-swup.js"></script>
+{% endif %}
+{% endif %}
