@@ -155,6 +155,7 @@ describe('CLI', () => {
       expect(packageJson.scripts['build:css']).toContain('tailwindcss');
       expect(packageJson.scripts['watch:css']).toContain('tailwindcss');
       expect(packageJson.dependencies.webspresso).toBeDefined();
+      expect(packageJson.dependencies.zod).toBeDefined();
       expect(packageJson.devDependencies.tailwindcss).toBeDefined();
       expect(packageJson.devDependencies.postcss).toBeDefined();
       expect(packageJson.devDependencies.autoprefixer).toBeDefined();
@@ -166,12 +167,24 @@ describe('CLI', () => {
       const serverPath = path.join(TEST_DIR, projectName, 'server.js');
       const serverContent = fs.readFileSync(serverPath, 'utf-8');
       
-      expect(serverContent).toContain("require('dotenv')");
+      expect(serverContent).toContain('./config/load-env');
+      expect(serverContent).toContain('loadEnv');
       expect(serverContent).toContain("require('webspresso')");
       expect(serverContent).toContain('createApp');
-      expect(serverContent).toContain('pagesDir');
-      expect(serverContent).toContain('viewsDir');
-      expect(serverContent).toContain('publicDir');
+      expect(serverContent).toContain('./config/app');
+      expect(serverContent).toContain('parseEnv');
+    });
+
+    it('should create config/ with load-env, env schema, and app options', () => {
+      runCli(`new ${projectName}`);
+      
+      const root = path.join(TEST_DIR, projectName);
+      expect(fs.existsSync(path.join(root, 'config', 'load-env.js'))).toBe(true);
+      expect(fs.existsSync(path.join(root, 'config', 'env.schema.js'))).toBe(true);
+      expect(fs.existsSync(path.join(root, 'config', 'app.js'))).toBe(true);
+      const schema = fs.readFileSync(path.join(root, 'config', 'env.schema.js'), 'utf-8');
+      expect(schema).toContain('zod');
+      expect(schema).toContain('parseEnv');
     });
 
     it('should create layout.njk with Tailwind classes', () => {
@@ -283,6 +296,7 @@ describe('CLI', () => {
       
       expect(gitignoreContent).toContain('node_modules');
       expect(gitignoreContent).toContain('.env');
+      expect(gitignoreContent).toContain('.env.*.local');
       expect(gitignoreContent).toContain('coverage');
     });
 

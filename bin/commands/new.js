@@ -159,6 +159,7 @@ function registerCommand(program) {
       fs.mkdirSync(path.join(projectPath, 'pages', 'locales'), { recursive: true });
       fs.mkdirSync(path.join(projectPath, 'views'), { recursive: true });
       fs.mkdirSync(path.join(projectPath, 'public'), { recursive: true });
+      fs.mkdirSync(path.join(projectPath, 'config'), { recursive: true });
       
       // Create models directory if database is selected
       if (useDatabase && databaseType) {
@@ -177,7 +178,8 @@ function registerCommand(program) {
         },
         dependencies: {
           webspresso: '*',
-          dotenv: '^16.3.1'
+          dotenv: '^16.3.1',
+          zod: '^3.23.0'
         }
       };
       
@@ -203,28 +205,108 @@ function registerCommand(program) {
         JSON.stringify(packageJson, null, 2) + '\n'
       );
       
-      // Create server.js
-      const serverJs = `require('dotenv').config();
-const { createApp } = require('webspresso');
+      // config/load-env.js — dotenv chain (last file wins for each key)
+      const loadEnvJs = `const fs = require('fs');
 const path = require('path');
+const dotenv = require('dotenv');
 
-const { app } = createApp({
-  pagesDir: path.join(__dirname, 'pages'),
-  viewsDir: path.join(__dirname, 'views'),
-  publicDir: path.join(__dirname, 'public')
+/**
+ * Load env files in order: .env, .env.local, .env.<NODE_ENV>, .env.<NODE_ENV>.local
+ * @param {string} [rootDir] Project root (default: parent of config/)
+ */
+function loadEnv(rootDir) {
+  const root = rootDir || path.resolve(__dirname, '..');
+  const loadFile = (name) => {
+    const full = path.join(root, name);
+    if (fs.existsSync(full)) {
+      dotenv.config({ path: full, override: true });
+    }
+  };
+  loadFile('.env');
+  loadFile('.env.local');
+  const mode = process.env.NODE_ENV || 'development';
+  loadFile(\`.env.\${mode}\`);
+  loadFile(\`.env.\${mode}.local\`);
+}
+
+module.exports = { loadEnv };
+`;
+
+      const envSchemaJs = `const { z } = require('zod');
+
+const envSchema = z.object({
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  PORT: z.coerce.number().int().positive().default(3000),
+  DEFAULT_LOCALE: z.string().min(1).default('en'),
+  SUPPORTED_LOCALES: z.string().min(1).default('en,de'),
+  BASE_URL: z.string().url().default('http://localhost:3000'),
+  DATABASE_URL: z.string().optional(),
 });
 
-const PORT = process.env.PORT || 3000;
+let _parsed = null;
 
-app.listen(PORT, () => {
-  console.log(\`🚀 Server running at http://localhost:\${PORT}\`);
+function parseEnv() {
+  if (_parsed) return _parsed;
+  const result = envSchema.safeParse(process.env);
+  if (!result.success) {
+    console.error('Invalid environment variables:');
+    console.error(result.error.format());
+    process.exit(1);
+  }
+  _parsed = result.data;
+  return _parsed;
+}
+
+module.exports = { envSchema, parseEnv };
+`;
+
+      const appConfigJs = `const path = require('path');
+const fs = require('fs');
+const { parseEnv } = require('./env.schema');
+
+function getCreateAppOptions() {
+  parseEnv();
+  const rootDir = path.resolve(__dirname, '..');
+  const options = {
+    pagesDir: path.join(rootDir, 'pages'),
+    viewsDir: path.join(rootDir, 'views'),
+    publicDir: path.join(rootDir, 'public'),
+  };
+  const dbFile = path.join(rootDir, 'webspresso.db.js');
+  if (fs.existsSync(dbFile)) {
+    const { createDatabase } = require('webspresso');
+    const knexConfig = require(dbFile);
+    options.db = createDatabase(knexConfig);
+  }
+  return options;
+}
+
+module.exports = getCreateAppOptions;
+`;
+
+      const serverJs = `const { loadEnv } = require('./config/load-env');
+loadEnv();
+
+const { createApp } = require('webspresso');
+const getCreateAppOptions = require('./config/app');
+const { parseEnv } = require('./config/env.schema');
+
+const env = parseEnv();
+const { app } = createApp(getCreateAppOptions());
+
+app.listen(env.PORT, () => {
+  console.log(\`🚀 Server running at http://localhost:\${env.PORT}\`);
 });
 `;
-      
+
+      fs.writeFileSync(path.join(projectPath, 'config', 'load-env.js'), loadEnvJs);
+      fs.writeFileSync(path.join(projectPath, 'config', 'env.schema.js'), envSchemaJs);
+      fs.writeFileSync(path.join(projectPath, 'config', 'app.js'), appConfigJs);
       fs.writeFileSync(path.join(projectPath, 'server.js'), serverJs);
       
-      // Create .env.example
-      let envExample = `PORT=3000
+      // Create .env.example (see config/load-env.js for merge order)
+      let envExample = `# Copy to .env and adjust. Optional overrides: .env.local, .env.<NODE_ENV>, .env.<NODE_ENV>.local
+PORT=3000
 NODE_ENV=development
 DEFAULT_LOCALE=en
 SUPPORTED_LOCALES=en,de
@@ -308,10 +390,11 @@ BASE_URL=http://localhost:3000
         fs.writeFileSync(path.join(projectPath, 'seeds', 'index.js'), seedIndex);
       }
       
-      // Create .gitignore
+      // Create .gitignore (.env optional: teams often commit a non-secret .env for local defaults)
       const gitignore = `node_modules/
 .env
 .env.local
+.env.*.local
 .DS_Store
 coverage/
 *.log
@@ -482,10 +565,18 @@ Webspresso project
 
 \`\`\`bash
 npm install
+cp .env.example .env
 npm run dev
 \`\`\`
 
 Visit http://localhost:3000
+
+## Configuration
+
+- **\`config/load-env.js\`** — loads \`.env\`, \`.env.local\`, then \`.env.$NODE_ENV\` and \`.env.$NODE_ENV.local\` (later files override keys).
+- **\`config/env.schema.js\`** — [Zod](https://zod.dev) schema for \`process.env\`; fails fast on invalid values.
+- **\`config/app.js\`** — builds options passed to \`createApp()\` (paths; adds \`db\` when \`webspresso.db.js\` exists).
+- **\`server.js\`** — calls \`loadEnv()\`, then \`createApp(getCreateAppOptions())\`.
 `;
       
       fs.writeFileSync(path.join(projectPath, 'README.md'), readme);

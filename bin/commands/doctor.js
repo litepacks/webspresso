@@ -107,6 +107,29 @@ function registerCommand(program) {
         warnings += 1;
       }
 
+      console.log('\nEnvironment files');
+      console.log('-----------------');
+
+      const envExamplePath = path.join(cwd, '.env.example');
+      const envPath = path.join(cwd, '.env');
+      if (fs.existsSync(envExamplePath)) {
+        line('✓', '.env.example present');
+      } else {
+        line('○', 'No .env.example (optional; new scaffolds include one)');
+      }
+      if (fs.existsSync(envPath)) {
+        line('✓', '.env present');
+      } else if (fs.existsSync(envExamplePath)) {
+        line('⚠', 'No .env — copy .env.example to .env if the app expects env vars');
+        warnings += 1;
+      } else {
+        line('○', 'No .env (fine if you do not use dotenv in this project)');
+      }
+      const loadEnvPath = path.join(cwd, 'config', 'load-env.js');
+      if (fs.existsSync(loadEnvPath)) {
+        line('✓', 'config/load-env.js present (dotenv chain scaffold)');
+      }
+
       console.log('\nDatabase config');
       console.log('---------------');
 

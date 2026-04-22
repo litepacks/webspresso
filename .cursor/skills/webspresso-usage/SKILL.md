@@ -216,12 +216,12 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 
 | Command | Role |
 |---------|------|
-| `webspresso new` | Scaffold project |
+| `webspresso new` | Scaffold project — includes **`config/load-env.js`** (`.env` chain), **`config/env.schema.js`** (Zod), **`config/app.js`** (`createApp` paths + optional `db` if `webspresso.db.js` exists), thin **`server.js`** |
 | `webspresso dev` / `start` | Servers |
 | `webspresso page` / `api` | Interactive scaffolding |
 | `webspresso db:*` | migrate, rollback, status, make |
 | `webspresso seed` | Seed data |
-| `webspresso doctor` | Env / layout / optional `--db` check |
+| `webspresso doctor` | Env / layout / `.env` vs `.env.example` / `config/load-env.js` / optional `--db` check |
 | `webspresso skill` | Cursor `SKILL.md` scaffold |
 | `webspresso skill --preset webspresso` | Copy bundled **Webspresso agent reference** skill |
 | `webspresso add tailwind` | Tailwind setup |

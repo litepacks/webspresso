@@ -129,6 +129,17 @@ If you select a database:
 - `models/` directory is created
 - `DATABASE_URL` is added to `.env.example` with a template
 
+**Scaffold: `config/` and environment files**
+
+New projects include:
+
+- **`config/load-env.js`** — loads, in order, `.env`, `.env.local`, `.env.${NODE_ENV}`, and `.env.${NODE_ENV}.local` (each file overrides keys from earlier ones).
+- **`config/env.schema.js`** — validates `process.env` with **Zod** before the app starts (`PORT`, `NODE_ENV`, i18n vars, `BASE_URL`, optional `DATABASE_URL`).
+- **`config/app.js`** — returns `createApp()` options (paths; if `webspresso.db.js` exists, also **`createDatabase`** as `db`).
+- **`server.js`** — calls `loadEnv()`, then `createApp(getCreateAppOptions())`, then `listen` using the parsed `PORT`.
+
+Copy **`.env.example`** to **`.env`** (and use `.env.local` for machine-specific overrides). Patterns such as `.env.development.local` are gitignored via `.env.*.local`.
+
 **Seed Data Generation:**
 After selecting a database, you'll be asked if you want to generate seed data:
 - If yes, `@faker-js/faker` is added to dependencies
