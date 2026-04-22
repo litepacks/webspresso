@@ -2,12 +2,13 @@
 name: webspresso-usage
 description: >-
   Comprehensive Webspresso framework reference: file-based SSR and API routing,
-  createApp options, session auth (createAuth, quickAuth, webspresso/core/auth),
-  Nunjucks/fsy helpers, i18n, lifecycle hooks, Zod API validation,
-  ORM (zdb, defineModel, repository, query builder, migrations), plugins (admin,
-  analytics, sitemap, SEO, audit, recaptcha), CLI, env vars, and testing. Use when
-  working in this repo or any Webspresso app—adding routes, APIs, models, plugins,
-  auth, or debugging routing, ctx.db, session, or templates.
+  createApp options including optional clientRuntime (Alpine.js, swup v4, no HTMX),
+  session auth (createAuth, quickAuth, webspresso/core/auth), Nunjucks/fsy helpers,
+  i18n, lifecycle hooks, Zod API validation, ORM (zdb, defineModel, repository,
+  query builder, migrations), plugins (admin, analytics, sitemap, SEO, audit,
+  recaptcha, rest resources), CLI, env vars, and testing. Use when working in this
+  repo or any Webspresso app—adding routes, APIs, models, plugins, auth, client-side
+  sprinkles or page transitions, or debugging routing, ctx.db, session, or templates.
 ---
 
 # Webspresso — agent reference
@@ -20,7 +21,7 @@ description: >-
 - **ORM**: Knex-backed layer in `core/orm` — `defineModel`, `zdb` schema helpers, repositories, query builder, migrations.
 - **Plugins**: Register in `createApp({ plugins })`; optional `db` passed as `ctx.db`.
 
-Public API surface: `require('webspresso')` / [`index.js`](../../../index.js) — `createApp`, file-router utilities, `createHelpers`, plugin manager, ORM exports, built-in plugins. **Session auth** lives in [`core/auth`](../../../core/auth) — import **`require('webspresso/core/auth')`** (`createAuth`, `quickAuth`, `hash`, `verify`, `setupAuthMiddleware`, `createRememberTokensTable`, policy helpers); wire with **`createApp({ auth })`**.
+Public API surface: `require('webspresso')` / [`index.js`](../../../index.js) — `createApp`, **`resolveClientRuntime`**, **`CLIENT_RUNTIME_BASE`**, file-router utilities, `createHelpers`, plugin manager, ORM exports, built-in plugins. **Session auth** lives in [`core/auth`](../../../core/auth) — import **`require('webspresso/core/auth')`** (`createAuth`, `quickAuth`, `hash`, `verify`, `setupAuthMiddleware`, `createRememberTokensTable`, policy helpers); wire with **`createApp({ auth })`**.
 
 ---
 
@@ -72,6 +73,14 @@ project/
 | `setupRoutes(app, ctx)` | **Register custom Express routes here** — runs **after** file routes and plugins’ `onRoutesReady`, **before** 404. **`ctx.clientRuntime`** is the resolved flags. **`ctx.authMiddleware`** is set when `auth` was passed (guards: `requireAuth`, `requireGuest`, `requireCan`, `requireVerified`, …). Do not rely on `app.get` *after* `createApp` returns unless routes are appended before the 404 middleware (see [`src/server.js`](../../../src/server.js)). |
 
 **Returns:** `{ app, nunjucksEnv, pluginManager, authMiddleware }` — `authMiddleware` is **`null`** when `auth` was not configured.
+
+### Client runtime — implementation notes
+
+- **Package helpers:** `resolveClientRuntime(options)` merges **`createApp({ clientRuntime })`** with env; **`CLIENT_RUNTIME_BASE`** is **`/__webspresso/client-runtime`** (script URLs under that path).
+- **After swup navigation:** bootstrap runs **`Alpine.initTree`** on **`#swup`** on swup’s **`content:replace`** so new SSR markup gets Alpine bindings.
+- **Default `ignoreVisit` (bootstrap):** links under **`/_admin`**, **`/_webspresso`**, elements with **`data-no-swup`**, plus swup’s usual rules (e.g. `target="_blank"`, other origin).
+- **CSP / Helmet:** production **`script-src 'self'`** works for **`/__webspresso/client-runtime/`**; some Alpine builds may need **`unsafe-eval`** — validate for your version or use a stricter build.
+- **Demo:** repo **[`examples/alpine-swup-demo/`](../../../examples/alpine-swup-demo/)**. Longer doc: **[`doc/index.html#client-runtime`](../../../doc/index.html#client-runtime)** · README **Client runtime**.
 
 ### Session authentication — essentials
 
@@ -232,15 +241,17 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `BASE_URL` | Canonical / links |
 | `DATABASE_URL` | DB connection |
 | `SESSION_SECRET` | Session cookie signing — set on auth config **`session.secret`** or read from env in app code |
+| `WEBSPRESSO_ALPINE` | If set to **`1`** or **`true`**, forces **`clientRuntime.alpine`** on (overrides `createApp` for that flag). |
+| `WEBSPRESSO_SWUP` | If set to **`1`** or **`true`**, forces **`clientRuntime.swup`** on (overrides `createApp` for that flag). |
 
 ---
 
 ## 13. Testing
 
 - **Unit / integration:** `npm test` (Vitest).
-- **E2E:** `npm run test:e2e` (Playwright).
+- **E2E:** `npm run test:e2e` (Playwright), including **`tests/e2e/swup.spec.js`** for **`clientRuntime`** (Alpine + swup).
 
-Touching **CLI**, **ORM**, or **server routing** — run the relevant suite.
+Touching **CLI**, **ORM**, **server routing**, or **client runtime** — run the relevant suite.
 
 ---
 
@@ -253,13 +264,14 @@ Touching **CLI**, **ORM**, or **server routing** — run the relevant suite.
 5. **Zod on API** — invalid input surfaces as validation errors; handlers should assume **`req.input`** is validated when schema is set.
 6. **Built-in `auth` option** — if you pass **`createApp({ auth })`**, do not expect a custom **`middlewares.auth`** to apply; the framework assigns **`auth`** / **`guest`** to the session guards.
 7. **Login route vs file router** — **`pages/login.njk`** can shadow custom login handlers; align with **`setupRoutes`** + **`views/`** pattern above.
+8. **Client runtime + swup** — without **`<main id="swup">`** (or matching **`containers`**), transitions will not replace the intended region. Include **`partials/webspresso-client-runtime.njk`** in the layout when flags are on. Tailwind CDN / third-party scripts may require **`helmet: false`** in dev or relaxed **`script-src`** in production.
 
 ---
 
 ## 15. When to load this skill
 
-- Adding or changing **pages**, **API routes**, **models**, **migrations**, **plugins**, **locales**, or **session auth** (`createAuth`, `createApp({ auth })`, policies).
+- Adding or changing **pages**, **API routes**, **models**, **migrations**, **plugins**, **locales**, **session auth** (`createAuth`, `createApp({ auth })`, policies), or **client runtime** (`createApp({ clientRuntime })`, Alpine, swup, layout partials).
 - Explaining **Webspresso** behavior vs plain Express.
-- Debugging **404 order**, **i18n**, **session/auth**, **ORM**, or **admin** integration.
+- Debugging **404 order**, **i18n**, **session/auth**, **ORM**, **admin** integration, or **swup / Alpine** (e.g. missing **`#swup`**, CSP blocking scripts).
 
-For authoritative long-form detail, see **[README.md](../../../README.md)** and **[`doc/index.html`](../../../doc/index.html)** (e.g. **Authentication**) in the repo.
+For authoritative long-form detail, see **[README.md](../../../README.md)** and **[`doc/index.html`](../../../doc/index.html)** (e.g. **Authentication**, **[Client runtime](../../../doc/index.html#client-runtime)**) in the repo.
