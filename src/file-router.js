@@ -16,6 +16,12 @@ const i18nCache = new Map();
 // Cache for route configs in production
 const configCache = new Map();
 
+// Dev-only: avoid require() on every SSR request when the .js file is unchanged (mtime)
+const routeConfigDevCache = new Map();
+
+// Cache for API filename -> { method, baseName } (basename keys; stable per process)
+const methodFromFilenameCache = new Map();
+
 /**
  * Convert a file path to an Express route pattern
  * @param {string} filePath - Relative path from pages/
@@ -57,20 +63,31 @@ function filePathToRoute(filePath, ext) {
  * @returns {{ method: string, baseName: string }}
  */
 function extractMethodFromFilename(filename) {
+  const hit = methodFromFilenameCache.get(filename);
+  if (hit !== undefined) {
+    return hit;
+  }
+
   const methods = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'];
   const parts = filename.replace('.js', '').split('.');
-  
+  let result;
+
   if (parts.length > 1) {
     const lastPart = parts[parts.length - 1].toLowerCase();
     if (methods.includes(lastPart)) {
-      return {
+      result = {
         method: lastPart,
-        baseName: parts.slice(0, -1).join('.')
+        baseName: parts.slice(0, -1).join('.'),
       };
     }
   }
-  
-  return { method: 'get', baseName: parts.join('.') };
+
+  if (!result) {
+    result = { method: 'get', baseName: parts.join('.') };
+  }
+
+  methodFromFilenameCache.set(filename, result);
+  return result;
 }
 
 /**
@@ -201,25 +218,31 @@ function createTranslator(translations) {
  */
 function loadRouteConfig(configPath, isDev) {
   if (!fs.existsSync(configPath)) {
+    routeConfigDevCache.delete(configPath);
     return null;
   }
-  
+
   try {
-    // Clear cache in development mode
-    if (isDev && require.cache[require.resolve(configPath)]) {
-      delete require.cache[require.resolve(configPath)];
+    if (isDev) {
+      const stats = fs.statSync(configPath);
+      const devCached = routeConfigDevCache.get(configPath);
+      if (devCached && devCached.mtime >= stats.mtimeMs) {
+        return devCached.config;
+      }
+      if (require.cache[require.resolve(configPath)]) {
+        delete require.cache[require.resolve(configPath)];
+      }
+      const config = require(configPath);
+      routeConfigDevCache.set(configPath, { mtime: stats.mtimeMs, config });
+      return config;
     }
-    
-    if (!isDev && configCache.has(configPath)) {
+
+    if (configCache.has(configPath)) {
       return configCache.get(configPath);
     }
-    
+
     const config = require(configPath);
-    
-    if (!isDev) {
-      configCache.set(configPath, config);
-    }
-    
+    configCache.set(configPath, config);
     return config;
   } catch (err) {
     console.error(`Error loading route config ${configPath}:`, err.message);

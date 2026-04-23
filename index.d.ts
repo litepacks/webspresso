@@ -94,7 +94,10 @@ export function mountPages(
 
 export function filePathToRoute(filePath: string, pagesDir: string): string;
 
-export function extractMethodFromFilename(filename: string): string | null;
+export function extractMethodFromFilename(filename: string): {
+  method: string;
+  baseName: string;
+};
 
 export function scanDirectory(
   dir: string,

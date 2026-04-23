@@ -38,6 +38,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Run micro-benchmarks
+        run: npm run bench
+
   coverage:
     name: Coverage (Node 20)
     runs-on: ubuntu-latest

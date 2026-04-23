@@ -2163,6 +2163,9 @@ npm run test:watch
 
 # Run tests with coverage
 npm run test:coverage
+
+# Micro-benchmarks (Vitest bench; also runs in CI on the test matrix)
+npm run bench
 ```
 
 ## License

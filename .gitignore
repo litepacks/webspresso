@@ -25,6 +25,9 @@ Thumbs.db
 dist/
 build/
 
+# Benchmarks (local baseline for vitest bench --compare)
+benchmark-results.json
+
 # Coverage
 coverage/
 

@@ -1,6 +1,11 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  benchmark: {
+    include: ['benchmarks/**/*.bench.mjs'],
+    exclude: ['node_modules', 'dist'],
+    reporters: ['verbose'],
+  },
   test: {
     environment: 'node',
     testTimeout: 10000,
