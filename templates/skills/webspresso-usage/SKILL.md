@@ -6,7 +6,7 @@ description: >-
   session auth (createAuth, quickAuth, webspresso/core/auth), Nunjucks/fsy helpers,
   i18n, lifecycle hooks, Zod API validation, ORM (zdb, defineModel, repository,
   query builder, migrations), plugins (admin, analytics, sitemap, SEO, audit,
-  recaptcha, rest resources, file upload), CLI, env vars, and testing. Use when working in this
+  recaptcha, rest resources, file upload), CLI (`new .`, `--yes`, `-i`), env vars, and testing. Use when working in this
   repo or any Webspresso app—adding routes, APIs, models, plugins, auth, client-side
   sprinkles or page transitions, or debugging routing, ctx.db, session, or templates.
 ---
@@ -220,6 +220,8 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | Command | Role |
 |---------|------|
 | `webspresso new` | Scaffold project — includes **`config/load-env.js`** (`.env` chain), **`config/env.schema.js`** (Zod), **`config/app.js`** (`createApp` paths + optional `db` if `webspresso.db.js` exists), thin **`server.js`** |
+| `webspresso new .` / `new ./` | Scaffold **into the current directory** (same as interactive “install here”). `package.json` **`name`** = folder basename, or **`webspresso-app`** if basename is not npm-safe. **Aborts** if **`server.js`** or **`pages/`** already exists (already a Webspresso layout). |
+| `webspresso new … --yes` | **Non-interactive:** skips DB/seed prompts (no DB), skips “install now?” unless you pass **`-i` / `--install`**, skips “start dev server?” after install. Use for CI and agent tools. |
 | `webspresso dev` / `start` | Servers |
 | `webspresso page` / `api` | Interactive scaffolding |
 | `webspresso db:*` | migrate, rollback, status, make |
@@ -231,6 +233,12 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `webspresso favicon:generate` | Favicons + manifest |
 | `webspresso admin:setup` / `admin:password` | Admin users |
 | `webspresso audit:prune` | Audit log retention |
+
+**`webspresso new` — current dir & automation**
+
+- **`new .`** does **not** treat the cwd as “directory already exists”; it scaffolds **in place** next to any existing non-dot files.
+- **Non-empty cwd:** interactive prompt defaults to **continue**; if **stdin is not a TTY** (piped/agent) or you pass **`--yes`**, the “continue?” step is skipped and a short **info** line is printed instead.
+- **Typical agent / vibe-coding one-liners:** `webspresso new . --yes --no-tailwind` · `webspresso new . --yes -i` (scaffold + install, no dev server prompt).
 
 ---
 

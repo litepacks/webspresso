@@ -18,7 +18,11 @@ const FAVICON_TEST_DIR = path.join(__dirname, '../fixtures/favicon-test');
 // When no project name: "Install in current directory?" (n), "Will you use a database?" (n), "Install dependencies?" (n)
 function runCli(args, options = {}) {
   // If command might be interactive, pipe answers to skip prompts
-  const isInteractive = args.includes('new') && !args.includes('--install') && !args.includes('--help');
+  const isInteractive =
+    args.includes('new') &&
+    !args.includes('--install') &&
+    !args.includes('--help') &&
+    !args.includes('--yes');
   
   let answers = '';
   if (isInteractive) {
@@ -106,6 +110,7 @@ describe('CLI', () => {
       expect(result.stdout).toContain('Create a new Webspresso project');
       expect(result.stdout).toContain('--no-tailwind');
       expect(result.stdout).toContain('--install');
+      expect(result.stdout).toContain('--yes');
       // Should show optional parameter (Commander.js shows it as [project-name])
       expect(result.stdout).toContain('[project-name]');
       expect(result.exitCode).toBe(0);
@@ -532,6 +537,25 @@ describe('CLI', () => {
   });
 
   describe.sequential('Error Handling', () => {
+    it('should scaffold into current directory when project name is .', () => {
+      const dirName = 'dot-dir-scaffold';
+      const projectPath = path.join(TEST_DIR, dirName);
+      if (fs.existsSync(projectPath)) {
+        fs.rmSync(projectPath, { recursive: true, force: true });
+      }
+      fs.mkdirSync(projectPath, { recursive: true });
+      fs.writeFileSync(path.join(projectPath, 'README.md'), '# existing\n');
+
+      runCli('new . --yes --no-tailwind', { cwd: projectPath });
+
+      expect(fs.existsSync(path.join(projectPath, 'server.js'))).toBe(true);
+      expect(fs.existsSync(path.join(projectPath, 'pages'))).toBe(true);
+      const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf-8'));
+      expect(pkg.name).toBe(dirName);
+
+      fs.rmSync(projectPath, { recursive: true, force: true });
+    });
+
     it('should fail if project directory already exists', () => {
       const projectName = 'existing-project';
       const projectPath = path.join(TEST_DIR, projectName);

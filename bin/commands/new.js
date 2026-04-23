@@ -9,6 +9,30 @@ const path = require('path');
 const { runInstallation, startDevServer } = require('../utils/project');
 const { getSeedFileTemplate } = require('../utils/seed');
 
+/** `.` / `./` mean scaffold into the current working directory */
+function isCurrentDirAlias(name) {
+  if (name == null || typeof name !== 'string') return false;
+  const t = name.trim();
+  return t === '.' || t === './';
+}
+
+/** package.json `name` from a directory path (must match interactive validator rules) */
+function derivePackageNameFromDir(dirPath) {
+  const base = path.basename(path.resolve(dirPath));
+  if (/^[a-z0-9-_]+$/i.test(base)) return base;
+  return 'webspresso-app';
+}
+
+function assertNotExistingWebspressoProject(projectPath) {
+  if (
+    fs.existsSync(path.join(projectPath, 'server.js')) ||
+    fs.existsSync(path.join(projectPath, 'pages'))
+  ) {
+    console.error('❌ Target directory already contains a Webspresso project (server.js or pages/).');
+    process.exit(1);
+  }
+}
+
 function registerCommand(program) {
   program
     .command('new [project-name]')
@@ -16,9 +40,12 @@ function registerCommand(program) {
     .option('-t, --template <template>', 'Template to use (minimal, full)', 'minimal')
     .option('--no-tailwind', 'Skip Tailwind CSS setup')
     .option('-i, --install', 'Auto install dependencies and build CSS')
+    .option('-y, --yes', 'Non-interactive: no database, skip install unless -i/--install, skip dev server')
     .action(async (projectNameArg, options) => {
       const useTailwind = options.tailwind !== false;
       const autoInstall = options.install === true;
+      const skipPrompts = options.yes === true;
+      const stdinNotTty = !process.stdin.isTTY;
       
       let projectName;
       let projectPath;
@@ -43,27 +70,27 @@ function registerCommand(program) {
           useCurrentDir = true;
           projectPath = process.cwd();
           
-          // Check for existing Webspresso files
-          if (fs.existsSync(path.join(projectPath, 'server.js')) || 
-              fs.existsSync(path.join(projectPath, 'pages'))) {
-            console.error('❌ Current directory already contains a Webspresso project!');
-            process.exit(1);
-          }
+          assertNotExistingWebspressoProject(projectPath);
           
           // Warn if there are existing files
           if (hasExistingFiles) {
-            const { continueAnyway } = await inquirer.prompt([
-              {
-                type: 'confirm',
-                name: 'continueAnyway',
-                message: '⚠️  Current directory is not empty. Continue anyway?',
-                default: false
+            const autoProceed = skipPrompts || stdinNotTty;
+            if (autoProceed) {
+              console.log('ℹ️  Current directory is not empty; scaffolding alongside existing files.');
+            } else {
+              const { continueAnyway } = await inquirer.prompt([
+                {
+                  type: 'confirm',
+                  name: 'continueAnyway',
+                  message: '⚠️  Current directory is not empty. Continue anyway?',
+                  default: true
+                }
+              ]);
+              
+              if (!continueAnyway) {
+                console.log('Cancelled.');
+                process.exit(0);
               }
-            ]);
-            
-            if (!continueAnyway) {
-              console.log('Cancelled.');
-              process.exit(0);
             }
           }
           
@@ -102,53 +129,92 @@ function registerCommand(program) {
           projectName = dirName;
           projectPath = path.resolve(dirName);
         }
+      } else if (isCurrentDirAlias(projectNameArg)) {
+        useCurrentDir = true;
+        projectPath = process.cwd();
+        projectName = derivePackageNameFromDir(projectPath);
+        
+        assertNotExistingWebspressoProject(projectPath);
+        
+        const currentDirFiles = fs.readdirSync(projectPath);
+        const hasExistingFiles = currentDirFiles.some((f) => !f.startsWith('.'));
+        if (hasExistingFiles) {
+          const autoProceed = skipPrompts || stdinNotTty;
+          if (autoProceed) {
+            console.log('ℹ️  Current directory is not empty; scaffolding alongside existing files.');
+          } else {
+            const { continueAnyway } = await inquirer.prompt([
+              {
+                type: 'confirm',
+                name: 'continueAnyway',
+                message: '⚠️  Current directory is not empty. Continue anyway?',
+                default: true
+              }
+            ]);
+            
+            if (!continueAnyway) {
+              console.log('Cancelled.');
+              process.exit(0);
+            }
+          }
+        }
       } else {
-        projectName = projectNameArg;
-        projectPath = path.resolve(projectNameArg);
+        const trimmed = projectNameArg.trim();
+        projectPath = path.resolve(trimmed);
+        projectName = derivePackageNameFromDir(projectPath);
         
         if (fs.existsSync(projectPath)) {
-          console.error(`❌ Directory ${projectName} already exists!`);
+          console.error(`❌ Directory ${trimmed} already exists!`);
           process.exit(1);
         }
       }
       
       console.log(`\n🚀 Creating new Webspresso project: ${projectName}\n`);
       
-      // Ask about database
-      const { useDatabase, databaseType } = await inquirer.prompt([
-        {
-          type: 'confirm',
-          name: 'useDatabase',
-          message: 'Will you use a database?',
-          default: false
-        },
-        {
-          type: 'list',
-          name: 'databaseType',
-          message: 'Which database?',
-          choices: [
-            { name: 'SQLite (better-sqlite3)', value: 'better-sqlite3' },
-            { name: 'PostgreSQL (pg)', value: 'pg' },
-            { name: 'MySQL (mysql2)', value: 'mysql2' },
-            { name: 'None', value: null }
-          ],
-          default: 'better-sqlite3',
-          when: (answers) => answers.useDatabase
-        }
-      ]);
-      
-      // Ask about seed data if database is selected
+      let useDatabase = false;
+      let databaseType = null;
       let useSeed = false;
-      if (useDatabase && databaseType) {
-        const { generateSeed } = await inquirer.prompt([
+      
+      if (skipPrompts) {
+        useDatabase = false;
+        databaseType = null;
+        useSeed = false;
+      } else {
+        const dbAnswers = await inquirer.prompt([
           {
             type: 'confirm',
-            name: 'generateSeed',
-            message: 'Generate seed data based on existing models?',
+            name: 'useDatabase',
+            message: 'Will you use a database?',
             default: false
+          },
+          {
+            type: 'list',
+            name: 'databaseType',
+            message: 'Which database?',
+            choices: [
+              { name: 'SQLite (better-sqlite3)', value: 'better-sqlite3' },
+              { name: 'PostgreSQL (pg)', value: 'pg' },
+              { name: 'MySQL (mysql2)', value: 'mysql2' },
+              { name: 'None', value: null }
+            ],
+            default: 'better-sqlite3',
+            when: (answers) => answers.useDatabase
           }
         ]);
-        useSeed = generateSeed;
+        useDatabase = dbAnswers.useDatabase;
+        databaseType = dbAnswers.databaseType;
+        
+        if (useDatabase && databaseType) {
+          const { generateSeed } = await inquirer.prompt([
+            {
+              type: 'confirm',
+              name: 'generateSeed',
+              message: 'Generate seed data based on existing models?',
+              default: false
+            }
+          ]);
+          useSeed = generateSeed;
+        }
       }
       
       // Create directory structure (skip root if using current dir)
@@ -652,28 +718,46 @@ module.exports = {
       if (autoInstall) {
         await runInstallation(projectPath, useTailwind);
         
-        // Ask if user wants to start dev server
-        const { shouldStartDev } = await inquirer.prompt([
-          {
-            type: 'confirm',
-            name: 'shouldStartDev',
-            message: 'Start development server?',
-            default: true
-          }
-        ]);
-        
-        if (shouldStartDev) {
-          startDevServer(projectPath, useTailwind);
-        } else {
+        if (skipPrompts) {
           console.log('✅ Project ready!\n');
           console.log('Start developing:');
           if (!useCurrentDir) {
             console.log(`  cd ${projectName}`);
           }
           console.log('  npm run dev\n');
+        } else {
+          const { shouldStartDev } = await inquirer.prompt([
+            {
+              type: 'confirm',
+              name: 'shouldStartDev',
+              message: 'Start development server?',
+              default: true
+            }
+          ]);
+          
+          if (shouldStartDev) {
+            startDevServer(projectPath, useTailwind);
+          } else {
+            console.log('✅ Project ready!\n');
+            console.log('Start developing:');
+            if (!useCurrentDir) {
+              console.log(`  cd ${projectName}`);
+            }
+            console.log('  npm run dev\n');
+          }
         }
+      } else if (skipPrompts) {
+        console.log('\n✅ Project created successfully!\n');
+        console.log('Next steps:');
+        if (!useCurrentDir) {
+          console.log(`  cd ${projectName}`);
+        }
+        console.log('  npm install');
+        if (useTailwind) {
+          console.log('  npm run build:css');
+        }
+        console.log('  npm run dev\n');
       } else {
-        // Ask if user wants to install dependencies
         const { shouldInstall } = await inquirer.prompt([
           {
             type: 'confirm',
@@ -686,7 +770,6 @@ module.exports = {
         if (shouldInstall) {
           await runInstallation(projectPath, useTailwind);
           
-          // Ask if user wants to start dev server
           const { shouldStartDev } = await inquirer.prompt([
             {
               type: 'confirm',
