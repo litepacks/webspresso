@@ -658,4 +658,6 @@ function createExtensionApiHandlers(options) {
 
 module.exports = {
   createExtensionApiHandlers,
+  buildFilteredQuery,
+  getAllMatchingIds,
 };

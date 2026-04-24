@@ -11,6 +11,7 @@ const {
   createTranslator,
   detectLocale,
   compareRouteRegistrationOrder,
+  routeRegistrationMeta,
 } = require('../../src/file-router');
 
 describe('file-router.js', () => {
@@ -207,6 +208,36 @@ describe('file-router.js', () => {
     it('should return empty object for non-existent locale', () => {
       const translations = loadI18n(fixturesPath, fixturesPath, 'nonexistent');
       expect(translations).toEqual({});
+    });
+  });
+
+  describe('routeRegistrationMeta', () => {
+    it('classifies static vs dynamic vs catch-all tiers', () => {
+      expect(routeRegistrationMeta('/about')).toMatchObject({
+        tier: 0,
+        literalSegCount: 1,
+        paramSegCount: 0,
+      });
+      expect(routeRegistrationMeta('/users/:id')).toMatchObject({
+        tier: 1,
+        paramSegCount: 1,
+      });
+      expect(routeRegistrationMeta('/docs/*')).toMatchObject({
+        tier: 2,
+      });
+    });
+
+    it('counts literal and param segments', () => {
+      const m = routeRegistrationMeta('/catalog/special/:id');
+      expect(m.literalSegCount).toBe(2);
+      expect(m.paramSegCount).toBe(1);
+      expect(m.depth).toBe(3);
+    });
+
+    it('handles root path', () => {
+      const m = routeRegistrationMeta('/');
+      expect(m.depth).toBe(0);
+      expect(m.tier).toBe(0);
     });
   });
 

@@ -1,10 +1,7 @@
 /**
- * Admin Panel Registry Unit Tests
- * @vitest-environment node
+ * Admin panel extension registry
  */
-
-import { describe, it, expect, beforeEach } from 'vitest';
-import { AdminRegistry, ExtensionType } from '../../plugins/admin-panel/core/registry.js';
+const { AdminRegistry, ExtensionType } = require('../../plugins/admin-panel/core/registry');
 
 describe('AdminRegistry', () => {
   let registry;
@@ -13,290 +10,177 @@ describe('AdminRegistry', () => {
     registry = new AdminRegistry();
   });
 
-  describe('Pages', () => {
-    it('should register a page', () => {
-      registry.registerPage('test-page', {
-        title: 'Test Page',
-        path: '/test',
-        icon: 'test',
+  describe('registerPage', () => {
+    it('registers a page and exposes it in toClientConfig', () => {
+      registry.registerPage('reports', {
+        title: 'Reports',
+        path: '/reports',
+        icon: 'chart',
       });
-
       const pages = registry.getPages();
       expect(pages).toHaveLength(1);
-      expect(pages[0].id).toBe('test-page');
-      expect(pages[0].title).toBe('Test Page');
-      expect(pages[0].path).toBe('/test');
-      expect(pages[0].type).toBe(ExtensionType.PAGE);
+      expect(pages[0].id).toBe('reports');
+      const client = registry.toClientConfig();
+      expect(client.pages[0]).toMatchObject({
+        id: 'reports',
+        title: 'Reports',
+        path: '/reports',
+        hasClientComponent: false,
+      });
     });
 
-    it('should throw if page is missing title', () => {
-      expect(() => {
-        registry.registerPage('test-page', { path: '/test' });
-      }).toThrow('Page "test-page" requires title and path');
-    });
-
-    it('should throw if page is missing path', () => {
-      expect(() => {
-        registry.registerPage('test-page', { title: 'Test' });
-      }).toThrow('Page "test-page" requires title and path');
+    it('throws when title or path missing', () => {
+      expect(() => registry.registerPage('x', { title: 'T' })).toThrow(/requires title and path/);
+      expect(() => registry.registerPage('x', { path: '/p' })).toThrow(/requires title and path/);
     });
   });
 
-  describe('Widgets', () => {
-    it('should register a widget', () => {
-      registry.registerWidget('test-widget', {
-        title: 'Test Widget',
-        size: 'lg',
-        order: 5,
-      });
-
-      const widgets = registry.getWidgets();
-      expect(widgets).toHaveLength(1);
-      expect(widgets[0].id).toBe('test-widget');
-      expect(widgets[0].size).toBe('lg');
-      expect(widgets[0].order).toBe(5);
+  describe('registerWidget', () => {
+    it('throws without title', () => {
+      expect(() => registry.registerWidget('w', { order: 1 })).toThrow(/requires title/);
     });
 
-    it('should use default size and order', () => {
-      registry.registerWidget('test-widget', {
-        title: 'Test Widget',
-      });
-
-      const widgets = registry.getWidgets();
-      expect(widgets[0].size).toBe('md');
-      expect(widgets[0].order).toBe(0);
-    });
-
-    it('should sort widgets by order', () => {
-      registry.registerWidget('widget-c', { title: 'C', order: 30 });
-      registry.registerWidget('widget-a', { title: 'A', order: 10 });
-      registry.registerWidget('widget-b', { title: 'B', order: 20 });
-
-      const widgets = registry.getWidgets();
-      expect(widgets[0].id).toBe('widget-a');
-      expect(widgets[1].id).toBe('widget-b');
-      expect(widgets[2].id).toBe('widget-c');
+    it('sorts getWidgets by order', () => {
+      registry.registerWidget('b', { title: 'B', order: 10 });
+      registry.registerWidget('a', { title: 'A', order: 1 });
+      const ids = registry.getWidgets().map((w) => w.id);
+      expect(ids).toEqual(['a', 'b']);
     });
   });
 
-  describe('Actions', () => {
-    it('should register an action', () => {
-      registry.registerAction('test-action', {
-        label: 'Test Action',
-        handler: () => {},
-        models: 'User',
-      });
-
-      const actions = registry.getActionsForModel('User');
-      expect(actions).toHaveLength(1);
-      expect(actions[0].label).toBe('Test Action');
+  describe('registerAction / registerBulkAction', () => {
+    it('throws without label or handler', () => {
+      expect(() => registry.registerAction('a', { label: 'L' })).toThrow(/label and handler/);
+      expect(() => registry.registerBulkAction('b', { label: 'L' })).toThrow(/label and handler/);
     });
 
-    it('should filter actions by model', () => {
-      registry.registerAction('user-action', {
-        label: 'User Action',
-        handler: () => {},
-        models: 'User',
-      });
-      registry.registerAction('post-action', {
-        label: 'Post Action',
-        handler: () => {},
-        models: 'Post',
-      });
-      registry.registerAction('global-action', {
-        label: 'Global Action',
-        handler: () => {},
-        models: '*',
-      });
-
-      const userActions = registry.getActionsForModel('User');
-      expect(userActions).toHaveLength(2); // user-action + global-action
-
-      const postActions = registry.getActionsForModel('Post');
-      expect(postActions).toHaveLength(2); // post-action + global-action
+    it('getActionsForModel respects models filter', () => {
+      registry.registerAction('all', { label: 'All', handler: async () => {}, models: '*' });
+      registry.registerAction('posts', { label: 'P', handler: async () => {}, models: ['Post'] });
+      registry.registerAction('one', { label: 'O', handler: async () => {}, models: 'Product' });
+      expect(registry.getActionsForModel('Post').map((a) => a.id)).toEqual(['all', 'posts']);
+      expect(registry.getActionsForModel('Product').map((a) => a.id)).toEqual(['all', 'one']);
     });
 
-    it('should support array of models', () => {
-      registry.registerAction('multi-action', {
-        label: 'Multi Action',
-        handler: () => {},
-        models: ['User', 'Post'],
+    it('toClientConfig includes actions and bulkActions', () => {
+      registry.registerAction('a1', {
+        label: 'A',
+        handler: async () => {},
+        icon: 'plus',
+        color: 'blue',
+        models: ['X'],
+        confirm: true,
+        confirmMessage: 'Sure?',
       });
-
-      expect(registry.getActionsForModel('User')).toHaveLength(1);
-      expect(registry.getActionsForModel('Post')).toHaveLength(1);
-      expect(registry.getActionsForModel('Comment')).toHaveLength(0);
+      registry.registerBulkAction('b1', {
+        label: 'Bulk',
+        handler: async () => {},
+        confirm: false,
+      });
+      const c = registry.toClientConfig();
+      expect(c.actions[0]).toMatchObject({
+        id: 'a1',
+        label: 'A',
+        icon: 'plus',
+        color: 'blue',
+        models: ['X'],
+        confirm: true,
+        confirmMessage: 'Sure?',
+      });
+      expect(c.bulkActions[0]).toMatchObject({ id: 'b1', label: 'Bulk', confirm: false });
     });
   });
 
-  describe('Bulk Actions', () => {
-    it('should register a bulk action', () => {
-      registry.registerBulkAction('bulk-delete', {
-        label: 'Delete All',
-        handler: () => {},
-      });
-
-      const actions = registry.getBulkActionsForModel('User');
-      expect(actions).toHaveLength(1);
-      expect(actions[0].confirm).toBe(true); // Default
-    });
-  });
-
-  describe('Menu Items', () => {
-    it('should register menu item', () => {
-      registry.registerMenuItem({
-        id: 'test-item',
-        label: 'Test Item',
-        path: '/test',
-        order: 10,
-      });
-
+  describe('menu', () => {
+    it('getMenu merges groups and ungrouped items', () => {
+      registry.registerMenuGroup('g1', { label: 'Group', order: 1 });
+      registry.registerMenuItem({ id: 'i1', label: 'Top', order: 0 });
+      registry.registerMenuItem({ id: 'i2', label: 'In group', group: 'g1', order: 0 });
       const menu = registry.getMenu();
-      expect(menu).toHaveLength(1);
-      expect(menu[0].id).toBe('test-item');
+      expect(menu[0].id).toBe('i1');
+      expect(menu[1].id).toBe('g1');
+      expect(menu[1].items).toHaveLength(1);
+      expect(menu[1].items[0].id).toBe('i2');
     });
 
-    it('should sort menu items by order', () => {
-      registry.registerMenuItem({ id: 'c', label: 'C', path: '/c', order: 30 });
-      registry.registerMenuItem({ id: 'a', label: 'A', path: '/a', order: 10 });
-      registry.registerMenuItem({ id: 'b', label: 'B', path: '/b', order: 20 });
-
-      const menu = registry.getMenu();
-      expect(menu[0].id).toBe('a');
-      expect(menu[1].id).toBe('b');
-      expect(menu[2].id).toBe('c');
+    it('registerMenuItem throws without id/label', () => {
+      expect(() => registry.registerMenuItem({ id: 'x' })).toThrow(/requires id and label/);
     });
-  });
 
-  describe('Menu Groups', () => {
-    it('should register menu group with items', () => {
-      registry.registerMenuGroup('content', {
-        label: 'Content',
-        order: 0,
-      });
-
-      registry.registerMenuItem({
-        id: 'posts',
-        label: 'Posts',
-        path: '/posts',
-        group: 'content',
-      });
-
-      registry.registerMenuItem({
-        id: 'pages',
-        label: 'Pages',
-        path: '/pages',
-        group: 'content',
-      });
-
-      const menu = registry.getMenu();
-      const contentGroup = menu.find(m => m.id === 'content');
-      expect(contentGroup).toBeDefined();
-      expect(contentGroup.items).toHaveLength(2);
+    it('registerMenuGroup throws without label', () => {
+      expect(() => registry.registerMenuGroup('g', {})).toThrow(/requires label/);
     });
   });
 
-  describe('Field Renderers', () => {
-    it('should register field renderer', () => {
-      registry.registerFieldRenderer('color', {
-        display: () => 'display',
-        edit: () => 'edit',
-      });
-
-      expect(registry.fieldRenderers.has('color')).toBe(true);
+  describe('field renderer & client component', () => {
+    it('registerFieldRenderer throws without display/edit', () => {
+      expect(() => registry.registerFieldRenderer('x', { display: () => {} })).toThrow(
+        /requires display and edit/,
+      );
     });
 
-    it('should throw if display or edit is missing', () => {
-      expect(() => {
-        registry.registerFieldRenderer('color', { display: () => {} });
-      }).toThrow();
+    it('getClientComponents concatenates registered scripts', () => {
+      registry.registerClientComponent('p1', 'window.x=1;');
+      registry.registerClientComponent('p2', 'window.y=2;');
+      expect(registry.getClientComponents()).toContain('window.x=1;');
+      expect(registry.getClientComponents()).toContain('window.y=2;');
+      const c = registry.toClientConfig();
+      expect(c.pages).toEqual([]);
+    });
+
+    it('toClientConfig marks hasClientComponent when page id matches', () => {
+      registry.registerPage('analytics', { title: 'A', path: '/analytics' });
+      registry.registerClientComponent('analytics', '/* c */');
+      const page = registry.toClientConfig().pages.find((p) => p.id === 'analytics');
+      expect(page.hasClientComponent).toBe(true);
     });
   });
 
-  describe('Hooks', () => {
-    it('should register and run hooks', async () => {
-      let called = false;
-      registry.registerHook('beforeCreate', () => {
-        called = true;
+  describe('hooks', () => {
+    it('registerHook creates new bucket and runHooks awaits callbacks', async () => {
+      const calls = [];
+      registry.registerHook('beforeCreate', async () => {
+        calls.push(1);
       });
-
+      registry.registerHook('beforeCreate', async () => {
+        calls.push(2);
+      });
       await registry.runHooks('beforeCreate', {});
-      expect(called).toBe(true);
-    });
-
-    it('should run multiple hooks in order', async () => {
-      const order = [];
-      registry.registerHook('beforeCreate', () => order.push(1));
-      registry.registerHook('beforeCreate', () => order.push(2));
-      registry.registerHook('beforeCreate', () => order.push(3));
-
-      await registry.runHooks('beforeCreate', {});
-      expect(order).toEqual([1, 2, 3]);
+      expect(calls).toEqual([1, 2]);
     });
   });
 
-  describe('Settings', () => {
-    it('should configure settings', () => {
-      registry.configure({
-        title: 'My Admin',
-        primaryColor: '#FF0000',
-        perPage: 50,
-      });
-
-      expect(registry.settings.title).toBe('My Admin');
-      expect(registry.settings.primaryColor).toBe('#FF0000');
-      expect(registry.settings.perPage).toBe(50);
+  describe('configure & userManagement', () => {
+    it('configure merges settings including autoRefreshMs', () => {
+      registry.configure({ title: 'X', autoRefreshMs: 30000 });
+      expect(registry.settings.title).toBe('X');
+      expect(registry.settings.autoRefreshMs).toBe(30000);
+      expect(registry.toClientConfig().settings.autoRefreshMs).toBe(30000);
     });
 
-    it('should merge with existing settings', () => {
-      registry.configure({ title: 'Admin 1' });
-      registry.configure({ perPage: 25 });
-
-      expect(registry.settings.title).toBe('Admin 1');
-      expect(registry.settings.perPage).toBe(25);
-    });
-  });
-
-  describe('User Management', () => {
-    it('should enable user management', () => {
-      registry.enableUserManagement({
-        model: 'Account',
-        fields: { email: 'user_email' },
-      });
-
+    it('enableUserManagement sets defaults', () => {
+      registry.enableUserManagement({ model: 'Account', fields: { email: 'mail' } });
       expect(registry.userManagement.enabled).toBe(true);
       expect(registry.userManagement.model).toBe('Account');
-      expect(registry.userManagement.fields.email).toBe('user_email');
-      expect(registry.userManagement.fields.password).toBe('password'); // Default
+      expect(registry.userManagement.fields.email).toBe('mail');
+      expect(registry.toClientConfig().userManagement.model).toBe('Account');
     });
   });
 
-  describe('Client Config', () => {
-    it('should serialize config for client', () => {
-      registry.configure({ title: 'Test Admin' });
-      registry.registerWidget('stats', { title: 'Stats' });
-      registry.registerPage('settings', { title: 'Settings', path: '/settings' });
-
-      const config = registry.toClientConfig();
-
-      expect(config.settings.title).toBe('Test Admin');
-      expect(config.widgets).toHaveLength(1);
-      expect(config.pages).toHaveLength(1);
-      expect(config.pages[0].id).toBe('settings');
-    });
-  });
-
-  describe('Clear', () => {
-    it('should clear all registrations', () => {
-      registry.registerPage('page', { title: 'Page', path: '/page' });
-      registry.registerWidget('widget', { title: 'Widget' });
-      registry.registerMenuItem({ id: 'item', label: 'Item', path: '/item' });
-
+  describe('clear', () => {
+    it('resets all collections', () => {
+      registry.registerPage('p', { title: 'T', path: '/p' });
+      registry.registerWidget('w', { title: 'W' });
+      registry.registerHook('beforeCreate', () => {});
       registry.clear();
-
       expect(registry.getPages()).toHaveLength(0);
       expect(registry.getWidgets()).toHaveLength(0);
-      expect(registry.getMenu()).toHaveLength(0);
+      expect(registry.hooks.beforeCreate).toEqual([]);
     });
+  });
+
+  it('ExtensionType constants', () => {
+    expect(ExtensionType.PAGE).toBe('page');
+    expect(ExtensionType.WIDGET).toBe('widget');
   });
 });

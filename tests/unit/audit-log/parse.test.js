@@ -1,7 +1,14 @@
 /**
  * Audit log path parsing
  */
-const { parseAdminModelAudit } = require('../../../plugins/audit-log/parse');
+const { parseAdminModelAudit, escapeRegex } = require('../../../plugins/audit-log/parse');
+
+describe('escapeRegex', () => {
+  it('escapes metacharacters', () => {
+    expect(escapeRegex('a+b')).toBe('a\\+b');
+    expect(escapeRegex('.*')).toBe('\\.\\*');
+  });
+});
 
 describe('parseAdminModelAudit', () => {
   const base = '/_admin';
@@ -52,5 +59,17 @@ describe('parseAdminModelAudit', () => {
       resourceModel: 'X',
       resourceId: '1',
     });
+  });
+
+  it('normalizes admin base trailing slash', () => {
+    expect(parseAdminModelAudit('/_admin/', 'POST', '/_admin/api/models/Post/records')).toEqual({
+      action: 'create',
+      resourceModel: 'Post',
+      resourceId: null,
+    });
+  });
+
+  it('returns null for POST with id but not restore', () => {
+    expect(parseAdminModelAudit(base, 'POST', '/_admin/api/models/Post/records/99')).toBeNull();
   });
 });

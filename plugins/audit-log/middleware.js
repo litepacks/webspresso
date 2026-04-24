@@ -109,4 +109,7 @@ function createAuditMiddleware(options) {
 
 module.exports = {
   createAuditMiddleware,
+  stringifyId,
+  extractResourceIdFromJsonBody,
+  buildMetadata,
 };
