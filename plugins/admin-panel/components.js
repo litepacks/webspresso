@@ -1484,14 +1484,15 @@ function formatCellValue(value, col) {
       }
       return String(value);
     
-    case 'text':
+    case 'text': {
       const textStr = String(value);
       return textStr.length > 50 ? textStr.substring(0, 50) + '...' : textStr;
+    }
 
     case 'file': {
       const s = String(value);
       const short = s.length > 72 ? s.substring(0, 72) + '…' : s;
-      if (/^https?:\/\//.test(s) || s.startsWith('/')) {
+      if (/^https?:\\/\\//.test(s) || s.startsWith('/')) {
         return m('a.text-indigo-600.dark:text-indigo-400.hover:underline.break-all', {
           href: s,
           target: '_blank',
@@ -1501,9 +1502,10 @@ function formatCellValue(value, col) {
       return short || m('span.text-gray-400', '—');
     }
     
-    default:
+    default: {
       const str = String(value);
       return str.length > 100 ? str.substring(0, 100) + '...' : str;
+    }
   }
 }
 
