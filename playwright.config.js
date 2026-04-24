@@ -11,6 +11,8 @@ module.exports = defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: 1, // Single worker to avoid port conflicts
+  /** Stop the run after the first failure (fail fast). Override: `playwright test --max-failures=N` (larger N = more failures before exit). */
+  maxFailures: 1,
   reporter: 'html',
   
   use: {
