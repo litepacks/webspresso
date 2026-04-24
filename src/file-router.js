@@ -58,6 +58,56 @@ function filePathToRoute(filePath, ext) {
 }
 
 /**
+ * Metadata for ordering route registration: more specific Express paths must be
+ * registered before less specific ones (static before dynamic; more literal
+ * segments before fewer; deeper paths before shallower among same class).
+ * @param {string} routePath
+ * @returns {{ tier: number, literalSegCount: number, paramSegCount: number, depth: number, routePath: string }}
+ */
+function routeRegistrationMeta(routePath) {
+  const hasCatchAll = routePath.includes('*');
+  const hasDynamic = routePath.includes(':');
+  let tier;
+  if (hasCatchAll) tier = 2;
+  else if (hasDynamic) tier = 1;
+  else tier = 0;
+
+  const segments = routePath.split('/').filter(Boolean);
+  let literalSegCount = 0;
+  let paramSegCount = 0;
+  for (const seg of segments) {
+    if (seg === '*' || (seg.length > 0 && seg.includes('*'))) continue;
+    if (seg.includes(':')) paramSegCount += 1;
+    else literalSegCount += 1;
+  }
+
+  return {
+    tier,
+    literalSegCount,
+    paramSegCount,
+    depth: segments.length,
+    routePath,
+  };
+}
+
+/**
+ * Compare two routes for registration order (negative if a before b).
+ * @param {{ routePath: string }} a
+ * @param {{ routePath: string }} b
+ */
+function compareRouteRegistrationOrder(a, b) {
+  const ma = routeRegistrationMeta(a.routePath);
+  const mb = routeRegistrationMeta(b.routePath);
+  if (ma.tier !== mb.tier) return ma.tier - mb.tier;
+  if (ma.literalSegCount !== mb.literalSegCount) {
+    return mb.literalSegCount - ma.literalSegCount;
+  }
+  if (ma.depth !== mb.depth) return mb.depth - ma.depth;
+  if (ma.paramSegCount !== mb.paramSegCount) return ma.paramSegCount - mb.paramSegCount;
+  return ma.routePath.localeCompare(mb.routePath);
+}
+
+/**
  * Extract HTTP method from API filename
  * @param {string} filename - Filename like health.get.js
  * @returns {{ method: string, baseName: string }}
@@ -454,22 +504,8 @@ function mountPages(app, options) {
     }
   }
   
-  // Sort routes: specific routes first, then dynamic, then catch-all
-  const sortRoutes = (routes) => {
-    return routes.sort((a, b) => {
-      const aHasCatchAll = a.routePath.includes('*');
-      const bHasCatchAll = b.routePath.includes('*');
-      const aHasDynamic = a.routePath.includes(':');
-      const bHasDynamic = b.routePath.includes(':');
-      
-      if (aHasCatchAll && !bHasCatchAll) return 1;
-      if (!aHasCatchAll && bHasCatchAll) return -1;
-      if (aHasDynamic && !bHasDynamic) return 1;
-      if (!aHasDynamic && bHasDynamic) return -1;
-      
-      return a.routePath.localeCompare(b.routePath);
-    });
-  };
+  // Sort routes: static before dynamic before catch-all; then more literal segments, then deeper paths
+  const sortRoutes = (routes) => routes.sort(compareRouteRegistrationOrder);
   
   // Register API routes
   for (const route of sortRoutes(apiRoutes)) {
@@ -709,6 +745,8 @@ module.exports = {
   loadI18n,
   createTranslator,
   detectLocale,
-  resolveMiddlewares
+  resolveMiddlewares,
+  routeRegistrationMeta,
+  compareRouteRegistrationOrder,
 };
 

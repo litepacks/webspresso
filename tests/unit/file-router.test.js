@@ -9,7 +9,8 @@ const {
   scanDirectory,
   loadI18n,
   createTranslator,
-  detectLocale
+  detectLocale,
+  compareRouteRegistrationOrder,
 } = require('../../src/file-router');
 
 describe('file-router.js', () => {
@@ -206,6 +207,32 @@ describe('file-router.js', () => {
     it('should return empty object for non-existent locale', () => {
       const translations = loadI18n(fixturesPath, fixturesPath, 'nonexistent');
       expect(translations).toEqual({});
+    });
+  });
+
+  describe('compareRouteRegistrationOrder', () => {
+    const r = (routePath) => ({ routePath });
+
+    it('static before dynamic', () => {
+      expect(compareRouteRegistrationOrder(r('/about'), r('/:slug'))).toBeLessThan(0);
+      expect(compareRouteRegistrationOrder(r('/:slug'), r('/about'))).toBeGreaterThan(0);
+    });
+
+    it('more literal segments before sibling :param (static wins)', () => {
+      expect(compareRouteRegistrationOrder(r('/catalog/special'), r('/catalog/:id'))).toBeLessThan(0);
+      expect(compareRouteRegistrationOrder(r('/catalog/:id'), r('/catalog/special'))).toBeGreaterThan(0);
+    });
+
+    it('deeper dynamic path before shallower when literals tie', () => {
+      expect(compareRouteRegistrationOrder(r('/items/:id/edit'), r('/items/:id'))).toBeLessThan(0);
+    });
+
+    it('nested :param before root :param', () => {
+      expect(compareRouteRegistrationOrder(r('/catalog/:id'), r('/:slug'))).toBeLessThan(0);
+    });
+
+    it('catch-all after non-catch-all dynamic', () => {
+      expect(compareRouteRegistrationOrder(r('/docs/:id'), r('/docs/*'))).toBeLessThan(0);
     });
   });
 });
