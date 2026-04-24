@@ -1407,10 +1407,11 @@ const SetupForm = {
 
 // Model List Component
 const ModelList = {
-  oninit: () => {
+  _load() {
     state.loading = true;
     state.error = null;
-    api.get('/models')
+    m.redraw();
+    return api.get('/models')
       .then(result => {
         state.models = result.models || [];
       })
@@ -1422,8 +1423,31 @@ const ModelList = {
         m.redraw();
       });
   },
-  view: () => m(Layout, [
-    m('h2.text-2xl.font-bold.mb-6', 'Models'),
+  oninit(vnode) {
+    vnode.state._stopPoll = null;
+    vnode.state.refreshing = false;
+    ModelList._load();
+    vnode.state._stopPoll = runAdminAutoRefresh(() => ModelList._load());
+  },
+  onremove(vnode) {
+    if (vnode.state._stopPoll) vnode.state._stopPoll();
+  },
+  view: (vnode) => m(Layout, [
+    m('.flex.items-center.justify-between.mb-6', [
+      m('h2.text-2xl.font-bold', 'Models'),
+      m(RefreshIconButton, {
+        title: 'Reload models',
+        spinning: vnode.state.refreshing || state.loading,
+        onclick: () => {
+          vnode.state.refreshing = true;
+          m.redraw();
+          ModelList._load().finally(() => {
+            vnode.state.refreshing = false;
+            m.redraw();
+          });
+        },
+      }),
+    ]),
     state.error ? m('.bg-red-100.border.border-red-400.text-red-700.px-4.py-3.rounded.mb-4', state.error) : null,
     state.loading
       ? m('p.text-gray-600', 'Loading models...')
@@ -1807,7 +1831,7 @@ function loadRecords(modelName, page = 1, filters = null) {
   window.history.replaceState({}, '', newUrl);
   
   const trashedParam = state.trashedView ? '&trashed=only' : '';
-  api.get('/models/' + modelName + '/records?page=' + page + '&perPage=' + perPage + trashedParam + filterQuery)
+  return api.get('/models/' + modelName + '/records?page=' + page + '&perPage=' + perPage + trashedParam + filterQuery)
     .then(result => {
       state.records = result.data || [];
       state.pagination = {
@@ -1866,9 +1890,19 @@ function initializeModelView(modelName) {
 
 // Record List Component - displays records with dynamic columns
 const RecordList = {
-  oninit: () => {
+  oninit(vnode) {
+    vnode.state._stopPoll = null;
+    vnode.state.manualRefresh = false;
     const modelName = m.route.param('model');
     initializeModelView(modelName);
+    vnode.state._stopPoll = runAdminAutoRefresh(() => {
+      const mName = m.route.param('model');
+      if (state._currentModelName !== mName || !state.currentModelMeta) return;
+      loadRecords(mName, state.pagination.page, state.filters);
+    });
+  },
+  onremove(vnode) {
+    if (vnode.state._stopPoll) vnode.state._stopPoll();
   },
   onbeforeupdate: () => {
     // Check if model changed (navigation between different models)
@@ -1878,7 +1912,7 @@ const RecordList = {
     }
     return true;
   },
-  view: () => {
+  view: (vnode) => {
     const modelName = m.route.param('model');
     const modelMeta = state.currentModelMeta;
     const displayColumns = modelMeta ? getDisplayColumns(modelMeta.columns) : [];
@@ -1922,6 +1956,18 @@ const RecordList = {
       m('.flex.items-center.justify-between.mb-4', [
         m('.flex.items-center.gap-3', [
           m('h2.text-2xl.font-bold', modelMeta?.label || modelName),
+          m(RefreshIconButton, {
+            title: 'Reload records',
+            spinning: vnode.state.manualRefresh || state.loading,
+            onclick: () => {
+              vnode.state.manualRefresh = true;
+              m.redraw();
+              loadRecords(modelName, state.pagination.page, state.filters).finally(() => {
+                vnode.state.manualRefresh = false;
+                m.redraw();
+              });
+            },
+          }),
           modelMeta?.softDelete ? m('.flex.rounded-lg.border.border-gray-200 dark:border-slate-600.p-0.5', [
             m('button.px-3.py-1.5.text-sm.font-medium.rounded-md.transition-colors', {
               class: !state.trashedView ? 'bg-indigo-600.text-white' : 'text-gray-600.hover:text-gray-900 dark:hover:text-slate-100 dark:hover:text-slate-100',

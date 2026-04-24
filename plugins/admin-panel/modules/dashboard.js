@@ -310,22 +310,37 @@ const Widget = {
     vnode.state.data = null;
     vnode.state.loading = true;
     vnode.state.error = null;
-    
-    // Load widget data
+    vnode.state.refreshing = false;
+    vnode.state._stopPoll = null;
+
     const { widget } = vnode.attrs;
-    if (widget.id) {
-      api.get('/extensions/widgets/' + widget.id + '/data')
+    vnode.state.load = () => {
+      if (!widget.id) {
+        vnode.state.loading = false;
+        return Promise.resolve();
+      }
+      vnode.state.loading = true;
+      vnode.state.error = null;
+      m.redraw();
+      return api.get('/extensions/widgets/' + widget.id + '/data')
         .then(result => {
           vnode.state.data = result.data;
-          vnode.state.loading = false;
-          m.redraw();
         })
         .catch(err => {
           vnode.state.error = err.message;
+        })
+        .finally(() => {
           vnode.state.loading = false;
           m.redraw();
         });
-    }
+    };
+
+    vnode.state.load();
+    vnode.state._stopPoll = runAdminAutoRefresh(() => vnode.state.load());
+  },
+
+  onremove(vnode) {
+    if (vnode.state._stopPoll) vnode.state._stopPoll();
   },
 
   view(vnode) {
@@ -343,8 +358,22 @@ const Widget = {
     return m('div.bg-white dark:bg-slate-800.rounded-lg.shadow', {
       class: sizeClasses[widget.size] || sizeClasses.md,
     }, [
-      m('div.px-4.py-3.border-b.border-gray-200', [
-        m('h3.text-sm.font-medium.text-gray-900', widget.title),
+      m('div.px-4.py-3.border-b.border-gray-200.dark:border-slate-700', [
+        m('div.flex.items-center.justify-between.gap-2', [
+          m('h3.text-sm.font-medium.text-gray-900.dark:text-slate-100', widget.title),
+          m(RefreshIconButton, {
+            title: 'Refresh',
+            spinning: vnode.state.refreshing || loading,
+            onclick: () => {
+              vnode.state.refreshing = true;
+              m.redraw();
+              vnode.state.load().finally(() => {
+                vnode.state.refreshing = false;
+                m.redraw();
+              });
+            },
+          }),
+        ]),
       ]),
       m('div.p-4', [
         loading 
@@ -362,6 +391,8 @@ const Dashboard = {
   oninit(vnode) {
     vnode.state.config = null;
     vnode.state.loading = true;
+    vnode.state.refreshKey = 0;
+    vnode.state.dashRefreshing = false;
     
     // Load admin config
     api.get('/extensions/config')
@@ -389,14 +420,34 @@ const Dashboard = {
     const widgets = config?.widgets || [];
 
     return m(Layout, [
-      m('div.mb-6', [
-        m('h1.text-2xl.font-bold.text-gray-900', config?.settings?.title || 'Dashboard'),
-        m('p.text-gray-500 dark:text-slate-400.mt-1', 'Welcome back, ' + (state.user?.name || 'Admin')),
+      m('div.mb-6.flex.items-start.justify-between.gap-4', [
+        m('div', [
+          m('h1.text-2xl.font-bold.text-gray-900.dark:text-slate-100', config?.settings?.title || 'Dashboard'),
+          m('p.text-gray-500.dark:text-slate-400.mt-1', 'Welcome back, ' + (state.user?.name || 'Admin')),
+        ]),
+        m(RefreshIconButton, {
+          title: 'Refresh all widgets',
+          spinning: vnode.state.dashRefreshing,
+          onclick: () => {
+            vnode.state.dashRefreshing = true;
+            m.redraw();
+            api.get('/extensions/config')
+              .then(config => {
+                vnode.state.config = config;
+                vnode.state.refreshKey = (vnode.state.refreshKey || 0) + 1;
+              })
+              .catch(err => console.error('Failed to refresh dashboard:', err))
+              .finally(() => {
+                vnode.state.dashRefreshing = false;
+                m.redraw();
+              });
+          },
+        }),
       ]),
 
       widgets.length > 0
         ? m('div.grid.grid-cols-1.md:grid-cols-2.lg:grid-cols-4.gap-4', 
-            widgets.map(widget => m(Widget, { key: widget.id, widget }))
+            widgets.map(widget => m(Widget, { key: widget.id + '-' + vnode.state.refreshKey, widget }))
           )
         : m('div.text-center.py-12.text-gray-500', [
             m('p', 'No dashboard widgets configured'),

@@ -191,8 +191,19 @@ var AnalyticsPage = {
     vnode.state.countries = [];
     vnode.state.recent = [];
     vnode.state.chartLoaded = false;
+    vnode.state._stopPoll = null;
+    vnode.state.chartDataVersion = 0;
     this.loadData(vnode);
     this.loadChartJs(vnode);
+    if (typeof runAdminAutoRefresh === 'function') {
+      vnode.state._stopPoll = runAdminAutoRefresh(function() {
+        this.loadData(vnode);
+      }.bind(this));
+    }
+  },
+
+  onremove: function(vnode) {
+    if (vnode.state._stopPoll) vnode.state._stopPoll();
   },
 
   loadChartJs: function(vnode) {
@@ -213,7 +224,7 @@ var AnalyticsPage = {
     vnode.state.loading = true;
     var days = vnode.state.days;
 
-    Promise.all([
+    return Promise.all([
       analyticsApi('stats', days),
       analyticsApi('views-over-time', days),
       analyticsApi('top-pages', days),
@@ -232,6 +243,7 @@ var AnalyticsPage = {
       vnode.state.clientErrors = results[6];
       vnode.state.recent = results[7];
       vnode.state.loading = false;
+      vnode.state.chartDataVersion = (vnode.state.chartDataVersion || 0) + 1;
 
       if (chartInstance) {
         chartInstance.destroy();
@@ -267,15 +279,24 @@ var AnalyticsPage = {
           ]),
           m('p.text-gray-500.text-sm.mt-1', 'Page view statistics and visitor analytics'),
         ]),
-        // Day filter
-        m('div.flex.gap-1.bg-gray-100.rounded-lg.p-1', [7, 30, 90].map(function(d) {
-          return m('button.px-3.py-1.5.text-sm.font-medium.rounded-md.transition-colors', {
-            class: s.days === d
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700',
-            onclick: function() { self.setDays(vnode, d); },
-          }, 'Last ' + d + ' days');
-        })),
+        m('div.flex.items-center.gap-2.flex-wrap.justify-end', [
+          typeof RefreshIconButton !== 'undefined'
+            ? m(RefreshIconButton, {
+                title: 'Refresh analytics',
+                spinning: s.loading,
+                onclick: function() { self.loadData(vnode); },
+              })
+            : null,
+          // Day filter
+          m('div.flex.gap-1.bg-gray-100.rounded-lg.p-1', [7, 30, 90].map(function(d) {
+            return m('button.px-3.py-1.5.text-sm.font-medium.rounded-md.transition-colors', {
+              class: s.days === d
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700',
+              onclick: function() { self.setDays(vnode, d); },
+            }, 'Last ' + d + ' days');
+          })),
+        ]),
       ]),
 
       s.loading
@@ -303,7 +324,7 @@ var AnalyticsPage = {
               ]),
               m('div.p-5', [
                 s.chartLoaded && s.viewsOverTime.length > 0
-                  ? m(ViewsChart, { key: 'chart-' + s.days, data: s.viewsOverTime })
+                  ? m(ViewsChart, { key: 'chart-' + s.days + '-' + (s.chartDataVersion || 0), data: s.viewsOverTime })
                   : m('div.flex.justify-center.py-16.text-gray-400.text-sm', 'Loading chart...'),
               ]),
             ]),

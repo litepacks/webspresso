@@ -94,6 +94,7 @@ const Icon = {
       activity: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />',
       filter: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />',
       search: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />',
+      refresh: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />',
       'chevron-down': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />',
       'chevron-right': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />',
       logout: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />',
@@ -113,6 +114,48 @@ const Icon = {
       viewBox: '0 0 24 24',
       xmlns: 'http://www.w3.org/2000/svg',
     }, m.trust(path));
+  },
+};
+
+function getAdminAutoRefreshMs() {
+  const raw = window.__ADMIN_CONFIG__?.settings?.autoRefreshMs;
+  if (raw === 0 || raw === false) return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return 60000;
+  return Math.min(Math.max(n, 10000), 3600000);
+}
+
+function runAdminAutoRefresh(callback) {
+  const ms = getAdminAutoRefreshMs();
+  if (!ms) return function noop() {};
+  const id = setInterval(() => {
+    if (document.visibilityState === 'hidden') return;
+    try {
+      callback();
+    } catch (e) {
+      console.error(e);
+    }
+  }, ms);
+  return function stopAdminAutoRefresh() {
+    clearInterval(id);
+  };
+}
+
+const RefreshIconButton = {
+  view(vnode) {
+    const { title, spinning, onclick, disabled } = vnode.attrs;
+    return m('button.inline-flex.items-center.justify-center.p-2.rounded-lg.border.border-gray-200.dark:border-slate-600.bg-white.dark:bg-slate-800.text-gray-600.dark:text-slate-300.hover:bg-gray-50.dark:hover:bg-slate-700.transition-colors.disabled:opacity-50', {
+      type: 'button',
+      title: title || 'Refresh',
+      disabled: !!disabled || !!spinning,
+      onclick: (e) => {
+        e.preventDefault();
+        if (onclick) onclick(e);
+      },
+    }, m(Icon, {
+      name: 'refresh',
+      class: 'w-4 h-4' + (spinning ? ' animate-spin' : ''),
+    }));
   },
 };
 

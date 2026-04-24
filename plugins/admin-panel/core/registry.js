@@ -68,6 +68,8 @@ class AdminRegistry {
       dateFormat: 'YYYY-MM-DD',
       timeFormat: 'HH:mm',
       uploadUrl: null,
+      /** Client: auto-refresh data on list/dashboard pages (ms). 0 = off. Min 10s when > 0. */
+      autoRefreshMs: 60000,
     };
     
     // User management config

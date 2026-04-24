@@ -153,23 +153,38 @@ function createCustomPage(pageConfig) {
       vnode.state.data = null;
       vnode.state.loading = true;
       vnode.state.error = null;
+      vnode.state.refreshing = false;
+      vnode.state._stopPoll = null;
 
-      // Load page data
-      if (pageConfig.dataLoader) {
-        api.get('/extensions/pages/' + pageConfig.id + '/data')
+      vnode.state.load = () => {
+        if (!pageConfig.dataLoader) {
+          vnode.state.loading = false;
+          return Promise.resolve();
+        }
+        vnode.state.loading = true;
+        vnode.state.error = null;
+        m.redraw();
+        return api.get('/extensions/pages/' + pageConfig.id + '/data')
           .then(result => {
             vnode.state.data = result.data;
-            vnode.state.loading = false;
-            m.redraw();
           })
           .catch(err => {
             vnode.state.error = err.message;
+          })
+          .finally(() => {
             vnode.state.loading = false;
             m.redraw();
           });
-      } else {
-        vnode.state.loading = false;
-      }
+      };
+
+      vnode.state.load();
+      vnode.state._stopPoll = pageConfig.dataLoader
+        ? runAdminAutoRefresh(() => vnode.state.load())
+        : null;
+    },
+
+    onremove(vnode) {
+      if (vnode.state._stopPoll) vnode.state._stopPoll();
     },
 
     view(vnode) {
@@ -180,9 +195,25 @@ function createCustomPage(pageConfig) {
           { label: pageConfig.title, href: pageConfig.path },
         ]}),
 
-        m('div.mb-6', [
-          m('h1.text-2xl.font-bold.text-gray-900', pageConfig.title),
-          pageConfig.description && m('p.text-gray-500 dark:text-slate-400.mt-1', pageConfig.description),
+        m('div.mb-6.flex.items-start.justify-between.gap-4', [
+          m('div', [
+            m('h1.text-2xl.font-bold.text-gray-900.dark:text-slate-100', pageConfig.title),
+            pageConfig.description && m('p.text-gray-500.dark:text-slate-400.mt-1', pageConfig.description),
+          ]),
+          pageConfig.dataLoader
+            ? m(RefreshIconButton, {
+                title: 'Reload page data',
+                spinning: vnode.state.refreshing || loading,
+                onclick: () => {
+                  vnode.state.refreshing = true;
+                  m.redraw();
+                  vnode.state.load().finally(() => {
+                    vnode.state.refreshing = false;
+                    m.redraw();
+                  });
+                },
+              })
+            : null,
         ]),
 
         loading 
@@ -208,6 +239,25 @@ const SettingsPage = {
     vnode.state.loading = true;
     vnode.state.saving = false;
     vnode.state.formData = {};
+    vnode.state.reloadBusy = false;
+
+    vnode.state.reloadFromServer = () => {
+      vnode.state.reloadBusy = true;
+      vnode.state.error = null;
+      m.redraw();
+      return api.get('/extensions/config')
+        .then(result => {
+          vnode.state.config = result;
+          vnode.state.formData = { ...result.settings };
+        })
+        .catch(err => {
+          vnode.state.error = err.message;
+        })
+        .finally(() => {
+          vnode.state.reloadBusy = false;
+          m.redraw();
+        });
+    };
 
     api.get('/extensions/config')
       .then(result => {
@@ -233,8 +283,19 @@ const SettingsPage = {
     return m(Layout, [
       m(Breadcrumb, { items: [{ label: 'Settings', href: '/settings' }] }),
 
-      m('div.mb-6', [
-        m('h1.text-2xl.font-bold.text-gray-900', 'Admin Settings'),
+      m('div.mb-6.flex.items-start.justify-between.gap-4', [
+        m('div', [
+          m('h1.text-2xl.font-bold.text-gray-900.dark:text-slate-100', 'Admin Settings'),
+          m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', 'Reload discards unsaved changes'),
+        ]),
+        m(RefreshIconButton, {
+          title: 'Reload settings from server',
+          disabled: saving,
+          spinning: vnode.state.reloadBusy,
+          onclick: () => {
+            vnode.state.reloadFromServer();
+          },
+        }),
       ]),
 
       error && m('div.bg-red-50.border.border-red-200.rounded.p-4.text-red-700.mb-4', error),
