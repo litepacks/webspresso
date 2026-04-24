@@ -18,6 +18,7 @@
     "bench": "vitest bench --run",
     "bench:compare": "vitest bench --run --compare benchmark-results.json",
     "check:types": "tsc --project tests/ts-smoke/tsconfig.json",
+    "rebuild:native": "npm rebuild better-sqlite3 bcrypt sharp",
     "release": "release-it"
   },
   "keywords": [

@@ -2151,9 +2151,14 @@ In production, keep the plugin disabled or protect it with `authorize` / your ow
 
 ## Development
 
+Native addons (**better-sqlite3**, **bcrypt**, **sharp**) are compiled for your current Node ABI. After switching Node major versions (e.g. nvm, fnm, Volta), run **`npm run rebuild:native`** or a clean install: `rm -rf node_modules && npm ci`. **chokidar** is not ABI-tied like those drivers; if file watching misbehaves, reinstall dependencies. The repo includes [`.nvmrc`](.nvmrc) (Node 20 LTS) as a known-good default for this project.
+
 ```bash
 # Install dependencies
 npm install
+
+# If you changed Node version and see MODULE_VERSION or .node load errors:
+npm run rebuild:native
 
 # Run tests
 npm test
