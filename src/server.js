@@ -440,7 +440,7 @@ function createApp(options = {}) {
   if (!isTest) {
     console.log('\nMounting routes:');
   }
-  const routeMetadata = mountPages(app, {
+  const { routeMetadata, registerDynamicFileRoutes } = mountPages(app, {
     pagesDir,
     nunjucks: nunjucksEnv,
     middlewares,
@@ -449,7 +449,7 @@ function createApp(options = {}) {
     db: options.db ?? null,
     clientRuntime,
   });
-  
+
   // Set route metadata in plugin manager
   pluginManager.setRoutes(routeMetadata);
   
@@ -491,7 +491,11 @@ function createApp(options = {}) {
       clientRuntime,
     });
   }
-  
+
+  // Dynamic / catch-all file routes after plugins and setupRoutes so paths like /_admin
+  // or custom /login are not shadowed by pages/[slug].njk (/:slug).
+  registerDynamicFileRoutes();
+
   // Helper to create error page context with fsy
   function createErrorContext(req, extraData = {}) {
     const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;

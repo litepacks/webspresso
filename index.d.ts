@@ -90,7 +90,10 @@ export function setAppContext(partial: { db?: DatabaseInstance | null }): void;
 export function mountPages(
   app: Application,
   options: Record<string, unknown>
-): unknown;
+): {
+  routeMetadata: unknown[];
+  registerDynamicFileRoutes: () => void;
+};
 
 export function filePathToRoute(filePath: string, pagesDir: string): string;
 

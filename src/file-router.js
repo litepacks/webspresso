@@ -506,9 +506,17 @@ function mountPages(app, options) {
   
   // Sort routes: static before dynamic before catch-all; then more literal segments, then deeper paths
   const sortRoutes = (routes) => routes.sort(compareRouteRegistrationOrder);
-  
-  // Register API routes
-  for (const route of sortRoutes(apiRoutes)) {
+  sortRoutes(apiRoutes);
+  sortRoutes(ssrRoutes);
+
+  const apiStatic = apiRoutes.filter((r) => routeRegistrationMeta(r.routePath).tier === 0);
+  const apiDynamic = apiRoutes.filter((r) => routeRegistrationMeta(r.routePath).tier !== 0);
+  const ssrStatic = ssrRoutes.filter((r) => routeRegistrationMeta(r.routePath).tier === 0);
+  const ssrDynamic = ssrRoutes.filter((r) => routeRegistrationMeta(r.routePath).tier !== 0);
+
+  /** Register API routes (shared by static phase and dynamic phase). */
+  const registerApiRoutes = (routes) => {
+    for (const route of routes) {
     const handler = require(route.fullPath);
     const handlerFn = typeof handler === 'function' ? handler : handler.default || handler.handler;
     const routeMiddleware = handler.middleware;
@@ -582,10 +590,12 @@ function mountPages(app, options) {
     });
     
     log(`  ${route.method.toUpperCase()} ${route.routePath} -> ${route.file}`);
-  }
-  
-  // Register SSR routes
-  for (const route of sortRoutes(ssrRoutes)) {
+    }
+  };
+
+  /** Register SSR GET routes (shared by static phase and dynamic phase). */
+  const registerSsrRoutes = (routes) => {
+    for (const route of routes) {
     app.get(route.routePath, async (req, res, next) => {
       try {
         // Detect locale
@@ -714,8 +724,19 @@ function mountPages(app, options) {
     });
     
     log(`  GET ${route.routePath} -> ${route.file}`);
-  }
-  
+    }
+  };
+
+  // Static / literal file routes first so plugins can register reserved paths (e.g. /_admin)
+  // before catch-all dynamics like /:slug shadow them.
+  registerApiRoutes(apiStatic);
+  registerSsrRoutes(ssrStatic);
+
+  const registerDynamicFileRoutes = () => {
+    registerApiRoutes(apiDynamic);
+    registerSsrRoutes(ssrDynamic);
+  };
+
   // Return route metadata for plugins
   const routeMetadata = [
     ...ssrRoutes.map(r => ({
@@ -733,8 +754,8 @@ function mountPages(app, options) {
       isDynamic: r.routePath.includes(':') || r.routePath.includes('*')
     }))
   ];
-  
-  return routeMetadata;
+
+  return { routeMetadata, registerDynamicFileRoutes };
 }
 
 module.exports = {
