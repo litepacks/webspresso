@@ -2043,7 +2043,7 @@ const RecordList = {
                 }
                 var msg = 'Import finished: created ' + body.created + ', updated ' + (body.updated || 0) + ', failed ' + (body.failed || 0);
                 if (body.errors && body.errors.length) {
-                  msg += '\nFirst errors: ' + body.errors.slice(0, 3).map(function (x) { return 'row ' + x.row + ': ' + x.message; }).join('; ');
+                  msg += 'First errors: ' + body.errors.slice(0, 3).map(function (x) { return 'row ' + x.row + ': ' + x.message; }).join('; ');
                 }
                 alert(msg);
                 loadRecords(modelName, state.pagination.page, state.filters);
