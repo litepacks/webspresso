@@ -17,6 +17,8 @@ const healthCheckPlugin = require('./health-check');
 const restResourcePlugin = require('./rest-resources');
 const ormCacheAdminPlugin = require('./orm-cache-admin');
 const { uploadPlugin, createLocalFileProvider } = require('./upload');
+/** Register after adminPanelPlugin (same db + adminPath) for session and routes. */
+const { dataExchangePlugin } = require('./data-exchange');
 
 module.exports = {
   sitemapPlugin,
@@ -34,5 +36,6 @@ module.exports = {
   ormCacheAdminPlugin,
   uploadPlugin,
   createLocalFileProvider,
+  dataExchangePlugin,
 };
 

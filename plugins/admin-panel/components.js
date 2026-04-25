@@ -1985,17 +1985,96 @@ const RecordList = {
             }, 'Trash'),
           ]) : null,
         ]),
-        !state.trashedView ? m('button.inline-flex.items-center.gap-2.px-4.py-2.text-sm.font-medium.text-white.bg-indigo-600.rounded-lg.hover:bg-indigo-700.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
-          onclick: () => {
-            state.currentRecord = null;
-            state.editing = true;
-            m.route.set('/models/' + modelName + '/new');
-          }
-        }, [
-          m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' }, [
-            m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M12 4v16m8-8H4' }),
+        !state.trashedView ? m('.flex.items-center.gap-2', [
+          m('button.inline-flex.items-center.gap-2.px-4.py-2.text-sm.font-medium.text-indigo-700.bg-white.dark:bg-slate-800.border.border-indigo-200.rounded-lg.hover:bg-indigo-50.transition-colors', {
+            onclick: async () => {
+              const adminPath = window.__ADMIN_PATH__ || '/_admin';
+              try {
+                const payload = { selectAll: true, filters: state.filters };
+                const res = await fetch(adminPath + '/api/data-exchange/export/' + modelName, {
+                  method: 'POST',
+                  credentials: 'include',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(payload),
+                });
+                if (!res.ok) {
+                  const err = await res.json().catch(function () { return {}; });
+                  throw new Error(err.error || 'Export failed');
+                }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = modelName + '-export.xlsx';
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch (err) {
+                alert('Error: ' + err.message);
+              }
+            },
+          }, [
+            m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+              m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' })
+            ),
+            'Export Excel',
           ]),
-          'New Record',
+          m('input[type=file]', {
+            id: 'data-exchange-import-' + modelName,
+            style: 'display:none',
+            accept: '.csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv',
+            onchange: async (e) => {
+              const file = e.target.files && e.target.files[0];
+              e.target.value = '';
+              if (!file) return;
+              const adminPath = window.__ADMIN_PATH__ || '/_admin';
+              const mode = window.confirm('OK = upsert by id, Cancel = insert only') ? 'upsert' : 'insert';
+              const upsertKey = 'id';
+              const fd = new FormData();
+              fd.append('file', file);
+              try {
+                const res = await fetch(
+                  adminPath + '/api/data-exchange/import/' + modelName +
+                    '?mode=' + encodeURIComponent(mode) + '&upsertKey=' + encodeURIComponent(upsertKey),
+                  { method: 'POST', body: fd, credentials: 'include' }
+                );
+                const body = await res.json().catch(function () { return ({}); });
+                if (!res.ok) {
+                  throw new Error(body.error || 'Import failed');
+                }
+                var msg = 'Import finished: created ' + body.created + ', updated ' + (body.updated || 0) + ', failed ' + (body.failed || 0);
+                if (body.errors && body.errors.length) {
+                  msg += '\nFirst errors: ' + body.errors.slice(0, 3).map(function (x) { return 'row ' + x.row + ': ' + x.message; }).join('; ');
+                }
+                alert(msg);
+                loadRecords(modelName, state.pagination.page, state.filters);
+              } catch (err) {
+                alert('Error: ' + err.message);
+              }
+            },
+          }),
+          m('button.inline-flex.items-center.gap-2.px-4.py-2.text-sm.font-medium.text-indigo-700.bg-white.dark:bg-slate-800.border.border-indigo-200.rounded-lg.hover:bg-indigo-50.transition-colors', {
+            onclick: function () {
+              var el = document.getElementById('data-exchange-import-' + modelName);
+              if (el) el.click();
+            },
+          }, [
+            m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+              m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M7 10l5 5m0 0l5-5m-5 5V4' })
+            ),
+            'Import',
+          ]),
+          m('button.inline-flex.items-center.gap-2.px-4.py-2.text-sm.font-medium.text-white.bg-indigo-600.rounded-lg.hover:bg-indigo-700.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+            onclick: () => {
+              state.currentRecord = null;
+              state.editing = true;
+              m.route.set('/models/' + modelName + '/new');
+            },
+          }, [
+            m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' }, [
+              m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M12 4v16m8-8H4' }),
+            ]),
+            'New Record',
+          ]),
         ]) : null,
       ]),
       
@@ -2201,6 +2280,46 @@ const RecordList = {
                     m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' })
                   ),
                   'Export CSV',
+                ]) : null,
+                !state.trashedView ? m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-violet-600.bg-white dark:bg-slate-800.border.border-violet-200.rounded.hover:bg-violet-50.transition-colors', {
+                  disabled: state.bulkActionInProgress,
+                  onclick: async () => {
+                    state.bulkActionInProgress = true;
+                    m.redraw();
+                    try {
+                      const adminPath = window.__ADMIN_PATH__ || '/_admin';
+                      const payload = state.selectAllMode 
+                        ? { selectAll: true, filters: state.filters }
+                        : { ids: Array.from(state.selectedRecords) };
+                      const res = await fetch(adminPath + '/api/data-exchange/export/' + modelName, {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                      });
+                      if (!res.ok) {
+                        const err = await res.json().catch(function () { return {}; });
+                        throw new Error(err.error || 'Export failed');
+                      }
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = modelName + '-export.xlsx';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (err) {
+                      alert('Error: ' + err.message);
+                    } finally {
+                      state.bulkActionInProgress = false;
+                      m.redraw();
+                    }
+                  },
+                }, [
+                  m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+                    m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' })
+                  ),
+                  'Export Excel',
                 ]) : null,
                 !state.trashedView ? m(BulkFieldUpdateDropdown, {
                   modelName: modelName,

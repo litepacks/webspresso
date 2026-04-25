@@ -52,6 +52,7 @@ const {
   ormCacheAdminPlugin,
   uploadPlugin,
   createLocalFileProvider,
+  dataExchangePlugin,
 } = require('./plugins');
 
 module.exports = {
@@ -109,4 +110,5 @@ module.exports = {
   ormCacheAdminPlugin,
   uploadPlugin,
   createLocalFileProvider,
+  dataExchangePlugin,
 };

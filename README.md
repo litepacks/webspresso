@@ -15,7 +15,7 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 - **Lifecycle Hooks**: Global and route-level hooks for request processing
 - **Template Helpers**: Laravel-inspired helper functions available in templates
 - **Plugin System**: Extensible architecture with version control and inter-plugin communication
-- **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing), self-hosted site analytics, optional Swagger UI for HTTP APIs, configurable HTTP health probe endpoint, optional REST CRUD routes from ORM models, optional admin UI for ORM query cache metrics and purge
+- **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing), self-hosted site analytics, optional Swagger UI for HTTP APIs, configurable HTTP health probe endpoint, optional REST CRUD routes from ORM models, optional admin UI for ORM query cache metrics and purge, optional **admin-only spreadsheet exchange** (Excel export, CSV/XLSX import via `dataExchangePlugin`)
 - **Session authentication** (optional): `createAuth` / `quickAuth` in **`webspresso/core/auth`** — pass the manager to **`createApp({ auth })`** for `express-session`, `req.user` / `req.auth`, remember-me tokens, and policy-style authorization. Full walkthrough: **[`doc/index.html#authentication`](doc/index.html#authentication)**.
 - **Optional client runtime** (Alpine.js + [swup](https://swup.js.org/)): **`createApp({ clientRuntime: { alpine, swup } })`** serves scripts under **`/__webspresso/client-runtime/`** and exposes **`clientRuntime`** in Nunjucks; layouts can include **`views/partials/webspresso-client-runtime.njk`**. Env overrides: **`WEBSPRESSO_ALPINE`**, **`WEBSPRESSO_SWUP`**. Demo: **`examples/alpine-swup-demo/`**. Details: **[`doc/index.html#client-runtime`](doc/index.html#client-runtime)**.
 - **TypeScript**: Published **`index.d.ts`** (via `package.json` `"types"`) for `createApp`, ORM, plugins, and router helpers — use from TS/JS with IDE autocomplete; runtime stays CommonJS
@@ -832,6 +832,45 @@ adminPanelPlugin({
   },
 })
 ```
+
+### Data exchange plugin (`dataExchangePlugin`)
+
+- **Admin session only** — same `requireAuth` / `req.session.adminUser` as the admin panel; paths live under your admin prefix (default `/_admin`).
+- **Excel export** (`.xlsx`) for models with `admin.enabled`; record selection matches the built-in JSON/CSV export (`ids`, `selectAll`, `filters` via query or POST body).
+- **Import** — `multipart/form-data` field `file` (`.csv` or `.xlsx`); query/body `mode=insert|upsert`, `upsertKey` (default primary key). Rows are validated through the ORM (`repository.create` / `update`). Hidden columns are excluded; caps: `maxRows`, `maxFileBytes`.
+- **UI** — when the plugin is loaded, the admin model list adds **Export Excel**, **Import**, and bulk **Export Excel** (alongside the existing JSON/CSV export actions). Registers bulk action `export-xlsx` for download URLs.
+- **Dependencies** — implemented with `exceljs` and `csv-parse` (declared on the `webspresso` package).
+
+Register **after** `adminPanelPlugin` so session middleware and the admin registry exist; use the **same** `db` and `adminPath`:
+
+```javascript
+const { adminPanelPlugin, dataExchangePlugin } = require('webspresso/plugins');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  db,
+  plugins: [
+    adminPanelPlugin({ db, path: '/_admin' }),
+    dataExchangePlugin({
+      db,
+      adminPath: '/_admin',
+      maxRows: 10_000,
+      maxFileBytes: 10 * 1024 * 1024,
+    }),
+  ],
+});
+```
+
+Options:
+- `db` — database instance (defaults to `ctx.db` in `onRoutesReady` if omitted but `createApp({ db })` was set)
+- `adminPath` — must match the admin panel path (default `/_admin`)
+- `enabled` — set `false` to skip registering routes (default `true`)
+- `maxRows` — export and import row limit (default `10000`)
+- `maxFileBytes` — multipart upload limit (default 10 MiB)
+
+API (all require admin cookie):
+- `GET|POST ${adminPath}/api/data-exchange/export/:model` — spreadsheet download
+- `POST ${adminPath}/api/data-exchange/import/:model` — import summary `{ success, created, updated, failed, errors: [{ row, message }] }`
 
 **Site Analytics Plugin:**
 - Self-hosted page view analytics (no external services required)

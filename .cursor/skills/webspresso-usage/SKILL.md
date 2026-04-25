@@ -5,7 +5,7 @@ description: >-
   createApp options including optional clientRuntime (Alpine.js, swup v4, no HTMX),
   session auth (createAuth, quickAuth, webspresso/core/auth), Nunjucks/fsy helpers,
   i18n, lifecycle hooks, Zod API validation, ORM (zdb, defineModel, repository,
-  query builder, migrations), plugins (admin, analytics, sitemap, SEO, audit,
+  query builder,   migrations), plugins (admin, data exchange / spreadsheet import-export, analytics, sitemap, SEO, audit,
   recaptcha, rest resources, file upload), CLI (`new .`, `--yes`, `-i`), env vars, and testing. Use when working in this
   repo or any Webspresso app—adding routes, APIs, models, plugins, auth, client-side
   sprinkles or page transitions, or debugging routing, ctx.db, session, or templates.
@@ -201,6 +201,7 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `sitemapPlugin` | `/sitemap.xml`, robots; optional DB-driven URLs |
 | `analyticsPlugin` | GA / GTM / Yandex / Bing / Facebook — `fsy` helpers |
 | `adminPanelPlugin` | SPA admin CRUD — needs `db`; optional `uploadUrl` or infer from `uploadPlugin` order |
+| `dataExchangePlugin` | Admin-only **Excel export** + **CSV/XLSX import** under `${adminPath}/api/data-exchange/*`; register **after** `adminPanelPlugin` with same `db` / `adminPath`; optional `maxRows`, `maxFileBytes`; adds UI buttons + bulk `export-xlsx` |
 | `uploadPlugin` | `POST` multipart (`multer`), `createLocalFileProvider` or custom `provider`; set **`mimeAllowlist`** / **`maxBytes`** in production |
 | `siteAnalyticsPlugin` | Self-hosted page views + admin charts |
 | `auditLogPlugin` | Admin mutation audit trail |
@@ -210,6 +211,8 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `ormCacheAdminPlugin` | Admin page for ORM cache metrics / purge / invalidate (`db.cache` required) |
 
 **File uploads:** `require('webspresso').uploadPlugin` / `createLocalFileProvider` — response `{ url, publicUrl, key? }`; admin reads **`settings.uploadUrl`** when `uploadPlugin` is registered before `adminPanelPlugin` (or pass **`adminPanelPlugin({ uploadUrl })`**). Docs: README **File upload plugin**, **`doc/index.html#plugins`**.
+
+**Spreadsheet exchange:** `dataExchangePlugin({ db, adminPath })` — import `multipart` field **`file`**, export via GET/POST with same **`ids` / `selectAll` / `filters`** as built-in admin export. README **Data exchange plugin**, **`doc/index.html#plugins-data-exchange`**.
 
 **Custom plugin:** `name`, `version`, `register(ctx)`, `onRoutesReady(ctx)` — use `ctx.app`, `ctx.db`, `ctx.addHelper`, `ctx.addRoute`, `ctx.usePlugin('other')`. Plugin failures **warn**; app keeps running.
 
@@ -260,7 +263,7 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 ## 13. Testing
 
 - **Unit / integration:** `npm test` (Vitest).
-- **E2E:** `npm run test:e2e` (Playwright), including **`tests/e2e/swup.spec.js`** for **`clientRuntime`** (Alpine + swup).
+- **E2E:** `npm run test:e2e` (Playwright), including **`tests/e2e/swup.spec.js`** for **`clientRuntime`** (Alpine + swup) and **`tests/e2e/data-exchange.spec.js`** for admin data-exchange HTTP API.
 
 Touching **CLI**, **ORM**, **server routing**, or **client runtime** — run the relevant suite.
 
@@ -283,6 +286,6 @@ Touching **CLI**, **ORM**, **server routing**, or **client runtime** — run the
 
 - Adding or changing **pages**, **API routes**, **models**, **migrations**, **plugins**, **locales**, **session auth** (`createAuth`, `createApp({ auth })`, policies), or **client runtime** (`createApp({ clientRuntime })`, Alpine, swup, layout partials).
 - Explaining **Webspresso** behavior vs plain Express.
-- Debugging **404 order**, **i18n**, **session/auth**, **ORM**, **admin** integration, or **swup / Alpine** (e.g. missing **`#swup`**, CSP blocking scripts).
+- Debugging **404 order**, **i18n**, **session/auth**, **ORM**, **admin** / **data exchange** integration, or **swup / Alpine** (e.g. missing **`#swup`**, CSP blocking scripts).
 
 For authoritative long-form detail, see **[README.md](../../../README.md)** and **[`doc/index.html`](../../../doc/index.html)** (e.g. **Authentication**, **[Client runtime](../../../doc/index.html#client-runtime)**) in the repo.

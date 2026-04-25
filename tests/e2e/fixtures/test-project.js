@@ -75,7 +75,7 @@ async function createTestProject() {
 
     // Create server.js with in-memory database for tests
     const serverJs = `const { createApp, createDatabase } = require('webspresso');
-const { adminPanelPlugin, auditLogPlugin, seoCheckerPlugin } = require('webspresso/plugins');
+const { adminPanelPlugin, dataExchangePlugin, auditLogPlugin, seoCheckerPlugin } = require('webspresso/plugins');
 const path = require('path');
 
 const db = createDatabase({
@@ -132,6 +132,10 @@ const db = createDatabase({
       plugins: [
         adminPanelPlugin({
           path: '/_admin',
+          db,
+        }),
+        dataExchangePlugin({
+          adminPath: '/_admin',
           db,
         }),
         auditLogPlugin({

@@ -516,6 +516,8 @@ export function schemaExplorerPlugin(options?: Record<string, unknown>): Webspre
 
 export function adminPanelPlugin(options?: Record<string, unknown>): WebspressoPlugin;
 
+export function dataExchangePlugin(options?: Record<string, unknown>): WebspressoPlugin;
+
 export function siteAnalyticsPlugin(options?: Record<string, unknown>): WebspressoPlugin;
 
 export function auditLogPlugin(options?: Record<string, unknown>): WebspressoPlugin;
