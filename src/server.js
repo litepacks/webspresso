@@ -261,6 +261,7 @@ function haltOnTimedout(req, res, next) {
  * @param {Object} options.auth - Authentication manager instance (from createAuth)
  * @param {Object} options.db - Database instance (exposed as ctx.db to plugins)
  * @param {Object} [options.clientRuntime] - Optional client assets: `{ alpine?: boolean|object, swup?: boolean|object }`. Overridable by env `WEBSPRESSO_ALPINE` / `WEBSPRESSO_SWUP` (=1 or true). Serves `/__webspresso/client-runtime/*` when either flag is on.
+ * @param {boolean|{enabled?: boolean, stylesheets?: boolean, scripts?: boolean}} [options.pageAssets] - If truthy, route `load()` return values for `stylesheets` and `scripts` are reserved: removed from the root template context and passed as `pageHead` to Nunjucks, with `pageAssets: true` (for layout to emit `<link>` / `<script>`). Default off.
  * @param {function(import('express').Express, Object): void} [options.setupRoutes] - Called after file routes and plugins, before 404 handler
  * @returns {Object} { app, nunjucksEnv, pluginManager, authMiddleware }
  */
@@ -448,6 +449,7 @@ function createApp(options = {}) {
     silent: isTest,
     db: options.db ?? null,
     clientRuntime,
+    pageAssets: options.pageAssets,
   });
 
   // Set route metadata in plugin manager

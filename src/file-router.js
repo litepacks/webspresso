@@ -141,6 +141,69 @@ function extractMethodFromFilename(filename) {
 }
 
 /**
+ * Whether `load()` return values for `stylesheets` and `scripts` are promoted to
+ * `pageHead` in Nunjucks (see `createApp({ pageAssets })`).
+ * @param {boolean|{enabled?: boolean, stylesheets?: boolean, scripts?: boolean}|null|undefined} raw
+ * @returns {{ enabled: boolean, stylesheets: boolean, scripts: boolean }}
+ */
+function resolvePageAssets(raw) {
+  if (raw === true) {
+    return { enabled: true, stylesheets: true, scripts: true };
+  }
+  if (raw == null || raw === false) {
+    return { enabled: false, stylesheets: false, scripts: false };
+  }
+  if (typeof raw === 'object') {
+    const on = raw.enabled !== false;
+    if (!on) {
+      return { enabled: false, stylesheets: false, scripts: false };
+    }
+    return {
+      enabled: true,
+      stylesheets: raw.stylesheets !== false,
+      scripts: raw.scripts !== false,
+    };
+  }
+  return { enabled: false, stylesheets: false, scripts: false };
+}
+
+/**
+ * @param {unknown} v
+ * @returns {unknown[]}
+ */
+function toList(v) {
+  if (v == null) return [];
+  return Array.isArray(v) ? v : [v];
+}
+
+/**
+ * @param {{ enabled: boolean, stylesheets: boolean, scripts: boolean }} cfg
+ * @param {Object} data
+ * @returns {{ data: Object, pageHead: { stylesheets: unknown[], scripts: unknown[] }|null, pageAssets: boolean }}
+ */
+function applyPageAssetsToTemplateData(cfg, data) {
+  if (!cfg || !cfg.enabled) {
+    return { data, pageHead: null, pageAssets: false };
+  }
+  const out = { ...data };
+  let styles = [];
+  let scriptItems = [];
+  if (cfg.stylesheets && Object.prototype.hasOwnProperty.call(out, 'stylesheets')) {
+    styles = toList(out.stylesheets);
+    delete out.stylesheets;
+  }
+  if (cfg.scripts && Object.prototype.hasOwnProperty.call(out, 'scripts')) {
+    scriptItems = toList(out.scripts);
+    delete out.scripts;
+  }
+  return {
+    data: out,
+    pageHead: { stylesheets: styles, scripts: scriptItems },
+    pageAssets: true,
+  };
+}
+
+/**
  * Recursively scan a directory for files
  * @param {string} dir - Directory to scan
  * @param {string} baseDir - Base directory for relative paths
@@ -439,6 +502,7 @@ function resolveMiddlewares(middlewareConfig, middlewareRegistry = {}) {
  * @param {boolean} options.silent - Suppress console output
  * @param {Object} options.db - Database instance (exposed as ctx.db in load/meta)
  * @param {{ alpine?: boolean, swup?: boolean }} [options.clientRuntime] - Passed to Nunjucks as `clientRuntime` (default both false)
+ * @param {boolean|{enabled?: boolean, stylesheets?: boolean, scripts?: boolean}} [options.pageAssets] - If set, `load()` may return `stylesheets` / `scripts` promoted to `pageHead` in templates
  * @returns {Array} Route metadata for plugins
  */
 function mountPages(app, options) {
@@ -450,7 +514,9 @@ function mountPages(app, options) {
     silent = false,
     db = null,
     clientRuntime: clientRuntimeOpt = null,
+    pageAssets: pageAssetsOpt = null,
   } = options;
+  const pageAssetsResolved = resolvePageAssets(pageAssetsOpt);
   const clientRuntime = clientRuntimeOpt && typeof clientRuntimeOpt === 'object'
     ? { alpine: !!clientRuntimeOpt.alpine, swup: !!clientRuntimeOpt.swup }
     : { alpine: false, swup: false };
@@ -686,9 +752,9 @@ function mountPages(app, options) {
         await executeHook(globalHooks, 'beforeRender', ctx);
         await executeHook(routeHooks, 'beforeRender', ctx);
         
-        // Render the template
-        const templatePath = route.file.split(path.sep).join('/');
-        const html = nunjucks.render(templatePath, {
+        const pageAssetBundle = applyPageAssetsToTemplateData(pageAssetsResolved, ctx.data);
+        ctx.data = pageAssetBundle.data;
+        const renderContext = {
           ...ctx.data,
           meta: ctx.meta,
           locale: ctx.locale,
@@ -700,7 +766,15 @@ function mountPages(app, options) {
             query: req.query,
             params: req.params
           }
-        });
+        };
+        if (pageAssetBundle.pageAssets) {
+          renderContext.pageAssets = true;
+          renderContext.pageHead = pageAssetBundle.pageHead;
+        }
+        
+        // Render the template
+        const templatePath = route.file.split(path.sep).join('/');
+        const html = nunjucks.render(templatePath, renderContext);
         
         // Execute hooks: afterRender
         ctx.html = html;
@@ -769,5 +843,7 @@ module.exports = {
   resolveMiddlewares,
   routeRegistrationMeta,
   compareRouteRegistrationOrder,
+  resolvePageAssets,
+  applyPageAssetsToTemplateData,
 };
 

@@ -172,4 +172,25 @@ describe('SSR Routes Integration', () => {
       expect(res.text).toContain('og:type');
     });
   });
+
+  describe('pageAssets', () => {
+    it('does not emit load() asset tags when pageAssets is off (default)', async () => {
+      const res = await request(app).get('/page-assets-test').expect(200);
+      expect(res.text).toContain('page-assets-test-marker');
+      expect(res.text).not.toContain('page-assets-extra.css');
+    });
+
+    it('emits link and script from load() when createApp({ pageAssets: true })', async () => {
+      const { app: appOn } = createApp({
+        pagesDir: PAGES_DIR,
+        viewsDir: VIEWS_DIR,
+        pageAssets: true,
+        logging: false,
+      });
+      const res = await request(appOn).get('/page-assets-test').expect(200);
+      expect(res.text).toContain('page-assets-test-marker');
+      expect(res.text).toContain('href="/page-assets-extra.css"');
+      expect(res.text).toContain('src="/page-assets-extra.js"');
+    });
+  });
 });

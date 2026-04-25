@@ -107,6 +107,23 @@
     }
   </style>
   
+  {% if pageAssets and pageHead %}
+    {% for item in pageHead.stylesheets %}
+      {% if item is string %}
+        <link rel="stylesheet" href="{{ item }}">
+      {% else %}
+        <link rel="stylesheet" href="{{ item.href }}"{% if item.media %} media="{{ item.media }}"{% endif %}>
+      {% endif %}
+    {% endfor %}
+    {% for item in pageHead.scripts %}
+      {% if item is string %}
+        <script src="{{ item }}" defer></script>
+      {% else %}
+        <script src="{{ item.src }}"{% if item.defer != false %} defer{% endif %}{% if item.async %} async{% endif %}{% if item.type %} type="{{ item.type }}"{% endif %}></script>
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+  
   {% block head %}{% endblock %}
 </head>
 <body class="bg-ink-50 text-ink-800 min-h-screen flex flex-col">

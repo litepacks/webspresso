@@ -12,6 +12,8 @@ const {
   detectLocale,
   compareRouteRegistrationOrder,
   routeRegistrationMeta,
+  resolvePageAssets,
+  applyPageAssetsToTemplateData,
 } = require('../../src/file-router');
 
 describe('file-router.js', () => {
@@ -264,6 +266,63 @@ describe('file-router.js', () => {
 
     it('catch-all after non-catch-all dynamic', () => {
       expect(compareRouteRegistrationOrder(r('/docs/:id'), r('/docs/*'))).toBeLessThan(0);
+    });
+  });
+
+  describe('resolvePageAssets', () => {
+    it('defaults to disabled', () => {
+      expect(resolvePageAssets()).toEqual({ enabled: false, stylesheets: false, scripts: false });
+      expect(resolvePageAssets(false)).toEqual({ enabled: false, stylesheets: false, scripts: false });
+    });
+    it('enables all when true', () => {
+      expect(resolvePageAssets(true)).toEqual({ enabled: true, stylesheets: true, scripts: true });
+    });
+    it('allows selective flags', () => {
+      expect(resolvePageAssets({ enabled: true, stylesheets: true, scripts: false })).toEqual({
+        enabled: true,
+        stylesheets: true,
+        scripts: false,
+      });
+    });
+    it('respects enabled: false', () => {
+      expect(resolvePageAssets({ enabled: false, stylesheets: true })).toEqual({
+        enabled: false,
+        stylesheets: false,
+        scripts: false,
+      });
+    });
+  });
+
+  describe('applyPageAssetsToTemplateData', () => {
+    it('passes data through when disabled', () => {
+      const data = { a: 1, stylesheets: ['/x.css'] };
+      const r = applyPageAssetsToTemplateData(
+        { enabled: false, stylesheets: true, scripts: true },
+        data
+      );
+      expect(r.pageAssets).toBe(false);
+      expect(r.data).toBe(data);
+      expect(r.pageHead).toBeNull();
+    });
+    it('moves reserved keys when enabled', () => {
+      const r = applyPageAssetsToTemplateData(
+        { enabled: true, stylesheets: true, scripts: true },
+        { title: 'T', stylesheets: '/a.css', scripts: { src: '/b.js' } }
+      );
+      expect(r.data).toEqual({ title: 'T' });
+      expect(r.pageHead).toEqual({
+        stylesheets: ['/a.css'],
+        scripts: [{ src: '/b.js' }],
+      });
+      expect(r.pageAssets).toBe(true);
+    });
+    it('leaves scripts in data when scripts feature off', () => {
+      const r = applyPageAssetsToTemplateData(
+        { enabled: true, stylesheets: true, scripts: false },
+        { scripts: ['/z.js'] }
+      );
+      expect(r.data).toEqual({ scripts: ['/z.js'] });
+      expect(r.pageHead).toEqual({ stylesheets: [], scripts: [] });
     });
   });
 });
