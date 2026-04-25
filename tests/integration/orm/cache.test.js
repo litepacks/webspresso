@@ -137,4 +137,110 @@ describe('ORM cache integration', () => {
     const m1 = db.cache.getMetrics();
     expect(m1.bypassed - m0.bypassed).toBeGreaterThanOrEqual(2);
   });
+
+  it('auto: findById for missing row does not cache null (two misses)', async () => {
+    const repo = db.getRepository('CacheWidget');
+    await repo.findById(999);
+    await repo.findById(999);
+    const m = db.cache.getMetrics();
+    expect(m.misses).toBe(2);
+    expect(m.sets).toBe(0);
+  });
+
+  it('auto: findAll is cached then invalidated by create', async () => {
+    const repo = db.getRepository('CacheWidget');
+    await repo.findAll();
+    await repo.findAll();
+    let m = db.cache.getMetrics();
+    expect(m.misses).toBe(1);
+    expect(m.hits).toBe(1);
+
+    await repo.create({ name: 'New' });
+    await repo.findAll();
+    m = db.cache.getMetrics();
+    expect(m.misses).toBe(2);
+  });
+
+  it('auto: delete invalidates cached reads', async () => {
+    const repo = db.getRepository('CacheWidget');
+    await repo.findById(2);
+    await repo.findById(2);
+    expect(db.cache.getMetrics().hits).toBe(1);
+
+    await repo.delete(2);
+
+    db.cache.resetMetrics();
+    await repo.findById(2);
+    const m = db.cache.getMetrics();
+    expect(m.misses).toBe(1);
+    expect(m.hits).toBe(0);
+  });
+
+  it('auto: updateWhere invalidates cache', async () => {
+    const repo = db.getRepository('CacheWidget');
+    await repo.findAll();
+    await repo.findAll();
+    expect(db.cache.getMetrics().hits).toBe(1);
+
+    await repo.updateWhere({ id: 1 }, { name: 'A1' });
+
+    db.cache.resetMetrics();
+    await repo.findAll();
+    expect(db.cache.getMetrics().misses).toBe(1);
+  });
+
+  it('auto: query().list() uses cache', async () => {
+    await db.query('CacheWidget').orderBy('id').list();
+    await db.query('CacheWidget').orderBy('id').list();
+    const m = db.cache.getMetrics();
+    expect(m.misses).toBe(1);
+    expect(m.hits).toBe(1);
+  });
+
+  it('auto: query().count() uses cache', async () => {
+    await db.query('CacheWidget').count();
+    await db.query('CacheWidget').count();
+    const m = db.cache.getMetrics();
+    expect(m.misses).toBe(1);
+    expect(m.hits).toBe(1);
+  });
+
+  it('db.cache.invalidateModel is safe for unknown model name', () => {
+    expect(() => db.cache.invalidateModel('__NoSuchModel__')).not.toThrow();
+  });
+
+  it('auto: mutating SmartWidget does not clear CacheWidget cache', async () => {
+    const rAuto = db.getRepository('CacheWidget');
+    const rSmart = db.getRepository('SmartWidget');
+    await rAuto.findById(1);
+    await rAuto.findById(1);
+    expect(db.cache.getMetrics().hits).toBe(1);
+
+    await rSmart.update(1, { name: 'S1y' });
+
+    await rAuto.findById(1);
+    expect(db.cache.getMetrics().hits).toBe(2);
+  });
+
+  it('auto: forceDelete invalidates cache', async () => {
+    await db.knex('cache_widgets').insert({ id: 99, name: 'Z' });
+    const repo = db.getRepository('CacheWidget');
+    await repo.findById(99);
+    await repo.findById(99);
+    expect(db.cache.getMetrics().hits).toBe(1);
+
+    await repo.forceDelete(99);
+
+    db.cache.resetMetrics();
+    await repo.findById(99);
+    expect(db.cache.getMetrics().misses).toBe(1);
+  });
+
+  it('auto: query().paginate() uses cache for same page', async () => {
+    await db.query('CacheWidget').orderBy('id').paginate(1, 10);
+    await db.query('CacheWidget').orderBy('id').paginate(1, 10);
+    const m = db.cache.getMetrics();
+    expect(m.misses).toBe(1);
+    expect(m.hits).toBe(1);
+  });
 });
