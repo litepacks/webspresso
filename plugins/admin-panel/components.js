@@ -1285,8 +1285,8 @@ const LoginForm = {
     m('.w-full.max-w-md', [
       m('.bg-white dark:bg-slate-800.rounded-2xl.shadow-2xl.p-6.sm:p-8', [
         m('div.text-center.mb-6', [
-          m('h1.text-2xl.sm:text-3xl.font-bold.text-gray-900', 'Admin Login'),
-          m('p.text-gray-500 dark:text-slate-400.text-sm.mt-1', 'Sign in to your account'),
+          m('h1.text-2xl.sm:text-3xl.font-bold.text-gray-900.dark:text-slate-50', 'Admin Login'),
+          m('p.text-gray-500.dark:text-slate-400.text-sm.mt-1', 'Sign in to your account'),
         ]),
         m('form', {
           onsubmit: async (e) => {
@@ -1308,10 +1308,10 @@ const LoginForm = {
             }
           }
         }, [
-          state.error ? m('.bg-red-50.border.border-red-200.text-red-700.px-4.py-3.rounded-lg.mb-4.text-sm', state.error) : null,
+          state.error ? m('.bg-red-50.border.border-red-200.text-red-700.dark:bg-red-950/50.dark:border-red-800/80.dark:text-red-200.px-4.py-3.rounded-lg.mb-4.text-sm', state.error) : null,
           m('.mb-4', [
-            m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-2', { for: 'email' }, 'Email'),
-            m('input#email.w-full.px-3.py-2.5.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
+            m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-2', { for: 'email' }, 'Email'),
+            m('input#email.w-full.px-3.py-2.5.bg-white.text-gray-900.border.border-gray-300.rounded-lg.placeholder-gray-400.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors.dark:bg-slate-900/80.dark:border-slate-500.dark:text-slate-100.dark:placeholder-slate-500', {
               type: 'email',
               name: 'email',
               required: true,
@@ -1319,14 +1319,14 @@ const LoginForm = {
             }),
           ]),
           m('.mb-6', [
-            m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-2', { for: 'password' }, 'Password'),
-            m('input#password.w-full.px-3.py-2.5.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
+            m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-2', { for: 'password' }, 'Password'),
+            m('input#password.w-full.px-3.py-2.5.bg-white.text-gray-900.border.border-gray-300.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors.dark:bg-slate-900/80.dark:border-slate-500.dark:text-slate-100', {
               type: 'password',
               name: 'password',
               required: true,
             }),
           ]),
-          m('button.w-full.bg-blue-600.text-white.py-2.5.px-4.rounded-lg.font-medium.hover:bg-blue-700.focus:ring-2.focus:ring-blue-500.focus:ring-offset-2.disabled:opacity-50.transition-colors', {
+          m('button.w-full.bg-blue-600.text-white.py-2.5.px-4.rounded-lg.font-medium.hover:bg-blue-700.focus:ring-2.focus:ring-blue-500.focus:ring-offset-2.dark:focus:ring-offset-slate-800.disabled:opacity-50.transition-colors', {
             type: 'submit',
             disabled: state.loading,
           }, state.loading ? 'Logging in...' : 'Sign in'),
@@ -1342,8 +1342,8 @@ const SetupForm = {
     m('.w-full.max-w-md', [
       m('.bg-white dark:bg-slate-800.rounded-2xl.shadow-2xl.p-6.sm:p-8', [
         m('div.text-center.mb-6', [
-          m('h1.text-2xl.sm:text-3xl.font-bold.text-gray-900', 'Setup Admin Account'),
-          m('p.text-gray-500 dark:text-slate-400.text-sm.mt-1', 'Create the first admin user account.'),
+          m('h1.text-2xl.sm:text-3xl.font-bold.text-gray-900.dark:text-slate-50', 'Setup Admin Account'),
+          m('p.text-gray-500.dark:text-slate-400.text-sm.mt-1', 'Create the first admin user account.'),
         ]),
         m('form', {
       onsubmit: async (e) => {
@@ -1367,18 +1367,18 @@ const SetupForm = {
         }
       }
     }, [
-      state.error ? m('.bg-red-50.border.border-red-200.text-red-700.px-4.py-3.rounded-lg.mb-4.text-sm', state.error) : null,
+      state.error ? m('.bg-red-50.border.border-red-200.text-red-700.dark:bg-red-950/50.dark:border-red-800/80.dark:text-red-200.px-4.py-3.rounded-lg.mb-4.text-sm', state.error) : null,
           m('.mb-4', [
-            m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-2', { for: 'name' }, 'Name'),
-            m('input#name.w-full.px-3.py-2.5.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
+            m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-2', { for: 'name' }, 'Name'),
+            m('input#name.w-full.px-3.py-2.5.bg-white.text-gray-900.border.border-gray-300.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors.dark:bg-slate-900/80.dark:border-slate-500.dark:text-slate-100', {
               type: 'text',
               name: 'name',
               required: true,
             }),
           ]),
           m('.mb-4', [
-            m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-2', { for: 'email' }, 'Email'),
-            m('input#email.w-full.px-3.py-2.5.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
+            m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-2', { for: 'email' }, 'Email'),
+            m('input#email.w-full.px-3.py-2.5.bg-white.text-gray-900.border.border-gray-300.rounded-lg.placeholder-gray-400.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors.dark:bg-slate-900/80.dark:border-slate-500.dark:text-slate-100.dark:placeholder-slate-500', {
               type: 'email',
               name: 'email',
               required: true,
@@ -1386,14 +1386,14 @@ const SetupForm = {
             }),
           ]),
           m('.mb-6', [
-            m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-2', { for: 'password' }, 'Password'),
-            m('input#password.w-full.px-3.py-2.5.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors', {
+            m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-2', { for: 'password' }, 'Password'),
+            m('input#password.w-full.px-3.py-2.5.bg-white.text-gray-900.border.border-gray-300.rounded-lg.focus:ring-2.focus:ring-blue-500.focus:border-blue-500.transition-colors.dark:bg-slate-900/80.dark:border-slate-500.dark:text-slate-100', {
               type: 'password',
               name: 'password',
               required: true,
             }),
           ]),
-          m('button.w-full.bg-blue-600.text-white.py-2.5.px-4.rounded-lg.font-medium.hover:bg-blue-700.focus:ring-2.focus:ring-blue-500.focus:ring-offset-2.disabled:opacity-50.transition-colors', {
+          m('button.w-full.bg-blue-600.text-white.py-2.5.px-4.rounded-lg.font-medium.hover:bg-blue-700.focus:ring-2.focus:ring-blue-500.focus:ring-offset-2.dark:focus:ring-offset-slate-800.disabled:opacity-50.transition-colors', {
             type: 'submit',
             disabled: state.loading,
           }, state.loading ? 'Creating...' : 'Create Admin Account'),
