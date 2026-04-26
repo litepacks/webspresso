@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../src/server.js';
-import { createDatabase, defineModel, zdb, hasModel } from '../../index.js';
+import { createDatabase, defineModel, zdb } from '../../index.js';
 import { adminPanelPlugin } from '../../plugins/index.js';
 import { clearRegistry } from '../../core/orm/model.js';
 
@@ -23,25 +23,26 @@ describe('Admin User Statistics widget', () => {
       models: './tests/fixtures/models-empty',
     });
 
-    if (!hasModel('User')) {
-      const User = defineModel({
-        name: 'User',
-        table: 'users',
-        schema: zdb.schema({
-          id: zdb.id(),
-          email: zdb.string({ unique: true, maxLength: 255 }),
-          password: zdb.string({ maxLength: 255 }),
-          name: zdb.string({ maxLength: 255, nullable: true }),
-          role: zdb.string({ maxLength: 50, default: 'user' }),
-          active: zdb.boolean({ default: true }),
-          created_at: zdb.timestamp({ auto: 'create' }),
-          updated_at: zdb.timestamp({ auto: 'update' }),
-        }),
-        admin: { enabled: true, label: 'Users' },
-        hidden: ['password'],
-      });
-      db.registerModel(User);
-    }
+    // Unique model name avoids global registry collisions when Vitest runs files in parallel
+    // (another test may have registered `User` with a different schema — skipping defineModel
+    // would leave `model.columns` without `active` and the widget returns null counts).
+    const User = defineModel({
+      name: 'AdminWidgetStatsUser',
+      table: 'users',
+      schema: zdb.schema({
+        id: zdb.id(),
+        email: zdb.string({ unique: true, maxLength: 255 }),
+        password: zdb.string({ maxLength: 255 }),
+        name: zdb.string({ maxLength: 255, nullable: true }),
+        role: zdb.string({ maxLength: 50, default: 'user' }),
+        active: zdb.boolean({ default: true }),
+        created_at: zdb.timestamp({ auto: 'create' }),
+        updated_at: zdb.timestamp({ auto: 'update' }),
+      }),
+      admin: { enabled: true, label: 'Users' },
+      hidden: ['password'],
+    });
+    db.registerModel(User);
 
     await db.knex.schema.createTable('users', (table) => {
       table.bigIncrements('id').primary();
@@ -95,7 +96,7 @@ describe('Admin User Statistics widget', () => {
         adminPanelPlugin({
           path: '/_admin',
           db,
-          userManagement: { enabled: true, model: 'User' },
+          userManagement: { enabled: true, model: 'AdminWidgetStatsUser' },
         }),
       ],
     });

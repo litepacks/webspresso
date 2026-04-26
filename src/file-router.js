@@ -65,27 +65,50 @@ function filePathToRoute(filePath, ext) {
  * @returns {{ tier: number, literalSegCount: number, paramSegCount: number, depth: number, routePath: string }}
  */
 function routeRegistrationMeta(routePath) {
-  const hasCatchAll = routePath.includes('*');
-  const hasDynamic = routePath.includes(':');
-  let tier;
-  if (hasCatchAll) tier = 2;
-  else if (hasDynamic) tier = 1;
-  else tier = 0;
-
-  const segments = routePath.split('/').filter(Boolean);
+  let pathHasStar = false;
+  let pathHasColon = false;
+  let depth = 0;
   let literalSegCount = 0;
   let paramSegCount = 0;
-  for (const seg of segments) {
-    if (seg === '*' || (seg.length > 0 && seg.includes('*'))) continue;
-    if (seg.includes(':')) paramSegCount += 1;
+
+  const s = routePath;
+  const n = s.length;
+  let i = 0;
+  while (i < n) {
+    while (i < n && s.charCodeAt(i) === 47 /* / */) i++;
+    if (i >= n) break;
+    const start = i;
+    while (i < n && s.charCodeAt(i) !== 47) i++;
+
+    depth++;
+    let segHasStar = false;
+    let segHasColon = false;
+    for (let j = start; j < i; j++) {
+      const c = s.charCodeAt(j);
+      if (c === 42 /* * */) segHasStar = true;
+      else if (c === 58 /* : */) segHasColon = true;
+    }
+    if (segHasStar) pathHasStar = true;
+    if (segHasColon) pathHasColon = true;
+
+    if (segHasStar) {
+      // Same as: seg === '*' || (seg.length > 0 && seg.includes('*'))
+      continue;
+    }
+    if (segHasColon) paramSegCount += 1;
     else literalSegCount += 1;
   }
+
+  let tier;
+  if (pathHasStar) tier = 2;
+  else if (pathHasColon) tier = 1;
+  else tier = 0;
 
   return {
     tier,
     literalSegCount,
     paramSegCount,
-    depth: segments.length,
+    depth,
     routePath,
   };
 }
