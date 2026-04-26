@@ -169,3 +169,122 @@ describe('Data exchange plugin', () => {
     expect(Boolean(again.active)).toBe(false);
   });
 });
+
+describe('Data exchange export with soft delete', () => {
+  let app;
+  let db;
+
+  beforeEach(async () => {
+    clearRegistry();
+
+    db = createDatabase({
+      client: 'better-sqlite3',
+      connection: ':memory:',
+      models: './tests/fixtures/models-empty',
+    });
+
+    if (!hasModel('SoftThing')) {
+      const SoftThing = defineModel({
+        name: 'SoftThing',
+        table: 'soft_things',
+        schema: zdb.schema({
+          id: zdb.id(),
+          name: zdb.string(),
+          deleted_at: zdb.timestamp({ nullable: true }),
+        }),
+        admin: { enabled: true, label: 'Soft' },
+        scopes: { softDelete: true },
+      });
+      db.registerModel(SoftThing);
+    }
+
+    await db.knex.schema.createTable('soft_things', (table) => {
+      table.bigIncrements('id');
+      table.string('name');
+      table.timestamp('deleted_at').nullable();
+    });
+
+    await db.knex.schema.createTable('admin_users', (table) => {
+      table.bigIncrements('id');
+      table.string('email').unique();
+      table.string('password');
+      table.string('name');
+      table.string('role').defaultTo('admin');
+      table.boolean('active').defaultTo(true);
+      table.timestamp('created_at');
+      table.timestamp('updated_at');
+    });
+
+    const result = createApp({
+      pagesDir: './tests/fixtures/pages',
+      viewsDir: './tests/fixtures/views',
+      publicDir: './public',
+      db,
+      plugins: [
+        adminPanelPlugin({ path: '/_admin', db }),
+        dataExchangePlugin({ db, adminPath: '/_admin' }),
+      ],
+    });
+
+    app = result.app;
+  });
+
+  afterEach(async () => {
+    if (db) await db.destroy();
+    clearRegistry();
+  });
+
+  async function loginCookie() {
+    await request(app).post('/_admin/api/auth/setup').send({
+      email: 'admin@example.com',
+      password: 'password123',
+      name: 'Admin',
+    });
+    const loginRes = await request(app).post('/_admin/api/auth/login').send({
+      email: 'admin@example.com',
+      password: 'password123',
+    });
+    return loginRes.headers['set-cookie'];
+  }
+
+  it('exports only active rows by default; trashed=only exports deleted rows', async () => {
+    const cookie = await loginCookie();
+    const repo = db.getRepository('SoftThing');
+    const a = await repo.create({ name: 'ActiveRow' });
+    const b = await repo.create({ name: 'GoneRow' });
+    await repo.delete(b.id);
+
+    const resActive = await request(app)
+      .post('/_admin/api/data-exchange/export/SoftThing')
+      .set('Cookie', cookie)
+      .send({ selectAll: true, filters: {} })
+      .buffer(true)
+      .parse((res, cb) => {
+        const data = [];
+        res.on('data', (c) => data.push(c));
+        res.on('end', () => cb(null, Buffer.concat(data)));
+      })
+      .expect(200);
+
+    const wbA = new ExcelJS.Workbook();
+    await wbA.xlsx.load(resActive.body);
+    expect(wbA.worksheets[0].rowCount).toBe(2);
+
+    const resTrashed = await request(app)
+      .post('/_admin/api/data-exchange/export/SoftThing')
+      .set('Cookie', cookie)
+      .send({ selectAll: true, filters: {}, trashed: 'only' })
+      .buffer(true)
+      .parse((res, cb) => {
+        const data = [];
+        res.on('data', (c) => data.push(c));
+        res.on('end', () => cb(null, Buffer.concat(data)));
+      })
+      .expect(200);
+
+    const wbT = new ExcelJS.Workbook();
+    await wbT.xlsx.load(resTrashed.body);
+    expect(wbT.worksheets[0].rowCount).toBe(2);
+    expect(wbT.worksheets[0].getRow(2).getCell(2).value).toBe('GoneRow');
+  });
+});

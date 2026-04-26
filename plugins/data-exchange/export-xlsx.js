@@ -30,6 +30,9 @@ async function buildXlsxBuffer(model, records) {
     const rowValues = columns.map((c) => {
       let v = rec[c];
       if (v === null || v === undefined) return '';
+      if (typeof v === 'bigint') return v.toString();
+      if (v instanceof Date) return v.toISOString();
+      if (Buffer.isBuffer(v)) return v.toString('base64');
       if (typeof v === 'object') v = JSON.stringify(v);
       if (typeof v === 'string' && /^[=+\-@]/.test(v)) return ` ${v}`;
       return v;

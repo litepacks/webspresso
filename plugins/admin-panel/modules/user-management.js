@@ -7,6 +7,18 @@
 const { hash, verify } = require('../../../core/auth/hash');
 
 /**
+ * DBs like SQLite store booleans as 0/1; `repo.count({ active: true })` can return 0 while rows are "active".
+ * Postgres/MySQL use real booleans — `true` is correct.
+ */
+function truthyBooleanForDb(db) {
+  try {
+    const client = db?.knex?.client?.config?.client;
+    if (client === 'sqlite3' || client === 'better-sqlite3') return 1;
+  } catch (_) {}
+  return true;
+}
+
+/**
  * Register user management in admin panel
  * @param {Object} options - Options
  * @param {Object} options.registry - Admin registry
@@ -91,21 +103,26 @@ function registerUserManagement(options) {
     dataLoader: async ({ db }) => {
       try {
         const repo = db.getRepository(modelName);
+        const model = repo.model;
         const total = await repo.count();
-        const active = await repo.count({ [fieldMap.active]: true });
+        const activeEq = truthyBooleanForDb(db);
+        const active = await repo.query().where(fieldMap.active, activeEq).count();
         const admins = await repo.count({ [fieldMap.role]: 'admin' });
-        
-        // Recent users (last 7 days)
-        const weekAgo = new Date();
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        const recentUsers = await repo.query()
-          .where(fieldMap.createdAt, '>=', weekAgo.toISOString())
-          .count();
+
+        let recentUsers = 0;
+        const createdCol = fieldMap.createdAt;
+        if (model.columns && model.columns.has(createdCol)) {
+          const weekAgo = new Date();
+          weekAgo.setDate(weekAgo.getDate() - 7);
+          recentUsers = await repo.query()
+            .where(createdCol, '>=', weekAgo.toISOString())
+            .count();
+        }
 
         return {
           total,
           active,
-          inactive: total - active,
+          inactive: Math.max(0, total - active),
           admins,
           recentUsers,
         };

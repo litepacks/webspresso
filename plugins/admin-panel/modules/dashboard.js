@@ -273,23 +273,26 @@ const WidgetRenderers = {
   // User stats (for user-management module)
   'user-stats': {
     render: (data) => {
-      if (!data) return m('div.text-gray-500', 'No data');
+      if (!data) return m('div.text-gray-500.dark:text-slate-400', 'No data');
+      if (data.error) {
+        return m('div.text-sm.text-red-600.dark:text-red-400', data.error);
+      }
       return m('div.grid.grid-cols-2.gap-4', [
-        m('div.text-center.p-3.bg-blue-50.rounded', [
-          m('p.text-2xl.font-bold.text-blue-600', data.total),
-          m('p.text-xs.text-gray-500', 'Total Users'),
+        m('div.text-center.p-3.bg-blue-50.dark:bg-blue-950/40.rounded-lg', [
+          m('p.text-2xl.font-bold.text-blue-600.dark:text-blue-400', data.total),
+          m('p.text-xs.text-gray-500.dark:text-slate-400', 'Total Users'),
         ]),
-        m('div.text-center.p-3.bg-green-50.rounded', [
-          m('p.text-2xl.font-bold.text-green-600', data.active),
-          m('p.text-xs.text-gray-500', 'Active'),
+        m('div.text-center.p-3.bg-green-50.dark:bg-green-950/40.rounded-lg', [
+          m('p.text-2xl.font-bold.text-green-600.dark:text-green-400', data.active),
+          m('p.text-xs.text-gray-500.dark:text-slate-400', 'Active'),
         ]),
-        m('div.text-center.p-3.bg-yellow-50.rounded', [
-          m('p.text-2xl.font-bold.text-yellow-600', data.admins),
-          m('p.text-xs.text-gray-500', 'Admins'),
+        m('div.text-center.p-3.bg-yellow-50.dark:bg-amber-950/40.rounded-lg', [
+          m('p.text-2xl.font-bold.text-yellow-600.dark:text-amber-400', data.admins),
+          m('p.text-xs.text-gray-500.dark:text-slate-400', 'Admins'),
         ]),
-        m('div.text-center.p-3.bg-purple-50.rounded', [
-          m('p.text-2xl.font-bold.text-purple-600', data.recentUsers),
-          m('p.text-xs.text-gray-500', 'This Week'),
+        m('div.text-center.p-3.bg-purple-50.dark:bg-purple-950/40.rounded-lg', [
+          m('p.text-2xl.font-bold.text-purple-600.dark:text-purple-400', data.recentUsers),
+          m('p.text-xs.text-gray-500.dark:text-slate-400', 'This Week'),
         ]),
       ]);
     },

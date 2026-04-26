@@ -24,6 +24,10 @@ async function resolveExportRecords(db, modelName, req) {
     }
   }
 
+  const trashedOnly =
+    body.trashed === 'only' ||
+    req.query.trashed === 'only';
+
   let idList = null;
   if (req.body?.ids && Array.isArray(req.body.ids)) {
     idList = req.body.ids;
@@ -45,14 +49,26 @@ async function resolveExportRecords(db, modelName, req) {
   const repo = db.getRepository(model.name);
   let records;
 
+  const filterOpts =
+    trashedOnly && model.scopes?.softDelete ? { onlyTrashed: true } : {};
+
   if (selectAll) {
-    const query = buildFilteredQuery(repo, filters);
+    const query = buildFilteredQuery(repo, filters, filterOpts);
     records = await query.list();
   } else if (idList && idList.length > 0) {
-    records = [];
-    for (const id of idList) {
-      const record = await repo.findById(id);
-      if (record) records.push(record);
+    if (trashedOnly && model.scopes?.softDelete) {
+      const pk = model.primaryKey || 'id';
+      records = await repo
+        .query()
+        .onlyTrashed()
+        .whereIn(pk, idList)
+        .list();
+    } else {
+      records = [];
+      for (const id of idList) {
+        const record = await repo.findById(id);
+        if (record) records.push(record);
+      }
     }
   } else {
     records = await repo.findAll();

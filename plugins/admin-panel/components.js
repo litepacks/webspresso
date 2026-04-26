@@ -32,6 +32,38 @@ const api = {
   delete(path) { return this.request(path, { method: 'DELETE' }); },
 };
 
+/** POST /data-exchange/export/:model — validates JSON errors vs .xlsx blob */
+async function downloadDataExchangeXlsx(modelName, payload) {
+  const adminPath = window.__ADMIN_PATH__ || '/_admin';
+  const res = await fetch(adminPath + '/api/data-exchange/export/' + modelName, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  if (!res.ok || ct.indexOf('spreadsheet') === -1) {
+    var msg = 'Export failed';
+    try {
+      if (ct.indexOf('json') !== -1) {
+        var j = await res.json();
+        msg = j.error || msg;
+      } else {
+        var t = await res.text();
+        if (t) msg = t.slice(0, 300);
+      }
+    } catch (e) {}
+    throw new Error(msg);
+  }
+  const blob = await res.blob();
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = modelName + '-export.xlsx';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // Helper: Capitalize first letter of each word
 function capitalizeWords(str) {
   if (!str) return '';
@@ -1985,29 +2017,13 @@ const RecordList = {
             }, 'Trash'),
           ]) : null,
         ]),
-        !state.trashedView ? m('.flex.items-center.gap-2', [
+        m('.flex.flex-wrap.items-center.gap-2', [
           m('button.inline-flex.items-center.gap-2.px-4.py-2.text-sm.font-medium.text-indigo-700.bg-white.dark:bg-slate-800.border.border-indigo-200.rounded-lg.hover:bg-indigo-50.transition-colors', {
             onclick: async () => {
-              const adminPath = window.__ADMIN_PATH__ || '/_admin';
               try {
                 const payload = { selectAll: true, filters: state.filters };
-                const res = await fetch(adminPath + '/api/data-exchange/export/' + modelName, {
-                  method: 'POST',
-                  credentials: 'include',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(payload),
-                });
-                if (!res.ok) {
-                  const err = await res.json().catch(function () { return {}; });
-                  throw new Error(err.error || 'Export failed');
-                }
-                const blob = await res.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = modelName + '-export.xlsx';
-                a.click();
-                URL.revokeObjectURL(url);
+                if (state.trashedView) payload.trashed = 'only';
+                await downloadDataExchangeXlsx(modelName, payload);
               } catch (err) {
                 alert('Error: ' + err.message);
               }
@@ -2018,7 +2034,7 @@ const RecordList = {
             ),
             'Export Excel',
           ]),
-          m('input[type=file]', {
+          !state.trashedView ? m('input[type=file]', {
             id: 'data-exchange-import-' + modelName,
             style: 'display:none',
             accept: '.csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv',
@@ -2051,8 +2067,8 @@ const RecordList = {
                 alert('Error: ' + err.message);
               }
             },
-          }),
-          m('button.inline-flex.items-center.gap-2.px-4.py-2.text-sm.font-medium.text-indigo-700.bg-white.dark:bg-slate-800.border.border-indigo-200.rounded-lg.hover:bg-indigo-50.transition-colors', {
+          }) : null,
+          !state.trashedView ? m('button.inline-flex.items-center.gap-2.px-4.py-2.text-sm.font-medium.text-indigo-700.bg-white.dark:bg-slate-800.border.border-indigo-200.rounded-lg.hover:bg-indigo-50.transition-colors', {
             onclick: function () {
               var el = document.getElementById('data-exchange-import-' + modelName);
               if (el) el.click();
@@ -2062,8 +2078,8 @@ const RecordList = {
               m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M7 10l5 5m0 0l5-5m-5 5V4' })
             ),
             'Import',
-          ]),
-          m('button.inline-flex.items-center.gap-2.px-4.py-2.text-sm.font-medium.text-white.bg-indigo-600.rounded-lg.hover:bg-indigo-700.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+          ]) : null,
+          !state.trashedView ? m('button.inline-flex.items-center.gap-2.px-4.py-2.text-sm.font-medium.text-white.bg-indigo-600.rounded-lg.hover:bg-indigo-700.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
             onclick: () => {
               state.currentRecord = null;
               state.editing = true;
@@ -2074,8 +2090,8 @@ const RecordList = {
               m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M12 4v16m8-8H4' }),
             ]),
             'New Record',
-          ]),
-        ]) : null,
+          ]) : null,
+        ]),
       ]),
       
       // Quick Filters Bar
@@ -2281,33 +2297,17 @@ const RecordList = {
                   ),
                   'Export CSV',
                 ]) : null,
-                !state.trashedView ? m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-violet-600.bg-white dark:bg-slate-800.border.border-violet-200.rounded.hover:bg-violet-50.transition-colors', {
+                m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-violet-600.bg-white dark:bg-slate-800.border.border-violet-200.rounded.hover:bg-violet-50.transition-colors', {
                   disabled: state.bulkActionInProgress,
                   onclick: async () => {
                     state.bulkActionInProgress = true;
                     m.redraw();
                     try {
-                      const adminPath = window.__ADMIN_PATH__ || '/_admin';
                       const payload = state.selectAllMode 
                         ? { selectAll: true, filters: state.filters }
                         : { ids: Array.from(state.selectedRecords) };
-                      const res = await fetch(adminPath + '/api/data-exchange/export/' + modelName, {
-                        method: 'POST',
-                        credentials: 'include',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload),
-                      });
-                      if (!res.ok) {
-                        const err = await res.json().catch(function () { return {}; });
-                        throw new Error(err.error || 'Export failed');
-                      }
-                      const blob = await res.blob();
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = modelName + '-export.xlsx';
-                      a.click();
-                      URL.revokeObjectURL(url);
+                      if (state.trashedView) payload.trashed = 'only';
+                      await downloadDataExchangeXlsx(modelName, payload);
                     } catch (err) {
                       alert('Error: ' + err.message);
                     } finally {
@@ -2320,7 +2320,7 @@ const RecordList = {
                     m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' })
                   ),
                   'Export Excel',
-                ]) : null,
+                ]),
                 !state.trashedView ? m(BulkFieldUpdateDropdown, {
                   modelName: modelName,
                   selectedIds: state.selectAllMode ? null : Array.from(state.selectedRecords),
