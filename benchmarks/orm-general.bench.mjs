@@ -29,6 +29,30 @@ const benchModel = {
   },
 };
 
+const benchModelSoft = {
+  name: 'BenchPostSoft',
+  table: 'posts',
+  primaryKey: 'id',
+  columns: new Map([['id', { type: 'integer' }]]),
+  scopes: {
+    softDelete: true,
+    timestamps: false,
+    tenant: null,
+  },
+};
+
+const benchModelTenant = {
+  name: 'BenchPostTenant',
+  table: 'posts',
+  primaryKey: 'id',
+  columns: new Map([['id', { type: 'integer' }]]),
+  scopes: {
+    softDelete: false,
+    timestamps: false,
+    tenant: 'tenant_id',
+  },
+};
+
 const zodSchema = zdb.schema({
   id: zdb.id(),
   title: zdb.string({ maxLength: 200 }),
@@ -48,11 +72,15 @@ const sampleObj = { a: 1, b: { c: 2 }, d: [3, 4] };
 
 let kx;
 let qbBase;
+let qbSoft;
+let qbTenant;
 
 describe('ORM general (scopes, QueryBuilder, utils, schema)', () => {
   beforeAll(() => {
     kx = knex({ client: 'better-sqlite3', connection: ':memory:', useNullAsDefault: true });
     qbBase = () => createQueryBuilder(benchModel, kx, createScopeContext(), null);
+    qbSoft = () => createQueryBuilder(benchModelSoft, kx, createScopeContext(), null);
+    qbTenant = () => createQueryBuilder(benchModelTenant, kx, createScopeContext(), null);
   });
 
   afterAll(async () => {
@@ -83,6 +111,51 @@ describe('ORM general (scopes, QueryBuilder, utils, schema)', () => {
 
   bench('QueryBuilder: clone + toSQL()', () => {
     qbBase().where('a', 1).orderBy('b', 'desc').clone().toKnex().toSQL();
+  });
+
+  bench('QueryBuilder: object where + orWhere + raw', () => {
+    qbBase()
+      .where({ status: 'published', kind: 'article' })
+      .where('min_score', '>=', 5)
+      .orWhere('featured', true)
+      .whereRaw('length(title) > ?', [2])
+      .orWhereRaw('pinned = ?', [1])
+      .toKnex()
+      .toSQL();
+  });
+
+  bench('QueryBuilder: whereNotIn + whereNull + whereNotNull', () => {
+    qbBase()
+      .whereNotIn('state', ['archived', 'banned'])
+      .whereNull('deleted_reason')
+      .whereNotNull('published_at')
+      .toKnex()
+      .toSQL();
+  });
+
+  bench('QueryBuilder: toKnex({ includeLimitOffset: false })', () => {
+    qbBase()
+      .where('x', 1)
+      .limit(10)
+      .offset(20)
+      .toKnex({ includeLimitOffset: false })
+      .toSQL();
+  });
+
+  bench('QueryBuilder: soft-delete default scope → toSQL()', () => {
+    qbSoft().where('active', 1).toKnex().toSQL();
+  });
+
+  bench('QueryBuilder: withTrashed + where → toSQL()', () => {
+    qbSoft().withTrashed().where('id', '>', 0).toKnex().toSQL();
+  });
+
+  bench('QueryBuilder: onlyTrashed → toSQL()', () => {
+    qbSoft().onlyTrashed().orderBy('id', 'desc').toKnex().toSQL();
+  });
+
+  bench('QueryBuilder: forTenant + where → toSQL()', () => {
+    qbTenant().forTenant(42).where('status', 'open').toKnex().toSQL();
   });
 
   bench('utils: pick + omit', () => {
