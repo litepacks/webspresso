@@ -659,7 +659,7 @@ const FieldRenderers = {
     
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
         id: col.name,
         name: col.name,
         type: inputType,
@@ -671,7 +671,7 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value),
       }),
       hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
@@ -689,7 +689,7 @@ const FieldRenderers = {
     
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('textarea.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('textarea.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
         id: col.name,
         name: col.name,
         rows: rows,
@@ -699,7 +699,7 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value),
       }, value || ''),
       hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
@@ -716,7 +716,7 @@ const FieldRenderers = {
     
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
         id: col.name,
         name: col.name,
         type: 'number',
@@ -728,7 +728,7 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value === '' ? null : parseInt(e.target.value, 10)),
       }),
       hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
@@ -745,7 +745,7 @@ const FieldRenderers = {
     
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
         id: col.name,
         name: col.name,
         type: 'number',
@@ -757,7 +757,7 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value === '' ? null : parseFloat(e.target.value)),
       }),
       hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
@@ -772,14 +772,14 @@ const FieldRenderers = {
     
     return m('.mb-4', [
       m('label.flex.items-center.cursor-pointer', { class: readonly ? 'cursor-not-allowed' : '' }, [
-        m('input.mr-2.w-4.h-4', {
+        m('input.mr-2.w-4.h-4.rounded.border-gray-300.dark:border-slate-600.text-indigo-600.focus:ring-indigo-500', {
           type: 'checkbox',
           name: col.name,
           checked: Boolean(value),
           disabled: readonly,
           onchange: (e) => onChange(e.target.checked),
         }),
-        m('span.text-sm.font-medium.text-gray-700', label),
+        m('span.text-sm.font-medium.text-gray-700.dark:text-slate-300', label),
       ]),
       hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
     ]);
@@ -796,7 +796,7 @@ const FieldRenderers = {
     
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
         id: col.name,
         name: col.name,
         type: 'date',
@@ -807,7 +807,7 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value),
       }),
       hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
@@ -825,7 +825,7 @@ const FieldRenderers = {
     
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
         id: col.name,
         name: col.name,
         type: 'datetime-local',
@@ -836,7 +836,7 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
         oninput: (e) => onChange(e.target.value),
       }),
       hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
@@ -852,13 +852,13 @@ const FieldRenderers = {
     
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('select.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('select.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
         id: col.name,
         name: col.name,
         value: value || '',
         required: !col.nullable && !readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
         onchange: (e) => onChange(e.target.value),
       }, [
         col.nullable ? m('option', { value: '' }, '-- Select --') : null,
@@ -879,7 +879,7 @@ const FieldRenderers = {
     
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('textarea.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.font-mono.text-sm.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('textarea.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.font-mono.text-sm.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
         id: col.name,
         name: col.name,
         rows: rows,
@@ -887,7 +887,7 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
         oninput: (e) => {
           try {
             const parsed = JSON.parse(e.target.value);
@@ -912,7 +912,7 @@ const FieldRenderers = {
     
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300 dark:border-slate-600.rounded.focus:outline-none.focus:ring-2.focus:ring-blue-500', {
+      m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
         id: col.name,
         name: col.name,
         type: 'text',
@@ -923,7 +923,7 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 cursor-not-allowed' : '',
+        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
         oninput: (e) => {
           const arr = e.target.value.split(',').map(s => s.trim()).filter(s => s);
           onChange(arr);
@@ -1035,9 +1035,9 @@ const RichTextField = {
         label,
         required ? m('span.text-red-500', ' *') : null
       ),
-      m('div.border.border-gray-300 dark:border-slate-600.rounded', {
+      m('div.border.border-gray-300.dark:border-slate-600.rounded.bg-white.dark:bg-slate-900/50', {
         id: editorId,
-        class: readonly ? 'bg-gray-100 opacity-50' : '',
+        class: readonly ? 'bg-gray-100 dark:bg-slate-800 opacity-50' : '',
         style: 'min-height: 200px;'
       }),
       m('input[type=hidden]', {
@@ -1115,7 +1115,7 @@ const FileUploadField = {
     if (readonly) {
       return m('.mb-4', [
         m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', label, required ? m('span.text-red-500', ' *') : null),
-        value ? m('a.text-indigo-600.break-all', { href: value, target: '_blank', rel: 'noopener noreferrer' }, value) : m('span.text-gray-400', '—'),
+        value ? m('a.text-indigo-600.dark:text-indigo-400.break-all', { href: value, target: '_blank', rel: 'noopener noreferrer' }, value) : m('span.text-gray-400.dark:text-slate-500', '—'),
         hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null,
       ]);
     }
@@ -1123,7 +1123,7 @@ const FileUploadField = {
       return m('.mb-4', [
         m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', { for: col.name }, label, required ? m('span.text-red-500', ' *') : null),
         m('p.text-xs.text-amber-700.dark:text-amber-400.mb-2', 'Upload URL is not configured. Enter a public URL or path manually.'),
-        m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded.bg-white.dark:bg-slate-800', {
+        m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500', {
           type: 'text',
           id: col.name,
           name: col.name,
@@ -1137,7 +1137,7 @@ const FileUploadField = {
     }
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', label, required ? m('span.text-red-500', ' *') : null),
-      m('div#' + dropZoneId + '.border-2.border-dashed.border-gray-300.dark:border-slate-600.rounded.p-8.text-center', { style: 'cursor: pointer;' }, [
+      m('div#' + dropZoneId + '.border-2.border-dashed.border-gray-300.dark:border-slate-600.rounded-lg.p-8.text-center.bg-gray-50.dark:bg-slate-900/40', { style: 'cursor: pointer;' }, [
         m('input[type=file].hidden', {
           id: 'file-input-' + col.name,
           accept: accept,
@@ -1153,7 +1153,7 @@ const FileUploadField = {
         ]),
         value ? m('.mt-4.text-left', [
           m('p.text-sm.text-gray-600.dark:text-slate-400.break-all', 'Current: ' + value),
-          m('button.text-red-600.hover:text-red-800.text-sm.mt-2', {
+          m('button.text-red-600.dark:text-red-400.hover:text-red-800.dark:hover:text-red-300.text-sm.mt-2', {
             type: 'button',
             onclick: function () { if (onChange) onChange(''); },
           }, 'Remove'),
@@ -2350,7 +2350,7 @@ const RecordList = {
                 m('thead.bg-gray-50.dark:bg-slate-900', { style: 'position: sticky; top: 0; z-index: 20;' }, [
                   m('tr', [
                     // Checkbox column header (sticky left, box-shadow on right)
-                    m('th.px-4.py-3.text-left.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200', { style: 'width: 40px; position: sticky; left: 0; z-index: 15; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' }, [
+                    m('th.px-4.py-3.text-left.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200 dark:border-slate-700', { style: 'width: 40px; position: sticky; left: 0; z-index: 15; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' }, [
                       m('input[type=checkbox].rounded.border-gray-300 dark:border-slate-600.text-indigo-600.focus:ring-indigo-500', {
                         checked: state.records.length > 0 && state.selectedRecords && state.selectedRecords.size === state.records.length,
                         indeterminate: state.selectedRecords && state.selectedRecords.size > 0 && state.selectedRecords.size < state.records.length,
@@ -2366,23 +2366,23 @@ const RecordList = {
                     ]),
                     // Dynamic column headers (first column sticky left with box-shadow)
                     ...displayColumns.map((col, i) => 
-                      m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500 dark:text-slate-400.uppercase.tracking-wider.whitespace-nowrap.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200', 
+                      m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500 dark:text-slate-400.uppercase.tracking-wider.whitespace-nowrap.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200 dark:border-slate-700', 
                         i === 0 ? { style: 'position: sticky; left: 40px; z-index: 15; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' } : {},
                         formatColumnLabel(col.name)
                       )
                     ),
                     // Sticky actions header (sticky right, box-shadow on left)
-                    m('th.px-4.py-3.text-right.text-xs.font-medium.text-gray-500 dark:text-slate-400.uppercase.tracking-wider.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200', {
+                    m('th.px-4.py-3.text-right.text-xs.font-medium.text-gray-500 dark:text-slate-400.uppercase.tracking-wider.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200 dark:border-slate-700', {
                       style: 'position: sticky; right: 0; min-width: 120px; z-index: 15; box-shadow: -4px 0 8px -4px rgba(0,0,0,0.08);',
                     }, 'Actions'),
                   ]),
                 ]),
-                m('tbody.divide-y.divide-gray-100', state.records.map(record => 
-                  m('tr.hover:bg-gray-50 dark:hover:bg-slate-800/50 dark:hover:bg-slate-800/50.transition-colors', {
-                    class: state.selectedRecords && state.selectedRecords.has(record[primaryKey]) ? 'bg-indigo-50' : '',
+                m('tbody.divide-y.divide-gray-100.dark:divide-slate-700', state.records.map(record => 
+                  m('tr.hover:bg-gray-50 dark:hover:bg-slate-800/50.transition-colors', {
+                    class: state.selectedRecords && state.selectedRecords.has(record[primaryKey]) ? 'bg-indigo-50 dark:bg-indigo-950/50' : '',
                   }, [
                     // Checkbox cell (sticky left, box-shadow on right)
-                    m('td.px-4.py-3.bg-white', {
+                    m('td.px-4.py-3.bg-white.dark:bg-slate-800', {
                       style: 'position: sticky; left: 0; z-index: 5; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);',
                     }, [
                       m('input[type=checkbox].rounded.border-gray-300 dark:border-slate-600.text-indigo-600.focus:ring-indigo-500', {
@@ -2400,17 +2400,17 @@ const RecordList = {
                     ]),
                     // Dynamic cell values (first column sticky left with box-shadow)
                     ...displayColumns.map((col, i) => 
-                      m('td.px-4.py-3.text-sm.whitespace-nowrap.text-gray-700 dark:text-slate-300.bg-white',
+                      m('td.px-4.py-3.text-sm.whitespace-nowrap.text-gray-700 dark:text-slate-300.bg-white dark:bg-slate-800',
                         i === 0 ? { style: 'position: sticky; left: 40px; z-index: 5; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' } : {},
                         formatCellValue(record[col.name], col)
                       )
                     ),
                     // Sticky actions cell (sticky right, box-shadow on left)
-                    m('td.px-4.py-3.text-sm.text-right.whitespace-nowrap.bg-white', {
+                    m('td.px-4.py-3.text-sm.text-right.whitespace-nowrap.text-gray-700 dark:text-slate-300.bg-white dark:bg-slate-800', {
                       style: 'position: sticky; right: 0; z-index: 5; box-shadow: -4px 0 8px -4px rgba(0,0,0,0.08);',
                     }, [
                       state.trashedView && modelMeta?.softDelete
-                        ? m('button.inline-flex.items-center.px-2.py-1.text-sm.text-green-600.hover:text-green-800.hover:bg-green-50.rounded.transition-colors', {
+                        ? m('button.inline-flex.items-center.px-2.py-1.text-sm.text-green-600.dark:text-green-400.hover:text-green-800.dark:hover:text-green-300.hover:bg-green-50.dark:hover:bg-green-950/40.rounded.transition-colors', {
                             onclick: async () => {
                               try {
                                 await api.post('/models/' + modelName + '/records/' + record[primaryKey] + '/restore');
@@ -2421,14 +2421,14 @@ const RecordList = {
                             },
                           }, 'Restore')
                         : [
-                            m('button.inline-flex.items-center.px-2.py-1.text-sm.text-indigo-600.hover:text-indigo-800.hover:bg-indigo-50.rounded.mr-1.transition-colors', {
+                            m('button.inline-flex.items-center.px-2.py-1.text-sm.text-indigo-600.dark:text-indigo-400.hover:text-indigo-800.dark:hover:text-indigo-300.hover:bg-indigo-50.dark:hover:bg-indigo-950/40.rounded.mr-1.transition-colors', {
                               onclick: () => {
                                 state.currentRecord = record;
                                 state.editing = true;
                                 m.route.set('/models/' + modelName + '/edit/' + record[primaryKey]);
                               },
                             }, 'Edit'),
-                            m('button.inline-flex.items-center.px-2.py-1.text-sm.text-red-600.hover:text-red-800.hover:bg-red-50.rounded.transition-colors', {
+                            m('button.inline-flex.items-center.px-2.py-1.text-sm.text-red-600.dark:text-red-400.hover:text-red-800.dark:hover:text-red-300.hover:bg-red-50.dark:hover:bg-red-950/40.rounded.transition-colors', {
                               onclick: async () => {
                                 if (confirm('Are you sure you want to delete this record?')) {
                                   try {
@@ -2516,14 +2516,14 @@ const RecordForm = {
     
     return m(Layout, { breadcrumbs }, [
       m('.flex.items-center.justify-between.mb-6', [
-        m('h2.text-2xl.font-bold', isNew ? 'New Record' : 'Edit Record'),
-        modelMeta ? m('span.text-gray-500', modelMeta.label || modelMeta.name) : null,
+        m('h2.text-2xl.font-bold.text-gray-900.dark:text-slate-100', isNew ? 'New Record' : 'Edit Record'),
+        modelMeta ? m('span.text-gray-500.dark:text-slate-400', modelMeta.label || modelMeta.name) : null,
       ]),
       
-      state.loading ? m('p.text-gray-600', 'Loading...') :
-      state.error && !modelMeta ? m('.bg-red-100.border.border-red-400.text-red-700.px-4.py-3.rounded', state.error) :
+      state.loading ? m('p.text-gray-600.dark:text-slate-400', 'Loading...') :
+      state.error && !modelMeta ? m('.bg-red-50.dark:bg-red-950/40.border.border-red-200.dark:border-red-800.text-red-800.dark:text-red-200.px-4.py-3.rounded-lg', state.error) :
       
-      m('form.bg-white dark:bg-slate-800.rounded.shadow.flex.flex-col', {
+      m('form.bg-white.dark:bg-slate-800.rounded-lg.shadow-sm.border.border-gray-200.dark:border-slate-700.flex.flex-col', {
         style: 'min-height: calc(100vh - 280px);',
         onsubmit: async (e) => {
           e.preventDefault();
@@ -2592,7 +2592,7 @@ const RecordForm = {
       }, [
         // Form content (scrollable)
         m('.p-6.flex-1.overflow-y-auto', [
-          state.error ? m('.bg-red-100.border.border-red-400.text-red-700.px-4.py-3.rounded.mb-4', state.error) : null,
+          state.error ? m('.bg-red-50.dark:bg-red-950/40.border.border-red-200.dark:border-red-800.text-red-800.dark:text-red-200.px-4.py-3.rounded-lg.mb-4', state.error) : null,
           
           // Render form fields based on model columns
           modelMeta && modelMeta.columns ? modelMeta.columns.map(col => {
@@ -2616,8 +2616,8 @@ const RecordForm = {
         ]),
         
         // Sticky footer buttons
-        m('.flex.gap-4.p-4.border-t.bg-gray-50 dark:bg-slate-900.sticky.bottom-0', [
-          m('button.bg-blue-600.text-white.px-6.py-2.rounded.hover:bg-blue-700.disabled:opacity-50', {
+        m('.flex.gap-4.p-4.border-t.border-gray-200.dark:border-slate-700.bg-gray-50.dark:bg-slate-900.sticky.bottom-0', [
+          m('button.bg-blue-600.dark:bg-blue-500.text-white.px-6.py-2.rounded-lg.hover:bg-blue-700.dark:hover:bg-blue-600.disabled:opacity-50', {
             type: 'submit',
             disabled: state.loading,
           }, state.loading ? 'Saving...' : 'Save'),

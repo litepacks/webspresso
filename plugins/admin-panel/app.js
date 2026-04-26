@@ -82,20 +82,20 @@ const UserSessionsPage = {
       vnode.state.message ? m('p.text-sm.text-gray-600.dark:text-slate-400.mb-2', vnode.state.message) : null,
       !vnode.state.loading && rows.length === 0 && !vnode.state.error
         ? m('p.text-gray-600.dark:text-slate-400', 'No remember-me sessions (or tracking not enabled).')
-        : m('.overflow-x-auto.rounded-lg.border.border-gray-200.dark:border-slate-700', [
+        : m('.overflow-x-auto.rounded-lg.border.border-gray-200.dark:border-slate-700.bg-white.dark:bg-slate-800/50', [
             m('table.min-w-full.text-sm.text-left', [
-              m('thead.bg-gray-50.dark:bg-slate-800', m('tr', [
-                m('th.px-3.py-2', 'User'),
-                m('th.px-3.py-2', 'Token (prefix)'),
-                m('th.px-3.py-2', 'Created'),
+              m('thead.bg-gray-50.dark:bg-slate-900', m('tr', [
+                m('th.px-3.py-2.text-xs.font-medium.text-gray-500.dark:text-slate-400.uppercase.tracking-wider', 'User'),
+                m('th.px-3.py-2.text-xs.font-medium.text-gray-500.dark:text-slate-400.uppercase.tracking-wider', 'Token (prefix)'),
+                m('th.px-3.py-2.text-xs.font-medium.text-gray-500.dark:text-slate-400.uppercase.tracking-wider', 'Created'),
                 m('th.px-3.py-2', ''),
               ])),
-              m('tbody', rows.map(function (r) {
+              m('tbody.divide-y.divide-gray-100.dark:divide-slate-700', rows.map(function (r) {
                 var tok = (r.token || '').slice(0, 12) + '…';
-                return m('tr.border-t.border-gray-100.dark:border-slate-700', [
-                  m('td.px-3.py-2', (r.user_email || r.user_id || '') + ''),
-                  m('td.px-3.py-2.font-mono.text-xs', tok),
-                  m('td.px-3.py-2', r.created_at ? new Date(r.created_at).toLocaleString() : ''),
+                return m('tr.bg-white.dark:bg-slate-800/30', [
+                  m('td.px-3.py-2.text-gray-900.dark:text-slate-200', (r.user_email || r.user_id || '') + ''),
+                  m('td.px-3.py-2.font-mono.text-xs.text-gray-800.dark:text-slate-300', tok),
+                  m('td.px-3.py-2.text-gray-700.dark:text-slate-300', r.created_at ? new Date(r.created_at).toLocaleString() : ''),
                   m('td.px-3.py-2', m('button.text-red-600.dark:text-red-400.text-xs', {
                     onclick: async function () {
                       if (!confirm('Revoke this session?')) return;
