@@ -49,11 +49,15 @@ function registerUserManagement(options) {
     order: 100,
   });
 
+  // Sidebar targets ORM CRUD routes directly (avoids Mithril onmatch redirect races on /users/new).
+  const userModelListPath = '/models/' + encodeURIComponent(modelName);
+  const userModelNewPath = userModelListPath + '/new';
+
   // Register menu items
   registry.registerMenuItem({
     id: 'user-list',
     label: 'All Users',
-    path: '/users',
+    path: userModelListPath,
     icon: 'users',
     group: 'users',
     order: 1,
@@ -62,7 +66,7 @@ function registerUserManagement(options) {
   registry.registerMenuItem({
     id: 'user-create',
     label: 'Add User',
-    path: '/users/new',
+    path: userModelNewPath,
     icon: 'user-plus',
     group: 'users',
     order: 2,

@@ -125,6 +125,28 @@ const db = createDatabase({
       table.json('metadata').nullable();
     });
 
+    await db.knex.schema.createTableIfNotExists('users', (table) => {
+      table.bigIncrements('id').primary();
+      table.string('email', 255).unique();
+      table.string('password', 255);
+      table.string('name', 255).nullable();
+      table.string('role', 50).defaultTo('user');
+      table.boolean('active').defaultTo(true);
+      table.timestamp('email_verified_at').nullable();
+      table.timestamp('created_at');
+      table.timestamp('updated_at');
+    });
+
+    await db.knex('users').insert({
+      email: 'visitor@e2e.test',
+      password: 'not-used',
+      name: 'E2E Visitor',
+      role: 'user',
+      active: 1,
+      created_at: db.knex.fn.now(),
+      updated_at: db.knex.fn.now(),
+    });
+
     const { app } = createApp({
       pagesDir: path.join(__dirname, 'pages'),
       viewsDir: path.join(__dirname, 'views'),
@@ -133,6 +155,7 @@ const db = createDatabase({
         adminPanelPlugin({
           path: '/_admin',
           db,
+          userManagement: { enabled: true, model: 'User' },
         }),
         dataExchangePlugin({
           adminPath: '/_admin',
@@ -275,6 +298,32 @@ module.exports = defineModel({
 `;
 
     fs.writeFileSync(path.join(projectPath, 'models', 'TestPost.js'), testModel);
+
+    const userModelFile = `const { defineModel, zdb } = require('webspresso');
+
+module.exports = defineModel({
+  name: 'User',
+  table: 'users',
+  schema: zdb.schema({
+    id: zdb.id(),
+    email: zdb.string({ unique: true, maxLength: 255 }),
+    password: zdb.string({ maxLength: 255 }),
+    name: zdb.string({ maxLength: 255, nullable: true }),
+    role: zdb.string({ maxLength: 50, default: 'user' }),
+    active: zdb.boolean({ default: true }),
+    email_verified_at: zdb.timestamp({ nullable: true }),
+    created_at: zdb.timestamp({ auto: 'create' }),
+    updated_at: zdb.timestamp({ auto: 'update' }),
+  }),
+  admin: {
+    enabled: true,
+    label: 'Site users',
+    icon: '👤',
+  },
+  hidden: ['password'],
+});
+`;
+    fs.writeFileSync(path.join(projectPath, 'models', 'User.js'), userModelFile);
 
     // Create migrations directory
     fs.mkdirSync(path.join(projectPath, 'migrations'), { recursive: true });

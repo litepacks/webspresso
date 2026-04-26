@@ -1332,4 +1332,20 @@ test.describe('Admin Panel UI', () => {
     const columnLabel = page.locator('p:has-text("Columns")').first();
     await expect(columnLabel).toBeVisible({ timeout: 5000 });
   });
+
+  test.describe('Site user management (userManagement)', () => {
+    test('All Users navigates to User model list and shows seeded site user', async ({ page }) => {
+      await ensureLoggedIn(page);
+      await page.getByRole('link', { name: 'All Users' }).click();
+      await expect(page).toHaveURL(/\/models\/User(\?|$)/, { timeout: 15000 });
+      await expect(page.getByText('visitor@e2e.test')).toBeVisible({ timeout: 15000 });
+    });
+
+    test('Add User opens new-record form for User model', async ({ page }) => {
+      await ensureLoggedIn(page);
+      await page.getByRole('link', { name: 'Add User' }).click();
+      await expect(page).toHaveURL(/\/models\/User\/new(\?|$)/, { timeout: 15000 });
+      await expect(page.getByRole('heading', { name: 'New Record' })).toBeVisible({ timeout: 15000 });
+    });
+  });
 });
