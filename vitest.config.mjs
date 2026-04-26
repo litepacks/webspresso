@@ -24,6 +24,12 @@ export default defineConfig({
       reportsDirectory: './coverage',
       include: ['src/**/*.js', 'utils/**/*.js', 'core/**/*.js', 'plugins/**/*.js'],
       exclude: ['src/**/*.test.js', 'node_modules'],
+      thresholds: {
+        lines: 83,
+        statements: 83,
+        branches: 76,
+        functions: 77,
+      },
     },
     watch: true,
     watchExclude: ['node_modules', 'coverage'],

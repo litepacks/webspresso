@@ -181,4 +181,167 @@ describe('redirectPlugin', () => {
     const res = await request(app).get('/wiki/foo').expect(302);
     expect(res.headers.location).toBe('/tools');
   });
+
+  it('normalizes trailing slash with strip mode', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      plugins: [
+        redirectPlugin({
+          trailingSlash: 'strip',
+          rules: [{ from: '/legacy/', to: '/tools' }],
+        }),
+      ],
+    });
+
+    const res = await request(app).get('/legacy/').expect(302);
+    expect(res.headers.location).toBe('/tools');
+  });
+
+  it('normalizes trailing slash with add mode', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      plugins: [
+        redirectPlugin({
+          trailingSlash: 'add',
+          rules: [{ from: '/legacy', to: '/tools' }],
+        }),
+      ],
+    });
+
+    const res = await request(app).get('/legacy/').expect(302);
+    expect(res.headers.location).toBe('/tools');
+  });
+
+  it('matches /path and /path/ loosely when trailingSlash is false', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      plugins: [
+        redirectPlugin({
+          trailingSlash: false,
+          rules: [{ from: '/legacy', to: '/tools' }],
+        }),
+      ],
+    });
+
+    const res = await request(app).get('/legacy/').expect(302);
+    expect(res.headers.location).toBe('/tools');
+  });
+
+  it('allows protocol-relative external URL when allowExternal is true', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      plugins: [
+        redirectPlugin({
+          allowExternal: true,
+          rules: [{ from: '/go-cdn', to: '//cdn.example.com/asset' }],
+        }),
+      ],
+    });
+
+    const res = await request(app).get('/go-cdn').expect(302);
+    expect(res.headers.location).toBe('//cdn.example.com/asset');
+  });
+
+  it('falls back to 302 when plugin defaultStatus is not a redirect code', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      plugins: [
+        redirectPlugin({
+          defaultStatus: 404,
+          rules: [{ from: '/legacy', to: '/tools' }],
+        }),
+      ],
+    });
+
+    await request(app).get('/legacy').expect(302);
+  });
+
+  it('falls back to default status when rule status is not a redirect code', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      plugins: [
+        redirectPlugin({
+          defaultStatus: 301,
+          rules: [{ from: '/legacy', to: '/tools', status: 418 }],
+        }),
+      ],
+    });
+
+    await request(app).get('/legacy').expect(301);
+  });
+
+  it('uses plugin-level defaultStatus when valid', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      plugins: [
+        redirectPlugin({
+          defaultStatus: 307,
+          rules: [{ from: '/legacy', to: '/tools' }],
+        }),
+      ],
+    });
+
+    await request(app).get('/legacy').expect(307);
+  });
+
+  it('redirects only methods listed on the rule', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      plugins: [
+        redirectPlugin({
+          rules: [{ from: '/legacy', to: '/tools', methods: ['POST'] }],
+        }),
+      ],
+    });
+
+    const getRes = await request(app).get('/legacy');
+    expect(getRes.status).not.toBe(302);
+    const postRes = await request(app).post('/legacy').send({});
+    expect(postRes.status).toBe(302);
+    expect(postRes.headers.location).toBe('/tools');
+  });
+
+  it('uses GET and HEAD when defaultMethods is empty array', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      plugins: [
+        redirectPlugin({
+          defaultMethods: [],
+          rules: [{ from: '/legacy', to: '/tools' }],
+        }),
+      ],
+    });
+
+    await request(app).get('/legacy').expect(302);
+    await request(app).head('/legacy').expect(302);
+    const postRes = await request(app).post('/legacy').send({});
+    expect(postRes.status).not.toBe(302);
+  });
+
+  it('does not register middleware when all rules are invalid', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      plugins: [
+        redirectPlugin({
+          rules: [
+            { from: '/x', to: '  ' },
+            { from: 1, to: '/tools' },
+          ],
+        }),
+      ],
+    });
+
+    const res = await request(app).get('/tools').expect(200);
+    expect(res.text).toBeTruthy();
+  });
 });
