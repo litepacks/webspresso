@@ -27,6 +27,9 @@ build/
 
 # Benchmarks (local baseline for vitest bench --compare)
 benchmark-results.json
+benchmarks/current-benchmark.json
+# CI baseline comes from the benchmark-baseline artifact; generate locally with npm run bench:baseline
+benchmarks/ci-baseline.json
 
 # Coverage
 coverage/

@@ -2210,8 +2210,9 @@ npm run test:watch
 # Run tests with coverage
 npm run test:coverage
 
-# Micro-benchmarks (Vitest bench; also runs in CI on the test matrix)
+# Micro-benchmarks (Vitest bench; CI: main push uploads benchmark-baseline artifact, PRs compare against it)
 npm run bench
+# Local baseline + compare: npm run bench:ci:local
 ```
 
 ## License

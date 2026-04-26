@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: read
+  # upload-artifact; PR jobs download main’s baseline via dawidd6/action-download-artifact
+  actions: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -38,8 +40,86 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Run micro-benchmarks
-        run: npm run bench
+  benchmark-baseline:
+    name: Benchmark baseline artifact (main, Node 20)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Record benchmark baseline (Linux runner; PRs compare against this)
+        run: npx vitest bench --run --outputJson benchmarks/ci-baseline.json
+
+      - name: Upload baseline for PR benchmark job
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-baseline
+          path: benchmarks/ci-baseline.json
+          retention-days: 90
+
+  benchmark:
+    name: Benchmark vs baseline (Node 20)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download baseline from latest successful main run
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: ci.yml
+          branch: main
+          event: push
+          workflow_conclusion: success
+          name: benchmark-baseline
+          path: benchmarks
+          search_artifacts: true
+          if_no_artifact_found: ignore
+
+      - name: Run benchmarks and compare
+        env:
+          BENCH_MIN_RATIO: '0.65'
+          BENCH_FAIL_ON_REGRESSION: '0'
+        run: |
+          set -e
+          npx vitest bench --run --outputJson benchmarks/current-benchmark.json
+          if [ -f benchmarks/ci-baseline.json ]; then
+            node scripts/check-bench-regression.mjs benchmarks/ci-baseline.json benchmarks/current-benchmark.json
+          else
+            echo '## Benchmark' >> "$GITHUB_STEP_SUMMARY"
+            echo '' >> "$GITHUB_STEP_SUMMARY"
+            echo "**main** has no \`benchmark-baseline\` artifact yet (appears after the first baseline job on main), or download failed (e.g. fork PR). Comparison skipped; \`current-benchmark.json\` was uploaded as an artifact." >> "$GITHUB_STEP_SUMMARY"
+            echo ''
+            echo 'No baseline artifact — comparison skipped.'
+          fi
+
+      - name: Upload benchmark JSON (this run)
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-current-node20
+          path: benchmarks/current-benchmark.json
+          retention-days: 14
 
   coverage:
     name: Coverage (Node 20)
