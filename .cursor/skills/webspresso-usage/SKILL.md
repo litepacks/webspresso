@@ -231,6 +231,7 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `webspresso dev` / `start` | Servers |
 | `webspresso page` / `api` | Interactive scaffolding |
 | `webspresso db:*` | migrate, rollback, status, make |
+| `webspresso upgrade` | Bump **`webspresso`** in **`package.json`** (detects npm/pnpm/yarn; **`--tag latest`**, **`--dry-run`**, **`--pm`**) — skips **`file:`** / **`link:`** / **`workspace:`** installs |
 | `webspresso seed` | Seed data |
 | `webspresso doctor` | Env / layout / `.env` vs `.env.example` / `config/load-env.js` / optional `--db` check |
 | `webspresso skill` | Cursor `SKILL.md` scaffold |

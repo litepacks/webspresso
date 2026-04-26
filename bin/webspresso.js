@@ -30,6 +30,7 @@ const { registerCommand: registerFaviconGenerate } = require('./commands/favicon
 const { registerCommand: registerAuditPrune } = require('./commands/audit-prune');
 const { registerCommand: registerDoctor } = require('./commands/doctor');
 const { registerCommand: registerSkill } = require('./commands/skill');
+const { registerCommand: registerUpgrade } = require('./commands/upgrade');
 
 registerNew(program);
 registerPage(program);
@@ -48,6 +49,7 @@ registerFaviconGenerate(program);
 registerAuditPrune(program);
 registerDoctor(program);
 registerSkill(program);
+registerUpgrade(program);
 
 // Parse arguments
 program.parse();
