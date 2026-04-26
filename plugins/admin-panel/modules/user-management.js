@@ -18,6 +18,18 @@ function truthyBooleanForDb(db) {
   return true;
 }
 
+/**
+ * True when the physical table has the column (handles schema vs migration drift).
+ */
+async function physicalColumnExists(db, table, column) {
+  if (!db?.knex?.schema || !table || !column) return false;
+  try {
+    return await db.knex.schema.hasColumn(table, column);
+  } catch {
+    return false;
+  }
+}
+
 /** `userManagement: { model: 'Member' }` is the public API; `modelName` is also accepted. */
 function resolveUserManagementModelName(config = {}) {
   if (config.modelName != null && String(config.modelName).trim() !== '') {
@@ -117,10 +129,12 @@ function registerUserManagement(options) {
         const repo = db.getRepository(modelName);
         const model = repo.model;
         const cols = model.columns;
+        const table = model.table;
         const total = await repo.count();
 
         const activeCol = fieldMap.active;
-        const hasActiveCol = cols && cols.has(activeCol);
+        const hasActiveCol =
+          cols?.has(activeCol) && (await physicalColumnExists(db, table, activeCol));
         let active = null;
         let inactive = null;
         if (hasActiveCol) {
@@ -131,13 +145,17 @@ function registerUserManagement(options) {
 
         const roleCol = fieldMap.role;
         let admins = null;
-        if (cols && cols.has(roleCol)) {
+        const hasRoleCol =
+          cols?.has(roleCol) && (await physicalColumnExists(db, table, roleCol));
+        if (hasRoleCol) {
           admins = await repo.count({ [roleCol]: 'admin' });
         }
 
         let recentUsers = 0;
         const createdCol = fieldMap.createdAt;
-        if (cols && cols.has(createdCol)) {
+        const hasCreatedCol =
+          cols?.has(createdCol) && (await physicalColumnExists(db, table, createdCol));
+        if (hasCreatedCol) {
           const weekAgo = new Date();
           weekAgo.setDate(weekAgo.getDate() - 7);
           recentUsers = await repo.query()
@@ -306,6 +324,8 @@ function createUserManagementApiHandlers(options) {
   async function listUsers(req, res) {
     try {
       const repo = db.getRepository(modelName);
+      const model = repo.model;
+      const table = model.table;
       const page = parseInt(req.query.page) || 1;
       const perPage = parseInt(req.query.perPage) || 20;
       const search = req.query.search;
@@ -314,21 +334,40 @@ function createUserManagementApiHandlers(options) {
 
       let query = repo.query();
 
-      // Search
+      // Search (only columns that exist on the physical table)
       if (search) {
-        query = query.where(function() {
-          this.where(fieldMap.email, 'like', `%${search}%`)
-              .orWhere(fieldMap.name, 'like', `%${search}%`);
-        });
+        const hasEmail = await physicalColumnExists(db, table, fieldMap.email);
+        const hasName = await physicalColumnExists(db, table, fieldMap.name);
+        if (hasEmail || hasName) {
+          query = query.where(function () {
+            if (hasEmail && hasName) {
+              this.where(fieldMap.email, 'like', `%${search}%`).orWhere(
+                fieldMap.name,
+                'like',
+                `%${search}%`
+              );
+            } else if (hasEmail) {
+              this.where(fieldMap.email, 'like', `%${search}%`);
+            } else {
+              this.where(fieldMap.name, 'like', `%${search}%`);
+            }
+          });
+        }
       }
 
-      // Role filter
-      if (role) {
+      if (
+        role &&
+        model.columns?.has(fieldMap.role) &&
+        (await physicalColumnExists(db, table, fieldMap.role))
+      ) {
         query = query.where(fieldMap.role, role);
       }
 
-      // Active filter
-      if (active !== undefined) {
+      if (
+        active !== undefined &&
+        model.columns?.has(fieldMap.active) &&
+        (await physicalColumnExists(db, table, fieldMap.active))
+      ) {
         query = query.where(fieldMap.active, active === 'true');
       }
 
