@@ -138,3 +138,93 @@ describe('Admin User Statistics widget', () => {
     expect(res.body.data.recentUsers).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe('User Statistics widget — schema without active/role', () => {
+  let app;
+  let db;
+
+  beforeEach(async () => {
+    clearRegistry();
+
+    db = createDatabase({
+      client: 'better-sqlite3',
+      connection: ':memory:',
+      models: './tests/fixtures/models-empty',
+    });
+
+    const MinimalUser = defineModel({
+      name: 'MinimalUser',
+      table: 'minimal_users',
+      schema: zdb.schema({
+        id: zdb.id(),
+        email: zdb.string({ unique: true, maxLength: 255 }),
+      }),
+      admin: { enabled: true, label: 'Users' },
+    });
+    db.registerModel(MinimalUser);
+
+    await db.knex.schema.createTable('minimal_users', (table) => {
+      table.bigIncrements('id').primary();
+      table.string('email', 255).unique();
+    });
+
+    await db.knex.schema.createTable('admin_users', (table) => {
+      table.bigIncrements('id');
+      table.string('email').unique();
+      table.string('password');
+      table.string('name');
+      table.string('role').defaultTo('admin');
+      table.boolean('active').defaultTo(true);
+      table.timestamp('created_at');
+      table.timestamp('updated_at');
+    });
+
+    await db.knex('minimal_users').insert({ email: 'only@cols.test' });
+
+    const result = createApp({
+      pagesDir: './tests/fixtures/pages',
+      viewsDir: './tests/fixtures/views',
+      publicDir: './public',
+      db,
+      plugins: [
+        adminPanelPlugin({
+          path: '/_admin',
+          db,
+          userManagement: { enabled: true, model: 'MinimalUser' },
+        }),
+      ],
+    });
+
+    app = result.app;
+  });
+
+  afterEach(async () => {
+    if (db) await db.destroy();
+    clearRegistry();
+  });
+
+  it('does not error when active/role columns are missing', async () => {
+    await request(app).post('/_admin/api/auth/setup').send({
+      email: 'a@x.com',
+      password: 'password123',
+      name: 'A',
+    });
+    const loginRes = await request(app).post('/_admin/api/auth/login').send({
+      email: 'a@x.com',
+      password: 'password123',
+    });
+    const cookie = loginRes.headers['set-cookie'];
+
+    const res = await request(app)
+      .get('/_admin/api/extensions/widgets/user-stats/data')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    expect(res.body.data.error).toBeUndefined();
+    expect(res.body.data.total).toBe(1);
+    expect(res.body.data.active).toBeNull();
+    expect(res.body.data.inactive).toBeNull();
+    expect(res.body.data.admins).toBeNull();
+    expect(res.body.data.recentUsers).toBe(0);
+  });
+});

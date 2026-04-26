@@ -18,6 +18,17 @@ function truthyBooleanForDb(db) {
   return true;
 }
 
+/** `userManagement: { model: 'Member' }` is the public API; `modelName` is also accepted. */
+function resolveUserManagementModelName(config = {}) {
+  if (config.modelName != null && String(config.modelName).trim() !== '') {
+    return String(config.modelName).trim();
+  }
+  if (config.model != null && String(config.model).trim() !== '') {
+    return String(config.model).trim();
+  }
+  return 'User';
+}
+
 /**
  * Register user management in admin panel
  * @param {Object} options - Options
@@ -30,11 +41,12 @@ function registerUserManagement(options) {
   const { registry, db, auth, config = {} } = options;
   
   const {
-    modelName = 'User',
     fields = {},
     roles = ['user', 'admin'],
     passwordMinLength = 8,
   } = config;
+
+  const modelName = resolveUserManagementModelName(config);
 
   const fieldMap = {
     email: 'email',
@@ -104,14 +116,28 @@ function registerUserManagement(options) {
       try {
         const repo = db.getRepository(modelName);
         const model = repo.model;
+        const cols = model.columns;
         const total = await repo.count();
-        const activeEq = truthyBooleanForDb(db);
-        const active = await repo.query().where(fieldMap.active, activeEq).count();
-        const admins = await repo.count({ [fieldMap.role]: 'admin' });
+
+        const activeCol = fieldMap.active;
+        const hasActiveCol = cols && cols.has(activeCol);
+        let active = null;
+        let inactive = null;
+        if (hasActiveCol) {
+          const activeEq = truthyBooleanForDb(db);
+          active = await repo.query().where(activeCol, activeEq).count();
+          inactive = Math.max(0, total - active);
+        }
+
+        const roleCol = fieldMap.role;
+        let admins = null;
+        if (cols && cols.has(roleCol)) {
+          admins = await repo.count({ [roleCol]: 'admin' });
+        }
 
         let recentUsers = 0;
         const createdCol = fieldMap.createdAt;
-        if (model.columns && model.columns.has(createdCol)) {
+        if (cols && cols.has(createdCol)) {
           const weekAgo = new Date();
           weekAgo.setDate(weekAgo.getDate() - 7);
           recentUsers = await repo.query()
@@ -122,12 +148,19 @@ function registerUserManagement(options) {
         return {
           total,
           active,
-          inactive: Math.max(0, total - active),
+          inactive,
           admins,
           recentUsers,
         };
       } catch (e) {
-        return { total: 0, active: 0, inactive: 0, admins: 0, recentUsers: 0, error: e.message };
+        return {
+          total: 0,
+          active: null,
+          inactive: null,
+          admins: null,
+          recentUsers: 0,
+          error: e.message,
+        };
       }
     },
   });
@@ -255,10 +288,8 @@ function registerUserManagement(options) {
  */
 function createUserManagementApiHandlers(options) {
   const { db, config, auth } = options;
-  const {
-    modelName = 'User',
-    fields = {},
-  } = config;
+  const { fields = {} } = config;
+  const modelName = resolveUserManagementModelName(config);
 
   const fieldMap = {
     email: 'email',
