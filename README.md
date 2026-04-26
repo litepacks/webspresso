@@ -682,6 +682,22 @@ Options:
 - `path` - Custom dashboard path (default: `/_webspresso`)
 - `enabled` - Force enable/disable (default: auto based on NODE_ENV)
 
+**Redirect plugin:**
+- Runs in `register()` **before** file-based routes, so configured paths override SSR pages.
+- Rules: `from` (string or `RegExp`), `to` (path or URL), optional `status` (301/302/303/307/308), optional `methods` (`'*'` or a list; default plugin methods are `GET` and `HEAD` only).
+- `preserveQuery` (default `true`) appends the request query when `to` has no `?`. External `to` values require `allowExternal: true`.
+
+```javascript
+const { redirectPlugin } = require('webspresso/plugins');
+
+redirectPlugin({
+  rules: [
+    { from: '/old-blog', to: '/blog', status: 301 },
+    { from: /^\/wiki\/(.*)$/, to: '/docs' },
+  ],
+});
+```
+
 **Sitemap Plugin:**
 - Generates `/sitemap.xml` from routes automatically
 - **Dynamic Database Content**: Generate URLs from database records

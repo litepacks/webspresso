@@ -53,6 +53,7 @@ const {
   uploadPlugin,
   createLocalFileProvider,
   dataExchangePlugin,
+  redirectPlugin,
 } = require('./plugins');
 
 module.exports = {
@@ -111,4 +112,5 @@ module.exports = {
   uploadPlugin,
   createLocalFileProvider,
   dataExchangePlugin,
+  redirectPlugin,
 };

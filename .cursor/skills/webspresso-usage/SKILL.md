@@ -5,7 +5,7 @@ description: >-
   createApp options including optional clientRuntime (Alpine.js, swup v4, no HTMX),
   session auth (createAuth, quickAuth, webspresso/core/auth), Nunjucks/fsy helpers,
   i18n, lifecycle hooks, Zod API validation, ORM (zdb, defineModel, repository,
-  query builder,   migrations), plugins (admin, data exchange / spreadsheet import-export, analytics, sitemap, SEO, audit,
+  query builder, migrations), plugins (admin, data exchange / spreadsheet import-export, redirect, analytics, sitemap, SEO, audit,
   recaptcha, rest resources, file upload), CLI (`new .`, `--yes`, `-i`), env vars, and testing. Use when working in this
   repo or any Webspresso app—adding routes, APIs, models, plugins, auth, client-side
   sprinkles or page transitions, or debugging routing, ctx.db, session, or templates.
@@ -205,6 +205,7 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `analyticsPlugin` | GA / GTM / Yandex / Bing / Facebook — `fsy` helpers |
 | `adminPanelPlugin` | SPA admin CRUD — needs **`db`**; optional **`uploadUrl`** (or infer from **`uploadPlugin`**); optional **`userManagement: { enabled, model, fields }`** + **`auth`** (same **`AuthManager`** as **`createApp({ auth })`**) for site-user CRUD + remember-me session UI — see **Session authentication** above |
 | `dataExchangePlugin` | Admin-only **Excel export** + **CSV/XLSX import** under `${adminPath}/api/data-exchange/*`; register **after** `adminPanelPlugin` with same `db` / `adminPath`; optional `maxRows`, `maxFileBytes`; adds UI buttons + bulk `export-xlsx` |
+| `redirectPlugin` | Configurable **301–308** redirects in `register()` — runs **before** file-based SSR routes; `rules` (`from` path or `RegExp`, `to`, `status`, `methods`), `preserveQuery`, `allowExternal`, `trailingSlash`, `defaultMethods`; docs **[`doc/index.html#plugins-redirect`](../../../doc/index.html#plugins-redirect)**, README **Redirect plugin** |
 | `uploadPlugin` | `POST` multipart (`multer`), `createLocalFileProvider` or custom `provider`; set **`mimeAllowlist`** / **`maxBytes`** in production |
 | `siteAnalyticsPlugin` | Self-hosted page views + admin charts |
 | `auditLogPlugin` | Admin mutation audit trail |
@@ -216,6 +217,8 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 **File uploads:** `require('webspresso').uploadPlugin` / `createLocalFileProvider` — response `{ url, publicUrl, key? }`; admin reads **`settings.uploadUrl`** when `uploadPlugin` is registered before `adminPanelPlugin` (or pass **`adminPanelPlugin({ uploadUrl })`**). Docs: README **File upload plugin**, **`doc/index.html#plugins`**.
 
 **Spreadsheet exchange:** `dataExchangePlugin({ db, adminPath })` — import `multipart` field **`file`**, export via GET/POST with same **`ids` / `selectAll` / `filters`** as built-in admin export. README **Data exchange plugin**, **`doc/index.html#plugins-data-exchange`**.
+
+**Redirects:** `redirectPlugin({ rules: [...] })` from **`webspresso/plugins`** — register near the start of **`plugins`** so legacy paths resolve before **`pages/`** files. README **Redirect plugin**, **`doc/index.html#plugins-redirect`**.
 
 **Custom plugin:** `name`, `version`, `register(ctx)`, `onRoutesReady(ctx)` — use `ctx.app`, `ctx.db`, `ctx.addHelper`, `ctx.addRoute`, `ctx.usePlugin('other')`. Plugin failures **warn**; app keeps running.
 

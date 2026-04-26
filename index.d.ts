@@ -528,6 +528,30 @@ export function swaggerPlugin(options?: Record<string, unknown>): WebspressoPlug
 
 export function healthCheckPlugin(options?: Record<string, unknown>): WebspressoPlugin;
 
+export interface RedirectRule {
+  from: string | RegExp;
+  to: string;
+  status?: number;
+  /** Use `'*'` to match any HTTP method; default follows `defaultMethods` on the plugin. */
+  methods?: string[] | '*';
+}
+
+export interface RedirectPluginOptions {
+  rules?: RedirectRule[];
+  /** Default when a rule omits `status`. Must be 301, 302, 303, 307, or 308. Default 302. */
+  defaultStatus?: number;
+  /** Append request query string to `to` when `to` has no `?`. Default true. */
+  preserveQuery?: boolean;
+  /** Allow `to` starting with http(s): or //. Default false. */
+  allowExternal?: boolean;
+  /** Normalize path before matching: strip/add trailing slash. Default false (still allows /old vs /old/ match for string rules). */
+  trailingSlash?: 'strip' | 'add' | false;
+  /** Methods matched when a rule has no `methods`. Default GET and HEAD. */
+  defaultMethods?: string[];
+}
+
+export function redirectPlugin(options?: RedirectPluginOptions): WebspressoPlugin;
+
 export interface RestResourcePluginOptions {
   path?: string;
   middleware?: RequestHandler[];
