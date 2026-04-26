@@ -92,8 +92,10 @@ project/
 - **Route config:** `middleware: ['auth']` (must be logged in) or `['guest']` (logged-out only). For JSON APIs mounted in **`setupRoutes`**, use **`ctx.authMiddleware.requireAuth({ api: true })`** for 401 JSON instead of redirect.
 - **Login page pitfall:** a **`pages/login.njk`** can register **before** `setupRoutes` and bypass **`requireGuest`**. Prefer login GET/POST in **`setupRoutes`** with templates under **`views/`** only, or omit **`pages/login.njk`** — see [`tests/e2e/auth.spec.js`](../../../tests/e2e/auth.spec.js).
 - **Admin panel** uses a **separate** session (`req.session.adminUser`, `/_admin/api/auth/*`); it does **not** replace **`createApp({ auth })`** for site users.
+- **Site users in the admin UI (`userManagement`):** Opt-in on **`adminPanelPlugin`**. Set **`userManagement: { enabled: true, model: 'User', fields?: { ... } }`** so the SPA shows **Users** (routes like **`/_admin/users`**, **`/_admin/users/new`**, **`/_admin/users/:id/edit`** — same Mithril shell as the rest of the panel). The **`model`** must be the ORM model your site auth uses (e.g. **`quickAuth({ userModel: 'User', ... })`** / **`createAuth`** adapters reading the same table). Pass **`auth: authManager`** with the **same** **`AuthManager`** instance as **`createApp({ auth: authManager })`** when you want **Active Sessions** / revoke APIs (**`rememberTokens`** / **`remember_me`**); without **`auth`**, list/create/update/delete users still work via **`db.getRepository(model)`**, but session endpoints return empty or “not enabled”.
+- **Wiring:** `plugins: [ adminPanelPlugin({ db, auth: authManager, userManagement: { enabled: true, model: 'User' } }) ]` alongside `createApp({ ..., auth: authManager })`. Admin staff log in at **`/_admin`**; end users use your normal site login — two different cookies/sessions.
 
-Longer narrative: **[`doc/index.html#authentication`](../../../doc/index.html#authentication)** · README **Authentication (session)**.
+Longer narrative: **[`doc/index.html#authentication`](../../../doc/index.html#authentication)** · **[`#admin-user-management`](../../../doc/index.html#admin-user-management)** · README **Authentication (session)** and **Admin Panel Plugin**.
 
 ---
 
@@ -201,7 +203,7 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `dashboardPlugin` | Dev route `/_webspresso` — route list |
 | `sitemapPlugin` | `/sitemap.xml`, robots; optional DB-driven URLs |
 | `analyticsPlugin` | GA / GTM / Yandex / Bing / Facebook — `fsy` helpers |
-| `adminPanelPlugin` | SPA admin CRUD — needs `db`; optional `uploadUrl` or infer from `uploadPlugin` order |
+| `adminPanelPlugin` | SPA admin CRUD — needs **`db`**; optional **`uploadUrl`** (or infer from **`uploadPlugin`**); optional **`userManagement: { enabled, model, fields }`** + **`auth`** (same **`AuthManager`** as **`createApp({ auth })`**) for site-user CRUD + remember-me session UI — see **Session authentication** above |
 | `uploadPlugin` | `POST` multipart (`multer`), `createLocalFileProvider` or custom `provider`; set **`mimeAllowlist`** / **`maxBytes`** in production |
 | `siteAnalyticsPlugin` | Self-hosted page views + admin charts |
 | `auditLogPlugin` | Admin mutation audit trail |

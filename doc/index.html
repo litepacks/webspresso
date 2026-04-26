@@ -428,7 +428,28 @@ const { app, authMiddleware } = createApp({
       <p class="text-slate-600 dark:text-slate-400 text-sm mb-3">If you pass a <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">rememberTokens</code> adapter, the manager stores a <strong class="text-slate-800 dark:text-slate-200">hashed</strong> token in the database and a signed cookie with the raw token. Call <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createRememberTokensTable(knex)</code> or mirror its columns in a migration. <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">quickAuth</code> can wire the default Knex table when <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">rememberMe: true</code>.</p>
 
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Admin panel auth (separate)</h3>
-      <p class="text-slate-600 dark:text-slate-400 text-sm mb-0 leading-relaxed">The <strong class="text-slate-800 dark:text-slate-200">admin panel</strong> plugin uses its own <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">express-session</code> stack and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.session.adminUser</code> with routes under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/api/auth/*</code>. It does not replace <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp({ auth })</code> for your public site users — use both if you need CMS staff and end-user sessions.</p>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-3 leading-relaxed">The <strong class="text-slate-800 dark:text-slate-200">admin panel</strong> plugin uses its own <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">express-session</code> stack and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.session.adminUser</code> with routes under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/api/auth/*</code>. It does not replace <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp({ auth })</code> for your public site users — use both if you need CMS staff and end-user sessions.</p>
+
+      <h3 id="admin-user-management" class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Site user management inside the admin plugin</h3>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-3 leading-relaxed">To manage <strong class="text-slate-800 dark:text-slate-200">end-user</strong> accounts (the same rows your site login uses) from the admin SPA, enable <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">userManagement</code> on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>. The <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">model</code> option must match your ORM user model (e.g. <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">User</code> with <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">quickAuth({ userModel: 'User', ... })</code>). The UI lives under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/users</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/users/new</code>, etc., and talks to <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/api/users*</code>.</p>
+      <ul class="list-disc pl-5 text-slate-600 dark:text-slate-400 text-sm mb-3 space-y-2">
+        <li><strong class="text-slate-800 dark:text-slate-200"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auth</code> on the plugin</strong> should be the <strong class="text-slate-800 dark:text-slate-200">same</strong> <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">AuthManager</code> you pass to <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp({ auth })</code> if you want <strong class="text-slate-800 dark:text-slate-200">Active Sessions</strong> and revoke-token APIs (requires <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">rememberTokens</code> / remember-me). Omit <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auth</code> if you only need CRUD on users via the repository — session admin endpoints then stay empty or return a “not enabled” message.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Admin users</strong> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">admin_users</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso admin:setup</code>) are still separate from site users; staff sign in at <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin</code>, visitors use your normal site routes.</li>
+      </ul>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-0"><code class="language-javascript">const authManager = quickAuth({ db, userModel: 'User', identifierField: 'email', passwordField: 'password' });
+
+const { app } = createApp({
+  pagesDir: './pages',
+  db,
+  auth: authManager,
+  plugins: [
+    adminPanelPlugin({
+      db,
+      auth: authManager,
+      userManagement: { enabled: true, model: 'User' },
+    }),
+  ],
+});</code></pre>
     </section>
 
     <section id="routing" class="doc-section mb-14">

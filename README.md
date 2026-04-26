@@ -764,9 +764,11 @@ const { app } = createApp({
 Options:
 - `db` (required) - Database instance
 - `path` - Admin panel path (default: `/_admin`)
-- `auth` - Auth manager for user management
-- `userManagement` - User management config (`enabled`, `model`, `fields`)
+- `auth` - Same **`AuthManager`** instance as **`createApp({ auth })`** when you use **`userManagement`** — enables **Active Sessions** / revoke APIs if **`rememberTokens`** (remember-me) is configured; optional for user CRUD-only
+- `userManagement` - Site-user admin UI (`enabled`, `model` matching ORM user table, optional `fields` map). SPA routes: `/_admin/users`, `/_admin/users/new`, …; APIs: `/_admin/api/users*`. Admin staff still use **`admin_users`** / `/_admin` login; this is separate from **`req.user`** on the public site
 - `configure` - Callback `(registry) => void` for manual setup
+
+See **`doc/index.html#admin-user-management`** and **Session authentication** in **`.cursor/skills/webspresso-usage/SKILL.md`** for the split between **`adminUser`** and **`createApp({ auth })`**.
 
 **Custom Admin Pages (registerModule):**
 
