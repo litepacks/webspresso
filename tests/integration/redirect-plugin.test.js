@@ -71,6 +71,25 @@ describe('redirectPlugin', () => {
     expect(res.headers.location).toBe('/tools?tab=1');
   });
 
+  it('does not preserve query when preserveQuery is false', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      plugins: [
+        redirectPlugin({
+          rules: [{ from: '/legacy', to: '/tools' }],
+          preserveQuery: false,
+        }),
+      ],
+    });
+
+    const res = await request(app)
+      .get('/legacy?x=1')
+      .expect(302);
+
+    expect(res.headers.location).toBe('/tools');
+  });
+
   it('skips external targets unless allowExternal', async () => {
     const { app } = createApp({
       pagesDir: FIXTURES_PAGES,
