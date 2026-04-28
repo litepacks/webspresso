@@ -28,11 +28,11 @@ function defaultDescription(skillName) {
   return `Guides the agent through tasks for ${label}. Use when the user works on ${label} or asks about related workflows.`;
 }
 
-/** Bundled presets: CLI flag → template path under bin/ */
+/** Bundled presets: CLI flag → template directory (all *.md copied) */
 const PRESETS = {
   webspresso: {
     skillName: 'webspresso-usage',
-    templatePath: path.join(__dirname, '../../templates/skills/webspresso-usage/SKILL.md'),
+    templateDir: path.join(__dirname, '../../templates/skills/webspresso-usage'),
   },
 };
 
@@ -76,7 +76,10 @@ function registerCommand(program) {
     .option('-g, --global', 'Write to ~/.cursor/skills/ instead of ./.cursor/skills/')
     .option('-d, --description <text>', 'Skill description (for YAML frontmatter)')
     .option('-f, --force', 'Overwrite existing SKILL.md')
-    .option('-p, --preset <name>', 'Install bundled skill: webspresso → full Webspresso agent reference (SKILL.md)')
+    .option(
+      '-p, --preset <name>',
+      'Install bundled skill: webspresso → agent reference (SKILL.md + REFERENCE-*.md in .cursor/skills/webspresso-usage/)',
+    )
     .action(async (nameArg, options) => {
       const presetKey = options.preset ? String(options.preset).trim().toLowerCase() : '';
 
@@ -86,8 +89,16 @@ function registerCommand(program) {
           console.error(`❌ Unknown preset "${presetKey}". Available: ${Object.keys(PRESETS).join(', ')}`);
           process.exit(1);
         }
-        if (!fs.existsSync(preset.templatePath)) {
-          console.error(`❌ Preset template missing: ${preset.templatePath}`);
+        const templateDir = preset.templateDir;
+        if (!templateDir || !fs.existsSync(templateDir)) {
+          console.error(`❌ Preset template directory missing: ${templateDir}`);
+          process.exit(1);
+        }
+        const mdFiles = fs
+          .readdirSync(templateDir)
+          .filter((f) => f.endsWith('.md'));
+        if (mdFiles.length === 0) {
+          console.error(`❌ No .md files in preset: ${templateDir}`);
           process.exit(1);
         }
         const root = options.global ? os.homedir() : process.cwd();
@@ -101,10 +112,13 @@ function registerCommand(program) {
         }
 
         fs.mkdirSync(dir, { recursive: true });
-        fs.copyFileSync(preset.templatePath, skillFile);
+        for (const file of mdFiles) {
+          fs.copyFileSync(path.join(templateDir, file), path.join(dir, file));
+        }
 
-        console.log(`\n✅ Installed bundled skill "${presetKey}" →\n   ${skillFile}\n`);
-        console.log('   Edit SKILL.md if needed, then restart Cursor or reload the window.\n');
+        console.log(`\n✅ Installed bundled skill "${presetKey}" →\n   ${dir}/\n`);
+        console.log(`   Files: ${mdFiles.join(', ')}\n`);
+        console.log('   Edit if needed, then restart Cursor or reload the window.\n');
         return;
       }
 

@@ -39,6 +39,9 @@ const {
 // ORM exports (lazy loaded)
 const orm = require('./core/orm');
 
+/** Application kernel (event bus, plugin shell, view resolver, flows). Use `kernel.createApp`; not the framework SSR `createApp`. */
+const kernel = require('./core/kernel');
+
 // Built-in plugins
 const {
   schemaExplorerPlugin,
@@ -95,7 +98,10 @@ module.exports = {
   
   // ORM
   ...orm,
-  
+
+  /** Event bus / plugin shell / view resolver / flows (`kernel.createApp` is distinct from SSR `createApp`) */
+  kernel,
+
   // Direct zdb export (for convenience)
   zdb: orm.zdb,
 

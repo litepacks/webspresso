@@ -23,7 +23,7 @@ export default defineConfig({
       reporter: ['text', 'json', 'json-summary', 'html', 'lcov'],
       reportsDirectory: './coverage',
       include: ['src/**/*.js', 'utils/**/*.js', 'core/**/*.js', 'plugins/**/*.js'],
-      exclude: ['src/**/*.test.js', 'node_modules'],
+      exclude: ['src/**/*.test.js', 'node_modules', '**/run-demo.js'],
       thresholds: {
         lines: 83,
         statements: 83,

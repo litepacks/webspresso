@@ -19,6 +19,7 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 - **Session authentication** (optional): `createAuth` / `quickAuth` in **`webspresso/core/auth`** — pass the manager to **`createApp({ auth })`** for `express-session`, `req.user` / `req.auth`, remember-me tokens, and policy-style authorization. Full walkthrough: **[`doc/index.html#authentication`](doc/index.html#authentication)**.
 - **Optional client runtime** (Alpine.js + [swup](https://swup.js.org/)): **`createApp({ clientRuntime: { alpine, swup } })`** serves scripts under **`/__webspresso/client-runtime/`** and exposes **`clientRuntime`** in Nunjucks; layouts can include **`views/partials/webspresso-client-runtime.njk`**. Env overrides: **`WEBSPRESSO_ALPINE`**, **`WEBSPRESSO_SWUP`**. Demo: **`examples/alpine-swup-demo/`**. Details: **[`doc/index.html#client-runtime`](doc/index.html#client-runtime)**.
 - **TypeScript**: Published **`index.d.ts`** (via `package.json` `"types"`) for `createApp`, ORM, plugins, and router helpers — use from TS/JS with IDE autocomplete; runtime stays CommonJS
+- **Application kernel (optional)**: In-process **`kernel`** API (`require('webspresso').kernel`) — event bus (`dispatch` / `publish`), **`kernel.createApp()`** (namespaced differently from SSR **`createApp`**), **`definePlugin`** / **`defineFlow`**, minimal **`{{ }}` view resolver**, and simulated **`BaseRepository`** with `orm.<resource>.*` events. Ships as **`core/kernel/`** on npm. Demo: **`node core/kernel/run-demo.js`**. Docs: **[`doc/index.html#application-kernel`](doc/index.html#application-kernel)**.
 
 ## Installation
 
@@ -39,6 +40,18 @@ import { createApp, defineModel, zdb } from 'webspresso';
 Install **`@types/express`** in your app if you want full **`Express.Application`** / **`Request`** / **`Response`** inference when you touch `createApp().app` or write middleware. **`knex`** and **`zod`** bring their own types.
 
 Framework development (this repo): run **`npm run check:types`** to typecheck the declarations against a small smoke file (`tests/ts-smoke/`).
+
+## Application kernel (`kernel`)
+
+Do **not** confuse **`kernel.createApp()`** with the package root **`createApp`** used for SSR—it returns a different object (event bus, optional flows, and a minimal view resolver). It does **not** modify Knex ORM behavior or Express routing.
+
+```javascript
+const { kernel } = require('webspresso');
+const app = kernel.createApp();
+app.events.on('orm.post.afterCreate', async (ctx) => { /* ... */ });
+```
+
+See **[`doc/index.html#application-kernel`](doc/index.html#application-kernel)** · source modules: [`core/kernel/`](core/kernel/). Cursor skill: **`REFERENCE-kernel.md`** (installed via `webspresso skill --preset webspresso`).
 
 ## Quick Start
 
@@ -234,7 +247,7 @@ webspresso doctor --strict
 
 Scaffold a **Cursor Agent Skill**: creates `.cursor/skills/<name>/SKILL.md` with valid YAML frontmatter (`name`, `description`) and a short markdown template for AI tooling. Use `--global` to write under `~/.cursor/skills/` instead of the current project.
 
-**Bundled preset:** `--preset webspresso` copies the full **Webspresso usage** reference skill (framework routing, ORM, plugins, CLI, pitfalls) into `.cursor/skills/webspresso-usage/SKILL.md` — no prompts.
+**Bundled preset:** `--preset webspresso` copies **`SKILL.md`** (short index), **`REFERENCE-framework.md`** (SSR `createApp`, routes, ORM, auth, plugins, CLI), and **`REFERENCE-kernel.md`** (`kernel` event bus / flows) into **`.cursor/skills/webspresso-usage/`** — no prompts.
 
 ```bash
 webspresso skill my-workflow
@@ -784,7 +797,7 @@ Options:
 - `userManagement` - Site-user admin UI (`enabled`, `model` matching ORM user table, optional `fields` map). SPA routes: `/_admin/users`, `/_admin/users/new`, …; APIs: `/_admin/api/users*`. Admin staff still use **`admin_users`** / `/_admin` login; this is separate from **`req.user`** on the public site
 - `configure` - Callback `(registry) => void` for manual setup
 
-See **`doc/index.html#admin-user-management`** and **Session authentication** in **`.cursor/skills/webspresso-usage/SKILL.md`** for the split between **`adminUser`** and **`createApp({ auth })`**.
+See **`doc/index.html#admin-user-management`** and **Session authentication** in **`.cursor/skills/webspresso-usage/REFERENCE-framework.md`** for the split between **`adminUser`** and **`createApp({ auth })`**.
 
 **Custom Admin Pages (registerModule):**
 

@@ -45,6 +45,7 @@
         <a href="#environment" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Env</a>
         <a href="#cli" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">CLI</a>
         <a href="#create-app" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">createApp</a>
+        <a href="#application-kernel" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Kernel</a>
         <a href="#client-runtime" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Client runtime</a>
         <a href="#authentication" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Auth</a>
         <a href="#routing" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Routing</a>
@@ -136,6 +137,7 @@
         <li><strong class="text-slate-800 dark:text-slate-200">Session authentication</strong> — optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createAuth</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">quickAuth</code> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso/core/auth</code>), <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp({ auth })</code>, remember-me tokens, policies/gates, route middleware <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auth</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">guest</code>. Details: <a href="#authentication" class="text-cyan-800 dark:text-cyan-400 hover:underline font-medium">Authentication</a>.</li>
         <li><strong class="text-slate-800 dark:text-slate-200">Built-in plugins</strong> — dev route dashboard, XML sitemap + robots, tag managers &amp; analytics pixels, self-hosted page analytics, admin CRUD (Mithril), optional admin page for ORM cache metrics (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">ormCacheAdminPlugin</code>), optional <strong class="text-slate-800 dark:text-slate-200">spreadsheet import/export</strong> for admin (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dataExchangePlugin</code> — Excel export, CSV/XLSX import; see <a href="#plugins-data-exchange" class="text-cyan-800 dark:text-cyan-400 hover:underline font-medium">Data exchange</a>), configurable HTTP <strong class="text-slate-800 dark:text-slate-200">redirects</strong> before file routes (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">redirectPlugin</code>; see <a href="#plugins-redirect" class="text-cyan-800 dark:text-cyan-400 hover:underline font-medium">Redirect</a>), SEO checker (dev), schema explorer (ORM metadata), Swagger UI + OpenAPI for HTTP APIs (dev by default), HTTP <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/health</code> probe, multipart <strong class="text-slate-800 dark:text-slate-200">file upload</strong> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">uploadPlugin</code> + <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createLocalFileProvider</code>), optional <strong class="text-slate-800 dark:text-slate-200">REST CRUD</strong> routes from ORM models (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">restResourcePlugin</code>) with batched <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">?include=</code> relations.</li>
         <li><strong class="text-slate-800 dark:text-slate-200">TypeScript</strong> — npm package includes <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.d.ts</code> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">package.json</code> <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">types</code>); import <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code>, ORM, plugins from TypeScript. Add <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">@types/express</code> in your app for richer Express types.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Application kernel (optional)</strong> — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">require('webspresso').kernel</code>: in-process event bus (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dispatch</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">publish</code>), plugin shell, flow registry, minimal view resolver, simulated <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">BaseRepository</code>; <strong class="text-slate-800 dark:text-slate-200">not</strong> the SSR <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code>. See <a href="#application-kernel" class="text-cyan-800 dark:text-cyan-400 hover:underline font-medium">Application kernel</a>.</li>
       </ul>
     </section>
 
@@ -267,7 +269,7 @@ webspresso dev --no-css   # skip CSS watch if Tailwind is configured</code></pre
             <tr><td><code class="whitespace-nowrap">admin:password</code></td><td>Reset admin password (interactive or <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">-e</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">-p</code>)</td></tr>
             <tr><td><code class="whitespace-nowrap">audit:prune</code></td><td>Delete audit log rows older than <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--days</code> (optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--table</code>)</td></tr>
             <tr><td><code class="whitespace-nowrap">doctor</code></td><td>Sanity checks: Node version vs <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">package.json</code> engines, expected project files, optional DB ping — run from your app root</td></tr>
-            <tr><td><code class="whitespace-nowrap">skill [name]</code></td><td>Create an <strong class="text-slate-800 dark:text-slate-200">Agent Skill</strong> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">SKILL.md</code>) for Cursor and similar tools — interactive name/description, or use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--preset webspresso</code> to install the bundled Webspresso reference skill under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.cursor/skills/</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">skill [name]</code></td><td>Create an <strong class="text-slate-800 dark:text-slate-200">Agent Skill</strong> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">SKILL.md</code>) for Cursor — interactive name/description, or <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--preset webspresso</code> copies <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">SKILL.md</code> + <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">REFERENCE-framework.md</code> + <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">REFERENCE-kernel.md</code> into <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.cursor/skills/webspresso-usage/</code></td></tr>
             <tr><td><code class="whitespace-nowrap">favicon:generate &lt;source&gt;</code></td><td>PNG favicons, PWA manifest, Nunjucks partial</td></tr>
           </tbody>
         </table>
@@ -342,6 +344,36 @@ const { app } = createApp({
   publicDir: './public',
   clientRuntime: { alpine: true, swup: true },
 });</code></pre>
+    </section>
+
+    <section id="application-kernel" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Application kernel (<code class="text-xl">kernel</code>)</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
+        A separate <strong class="text-slate-800 dark:text-slate-200">optional</strong> in-process layer ships under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">core/kernel/</code>.
+        Import <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">kernel</code> from the package root (<strong class="text-slate-800 dark:text-slate-200">not</strong> the same symbol as SSR <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code>):
+        <strong class="text-slate-800 dark:text-slate-200"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">require('webspresso').kernel.createApp()</code></strong> exposes an event bus (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dispatch</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">publish</code>), <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">registerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">registerFlow</code>, a minimal namespaced view resolver, and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">BaseRepository</code> that emits <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">orm.&lt;resource&gt;.*</code> lifecycle events (in-memory store for demos). It does <strong class="text-slate-800 dark:text-slate-200">not</strong> replace Express routing or Knex ORM <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">ModelEvents</code>.
+      </p>
+      <div class="overflow-x-auto mb-6">
+        <table class="w-full text-sm">
+          <thead><tr><th>Export / path</th><th>Role</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">kernel.createApp()</code></td><td>Registers event bus + view engine shell; distinct from SSR <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp(options)</code> above.</td></tr>
+            <tr><td><code class="whitespace-nowrap">kernel.definePlugin</code> / <code class="whitespace-nowrap">defineFlow</code></td><td>Small plugin descriptors and trigger → condition → sequential actions.</td></tr>
+            <tr><td><code class="whitespace-nowrap">kernel.BaseRepository</code></td><td>Simulated repository with <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">beforeCreate</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">afterCreate</code> / … events.</td></tr>
+            <tr><td><code class="whitespace-nowrap">core/kernel/*.js</code></td><td>Source modules: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">events.js</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">view.js</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">app.js</code>, …</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">const { kernel } = require('webspresso');
+const app = kernel.createApp();
+// app.events.dispatch / publish / on
+// app.registerPlugin(kernel.definePlugin({ name: '…', events(app) { … }, views() { … } }));
+// app.registerFlow(kernel.defineFlow({ trigger: 'orm.post.afterCreate', when: (ctx) =&gt; …, actions: [ … ] }));</code></pre>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-2">
+        Runnable demo from the repository clone: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">node core/kernel/run-demo.js</code>.
+        Types: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.d.ts</code> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">WebspressoKernel</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">KernelAppShell</code>).
+        Agent skill: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso skill --preset webspresso</code> installs <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">REFERENCE-kernel.md</code> next to <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">SKILL.md</code>.
+      </p>
     </section>
 
     <section id="authentication" class="doc-section mb-14">

@@ -593,3 +593,103 @@ export function createLocalFileProvider(options?: {
   destDir?: string;
   publicBasePath?: string;
 }): UploadStorageProvider;
+
+// --- Application kernel (use `kernel.createApp`; not the SSR `createApp`) ---
+
+export type KernelEventSource = 'orm' | 'auth' | 'route' | 'plugin' | 'system';
+
+export interface KernelEventMeta {
+  requestId?: string;
+  userId?: string;
+  source: KernelEventSource;
+  createdAt: Date;
+}
+
+export interface KernelEventContext {
+  payload: unknown;
+  meta: KernelEventMeta;
+}
+
+export interface KernelEventBus {
+  dispatch(eventName: string, ctx: KernelEventContext): Promise<unknown>;
+  publish(eventName: string, ctx: KernelEventContext): Promise<void>;
+  on(eventName: string, handler: (ctx: KernelEventContext) => unknown): void;
+  off(eventName: string, handler: (ctx: KernelEventContext) => unknown): void;
+  buildContext(
+    payload: unknown,
+    meta: Partial<Omit<KernelEventMeta, 'createdAt'>> & Pick<KernelEventMeta, 'source'>
+  ): KernelEventContext;
+}
+
+export interface KernelViewEngine {
+  registerPluginViews(
+    pluginName: string,
+    bundle: {
+      namespace: string;
+      layouts?: Record<string, string>;
+      pages?: Record<string, string>;
+      partials?: Record<string, string>;
+    }
+  ): void;
+  renderView(
+    qualifiedName: string,
+    data: Record<string, unknown>,
+    options?: { layout?: string }
+  ): string;
+  renderPartial(qualifiedName: string, data: Record<string, unknown>): string;
+}
+
+export interface KernelPluginDescriptor {
+  name: string;
+  events?: (app: KernelAppShell) => void | Promise<void>;
+  views?: () => {
+    namespace: string;
+    layouts?: Record<string, string>;
+    pages?: Record<string, string>;
+    partials?: Record<string, string>;
+  };
+}
+
+export interface KernelFlowDefinition {
+  id?: string;
+  trigger: string;
+  when?: (ctx: KernelEventContext) => boolean;
+  actions?: Array<(ctx: KernelEventContext, app: KernelAppShell) => void | Promise<void>>;
+}
+
+export interface KernelAppShell {
+  events: KernelEventBus;
+  view: KernelViewEngine;
+  flows: Array<{ id?: string; trigger: string }>;
+  registerPlugin(plugin: KernelPluginDescriptor): void;
+  registerFlow(flow: KernelFlowDefinition): () => void;
+  paths: Record<string, string | undefined>;
+  options?: Record<string, unknown>;
+}
+
+export interface KernelBaseRepository {
+  events: KernelEventBus;
+  resource: string;
+  create(data: Record<string, unknown>): Promise<Record<string, unknown>>;
+  update(id: string, data: Partial<Record<string, unknown>>): Promise<Record<string, unknown>>;
+  delete(id: string): Promise<void>;
+}
+
+export interface KernelBaseRepositoryConstructor {
+  new (events: KernelEventBus, options: { resource: string; source?: KernelEventSource }): KernelBaseRepository;
+}
+
+export interface WebspressoKernel {
+  createApp(options?: { paths?: { appViews?: string; themeViews?: string } }): KernelAppShell;
+  definePlugin(plugin: KernelPluginDescriptor): KernelPluginDescriptor;
+  defineFlow(flow: KernelFlowDefinition): KernelFlowDefinition;
+  BaseRepository: KernelBaseRepositoryConstructor;
+  createEventBus(): KernelEventBus;
+  buildContext: KernelEventBus['buildContext'];
+  randomUUID(): string;
+  createViewEngine(paths?: { appViews?: string; themeViews?: string }): KernelViewEngine;
+  renderTemplate(template: string, data: Record<string, unknown>): string;
+  parseQualified(qualified: string): { namespace: string; name: string };
+}
+
+export const kernel: WebspressoKernel;
