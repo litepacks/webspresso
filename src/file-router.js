@@ -9,6 +9,12 @@ const { ZodError } = require('zod');
 const { compileSchema, invalidateSchema } = require('../core/compileSchema');
 const { applySchema } = require('../core/applySchema');
 const { createHelpers } = require('./helpers');
+const {
+  loadNjkRouteTemplate,
+  parseNjkFrontmatter,
+  frontmatterToPatches,
+  clearNjkFrontmatterCaches,
+} = require('./njk-frontmatter');
 
 // Cache for i18n files (key: filePath, value: { mtime, data })
 const i18nCache = new Map();
@@ -702,6 +708,8 @@ function mountPages(app, options) {
         const baseHelpers = createHelpers({ req, res, locale });
         const pluginHelpers = pluginManager ? pluginManager.getHelpers() : {};
         
+        const njkTpl = loadNjkRouteTemplate(route.fullPath, isDev);
+
         const ctx = {
           req,
           res,
@@ -711,12 +719,13 @@ function mountPages(app, options) {
           routeDir: route.routeDir,
           locale,
           t,
-          data: {},
+          data: { ...njkTpl.dataPatch },
           meta: {
             title: t('meta.title') !== 'meta.title' ? t('meta.title') : null,
             description: t('meta.description') !== 'meta.description' ? t('meta.description') : null,
             indexable: true,
-            canonical: null
+            canonical: null,
+            ...njkTpl.metaPatch,
           },
           fsy: { ...baseHelpers, ...pluginHelpers },
           clientRuntime,
@@ -797,7 +806,10 @@ function mountPages(app, options) {
         
         // Render the template
         const templatePath = route.file.split(path.sep).join('/');
-        const html = nunjucks.render(templatePath, renderContext);
+        const html =
+          njkTpl.useStringRender && njkTpl.templateBody != null
+            ? nunjucks.renderString(njkTpl.templateBody, renderContext, { path: route.fullPath })
+            : nunjucks.render(templatePath, renderContext);
         
         // Execute hooks: afterRender
         ctx.html = html;
@@ -868,5 +880,9 @@ module.exports = {
   compareRouteRegistrationOrder,
   resolvePageAssets,
   applyPageAssetsToTemplateData,
+  parseNjkFrontmatter,
+  frontmatterToPatches,
+  loadNjkRouteTemplate,
+  clearNjkFrontmatterCaches,
 };
 

@@ -120,6 +120,29 @@ export function detectLocale(
   defaultLocale: string
 ): string;
 
+export function parseNjkFrontmatter(content: string): {
+  body: string;
+  fm: Record<string, unknown> | null;
+  hasDelimiter: boolean;
+};
+
+export function frontmatterToPatches(fm: unknown): {
+  metaPatch: Record<string, unknown>;
+  dataPatch: Record<string, unknown>;
+};
+
+export function loadNjkRouteTemplate(
+  absPath: string,
+  isDev: boolean
+): {
+  useStringRender: boolean;
+  templateBody: string | null;
+  metaPatch: Record<string, unknown>;
+  dataPatch: Record<string, unknown>;
+};
+
+export function clearNjkFrontmatterCaches(): void;
+
 // --- Helpers / assets ---
 
 export function createHelpers(context: Record<string, unknown>): Record<string, unknown>;

@@ -20,7 +20,11 @@ const {
   scanDirectory,
   loadI18n,
   createTranslator,
-  detectLocale
+  detectLocale,
+  parseNjkFrontmatter,
+  frontmatterToPatches,
+  loadNjkRouteTemplate,
+  clearNjkFrontmatterCaches,
 } = require('./src/file-router');
 const { 
   createHelpers, 
@@ -80,6 +84,10 @@ module.exports = {
   loadI18n,
   createTranslator,
   detectLocale,
+  parseNjkFrontmatter,
+  frontmatterToPatches,
+  loadNjkRouteTemplate,
+  clearNjkFrontmatterCaches,
   
   // Template helpers
   createHelpers,
