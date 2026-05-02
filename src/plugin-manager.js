@@ -130,7 +130,7 @@ class PluginManager {
   /**
    * Register plugins with the manager (async version)
    * @param {Array} plugins - Array of plugin definitions or factory functions
-   * @param {Object} context - Context object { app, nunjucksEnv, options }
+   * @param {Object} context - Context object `{ app, nunjucksEnv, options, middlewares? }`
    */
   async register(plugins, context) {
     if (!plugins || !Array.isArray(plugins)) return;
@@ -159,7 +159,7 @@ class PluginManager {
   /**
    * Register plugins with the manager (sync version)
    * @param {Array} plugins - Array of plugin definitions or factory functions
-   * @param {Object} context - Context object { app, nunjucksEnv, options }
+   * @param {Object} context - Context object `{ app, nunjucksEnv, options, middlewares? }`
    */
   registerSync(plugins, context) {
     if (!plugins || !Array.isArray(plugins)) return;
@@ -372,6 +372,8 @@ class PluginManager {
       options: plugin._options || {},
       nunjucksEnv: context.nunjucksEnv,
       db: context.options?.db ?? null,
+      /** @type {Record<string, unknown>} Named middleware registry (same reference as createApp → mountPages) */
+      middlewares: context.middlewares ?? {},
 
       /**
        * Get another plugin's API

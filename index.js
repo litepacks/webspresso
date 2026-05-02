@@ -61,6 +61,7 @@ const {
   createLocalFileProvider,
   dataExchangePlugin,
   redirectPlugin,
+  rateLimitPlugin,
 } = require('./plugins');
 
 module.exports = {
@@ -127,4 +128,5 @@ module.exports = {
   createLocalFileProvider,
   dataExchangePlugin,
   redirectPlugin,
+  rateLimitPlugin,
 };

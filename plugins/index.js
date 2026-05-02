@@ -20,6 +20,7 @@ const { uploadPlugin, createLocalFileProvider } = require('./upload');
 /** Register after adminPanelPlugin (same db + adminPath) for session and routes. */
 const { dataExchangePlugin } = require('./data-exchange');
 const { redirectPlugin } = require('./redirect');
+const { rateLimitPlugin } = require('./rate-limit');
 
 module.exports = {
   sitemapPlugin,
@@ -39,5 +40,6 @@ module.exports = {
   createLocalFileProvider,
   dataExchangePlugin,
   redirectPlugin,
+  rateLimitPlugin,
 };
 

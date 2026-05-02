@@ -615,6 +615,10 @@ function mountPages(app, options) {
     const handler = require(route.fullPath);
     const handlerFn = typeof handler === 'function' ? handler : handler.default || handler.handler;
     const routeMiddleware = handler.middleware;
+
+    const preResolvedMw = routeMiddleware
+      ? resolveMiddlewares(routeMiddleware, middlewares)
+      : [];
     
     if (typeof handlerFn !== 'function') {
       console.warn(`API route ${route.file} does not export a function`);
@@ -663,11 +667,9 @@ function mountPages(app, options) {
           throw err;
         }
         
-        // Run middleware if defined
-        const mwConfig = isDev ? currentHandler.middleware : routeMiddleware;
-        if (mwConfig) {
-          const resolvedMw = resolveMiddlewares(mwConfig, middlewares);
-          for (const mw of resolvedMw) {
+        // Run middleware if defined (resolved at route registration — required for stateful middleware like express-rate-limit)
+        if (preResolvedMw.length) {
+          for (const mw of preResolvedMw) {
             await new Promise((resolve, reject) => {
               mw(req, res, (err) => {
                 if (err) reject(err);
@@ -691,6 +693,11 @@ function mountPages(app, options) {
   /** Register SSR GET routes (shared by static phase and dynamic phase). */
   const registerSsrRoutes = (routes) => {
     for (const route of routes) {
+    const mountConfig = loadRouteConfig(route.configPath, isDev);
+    const preResolvedPageMw = mountConfig?.middleware
+      ? resolveMiddlewares(mountConfig.middleware, middlewares)
+      : [];
+
     app.get(route.routePath, async (req, res, next) => {
       try {
         // Detect locale
@@ -743,10 +750,9 @@ function mountPages(app, options) {
         await executeHook(globalHooks, 'beforeMiddleware', ctx);
         await executeHook(routeHooks, 'beforeMiddleware', ctx);
         
-        // Run route middleware
-        if (config?.middleware) {
-          const resolvedMiddlewares = resolveMiddlewares(config.middleware, middlewares);
-          for (const mw of resolvedMiddlewares) {
+        // Run route middleware (chain fixed at route registration; edit middleware in dev → restart)
+        if (preResolvedPageMw.length) {
+          for (const mw of preResolvedPageMw) {
             await new Promise((resolve, reject) => {
               mw(req, res, (err) => {
                 if (err) reject(err);

@@ -376,6 +376,12 @@ function createApp(options = {}) {
     middlewares.auth = authMiddleware.auth;
     middlewares.guest = authMiddleware.guest;
   }
+
+  // Under Vitest, shared API fixtures use `fixtureRequireAuth`; default no-op unless overridden.
+  const runsUnderVitest = process.env.VITEST === 'true' || process.env.VITEST_WORKER_ID !== undefined;
+  if (runsUnderVitest && middlewares.fixtureRequireAuth == null) {
+    middlewares.fixtureRequireAuth = (req, res, next) => next();
+  }
   
   // Static files (if publicDir provided)
   if (publicDir) {
@@ -421,8 +427,8 @@ function createApp(options = {}) {
     return d.toString();
   });
   
-  // Register plugins (sync)
-  const pluginContext = { app, nunjucksEnv, options };
+  // Register plugins (sync) — middlewares is the same object later passed to mountPages
+  const pluginContext = { app, nunjucksEnv, options, middlewares };
   pluginManager.registerSync(plugins, pluginContext);
   
   // Request logging middleware
@@ -463,6 +469,7 @@ function createApp(options = {}) {
         app,
         nunjucksEnv,
         options,
+        middlewares,
         db: options.db ?? null,
         routes: pluginManager.routes,
         usePlugin: (n) => pluginManager.getPluginAPI(n),

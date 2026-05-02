@@ -167,6 +167,8 @@ export interface RoutesReadyContext {
   app: Application;
   nunjucksEnv: unknown;
   options: CreateAppOptions;
+  /** Same object as `createApp({ middlewares })` — plugins may register named handlers before or after routes. */
+  middlewares: Record<string, WebspressoRegisteredMiddleware>;
   db: DatabaseInstance | null;
   routes: unknown;
   usePlugin(name: string): unknown;
@@ -180,6 +182,8 @@ export interface PluginRegisterContext {
   app: Application;
   nunjucksEnv: unknown;
   options: Record<string, unknown>;
+  /** Same object as `createApp({ middlewares })` for registering named route middleware. */
+  middlewares: Record<string, WebspressoRegisteredMiddleware>;
   db: DatabaseInstance | null;
   usePlugin(name: string): unknown;
   addHelper(name: string, fn: (...args: unknown[]) => unknown): void;
@@ -574,6 +578,19 @@ export interface RedirectPluginOptions {
 }
 
 export function redirectPlugin(options?: RedirectPluginOptions): WebspressoPlugin;
+
+/** Options for `rateLimitPlugin`: `express-rate-limit` fields plus plugin-only keys. */
+export interface RateLimitPluginOptions {
+  /** Mount a global limiter on the Express app (named route middleware is always registered). */
+  global?: boolean;
+  /** Shallow merge applied only to the global limiter. */
+  globalOverrides?: Record<string, unknown>;
+  /** Extra path prefixes skipped by the global limiter (builtin skips dev routes, favicon, robots, health). */
+  globalSkipPaths?: string[];
+  [key: string]: unknown;
+}
+
+export function rateLimitPlugin(options?: RateLimitPluginOptions): WebspressoPlugin;
 
 export interface RestResourcePluginOptions {
   path?: string;
