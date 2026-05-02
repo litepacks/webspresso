@@ -409,9 +409,9 @@ function loadGlobalHooks(pagesDir, isDev) {
  * @param {string} hookName - Hook name
  * @param {Object} ctx - Context object
  */
-async function executeHook(hooks, hookName, ctx) {
+async function executeHook(hooks, hookName, ctx, ...extra) {
   if (hooks && typeof hooks[hookName] === 'function') {
-    await hooks[hookName](ctx);
+    await hooks[hookName](ctx, ...extra);
   }
 }
 
@@ -682,7 +682,13 @@ function mountPages(app, options) {
         await fn(req, res, next);
       } catch (err) {
         console.error(`API error ${route.routePath}:`, err);
-        res.status(500).json({ error: 'Internal Server Error' });
+        const hookCtx = { req, res, error: err };
+        try {
+          await executeHook(globalHooks, 'onError', hookCtx, err);
+        } catch (hookErr) {
+          console.error('Error in onError hook:', hookErr);
+        }
+        return next(err);
       }
     });
     
@@ -834,7 +840,7 @@ function mountPages(app, options) {
           console.error('Error in onError hook:', hookErr);
         }
         
-        res.status(500).send('Internal Server Error');
+        return next(err);
       }
     });
     

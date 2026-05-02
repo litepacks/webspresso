@@ -58,6 +58,16 @@ function getDefaultHelmetConfig(isDev) {
 }
 
 /**
+ * Use JSON error responses for `pages/api/*` routes and clients that do not prefer HTML.
+ * @param {import('express').Request} req
+ * @returns {boolean}
+ */
+function preferJsonErrorResponse(req) {
+  if (req.path && req.path.startsWith('/api')) return true;
+  return !req.accepts('html');
+}
+
+/**
  * Shared CSS for built-in HTML error pages (viewport-safe, fluid type, dark mode)
  */
 function defaultErrorPageStyles() {
@@ -569,7 +579,7 @@ function createApp(options = {}) {
       }
       
       // Custom timeout template
-      if (typeof errorPages.timeout === 'string') {
+      if (typeof errorPages.timeout === 'string' && !preferJsonErrorResponse(req)) {
         try {
           const html = nunjucksEnv.render(errorPages.timeout, ctx);
           return res.send(html);
@@ -579,7 +589,7 @@ function createApp(options = {}) {
       }
       
       // Default timeout response
-      if (req.accepts('html')) {
+      if (!preferJsonErrorResponse(req)) {
         return res.send(default503Html());
       } else {
         return res.json({ error: 'Request Timeout', status: 503 });
@@ -598,8 +608,8 @@ function createApp(options = {}) {
       return errorPages.serverError(err, req, res, ctx);
     }
     
-    // Custom template
-    if (typeof errorPages.serverError === 'string') {
+    // Custom template (skipped for /api and JSON-preferring clients so they never get HTML)
+    if (typeof errorPages.serverError === 'string' && !preferJsonErrorResponse(req)) {
       try {
         const html = nunjucksEnv.render(errorPages.serverError, ctx);
         return res.send(html);
@@ -609,7 +619,7 @@ function createApp(options = {}) {
     }
     
     // Default response
-    if (req.accepts('html')) {
+    if (!preferJsonErrorResponse(req)) {
       res.send(default500Html(err, isDev));
     } else {
       res.json({ 

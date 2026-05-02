@@ -546,6 +546,14 @@ Error templates receive these variables:
 - `500.njk`: `{ error, status, isDev }`
 - `503.njk`: `{ url, method, isDev }`
 
+**How errors reach this handler**
+
+Unhandled errors from file-based routes (`pages/**/*.njk` `load()` / middleware / render, and `pages/api/**/*.js` handlers) are forwarded with `next(err)`, so they go through this 4-argument Express error middleware. That means `errorPages.serverError` and `errorPages.timeout` apply to those failures as well (not only to routes you add with `setupRoutes`).
+
+- **`pages/_hooks.js` `onError(ctx, err)`** runs **before** the central handler (for both SSR and API file routes). Use it for logging or APM (`Sentry.captureException`, `newrelic.noticeError`, etc.). The error is also on **`ctx.error`**.
+
+- **JSON vs HTML:** Requests whose path starts with **`/api`** always get a **JSON** error body from the default branch (and the default **string** `serverError` / `timeout` Nunjucks templates are skipped for those paths). Other clients use **`Accept`** as before: prefer HTML when the client accepts HTML.
+
 **Request Timeout:**
 
 Configure request timeout with `connect-timeout`:

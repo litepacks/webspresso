@@ -34,7 +34,10 @@ export interface CreateAppOptions {
     version?: string;
     manifestPath?: string;
     prefix?: string;
-  };
+  };  /**
+   * Custom 404 / 500 / 503 handlers. File-based route errors are forwarded with `next(err)` and hit `serverError` / `timeout`.
+   * When `serverError` / `timeout` is a template path, it is not used for paths under `/api` (default JSON instead).
+   */
   errorPages?: {
     notFound?: string | ((req: Request, res: Response, ctx: ErrorPageContext) => unknown);
     serverError?:

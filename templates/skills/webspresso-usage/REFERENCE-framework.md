@@ -53,7 +53,7 @@ project/
 | `db` | DB instance from `createDatabase()` → **`ctx.db`** in `load`, `meta`, plugins |
 | `middlewares` | Named map; reference by string in route/API config (`middleware: ['auth']`) |
 | `plugins` | Array of plugin factories/objects |
-| `errorPages` | `{ notFound, serverError, timeout }` — function or template path |
+| `errorPages` | `{ notFound, serverError, timeout }` — function or template path. File-based SSR/API errors are passed to this Express error middleware via `next(err)`. **`serverError` / `timeout` as a template path** is not used for paths under **`/api`** (those get default JSON). |
 | `timeout` | e.g. `'30s'` or `false` |
 | `helmet` | `true` / `false` / object |
 | `assets` | `{ version, manifestPath, prefix }` for `fsy.asset` / `fsy.css` / `fsy.js` |
@@ -128,6 +128,8 @@ Longer narrative: **[`doc/index.html#authentication`](../../../doc/index.html#au
 ## 6. Global and route hooks
 
 **Global:** `pages/_hooks.js` exports `onRequest`, `beforeLoad`, `afterLoad`, `beforeRender`, `afterRender`, `onError`, etc.
+
+**`onError(ctx, err)`** — runs when an unhandled error occurs in a **file-based** SSR route or **`pages/api/*`** handler (after `console.error`, before the central `errorPages` handler). Optional second argument **`err`** matches **`ctx.error`**. Use for APM (Sentry, New Relic `noticeError`, …).
 
 **Rough order:** global `onRequest` → route middleware chain → `load` → render → `afterRender`. (See README “Hook Execution Order” for full list.)
 
