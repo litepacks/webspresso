@@ -31,6 +31,7 @@ const { registerCommand: registerAuditPrune } = require('./commands/audit-prune'
 const { registerCommand: registerDoctor } = require('./commands/doctor');
 const { registerCommand: registerSkill } = require('./commands/skill');
 const { registerCommand: registerUpgrade } = require('./commands/upgrade');
+const { registerCommand: registerOrmMap } = require('./commands/orm-map');
 
 registerNew(program);
 registerPage(program);
@@ -50,6 +51,7 @@ registerAuditPrune(program);
 registerDoctor(program);
 registerSkill(program);
 registerUpgrade(program);
+registerOrmMap(program);
 
 // Parse arguments
 program.parse();
