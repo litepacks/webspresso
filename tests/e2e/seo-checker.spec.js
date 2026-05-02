@@ -10,7 +10,7 @@ test.describe('SEO Checker Plugin', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to homepage where SEO checker is injected
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
   });
 
   test.describe('Panel Injection', () => {
@@ -304,7 +304,7 @@ test.describe('SEO Checker Plugin', () => {
       
       // Reload page
       await page.reload();
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('load');
       
       // Toggle button should still be visible
       const toggleButton = page.locator('#seo-checker-toggle');
@@ -317,7 +317,7 @@ test.describe('SEO Checker Plugin', () => {
       
       // Reload page
       await page.reload();
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('load');
       
       // Toggle button should still be visible
       const toggleButton = page.locator('#seo-checker-toggle');

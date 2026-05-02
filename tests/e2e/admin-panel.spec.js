@@ -5,7 +5,7 @@
 
 const { test, expect } = require('@playwright/test');
 
-const BASE_URL = 'http://localhost:3001';
+const BASE_URL = 'http://127.0.0.1:3001';
 
 const TEST_ADMIN = {
   name: 'Test Admin',
@@ -15,33 +15,32 @@ const TEST_ADMIN = {
 
 // Helper to ensure user is logged in and return the page with session
 async function ensureLoggedIn(page) {
-  await page.goto(`${BASE_URL}/_admin`);
-  await page.waitForLoadState('networkidle');
-  
-  // Wait for the page to load
-  await page.waitForSelector('h1', { timeout: 10000 });
+  await page.goto(`${BASE_URL}/_admin`, { waitUntil: 'load', timeout: 60_000 });
+
+  // Admin UI mounts via Mithril from CDN; avoid networkidle (unreliable with external scripts).
+  await page.waitForSelector('h1', { timeout: 45_000 });
   const heading = await page.locator('h1').textContent();
-  
+
   if (heading.includes('Setup Admin Account')) {
     // Create admin account
     await page.fill('input[name="name"]', TEST_ADMIN.name);
     await page.fill('input[name="email"]', TEST_ADMIN.email);
     await page.fill('input[name="password"]', TEST_ADMIN.password);
     await page.click('button[type="submit"]');
-    await page.waitForURL(/\/(_admin)?(\/)?$/, { timeout: 15000 });
-    await page.waitForLoadState('networkidle');
+    await page.waitForURL(/\/(_admin)?(\/)?$/, { timeout: 15_000 });
+    await page.waitForLoadState('load');
   } else if (heading.includes('Admin Login')) {
     // Login
     await page.fill('input[name="email"]', TEST_ADMIN.email);
     await page.fill('input[name="password"]', TEST_ADMIN.password);
     await page.click('button[type="submit"]');
-    await page.waitForURL(/\/(_admin)?(\/)?$/, { timeout: 15000 });
-    await page.waitForLoadState('networkidle');
+    await page.waitForURL(/\/(_admin)?(\/)?$/, { timeout: 15_000 });
+    await page.waitForLoadState('load');
   }
   // else: Already logged in (showing Admin Panel)
-  
+
   // Verify we're logged in
-  await page.waitForSelector('text=Admin Panel', { timeout: 10000 });
+  await page.waitForSelector('text=Admin Panel', { timeout: 15_000 });
 }
 
 test.describe('Admin Panel API', () => {
@@ -986,7 +985,7 @@ test.describe('Admin Panel UI', () => {
 
   test('should display dashboard with widgets', async ({ page }) => {
     await page.goto(`${BASE_URL}/_admin`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Should see sidebar with Admin Panel title
     const sidebar = page.locator('aside');
@@ -1000,7 +999,7 @@ test.describe('Admin Panel UI', () => {
 
   test('should navigate to model list via menu', async ({ page }) => {
     await page.goto(`${BASE_URL}/_admin`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Find and click TestPost in sidebar or models list
     const modelLink = page.locator('a:has-text("Test Posts")').or(page.locator('a:has-text("TestPost")'));
@@ -1017,7 +1016,7 @@ test.describe('Admin Panel UI', () => {
 
   test('should display records table when records exist', async ({ page }) => {
     await page.goto(`${BASE_URL}/_admin/models/TestPost`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Wait for table to load
     await page.waitForSelector('table', { timeout: 15000 });
@@ -1041,7 +1040,7 @@ test.describe('Admin Panel UI', () => {
 
   test('should show All Filters button', async ({ page }) => {
     await page.goto(`${BASE_URL}/_admin/models/TestPost`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // All Filters button should be visible
     const allFiltersBtn = page.locator('button:has-text("All Filters")');
@@ -1050,7 +1049,7 @@ test.describe('Admin Panel UI', () => {
 
   test('should open filter drawer', async ({ page }) => {
     await page.goto(`${BASE_URL}/_admin/models/TestPost`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Click All Filters button
     await page.click('button:has-text("All Filters")');
@@ -1069,7 +1068,7 @@ test.describe('Admin Panel UI', () => {
 
   test('should display record form with proper fields', async ({ page }) => {
     await page.goto(`${BASE_URL}/_admin/models/TestPost/new`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Wait for form
     await page.waitForSelector('form', { timeout: 15000 });
@@ -1089,7 +1088,7 @@ test.describe('Admin Panel UI', () => {
 
   test('should have breadcrumb navigation', async ({ page }) => {
     await page.goto(`${BASE_URL}/_admin/models/TestPost`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Breadcrumb or sidebar navigation should be visible
     const breadcrumb = page.locator('nav[aria-label="Breadcrumb"], [class*="breadcrumb"]').first();
@@ -1111,7 +1110,7 @@ test.describe('Admin Panel UI', () => {
 
   test('should have fixed sidebar', async ({ page }) => {
     await page.goto(`${BASE_URL}/_admin`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Fixed sidebar should be visible (new layout uses fixed sidebar instead of sticky header)
     const sidebar = page.locator('aside.fixed, aside.w-64').first();
@@ -1123,7 +1122,7 @@ test.describe('Admin Panel UI', () => {
 
   test('should show logout button', async ({ page }) => {
     await page.goto(`${BASE_URL}/_admin`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Logout button should be visible (in new layout it's an icon button with title="Logout")
     const logoutBtn = page.locator('button[title="Logout"], button:has-text("Logout")').first();
@@ -1150,7 +1149,7 @@ test.describe('Admin Panel UI', () => {
     });
     
     await page.goto(`${BASE_URL}/_admin/models/TestPost`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Wait for table to load
     await page.waitForSelector('table', { timeout: 15000 });
@@ -1185,7 +1184,7 @@ test.describe('Admin Panel UI', () => {
     });
     
     await page.goto(`${BASE_URL}/_admin/models/TestPost`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Wait for table to load
     await page.waitForSelector('table', { timeout: 15000 });
@@ -1212,7 +1211,7 @@ test.describe('Admin Panel UI', () => {
     });
     
     await page.goto(`${BASE_URL}/_admin/models/TestPost`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Wait for table to load
     await page.waitForSelector('table', { timeout: 15000 });
@@ -1240,7 +1239,7 @@ test.describe('Admin Panel UI', () => {
 
   test('should clear selection when Clear button clicked', async ({ page }) => {
     await page.goto(`${BASE_URL}/_admin/models/TestPost`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Wait for table to load
     await page.waitForSelector('table', { timeout: 15000 });
@@ -1264,7 +1263,7 @@ test.describe('Admin Panel UI', () => {
 
   test('should select all with header checkbox', async ({ page }) => {
     await page.goto(`${BASE_URL}/_admin/models/TestPost`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Wait for table to load
     await page.waitForSelector('table', { timeout: 15000 });
@@ -1294,7 +1293,7 @@ test.describe('Admin Panel UI', () => {
     }
     
     await page.goto(`${BASE_URL}/_admin/models/TestPost`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Wait for table to load
     await page.waitForSelector('table', { timeout: 15000 });
@@ -1318,7 +1317,7 @@ test.describe('Admin Panel UI', () => {
 
   test('should display dashboard model cards with extended info', async ({ page }) => {
     await page.goto(`${BASE_URL}/_admin`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Wait for dashboard to load (Overview widget or model cards)
     const dashboardLoaded = page.locator('text=Overview').or(page.locator('a[href*="/models/TestPost"]')).or(page.locator('text=Test Posts'));

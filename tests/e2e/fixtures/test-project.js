@@ -9,10 +9,11 @@ const path = require('path');
 const os = require('os');
 
 const TEST_PROJECT_DIR = path.join(os.tmpdir(), 'webspresso-e2e-test');
-const WEBSPRESSO_CLI = path.join(__dirname, '../../../bin/webspresso.js');
 
 /**
- * Create a new test project
+ * Create a new test project (deterministic scaffold — no interactive CLI).
+ * Piping answers into `webspresso new` is unreliable on CI; when the CLI exited 0,
+ * the old code skipped this scaffold and ran `npm install` in an empty directory.
  * @returns {Promise<string>} Project directory path
  */
 async function createTestProject() {
@@ -24,35 +25,11 @@ async function createTestProject() {
   // Create project directory
   fs.mkdirSync(TEST_PROJECT_DIR, { recursive: true });
 
-  console.log('Creating test project...');
-
-  // Run webspresso new with non-interactive inputs
-  // We'll use echo to pipe answers to stdin
   const projectName = 'test-app';
   const projectPath = path.join(TEST_PROJECT_DIR, projectName);
+  fs.mkdirSync(projectPath, { recursive: true });
 
-  // Create project using CLI with non-interactive mode
-  // We'll simulate user input: use current dir = no, project name, database = better-sqlite3, tailwind = no, seed = no
-  const inputs = [
-    'n', // Don't use current directory
-    projectName, // Project name
-    'better-sqlite3', // Database choice
-    'n', // No Tailwind
-    'n', // No seed
-  ].join('\n');
-
-  try {
-    execSync(`echo "${inputs}" | node ${WEBSPRESSO_CLI} new`, {
-      cwd: TEST_PROJECT_DIR,
-      stdio: 'inherit',
-      env: { ...process.env, NODE_ENV: 'test' },
-    });
-  } catch (error) {
-    // If that doesn't work, try a different approach
-    console.log('Trying alternative project creation method...');
-    
-    // Create project manually
-    fs.mkdirSync(projectPath, { recursive: true });
+  console.log('Creating test project (e2e fixture scaffold)...');
     
     // Create package.json
     const packageJson = {
@@ -340,7 +317,6 @@ module.exports = defineModel({
 `;
 
     fs.writeFileSync(path.join(projectPath, 'webspresso.db.js'), dbConfig);
-  }
 
   // Install dependencies
   console.log('Installing dependencies...');
@@ -393,12 +369,12 @@ async function startTestServer(projectPath) {
 
     server.on('error', reject);
 
-    // Timeout after 30 seconds
+    const startTimeoutMs = process.env.CI ? 90_000 : 30_000;
     setTimeout(() => {
       if (!server.killed) {
         reject(new Error('Server startup timeout'));
       }
-    }, 30000);
+    }, startTimeoutMs);
   });
 }
 

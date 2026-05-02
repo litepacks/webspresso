@@ -14,11 +14,13 @@ module.exports = defineConfig({
   /** Stop the run after the first failure (fail fast). Override: `playwright test --max-failures=N` (larger N = more failures before exit). */
   maxFailures: 1,
   reporter: 'html',
+  timeout: process.env.CI ? 120_000 : 60_000,
   
   use: {
-    baseURL: 'http://localhost:3001',
+    baseURL: 'http://127.0.0.1:3001',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    navigationTimeout: 60_000,
   },
 
   projects: [
@@ -32,7 +34,7 @@ module.exports = defineConfig({
     command: 'node tests/e2e/fixtures/test-server.js',
     port: 3001,
     reuseExistingServer: !process.env.CI, // Reuse existing server in dev, fresh in CI
-    timeout: 120 * 1000, // 2 minutes for npm install
+    timeout: process.env.CI ? 240 * 1000 : 120 * 1000,
   },
 
   globalSetup: path.join(__dirname, 'tests/e2e/global-setup.js'),

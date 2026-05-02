@@ -4,7 +4,7 @@
 
 const { test, expect } = require('@playwright/test');
 
-const BASE_URL = 'http://localhost:3001';
+const BASE_URL = 'http://127.0.0.1:3001';
 
 const TEST_ADMIN = {
   name: 'Test Admin',
@@ -13,10 +13,8 @@ const TEST_ADMIN = {
 };
 
 async function ensureLoggedIn(page) {
-  await page.goto(`${BASE_URL}/_admin`);
-  await page.waitForLoadState('networkidle');
-
-  await page.waitForSelector('h1', { timeout: 10000 });
+  await page.goto(`${BASE_URL}/_admin`, { waitUntil: 'load', timeout: 60_000 });
+  await page.waitForSelector('h1', { timeout: 45_000 });
   const heading = await page.locator('h1').textContent();
 
   if (heading.includes('Setup Admin Account')) {
@@ -24,17 +22,17 @@ async function ensureLoggedIn(page) {
     await page.fill('input[name="email"]', TEST_ADMIN.email);
     await page.fill('input[name="password"]', TEST_ADMIN.password);
     await page.click('button[type="submit"]');
-    await page.waitForURL(/\/(_admin)?(\/)?$/, { timeout: 15000 });
-    await page.waitForLoadState('networkidle');
+    await page.waitForURL(/\/(_admin)?(\/)?$/, { timeout: 15_000 });
+    await page.waitForLoadState('load');
   } else if (heading.includes('Admin Login')) {
     await page.fill('input[name="email"]', TEST_ADMIN.email);
     await page.fill('input[name="password"]', TEST_ADMIN.password);
     await page.click('button[type="submit"]');
-    await page.waitForURL(/\/(_admin)?(\/)?$/, { timeout: 15000 });
-    await page.waitForLoadState('networkidle');
+    await page.waitForURL(/\/(_admin)?(\/)?$/, { timeout: 15_000 });
+    await page.waitForLoadState('load');
   }
 
-  await page.waitForSelector('text=Admin Panel', { timeout: 10000 });
+  await page.waitForSelector('text=Admin Panel', { timeout: 15_000 });
 }
 
 test.describe('Audit log API', () => {
@@ -124,14 +122,14 @@ test.describe('Audit log UI', () => {
 
   test('loads audit log page from menu', async ({ page }) => {
     await page.goto(`${BASE_URL}/_admin`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     const link = page.locator('aside a[href*="/audit-log"], nav a[href*="/audit-log"]').first();
     await expect(link).toBeVisible({ timeout: 10000 });
     await link.click();
 
     await page.waitForURL(/\/_admin\/audit-log/, { timeout: 15000 });
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     await expect(page.locator('text=Loading').or(page.locator('text=Total:'))).toBeVisible({
       timeout: 15000,

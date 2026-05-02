@@ -109,7 +109,7 @@ function formatCellValue(value, col) {
     case 'file': {
       const s = String(value);
       const short = s.length > 72 ? s.substring(0, 72) + '…' : s;
-      if (/^https?:\\/\\//.test(s) || s.startsWith('/')) {
+      if (/^https?:\/\//.test(s) || s.startsWith('/')) {
         return m('a.text-indigo-600.dark:text-indigo-400.hover:underline.break-all', {
           href: s,
           target: '_blank',
