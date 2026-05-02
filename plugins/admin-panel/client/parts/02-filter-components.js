@@ -1,10 +1,17 @@
 // Filter Operator Labels
+/** Null / presence checks — available for filterable scalar columns where applicable */
+const FILTER_OPS_NULL_CHECK = [
+  { value: 'is_null', label: 'Is null' },
+  { value: 'is_not_null', label: 'Is not null' },
+];
+
 const FILTER_OPERATORS = {
   string: [
     { value: 'contains', label: 'Contains' },
     { value: 'equals', label: 'Equals' },
     { value: 'starts_with', label: 'Starts with' },
     { value: 'ends_with', label: 'Ends with' },
+    ...FILTER_OPS_NULL_CHECK,
   ],
   number: [
     { value: 'eq', label: 'Equals' },
@@ -13,6 +20,7 @@ const FILTER_OPERATORS = {
     { value: 'lt', label: 'Less than' },
     { value: 'lte', label: 'Less or equal' },
     { value: 'between', label: 'Between' },
+    ...FILTER_OPS_NULL_CHECK,
   ],
   date: [
     { value: 'eq', label: 'Equals' },
@@ -21,16 +29,25 @@ const FILTER_OPERATORS = {
     { value: 'lt', label: 'Before' },
     { value: 'lte', label: 'On or before' },
     { value: 'between', label: 'Between' },
+    ...FILTER_OPS_NULL_CHECK,
   ],
 };
 
+function filterOpIsNullCheck(op) {
+  return op === 'is_null' || op === 'is_not_null';
+}
+
 function getOperatorLabel(op, colType) {
-  const ops = colType === 'date' || colType === 'datetime' || colType === 'timestamp' 
-    ? FILTER_OPERATORS.date 
-    : colType === 'integer' || colType === 'bigint' || colType === 'float' || colType === 'decimal'
-      ? FILTER_OPERATORS.number
-      : FILTER_OPERATORS.string;
-  
+  if (filterOpIsNullCheck(op)) {
+    return op === 'is_null' ? 'Is null' : 'Is not null';
+  }
+  const ops =
+    colType === 'date' || colType === 'datetime' || colType === 'timestamp'
+      ? FILTER_OPERATORS.date
+      : colType === 'integer' || colType === 'bigint' || colType === 'float' || colType === 'decimal'
+        ? FILTER_OPERATORS.number
+        : FILTER_OPERATORS.string;
+
   const found = ops.find(o => o.value === op);
   return found ? found.label : op;
 }
@@ -43,22 +60,26 @@ const FilterBadge = {
     const opLabel = getOperatorLabel(filter.op, colMeta?.type);
     
     let displayValue = '';
-      if (filter.op === 'between') {
+    if (filterOpIsNullCheck(filter.op)) {
+      displayValue = '';
+    } else if (filter.op === 'between') {
       displayValue = (filter.from || '?') + ' - ' + (filter.to || '?');
     } else if (filter.op === 'in' && Array.isArray(filter.value)) {
       displayValue = filter.value.join(', ');
       } else {
       displayValue = String(filter.value || '');
     }
-    
-    if (displayValue.length > 20) {
+
+    const showQuotedValue = displayValue.length > 0;
+
+    if (showQuotedValue && displayValue.length > 20) {
       displayValue = displayValue.substring(0, 20) + '...';
     }
     
     return m('span.inline-flex.items-center.gap-1.px-2.5.py-1.rounded-full.text-xs.font-medium.bg-indigo-50.text-indigo-700.border.border-indigo-200', [
       m('span.font-semibold', label),
       m('span.text-indigo-400', opLabel.toLowerCase()),
-      m('span', '"' + displayValue + '"'),
+      showQuotedValue ? m('span', '"' + displayValue + '"') : null,
       m('button.ml-1.text-indigo-400.hover:text-indigo-600.focus:outline-none', {
         onclick: (e) => {
           e.stopPropagation();
@@ -80,8 +101,15 @@ const ActiveFiltersBar = {
     const { filters, modelMeta, onRemove, onClearAll } = vnode.attrs;
     if (!filters || Object.keys(filters).length === 0) return null;
     
-    const filterEntries = Object.entries(filters).filter(([_, f]) => 
-      f && (f.value !== '' || f.from || f.to)
+    const filterEntries = Object.entries(filters).filter(([_, f]) =>
+      f &&
+      (
+        filterOpIsNullCheck(f.op) ||
+        f.value !== '' ||
+        (Array.isArray(f.value) && f.value.length > 0) ||
+        f.from ||
+        f.to
+      ),
     );
     
     if (filterEntries.length === 0) return null;
@@ -213,150 +241,224 @@ const FilterField = {
     const label = col.ui?.label || formatColumnLabel(col.name);
     
     if (col.type === 'boolean') {
+      const mode =
+        filterOpIsNullCheck(currentFilter.op)
+          ? currentFilter.op
+          : (currentFilter.value || '')
+            ? currentFilter.value
+            : '';
+
+      const rows = [
+        ['true', 'Yes'],
+        ['false', 'No'],
+        ['is_null', 'Is null'],
+        ['is_not_null', 'Is not null'],
+        ['', 'Any'],
+      ];
+
       return m('.space-y-2', [
         m('label.block.text-sm.font-medium.text-gray-700', label),
-        m('.flex.items-center.gap-4', [
-          ['true', 'false', ''].map((val, idx) => {
-            const labels = ['Yes', 'No', 'Any'];
-            return m('label.inline-flex.items-center.cursor-pointer', [
-              m('input.w-4.h-4.text-indigo-600.border-gray-300 dark:border-slate-600.focus:ring-indigo-500', {
+        m('.flex.flex-col.gap-2', [
+          ...rows.map(([val, lab]) =>
+            m('label.inline-flex.items-center.cursor-pointer', [
+              m('input.w-4.h-4.text-indigo-600.border-gray-300.dark:border-slate-600.focus:ring-indigo-500', {
                 type: 'radio',
                 name: 'filter_bool_' + col.name,
-                checked: (currentFilter.value || '') === val,
-                onchange: () => onChange(val ? { value: val } : null),
+                checked: mode === val,
+                onchange: () => {
+                  if (val === '') onChange(null);
+                  else if (val === 'is_null') onChange({ op: 'is_null' });
+                  else if (val === 'is_not_null') onChange({ op: 'is_not_null' });
+                  else onChange({ value: val });
+                },
               }),
-              m('span.ml-2.text-sm.text-gray-600', labels[idx]),
-            ]);
-          }),
+              m('span.ml-2.text-sm.text-gray-600', lab),
+            ]),
+          ),
         ]),
       ]);
     }
     
     if (col.type === 'enum' && col.enumValues) {
-      const selectedValues = currentFilter.op === 'in' && Array.isArray(currentFilter.value) 
-        ? currentFilter.value 
-        : currentFilter.value ? [currentFilter.value] : [];
-      
+      const enumModeSelect = FILTER_OPS_NULL_CHECK;
+      const isNullEnum = filterOpIsNullCheck(currentFilter.op);
+      const selectedValues =
+        currentFilter.op === 'in' && Array.isArray(currentFilter.value)
+          ? currentFilter.value
+          : currentFilter.value
+            ? [currentFilter.value]
+            : [];
+
       return m('.space-y-2', [
         m('label.block.text-sm.font-medium.text-gray-700', label),
-        m('.flex.flex-wrap.gap-2', [
-          ...col.enumValues.map(val => {
-            const isSelected = selectedValues.includes(val);
-            return m('button.px-3.py-1.5.text-sm.rounded-md.border.transition-colors', {
-              type: 'button',
-              class: isSelected 
-                ? 'bg-indigo-100 border-indigo-300 text-indigo-700' 
-                : 'bg-white border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800/50 dark:hover:bg-slate-800/50',
-              onclick: () => {
-                const newSelected = isSelected 
-                  ? selectedValues.filter(v => v !== val)
-                  : [...selectedValues, val];
-                onChange(newSelected.length > 0 ? { op: 'in', value: newSelected } : null);
-              },
-            }, val);
-          }),
-          ]),
-        ]);
+        m('select.w-full.px-3.py-2.text-sm.border.border-gray-300.dark:border-slate-600.rounded-lg.bg-white.dark:bg-slate-800.focus:outline-none.focus:ring-2.focus:ring-indigo-500.mb-2', {
+          value: isNullEnum ? currentFilter.op : 'match',
+          onchange: (e) => {
+            const v = e.target.value;
+            if (v === 'match') {
+              onChange(selectedValues.length > 0 ? { op: 'in', value: selectedValues } : null);
+            } else if (filterOpIsNullCheck(v)) {
+              onChange({ op: v });
+            }
+          },
+        }, [
+          m('option', { value: 'match' }, 'Match values…'),
+          ...enumModeSelect.map(o => m('option', { value: o.value }, o.label)),
+        ]),
+        !isNullEnum
+          ? m('.flex.flex-wrap.gap-2', [
+              ...col.enumValues.map(val => {
+                const isSelected = selectedValues.includes(val);
+                return m('button.px-3.py-1.5.text-sm.rounded-md.border.transition-colors', {
+                  type: 'button',
+                  class: isSelected
+                    ? 'bg-indigo-100.border-indigo-300.text-indigo-700'
+                    : 'bg-white.border-gray-300.dark:border-slate-600.text-gray-700.dark:text-slate-300.hover:bg-gray-50.dark:hover:bg-slate-800/50.dark:hover:bg-slate-800/50',
+                  onclick: () => {
+                    const newSelected = isSelected
+                      ? selectedValues.filter(v => v !== val)
+                      : [...selectedValues, val];
+                    onChange(newSelected.length > 0 ? { op: 'in', value: newSelected } : null);
+                  },
+                }, val);
+              }),
+            ])
+          : null,
+      ]);
     }
     
     if (col.type === 'date' || col.type === 'datetime' || col.type === 'timestamp') {
       const inputType = col.type === 'date' ? 'date' : 'datetime-local';
       const ops = FILTER_OPERATORS.date;
-      
+      const activeOp = filterOpIsNullCheck(currentFilter.op)
+        ? currentFilter.op
+        : (currentFilter.op || 'eq');
+
       return m('.space-y-2', [
         m('label.block.text-sm.font-medium.text-gray-700', label),
         m('.flex.items-start.gap-2.flex-wrap', [
           m('select.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.bg-white dark:bg-slate-800.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
-              value: currentFilter.op || 'eq',
-              onchange: (e) => {
-                const op = e.target.value;
-              if (op === 'between') {
-                onChange({ op, from: currentFilter.from || '', to: currentFilter.to || '' });
+            value: activeOp,
+            onchange: (e) => {
+              const nextOp = e.target.value;
+              if (filterOpIsNullCheck(nextOp)) {
+                onChange({ op: nextOp });
+                return;
+              }
+              if (nextOp === 'between') {
+                onChange({ op: nextOp, from: currentFilter.from || '', to: currentFilter.to || '' });
               } else {
-                onChange({ op, value: currentFilter.value || '' });
+                onChange({ op: nextOp, value: currentFilter.value || '' });
               }
             },
           }, ops.map(o => m('option', { value: o.value }, o.label))),
-            currentFilter.op === 'between' ? [
-            m('input.flex-1.min-w-32.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
-              type: inputType,
+          !filterOpIsNullCheck(activeOp) && activeOp === 'between'
+            ? [
+              m('input.flex-1.min-w-32.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+                type: inputType,
                 value: currentFilter.from || '',
-              oninput: (e) => onChange({ op: 'between', from: e.target.value, to: currentFilter.to || '' }),
-            }),
-            m('span.text-gray-400 dark:text-slate-500.self-center', 'to'),
-            m('input.flex-1.min-w-32.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
-              type: inputType,
+                oninput: (e) => onChange({ op: 'between', from: e.target.value, to: currentFilter.to || '' }),
+              }),
+              m('span.text-gray-400 dark:text-slate-500.self-center', 'to'),
+              m('input.flex-1.min-w-32.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+                type: inputType,
                 value: currentFilter.to || '',
-              oninput: (e) => onChange({ op: 'between', from: currentFilter.from || '', to: e.target.value }),
-            }),
-          ] : m('input.flex-1.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
-            type: inputType,
-              value: currentFilter.value || '',
-            oninput: (e) => onChange({ op: currentFilter.op || 'eq', value: e.target.value }),
-            }),
-          ]),
-        ]);
+                oninput: (e) => onChange({ op: 'between', from: currentFilter.from || '', to: e.target.value }),
+              }),
+            ]
+            : !filterOpIsNullCheck(activeOp)
+              ? m('input.flex-1.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+                  type: inputType,
+                  value: currentFilter.value || '',
+                  oninput: (e) => onChange({ op: activeOp, value: e.target.value }),
+                })
+              : null,
+        ]),
+      ]);
     }
-    
+
     if (col.type === 'integer' || col.type === 'bigint' || col.type === 'float' || col.type === 'decimal') {
       const ops = FILTER_OPERATORS.number;
-      
+      const activeOp = filterOpIsNullCheck(currentFilter.op)
+        ? currentFilter.op
+        : (currentFilter.op || 'eq');
+
       return m('.space-y-2', [
         m('label.block.text-sm.font-medium.text-gray-700', label),
         m('.flex.items-start.gap-2', [
           m('select.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.bg-white dark:bg-slate-800.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
-              value: currentFilter.op || 'eq',
-              onchange: (e) => {
-                const op = e.target.value;
-              if (op === 'between') {
-                onChange({ op, from: currentFilter.from || '', to: currentFilter.to || '' });
+            value: activeOp,
+            onchange: (e) => {
+              const nextOp = e.target.value;
+              if (filterOpIsNullCheck(nextOp)) {
+                onChange({ op: nextOp });
+                return;
+              }
+              if (nextOp === 'between') {
+                onChange({ op: nextOp, from: currentFilter.from || '', to: currentFilter.to || '' });
               } else {
-                onChange({ op, value: currentFilter.value || '' });
+                onChange({ op: nextOp, value: currentFilter.value || '' });
               }
             },
           }, ops.map(o => m('option', { value: o.value }, o.label))),
-            currentFilter.op === 'between' ? [
-            m('input.w-24.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+          !filterOpIsNullCheck(activeOp) && activeOp === 'between'
+            ? [
+              m('input.w-24.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
                 type: 'number',
                 value: currentFilter.from || '',
                 placeholder: 'Min',
-              oninput: (e) => onChange({ op: 'between', from: e.target.value, to: currentFilter.to || '' }),
-            }),
-            m('span.text-gray-400 dark:text-slate-500.self-center', 'to'),
-            m('input.w-24.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+                oninput: (e) => onChange({ op: 'between', from: e.target.value, to: currentFilter.to || '' }),
+              }),
+              m('span.text-gray-400 dark:text-slate-500.self-center', 'to'),
+              m('input.w-24.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
                 type: 'number',
                 value: currentFilter.to || '',
                 placeholder: 'Max',
-              oninput: (e) => onChange({ op: 'between', from: currentFilter.from || '', to: e.target.value }),
-            }),
-          ] : m('input.flex-1.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
-              type: 'number',
-              value: currentFilter.value || '',
-            placeholder: 'Enter value',
-            oninput: (e) => onChange({ op: currentFilter.op || 'eq', value: e.target.value }),
-            }),
+                oninput: (e) => onChange({ op: 'between', from: currentFilter.from || '', to: e.target.value }),
+              }),
+            ]
+            : !filterOpIsNullCheck(activeOp)
+              ? m('input.flex-1.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+                  type: 'number',
+                  value: currentFilter.value || '',
+                  placeholder: 'Enter value',
+                  oninput: (e) => onChange({ op: activeOp, value: e.target.value }),
+                })
+              : null,
           ]),
         ]);
     }
     
     // String/Text field (default)
     const ops = FILTER_OPERATORS.string;
-    
+    const activeOpStr = filterOpIsNullCheck(currentFilter.op)
+      ? currentFilter.op
+      : (currentFilter.op || 'contains');
+
     return m('.space-y-2', [
       m('label.block.text-sm.font-medium.text-gray-700', label),
       m('.flex.items-center.gap-2', [
-        m('select.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.bg-white dark:bg-slate-800.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
-              value: currentFilter.op || 'contains',
-          onchange: (e) => onChange({ op: e.target.value, value: currentFilter.value || '' }),
+        m('select.px-3.py-2.text-sm.border.border-gray-300.dark:border-slate-600.rounded-lg.bg-white.dark:bg-slate-800.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+          value: activeOpStr,
+          onchange: (e) => {
+            const nextOp = e.target.value;
+            if (filterOpIsNullCheck(nextOp)) {
+              onChange({ op: nextOp });
+              return;
+            }
+            onChange({ op: nextOp, value: currentFilter.value || '' });
+          },
         }, ops.map(o => m('option', { value: o.value }, o.label))),
-        m('input.flex-1.px-3.py-2.text-sm.border.border-gray-300 dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+        !filterOpIsNullCheck(activeOpStr)
+          ? m('input.flex-1.px-3.py-2.text-sm.border.border-gray-300.dark:border-slate-600.rounded-lg.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
               type: 'text',
               value: currentFilter.value || '',
               placeholder: 'Enter search term',
-          oninput: (e) => onChange({ op: currentFilter.op || 'contains', value: e.target.value }),
-            }),
-          ]),
-        ]);
+              oninput: (e) => onChange({ op: activeOpStr, value: e.target.value }),
+            })
+          : null,
+      ]),
+    ]);
   },
 };
 

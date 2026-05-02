@@ -283,8 +283,19 @@ function createApiHandlers(options) {
         const from = filter.from;
         const to = filter.to;
 
+        if (op === 'is_null') {
+          query = query.whereNull(colName);
+          countQuery = countQuery.whereNull(colName);
+          continue;
+        }
+        if (op === 'is_not_null') {
+          query = query.whereNotNull(colName);
+          countQuery = countQuery.whereNotNull(colName);
+          continue;
+        }
+
         // Handle boolean values - convert string 'true'/'false' to actual boolean
-        if (colType === 'boolean' && value !== undefined && value !== null) {
+        if (colType === 'boolean' && value !== undefined && value !== null && value !== '') {
           const boolValue = value === 'true' || value === true ? 1 : 0;
           query = query.where(colName, '=', boolValue);
           countQuery = countQuery.where(colName, '=', boolValue);

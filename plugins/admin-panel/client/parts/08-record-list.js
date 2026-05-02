@@ -29,9 +29,7 @@ const RecordList = {
     const primaryKey = modelMeta?.primaryKey || 'id';
     
     // Count active filters
-    const activeFilterCount = Object.values(state.filters || {}).filter(f => 
-      f && (f.value !== '' || f.from || f.to)
-    ).length;
+    const activeFilterCount = Object.values(state.filters || {}).filter(filterPayloadIsActive).length;
     
     const breadcrumbs = [
       { label: modelMeta?.label || modelName, href: '/models/' + modelName },

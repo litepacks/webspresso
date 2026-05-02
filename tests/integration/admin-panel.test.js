@@ -34,6 +34,7 @@ describe('Admin Panel Integration', () => {
           id: zdb.id(),
           name: zdb.string(),
           email: zdb.string(),
+          subtitle: zdb.string({ nullable: true }),
           active: zdb.boolean({ default: true }),
           created_at: zdb.timestamp({ auto: 'create' }),
           updated_at: zdb.timestamp({ auto: 'update' }),
@@ -52,6 +53,7 @@ describe('Admin Panel Integration', () => {
       table.bigIncrements('id');
       table.string('name');
       table.string('email');
+      table.string('subtitle').nullable();
       table.boolean('active').defaultTo(true);
       table.timestamp('created_at');
       table.timestamp('updated_at');
@@ -451,6 +453,27 @@ describe('Admin Panel Integration', () => {
       expect(res.body).toHaveProperty('data');
       // SQLite returns 0/1 for boolean, so use Boolean() or truthy check
       expect(res.body.data.every(r => r.name.toLowerCase().includes('a') && Boolean(r.active))).toBe(true);
+    });
+
+    it('should filter by nullable string is_null / is_not_null', async () => {
+      await testRepo.create({ name: 'SubNull', email: 'n1@test.com', active: true, subtitle: null });
+      await testRepo.create({ name: 'SubSet', email: 'n2@test.com', active: true, subtitle: 'hello' });
+
+      const onlyNull = await request(app)
+        .get('/_admin/api/models/TestModel/records?filter[subtitle][op]=is_null')
+        .set('Cookie', adminCookie)
+        .expect(200);
+
+      expect(onlyNull.body.data.every((r) => r.subtitle == null)).toBe(true);
+      expect(onlyNull.body.data.some((r) => r.name === 'SubNull')).toBe(true);
+
+      const onlyNotNull = await request(app)
+        .get('/_admin/api/models/TestModel/records?filter[subtitle][op]=is_not_null')
+        .set('Cookie', adminCookie)
+        .expect(200);
+
+      expect(onlyNotNull.body.data.every((r) => r.subtitle != null)).toBe(true);
+      expect(onlyNotNull.body.data.some((r) => r.name === 'SubSet')).toBe(true);
     });
 
     it('should return empty results when filter matches nothing', async () => {

@@ -95,7 +95,7 @@ const state = {
   filters: {}, // Active filters { column: { op, value, from, to } }
   filterPanelOpen: false, // Filter panel visibility (deprecated)
   filterDrawerOpen: false, // Filter drawer visibility
-  bulkFields: [], // Bulk-updatable fields (enum/boolean)
+  bulkFields: [], // Bulk-updatable fields (enum/boolean/date/datetime/timestamp)
   bulkFieldDropdownOpen: false, // Bulk field dropdown visibility
   selectedBulkField: null, // Currently selected bulk field for update
   selectAllMode: false, // true = all records selected (not just current page)

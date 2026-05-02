@@ -25,10 +25,21 @@ function buildFilteredQuery(repo, filters, options = {}) {
   }
   
   for (const [column, filter] of Object.entries(filters)) {
-    if (!filter || (filter.value === '' && !filter.from && !filter.to)) continue;
-    
+    if (!filter) continue;
+
     const op = filter.op || filter.operator || 'contains';
-    
+
+    if (op === 'is_null') {
+      query = query.whereNull(column);
+      continue;
+    }
+    if (op === 'is_not_null') {
+      query = query.whereNotNull(column);
+      continue;
+    }
+
+    if (filter.value === '' && !filter.from && !filter.to) continue;
+
     switch (op) {
       case 'contains':
         query = query.where(column, 'like', `%${filter.value}%`);
@@ -84,6 +95,60 @@ async function getAllMatchingIds(repo, filters, primaryKey = 'id', options = {})
   const query = buildFilteredQuery(repo, filters, options);
   const records = await query.select(primaryKey).list();
   return records.map(r => r[primaryKey]);
+}
+
+const BULK_TEMPORAL_TYPES = new Set(['date', 'datetime', 'timestamp']);
+
+/**
+ * Bulk field update: coerce date / datetime / timestamp body values to Date (or null).
+ * @param {object} columnMeta - ORM column metadata
+ * @param {unknown} raw
+ * @param {string} fieldName
+ * @returns {{ value: Date|null }|{ error: string }}
+ */
+function coerceBulkTemporalValue(columnMeta, raw, fieldName) {
+  const nullable = !!columnMeta.nullable;
+  const empty =
+    raw === null ||
+    raw === undefined ||
+    (typeof raw === 'string' && raw.trim() === '');
+
+  if (empty) {
+    if (nullable) return { value: null };
+    return { error: `Field "${fieldName}" requires a value` };
+  }
+
+  if (columnMeta.type === 'date') {
+    if (typeof raw !== 'string') return { error: `Invalid date value for "${fieldName}"` };
+    const s = raw.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      return { error: `Date must be YYYY-MM-DD for "${fieldName}"` };
+    }
+    const d = new Date(`${s}T12:00:00.000Z`);
+    if (Number.isNaN(d.getTime())) return { error: `Invalid date for "${fieldName}"` };
+    return { value: d };
+  }
+
+  if (columnMeta.type === 'datetime' || columnMeta.type === 'timestamp') {
+    if (typeof raw !== 'string') return { error: `Invalid datetime value for "${fieldName}"` };
+    const s = raw.trim();
+    let d;
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s)) {
+      d = new Date(s);
+    } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(s)) {
+      d = new Date(s);
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      d = new Date(`${s}T00:00:00`);
+    } else {
+      d = new Date(s);
+    }
+    if (Number.isNaN(d.getTime())) {
+      return { error: `Invalid datetime for "${fieldName}"` };
+    }
+    return { value: d };
+  }
+
+  return { error: `Field "${fieldName}" is not a temporal type` };
 }
 
 /**
@@ -258,7 +323,7 @@ function createExtensionApiHandlers(options) {
   }
 
   /**
-   * Bulk update field values (for enum/boolean fields)
+   * Bulk update field values (enum, boolean, date, datetime, timestamp)
    * Supports both specific IDs and selectAll mode with filters
    */
   async function bulkUpdateFieldHandler(req, res) {
@@ -283,13 +348,18 @@ function createExtensionApiHandlers(options) {
         return res.status(400).json({ error: `Field "${field}" not found in model` });
       }
 
-      // Validate field type - only allow enum and boolean
       const enumValues = columnMeta.enumValues || columnMeta.enum;
       const isEnum = enumValues && Array.isArray(enumValues);
       const isBoolean = columnMeta.type === 'boolean';
+      const isTemporal =
+        BULK_TEMPORAL_TYPES.has(columnMeta.type) &&
+        columnMeta.auto !== 'create' &&
+        columnMeta.auto !== 'update';
 
-      if (!isEnum && !isBoolean) {
-        return res.status(400).json({ error: `Field "${field}" is not an enum or boolean type` });
+      if (!isEnum && !isBoolean && !isTemporal) {
+        return res.status(400).json({
+          error: `Field "${field}" is not bulk-updatable (allowed: enum, boolean, date, datetime, timestamp)`,
+        });
       }
 
       // Validate value for enum fields
@@ -297,10 +367,15 @@ function createExtensionApiHandlers(options) {
         return res.status(400).json({ error: `Invalid value "${value}" for enum field "${field}"` });
       }
 
-      // Coerce boolean value
       let updateValue = value;
       if (isBoolean) {
         updateValue = value === true || value === 'true' || value === 1 || value === '1';
+      } else if (isTemporal) {
+        const coerced = coerceBulkTemporalValue(columnMeta, value, field);
+        if (coerced.error) {
+          return res.status(400).json({ error: coerced.error });
+        }
+        updateValue = coerced.value;
       }
 
       // Get repository and determine IDs
@@ -351,7 +426,7 @@ function createExtensionApiHandlers(options) {
   }
 
   /**
-   * Get bulk-updatable fields for a model (enum and boolean fields)
+   * Get bulk-updatable fields for a model (enum, boolean, date, datetime, timestamp)
    */
   function bulkFieldsHandler(req, res) {
     try {
@@ -364,14 +439,21 @@ function createExtensionApiHandlers(options) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
+      const hiddenSet = new Set(model.hidden || []);
       const bulkFields = [];
 
       // model.columns is a Map<string, ColumnMeta> - values are already metadata objects
       for (const [fieldName, columnMeta] of model.columns.entries()) {
+        if (hiddenSet.has(fieldName)) continue;
+
         // Check for enum - schema uses 'enumValues' property
         const enumValues = columnMeta.enumValues || columnMeta.enum;
         const isEnum = enumValues && Array.isArray(enumValues);
         const isBoolean = columnMeta.type === 'boolean';
+        const isTemporal =
+          BULK_TEMPORAL_TYPES.has(columnMeta.type) &&
+          columnMeta.auto !== 'create' &&
+          columnMeta.auto !== 'update';
 
         if (isEnum) {
           bulkFields.push({
@@ -389,6 +471,13 @@ function createExtensionApiHandlers(options) {
               { value: true, label: 'True' },
               { value: false, label: 'False' },
             ],
+          });
+        } else if (isTemporal) {
+          bulkFields.push({
+            name: fieldName,
+            type: columnMeta.type,
+            label: columnMeta.label || fieldName,
+            nullable: !!columnMeta.nullable,
           });
         }
       }
@@ -660,4 +749,5 @@ module.exports = {
   createExtensionApiHandlers,
   buildFilteredQuery,
   getAllMatchingIds,
+  coerceBulkTemporalValue,
 };

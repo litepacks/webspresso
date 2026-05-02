@@ -5,6 +5,7 @@ const {
   createExtensionApiHandlers,
   buildFilteredQuery,
   getAllMatchingIds,
+  coerceBulkTemporalValue,
 } = require('../../plugins/admin-panel/core/api-extensions');
 const { AdminRegistry } = require('../../plugins/admin-panel/core/registry');
 
@@ -37,6 +38,14 @@ function createQueryChain(listResult) {
     },
     where(col, op, val) {
       calls.push(['where', col, op, val]);
+      return chain;
+    },
+    whereNull(col) {
+      calls.push(['whereNull', col]);
+      return chain;
+    },
+    whereNotNull(col) {
+      calls.push(['whereNotNull', col]);
       return chain;
     },
     whereIn(col, vals) {
@@ -118,6 +127,17 @@ describe('admin api-extensions', () => {
       const repo = { query: () => q };
       buildFilteredQuery(repo, { e: { op: 'in', value: [] } });
       expect(q._calls.some((c) => c[0] === 'whereIn')).toBe(false);
+    });
+
+    it('applies whereNull / whereNotNull for is_null and is_not_null', () => {
+      const q = createQueryChain([]);
+      const repo = { query: () => q };
+      buildFilteredQuery(repo, {
+        a: { op: 'is_null' },
+        b: { op: 'is_not_null' },
+      });
+      expect(q._calls.some((c) => c[0] === 'whereNull' && c[1] === 'a')).toBe(true);
+      expect(q._calls.some((c) => c[0] === 'whereNotNull' && c[1] === 'b')).toBe(true);
     });
 
     it('skips inactive filter rows', () => {
@@ -282,6 +302,7 @@ describe('admin api-extensions', () => {
       const model = {
         name: 'X',
         admin: { enabled: true },
+        hidden: [],
         columns: new Map([
           ['status', { type: 'string', enumValues: ['draft', 'live'], label: 'Status' }],
           ['active', { type: 'boolean', label: 'Active' }],
@@ -300,6 +321,30 @@ describe('admin api-extensions', () => {
       expect(res.payload.fields.length).toBe(2);
       expect(res.payload.fields.find((f) => f.name === 'status').type).toBe('enum');
       expect(res.payload.fields.find((f) => f.name === 'active').type).toBe('boolean');
+    });
+
+    it('bulkFieldsHandler includes date fields and excludes auto timestamps', () => {
+      const model = {
+        name: 'D',
+        admin: { enabled: true },
+        hidden: ['secret'],
+        columns: new Map([
+          ['secret', { type: 'date', nullable: true }],
+          ['on_day', { type: 'date', nullable: false, label: 'On day' }],
+          ['starts_at', { type: 'datetime', nullable: true }],
+          ['created_at', { type: 'timestamp', nullable: false, auto: 'create' }],
+        ]),
+      };
+      const handlers = createExtensionApiHandlers({
+        registry,
+        db: { ...db, getModel: () => model },
+      });
+      const res = createMockRes();
+      handlers.bulkFieldsHandler({ params: { model: 'D' } }, res);
+      const names = res.payload.fields.map((f) => f.name).sort();
+      expect(names).toEqual(['on_day', 'starts_at']);
+      expect(res.payload.fields.find((f) => f.name === 'on_day').nullable).toBe(false);
+      expect(res.payload.fields.find((f) => f.name === 'starts_at').type).toBe('datetime');
     });
 
     it('bulkFieldsHandler 404 when model missing', () => {
@@ -413,6 +458,60 @@ describe('admin api-extensions', () => {
         r2,
       );
       expect(r2.payload.success).toBe(true);
+    });
+
+    it('bulkUpdateFieldHandler accepts date and rejects invalid format', async () => {
+      let lastUpdate;
+      const model = {
+        name: 'Bu',
+        admin: { enabled: true },
+        primaryKey: 'id',
+        columns: new Map([
+          ['on_day', { type: 'date', nullable: false }],
+          ['optional_at', { type: 'datetime', nullable: true }],
+        ]),
+      };
+      const handlers = createExtensionApiHandlers({
+        registry,
+        db: {
+          ...db,
+          getModel: () => model,
+          getRepository: () => ({
+            update: async (_id, data) => {
+              lastUpdate = data;
+            },
+          }),
+        },
+      });
+
+      const bad = createMockRes();
+      await handlers.bulkUpdateFieldHandler(
+        { params: { model: 'Bu' }, body: { ids: [1], field: 'on_day', value: '02-03-2025' } },
+        bad,
+      );
+      expect(bad.statusCode).toBe(400);
+
+      const ok = createMockRes();
+      await handlers.bulkUpdateFieldHandler(
+        { params: { model: 'Bu' }, body: { ids: [1], field: 'on_day', value: '2025-06-15' } },
+        ok,
+      );
+      expect(ok.payload.success).toBe(true);
+      expect(lastUpdate.on_day).toBeInstanceOf(Date);
+
+      const nullOk = createMockRes();
+      await handlers.bulkUpdateFieldHandler(
+        { params: { model: 'Bu' }, body: { ids: [1], field: 'optional_at', value: null } },
+        nullOk,
+      );
+      expect(nullOk.payload.success).toBe(true);
+      expect(lastUpdate.optional_at).toBeNull();
+    });
+
+    it('coerceBulkTemporalValue covers edge cases', () => {
+      expect(coerceBulkTemporalValue({ type: 'date', nullable: true }, '', 'd').value).toBeNull();
+      expect(coerceBulkTemporalValue({ type: 'date', nullable: false }, '', 'd').error).toBeTruthy();
+      expect(coerceBulkTemporalValue({ type: 'datetime', nullable: true }, '2025-01-02T08:30', 't').value).toBeInstanceOf(Date);
     });
   });
 });

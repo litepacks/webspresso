@@ -83,6 +83,7 @@ const db = createDatabase({
       table.text('body');
       table.string('status').defaultTo('draft');
       table.boolean('published').defaultTo(false);
+      table.date('publish_date').nullable();
       table.timestamp('created_at');
       table.timestamp('updated_at');
     });
@@ -257,6 +258,10 @@ module.exports = defineModel({
     published: zdb.boolean({ default: false }).config({
       label: 'Published',
       hint: 'Check to publish this post',
+    }),
+    publish_date: zdb.date({ nullable: true }).config({
+      label: 'Publish date',
+      hint: 'Optional publication date',
     }),
     created_at: zdb.timestamp({ auto: 'create' }),
     updated_at: zdb.timestamp({ auto: 'update' }),

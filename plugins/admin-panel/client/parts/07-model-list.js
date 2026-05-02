@@ -126,6 +126,12 @@ function formatCellValue(value, col) {
   }
 }
 
+/** Bulk field definitions with type date / datetime / timestamp (no predefined options). */
+function bulkFieldUsesTemporalInput(field) {
+  const t = field?.type;
+  return t === 'date' || t === 'datetime' || t === 'timestamp';
+}
+
 // Load bulk-updatable fields for a model
 async function loadBulkFields(modelName) {
   try {
@@ -167,13 +173,27 @@ async function executeBulkFieldUpdateWithSelectAll(modelName, field, value, sele
 
 // Bulk Field Update Dropdown Component
 const BulkFieldUpdateDropdown = {
+  oninit(vnode) {
+    vnode.state.bulkTemporalInput = '';
+    vnode.state._bulkFieldName = null;
+  },
   view: (vnode) => {
     const { modelName, selectedIds, selectAllMode, filters, onComplete } = vnode.attrs;
+
+    const sf = state.selectedBulkField;
+    if (sf && bulkFieldUsesTemporalInput(sf)) {
+      if (vnode.state._bulkFieldName !== sf.name) {
+        vnode.state._bulkFieldName = sf.name;
+        vnode.state.bulkTemporalInput = '';
+      }
+    }
     
     if (!state.bulkFields || state.bulkFields.length === 0) {
       return null;
     }
     
+    const menuWide = !!(sf && bulkFieldUsesTemporalInput(sf));
+
     return m('.relative.inline-block', [
       // Dropdown trigger
       m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-purple-600.bg-white dark:bg-slate-800.border.border-purple-200.rounded.hover:bg-purple-50.transition-colors', {
@@ -195,7 +215,7 @@ const BulkFieldUpdateDropdown = {
       ]),
       
       // Dropdown menu
-      state.bulkFieldDropdownOpen && m('.absolute.z-50.mt-1.w-64.bg-white dark:bg-slate-800.rounded-lg.shadow-lg.border.border-gray-200 dark:border-slate-600.overflow-hidden', {
+      state.bulkFieldDropdownOpen && m(menuWide ? '.absolute.z-50.mt-1.w-72.bg-white dark:bg-slate-800.rounded-lg.shadow-lg.border.border-gray-200 dark:border-slate-600.overflow-hidden' : '.absolute.z-50.mt-1.w-64.bg-white dark:bg-slate-800.rounded-lg.shadow-lg.border.border-gray-200 dark:border-slate-600.overflow-hidden', {
         style: 'left: 0; top: 100%;',
         onclick: (e) => e.stopPropagation(),
       }, [
@@ -209,25 +229,102 @@ const BulkFieldUpdateDropdown = {
         }),
         
         // Dropdown content
-        m('.relative.z-50.bg-white', [
+        m('.relative.z-50.bg-white dark:bg-slate-800', [
           // Header
-          m('.px-3.py-2.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200', [
-            m('span.text-xs.font-medium.text-gray-500 dark:text-slate-400.uppercase.tracking-wider', 
-              state.selectedBulkField ? 'Select Value' : 'Select Field'
+          m('.px-3.py-2.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200 dark:border-slate-700', [
+            m('span.text-xs.font-medium.text-gray-500 dark:text-slate-400.uppercase.tracking-wider',
+              state.selectedBulkField
+                ? (bulkFieldUsesTemporalInput(state.selectedBulkField)
+                  ? 'Set date / time'
+                  : 'Select Value')
+                : 'Select Field'
             ),
           ]),
-          
-          // Field list or value list
+
+          // Field list or value list or temporal inputs
           m('.max-h-64.overflow-y-auto', [
-            state.selectedBulkField 
-              // Show values for selected field
-              ? state.selectedBulkField.options.map(option => 
+            state.selectedBulkField && bulkFieldUsesTemporalInput(state.selectedBulkField)
+              ? m('.px-3.py-3.space-y-2', [
+                  state.selectedBulkField.nullable
+                    ? m('button.w-full.px-3.py-2.text-left.text-sm.rounded.border.border-gray-200.dark:border-slate-600.text-gray-700.dark:text-slate-200.hover:bg-purple-50.dark:hover:bg-slate-700.transition-colors', {
+                        onclick: async () => {
+                          state.bulkActionInProgress = true;
+                          state.bulkFieldDropdownOpen = false;
+                          m.redraw();
+                          try {
+                            await executeBulkFieldUpdateWithSelectAll(
+                              modelName,
+                              state.selectedBulkField.name,
+                              null,
+                              selectedIds,
+                              selectAllMode,
+                              filters,
+                            );
+                            state.selectedBulkField = null;
+                            vnode.state.bulkTemporalInput = '';
+                            vnode.state._bulkFieldName = null;
+                            if (onComplete) onComplete();
+                          } catch (err) {
+                            alert('Error: ' + err.message);
+                          } finally {
+                            state.bulkActionInProgress = false;
+                            m.redraw();
+                          }
+                        },
+                      }, 'Clear (set null)')
+                    : null,
+                  m('label.block.text-xs.text-gray-500.dark:text-slate-400', 'Value'),
+                  m('input.w-full.px-2.py-1.5.text-sm.border.border-gray-200.dark:border-slate-600.rounded.bg-white.dark:bg-slate-900.text-gray-900.dark:text-slate-100', {
+                    type: state.selectedBulkField.type === 'date' ? 'date' : 'datetime-local',
+                    value: vnode.state.bulkTemporalInput,
+                    oninput: (e) => {
+                      vnode.state.bulkTemporalInput = e.target.value;
+                    },
+                  }),
+                  m('button.w-full.mt-1.px-3.py-2.text-sm.font-medium.text-white.bg-purple-600.rounded.hover:bg-purple-700.transition-colors', {
+                    onclick: async () => {
+                      const trimmed = vnode.state.bulkTemporalInput && String(vnode.state.bulkTemporalInput).trim();
+                      if (!trimmed) {
+                        if (state.selectedBulkField.nullable) {
+                          alert('Enter a date/time or use Clear (set null).');
+                        } else {
+                          alert('Please enter a value.');
+                        }
+                        return;
+                      }
+                      state.bulkActionInProgress = true;
+                      state.bulkFieldDropdownOpen = false;
+                      m.redraw();
+                      try {
+                        await executeBulkFieldUpdateWithSelectAll(
+                          modelName,
+                          state.selectedBulkField.name,
+                          trimmed,
+                          selectedIds,
+                          selectAllMode,
+                          filters,
+                        );
+                        state.selectedBulkField = null;
+                        vnode.state.bulkTemporalInput = '';
+                        vnode.state._bulkFieldName = null;
+                        if (onComplete) onComplete();
+                      } catch (err) {
+                        alert('Error: ' + err.message);
+                      } finally {
+                        state.bulkActionInProgress = false;
+                        m.redraw();
+                      }
+                    },
+                  }, 'Apply to selected'),
+                ])
+              : state.selectedBulkField
+                ? state.selectedBulkField.options.map(option =>
                   m('button.w-full.px-3.py-2.text-left.text-sm.hover:bg-purple-50.flex.items-center.justify-between.transition-colors', {
                     onclick: async () => {
                       state.bulkActionInProgress = true;
                       state.bulkFieldDropdownOpen = false;
                       m.redraw();
-                      
+
                       try {
                         await executeBulkFieldUpdateWithSelectAll(modelName, state.selectedBulkField.name, option.value, selectedIds, selectAllMode, filters);
                         state.selectedBulkField = null;
@@ -241,15 +338,14 @@ const BulkFieldUpdateDropdown = {
                     },
                   }, [
                     m('span.text-gray-700', String(option.label)),
-                    state.selectedBulkField.type === 'boolean' && m('span.ml-2', 
-                      option.value === true 
+                    state.selectedBulkField.type === 'boolean' && m('span.ml-2',
+                      option.value === true
                         ? m('span.inline-flex.items-center.px-2.py-0.5.rounded-full.text-xs.font-medium.bg-green-100.text-green-800', '✓')
-                        : m('span.inline-flex.items-center.px-2.py-0.5.rounded-full.text-xs.font-medium.bg-gray-100 dark:bg-slate-800.text-gray-600', '✗')
+                        : m('span.inline-flex.items-center.px-2.py-0.5.rounded-full.text-xs.font-medium.bg-gray-100.dark:bg-slate-800.text-gray-600', '✗')
                     ),
                   ])
                 )
-              // Show field list
-              : state.bulkFields.map(field =>
+                : state.bulkFields.map(field =>
                   m('button.w-full.px-3.py-2.text-left.text-sm.hover:bg-purple-50.flex.items-center.justify-between.transition-colors', {
                     onclick: () => {
                       state.selectedBulkField = field;
@@ -258,7 +354,7 @@ const BulkFieldUpdateDropdown = {
                   }, [
                     m('.flex.items-center.gap-2', [
                       m('span.text-gray-700', formatColumnLabel(field.label || field.name)),
-                      m('span.text-xs.text-gray-400 dark:text-slate-500.uppercase', field.type),
+                      m('span.text-xs.text-gray-400.dark:text-slate-500.uppercase', field.type),
                     ]),
                     m('svg.w-4.h-4.text-gray-400', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
                       m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M9 5l7 7-7 7' })
@@ -311,14 +407,26 @@ function getDisplayColumns(columns) {
     .slice(0, 6); // Max 6 columns for readability
 }
 
+/** Sent to records API / URL when applying filters */
+function filterPayloadIsActive(f) {
+  if (!f) return false;
+  if (f.op === 'is_null' || f.op === 'is_not_null') return true;
+  if (Array.isArray(f.value) && f.value.length > 0) return true;
+  return f.value !== '' || !!f.from || !!f.to;
+}
+
 // Build query string from filters
 function buildFilterQuery(filters) {
   if (!filters || Object.keys(filters).length === 0) return '';
   
   const params = [];
   for (const [col, filter] of Object.entries(filters)) {
-    if (!filter || (filter.value === '' && !filter.from && !filter.to)) continue;
-    
+    if (!filter || (!filterPayloadIsActive(filter))) continue;
+
+    if (filter.op === 'is_null' || filter.op === 'is_not_null') {
+      params.push('filter[' + col + '][op]=' + encodeURIComponent(filter.op));
+      continue;
+    }
     if (filter.op === 'between') {
       params.push('filter[' + col + '][op]=between');
       if (filter.from) params.push('filter[' + col + '][from]=' + encodeURIComponent(filter.from));
@@ -377,6 +485,8 @@ function parseFilterQuery(queryString) {
       filters[col] = { op: 'between', from: data.from || '', to: data.to || '' };
     } else if (data.op === 'in') {
       filters[col] = { op: 'in', value: Array.isArray(data.value) ? data.value : [data.value] };
+    } else if (data.op === 'is_null' || data.op === 'is_not_null') {
+      filters[col] = { op: data.op };
     } else {
       filters[col] = { op: data.op || 'contains', value: data.value || '' };
     }
@@ -402,7 +512,11 @@ function loadRecords(modelName, page = 1, filters = null) {
   }
   if (Object.keys(activeFilters).length > 0) {
     for (const [col, filter] of Object.entries(activeFilters)) {
-      if (!filter || (filter.value === '' && !filter.from && !filter.to)) continue;
+      if (!filter || !filterPayloadIsActive(filter)) continue;
+      if (filter.op === 'is_null' || filter.op === 'is_not_null') {
+        queryParams.set('filter[' + col + '][op]', filter.op);
+        continue;
+      }
       if (filter.op === 'between') {
         queryParams.set('filter[' + col + '][op]', 'between');
         if (filter.from) queryParams.set('filter[' + col + '][from]', filter.from);

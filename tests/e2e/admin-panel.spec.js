@@ -360,10 +360,15 @@ test.describe('Admin Panel API', () => {
       expect(data).toHaveProperty('fields');
       expect(Array.isArray(data.fields)).toBe(true);
       
-      // Should have status (enum) and published (boolean) fields
+      // Should include status (enum), published (boolean), publish_date (date)
       const fieldNames = data.fields.map(f => f.name);
       expect(fieldNames).toContain('published');
       expect(fieldNames).toContain('status');
+      expect(fieldNames).toContain('publish_date');
+
+      const publishDateField = data.fields.find((f) => f.name === 'publish_date');
+      expect(publishDateField.type).toBe('date');
+      expect(publishDateField.nullable).toBe(true);
       
       // Check field structure
       const statusField = data.fields.find(f => f.name === 'status');
@@ -471,6 +476,57 @@ test.describe('Admin Panel API', () => {
       }
     });
 
+    test('should bulk update nullable date field', async ({ page }) => {
+      await ensureLoggedIn(page);
+
+      const ids = [];
+      for (let i = 1; i <= 2; i++) {
+        const response = await page.request.post(`${BASE_URL}/_admin/api/models/TestPost/records`, {
+          data: {
+            title: `Bulk Date Test ${i}`,
+            content: 'Content for bulk date test',
+            published: false,
+            status: 'draft',
+          },
+        });
+        const data = await response.json();
+        ids.push(data.data.id);
+      }
+
+      const updateResponse = await page.request.post(
+        `${BASE_URL}/_admin/api/extensions/bulk-update/TestPost`,
+        { data: { ids, field: 'publish_date', value: '2030-11-20' } },
+      );
+
+      expect(updateResponse.status()).toBe(200);
+      const result = await updateResponse.json();
+      expect(result.success).toBe(true);
+      expect(result.affected).toBe(2);
+
+      for (const id of ids) {
+        const getResponse = await page.request.get(`${BASE_URL}/_admin/api/models/TestPost/records/${id}`);
+        const record = await getResponse.json();
+        const d = new Date(record.data.publish_date);
+        expect(Number.isNaN(d.getTime())).toBe(false);
+        expect(d.toISOString().startsWith('2030-11-20')).toBe(true);
+      }
+
+      const clearResp = await page.request.post(
+        `${BASE_URL}/_admin/api/extensions/bulk-update/TestPost`,
+        { data: { ids, field: 'publish_date', value: null } },
+      );
+      expect(clearResp.status()).toBe(200);
+      for (const id of ids) {
+        const getResponse = await page.request.get(`${BASE_URL}/_admin/api/models/TestPost/records/${id}`);
+        const record = await getResponse.json();
+        expect(record.data.publish_date).toBeNull();
+      }
+
+      for (const id of ids) {
+        await page.request.delete(`${BASE_URL}/_admin/api/models/TestPost/records/${id}`);
+      }
+    });
+
     test('should return 400 for invalid enum value', async ({ page }) => {
       await ensureLoggedIn(page);
       
@@ -499,7 +555,7 @@ test.describe('Admin Panel API', () => {
       await page.request.delete(`${BASE_URL}/_admin/api/models/TestPost/records/${id}`);
     });
 
-    test('should return 400 for non-enum/boolean field', async ({ page }) => {
+    test('should return 400 for non-bulk-updatable field', async ({ page }) => {
       await ensureLoggedIn(page);
       
       // Create a test record
@@ -520,7 +576,7 @@ test.describe('Admin Panel API', () => {
       
       expect(updateResponse.status()).toBe(400);
       const result = await updateResponse.json();
-      expect(result.error).toContain('not an enum or boolean');
+      expect(result.error).toMatch(/not bulk-updatable/);
       
       // Cleanup
       await page.request.delete(`${BASE_URL}/_admin/api/models/TestPost/records/${id}`);
