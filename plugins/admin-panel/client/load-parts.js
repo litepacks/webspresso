@@ -22,6 +22,18 @@ function partsDir() {
 }
 
 /**
+ * Inline admin SPA runs in the browser; CommonJS `module.exports` throws ReferenceError and breaks the whole bundle.
+ * @param {string} src
+ * @returns {string}
+ */
+function stripCommonJsExportsForBrowser(src) {
+  return src
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*module\.exports\s*=/.test(line))
+    .join('\n');
+}
+
+/**
  * @returns {string[]} ordered part filenames from manifest.parts.json
  */
 function getManifestFilenames() {
@@ -39,9 +51,8 @@ function getManifestFilenames() {
  * @returns {string}
  */
 function buildComponentsBody() {
-  const sharedLib = fs.readFileSync(
-    path.join(__dirname, '..', 'lib', 'is-rich-text-empty.js'),
-    'utf8',
+  const sharedLib = stripCommonJsExportsForBrowser(
+    fs.readFileSync(path.join(__dirname, '..', 'lib', 'is-rich-text-empty.js'), 'utf8'),
   );
   const dir = partsDir();
   const body = getManifestFilenames()
