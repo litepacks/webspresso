@@ -39,8 +39,12 @@ function getManifestFilenames() {
  * @returns {string}
  */
 function buildComponentsBody() {
+  const sharedLib = fs.readFileSync(
+    path.join(__dirname, '..', 'lib', 'is-rich-text-empty.js'),
+    'utf8',
+  );
   const dir = partsDir();
-  return getManifestFilenames()
+  const body = getManifestFilenames()
     .map((filename) => {
       const p = path.join(dir, filename);
       if (!fs.existsSync(p)) {
@@ -49,6 +53,7 @@ function buildComponentsBody() {
       return fs.readFileSync(p, 'utf8');
     })
     .join('\n');
+  return `${sharedLib}\n${body}`;
 }
 
 module.exports = {

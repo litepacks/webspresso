@@ -116,7 +116,20 @@ class AuthManager {
     if (!config.secret) {
       throw new Error('Session secret is required. Set AUTH_SESSION_SECRET environment variable or pass session.secret in config.');
     }
-    
+
+    const mergedCookie = {
+      ...DEFAULT_CONFIG.session.cookie,
+      ...(config.cookie || {}),
+    };
+    const userSetSecure =
+      typeof (this.config.session.cookie && this.config.session.cookie.secure) === 'boolean';
+    const secureComputed =
+      process.env.NODE_ENV === 'production' ||
+      process.env.COOKIE_SECURE === 'true' ||
+      /^https:/i.test(String(process.env.BASE_URL || '').trim());
+    mergedCookie.secure = userSetSecure ? mergedCookie.secure : secureComputed;
+    config.cookie = mergedCookie;
+
     return config;
   }
 

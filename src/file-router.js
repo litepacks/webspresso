@@ -28,6 +28,89 @@ const routeConfigDevCache = new Map();
 // Cache for API filename -> { method, baseName } (basename keys; stable per process)
 const methodFromFilenameCache = new Map();
 
+const MAX_LOCALE_LEN = 16;
+
+/** @returns {Set<string>} */
+function parseSupportedLocaleSet() {
+  const raw = process.env.SUPPORTED_LOCALES || 'en';
+  return new Set(
+    raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+  );
+}
+
+/**
+ * @param {string} raw
+ * @returns {string|null}
+ */
+function normalizeLocaleCandidate(raw) {
+  let s = String(raw).trim().toLowerCase().split(';')[0].split(',')[0].trim().replace(/_/g, '-');
+  if (s.length < 1 || s.length > MAX_LOCALE_LEN) {
+    return null;
+  }
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s)) {
+    return null;
+  }
+  return s;
+}
+
+/**
+ * @param {string|null} normalized
+ * @param {Set<string>} supported
+ * @returns {string|null}
+ */
+function pickMatchingLocale(normalized, supported) {
+  if (!normalized) {
+    return null;
+  }
+  if (supported.has(normalized)) {
+    return normalized;
+  }
+  const base = normalized.split('-')[0];
+  if (supported.has(base)) {
+    return base;
+  }
+  return null;
+}
+
+/**
+ * Linear-time conversion of [...x] → * then [x] → :x (filesystem route segments only).
+ * @param {string} route
+ */
+function rewriteDynamicRouteMarkers(route) {
+  let i = 0;
+  let out = '';
+  const n = route.length;
+  while (i < n) {
+    const open = route.indexOf('[', i);
+    if (open === -1) {
+      out += route.slice(i);
+      break;
+    }
+    out += route.slice(i, open);
+    const close = route.indexOf(']', open + 1);
+    if (close === -1) {
+      out += route.slice(open);
+      break;
+    }
+    const inner = route.slice(open + 1, close);
+    let repl;
+    if (inner.startsWith('...') && inner.length > 3) {
+      repl = '*';
+    } else if (inner.length > 0 && inner.indexOf('[') === -1) {
+      repl = ':' + inner;
+    } else {
+      repl = route.slice(open, close + 1);
+    }
+    out += repl;
+    i = close + 1;
+  }
+  return out;
+}
+
+function escapeRegExp(s) {
+  return String(s).replace(/[\\^$*+?.()|[\]{}]/g, '\\$&');
+}
+
 /**
  * Convert a file path to an Express route pattern
  * @param {string} filePath - Relative path from pages/
@@ -49,12 +132,9 @@ function filePathToRoute(filePath, ext) {
     route = '/';
   }
   
-  // Convert [param] to :param
-  route = route.replace(/\[([^\]\.]+)\]/g, ':$1');
-  
-  // Convert [...param] to * (catch-all)
-  route = route.replace(/\[\.\.\.([^\]]+)\]/g, '*');
-  
+  // Convert [param] / [...param] without regex backtracking hazards
+  route = rewriteDynamicRouteMarkers(route);
+
   // Ensure leading slash
   if (!route.startsWith('/')) {
     route = '/' + route;
@@ -289,7 +369,7 @@ function loadI18nFile(filePath) {
     i18nCache.set(filePath, { mtime: stats.mtimeMs, data });
     return data;
   } catch (err) {
-    console.error(`Error loading i18n file ${filePath}:`, err.message);
+    console.error('Error loading i18n file:', filePath, err.message);
     return {};
   }
 }
@@ -344,7 +424,8 @@ function createTranslator(translations) {
     // Replace params like {{name}} in the translation
     if (typeof value === 'string' && Object.keys(params).length > 0) {
       for (const [paramKey, paramValue] of Object.entries(params)) {
-        value = value.replace(new RegExp(`{{\\s*${paramKey}\\s*}}`, 'g'), paramValue);
+        const escaped = escapeRegExp(paramKey);
+        value = value.replace(new RegExp(`{{\\s*${escaped}\\s*}}`, 'g'), paramValue);
       }
     }
     
@@ -387,7 +468,7 @@ function loadRouteConfig(configPath, isDev) {
     configCache.set(configPath, config);
     return config;
   } catch (err) {
-    console.error(`Error loading route config ${configPath}:`, err.message);
+    console.error('Error loading route config:', configPath, err.message);
     return null;
   }
 }
@@ -421,23 +502,32 @@ async function executeHook(hooks, hookName, ctx, ...extra) {
  * @returns {string} Locale code
  */
 function detectLocale(req) {
-  // 1. Check query parameter
-  if (req.query.lang) {
-    return req.query.lang;
-  }
-  
-  // 2. Check Accept-Language header
-  const acceptLanguage = req.get('Accept-Language');
-  if (acceptLanguage) {
-    const supported = (process.env.SUPPORTED_LOCALES || 'en').split(',');
-    const preferred = acceptLanguage.split(',')[0].split('-')[0].toLowerCase();
-    if (supported.includes(preferred)) {
-      return preferred;
+  const supported = parseSupportedLocaleSet();
+  const defaultCand = normalizeLocaleCandidate(process.env.DEFAULT_LOCALE || 'en');
+  const def =
+    pickMatchingLocale(defaultCand, supported)
+    ?? (supported.has('en') ? 'en' : [...supported][0])
+    ?? 'en';
+
+  if (req.query && req.query.lang != null && req.query.lang !== '') {
+    const q = normalizeLocaleCandidate(String(req.query.lang));
+    const hit = pickMatchingLocale(q, supported);
+    if (hit) {
+      return hit;
     }
   }
-  
-  // 3. Default locale
-  return process.env.DEFAULT_LOCALE || 'en';
+
+  const acceptLanguage = req.get('Accept-Language');
+  if (acceptLanguage) {
+    const langPart = acceptLanguage.split(',')[0];
+    const a = normalizeLocaleCandidate(langPart);
+    const hit = pickMatchingLocale(a, supported);
+    if (hit) {
+      return hit;
+    }
+  }
+
+  return def;
 }
 
 /**
@@ -580,7 +670,7 @@ function mountPages(app, options) {
       apiRoutes.push({
         file,
         method,
-        routePath: filePathToRoute(routePath.replace(/^\/api/, '/api'), ''),
+        routePath: filePathToRoute(routePath, ''),
         fullPath: path.join(absolutePagesDir, file)
       });
     } else if (ext === '.njk') {

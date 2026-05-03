@@ -8,6 +8,8 @@ const { zodToJsonSchema } = require('zod-to-json-schema');
 const { compileSchema } = require('../compileSchema');
 const { generateOrmOpenApiSchemas } = require('./orm-components');
 
+const OPENAPI_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'head', 'options']);
+
 /**
  * Express route pattern → OpenAPI path (e.g. /users/:id → /users/{id})
  * @param {string} expressPath
@@ -115,7 +117,7 @@ function buildOpenApiDocument(opts) {
     throw new Error('buildOpenApiDocument: pagesDir is required');
   }
 
-  const paths = {};
+  const paths = Object.create(null);
   const apiRoutes = routes.filter((r) => r.type === 'api');
   const absPages = path.resolve(pagesDir);
 
@@ -142,8 +144,12 @@ function buildOpenApiDocument(opts) {
     const openApiPath = expressPathToOpenApi(route.pattern);
     const method = route.method.toLowerCase();
 
+    if (!OPENAPI_METHODS.has(method)) {
+      continue;
+    }
+
     if (!paths[openApiPath]) {
-      paths[openApiPath] = {};
+      paths[openApiPath] = Object.create(null);
     }
 
     paths[openApiPath][method] = buildOperation(route, compiled);

@@ -3,12 +3,16 @@
  * @vitest-environment node
  */
 
+import { createRequire } from 'node:module';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../src/server.js';
 import { createDatabase, defineModel, zdb, hasModel } from '../../index.js';
 import { adminPanelPlugin } from '../../plugins/index.js';
 import { clearRegistry } from '../../core/orm/model.js';
+
+const require = createRequire(import.meta.url);
+const { isRichTextEmpty } = require('../../plugins/admin-panel/lib/is-rich-text-empty.js');
 
 describe('Admin Panel Integration', () => {
   let app;
@@ -510,13 +514,8 @@ describe('Admin Panel Integration', () => {
       // For now, we'll test the validation logic exists
       // In a real scenario, you'd need a model with rich-text field
       
-      // Test that empty rich-text (<p><br></p>) is rejected
       const emptyRichText = '<p><br></p>';
-      const stripped = emptyRichText.replace(/<[^>]*>/g, '').trim();
-      expect(stripped).toBe('');
-      
-      // This validates the isRichTextEmpty function logic
-      expect(stripped === '' || emptyRichText === '<p><br></p>').toBe(true);
+      expect(isRichTextEmpty(emptyRichText)).toBe(true);
     });
   });
 });

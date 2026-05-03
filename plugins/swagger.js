@@ -3,6 +3,7 @@
  */
 
 const path = require('path');
+const { trimUrlPathSlashes } = require('../core/url-path-normalize');
 const { buildOpenApiDocument } = require('../core/openapi/build-from-api-routes');
 
 const PKG = require(path.join(__dirname, '..', 'package.json'));
@@ -61,7 +62,7 @@ function swaggerPlugin(options = {}) {
     serverUrl,
   } = options;
 
-  const normalizedBase = `/${String(basePath).replace(/^\/+|\/+$/g, '')}`;
+  const normalizedBase = `/${trimUrlPathSlashes(basePath)}`;
   const jsonPath = `${normalizedBase}/openapi.json`;
   const uiPath = normalizedBase;
 

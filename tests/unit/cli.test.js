@@ -5,61 +5,96 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const sharp = require('sharp');
 
 const CLI_PATH = path.join(__dirname, '../../bin/webspresso.js');
 const TEST_DIR = path.join(__dirname, '../fixtures/cli-test-projects');
 const FAVICON_TEST_DIR = path.join(__dirname, '../fixtures/favicon-test');
 
-// Helper to run CLI commands
-// For interactive commands, pipes answers to skip prompts
-// When project name is provided: "Will you use a database?" (n), "Install dependencies?" (n)
-// When no project name: "Install in current directory?" (n), "Will you use a database?" (n), "Install dependencies?" (n)
-function runCli(args, options = {}) {
-  // If command might be interactive, pipe answers to skip prompts
-  const isInteractive =
-    args.includes('new') &&
-    !args.includes('--install') &&
-    !args.includes('--help') &&
-    !args.includes('--yes');
-  
-  let answers = '';
-  if (isInteractive) {
-    // Check if project name is provided
-    const hasProjectName = args.match(/new\s+(\S+)/);
-    if (hasProjectName) {
-      // Project name provided: database (n + Enter), seed (n + Enter), install (n + Enter)
-      // Each answer needs Enter, so: n\n for database, n\n for seed, n\n for install
-      answers = 'n\\nn\\nn\\n';
-    } else {
-      // No project name: current dir (n + Enter), database (n + Enter), seed (n + Enter), install (n + Enter)
-      answers = 'n\\nn\\nn\\nn\\n';
+/** Minimal quoted-string splitter for CLI test arg lines (supports "double quotes"). */
+function tokenizeCliLine(line) {
+  const s = String(line).trim();
+  if (!s) return [];
+  const parts = [];
+  let cur = '';
+  let quote = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (quote) {
+      if (c === '\\' && quote === '"' && i + 1 < s.length) {
+        cur += s[i + 1];
+        i += 1;
+        continue;
+      }
+      if (c === quote) {
+        quote = '';
+      } else {
+        cur += c;
+      }
+      continue;
     }
+    if (/\s/.test(c)) {
+      if (cur) {
+        parts.push(cur);
+        cur = '';
+      }
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      quote = c;
+      continue;
+    }
+    cur += c;
   }
-  
-  const cmd = isInteractive 
-    ? `(echo -e "${answers}") | node ${CLI_PATH} ${args} 2>&1 || true`
-    : `node ${CLI_PATH} ${args}`;
-  
-  try {
+  if (cur.length > 0) {
+    parts.push(cur);
+  }
+  return parts;
+}
+
+// Helper to run CLI commands
+// Non-interactive: spawn node without shell. Interactive `new`: feed 'n\\n' answers on stdin (no bash).
+function runCli(args, options = {}) {
+  const argParts = Array.isArray(args) ? [...args] : tokenizeCliLine(args);
+
+  const isInteractive =
+    argParts.includes('new') &&
+    !argParts.includes('--install') &&
+    !argParts.includes('--help') &&
+    !argParts.includes('--yes');
+
+  /** @type {string|undefined} */
+  let input;
+  if (isInteractive) {
+    const idx = argParts.indexOf('new');
+    const next = idx >= 0 ? argParts[idx + 1] : null;
+    const hasProjectName = next != null && !String(next).startsWith('-');
+    input = (hasProjectName ? ['n', 'n', 'n'].join('\n') : ['n', 'n', 'n', 'n'].join('\n')) + '\n';
+  }
+
+  const proc = spawnSync(process.execPath, [CLI_PATH, ...argParts], {
+    cwd: options.cwd || TEST_DIR,
+    input,
+    encoding: 'utf8',
+    env: options.env,
+  });
+
+  if (proc.error) {
     return {
-      stdout: execSync(cmd, { 
-        encoding: 'utf-8',
-        cwd: options.cwd || TEST_DIR,
-        shell: isInteractive ? '/bin/bash' : undefined,
-        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-        ...options
-      }),
-      exitCode: 0
-    };
-  } catch (err) {
-    return {
-      stdout: err.stdout || '',
-      stderr: err.stderr || '',
-      exitCode: err.status || 1
+      stdout: '',
+      stderr: String(proc.error),
+      exitCode: 1,
     };
   }
+
+  const combined = `${proc.stdout || ''}${proc.stderr || ''}`;
+  const exit = proc.status == null ? 1 : proc.status;
+  return {
+    stdout: combined,
+    stderr: proc.stderr ?? '',
+    exitCode: exit,
+  };
 }
 
 // Helper to clean up test projects

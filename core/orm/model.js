@@ -4,6 +4,7 @@
  * @module core/orm/model
  */
 
+const { trimUrlPathSlashes } = require('../url-path-normalize');
 const { extractColumnsFromSchema } = require('./schema-helpers');
 const { ModelEvents, Hooks } = require('./events');
 
@@ -93,7 +94,8 @@ function defineModel(options) {
     },
     rest: {
       enabled: rest.enabled === true,
-      path: typeof rest.path === 'string' && rest.path.length > 0 ? rest.path.replace(/^\/+|\/+$/g, '') : null,
+      path:
+        typeof rest.path === 'string' && rest.path.length > 0 ? trimUrlPathSlashes(rest.path) : null,
       allowInclude: Array.isArray(rest.allowInclude) ? rest.allowInclude.filter((x) => typeof x === 'string') : null,
     },
     hidden: Array.isArray(hidden) ? hidden : [],

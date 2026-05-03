@@ -333,12 +333,3 @@ function isAutoColumn(col) {
   if (col.name === 'created_at' || col.name === 'updated_at') return 'auto';
   return false;
 }
-
-// Check if rich-text content is empty
-function isRichTextEmpty(value) {
-  if (!value) return true;
-  // Remove all HTML tags and check if only whitespace remains
-  const stripped = value.replace(/<[^>]*>/g, '').trim();
-  // Check for common empty Quill outputs
-  return stripped === '' || value === '<p><br></p>' || value === '<p></p>';
-}

@@ -6,6 +6,7 @@
 const { attachDbMiddleware } = require('../../src/app-context');
 const { getAllModels } = require('../../core/orm/model');
 const { omit } = require('../../core/orm/utils');
+const { trimUrlPathSlashes } = require('../../core/url-path-normalize');
 
 const RESERVED_QUERY_KEYS = new Set(['page', 'perPage', 'sort', 'order', 'include', 'trashed']);
 
@@ -150,7 +151,7 @@ function resolveExposedModels(db, opts) {
 }
 
 function normalizeBasePath(p) {
-  return `/${String(p).replace(/^\/+|\/+$/g, '')}`;
+  return `/${trimUrlPathSlashes(p)}`;
 }
 
 function applySoftDeleteScope(query, countQuery, model, trashed) {

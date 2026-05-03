@@ -7,19 +7,7 @@
 const { getAllModels, getModel } = require('../../core/orm/model');
 const { sanitizeForOutput } = require('../../core/orm/utils');
 const { checkAdminExists, setupAdmin, login, logout, requireAuth } = require('./auth');
-
-/**
- * Check if rich-text content is empty
- * @param {string} value - Rich-text HTML value
- * @returns {boolean} True if empty
- */
-function isRichTextEmpty(value) {
-  if (!value) return true;
-  // Remove all HTML tags and check if only whitespace remains
-  const stripped = value.replace(/<[^>]*>/g, '').trim();
-  // Check for common empty Quill outputs
-  return stripped === '' || value === '<p><br></p>' || value === '<p></p>';
-}
+const { isRichTextEmpty } = require('./lib/is-rich-text-empty');
 
 /**
  * Create API route handlers

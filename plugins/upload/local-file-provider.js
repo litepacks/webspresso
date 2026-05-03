@@ -6,6 +6,7 @@
 const fs = require('fs/promises');
 const path = require('path');
 const { randomBytes } = require('crypto');
+const { trimUrlPathSlashes } = require('../../core/url-path-normalize');
 
 /**
  * Common MIME → canonical extension (lowercase, with leading dot).
@@ -38,8 +39,11 @@ const MIME_TO_EXT = {
  * @returns {string}
  */
 function normalizePublicBase(publicBasePath) {
-  let p = (publicBasePath == null || publicBasePath === '' ? '/uploads' : String(publicBasePath)).trim();
-  p = p.replace(/\/+$/, '');
+  let p =
+    publicBasePath == null || publicBasePath === ''
+      ? '/uploads'
+      : String(publicBasePath).trim();
+  p = trimUrlPathSlashes(p);
   if (!p.startsWith('/')) {
     p = `/${p}`;
   }

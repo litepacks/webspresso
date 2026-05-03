@@ -11,8 +11,46 @@ const { loadProjectModels } = require('../utils/orm-map-load');
 const { buildSnapshot, buildMermaidErDiagram } = require('../utils/orm-map-snapshot');
 const { buildOrmMapHtml, readPackageName } = require('../utils/orm-map-html');
 
-function openFile(filePath) {
+function ensureOpenInsideTrustedRoots(absFile, cwd) {
+  if (!fs.existsSync(absFile)) {
+    throw new Error(`File does not exist: ${absFile}`);
+  }
+  let realFile;
+  try {
+    realFile = fs.realpathSync(absFile);
+  } catch (e) {
+    throw new Error(`Cannot resolve file path: ${absFile}`, { cause: e });
+  }
+
+  /** @type {string[]} */
+  const roots = [];
+  for (const base of [os.tmpdir(), cwd]) {
+    const resolvedBase = path.resolve(base);
+    try {
+      roots.push(fs.realpathSync(resolvedBase));
+    } catch {
+      roots.push(resolvedBase);
+    }
+  }
+
+  const fileNorm = path.normalize(realFile + path.sep);
+  const trusted = roots.some((rootRaw) => {
+    const rr =
+      typeof rootRaw === 'string' && fs.existsSync(rootRaw)
+        ? fs.realpathSync(rootRaw)
+        : path.normalize(rootRaw);
+    const rp = rr.endsWith(path.sep) ? rr : rr + path.sep;
+    return realFile === rr || fileNorm.startsWith(path.normalize(rp));
+  });
+
+  if (!trusted) {
+    throw new Error('Refused to open file outside cwd or OS temp dir');
+  }
+}
+
+function openFile(filePath, cwd) {
   const fp = path.resolve(filePath);
+  ensureOpenInsideTrustedRoots(fp, cwd);
   if (process.platform === 'darwin') {
     execFileSync('open', [fp], { stdio: 'ignore' });
   } else if (process.platform === 'win32') {
@@ -90,7 +128,7 @@ function registerCommand(program) {
 
       if (options.open !== false) {
         try {
-          openFile(outPath);
+          openFile(outPath, cwd);
         } catch (e) {
           console.warn(`⚠️  Could not open browser: ${e.message}`);
         }

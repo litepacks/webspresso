@@ -41,15 +41,15 @@ describe('Error Pages', () => {
         viewsDir,
         errorPages: {
           notFound: (req, res) => {
-            res.send('Custom 404: ' + req.url);
-          }
-        }
+            res.send(`Custom 404: ${encodeURIComponent(req.path)}`);
+          },
+        },
       });
       
       const res = await request(app).get('/missing-page');
       
       expect(res.status).toBe(404);
-      expect(res.text).toBe('Custom 404: /missing-page');
+      expect(res.text).toBe(`Custom 404: ${encodeURIComponent('/missing-page')}`);
     });
 
     it('should use custom 500 handler function', async () => {

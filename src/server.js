@@ -11,7 +11,7 @@ const timeout = require('connect-timeout');
 const { setAppContext } = require('./app-context');
 const { mountClientRuntime } = require('./client-runtime/mount');
 const { resolveClientRuntime } = require('./client-runtime/resolve');
-const { mountPages } = require('./file-router');
+const { mountPages, detectLocale } = require('./file-router');
 const { configureAssets, createHelpers, getScriptInjector } = require('./helpers');
 const { createPluginManager } = require('./plugin-manager');
 
@@ -518,7 +518,7 @@ function createApp(options = {}) {
   // Helper to create error page context with fsy
   function createErrorContext(req, extraData = {}) {
     const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
-    const locale = req.query?.lang || process.env.DEFAULT_LOCALE || 'en';
+    const locale = detectLocale(req);
     
     // Create fsy helpers
     const fsy = createHelpers({ req, res: {}, baseUrl, locale });
