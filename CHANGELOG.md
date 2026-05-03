@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+#### Locale & i18n file paths (`src/file-router.js`)
+- **`detectLocale`**: **`?lang`** and **`Accept-Language`** resolve only to **`SUPPORTED_LOCALES`** entries and a safe **`[a-z0-9-]{1,16}`** tag shape; rejects traversal-style **`lang`** for **`loadI18n`** / **`pages/locales/*.json`**. Defaults fall back via **`DEFAULT_LOCALE`** then first configured locale.
+
+#### Translator & SSR utilities
+- **`createTranslator`**: interpolates **`{{ key }}`** with **RegExp-escaped keys** when replacing params.
+- **`filePathToRoute`**: **`[segment]` / `[...segment]`** conversion uses a linear scan (**no bracket regex** flagged by analyzers).
+
+#### Logging
+- **`loadI18nFile`**, **`loadRouteConfig`**: **`console.error`** uses fixed first message + separate arguments (avoid format-string quirks with attacker-influenced paths).
+
+#### Slash trimming (ReDoS-hardened)
+- New **`core/url-path-normalize.js`** — **`trimUrlPathSlashes`**: linear-time leading/trailing **`/`** trimming (avoids polynomial regexes like **`/^\/+|\/+$/g`** on long slash runs) in **`plugins/swagger.js`**, **`plugins/rest-resources`**, **`core/orm/model`** (**`rest.path`**), **`plugins/upload/local-file-provider`**.
+
+#### OpenAPI generator (`core/openapi/build-from-api-routes.js`)
+- **`paths`** nested maps use **`Object.create(null)`**; only allowlisted lowercase HTTP methods (**`get`**, **`post`**, **`put`**, **`patch`**, **`delete`**, **`head`**, **`options`**) populate operations.
+
+#### Session cookies (`core/auth/manager.js`)
+- **`getSessionConfig`**: **`cookie.secure`** is **`true`** when **`NODE_ENV === 'production'`**, **`COOKIE_SECURE === 'true'`**, or **`BASE_URL`** is **`https:`**; an explicit **`session.cookie.secure` boolean from the caller still wins.
+
+#### CLI / tooling
+- **`orm:map`**: browser **`open`** / **`xdg-open`** only after the written HTML resolves under **`process.cwd()`** or the OS temp dir (**`realpathSync`** checks).
+
+#### Admin rich-text emptiness (`plugins/admin-panel`)
+- Shared **`lib/is-rich-text-empty.js`** with **repeat-until-stable** stripping of **`/<[^>]*>/`**; **`api.js`** imports it; **SPA bundle prepends** the same file via **`client/load-parts.js`**.
+
+#### Tests
+- **`tests/unit/cli.test.js`**: interactive **`webspresso new`** flows use **`spawnSync`** + stdin (no shell pipeline); quoted favicon args parsed with **`tokenizeCliLine`**.
+- **`tests/unit/error-pages.test.js`**: custom 404 example uses **`encodeURIComponent(req.path)`** instead of raw reflection.
+- **`tests/integration/admin-panel.test.js`**: rich-text empty check asserts **`isRichTextEmpty`** from the shared lib.
+
+### Fixed
+
+#### Standalone docs on GitHub Pages (`doc/index.html`)
+- **Tailwind Play CDN** (**`cdn.tailwindcss.com`**) loads **without SRI / `crossorigin="anonymous"`** — that combination triggers **CORS** failures (redirect chain, missing **`Access-Control-Allow-Origin`**) on **`*.github.io`**.
+- Inline config wrapped in **`typeof tailwind !== 'undefined'`** so a failed CDN load does not throw **`ReferenceError`**.
+
+### Changed
+
+#### Error pages & SSR (`src/server.js`)
+- **`createErrorContext`** uses **`detectLocale(req)`** instead of **`req.query.lang`** directly (aligned with i18n allowlist behaviour).
+
+#### File router (`src/file-router.js`)
+- API route registration: removed redundant no-op **`/^\/api`** replace before **`filePathToRoute`**.
+
 ### Added
 
 #### API routes: runtime Zod + object export
