@@ -6,13 +6,12 @@
   <meta name="color-scheme" content="light dark" />
   <meta name="description" content="webspresso — minimal SSR framework for Node.js: file-based routing, Nunjucks, Zod, Knex ORM, plugins, CLI. Full single-page reference." />
   <title>webspresso — documentation</title>
-  <script
-    src="https://cdn.tailwindcss.com"
-    integrity="sha384-igm5BeiBt36UU4gqwWS7imYmelpTsZlQ45FZf+XBn9MuJbn4nQr7yx1yFydocC/K"
-    crossorigin="anonymous"
-  ></script>
+  <!-- Plain script tag (no crossorigin/SRI): Tailwind CDN + redirects don’t reliably send ACAO → breaks on GitHub Pages. -->
+  <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    tailwind.config = { darkMode: 'class' }
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = { darkMode: 'class' };
+    }
   </script>
   <link
     rel="stylesheet"
