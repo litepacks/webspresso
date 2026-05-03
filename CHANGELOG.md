@@ -31,10 +31,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### CLI / tooling
 - **`orm:map`**: browser **`open`** / **`xdg-open`** only after the written HTML resolves under **`process.cwd()`** or the OS temp dir (**`realpathSync`** checks).
 
+#### Admin rich-text HTML (`plugins/admin-panel`)
+- **`sanitize-html`** (dependency): model **create/update** routes sanitize **`admin.customFields`** columns with **`type: 'rich-text'`** before persistence (whitelist tuned for Quill). Nullable columns normalize empty HTML to **`null`** after sanitization.
+- **`adminPanelPlugin({ richTextSanitize: false })`** disables server-side sanitization (increases XSS risk if HTML is rendered unsafely).
+
 #### Admin rich-text emptiness (`plugins/admin-panel`)
 - Shared **`lib/is-rich-text-empty.js`** with **repeat-until-stable** stripping of **`/<[^>]*>/`**; **`api.js`** imports it; **SPA bundle prepends** the same file via **`client/load-parts.js`**.
 
 #### Tests
+- **`tests/unit/admin-panel/sanitize-rich-html.test.js`**, **`tests/integration/admin-rich-text-sanitize.test.js`**: rich-text HTML sanitization behavior and **`richTextSanitize: false`** opt-out.
 - **`tests/unit/cli.test.js`**: interactive **`webspresso new`** flows use **`spawnSync`** + stdin (no shell pipeline); quoted favicon args parsed with **`tokenizeCliLine`**.
 - **`tests/unit/error-pages.test.js`**: custom 404 example uses **`encodeURIComponent(req.path)`** instead of raw reflection.
 - **`tests/integration/admin-panel.test.js`**: rich-text empty check asserts **`isRichTextEmpty`** from the shared lib.

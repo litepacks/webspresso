@@ -31,6 +31,7 @@ const { registerModule } = require('./core/admin-module');
  * @param {Object} [options.userManagement.fields] - Field mappings
  * @param {Function} [options.configure] - Configuration callback (registry) => void
  * @param {string} [options.uploadUrl] - POST URL for file uploads (overrides app.get('webspresso.uploadPath') from uploadPlugin)
+ * @param {boolean} [options.richTextSanitize=true] - Sanitize HTML for admin rich-text fields on create/update (set false only if you accept XSS risk)
  * @returns {Object} Plugin definition
  */
 function adminPanelPlugin(options = {}) {
@@ -43,6 +44,7 @@ function adminPanelPlugin(options = {}) {
     userManagement: userMgmtConfig,
     configure,
     uploadUrl: uploadUrlOption,
+    richTextSanitize = true,
   } = options;
 
   // Validate required options
@@ -204,6 +206,7 @@ function adminPanelPlugin(options = {}) {
         AdminUser,
         hashPassword: (password, rounds) => bcrypt.hash(password, rounds),
         comparePassword: (password, hash) => bcrypt.compare(password, hash),
+        richTextSanitize,
       });
 
       const extensionHandlers = createExtensionApiHandlers({

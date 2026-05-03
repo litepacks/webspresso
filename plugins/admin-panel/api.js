@@ -8,6 +8,7 @@ const { getAllModels, getModel } = require('../../core/orm/model');
 const { sanitizeForOutput } = require('../../core/orm/utils');
 const { checkAdminExists, setupAdmin, login, logout, requireAuth } = require('./auth');
 const { isRichTextEmpty } = require('./lib/is-rich-text-empty');
+const { sanitizeRichHtml } = require('./lib/sanitize-rich-html');
 
 /**
  * Create API route handlers
@@ -17,12 +18,36 @@ const { isRichTextEmpty } = require('./lib/is-rich-text-empty');
  * @param {Object} options.AdminUser - AdminUser model
  * @param {Function} options.hashPassword - Bcrypt hash function
  * @param {Function} options.comparePassword - Bcrypt compare function
+ * @param {boolean} [options.richTextSanitize=true] - Sanitize rich-text HTML before create/update
  * @returns {Object} Route handlers
  */
 function createApiHandlers(options) {
-  const { path, db, AdminUser, hashPassword, comparePassword } = options;
+  const {
+    path,
+    db,
+    AdminUser,
+    hashPassword,
+    comparePassword,
+    richTextSanitize = true,
+  } = options;
   const adminPath = path || '/_admin';
   const apiPath = `${adminPath}/api`;
+
+  /** Strip XSS vectors from rich-text columns present on body; nullable columns normalize empty → null */
+  function mutateRichTextFieldsInBody(body, model) {
+    if (!richTextSanitize || !model.admin?.customFields) return;
+    for (const [colName, colMeta] of model.columns) {
+      if (model.admin.customFields[colName]?.type !== 'rich-text') continue;
+      if (!(colName in body)) continue;
+      const raw = body[colName];
+      if (raw === null || raw === undefined) continue;
+      if (typeof raw !== 'string') continue;
+      body[colName] = sanitizeRichHtml(raw);
+      if (colMeta.nullable && isRichTextEmpty(body[colName])) {
+        body[colName] = null;
+      }
+    }
+  }
 
   // Helper to get model from db instance or global registry
   function getModelFromDb(modelName) {
@@ -447,6 +472,8 @@ function createApiHandlers(options) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
+      mutateRichTextFieldsInBody(req.body, model);
+
       // Validate rich-text fields
       for (const [colName, colMeta] of model.columns) {
         if (model.admin.customFields?.[colName]?.type === 'rich-text' && !colMeta.nullable) {
@@ -479,6 +506,8 @@ function createApiHandlers(options) {
       if (!model || !model.admin || model.admin.enabled !== true) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
+
+      mutateRichTextFieldsInBody(req.body, model);
 
       // Validate rich-text fields (only if field is being updated)
       for (const [colName, colMeta] of model.columns) {
