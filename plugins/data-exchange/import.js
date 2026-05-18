@@ -3,7 +3,7 @@
  * @module plugins/data-exchange/import
  */
 
-const multer = require('multer');
+const { extractUploadFile } = require('../../src/http/multipart');
 const ExcelJS = require('exceljs');
 const { parse: parseCsv } = require('csv-parse/sync');
 const { buildHeaderMapping, dataRowsToObjects } = require('./parse-table');
@@ -138,13 +138,6 @@ function cellValueToPlain(cell) {
   return v;
 }
 
-function createMulter(maxFileBytes) {
-  return multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: maxFileBytes, files: 1 },
-  });
-}
-
 /**
  * @param {object} opts
  * @param {import('../../core/orm/database').Database} opts.db
@@ -153,19 +146,24 @@ function createMulter(maxFileBytes) {
  */
 function createImportHandler(opts) {
   const { db, maxRows, maxFileBytes } = opts;
-  const upload = createMulter(maxFileBytes).single('file');
 
   return async function importHandler(req, res) {
-    upload(req, res, async (multerErr) => {
+    try {
+      let file;
       try {
-        if (multerErr) {
-          const code = multerErr.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
-          return res.status(code).json({
-            error: multerErr.code === 'LIMIT_FILE_SIZE' ? 'File too large' : multerErr.message,
-          });
-        }
+        file = await extractUploadFile(req, 'file', maxFileBytes);
+      } catch (multerErr) {
+        const code = multerErr.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+        return res.status(code).json({
+          error: multerErr.code === 'LIMIT_FILE_SIZE' ? 'File too large' : multerErr.message,
+        });
+      }
 
-        const modelName = req.params.model;
+      if (!file?.buffer) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      const modelName = req.params.model;
         const { getModel } = require('../../core/orm/model');
         const model = db.getModel ? db.getModel(modelName) : getModel(modelName);
         if (!model || !model.admin?.enabled) {
@@ -184,18 +182,14 @@ function createImportHandler(opts) {
           return res.status(400).json({ error: `upsertKey "${upsertKey}" is not allowed` });
         }
 
-        if (!req.file || !req.file.buffer) {
-          return res.status(400).json({ error: 'Missing file field' });
-        }
-
-        const name = (req.file.originalname || '').toLowerCase();
-        const isCsv = name.endsWith('.csv') || (req.file.mimetype || '').includes('csv');
+        const name = (file.originalname || '').toLowerCase();
+        const isCsv = name.endsWith('.csv') || (file.mimetype || '').includes('csv');
         let rows;
         if (isCsv) {
-          rows = parseCsvToRows(req.file.buffer);
+          rows = parseCsvToRows(file.buffer);
         } else {
           try {
-            rows = await parseXlsxToRows(req.file.buffer);
+            rows = await parseXlsxToRows(file.buffer);
           } catch (e) {
             return res.status(400).json({ error: `Invalid spreadsheet: ${e.message}` });
           }
@@ -273,15 +267,13 @@ function createImportHandler(opts) {
         res.json(summary);
       } catch (err) {
         console.error('[data-exchange] import:', err);
-        res.status(500).json({ error: err.message || 'Import failed' });
-      }
-    });
+      res.status(500).json({ error: err.message || 'Import failed' });
+    }
   };
 }
 
 module.exports = {
   createImportHandler,
-  createMulter,
   allowedImportColumns,
   parseCsvToRows,
   parseXlsxToRows,

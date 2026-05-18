@@ -5,7 +5,7 @@
 const { createApp } = require('../../src/server');
 const { resolveMiddlewares } = require('../../src/file-router');
 const path = require('path');
-const request = require('supertest');
+const request = require('../helpers/http').request;
 
 describe('Middleware Configuration', () => {
   const pagesDir = path.join(__dirname, '../fixtures/pages');

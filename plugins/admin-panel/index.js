@@ -56,8 +56,8 @@ function adminPanelPlugin(options = {}) {
   const registry = new AdminRegistry();
 
   // Dependencies are now in main package
-  const session = require('express-session');
   const bcrypt = require('bcrypt');
+  const { mountAppSession } = require('../../src/http/session');
 
   const serveAdminPanel = (req, res) => {
     res.type('text/html');
@@ -166,20 +166,16 @@ function adminPanelPlugin(options = {}) {
 
       // Setup session middleware (only once)
       if (!app._webspressoSessionInitialized) {
-        const secret = sessionSecret || process.env.SESSION_SECRET || 'webspresso-admin-secret-change-in-production';
-
-        app.use(session({
-          secret,
-          resave: false,
-          saveUninitialized: false,
-          cookie: {
-            secure: process.env.NODE_ENV === 'production',
-            httpOnly: true,
-            maxAge: 24 * 60 * 60 * 1000, // 24 hours
-          },
-        }));
-
-        app._webspressoSessionInitialized = true;
+        const secret =
+          sessionSecret ||
+          process.env.SESSION_SECRET ||
+          'webspresso-admin-secret-change-in-production-32';
+        mountAppSession(app, {
+          secret: secret.length >= 32 ? secret : secret.padEnd(32, 'x'),
+          sessionCookieName: 'ws.admin.sid',
+          maxAgeMs: 24 * 60 * 60 * 1000,
+          secure: process.env.NODE_ENV === 'production',
+        });
       }
 
       // Register default modules

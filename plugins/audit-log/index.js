@@ -3,7 +3,8 @@
  * @module plugins/audit-log
  */
 
-const { createAuditMiddleware } = require('./middleware');
+const { createAuditMiddleware, flushAuditFromContext } = require('./middleware');
+const { buildReq } = require('../../src/http/context');
 const { createAuditLogHandlers } = require('./api-handlers');
 const { generateAuditLogComponent } = require('./admin-component');
 const { generateAuditLogsMigration } = require('./migration-template');
@@ -49,7 +50,12 @@ function auditLogPlugin(options = {}) {
 
     register(ctx) {
       const adminPath = adminPathOpt || '/_admin';
-      ctx.app.use(createAuditMiddleware({ knex, adminPath, tableName }));
+      const auditOpts = { knex, adminPath, tableName };
+      ctx.app.use(createAuditMiddleware(auditOpts));
+      ctx.app._hono.use('*', async (c, next) => {
+        await next();
+        await flushAuditFromContext(c, auditOpts);
+      });
     },
 
     onRoutesReady(ctx) {

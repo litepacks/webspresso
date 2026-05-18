@@ -5,7 +5,7 @@
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import request from 'supertest';
+import { request } from '../helpers/http.js';
 import { describe, it, expect } from 'vitest';
 import { createApp } from '../../src/server.js';
 import { redirectPlugin } from '../../plugins/redirect/index.js';

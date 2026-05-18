@@ -3,7 +3,6 @@
  */
 
 const { test, expect } = require('@playwright/test');
-const express = require('express');
 const { createApp } = require('../../src/server');
 const { createAuth, hash, verify, createRememberTokensTable } = require('../../core/auth');
 const { createDatabase, defineModel, clearRegistry, zdb } = require('../../core/orm');
@@ -110,7 +109,7 @@ test.describe('Auth E2E Tests', () => {
         },
       },
       session: {
-        secret: 'e2e-test-secret-key-12345',
+        secret: 'e2e-test-secret-key-32-characters-minimum',
         resave: false,
         saveUninitialized: false,
       },
@@ -188,9 +187,11 @@ test.describe('Auth E2E Tests', () => {
       pagesDir,
       viewsDir,
       auth,
-      setupRoutes: (expressApp, { authMiddleware: am }) => {
+      setupRoutes: (expressApp, { authMiddleware: am, nunjucksEnv }) => {
+        const render = (view, data) => nunjucksEnv.render(view, data);
+
         expressApp.get('/login', am.requireGuest(), (req, res) => {
-          res.render('login.njk', { title: 'Login' });
+          res.send(render('login.njk', { title: 'Login' }));
         });
 
         expressApp.post('/login', async (req, res) => {
@@ -201,11 +202,11 @@ test.describe('Auth E2E Tests', () => {
             return res.redirect('/dashboard');
           }
 
-          res.render('login.njk', { title: 'Login', error: 'Invalid credentials' });
+          res.send(render('login.njk', { title: 'Login', error: 'Invalid credentials' }));
         });
 
         expressApp.get('/dashboard', am.requireAuth(), (req, res) => {
-          res.render('dashboard.njk', { title: 'Dashboard', user: req.user });
+          res.send(render('dashboard.njk', { title: 'Dashboard', user: req.user }));
         });
 
         expressApp.post('/logout', async (req, res) => {
@@ -214,7 +215,7 @@ test.describe('Auth E2E Tests', () => {
         });
 
         expressApp.get('/', (req, res) => {
-          res.render('index.njk', { title: 'Home', user: req.user });
+          res.send(render('index.njk', { title: 'Home', user: req.user }));
         });
       },
     });

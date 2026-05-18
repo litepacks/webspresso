@@ -1,7 +1,7 @@
 /**
  * Typecheck smoke: ensures index.d.ts matches public exports (not executed in Vitest).
  */
-import type { Application } from 'express';
+import type { WebspressoCompatApp } from '../..';
 import {
   createApp,
   createDatabase,
@@ -11,13 +11,15 @@ import {
   getAllModels,
 } from '../..';
 
-const { app }: { app: Application } = createApp({
+const { app }: { app: WebspressoCompatApp } = createApp({
   pagesDir: 'tests/fixtures/pages',
   viewsDir: 'tests/fixtures/views',
   plugins: [restResourcePlugin({ path: '/api/rest' })],
 });
 
-void app;
+void app.listen;
+void app.fetch;
+void app._hono;
 
 const schema = zdb.schema({
   id: zdb.id(),

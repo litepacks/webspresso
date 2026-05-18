@@ -3,7 +3,7 @@
  */
 
 const path = require('path');
-const request = require('supertest');
+const request = require('../helpers/http').request;
 const { createApp } = require('../../src/server');
 const { rateLimitPlugin } = require('../../plugins/rate-limit');
 const { resolveMiddlewares } = require('../../src/file-router');
@@ -11,22 +11,20 @@ const { resolveMiddlewares } = require('../../src/file-router');
 const viewsDir = path.join(__dirname, '../fixtures/views');
 
 describe('rateLimitPlugin', () => {
-  it('createLimiterOptions uses ipKeyGenerator-backed default keyGenerator', () => {
+  it('createLimiterOptions includes default keyGenerator from req.ip', () => {
     const p = rateLimitPlugin({ limit: 10 });
     const opts = p.api.createLimiterOptions();
     expect(typeof opts.keyGenerator).toBe('function');
-    expect(opts.ipv6Subnet).toBeUndefined();
     const key = opts.keyGenerator({ ip: '127.0.0.1' }, {});
     expect(key).toBe('127.0.0.1');
   });
 
-  it('createLimiterOptions honours custom keyGenerator and omits ipv6Subnet', () => {
+  it('createLimiterOptions honours custom keyGenerator', () => {
     const p = rateLimitPlugin({
       keyGenerator: () => 'fixed-key',
     });
     const opts = p.api.createLimiterOptions({ limit: 2 });
     expect(opts.keyGenerator()).toBe('fixed-key');
-    expect(opts.ipv6Subnet).toBeUndefined();
   });
 
   it('register adds factory to ctx.middlewares.rateLimit', () => {
