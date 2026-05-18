@@ -22,6 +22,10 @@ function createMockRes() {
       this.payload = o;
       return this;
     },
+    send(body) {
+      this.payload = body;
+      return this;
+    },
     setHeader(k, v) {
       this.headers[k] = v;
     },
@@ -420,8 +424,8 @@ describe('admin api-extensions', () => {
         r2,
       );
       expect(r2.headers['Content-Type']).toBe('text/csv');
-      expect(String(r2.payload.data)).toContain('name');
-      expect(String(r2.payload.data)).toContain('"a,b"');
+      expect(String(r2.payload)).toContain('name');
+      expect(String(r2.payload)).toContain('"a,b"');
     });
 
     it('bulkUpdateFieldHandler validates field and enum', async () => {

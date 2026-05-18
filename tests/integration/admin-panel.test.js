@@ -5,7 +5,7 @@
 
 import { createRequire } from 'node:module';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import request from 'supertest';
+import { request } from '../helpers/http.js';
 import { createApp } from '../../src/server.js';
 import { createDatabase, defineModel, zdb, hasModel } from '../../index.js';
 import { adminPanelPlugin } from '../../plugins/index.js';

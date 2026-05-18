@@ -2,7 +2,7 @@
  * Plugin System Tests
  */
 const path = require('path');
-const request = require('supertest');
+const request = require('../helpers/http').request;
 
 const {
   PluginManager,

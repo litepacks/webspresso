@@ -585,6 +585,39 @@ function resolveNamedMiddleware(name, entry, fromTuple, tupleOptions, middleware
  * @param {Object} middlewareRegistry - Named middleware registry (plain handlers or option factories)
  * @returns {Array} Array of resolved middleware functions
  */
+/**
+ * Run route middleware chain; stop when a handler sends a response without calling next()
+ * @param {object} req
+ * @param {object} res
+ * @param {Function[]} middlewares
+ */
+async function runRouteMiddlewareChain(req, res, middlewares) {
+  for (const mw of middlewares) {
+    await new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (err) => {
+        if (settled) return;
+        settled = true;
+        if (err) reject(err);
+        else resolve();
+      };
+      try {
+        const result = mw(req, res, finish);
+        if (result && typeof result.then === 'function') {
+          result.then(() => finish()).catch(finish);
+          return;
+        }
+        if (res._handled || res._ended) {
+          setImmediate(finish);
+        }
+      } catch (err) {
+        finish(err);
+      }
+    });
+    if (res._handled || res._ended) break;
+  }
+}
+
 function resolveMiddlewares(middlewareConfig, middlewareRegistry = {}) {
   if (!middlewareConfig || !Array.isArray(middlewareConfig)) {
     return [];
@@ -759,14 +792,8 @@ function mountPages(app, options) {
         
         // Run middleware if defined (resolved at route registration — required for stateful middleware like express-rate-limit)
         if (preResolvedMw.length) {
-          for (const mw of preResolvedMw) {
-            await new Promise((resolve, reject) => {
-              mw(req, res, (err) => {
-                if (err) reject(err);
-                else resolve();
-              });
-            });
-          }
+          await runRouteMiddlewareChain(req, res, preResolvedMw);
+          if (res._handled || res._ended) return;
         }
         
         await fn(req, res, next);
@@ -848,14 +875,8 @@ function mountPages(app, options) {
         
         // Run route middleware (chain fixed at route registration; edit middleware in dev → restart)
         if (preResolvedPageMw.length) {
-          for (const mw of preResolvedPageMw) {
-            await new Promise((resolve, reject) => {
-              mw(req, res, (err) => {
-                if (err) reject(err);
-                else resolve();
-              });
-            });
-          }
+          await runRouteMiddlewareChain(req, res, preResolvedPageMw);
+          if (res._handled || res._ended) return;
         }
         
         // Execute hooks: afterMiddleware

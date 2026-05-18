@@ -4,7 +4,7 @@
 
 const { createApp } = require('../../src/server');
 const path = require('path');
-const request = require('supertest');
+const request = require('../helpers/http').request;
 const fs = require('fs');
 
 describe('Error Pages', () => {
@@ -53,21 +53,22 @@ describe('Error Pages', () => {
     });
 
     it('should use custom 500 handler function', async () => {
-      const express = require('express');
-      const testApp = express();
-      
-      // Add error route BEFORE error handlers
-      testApp.get('/error-test', (req, res, next) => {
-        next(new Error('Test error'));
+      const { app } = createApp({
+        pagesDir,
+        viewsDir,
+        errorPages: {
+          serverError: (err, req, res) => {
+            res.status(500).send(`Custom Error: ${err.message}`);
+          },
+        },
       });
-      
-      // Custom error handler
-      testApp.use((err, req, res, next) => {
-        res.status(500).send('Custom Error: ' + err.message);
+
+      app.get('/error-test', () => {
+        throw new Error('Test error');
       });
-      
-      const res = await request(testApp).get('/error-test');
-      
+
+      const res = await request(app).get('/error-test');
+
       expect(res.status).toBe(500);
       expect(res.text).toBe('Custom Error: Test error');
     });
@@ -151,23 +152,26 @@ describe('Error Pages', () => {
 
   describe('Error Status Codes', () => {
     it('should respect custom error status codes', async () => {
-      const express = require('express');
-      const testApp = express();
-      
-      testApp.get('/forbidden', (req, res, next) => {
+      const { app } = createApp({
+        pagesDir,
+        viewsDir,
+        errorPages: {
+          serverError: (err, req, res) => {
+            res.status(err.status || 500).json({ error: err.message });
+          },
+        },
+      });
+
+      app.get('/forbidden', () => {
         const err = new Error('Forbidden');
         err.status = 403;
-        next(err);
+        throw err;
       });
-      
-      // Error handler that respects err.status
-      testApp.use((err, req, res, next) => {
-        res.status(err.status || 500).json({ error: err.message });
-      });
-      
-      const res = await request(testApp).get('/forbidden');
-      
+
+      const res = await request(app).get('/forbidden');
+
       expect(res.status).toBe(403);
+      expect(res.body.error).toBe('Forbidden');
     });
   });
 });

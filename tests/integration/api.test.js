@@ -3,7 +3,7 @@
  */
 
 const path = require('path');
-const request = require('supertest');
+const request = require('../helpers/http').request;
 const { createApp } = require('../../src/server');
 
 const FIXTURES_PATH = path.join(__dirname, '..', 'fixtures');

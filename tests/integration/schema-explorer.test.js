@@ -2,8 +2,8 @@
  * Schema Explorer Plugin Integration Tests
  */
 
-const request = require('supertest');
-const express = require('express');
+const request = require('../helpers/http').request;
+const { createCompatApp } = require('../../src/http/compat-app');
 const { z } = require('zod');
 const { zdb, defineModel, clearRegistry } = require('../../core/orm');
 const schemaExplorerPlugin = require('../../plugins/schema-explorer');
@@ -13,8 +13,8 @@ describe('Schema Explorer Plugin Integration', () => {
 
   beforeEach(() => {
     clearRegistry();
-    app = express();
-    app.use(express.json());
+    app = createCompatApp();
+    app.mountBodyParsers();
   });
 
   /**

@@ -16,7 +16,7 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 - **Template Helpers**: Laravel-inspired helper functions available in templates
 - **Plugin System**: Extensible architecture with version control and inter-plugin communication
 - **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing), self-hosted site analytics, optional Swagger UI for HTTP APIs, configurable HTTP health probe endpoint, optional REST CRUD routes from ORM models, optional admin UI for ORM query cache metrics and purge, optional **admin-only spreadsheet exchange** (Excel export, CSV/XLSX import via `dataExchangePlugin`)
-- **Session authentication** (optional): `createAuth` / `quickAuth` in **`webspresso/core/auth`** — pass the manager to **`createApp({ auth })`** for `express-session`, `req.user` / `req.auth`, remember-me tokens, and policy-style authorization. Full walkthrough: **[`doc/index.html#authentication`](doc/index.html#authentication)**.
+- **Session authentication** (optional): `createAuth` / `quickAuth` in **`webspresso/core/auth`** — pass the manager to **`createApp({ auth })`** for encrypted cookie sessions (`hono-sessions`), `req.user` / `req.auth`, remember-me tokens, and policy-style authorization. Full walkthrough: **[`doc/index.html#authentication`](doc/index.html#authentication)**.
 - **Optional client runtime** (Alpine.js + [swup](https://swup.js.org/)): **`createApp({ clientRuntime: { alpine, swup } })`** serves scripts under **`/__webspresso/client-runtime/`** and exposes **`clientRuntime`** in Nunjucks; layouts can include **`views/partials/webspresso-client-runtime.njk`**. Env overrides: **`WEBSPRESSO_ALPINE`**, **`WEBSPRESSO_SWUP`**. Demo: **`examples/alpine-swup-demo/`**. Details: **[`doc/index.html#client-runtime`](doc/index.html#client-runtime)**.
 - **TypeScript**: Published **`index.d.ts`** (via `package.json` `"types"`) for `createApp`, ORM, plugins, and router helpers — use from TS/JS with IDE autocomplete; runtime stays CommonJS
 - **Application kernel (optional)**: In-process **`kernel`** API (`require('webspresso').kernel`) — event bus (`dispatch` / `publish`), **`kernel.createApp()`** (namespaced differently from SSR **`createApp`**), **`definePlugin`** / **`defineFlow`**, minimal **`{{ }}` view resolver**, and simulated **`BaseRepository`** with `orm.<resource>.*` events. Ships as **`core/kernel/`** on npm. Demo: **`node core/kernel/run-demo.js`**. Docs: **[`doc/index.html#application-kernel`](doc/index.html#application-kernel)**.
@@ -37,13 +37,31 @@ The npm package ships with **[`index.d.ts`](index.d.ts)** so consumers get typin
 import { createApp, defineModel, zdb } from 'webspresso';
 ```
 
-Install **`@types/express`** in your app if you want full **`Express.Application`** / **`Request`** / **`Response`** inference when you touch `createApp().app` or write middleware. **`knex`** and **`zod`** bring their own types.
+**`index.d.ts`** exports **`WebspressoCompatApp`**, **`WebspressoRequest`**, and **`WebspressoResponse`** for route handlers and middleware (Express-shaped API on Hono). Install **`hono`** in your app if you need Hono core types when extending `createApp().app`. **`knex`** and **`zod`** bring their own types.
 
 Framework development (this repo): run **`npm run check:types`** to typecheck the declarations against a small smoke file (`tests/ts-smoke/`).
 
+### Migrating from the Express-based Webspresso stack
+
+Major versions use **Hono** instead of Express. Breaking changes:
+
+| Before (Express) | After (Hono) |
+|----------------|--------------|
+| `createApp().app` is `express.Application` | `createApp().app` is **`WebspressoCompatApp`** (Hono + `listen`, `get`, `post`, …) |
+| `express-session`, `cookie-parser`, `helmet`, `multer` | Built into Webspresso (`hono-sessions`, secure-headers, `parseBody` / upload plugin) |
+| `app.listen(port)` via Express | Same call — implemented with **`@hono/node-server`** |
+| Custom middleware `(req, res, next)` | Same signature; `req` / `res` are compat wrappers |
+| `supertest` in tests | Use **`app.fetch`** or project test helper (`tests/helpers/http.js`) |
+
+**`server.js` scaffold** (from `webspresso new`) still uses `app.listen(PORT, callback)` — no change required for basic apps.
+
+**Rate limiting:** optional peer **`hono-rate-limiter`**; built-in **`rateLimitPlugin`** provides in-memory limiters for file routes.
+
+**Raw Hono:** `createApp().app._hono` exposes the underlying Hono instance for advanced routing.
+
 ## Application kernel (`kernel`)
 
-Do **not** confuse **`kernel.createApp()`** with the package root **`createApp`** used for SSR—it returns a different object (event bus, optional flows, and a minimal view resolver). It does **not** modify Knex ORM behavior or Express routing.
+Do **not** confuse **`kernel.createApp()`** with the package root **`createApp`** used for SSR—it returns a different object (event bus, optional flows, and a minimal view resolver). It does **not** modify Knex ORM behavior or HTTP routing.
 
 ```javascript
 const { kernel } = require('webspresso');

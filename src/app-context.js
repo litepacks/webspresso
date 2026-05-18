@@ -1,5 +1,5 @@
 /**
- * Process-wide app context set by createApp() — use from API handlers, jobs, etc.
+ * Process-wide app context set by createApp()
  * @module src/app-context
  */
 
@@ -8,26 +8,14 @@ let context = {
   db: null,
 };
 
-/**
- * Merge into the current context (typically called once from createApp).
- * @param {{ db?: object|null }} partial
- */
 function setAppContext(partial) {
   context = { ...context, ...partial };
 }
 
-/**
- * @returns {{ db: object|null }}
- */
 function getAppContext() {
   return context;
 }
 
-/**
- * Database instance passed to createApp({ db }) (Knex + ORM helpers).
- * @returns {object}
- * @throws {Error} If createApp was not given a db instance
- */
 function getDb() {
   if (!context.db) {
     throw new Error(
@@ -38,25 +26,16 @@ function getDb() {
   return context.db;
 }
 
-/**
- * @returns {boolean}
- */
 function hasDb() {
   return context.db != null;
 }
 
-/**
- * Clear context (e.g. between tests).
- */
 function resetAppContext() {
   context = { db: null };
 }
 
 /**
- * Express middleware: sets `req.db` from registered app context.
- * File-based `pages/api/*` routes attach this automatically; use in `setupRoutes`
- * for manually registered handlers that need `req.db`.
- * @type {import('express').RequestHandler}
+ * Compat middleware: sets req.db from app context
  */
 function attachDbMiddleware(req, res, next) {
   if (context.db != null) {

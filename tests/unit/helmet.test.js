@@ -4,7 +4,7 @@
 
 const { createApp } = require('../../src/server');
 const path = require('path');
-const request = require('supertest');
+const request = require('../helpers/http').request;
 
 describe('Helmet Configuration', () => {
   const pagesDir = path.join(__dirname, '../fixtures/pages');

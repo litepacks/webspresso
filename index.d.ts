@@ -2,16 +2,87 @@
  * Type definitions for webspresso (CommonJS package).
  */
 
-import type { Application, NextFunction, Request, RequestHandler, Response } from 'express';
+import type { Hono } from 'hono';
 import type { Knex } from 'knex';
 import type { ZodObject, ZodTypeAny } from 'zod';
 
+/** Compat app returned by `createApp()` — Hono core + Express-shaped route helpers. */
+export interface WebspressoCompatApp extends Hono {
+  listen(
+    port?: number | string,
+    callback?: (err?: Error | null, info?: { port: number }) => void
+  ): unknown;
+  mountBodyParsers(): void;
+  mountStatic(publicDir: string, options?: Record<string, unknown>): void;
+  mountTimeout(timeout?: string | false): void;
+  mountHaltOnTimedout(): void;
+  useSecureHeaders(config?: Record<string, unknown>): void;
+  set(key: string, value: unknown): void;
+  get(key: string): unknown;
+  fetch: typeof fetch;
+  _hono: Hono;
+}
+
+/** Express-shaped request built from Hono context (file routes, plugins, auth). */
+export interface WebspressoRequest {
+  method: string;
+  path: string;
+  url: string;
+  originalUrl: string;
+  query: Record<string, unknown>;
+  params: Record<string, string>;
+  body: unknown;
+  headers: Record<string, string>;
+  cookies: Record<string, string>;
+  signedCookies?: Record<string, string>;
+  session?: Record<string, unknown> & {
+    regenerate(cb: (err?: Error) => void): void;
+    destroy(cb: (err?: Error) => void): void;
+    save(cb: (err?: Error) => void): void;
+  };
+  user?: unknown;
+  auth?: unknown;
+  db?: unknown;
+  input?: { body?: unknown; params?: Record<string, string>; query?: Record<string, unknown> };
+  ip?: string;
+  xhr?: boolean;
+  protocol?: string;
+  timedout?: boolean;
+  get(name: string): string | null;
+  accepts(type: string): boolean;
+}
+
+/** Express-shaped response wrapper around Hono context. */
+export interface WebspressoResponse {
+  status(code: number): this;
+  statusCode: number;
+  headers: Record<string, string>;
+  locals: Record<string, unknown>;
+  json(data: unknown): Promise<unknown>;
+  send(body?: unknown): Promise<unknown>;
+  redirect(url: string, status?: number): Promise<unknown>;
+  redirect(status: number, url: string): Promise<unknown>;
+  type(contentType: string): this;
+  set(name: string, value: string): this;
+  setHeader(name: string, value: string): this;
+  getHeader(name: string): string | undefined;
+  cookie(name: string, value: string, opts?: Record<string, unknown>): this;
+  clearCookie(name: string, opts?: Record<string, unknown>): this;
+  on(event: string, fn: () => void): this;
+}
+
+export type WebspressoHandler = (
+  req: WebspressoRequest,
+  res: WebspressoResponse,
+  next: (err?: unknown) => void
+) => void | Promise<void>;
+
 /** Registered as createApp middlewares[name]: plain handler or (options) => handler (for middleware: ['name', options]). */
 export type WebspressoRegisteredMiddleware =
-  | RequestHandler
-  | ((options: unknown) => RequestHandler);
+  | WebspressoHandler
+  | ((options: unknown) => WebspressoHandler);
 
-// --- Express / app ---
+// --- HTTP app ---
 
 export interface ErrorPageContext {
   fsy: Record<string, unknown>;
@@ -39,11 +110,11 @@ export interface CreateAppOptions {
    * When `serverError` / `timeout` is a template path, it is not used for paths under `/api` (default JSON instead).
    */
   errorPages?: {
-    notFound?: string | ((req: Request, res: Response, ctx: ErrorPageContext) => unknown);
+    notFound?: string | ((req: WebspressoRequest, res: WebspressoResponse, ctx: ErrorPageContext) => unknown);
     serverError?:
       | string
-      | ((err: unknown, req: Request, res: Response, ctx: ErrorPageContext) => unknown);
-    timeout?: string | ((req: Request, res: Response, ctx: ErrorPageContext) => unknown);
+      | ((err: unknown, req: WebspressoRequest, res: WebspressoResponse, ctx: ErrorPageContext) => unknown);
+    timeout?: string | ((req: WebspressoRequest, res: WebspressoResponse, ctx: ErrorPageContext) => unknown);
   };
   timeout?: string | false;
   auth?: unknown;
@@ -53,30 +124,30 @@ export interface CreateAppOptions {
     alpine?: boolean | Record<string, unknown>;
     swup?: boolean | Record<string, unknown>;
   };
-  setupRoutes?: (app: Application, ctx: SetupRoutesContext) => void;
+  setupRoutes?: (app: WebspressoCompatApp, ctx: SetupRoutesContext) => void;
   [key: string]: unknown;
 }
 
 export interface SetupRoutesContext {
   nunjucksEnv: unknown;
-  authMiddleware?: RequestHandler;
+  authMiddleware?: WebspressoHandler;
   pluginManager: PluginManager;
   options: CreateAppOptions;
   clientRuntime: { alpine: boolean; swup: boolean };
 }
 
 export interface CreateAppResult {
-  app: Application;
+  app: WebspressoCompatApp;
   nunjucksEnv: unknown;
   pluginManager: PluginManager;
-  authMiddleware?: RequestHandler;
+  authMiddleware?: WebspressoHandler;
 }
 
 export function createApp(options?: CreateAppOptions): CreateAppResult;
 
 // --- App context ---
 
-export function attachDbMiddleware(req: Request, res: Response, next: NextFunction): void;
+export function attachDbMiddleware(req: WebspressoRequest, res: WebspressoResponse, next: (err?: unknown) => void): void;
 
 export function getAppContext(): { db: DatabaseInstance | null };
 
@@ -91,7 +162,7 @@ export function setAppContext(partial: { db?: DatabaseInstance | null }): void;
 // --- File router ---
 
 export function mountPages(
-  app: Application,
+  app: WebspressoCompatApp,
   options: Record<string, unknown>
 ): {
   routeMetadata: unknown[];
@@ -118,7 +189,7 @@ export function createTranslator(
 ): (key: string, params?: Record<string, unknown>) => string;
 
 export function detectLocale(
-  req: Request,
+  req: WebspressoRequest,
   supportedLocales: string[],
   defaultLocale: string
 ): string;
@@ -167,7 +238,7 @@ export function getAssetManager(): AssetManager | null;
 // --- Plugins ---
 
 export interface RoutesReadyContext {
-  app: Application;
+  app: WebspressoCompatApp;
   nunjucksEnv: unknown;
   options: CreateAppOptions;
   /** Same object as `createApp({ middlewares })` — plugins may register named handlers before or after routes. */
@@ -177,12 +248,12 @@ export interface RoutesReadyContext {
   usePlugin(name: string): unknown;
   addHelper(name: string, fn: (...args: unknown[]) => unknown): void;
   addFilter(name: string, fn: (...args: unknown[]) => unknown): void;
-  addRoute(method: string, path: string, ...handlers: RequestHandler[]): void;
+  addRoute(method: string, path: string, ...handlers: WebspressoHandler[]): void;
   [key: string]: unknown;
 }
 
 export interface PluginRegisterContext {
-  app: Application;
+  app: WebspressoCompatApp;
   nunjucksEnv: unknown;
   options: Record<string, unknown>;
   /** Same object as `createApp({ middlewares })` for registering named route middleware. */
@@ -191,7 +262,7 @@ export interface PluginRegisterContext {
   usePlugin(name: string): unknown;
   addHelper(name: string, fn: (...args: unknown[]) => unknown): void;
   addFilter(name: string, fn: (...args: unknown[]) => unknown): void;
-  addRoute(method: string, path: string, ...handlers: RequestHandler[]): void;
+  addRoute(method: string, path: string, ...handlers: WebspressoHandler[]): void;
   routes: unknown;
   [key: string]: unknown;
 }
@@ -582,7 +653,7 @@ export interface RedirectPluginOptions {
 
 export function redirectPlugin(options?: RedirectPluginOptions): WebspressoPlugin;
 
-/** Options for `rateLimitPlugin`: `express-rate-limit` fields plus plugin-only keys. */
+/** Options for `rateLimitPlugin`: limiter fields plus plugin-only keys. */
 export interface RateLimitPluginOptions {
   /** Mount a global limiter on the Express app (named route middleware is always registered). */
   global?: boolean;
@@ -597,7 +668,7 @@ export function rateLimitPlugin(options?: RateLimitPluginOptions): WebspressoPlu
 
 export interface RestResourcePluginOptions {
   path?: string;
-  middleware?: RequestHandler[];
+  middleware?: WebspressoHandler[];
   models?: string[] | null;
   excludeModels?: string[];
   filter?: (model: ModelDefinition) => boolean;
@@ -626,7 +697,7 @@ export interface UploadPluginOptions {
   maxBytes?: number;
   mimeAllowlist?: string[] | null;
   extensionAllowlist?: string[] | null;
-  middleware?: RequestHandler | RequestHandler[];
+  middleware?: WebspressoHandler | WebspressoHandler[];
   fieldName?: string;
 }
 
