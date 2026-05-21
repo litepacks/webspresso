@@ -9,15 +9,38 @@ export default defineConfig({
   test: {
     environment: 'node',
     testTimeout: 10000,
+    hookTimeout: 30000,
+    teardownTimeout: 30000,
     setupFiles: ['./tests/setup.js'],
-    include: ['tests/**/*.test.js'],
-    exclude: ['node_modules', 'dist'],
-    pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
+    reporters: ['verbose'],
+    globals: true,
+    watch: false,
+    watchExclude: ['node_modules', 'coverage'],
+    fileParallelism: true,
+    maxWorkers: 4,
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'unit-integration',
+          include: ['tests/**/*.test.js'],
+          exclude: ['tests/unit/cli.test.js'],
+          pool: 'forks',
+        },
       },
-    },
+      {
+        extends: true,
+        test: {
+          name: 'cli',
+          include: ['tests/unit/cli.test.js'],
+          // spawnSync-heavy suite; fork RPC times out during long runs
+          pool: 'threads',
+          fileParallelism: false,
+          testTimeout: 120000,
+          hookTimeout: 120000,
+        },
+      },
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'json-summary', 'html', 'lcov'],
@@ -28,7 +51,6 @@ export default defineConfig({
         '**/node_modules/**',
         'src/**/*.test.js',
         '**/run-demo.js',
-        // Browser/admin UI bundles are not executed by the Node test suite
         'plugins/admin-panel/client/**',
         'plugins/admin-panel/field-renderers/**',
         'src/client-runtime/bootstrap-*.js',
@@ -42,9 +64,5 @@ export default defineConfig({
         functions: 80,
       },
     },
-    watch: false,
-    watchExclude: ['node_modules', 'coverage'],
-    reporters: ['verbose'],
-    globals: true,
   },
 });
