@@ -31,4 +31,30 @@ describe('http/node-serve', () => {
     expect(body).toBe('pong');
     await new Promise((resolve) => server.close(resolve));
   });
+
+  it('invokes optional listen callback with (null, info)', async () => {
+    const app = new Hono();
+    app.get('/ping', (c) => c.text('pong'));
+    const onListen = vi.fn();
+    const server = listen(app, 0, onListen);
+    await new Promise((resolve) => server.once('listening', resolve));
+    expect(onListen).toHaveBeenCalledTimes(1);
+    expect(onListen.mock.calls[0][0]).toBeNull();
+    expect(onListen.mock.calls[0][1]).toEqual(expect.objectContaining({ port: expect.any(Number) }));
+    await new Promise((resolve) => server.close(resolve));
+  });
+
+  it('uses PORT from env when port argument omitted', async () => {
+    const prev = process.env.PORT;
+    process.env.PORT = '0';
+    const app = new Hono();
+    app.get('/', (c) => c.text('ok'));
+    const server = listen(app);
+    await new Promise((resolve) => server.once('listening', resolve));
+    const addr = server.address();
+    expect(typeof addr === 'object' ? addr.port : addr).toBeGreaterThan(0);
+    await new Promise((resolve) => server.close(resolve));
+    if (prev === undefined) delete process.env.PORT;
+    else process.env.PORT = prev;
+  });
 });
