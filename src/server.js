@@ -10,6 +10,7 @@ const { setAppContext } = require('./app-context');
 const { mountClientRuntime } = require('./client-runtime/mount');
 const { resolveClientRuntime } = require('./client-runtime/resolve');
 const { mountPages, detectLocale } = require('./file-router');
+const { mountPagesFromManifest } = require('../core/build/runtime/mount-manifest');
 const { configureAssets, createHelpers, getScriptInjector } = require('./helpers');
 const { createPluginManager } = require('./plugin-manager');
 const {
@@ -320,16 +321,29 @@ function createApp(options = {}) {
     console.log('\nMounting routes:');
   }
 
-  const { routeMetadata, registerDynamicFileRoutes } = mountPages(app, {
-    pagesDir,
-    nunjucks: nunjucksEnv,
-    middlewares,
-    pluginManager,
-    silent: isTest,
-    db: options.db ?? null,
-    clientRuntime,
-    pageAssets: options.pageAssets,
-  });
+  const { routeMetadata, registerDynamicFileRoutes } = options._manifestMode
+    ? mountPagesFromManifest(app, {
+        manifest: options._manifest,
+        handlers: options._handlers,
+        nunjucks: nunjucksEnv,
+        middlewares,
+        pluginManager,
+        silent: isTest,
+        db: options.db ?? null,
+        clientRuntime,
+        pageAssets: options.pageAssets,
+        globalHooksModule: options._handlers?._global_hooks,
+      })
+    : mountPages(app, {
+        pagesDir,
+        nunjucks: nunjucksEnv,
+        middlewares,
+        pluginManager,
+        silent: isTest,
+        db: options.db ?? null,
+        clientRuntime,
+        pageAssets: options.pageAssets,
+      });
 
   pluginManager.setRoutes(routeMetadata);
 

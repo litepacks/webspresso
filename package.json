@@ -4,6 +4,11 @@
   "description": "Minimal, production-ready SSR framework for Node.js with file-based routing, Nunjucks templating, built-in i18n, and CLI tooling",
   "main": "index.js",
   "types": "index.d.ts",
+  "exports": {
+    ".": "./index.js",
+    "./build": "./core/build/index.js",
+    "./build/runtime/create-app-from-manifest": "./core/build/runtime/create-app-from-manifest.js"
+  },
   "bin": {
     "webspresso": "./bin/webspresso.js"
   },
@@ -47,6 +52,7 @@
     "src/",
     "utils/",
     "core/",
+    "adapters/",
     "plugins/",
     "templates/",
     "views/partials/webspresso-client-runtime.njk"
@@ -110,6 +116,7 @@
     "better-sqlite3": "^11.10.0",
     "chokidar": "^3.5.3",
     "dotenv": "^16.3.1",
+    "esbuild": "^0.25.12",
     "hono-rate-limiter": "^0.4.2",
     "release-it": "^19.0.0",
     "typescript": "~5.6.3",

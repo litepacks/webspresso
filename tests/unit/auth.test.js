@@ -12,7 +12,19 @@ const {
   AuthorizationError,
   AuthManager,
   AuthenticationError,
+  createAuth,
+  quickAuth,
+  createRememberTokensTable,
+  dropRememberTokensTable,
 } = require('../../core/auth');
+const {
+  definePolicy,
+  defineGate,
+  can,
+  cannot,
+  authorize,
+  defaultPolicyManager,
+} = require('../../core/auth/policy');
 
 describe('Auth Hash Utilities', () => {
   describe('hash()', () => {
@@ -195,6 +207,29 @@ describe('PolicyManager', () => {
 
     it('should return false for undefined action', () => {
       expect(policies.can({}, 'nonexistent', 'post')).toBe(false);
+    });
+
+    it('should return false when gate throws', () => {
+      policies.defineGate('broken', () => {
+        throw new Error('gate fail');
+      });
+      expect(policies.can({}, 'broken')).toBe(false);
+    });
+
+    it('should return false when policy rule throws', () => {
+      policies.definePolicy('fragile', {
+        view: () => {
+          throw new Error('rule fail');
+        },
+      });
+      expect(policies.can({}, 'view', 'fragile')).toBe(false);
+    });
+
+    it('getPolicies and getGates list names', () => {
+      policies.definePolicy('post', { view: () => true });
+      policies.defineGate('admin', () => true);
+      expect(policies.getPolicies()).toContain('post');
+      expect(policies.getGates()).toContain('admin');
     });
   });
 
@@ -384,6 +419,166 @@ describe('AuthenticationError', () => {
     
     expect(error.message).toBe('Invalid token');
     expect(error.code).toBe('INVALID_TOKEN');
+  });
+});
+
+describe('createAuth / quickAuth', () => {
+  it('createAuth returns AuthManager instance', () => {
+    const auth = createAuth({
+      findUserById: async () => null,
+      findUserByCredentials: async () => null,
+      session: { secret: 'test-secret-key-32chars-min' },
+    });
+    expect(auth).toBeInstanceOf(AuthManager);
+  });
+
+  it('quickAuth wires repository lookups', async () => {
+    const users = new Map([[1, { id: 1, email: 'a@b.com', password: await hash('pass') }]]);
+    const db = {
+      getRepository: () => ({
+        findById: async (id) => users.get(id) || null,
+        findOne: async (q) => {
+          for (const u of users.values()) {
+            if (u.email === q.email) return u;
+          }
+          return null;
+        },
+      }),
+      knex: vi.fn(() => ({
+        insert: vi.fn().mockResolvedValue(undefined),
+        where: vi.fn().mockReturnThis(),
+        first: vi.fn().mockResolvedValue(null),
+        delete: vi.fn().mockResolvedValue(undefined),
+      })),
+    };
+
+    const auth = quickAuth({
+      db,
+      session: { secret: 'test-secret-key-32chars-min' },
+      rememberMe: false,
+    });
+
+    const user = await auth.findUserByCredentials('a@b.com', 'pass');
+    expect(user?.id).toBe(1);
+  });
+
+  it('quickAuth throws without db.getRepository', () => {
+    expect(() => quickAuth({})).toThrow('db with getRepository is required');
+  });
+});
+
+describe('remember_tokens migrations', () => {
+  it('createRememberTokensTable creates table when missing', async () => {
+    const knex = {
+      schema: {
+        hasTable: vi.fn().mockResolvedValue(false),
+        createTable: vi.fn((name, cb) => {
+          const table = {
+            bigIncrements: vi.fn().mockReturnThis(),
+            primary: vi.fn().mockReturnThis(),
+            bigInteger: vi.fn().mockReturnThis(),
+            unsigned: vi.fn().mockReturnThis(),
+            notNullable: vi.fn().mockReturnThis(),
+            string: vi.fn().mockReturnThis(),
+            unique: vi.fn().mockReturnThis(),
+            timestamp: vi.fn().mockReturnThis(),
+            defaultTo: vi.fn().mockReturnThis(),
+            index: vi.fn().mockReturnThis(),
+          };
+          cb(table);
+        }),
+      },
+      fn: { now: vi.fn() },
+    };
+    await createRememberTokensTable(knex);
+    expect(knex.schema.createTable).toHaveBeenCalledWith('remember_tokens', expect.any(Function));
+  });
+
+  it('dropRememberTokensTable drops table', async () => {
+    const knex = { schema: { dropTableIfExists: vi.fn().mockResolvedValue(undefined) } };
+    await dropRememberTokensTable(knex);
+    expect(knex.schema.dropTableIfExists).toHaveBeenCalledWith('remember_tokens');
+  });
+});
+
+describe('policy module exports', () => {
+  beforeEach(() => {
+    defaultPolicyManager.clear();
+  });
+
+  it('definePolicy / can / cannot / authorize on default instance', () => {
+    definePolicy('article', { view: () => true, edit: () => false });
+    expect(can({}, 'view', 'article')).toBe(true);
+    expect(cannot({}, 'edit', 'article')).toBe(true);
+    expect(() => authorize({}, 'edit', 'article')).toThrow(AuthorizationError);
+  });
+
+  it('defineGate works on default instance', () => {
+    defineGate('staff', (user) => user?.staff === true);
+    expect(can({ staff: true }, 'staff')).toBe(true);
+    expect(can({}, 'staff')).toBe(false);
+  });
+});
+
+describe('AuthManager request auth', () => {
+  const mockFindUserById = vi.fn();
+  const mockFindUserByCredentials = vi.fn();
+
+  function mockReqRes() {
+    const session = { userId: null, regenerate: (cb) => cb(null), destroy: (cb) => cb(null) };
+    const req = {
+      session,
+      cookies: {},
+      signedCookies: {},
+      user: null,
+    };
+    const res = {
+      cookie: vi.fn(),
+      clearCookie: vi.fn(),
+    };
+    return { req, res };
+  }
+
+  beforeEach(() => {
+    mockFindUserById.mockReset();
+    mockFindUserByCredentials.mockReset();
+  });
+
+  it('createRequestAuth attempt/login/logout/check', async () => {
+    const auth = new AuthManager({
+      findUserById: mockFindUserById,
+      findUserByCredentials: mockFindUserByCredentials,
+      session: { secret: 'test-secret-key-32chars-min' },
+    });
+    const { req, res } = mockReqRes();
+    const reqAuth = auth.createRequestAuth(req, res);
+
+    mockFindUserByCredentials.mockResolvedValue({ id: 7, email: 'u@test.com' });
+    const user = await reqAuth.attempt('u@test.com', 'pass');
+    expect(user.id).toBe(7);
+    expect(reqAuth.check()).toBe(true);
+
+    await reqAuth.logout();
+    expect(reqAuth.guest()).toBe(true);
+    expect(reqAuth.user()).toBeNull();
+  });
+
+  it('verifyRememberToken returns null without cookie', async () => {
+    const rememberTokens = {
+      create: vi.fn(),
+      find: vi.fn(),
+      delete: vi.fn(),
+      deleteAllForUser: vi.fn(),
+    };
+    const auth = new AuthManager({
+      findUserById: mockFindUserById,
+      findUserByCredentials: mockFindUserByCredentials,
+      session: { secret: 'test-secret-key-32chars-min' },
+      rememberTokens,
+    });
+    const { req, res } = mockReqRes();
+    const user = await auth.verifyRememberToken(req, res);
+    expect(user).toBeNull();
   });
 });
 

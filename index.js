@@ -111,6 +111,11 @@ module.exports = {
   /** Event bus / plugin shell / view resolver / flows (`kernel.createApp` is distinct from SSR `createApp`) */
   kernel,
 
+  // Build compiler (adapters, manifest, production bundle)
+  build: require('./core/build'),
+  createAppFromManifest: require('./core/build/runtime/create-app-from-manifest').createAppFromManifest,
+  mountPagesFromManifest: require('./core/build/runtime/mount-manifest').mountPagesFromManifest,
+
   // Direct zdb export (for convenience)
   zdb: orm.zdb,
 

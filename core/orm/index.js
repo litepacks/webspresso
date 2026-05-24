@@ -20,9 +20,10 @@ const { createOrmCacheFromConfig, unregisterOrmCacheListeners } = require('./cac
 /**
  * Create a database instance
  * @param {import('./types').DatabaseConfig} config - Database configuration
+ * @param {{ d1?: object, skipModelScan?: boolean }} [runtime] - Runtime bindings (D1 on Workers)
  * @returns {import('./types').DatabaseInstance}
  */
-function createDatabase(config) {
+function createDatabase(config, runtime = {}) {
   // Lazy load knex to avoid requiring it if ORM is not used
   let knex;
   try {
@@ -31,33 +32,75 @@ function createDatabase(config) {
     throw new Error('Knex is required for ORM. Install it with: npm install knex');
   }
 
+  const driverMap = {
+    'better-sqlite3': 'better-sqlite3',
+    'pg': 'pg',
+    'mysql2': 'mysql2',
+    'mysql': 'mysql2',
+    'd1': 'knex-cloudflare-d1',
+    'd1-remote': 'knex-cloudflare-d1',
+  };
+
   // Check if database driver is available in project's node_modules
   const client = config.client;
-  if (client) {
-    const driverMap = {
-      'better-sqlite3': 'better-sqlite3',
-      'pg': 'pg',
-      'mysql2': 'mysql2',
-      'mysql': 'mysql2',
-    };
-    
+
+  let knexInstance;
+
+  if (client === 'd1') {
+    if (!runtime.d1) {
+      throw new Error(
+        'D1 client requires a runtime binding.\n' +
+        'Pass createDatabase({ client: "d1" }, { d1: env.DB }) in Workers.'
+      );
+    }
+    let d1KnexClient;
+    try {
+      d1KnexClient = require('knex-cloudflare-d1');
+    } catch {
+      throw new Error(
+        'D1 support requires knex-cloudflare-d1.\n' +
+        'Install: npm install knex-cloudflare-d1'
+      );
+    }
+    knexInstance = knex({
+      client: d1KnexClient,
+      connection: runtime.d1,
+    });
+  } else if (client === 'd1-remote') {
+    let remoteClient;
+    try {
+      remoteClient = require('knex-cloudflare-d1/remote-client');
+    } catch {
+      try {
+        remoteClient = require('knex-cloudflare-d1/dist/remote-client');
+      } catch {
+        throw new Error(
+          'D1 remote migrations require knex-cloudflare-d1 remote client.\n' +
+          'Install: npm install knex-cloudflare-d1\n' +
+          'Configure accountId, databaseId, and apiToken in webspresso.db.js'
+        );
+      }
+    }
+    knexInstance = knex({
+      client: remoteClient,
+      connection: config.connection || {},
+    });
+  } else if (client) {
     const driverName = driverMap[client] || client;
     const projectNodeModules = path.join(process.cwd(), 'node_modules');
-    
-    // Try to find and pre-load driver from project's node_modules
+
     try {
       const driverPath = require.resolve(driverName, { paths: [projectNodeModules] });
-      require(driverPath); // Pre-load into Module._cache
+      require(driverPath);
     } catch (e) {
-      // Driver not found in project
-      const installCmd = driverName === 'better-sqlite3' 
+      const installCmd = driverName === 'better-sqlite3'
         ? 'npm install better-sqlite3 --save'
         : driverName === 'pg'
-        ? 'npm install pg --save'
-        : driverName === 'mysql2'
-        ? 'npm install mysql2 --save'
-        : `npm install ${driverName} --save`;
-      
+          ? 'npm install pg --save'
+          : driverName === 'mysql2'
+            ? 'npm install mysql2 --save'
+            : `npm install ${driverName} --save`;
+
       throw new Error(
         `Database driver "${driverName}" is not installed in your project.\n` +
         `Please install it with: ${installCmd}\n` +
@@ -66,31 +109,29 @@ function createDatabase(config) {
     }
   }
 
-  // Create Knex instance
-  let knexInstance;
-  try {
-    knexInstance = knex(config);
-  } catch (e) {
-    // Provide helpful error message
-    if (e.message && (e.message.includes('Cannot find module') || e.message.includes('npm install'))) {
-      const driverName = driverMap[config.client] || config.client;
-      const installCmd = driverName === 'better-sqlite3' 
-        ? 'npm install better-sqlite3 --save'
-        : driverName === 'pg'
-        ? 'npm install pg --save'
-        : driverName === 'mysql2'
-        ? 'npm install mysql2 --save'
-        : `npm install ${driverName} --save`;
-      
-      throw new Error(
-        `Failed to initialize database: ${e.message}\n` +
-        `Make sure "${driverName}" is installed: ${installCmd}`
-      );
+  if (!knexInstance) {
+    try {
+      knexInstance = knex(config);
+    } catch (e) {
+      if (e.message && (e.message.includes('Cannot find module') || e.message.includes('npm install'))) {
+        const driverName = driverMap[config.client] || config.client;
+        const installCmd = driverName === 'better-sqlite3'
+          ? 'npm install better-sqlite3 --save'
+          : driverName === 'pg'
+            ? 'npm install pg --save'
+            : driverName === 'mysql2'
+              ? 'npm install mysql2 --save'
+              : `npm install ${driverName} --save`;
+
+        throw new Error(
+          `Failed to initialize database: ${e.message}\n` +
+          `Make sure "${driverName}" is installed: ${installCmd}`
+        );
+      }
+      throw e;
     }
-    throw e;
   }
 
-  // Create migration manager
   const migrationConfig = config.migrations || {};
   const migrate = createMigrationManager(knexInstance, migrationConfig);
 
@@ -102,7 +143,7 @@ function createDatabase(config) {
   const modelsDir = config.models || './models';
   const absoluteModelsDir = path.resolve(process.cwd(), modelsDir);
   
-  if (fs.existsSync(absoluteModelsDir)) {
+  if (!runtime.skipModelScan && fs.existsSync(absoluteModelsDir)) {
     const modelFiles = fs.readdirSync(absoluteModelsDir)
       .filter(file => file.endsWith('.js') && !file.startsWith('_'));
     

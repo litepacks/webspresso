@@ -1,0 +1,8 @@
+node_modules
+.git
+.webspresso/cache
+.env
+*.log
+tests
+coverage
+.cursor

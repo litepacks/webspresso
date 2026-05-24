@@ -7,7 +7,8 @@ const request = require('../helpers/http').request;
 const {
   PluginManager,
   createPluginManager,
-  resetPluginManager
+  getPluginManager,
+  resetPluginManager,
 } = require('../../src/plugin-manager');
 const { semver, matchPattern } = require('../../src/plugin-manager');
 const { createApp } = require('../../src/server');
@@ -240,6 +241,39 @@ describe('Plugin System', () => {
 
       expect(receivedRoutes).toHaveLength(2);
       expect(receivedRoutes[0].pattern).toBe('/');
+    });
+
+    it('should call onReady hook', async () => {
+      const onReady = vi.fn();
+      await pm.register([{ name: 'ready-plugin', version: '1.0.0', onReady }], {});
+      await pm.onReady({ app: {} });
+      expect(onReady).toHaveBeenCalled();
+    });
+
+    it('mountCustomRoutes mounts routes added in onRoutesReady', async () => {
+      const mockApp = { get: vi.fn() };
+      await pm.register(
+        [
+          {
+            name: 'route-adder',
+            version: '1.0.0',
+            onRoutesReady(ctx) {
+              ctx.addRoute('get', '/plugin-route', () => {});
+            },
+          },
+        ],
+        { app: mockApp }
+      );
+      await pm.onRoutesReady({ app: mockApp });
+      expect(mockApp.get).toHaveBeenCalledWith('/plugin-route', expect.any(Function));
+    });
+
+    it('getPluginManager returns singleton', () => {
+      resetPluginManager();
+      const a = getPluginManager();
+      const b = getPluginManager();
+      expect(a).toBe(b);
+      resetPluginManager();
     });
   });
 

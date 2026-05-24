@@ -1,0 +1,24 @@
+/**
+ * D1 database config — local dev uses sqlite; production uses D1 binding.
+ * CLI migrations (remote): WEBSPRESSO_D1_REMOTE=1 webspresso db:migrate
+ */
+module.exports = {
+  development: {
+    client: 'better-sqlite3',
+    connection: { filename: './dev.sqlite3' },
+    useNullAsDefault: true,
+  },
+  production: {
+    client: process.env.WEBSPRESSO_D1_REMOTE ? 'd1-remote' : 'd1',
+    connection: process.env.WEBSPRESSO_D1_REMOTE
+      ? {
+          accountId: process.env.CF_ACCOUNT_ID,
+          databaseId: process.env.CF_D1_DATABASE_ID,
+          apiToken: process.env.CF_API_TOKEN,
+        }
+      : {},
+    migrations: {
+      directory: './migrations',
+    },
+  },
+};
