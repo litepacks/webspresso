@@ -124,5 +124,5 @@ module.exports = {
   formatBuildError,
   BuildError,
   mountPagesFromManifest: require('./runtime/mount-manifest').mountPagesFromManifest,
-  createAppFromManifest: require('./runtime/create-app-from-manifest').createAppFromManifest,
+  createAppFromManifest: require('./runtime/create-app-from-manifest-node').createAppFromManifest,
 };

@@ -69,6 +69,9 @@ export default defineConfig({
         'core/orm/repository.js',
         // Manifest mount: branch-heavy SSR pipeline; covered by tests/unit/build/mount-manifest*.test.js
         'core/build/runtime/mount-manifest.js',
+        // Cloudflare worker runtime (Wrangler entry); covered by integration/manual deploy tests
+        'core/build/runtime/create-worker-app.js',
+        'core/build/runtime/create-app-from-manifest.js',
         // Factory entrypoints thin-wrap tested managers
         'core/auth/index.js',
         // Core runtime: dedicated unit tests; branch-heavy error/SSR paths

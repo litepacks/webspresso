@@ -107,10 +107,11 @@ function emitPrecompiledTemplatesMjs(items) {
  * @param {object[]} ssrRoutes
  * @param {string} pagesDir
  * @param {string|null} viewsDir
+ * @returns {Array<{ name: string, absPath: string }>}
  */
 function gatherTemplateNames(ssrRoutes, pagesDir, viewsDir) {
-  /** @type {Set<string>} */
-  const names = new Set();
+  /** @type {Map<string, string>} */
+  const entries = new Map();
   /** @type {Set<string>} */
   const visited = new Set();
 
@@ -118,7 +119,7 @@ function gatherTemplateNames(ssrRoutes, pagesDir, viewsDir) {
     if (!absPath || visited.has(absPath)) return;
     visited.add(absPath);
     const base = path.basename(absPath);
-    names.add(base);
+    entries.set(base, absPath);
     if (!fs.existsSync(absPath)) return;
     const raw = fs.readFileSync(absPath, 'utf8');
     const { body } = parseNjkFrontmatter(raw);
@@ -137,7 +138,7 @@ function gatherTemplateNames(ssrRoutes, pagesDir, viewsDir) {
     if (route.absPath) addFromFile(route.absPath);
   }
 
-  return [...names];
+  return [...entries.entries()].map(([name, absPath]) => ({ name, absPath }));
 }
 
 /**
@@ -155,14 +156,11 @@ function buildPrecompiledTemplatesMjs(ctx, ssrRoutes, viewsDir) {
     autoescape: true,
   });
 
-  const names = gatherTemplateNames(ssrRoutes, pagesDir, viewsDir);
+  const templates = gatherTemplateNames(ssrRoutes, pagesDir, viewsDir);
   /** @type {Array<{ name: string, template: string }>} */
   const items = [];
 
-  for (const name of names) {
-    const absPath =
-      resolveNjkPath(name, path.join(pagesDir, name), pagesDir, viewsDir) ||
-      path.join(pagesDir, name);
+  for (const { name, absPath } of templates) {
     if (!fs.existsSync(absPath)) {
       throw new Error(`Template "${name}" not found for precompile`);
     }
