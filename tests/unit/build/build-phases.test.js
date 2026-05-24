@@ -283,7 +283,7 @@ describe('bundle phase and adapters', () => {
     expect(node.generateEntry({}).length).toBeGreaterThan(50);
     expect(cf.generateEntry({}).length).toBeGreaterThan(50);
     expect(node.bundleOptions({}, '/tmp').platform).toBe('node');
-    expect(cf.bundleOptions({}, '/tmp').platform).toBe('browser');
+    expect(cf.bundleOptions({}, '/tmp').platform).toBe('node');
   });
 
   it('cloudflare validate rejects memory session store', () => {

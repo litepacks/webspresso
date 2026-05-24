@@ -20,6 +20,7 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 - **Optional client runtime** (Alpine.js + [swup](https://swup.js.org/)): **`createApp({ clientRuntime: { alpine, swup } })`** serves scripts under **`/__webspresso/client-runtime/`** and exposes **`clientRuntime`** in Nunjucks; layouts can include **`views/partials/webspresso-client-runtime.njk`**. Env overrides: **`WEBSPRESSO_ALPINE`**, **`WEBSPRESSO_SWUP`**. Demo: **`examples/alpine-swup-demo/`**. Details: **[`doc/index.html#client-runtime`](doc/index.html#client-runtime)**.
 - **TypeScript**: Published **`index.d.ts`** (via `package.json` `"types"`) for `createApp`, ORM, plugins, and router helpers — use from TS/JS with IDE autocomplete; runtime stays CommonJS
 - **Application kernel (optional)**: In-process **`kernel`** API (`require('webspresso').kernel`) — event bus (`dispatch` / `publish`), **`kernel.createApp()`** (namespaced differently from SSR **`createApp`**), **`definePlugin`** / **`defineFlow`**, minimal **`{{ }}` view resolver**, and simulated **`BaseRepository`** with `orm.<resource>.*` events. Ships as **`core/kernel/`** on npm. Demo: **`node core/kernel/run-demo.js`**. Docs: **[`doc/index.html#application-kernel`](doc/index.html#application-kernel)**.
+- **Production builds & Cloudflare Workers**: **`webspresso build --adapter cloudflare`** emits a Wrangler-ready worker (manifest, precompiled Nunjucks, static assets). Full guide: **[`doc/index.html#cloudflare-workers`](doc/index.html#cloudflare-workers)** · summary below in **[Deployment](#deployment)**.
 
 ## Installation
 
@@ -300,6 +301,57 @@ npm run build:css      # Build CSS once
 npm run watch:css      # Watch and rebuild CSS on changes
 npm run dev            # Starts both CSS watch and dev server
 ```
+
+### `webspresso add deploy`
+
+Scaffold deployment provider files in the current project.
+
+```bash
+# Cloudflare Workers + Wrangler + D1 example config
+webspresso add deploy --provider cloudflare
+
+# Docker or PM2 (Node process)
+webspresso add deploy --provider docker
+webspresso add deploy --provider pm2
+
+# Multiple providers at once
+webspresso add deploy --provider cloudflare,docker
+```
+
+| Provider | Files created |
+|----------|----------------|
+| `cloudflare` | `wrangler.toml`, `webspresso.build.js`, optional `webspresso.db.js` (D1), legacy `src/worker.js` stub |
+| `docker` | `Dockerfile`, `.dockerignore`, `docker-compose.yml` |
+| `pm2` | `ecosystem.config.js` |
+
+After scaffolding, run **`webspresso build --adapter <name>`** then deploy with the provider’s tool (Wrangler, Docker, PM2). See **[Deployment](#deployment)** and **[`doc/index.html#cloudflare-workers`](doc/index.html#cloudflare-workers)**.
+
+### `webspresso build`
+
+Compile routes into a **build manifest** and write adapter-specific output under **`.webspresso/`**.
+
+```bash
+# Node production entry (default when webspresso.build.js sets adapter: 'node')
+webspresso build
+webspresso build --adapter node
+
+# Cloudflare Workers (Wrangler bundles .webspresso/worker/)
+webspresso build --adapter cloudflare
+
+# Manifest only — skip esbuild pre-bundle (Cloudflare always skips; Wrangler bundles)
+webspresso build --adapter node --skip-bundle
+
+# Fail CI on validation warnings (edge-incompatible imports, unresolved templates, …)
+webspresso build --adapter cloudflare --fail-on-warnings
+```
+
+| Adapter | Output directory | Runtime entry |
+|---------|------------------|---------------|
+| `node` | `.webspresso/server/` | `index.mjs` + `manifest.json` + `handlers.mjs` |
+| `cloudflare` | `.webspresso/worker/` | same layout + **`templates.mjs`** (precompiled Nunjucks) |
+| `bun` | `.webspresso/server/` (Bun adapter) | experimental |
+
+Configure defaults in **`webspresso.build.js`** at the project root (see templates under `templates/deploy/`).
 
 ### `webspresso favicon:generate <source.png>`
 
@@ -2244,6 +2296,184 @@ const app = createApp({
 - `GET /_swagger` — Swagger UI (loads the JSON above; requires network access for CDN assets).
 
 In production, keep the plugin disabled or protect it with `authorize` / your own middleware.
+
+## Deployment
+
+Webspresso can compile your `pages/` tree into a **static route manifest** and ship a **production entry** for Node or **Cloudflare Workers**. Development still uses `webspresso dev` + `server.js`; production uses **`webspresso build`** + the target adapter.
+
+Long-form reference: **[`doc/index.html#deployment`](doc/index.html#deployment)** · Cloudflare walkthrough: **[`doc/index.html#cloudflare-workers`](doc/index.html#cloudflare-workers)**.
+
+### Quick comparison
+
+| | Node (`adapter: 'node'`) | Cloudflare (`adapter: 'cloudflare'`) |
+|--|--------------------------|--------------------------------------|
+| **Dev** | `webspresso dev` | `webspresso build --adapter cloudflare` then `npx wrangler dev` |
+| **Deploy** | `node server.js` or Docker / PM2 | `npx wrangler deploy` |
+| **Full `createApp`** | Yes — plugins, auth, file-router scan | **Edge worker runtime** — manifest routes only |
+| **ORM / Knex** | All supported drivers | **D1** via `webspresso.db.js` + `knex-cloudflare-d1` (optional) |
+| **Auth (`core/auth`)** | bcrypt sessions, remember-me | **Not on Workers** — use external auth or Node adapter |
+| **Plugins** | All built-ins | Edge-compatible only (no admin panel, upload, data-exchange) |
+| **Nunjucks** | Filesystem + watch | **Precompiled at build** (Workers disallow runtime `eval`) |
+| **Static files** | `publicDir` via Hono static | Wrangler **`[assets]`** binding |
+
+### Node production
+
+1. `webspresso add deploy --provider docker` or `pm2` (optional).
+2. `webspresso build --adapter node` → `.webspresso/server/`.
+3. Run `node .webspresso/server/index.mjs` or use your process manager / container with `NODE_ENV=production`.
+
+The generated entry calls **`createAppFromManifest`** with the full Node server (same feature set as `server.js` + manifest mode).
+
+### Cloudflare Workers
+
+#### Prerequisites
+
+- [Wrangler](https://developers.cloudflare.com/workers/wrangler/) (`npm i -D wrangler`)
+- Cloudflare account (for deploy)
+- Project with `pages/`, `views/` (layouts), and `public/` (CSS built with `npm run build:css`)
+
+#### 1. Scaffold
+
+```bash
+webspresso add deploy --provider cloudflare
+```
+
+Creates **`wrangler.toml`**, **`webspresso.build.js`**, and optional **`webspresso.db.js`** (D1). Ensure `wrangler.toml` includes:
+
+```toml
+compatibility_flags = ["nodejs_compat"]
+```
+
+(The template ships this flag — required for some Node polyfills in the worker bundle.)
+
+#### 2. Configure build
+
+**`webspresso.build.js`** (example):
+
+```javascript
+/** @type {import('webspresso/build').BuildConfig} */
+module.exports = {
+  adapter: 'cloudflare',
+  pagesDir: 'pages',
+  viewsDir: 'views',
+  publicDir: 'public',
+};
+```
+
+#### 3. Build
+
+```bash
+npm run build:css          # Tailwind → public/css/style.css
+webspresso build --adapter cloudflare
+```
+
+**Output** (`.webspresso/worker/`):
+
+| Artifact | Purpose |
+|----------|---------|
+| `manifest.json` | Routes, templates metadata, i18n blobs, build id |
+| `handlers.mjs` | Compiled API handlers + SSR route configs |
+| `templates.mjs` | **Precompiled** Nunjucks (`index.njk`, `layout.njk`, …) |
+| `index.mjs` | Worker entry (`fetch` → `createAppFromManifest`) |
+| `assets/public/` | Copy of `public/` for Wrangler **Assets** |
+
+Cloudflare builds **skip** the framework’s esbuild pre-bundle; **Wrangler** bundles `index.mjs` + dependencies when you run `wrangler dev` / `deploy`.
+
+#### 4. Local worker dev
+
+```bash
+npx wrangler dev
+# or: npx wrangler dev --port 8788
+```
+
+`webspresso dev --adapter cloudflare` only reminds you to build + run Wrangler — use the two commands above for local Workers testing.
+
+#### 5. Deploy
+
+```bash
+npx wrangler deploy
+```
+
+Configure `name`, routes, and D1 in **`wrangler.toml`**.
+
+#### D1 database (optional)
+
+When `webspresso.db.js` is present, the template wires **D1** for production:
+
+```javascript
+// webspresso.db.js — excerpt
+module.exports = {
+  development: { client: 'better-sqlite3', connection: { filename: './dev.sqlite3' }, useNullAsDefault: true },
+  production: {
+    client: process.env.WEBSPRESSO_D1_REMOTE ? 'd1-remote' : 'd1',
+    connection: process.env.WEBSPRESSO_D1_REMOTE
+      ? { accountId: process.env.CF_ACCOUNT_ID, databaseId: process.env.CF_D1_DATABASE_ID, apiToken: process.env.CF_API_TOKEN }
+      : {},
+    migrations: { directory: './migrations' },
+  },
+};
+```
+
+- **Local D1:** `wrangler dev` uses a local D1 emulator; run migrations with `webspresso db:migrate`.
+- **Remote D1:** `WEBSPRESSO_D1_REMOTE=1` plus `CF_*` env vars for CLI migrations against the remote database.
+
+Pass **`env.DB`** from Wrangler into the worker via bindings (template `[[d1_databases]]`).
+
+#### What works on Workers
+
+- SSR pages from manifest (`pages/*.njk` + `views/` layouts)
+- API routes compiled into `handlers.mjs`
+- i18n JSON baked into the manifest
+- Static assets via **`[assets]`**
+- Zod validation on API routes
+- Optional D1 + ORM when configured
+
+#### Limitations (build will error or warn)
+
+| Not supported on Cloudflare adapter | Alternative |
+|-----------------------------------|-------------|
+| `admin-panel`, `upload`, `data-exchange` plugins | Deploy on **Node** or split admin to a separate service |
+| `createApp({ auth })` / bcrypt | External auth (JWT, Cloudflare Access) or Node adapter |
+| In-memory session store | KV, D1, or cookie-only JWT |
+| `clientRuntime` (Alpine/swup) in worker entry | Disabled in generated entry; enable only on Node |
+| Runtime filesystem route scan | Use **`webspresso build`** manifest instead |
+| `better-sqlite3`, `pg`, `mysql2` in worker bundle | **D1** or HTTP API to a Node backend |
+
+Build-time validation reports **`WS_BUILD_PLUGIN_UNSUPPORTED`**, **`WS_BUILD_EDGE_INCOMPATIBLE`**, and **`WS_BUILD_SESSION_MEMORY`** when applicable.
+
+#### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|----------------|-----|
+| `Could not resolve "crypto"` / `fs` during **webspresso** esbuild | Wrong adapter or old build path | Use `--adapter cloudflare` (skips framework esbuild); let Wrangler bundle |
+| `bcrypt` / `node-pre-gyp` / `aws-sdk` in **Wrangler** bundle | Full `server.js` pulled into worker | Ensure entry imports **`webspresso/build/runtime/create-app-from-manifest`** (worker-only), not Node manifest path |
+| `EvalError: Code generation from strings disallowed` | Nunjucks compiled at runtime | Rebuild — need **`templates.mjs`** from current `webspresso build` |
+| `layout.njk` not found at runtime | Missing parent template in precompile | Keep layouts in **`views/`**; rebuild so `extends` is collected |
+| Empty CSS on worker | Assets not built | Run **`npm run build:css`** before `webspresso build` |
+| `Address already in use` on `wrangler dev` | Port taken | `npx wrangler dev --port 8788` |
+
+#### Architecture (Cloudflare)
+
+```
+pages/ + views/  →  webspresso build  →  .webspresso/worker/
+                                              ├── manifest.json
+                                              ├── handlers.mjs
+                                              ├── templates.mjs  (precompiled)
+                                              └── index.mjs  → createWorkerApp()
+wrangler dev|deploy  →  Workers runtime  →  fetch(request, env)
+```
+
+Worker runtime uses **`createWorkerApp`** (`core/build/runtime/create-worker-app.js`): Hono compat app, manifest route mounting, precompiled Nunjucks — **without** `src/server.js`, file-router `fs` scan, or auth.
+
+### Docker / PM2
+
+```bash
+webspresso add deploy --provider docker   # Dockerfile + compose
+webspresso add deploy --provider pm2      # ecosystem.config.js
+webspresso build --adapter node
+```
+
+Run the generated **`.webspresso/server/index.mjs`** inside your container or PM2 process (set `NODE_ENV=production`, expose `PORT`).
 
 ## Development
 

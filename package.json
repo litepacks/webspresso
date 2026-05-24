@@ -21,6 +21,7 @@
     "./build": "./core/build/index.js",
     "./build/*": "./core/build/*",
     "./build/runtime/create-app-from-manifest": "./core/build/runtime/create-app-from-manifest.js",
+    "./build/runtime/create-app-from-manifest-node": "./core/build/runtime/create-app-from-manifest-node.js",
     "./build/runtime/mount-manifest": "./core/build/runtime/mount-manifest.js"
   },
   "bin": {

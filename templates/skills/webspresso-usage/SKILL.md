@@ -19,6 +19,7 @@ There are **three** files in this folder; open the reference that matches the ta
 | `createAuth`, `quickAuth`, `middleware: ['auth']` | [`REFERENCE-framework.md`](./REFERENCE-framework.md) § Auth | **`webspresso/core/auth`**. |
 | Admin, sitemap, upload, redirect, data-exchange plugins | [`REFERENCE-framework.md`](./REFERENCE-framework.md) § Plugins | Framework plugin API (`createApp({ plugins })`). |
 | Greenfield project, `webspresso new`, `dev`, `db:migrate`, `doctor` | [`REFERENCE-framework.md`](./REFERENCE-framework.md) § CLI | Full command table there. |
+| Cloudflare Workers deploy, `webspresso build`, Wrangler, D1 | [`doc/index.html#cloudflare-workers`](../../../doc/index.html#cloudflare-workers), README § Deployment | Worker runtime vs Node `createApp`. |
 | Event bus, `kernel.createApp`, `defineFlow`, `definePlugin`, simulated `BaseRepository`, namespaced minimal views | [`REFERENCE-kernel.md`](./REFERENCE-kernel.md) | **Not** SSR **`createApp`** — [`doc/index.html#application-kernel`](../../../doc/index.html#application-kernel). |
 | Long-form narrative, all options | [`README.md`](../../../README.md), [`doc/index.html`](../../../doc/index.html) | Single-page HTML docs. |
 
@@ -32,6 +33,8 @@ There are **three** files in this folder; open the reference that matches the ta
 | `webspresso dev` | Dev server (watch). |
 | `webspresso db:migrate` / `db:rollback` / `db:status` | ORM migrations. |
 | `webspresso doctor` | Environment / project sanity checks. |
+| `webspresso add deploy --provider cloudflare` | Wrangler + `webspresso.build.js` scaffold. |
+| `webspresso build --adapter cloudflare` | Manifest + worker under `.webspresso/worker/` → `npx wrangler dev`. |
 | `webspresso skill --preset webspresso` | Copies this skill bundle under `.cursor/skills/webspresso-usage/` (`SKILL.md` + `REFERENCE-*.md`). |
 
 ## When to use this skill

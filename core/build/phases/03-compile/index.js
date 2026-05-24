@@ -77,7 +77,10 @@ async function compilePhase(ctx, analyzed, viewsDir, globalHooks) {
         registrationIndex: route.registrationIndex,
         source: { page: route.sourceFile, config: route.configFile || null },
         handler: { configExport: ck, hooks: ['beforeLoad', 'load', 'afterRender'] },
-        template: { id: tplId, renderMode: 'string' },
+        template: {
+          id: tplId,
+          renderMode: ctx.adapter.name === 'cloudflare' ? 'precompiled' : 'string',
+        },
         middleware: route.middleware || [],
         i18n: { namespaces },
         seo: tpl.templates[tplId]?.frontmatter?.metaPatch || {},

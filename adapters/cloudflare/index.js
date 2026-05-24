@@ -63,6 +63,7 @@ module.exports = {
 import { createAppFromManifest } from 'webspresso/build/runtime/create-app-from-manifest';
 import manifest from './manifest.json' assert { type: 'json' };
 import { handlers } from './handlers.mjs';
+import precompiledTemplates from './templates.mjs';
 
 /** @type {{ app: import('webspresso').WebspressoCompatApp } | null} */
 let cached = null;
@@ -74,6 +75,9 @@ function getApp(env) {
       handlers,
       pagesDir: 'pages',
       bindings: env,
+      precompiledTemplates,
+      clientRuntime: { alpine: false, swup: false },
+      logging: false,
     });
   }
   return cached.app;
@@ -93,13 +97,28 @@ export default {
    */
   bundleOptions(_manifest, _outputDir) {
     return {
-      platform: 'browser',
+      platform: 'node',
       format: 'esm',
       target: 'es2022',
-      conditions: ['worker', 'browser'],
+      conditions: ['worker', 'import', 'require'],
+      mainFields: ['module', 'main'],
       define: {
         'process.env.NODE_ENV': '"production"',
       },
+      external: [
+        'bcrypt',
+        'better-sqlite3',
+        'sharp',
+        'mysql2',
+        'pg',
+        'knex',
+        'sqlite3',
+        'mysql',
+        'tedious',
+        'oracledb',
+        'fsevents',
+        'chokidar',
+      ],
     };
   },
 };

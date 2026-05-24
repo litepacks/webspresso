@@ -351,16 +351,6 @@ function createHelpers(ctx) {
     },
 
     /**
-     * Get the path to a static asset
-     * @param {string} path - Asset path
-     * @returns {string}
-     */
-    asset(path) {
-      const assetPath = path.startsWith('/') ? path : `/${path}`;
-      return assetPath;
-    },
-
-    /**
      * Get the current locale
      * @returns {string}
      */

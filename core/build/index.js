@@ -81,7 +81,7 @@ async function runBuild(opts = {}) {
 
   let bundleResult = null;
   bundleResult = await bundlePhase(ctx, manifest, compiled.handlersSource, {
-    skipEsbuild: !!opts.skipBundle,
+    skipEsbuild: !!opts.skipBundle || adapterName === 'cloudflare',
   });
 
   ctx.cache.save();

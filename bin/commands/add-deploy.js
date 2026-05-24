@@ -45,9 +45,9 @@ function copyTemplate(provider, filename, cwd) {
   return true;
 }
 
-function registerCommand(program) {
-  program
-    .command('add deploy')
+function registerCommand(addProgram) {
+  addProgram
+    .command('deploy')
     .description('Add deployment provider files (docker, pm2, cloudflare)')
     .requiredOption('-p, --provider <name>', 'Provider: docker, pm2, cloudflare (comma-separated)')
     .action((options) => {

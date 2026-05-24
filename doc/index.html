@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
-  <meta name="description" content="webspresso — minimal SSR framework for Node.js: file-based routing, Nunjucks, Zod, Knex ORM, plugins, CLI. Full single-page reference." />
+  <meta name="description" content="webspresso — minimal SSR framework for Node.js: file-based routing, Nunjucks, Zod, Knex ORM, plugins, CLI, Cloudflare Workers deployment. Full single-page reference." />
   <title>webspresso — documentation</title>
   <!-- Plain script tag (no crossorigin/SRI): Tailwind CDN + redirects don’t reliably send ACAO → breaks on GitHub Pages. -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -96,6 +96,8 @@
         <a href="#tooling" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Tooling</a>
         <a href="#request-flow" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Request flow</a>
         <a href="#architecture" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Architecture</a>
+        <a href="#deployment" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Deploy</a>
+        <a href="#cloudflare-workers" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Cloudflare</a>
         <a href="#testing" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Testing</a>
       </nav>
       <button id="theme-toggle" type="button" class="p-2 rounded-lg text-slate-500 hover:bg-stone-200 hover:text-cyan-800 dark:hover:bg-slate-800 dark:text-slate-400 dark:hover:text-cyan-300 shrink-0" aria-label="Toggle dark mode">
@@ -176,6 +178,7 @@
         <li><strong class="text-slate-800 dark:text-slate-200">Built-in plugins</strong> — dev route dashboard, XML sitemap + robots, tag managers &amp; analytics pixels, self-hosted page analytics, admin CRUD (Mithril), optional admin page for ORM cache metrics (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">ormCacheAdminPlugin</code>), optional <strong class="text-slate-800 dark:text-slate-200">spreadsheet import/export</strong> for admin (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dataExchangePlugin</code> — Excel export, CSV/XLSX import; see <a href="#plugins-data-exchange" class="text-cyan-800 dark:text-cyan-400 hover:underline font-medium">Data exchange</a>), configurable HTTP <strong class="text-slate-800 dark:text-slate-200">redirects</strong> before file routes (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">redirectPlugin</code>; see <a href="#plugins-redirect" class="text-cyan-800 dark:text-cyan-400 hover:underline font-medium">Redirect</a>), SEO checker (dev), schema explorer (ORM metadata), Swagger UI + OpenAPI for HTTP APIs (dev by default), HTTP <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/health</code> probe, multipart <strong class="text-slate-800 dark:text-slate-200">file upload</strong> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">uploadPlugin</code> + <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createLocalFileProvider</code>), optional <strong class="text-slate-800 dark:text-slate-200">REST CRUD</strong> routes from ORM models (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">restResourcePlugin</code>) with batched <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">?include=</code> relations.</li>
         <li><strong class="text-slate-800 dark:text-slate-200">TypeScript</strong> — npm package includes <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.d.ts</code> with <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">WebspressoCompatApp</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">WebspressoRequest</code>, and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">WebspressoResponse</code>; import <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code>, ORM, plugins from TypeScript. Install <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">hono</code> if you need core Hono types on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp().app._hono</code>.</li>
         <li><strong class="text-slate-800 dark:text-slate-200">Application kernel (optional)</strong> — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">require('webspresso').kernel</code>: in-process event bus (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dispatch</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">publish</code>), plugin shell, flow registry, minimal view resolver, simulated <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">BaseRepository</code>; <strong class="text-slate-800 dark:text-slate-200">not</strong> the SSR <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code>. See <a href="#application-kernel" class="text-cyan-800 dark:text-cyan-400 hover:underline font-medium">Application kernel</a>.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Production builds</strong> — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso build --adapter node|cloudflare|bun</code> writes a route manifest and adapter entry under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.webspresso/</code>. <strong class="text-slate-800 dark:text-slate-200">Cloudflare Workers</strong>: precompiled Nunjucks, Wrangler bundle, optional D1. See <a href="#deployment" class="text-cyan-800 dark:text-cyan-400 hover:underline font-medium">Deployment</a> and <a href="#cloudflare-workers" class="text-cyan-800 dark:text-cyan-400 hover:underline font-medium">Cloudflare Workers</a>.</li>
       </ul>
     </section>
 
@@ -297,6 +300,8 @@ webspresso dev --no-css   # skip CSS watch if Tailwind is configured</code></pre
             <tr><td><code class="whitespace-nowrap">dev</code></td><td>Development server (Node watch, optional CSS watch)</td></tr>
             <tr><td><code class="whitespace-nowrap">start</code></td><td>Production server via <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">server.js</code></td></tr>
             <tr><td><code class="whitespace-nowrap">add tailwind</code></td><td>Add Tailwind, PostCSS, build + watch scripts</td></tr>
+            <tr><td><code class="whitespace-nowrap">add deploy</code></td><td>Scaffold deploy files — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--provider cloudflare|docker|pm2</code> (comma-separated)</td></tr>
+            <tr><td><code class="whitespace-nowrap">build</code></td><td>Compile manifest + adapter output under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.webspresso/</code> — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--adapter node|cloudflare|bun</code></td></tr>
             <tr><td><code class="whitespace-nowrap">db:migrate</code></td><td>Run pending migrations</td></tr>
             <tr><td><code class="whitespace-nowrap">db:rollback</code></td><td>Rollback last migration batch</td></tr>
             <tr><td><code class="whitespace-nowrap">db:status</code></td><td>Show migration status</td></tr>
@@ -318,7 +323,9 @@ webspresso dev --no-css   # skip CSS watch if Tailwind is configured</code></pre
           <thead><tr><th>Command</th><th>Flags / notes</th></tr></thead>
           <tbody class="text-slate-600 dark:text-slate-400">
             <tr><td><code>new</code></td><td><code>-i, --install</code> · <code>--no-tailwind</code></td></tr>
-            <tr><td><code>dev</code> / <code>start</code></td><td><code>-p, --port</code> (default 3000) · <code>dev --no-css</code></td></tr>
+            <tr><td><code>dev</code> / <code>start</code></td><td><code>-p, --port</code> (default 3000) · <code>dev --no-css</code> · <code>dev -a cloudflare</code> prints Wrangler reminder</td></tr>
+            <tr><td><code>build</code></td><td><code>-a, --adapter &lt;name&gt;</code> · <code>--skip-bundle</code> · <code>--fail-on-warnings</code></td></tr>
+            <tr><td><code>add deploy</code></td><td><code>-p, --provider &lt;name&gt;</code> (required) — <code>cloudflare</code>, <code>docker</code>, <code>pm2</code></td></tr>
             <tr><td><code>seed</code></td><td><code>--setup</code> · <code>--config</code> · <code>--env</code></td></tr>
             <tr><td><code>admin:password</code> / <code>admin:list</code></td><td><code>-c, --config</code> · <code>-E, --env</code></td></tr>
             <tr><td><code>favicon:generate</code></td><td><code>-o</code> · <code>--no-layout</code> · PWA <code>--name</code> / <code>--short-name</code> / <code>--theme-color</code></td></tr>
@@ -903,6 +910,8 @@ module.exports = {
             <tr><td><code class="whitespace-nowrap">src/plugin-manager.js</code></td><td>Plugin registry, dependency metadata, lifecycle hooks</td></tr>
             <tr><td><code class="whitespace-nowrap">core/orm/</code></td><td>Models, repositories, Knex query builder, migrations, seeding</td></tr>
             <tr><td><code class="whitespace-nowrap">core/auth/</code></td><td>Session-aware helpers for protected routes / admin</td></tr>
+            <tr><td><code class="whitespace-nowrap">core/build/</code></td><td>Production compiler — manifest, adapters (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">node</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">cloudflare</code>), <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createWorkerApp</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">src/router-edge.js</code></td><td>Edge-safe i18n / middleware helpers (no <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fs</code>)</td></tr>
             <tr><td><code class="whitespace-nowrap">core/compileSchema.js</code> / <code class="whitespace-nowrap">applySchema.js</code></td><td>Zod schema compilation for validation layers</td></tr>
             <tr><td><code class="whitespace-nowrap">plugins/</code></td><td>Built-in dashboard, sitemap, analytics, admin, SEO checker, …</td></tr>
             <tr><td><code class="whitespace-nowrap">utils/</code></td><td>Shared helpers (e.g. schema cache)</td></tr>
@@ -919,6 +928,185 @@ core/              # ORM, auth, Zod compile/apply
 plugins/           # first-party plugins
 src/               # server.js, file-router, http/ (Hono compat), helpers
 utils/             # shared utilities</pre>
+    </section>
+
+    <section id="deployment" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Deployment</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
+        Development uses <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso dev</code> and your project <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">server.js</code> (live file-router scan). Production can use the same stack on <strong class="text-slate-800 dark:text-slate-200">Node</strong>, or a compiled <strong class="text-slate-800 dark:text-slate-200">Cloudflare Worker</strong> that serves routes from a build manifest. The compiler lives in <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">core/build/</code> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso build</code> CLI).
+      </p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Adapters</h3>
+      <div class="overflow-x-auto mb-6">
+        <table class="w-full text-sm">
+          <thead><tr><th>Adapter</th><th>Output</th><th>Deploy with</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">node</code></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.webspresso/server/</code></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">node .webspresso/server/index.mjs</code>, Docker, PM2</td></tr>
+            <tr><td><code class="whitespace-nowrap">cloudflare</code></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.webspresso/worker/</code> + <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">templates.mjs</code></td><td><a href="#cloudflare-workers" class="text-cyan-800 dark:text-cyan-400 hover:underline">Wrangler</a> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">wrangler dev</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">deploy</code>)</td></tr>
+            <tr><td><code class="whitespace-nowrap">bun</code></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.webspresso/server/</code></td><td>Bun runtime (experimental)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Typical workflow</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-6"><code class="language-bash"># 1) Scaffold provider files (once per project)
+webspresso add deploy --provider cloudflare
+
+# 2) Configure webspresso.build.js (adapter, pagesDir, viewsDir, publicDir)
+
+# 3) Build production artifacts
+npm run build:css                    # if using Tailwind
+webspresso build --adapter cloudflare
+
+# 4) Run locally or deploy
+npx wrangler dev
+npx wrangler deploy</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Build output layout</h3>
+      <pre class="bg-slate-100 dark:bg-slate-900/80 border border-stone-200 dark:border-slate-700 rounded-xl p-4 text-sm text-slate-700 dark:text-slate-300 overflow-x-auto font-mono mb-6">.webspresso/
+  worker/                    # cloudflare adapter
+    manifest.json            # routes, i18n, template metadata, buildId
+    handlers.mjs             # compiled API + SSR config exports
+    templates.mjs            # precompiled Nunjucks (extends/includes from views/)
+    index.mjs                # Worker entry (import createAppFromManifest)
+    assets/public/           # copy of public/ for Wrangler [assets]
+  server/                    # node adapter (same except no templates.mjs)
+  meta/
+    build-graph.json
+    diagnostics.json</pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Build phases (summary)</h3>
+      <ol class="list-decimal pl-5 text-slate-600 dark:text-slate-400 space-y-2 text-sm mb-6">
+        <li><strong class="text-slate-800 dark:text-slate-200">Discover</strong> — scan <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/</code> for SSR and API routes.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Analyze</strong> — static import checks, Nunjucks <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">extends</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">include</code>, edge-incompatible <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">require()</code> on Cloudflare.</li>
+        <li><strong class="text-slate-800 dark:bg-slate-200">Compile</strong> — bundle handlers, inline template bodies, collect i18n JSON.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Manifest</strong> — assign registration order, template ids, plugin metadata.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Bundle</strong> — write artifacts; Node runs esbuild on entry; Cloudflare skips esbuild and emits <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">templates.mjs</code> for Wrangler.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Validate</strong> — adapter rules (unsupported plugins, memory sessions, unresolved templates).</li>
+      </ol>
+
+      <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Node production entry uses <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createAppFromManifest</code> from <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso/build/runtime/create-app-from-manifest-node</code> (full <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">server.js</code>). Cloudflare uses a separate worker-only module so Wrangler never bundles auth, bcrypt, or filesystem route scanning. Details: <a href="#cloudflare-workers" class="text-cyan-800 dark:text-cyan-400 hover:underline font-medium">Cloudflare Workers</a>.</p>
+    </section>
+
+    <section id="cloudflare-workers" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Cloudflare Workers</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
+        Run SSR and API routes on Cloudflare’s edge using a <strong class="text-slate-800 dark:text-slate-200">manifest-driven worker</strong>. The worker runtime (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createWorkerApp</code>) mounts routes from <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">manifest.json</code>, renders templates from <strong class="text-slate-800 dark:text-slate-200">precompiled</strong> Nunjucks (no runtime <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">eval</code>), and receives Wrangler bindings (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">env.DB</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">env.ASSETS</code>) on each <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fetch</code>.
+      </p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Prerequisites</h3>
+      <ul class="list-disc pl-5 text-slate-600 dark:text-slate-400 space-y-1 text-sm mb-6">
+        <li>Wrangler CLI — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">npm i -D wrangler</code></li>
+        <li><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">compatibility_flags = ["nodejs_compat"]</code> in <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">wrangler.toml</code> (included in the scaffold template)</li>
+        <li>Layouts under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">views/</code> when pages use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">{% extends "layout.njk" %}</code> — the build precompiles parent templates too</li>
+      </ul>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2"><code class="text-base">webspresso.build.js</code></h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-6"><code class="language-javascript">/** @type {import('webspresso/build').BuildConfig} */
+module.exports = {
+  adapter: 'cloudflare',
+  pagesDir: 'pages',
+  viewsDir: 'views',
+  publicDir: 'public',
+};</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2"><code class="text-base">wrangler.toml</code> (scaffold)</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-toml">name = "webspresso-app"
+main = ".webspresso/worker/index.mjs"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = ".webspresso/worker/assets/public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "webspresso"
+migrations_dir = "migrations"
+
+[vars]
+NODE_ENV = "production"</code></pre>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-6 leading-relaxed"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">main</code> points at the generated worker entry. Static files are served via the <strong class="text-slate-800 dark:text-slate-200">Assets</strong> binding (copied at build time). Remove the <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">[[d1_databases]]</code> block if you do not use D1.</p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Generated worker entry</h3>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-3 leading-relaxed">After <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso build --adapter cloudflare</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.webspresso/worker/index.mjs</code> imports the worker-only manifest helper and precompiled templates:</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-6"><code class="language-javascript">import { createAppFromManifest } from 'webspresso/build/runtime/create-app-from-manifest';
+import manifest from './manifest.json' assert { type: 'json' };
+import { handlers } from './handlers.mjs';
+import precompiledTemplates from './templates.mjs';
+
+let cached = null;
+function getApp(env) {
+  if (!cached) {
+    cached = createAppFromManifest({
+      manifest,
+      handlers,
+      pagesDir: 'pages',
+      bindings: env,
+      precompiledTemplates,
+      clientRuntime: { alpine: false, swup: false },
+      logging: false,
+    });
+  }
+  return cached.app;
+}
+
+export default {
+  fetch(request, env, ctx) {
+    return getApp(env).fetch(request, env, ctx);
+  },
+};</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Node vs worker runtime</h3>
+      <div class="overflow-x-auto mb-6">
+        <table class="w-full text-sm">
+          <thead><tr><th>Capability</th><th>Node <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code></th><th>Worker <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createWorkerApp</code></th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td>Route source</td><td>Filesystem scan (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">file-router</code>) or manifest</td><td>Manifest only</td></tr>
+            <tr><td>Nunjucks</td><td>Live templates + watch</td><td>Precompiled <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">templates.mjs</code></td></tr>
+            <tr><td>Auth / bcrypt</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">core/auth</code></td><td>Not included</td></tr>
+            <tr><td>Plugins</td><td>All built-ins</td><td>Edge-compatible only; build rejects admin/upload/data-exchange</td></tr>
+            <tr><td>Client runtime (Alpine/swup)</td><td>Optional</td><td>Off in generated entry</td></tr>
+            <tr><td>Static files</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">publicDir</code></td><td>Wrangler Assets</td></tr>
+            <tr><td>Database</td><td>Knex drivers</td><td>D1 via <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso.db.js</code> (optional)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">D1 (optional)</h3>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-3 leading-relaxed"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso add deploy --provider cloudflare</code> can create <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso.db.js</code> with <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">better-sqlite3</code> for local dev and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">d1</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">d1-remote</code> for production migrations. Use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">WEBSPRESSO_D1_REMOTE=1</code> with <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">CF_ACCOUNT_ID</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">CF_D1_DATABASE_ID</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">CF_API_TOKEN</code> to migrate the remote database from CI.</p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Build validation errors</h3>
+      <div class="overflow-x-auto mb-6">
+        <table class="w-full text-sm">
+          <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">WS_BUILD_PLUGIN_UNSUPPORTED</code></td><td>Plugin not marked edge-compatible (e.g. admin panel)</td></tr>
+            <tr><td><code class="whitespace-nowrap">WS_BUILD_EDGE_INCOMPATIBLE</code></td><td>Route file imports <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fs</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">bcrypt</code>, etc.</td></tr>
+            <tr><td><code class="whitespace-nowrap">WS_BUILD_SESSION_MEMORY</code></td><td>In-memory session store not allowed on Workers</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Troubleshooting</h3>
+      <div class="overflow-x-auto mb-4">
+        <table class="w-full text-sm">
+          <thead><tr><th>Symptom</th><th>What to check</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td>Many esbuild errors (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">crypto</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fs</code>, knex dialects)</td><td>Use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">--adapter cloudflare</code>; framework skips its esbuild — Wrangler bundles the worker entry</td></tr>
+            <tr><td>Wrangler: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">bcrypt</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">node-pre-gyp</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">aws-sdk</code></td><td>Entry must use worker <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">create-app-from-manifest</code>, not Node server path; rebuild after upgrading webspresso</td></tr>
+            <tr><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">EvalError: Code generation from strings disallowed</code></td><td>Missing or stale <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">templates.mjs</code> — run <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso build --adapter cloudflare</code></td></tr>
+            <tr><td>Template / layout not found</td><td>Put layouts in <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">views/</code>; rebuild so <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">extends</code> is precompiled</td></tr>
+            <tr><td>No CSS on worker</td><td>Run <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">npm run build:css</code> before <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso build</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-2"><code class="language-bash">npm run build:css
+webspresso build --adapter cloudflare
+npx wrangler dev
+npx wrangler deploy</code></pre>
     </section>
 
     <section id="testing" class="doc-section mb-14">

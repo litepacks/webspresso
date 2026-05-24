@@ -11,10 +11,9 @@ const {
   detectLocale,
   createTranslator,
   resolveMiddlewares,
-  routeRegistrationMeta,
   resolvePageAssets,
   applyPageAssetsToTemplateData,
-} = require('../../../src/file-router');
+} = require('../../../src/router-edge');
 
 /**
  * Merge i18n namespaces from manifest for a locale
@@ -267,8 +266,14 @@ function mountPagesFromManifest(app, options) {
           }
 
           let html;
-          if (tpl && tpl.body && nunjucks) {
-            html = nunjucks.renderString(tpl.body, renderContext, { path: route.source.page });
+          if (tpl && nunjucks) {
+            if (route.template?.renderMode === 'precompiled') {
+              html = nunjucks.render(route.source.page, renderContext);
+            } else if (tpl.body) {
+              html = nunjucks.renderString(tpl.body, renderContext, { path: route.source.page });
+            } else {
+              html = `<html><body>Missing template ${route.template?.id}</body></html>`;
+            }
           } else {
             html = `<html><body>Missing template ${route.template?.id}</body></html>`;
           }

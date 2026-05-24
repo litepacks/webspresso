@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { buildPrecompiledTemplatesMjs } = require('../phases/03-compile/templates');
 
 /**
  * @param {import('../index').BuildContextInternal} ctx
@@ -22,6 +23,30 @@ async function bundlePhase(ctx, manifest, handlersSource, opts = {}) {
 
   fs.writeFileSync(path.join(outputDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
   fs.writeFileSync(path.join(metaDir, 'build-graph.json'), JSON.stringify(ctx.graph.toJSON(), null, 2));
+
+  if (ctx.adapter.name === 'cloudflare') {
+    const pagesDir = path.resolve(ctx.cwd, ctx.config.pagesDir || 'pages');
+    const viewsDir = ctx.config.viewsDir
+      ? path.resolve(ctx.cwd, ctx.config.viewsDir)
+      : fs.existsSync(path.join(ctx.cwd, 'views'))
+        ? path.join(ctx.cwd, 'views')
+        : null;
+    const { parseNjkDirectives } = require('./02-analyze');
+    const ssrRoutes = (manifest.routes || [])
+      .filter((r) => r.type === 'ssr')
+      .map((r) => {
+        const absPath = path.join(pagesDir, r.source.page);
+        return {
+          absPath,
+          sourceFile: r.source.page,
+          njk: fs.existsSync(absPath)
+            ? parseNjkDirectives(fs.readFileSync(absPath, 'utf8'))
+            : null,
+        };
+      });
+    const templatesMjs = buildPrecompiledTemplatesMjs(ctx, ssrRoutes, viewsDir);
+    fs.writeFileSync(path.join(outputDir, 'templates.mjs'), templatesMjs);
+  }
 
   const handlersPath = path.join(outputDir, 'handlers.mjs');
   fs.writeFileSync(handlersPath, handlersSource);

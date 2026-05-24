@@ -40,7 +40,6 @@ registerPage(program);
 registerApi(program);
 registerDev(program);
 registerStart(program);
-registerAddTailwind(program);
 registerDbMigrate(program);
 registerDbRollback(program);
 registerDbStatus(program);
@@ -55,7 +54,10 @@ registerSkill(program);
 registerUpgrade(program);
 registerOrmMap(program);
 registerBuild(program);
-registerAddDeploy(program);
+
+const addCommand = program.command('add').description('Add project features (tailwind, deploy providers, …)');
+registerAddTailwind(addCommand);
+registerAddDeploy(addCommand);
 
 // Parse arguments
 program.parse();
