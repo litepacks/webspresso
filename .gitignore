@@ -21,9 +21,9 @@ Thumbs.db
 *.swp
 *.swo
 
-# Build
+# Build (root output only — do not use bare build/; it ignores core/build/)
 dist/
-build/
+/build/
 .webspresso/
 
 # Benchmarks (local baseline for vitest bench --compare)
