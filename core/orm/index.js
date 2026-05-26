@@ -24,12 +24,23 @@ const { createOrmCacheFromConfig, unregisterOrmCacheListeners } = require('./cac
  * @returns {import('./types').DatabaseInstance}
  */
 function createDatabase(config, runtime = {}) {
+  const resolveModule = (name) => {
+    const candidates = [
+      ...(runtime.modulePaths || []),
+      path.join(process.cwd(), 'node_modules'),
+      process.cwd(),
+    ];
+    return require(require.resolve(name, { paths: candidates }));
+  };
+
   // Lazy load knex to avoid requiring it if ORM is not used
-  let knex;
-  try {
-    knex = require('knex');
-  } catch {
-    throw new Error('Knex is required for ORM. Install it with: npm install knex');
+  let knex = runtime.knex;
+  if (!knex) {
+    try {
+      knex = resolveModule('knex');
+    } catch {
+      throw new Error('Knex is required for ORM. Install it with: npm install knex');
+    }
   }
 
   const driverMap = {
@@ -53,26 +64,29 @@ function createDatabase(config, runtime = {}) {
         'Pass createDatabase({ client: "d1" }, { d1: env.DB }) in Workers.'
       );
     }
-    let d1KnexClient;
-    try {
-      d1KnexClient = require('knex-cloudflare-d1');
-    } catch {
-      throw new Error(
-        'D1 support requires knex-cloudflare-d1.\n' +
-        'Install: npm install knex-cloudflare-d1'
-      );
+    const projectNodeModules = path.join(process.cwd(), 'node_modules');
+    let d1KnexClient = runtime.d1Client;
+    if (!d1KnexClient) {
+      try {
+        d1KnexClient = resolveModule('knex-cloudflare-d1');
+      } catch {
+        throw new Error(
+          'D1 support requires knex-cloudflare-d1.\n' +
+          'Install: npm install knex-cloudflare-d1'
+        );
+      }
     }
     knexInstance = knex({
       client: d1KnexClient,
-      connection: runtime.d1,
+      connection: { database: runtime.d1 },
     });
   } else if (client === 'd1-remote') {
     let remoteClient;
     try {
-      remoteClient = require('knex-cloudflare-d1/remote-client');
+      remoteClient = resolveModule('knex-cloudflare-d1/remote-client');
     } catch {
       try {
-        remoteClient = require('knex-cloudflare-d1/dist/remote-client');
+        remoteClient = resolveModule('knex-cloudflare-d1/dist/remote-client');
       } catch {
         throw new Error(
           'D1 remote migrations require knex-cloudflare-d1 remote client.\n' +

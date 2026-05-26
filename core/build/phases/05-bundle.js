@@ -51,7 +51,7 @@ async function bundlePhase(ctx, manifest, handlersSource, opts = {}) {
   const handlersPath = path.join(outputDir, 'handlers.mjs');
   fs.writeFileSync(handlersPath, handlersSource);
 
-  const entrySource = ctx.adapter.generateEntry(manifest);
+  const entrySource = ctx.adapter.generateEntry(manifest, ctx);
   const entryPath = path.join(outputDir, 'entry.mjs');
   fs.writeFileSync(entryPath, entrySource);
 

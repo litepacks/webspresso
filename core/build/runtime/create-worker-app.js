@@ -9,6 +9,7 @@ const { setAppContext } = require('../../../src/app-context');
 const { createHelpers } = require('../../../src/helpers');
 const { detectLocale } = require('../../../src/router-edge');
 const { mountPagesFromManifest } = require('./mount-manifest');
+const { resolveWorkerDb } = require('./resolve-worker-db');
 const {
   createCompatApp,
   getDefaultHelmetConfig,
@@ -113,7 +114,12 @@ function createWorkerApp(options = {}) {
     throw new Error('pagesDir is required');
   }
 
-  setAppContext({ db: db ?? null, bindings: bindings ?? null });
+  const resolvedDb = resolveWorkerDb(bindings, db, {
+    modulePaths: options.modulePaths,
+    dbRuntime: options.dbRuntime,
+  });
+
+  setAppContext({ db: resolvedDb ?? null, bindings: bindings ?? null });
 
   const cookieSecret =
     process.env.SESSION_SECRET ||
@@ -172,7 +178,7 @@ function createWorkerApp(options = {}) {
     middlewares,
     pluginManager: null,
     silent: !logging,
-    db,
+    db: resolvedDb,
     clientRuntime,
     pageAssets,
     globalHooksModule: handlers._global_hooks,

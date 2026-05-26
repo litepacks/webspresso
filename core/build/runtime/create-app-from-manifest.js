@@ -13,7 +13,16 @@ const { createWorkerApp } = require('./create-worker-app');
  * @param {Record<string, unknown>} [options.precompiledTemplates]
  */
 function createAppFromManifest(options) {
-  const { manifest, handlers, bindings, db, precompiledTemplates, ...appOptions } = options;
+  const {
+    manifest,
+    handlers,
+    bindings,
+    db,
+    precompiledTemplates,
+    modulePaths,
+    dbRuntime,
+    ...appOptions
+  } = options;
 
   if (!manifest || !handlers) {
     throw new Error('createAppFromManifest requires manifest and handlers');
@@ -25,6 +34,8 @@ function createAppFromManifest(options) {
     handlers,
     bindings,
     precompiledTemplates,
+    modulePaths,
+    dbRuntime,
     db: db ?? appOptions.db ?? null,
   });
 }

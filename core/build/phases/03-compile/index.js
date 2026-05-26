@@ -7,6 +7,7 @@ const path = require('path');
 const { compileApiRoutes } = require('./routes-api');
 const { compileSsrRoutes } = require('./routes-ssr');
 const { compileTemplates } = require('./templates');
+const { compileModelImports } = require('./models');
 const { buildMiddlewareManifest } = require('./middleware');
 const { compilePlugins, runPluginBuildHooks } = require('./plugins');
 const { configKey } = require('./routes-ssr');
@@ -33,7 +34,11 @@ async function compilePhase(ctx, analyzed, viewsDir, globalHooks) {
   const middleware = buildMiddlewareManifest(analyzed);
   const { plugins } = await compilePlugins(ctx, ctx.config.plugins || []);
 
-  const handlersSource = [api.handlersSource, ssr.ssrConfigSource].filter(Boolean).join('\n\n');
+  const modelImports =
+    ctx.adapter.name === 'cloudflare' ? compileModelImports(ctx, outputDir) : '';
+  const handlersSource = [modelImports, api.handlersSource, ssr.ssrConfigSource]
+    .filter(Boolean)
+    .join('\n\n');
 
   /** @type {object[]} */
   const routeEntries = [];

@@ -14,3 +14,13 @@ migrations_dir = "migrations"
 
 [vars]
 NODE_ENV = "production"
+
+# Native / Node-only deps — stub for Workers bundle (see stubs/empty.mjs)
+[alias]
+"bcrypt" = "./stubs/empty.mjs"
+"better-sqlite3" = "./stubs/empty.mjs"
+"sharp" = "./stubs/empty.mjs"
+"mock-aws-s3" = "./stubs/empty.mjs"
+"aws-sdk" = "./stubs/empty.mjs"
+"nock" = "./stubs/empty.mjs"
+"@mapbox/node-pre-gyp" = "./stubs/empty.mjs"
