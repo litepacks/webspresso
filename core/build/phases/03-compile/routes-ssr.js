@@ -26,9 +26,9 @@ function compileSsrRoutes(ctx, ssrRoutes, outputDir) {
     const key = configKey(route);
     const rel = path.relative(outputDir, route.configAbsPath).split(path.sep).join('/');
     const imp = rel.startsWith('.') ? rel : `./${rel}`;
-    const modVar = `c${route.registrationIndex}`;
-    lines.push(`import * as ${modVar} from '${imp}';`);
-    lines.push(`export const ${key} = ${modVar};`);
+    const importName = `pageCfg${route.registrationIndex}`;
+    lines.push(`import ${importName} from '${imp}';`);
+    lines.push(`export const ${key} = ${importName};`);
     exports.push(key);
   }
 

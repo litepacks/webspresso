@@ -21,6 +21,52 @@ const {
  * @param {string[]} namespaces
  * @param {string} locale
  */
+/**
+ * Normalize SSR page config from ESM namespace import (Workers bundle interop).
+ * @param {unknown} configMod
+ */
+function resolveSsrConfig(configMod) {
+  if (!configMod) return null;
+
+  const mod = configMod.default ?? configMod;
+
+  if (mod && typeof mod === 'object' && typeof mod.load === 'function') {
+    return mod;
+  }
+
+  if (mod?.default && typeof mod.default === 'object' && typeof mod.default.load === 'function') {
+    return mod.default;
+  }
+
+  if (typeof mod === 'function') {
+    return { load: mod };
+  }
+
+  if (typeof configMod.load === 'function') {
+    return configMod;
+  }
+
+  return mod && typeof mod === 'object' ? mod : null;
+}
+
+/**
+ * @param {object|null|undefined} config
+ * @param {unknown} configMod
+ */
+function resolveSsrLoadFn(config, configMod) {
+  if (config?.load && typeof config.load === 'function') {
+    return config.load;
+  }
+  const mod = configMod?.default ?? configMod;
+  if (typeof mod?.load === 'function') {
+    return mod.load;
+  }
+  if (typeof configMod?.load === 'function') {
+    return configMod.load;
+  }
+  return null;
+}
+
 function loadI18nFromManifest(i18nMap, namespaces, locale) {
   /** @type {Record<string, unknown>} */
   let merged = {};
@@ -177,7 +223,7 @@ function mountPagesFromManifest(app, options) {
     for (const route of list) {
       const configExport = route.handler.configExport;
       const configMod = configExport ? handlers[configExport] : null;
-      const config = configMod?.default || configMod;
+      const config = resolveSsrConfig(configMod);
       const preResolvedPageMw = config?.middleware
         ? resolveMiddlewares(config.middleware, middlewares)
         : [];
@@ -186,6 +232,10 @@ function mountPagesFromManifest(app, options) {
 
       app.get(route.pattern, async (req, res, next) => {
         try {
+          if (db != null) {
+            req.db = db;
+          }
+
           const locale = detectLocale(req);
           const namespaces = route.i18n?.namespaces || [];
           const translations = loadI18nFromManifest(manifest.i18n, namespaces, locale);
@@ -233,8 +283,9 @@ function mountPagesFromManifest(app, options) {
           await executeHook(globalHooks, 'beforeLoad', ctx);
           await executeHook(routeHooks, 'beforeLoad', ctx);
 
-          if (config?.load && typeof config.load === 'function') {
-            const loadData = await config.load(req, ctx);
+          const loadFn = resolveSsrLoadFn(config, configMod);
+          if (loadFn) {
+            const loadData = await loadFn.call(config, req, ctx);
             ctx.data = { ...ctx.data, ...loadData };
           }
 
@@ -253,6 +304,7 @@ function mountPagesFromManifest(app, options) {
           ctx.data = pageAssetBundle.data;
           const renderContext = {
             ...ctx.data,
+            dbPresent: Boolean(db ?? ctx.db ?? req.db),
             meta: ctx.meta,
             locale: ctx.locale,
             t: ctx.t,

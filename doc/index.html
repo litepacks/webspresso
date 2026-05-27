@@ -74,6 +74,7 @@
     <div class="flex items-center justify-between mb-10 gap-4 flex-wrap">
       <nav class="flex flex-wrap gap-x-3 gap-y-2 text-sm leading-snug" aria-label="Page sections">
         <a href="#overview" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Overview</a>
+        <a href="#whats-new" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">What's new</a>
         <a href="#features" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Features</a>
         <a href="#installation" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Install</a>
         <a href="#peers" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Peers</a>
@@ -127,6 +128,7 @@
           <a href="https://github.com/litepacks/webspresso/blob/main/README.md" class="text-cyan-800 dark:text-cyan-400 hover:underline font-medium">README.md</a> in the repository.
         </p>
         <p class="mt-2 text-slate-500 dark:text-slate-500 text-sm">
+          Release: <strong class="text-slate-700 dark:text-slate-300">0.1.0-alpha.0</strong> ·
           Stack: <code class="bg-stone-200/80 dark:bg-slate-800 px-1 rounded">Hono</code> ·
           <code class="bg-stone-200/80 dark:bg-slate-800 px-1 rounded">Nunjucks</code> ·
           <code class="bg-stone-200/80 dark:bg-slate-800 px-1 rounded">Knex</code> ·
@@ -135,6 +137,26 @@
         </p>
       </div>
     </header>
+
+    <section id="whats-new" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">What's new</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 text-sm leading-relaxed">
+        Highlights in <strong class="text-slate-800 dark:text-slate-200">0.1.0-alpha.0</strong>. Full history:
+        <a href="https://github.com/litepacks/webspresso/blob/main/CHANGELOG.md" class="text-cyan-800 dark:text-cyan-400 hover:underline font-medium">CHANGELOG.md</a>.
+      </p>
+      <div class="overflow-x-auto mb-2">
+        <table class="w-full text-sm">
+          <thead><tr><th>Area</th><th>Summary</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><strong class="text-slate-800 dark:text-slate-200">Hono</strong></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp().app</code> is <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">WebspressoCompatApp</code> — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">listen</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fetch</code>, Express-shaped handlers. See <a href="#migration-hono" class="text-cyan-800 dark:text-cyan-400 hover:underline">Hono migration</a>.</td></tr>
+            <tr><td><strong class="text-slate-800 dark:text-slate-200">Build compiler</strong></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso build</code> — manifest + handlers under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.webspresso/</code>. See <a href="#deployment" class="text-cyan-800 dark:text-cyan-400 hover:underline">Deployment</a>.</td></tr>
+            <tr><td><strong class="text-slate-800 dark:text-slate-200">Cloudflare Workers</strong></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">add deploy --provider cloudflare</code>; precompiled <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">templates.mjs</code> (full <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">extends</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">include</code> graph). Worker runtime: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createWorkerApp</code>. See <a href="#cloudflare-workers" class="text-cyan-800 dark:text-cyan-400 hover:underline">Cloudflare Workers</a>.</td></tr>
+            <tr><td><strong class="text-slate-800 dark:text-slate-200">Subpath exports</strong></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso/build</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso/core/auth</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso/core/orm</code>, split manifest entries for Node vs Worker.</td></tr>
+            <tr><td><strong class="text-slate-800 dark:text-slate-200">D1 on Workers</strong></td><td>Wrangler <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">env.DB</code> → <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.db</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">getDb()</code> in compiled API routes.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
     <section id="overview" class="doc-section mb-14">
       <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">At a glance</h2>
@@ -921,13 +943,30 @@ module.exports = {
       </div>
 
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Package layout (<code class="text-base">package.json</code> <code class="text-base">files</code>)</h3>
-      <pre class="bg-slate-100 dark:bg-slate-900/80 border border-stone-200 dark:border-slate-700 rounded-xl p-4 text-sm text-slate-700 dark:text-slate-300 overflow-x-auto font-mono">index.js           # re-exports createApp, router utils, ORM, plugins
+      <pre class="bg-slate-100 dark:bg-slate-900/80 border border-stone-200 dark:border-slate-700 rounded-xl p-4 text-sm text-slate-700 dark:text-slate-300 overflow-x-auto font-mono mb-4">index.js           # re-exports createApp, router utils, ORM, plugins
 index.d.ts         # TypeScript declarations (public API)
 bin/               # webspresso CLI
-core/              # ORM, auth, Zod compile/apply
+adapters/          # node, cloudflare, bun deploy adapters
+core/              # ORM, auth, build compiler, Zod compile/apply
 plugins/           # first-party plugins
 src/               # server.js, file-router, http/ (Hono compat), helpers
 utils/             # shared utilities</pre>
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Subpath exports (<code class="text-base">package.json</code> <code class="text-base">exports</code>)</h3>
+      <div class="overflow-x-auto mb-6">
+        <table class="w-full text-sm">
+          <thead><tr><th>Import</th><th>Use</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">webspresso</code></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp</code>, router, ORM re-exports, plugins index</td></tr>
+            <tr><td><code class="whitespace-nowrap">webspresso/build</code></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">runBuild</code>, build types</td></tr>
+            <tr><td><code class="whitespace-nowrap">webspresso/build/runtime/create-app-from-manifest</code></td><td>Cloudflare Worker → <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createWorkerApp</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">webspresso/build/runtime/create-app-from-manifest-node</code></td><td>Node production manifest → full <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">server.js</code> stack</td></tr>
+            <tr><td><code class="whitespace-nowrap">webspresso/core/auth</code></td><td>Session auth (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createAuth</code>, guards)</td></tr>
+            <tr><td><code class="whitespace-nowrap">webspresso/core/orm</code></td><td>Knex ORM (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineModel</code>, D1 client)</td></tr>
+            <tr><td><code class="whitespace-nowrap">webspresso/plugins/*</code></td><td>Individual built-in plugins</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Generated <strong class="text-slate-800 dark:text-slate-200">Cloudflare</strong> entries must import the <strong class="text-slate-800 dark:text-slate-200">worker</strong> manifest path so Wrangler does not bundle bcrypt, admin plugins, or filesystem route scanning.</p>
     </section>
 
     <section id="deployment" class="doc-section mb-14">
@@ -979,7 +1018,7 @@ npx wrangler deploy</code></pre>
       <ol class="list-decimal pl-5 text-slate-600 dark:text-slate-400 space-y-2 text-sm mb-6">
         <li><strong class="text-slate-800 dark:text-slate-200">Discover</strong> — scan <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">pages/</code> for SSR and API routes.</li>
         <li><strong class="text-slate-800 dark:text-slate-200">Analyze</strong> — static import checks, Nunjucks <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">extends</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">include</code>, edge-incompatible <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">require()</code> on Cloudflare.</li>
-        <li><strong class="text-slate-800 dark:bg-slate-200">Compile</strong> — bundle handlers, inline template bodies, collect i18n JSON.</li>
+        <li><strong class="text-slate-800 dark:bg-slate-200">Compile</strong> — bundle handlers; walk Nunjucks <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">extends</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">include</code> from <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">views/</code>; precompile to <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">templates.mjs</code> (Cloudflare); collect i18n JSON.</li>
         <li><strong class="text-slate-800 dark:text-slate-200">Manifest</strong> — assign registration order, template ids, plugin metadata.</li>
         <li><strong class="text-slate-800 dark:text-slate-200">Bundle</strong> — write artifacts; Node runs esbuild on entry; Cloudflare skips esbuild and emits <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">templates.mjs</code> for Wrangler.</li>
         <li><strong class="text-slate-800 dark:text-slate-200">Validate</strong> — adapter rules (unsupported plugins, memory sessions, unresolved templates).</li>
@@ -1069,13 +1108,20 @@ export default {
             <tr><td>Plugins</td><td>All built-ins</td><td>Edge-compatible only; build rejects admin/upload/data-exchange</td></tr>
             <tr><td>Client runtime (Alpine/swup)</td><td>Optional</td><td>Off in generated entry</td></tr>
             <tr><td>Static files</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">publicDir</code></td><td>Wrangler Assets</td></tr>
-            <tr><td>Database</td><td>Knex drivers</td><td>D1 via <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso.db.js</code> (optional)</td></tr>
+            <tr><td>Database</td><td>Knex drivers</td><td>D1 via <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso.db.js</code> (optional); <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">env.DB</code> → <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.db</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">getDb()</code> in API handlers</td></tr>
           </tbody>
         </table>
       </div>
 
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">D1 (optional)</h3>
       <p class="text-slate-600 dark:text-slate-400 text-sm mb-3 leading-relaxed"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso add deploy --provider cloudflare</code> can create <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso.db.js</code> with <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">better-sqlite3</code> for local dev and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">d1</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">d1-remote</code> for production migrations. Use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">WEBSPRESSO_D1_REMOTE=1</code> with <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">CF_ACCOUNT_ID</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">CF_D1_DATABASE_ID</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">CF_API_TOKEN</code> to migrate the remote database from CI.</p>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-3 leading-relaxed">The generated worker entry imports <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">knex</code> and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">knex-cloudflare-d1</code>, passes <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dbRuntime</code> into <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createAppFromManifest</code>, and resolves <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">bindings.DB</code> via <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">resolveWorkerDb</code> — same <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.db.getRepository('Model')</code> pattern as Node.</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-6"><code class="language-javascript">// pages/api/notes.get.js
+module.exports = async function handler(req, res) {
+  if (!req.db) return res.status(503).json({ error: 'Database not configured' });
+  const notes = await req.db.getRepository('Note').query().orderBy('created_at', 'desc').list();
+  res.json(notes);
+};</code></pre>
 
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Build validation errors</h3>
       <div class="overflow-x-auto mb-6">
@@ -1131,7 +1177,7 @@ npm run test:e2e:headed</code></pre>
     </section>
 
     <footer class="pt-10 border-t border-stone-200 dark:border-slate-800 text-sm text-slate-500 dark:text-slate-500">
-      <p><a href="https://github.com/litepacks/webspresso" class="text-cyan-800 dark:text-cyan-400 hover:underline">github.com/litepacks/webspresso</a> · MIT</p>
+      <p><a href="https://github.com/litepacks/webspresso" class="text-cyan-800 dark:text-cyan-400 hover:underline">github.com/litepacks/webspresso</a> · <a href="https://github.com/litepacks/webspresso/blob/main/CHANGELOG.md" class="text-cyan-800 dark:text-cyan-400 hover:underline">CHANGELOG</a> · MIT</p>
     </footer>
   </div>
 

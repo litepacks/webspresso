@@ -5,6 +5,20 @@
 
 A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 
+> **Current release:** `0.1.0-alpha.0` — Hono-based HTTP stack, production build compiler, and Cloudflare Workers adapter. See **[What's new](#whats-new)** and **[CHANGELOG.md](CHANGELOG.md)**.
+
+## What's new
+
+Highlights in **`0.1.0-alpha.0`** (see **[CHANGELOG.md](CHANGELOG.md)** for the full list):
+
+| Area | Summary |
+|------|---------|
+| **HTTP runtime** | **Hono** under the hood; handlers still use **`(req, res, next)`** and **`app.listen()`** via compat wrappers. |
+| **Production build** | **`webspresso build --adapter node\|cloudflare\|bun`** — discover → analyze → compile → manifest → bundle → validate; output under **`.webspresso/`**. |
+| **Cloudflare Workers** | **`webspresso add deploy --provider cloudflare`** scaffolds Wrangler + **`webspresso.build.js`**; build emits **precompiled `templates.mjs`** (walks **`extends` / `include`** from `views/`). Worker entry uses **`createWorkerApp`** via **`webspresso/build/runtime/create-app-from-manifest`** (not the Node server bundle). |
+| **D1 on Workers** | Wrangler **`env.DB`** → **`req.db`** / **`getDb()`** when the generated entry wires **`knex`** + **`knex-cloudflare-d1`**. |
+| **Package exports** | Subpaths: **`webspresso/build`**, **`webspresso/core/auth`**, **`webspresso/core/orm`**, **`webspresso/plugins/*`**, plus split manifest helpers (**`create-app-from-manifest`** vs **`create-app-from-manifest-node`**). |
+
 ## Features
 
 - **File-Based Routing**: Create pages by adding `.njk` files to a `pages/` directory
@@ -59,6 +73,22 @@ Major versions use **Hono** instead of Express. Breaking changes:
 **Rate limiting:** optional peer **`hono-rate-limiter`**; built-in **`rateLimitPlugin`** provides in-memory limiters for file routes.
 
 **Raw Hono:** `createApp().app._hono` exposes the underlying Hono instance for advanced routing.
+
+### Package subpath exports
+
+The npm **`exports`** field exposes focused entry points (CommonJS, with types on the root):
+
+| Import | Use |
+|--------|-----|
+| `webspresso` | `createApp`, router utils, ORM re-exports, plugins index |
+| `webspresso/build` | `runBuild`, `BuildConfig`, build diagnostics |
+| `webspresso/build/runtime/create-app-from-manifest` | **Cloudflare Worker** manifest bootstrap → **`createWorkerApp`** |
+| `webspresso/build/runtime/create-app-from-manifest-node` | **Node** manifest bootstrap (full `server.js` feature set) |
+| `webspresso/core/auth` | `createAuth`, `quickAuth`, session middleware |
+| `webspresso/core/orm` | `defineModel`, `createDatabase`, `zdb` |
+| `webspresso/plugins/*` | Individual built-in plugins |
+
+Use the **worker** manifest path in generated **`.webspresso/worker/index.mjs`** so Wrangler does not bundle bcrypt, admin plugins, or filesystem route scanning.
 
 ## Application kernel (`kernel`)
 
@@ -353,6 +383,8 @@ webspresso build --adapter cloudflare --fail-on-warnings
 
 Configure defaults in **`webspresso.build.js`** at the project root (see templates under `templates/deploy/`).
 
+**Build phases** (summary): discover `pages/` → analyze edge imports & Nunjucks graph → compile handlers + inline i18n → write **`manifest.json`** → bundle adapter output (Node: optional esbuild; Cloudflare: **`templates.mjs`** + skip framework esbuild) → validate. Compiler internals: [`core/build/README.md`](core/build/README.md).
+
 ### `webspresso favicon:generate <source.png>`
 
 Generate favicon PNG files and `favicons.njk` partial from a single source PNG.
@@ -439,7 +471,7 @@ my-app/
 
 ### `createApp(options)`
 
-Creates and configures the Express app.
+Creates and configures the **Hono-based compat app** (`WebspressoCompatApp`).
 
 **Options:**
 - `pagesDir` (required): Path to pages directory
@@ -454,7 +486,7 @@ Creates and configures the Express app.
 - `middlewares` (optional): Named middleware registry for routes
 - `clientRuntime` (optional): **`{ alpine?: boolean | object, swup?: boolean | object }`**. When either flag is enabled, mounts vendored Alpine 3 / swup 4 (+ Head + Scripts plugins) at **`/__webspresso/client-runtime/*`** and passes resolved **`{ alpine, swup }`** into SSR templates as **`clientRuntime`**. Override with env **`WEBSPRESSO_ALPINE`** / **`WEBSPRESSO_SWUP`** (`1` or `true`). Package exports **`resolveClientRuntime`** and **`CLIENT_RUNTIME_BASE`**. See **[Client runtime](#client-runtime)** below and **[`doc/index.html#client-runtime`](doc/index.html#client-runtime)**.
 - `auth` (optional): `AuthManager` from **`createAuth()`** / **`quickAuth()`** (`require('webspresso/core/auth')`). Registers session + cookie parsing, attaches **`req.auth`** / **`req.user`**, and injects named route middleware **`auth`** and **`guest`** (do not reuse those names for custom handlers if you pass `auth`). See **[`doc/index.html#authentication`](doc/index.html#authentication)**.
-- `setupRoutes(app, ctx)` (optional): Register custom Express routes after file routes and plugin `onRoutesReady`, before the 404 handler — use for login/logout handlers when using the auth module; **`ctx.authMiddleware`** exposes `requireAuth`, `requireGuest`, etc.; **`ctx.clientRuntime`** is **`{ alpine, swup }`**
+- `setupRoutes(app, ctx)` (optional): Register custom routes on the compat **`app`** after file routes and plugin `onRoutesReady`, before the 404 handler — use for login/logout handlers when using the auth module; **`ctx.authMiddleware`** exposes `requireAuth`, `requireGuest`, etc.; **`ctx.clientRuntime`** is **`{ alpine, swup }`**
 
 **Example with middlewares:**
 
@@ -477,7 +509,7 @@ const { app } = createApp({
       }
       next();
     },
-    rateLimit: require('express-rate-limit')({ windowMs: 60000, max: 100 })
+    rateLimit: require('hono-rate-limiter')({ windowMs: 60_000, limit: 100 })
   }
 });
 ```
@@ -584,7 +616,7 @@ createApp({
 | `getDb()` | Same instance as `req.db`; **throws** if no `db` was passed to `createApp` |
 | `hasDb()` | `true` if `createApp` was given `db` |
 | `getAppContext()` | `{ db }` — `db` may be `null` |
-| `attachDbMiddleware` | Express middleware to populate `req.db` for non–file-router routes |
+| `attachDbMiddleware` | Compat middleware to populate `req.db` for non–file-router routes |
 | `resetAppContext()` | Clears context (mainly for tests) |
 | `setAppContext(partial)` | Low-level merge; normally only `createApp` uses this |
 
@@ -618,7 +650,7 @@ Error templates receive these variables:
 
 **How errors reach this handler**
 
-Unhandled errors from file-based routes (`pages/**/*.njk` `load()` / middleware / render, and `pages/api/**/*.js` handlers) are forwarded with `next(err)`, so they go through this 4-argument Express error middleware. That means `errorPages.serverError` and `errorPages.timeout` apply to those failures as well (not only to routes you add with `setupRoutes`).
+Unhandled errors from file-based routes (`pages/**/*.njk` `load()` / middleware / render, and `pages/api/**/*.js` handlers) are forwarded with `next(err)`, so they go through the central error handler. That means `errorPages.serverError` and `errorPages.timeout` apply to those failures as well (not only to routes you add with `setupRoutes`).
 
 - **`pages/_hooks.js` `onError(ctx, err)`** runs **before** the central handler (for both SSR and API file routes). Use it for logging or APM (`Sentry.captureException`, `newrelic.noticeError`, etc.). The error is also on **`ctx.error`**.
 
@@ -2426,7 +2458,20 @@ Pass **`env.DB`** from Wrangler into the worker via bindings (template `[[d1_dat
 - i18n JSON baked into the manifest
 - Static assets via **`[assets]`**
 - Zod validation on API routes
-- Optional D1 + ORM when configured
+- Optional D1 + ORM when configured — API handlers get **`req.db`** from the **`DB`** binding (same as Node when `createApp({ db })` was used)
+
+**D1 in API routes (Workers):**
+
+```javascript
+// pages/api/notes.get.js — env.DB resolved at worker cold start
+module.exports = async function handler(req, res) {
+  if (!req.db) return res.status(503).json({ error: 'Database not configured' });
+  const notes = await req.db.getRepository('Note').query().orderBy('created_at', 'desc').list();
+  res.json(notes);
+};
+```
+
+Install **`knex`** and **`knex-cloudflare-d1`** in the project; the scaffolded worker entry passes them via **`dbRuntime`** (see generated **`.webspresso/worker/index.mjs`**).
 
 #### Limitations (build will error or warn)
 
@@ -2448,7 +2493,7 @@ Build-time validation reports **`WS_BUILD_PLUGIN_UNSUPPORTED`**, **`WS_BUILD_EDG
 | `Could not resolve "crypto"` / `fs` during **webspresso** esbuild | Wrong adapter or old build path | Use `--adapter cloudflare` (skips framework esbuild); let Wrangler bundle |
 | `bcrypt` / `node-pre-gyp` / `aws-sdk` in **Wrangler** bundle | Full `server.js` pulled into worker | Ensure entry imports **`webspresso/build/runtime/create-app-from-manifest`** (worker-only), not Node manifest path |
 | `EvalError: Code generation from strings disallowed` | Nunjucks compiled at runtime | Rebuild — need **`templates.mjs`** from current `webspresso build` |
-| `layout.njk` not found at runtime | Missing parent template in precompile | Keep layouts in **`views/`**; rebuild so `extends` is collected |
+| `layout.njk` not found at runtime | Missing parent template in precompile | Keep layouts in **`views/`**; rebuild — build walks **`extends` / `include`** and precompiles the full graph into **`templates.mjs`** |
 | Empty CSS on worker | Assets not built | Run **`npm run build:css`** before `webspresso build` |
 | `Address already in use` on `wrangler dev` | Port taken | `npx wrangler dev --port 8788` |
 

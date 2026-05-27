@@ -68,13 +68,14 @@ function createDatabase(config, runtime = {}) {
     let d1KnexClient = runtime.d1Client;
     if (!d1KnexClient) {
       try {
-        d1KnexClient = resolveModule('knex-cloudflare-d1');
+        resolveModule('knex-cloudflare-d1');
       } catch {
         throw new Error(
           'D1 support requires knex-cloudflare-d1.\n' +
           'Install: npm install knex-cloudflare-d1'
         );
       }
+      d1KnexClient = require('./d1-knex-client')(resolveModule('knex-cloudflare-d1'));
     }
     knexInstance = knex({
       client: d1KnexClient,
