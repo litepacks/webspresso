@@ -18,20 +18,44 @@ const { generateNanoid, zodNanoid, extendZ } = require('./utils/nanoid');
 const { createOrmCacheFromConfig, unregisterOrmCacheListeners } = require('./cache');
 
 /**
+ * Module resolution paths: app cwd first, then webspresso package tree (nested deps when linked via file:).
+ * @param {{ modulePaths?: string[] }} [runtime]
+ * @returns {string[]}
+ */
+function getModuleResolvePaths(runtime = {}) {
+  const paths = [];
+  if (runtime.modulePaths?.length) {
+    paths.push(...runtime.modulePaths);
+  }
+  paths.push(path.join(process.cwd(), 'node_modules'));
+  paths.push(process.cwd());
+
+  try {
+    const webspressoPkg = require.resolve('webspresso/package.json', {
+      paths: [process.cwd(), __dirname],
+    });
+    const webspressoDir = path.dirname(webspressoPkg);
+    paths.push(path.join(webspressoDir, 'node_modules'));
+    paths.push(path.dirname(webspressoDir));
+  } catch {
+    const repoRoot = path.join(__dirname, '..', '..');
+    paths.push(path.join(repoRoot, 'node_modules'));
+    paths.push(repoRoot);
+  }
+
+  return paths;
+}
+
+/**
  * Create a database instance
  * @param {import('./types').DatabaseConfig} config - Database configuration
  * @param {{ d1?: object, skipModelScan?: boolean }} [runtime] - Runtime bindings (D1 on Workers)
  * @returns {import('./types').DatabaseInstance}
  */
 function createDatabase(config, runtime = {}) {
-  const resolveModule = (name) => {
-    const candidates = [
-      ...(runtime.modulePaths || []),
-      path.join(process.cwd(), 'node_modules'),
-      process.cwd(),
-    ];
-    return require(require.resolve(name, { paths: candidates }));
-  };
+  const modulePaths = getModuleResolvePaths(runtime);
+
+  const resolveModule = (name) => require(require.resolve(name, { paths: modulePaths }));
 
   // Lazy load knex to avoid requiring it if ORM is not used
   let knex = runtime.knex;
@@ -64,7 +88,6 @@ function createDatabase(config, runtime = {}) {
         'Pass createDatabase({ client: "d1" }, { d1: env.DB }) in Workers.'
       );
     }
-    const projectNodeModules = path.join(process.cwd(), 'node_modules');
     let d1KnexClient = runtime.d1Client;
     if (!d1KnexClient) {
       try {
@@ -102,10 +125,8 @@ function createDatabase(config, runtime = {}) {
     });
   } else if (client) {
     const driverName = driverMap[client] || client;
-    const projectNodeModules = path.join(process.cwd(), 'node_modules');
-
     try {
-      const driverPath = require.resolve(driverName, { paths: [projectNodeModules] });
+      const driverPath = require.resolve(driverName, { paths: modulePaths });
       require(driverPath);
     } catch (e) {
       const installCmd = driverName === 'better-sqlite3'
