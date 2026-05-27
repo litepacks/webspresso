@@ -290,6 +290,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 *Only hydrated islands consume memory
 
+## [0.1.0-alpha.0] - 2026-05-27
+
+### Added
+
+#### HTTP stack (Hono)
+- **`createApp().app`** is **`WebspressoCompatApp`** (Hono + Express-shaped **`(req, res, next)`**, **`app.listen`**, **`app.fetch`**).
+- Built-in secure headers, **`hono-sessions`**, body parsers, multipart via upload plugin; optional **`hono-rate-limiter`** peer.
+- **`app._hono`** for advanced routing; integration tests use **`app.fetch`** (no supertest).
+
+#### Production build compiler (`core/build/`)
+- **`webspresso build --adapter node|cloudflare|bun`** — discover, analyze, compile, manifest, bundle, validate.
+- Output under **`.webspresso/`** (`manifest.json`, `handlers.mjs`, adapter `index.mjs`).
+- **`webspresso add deploy --provider cloudflare|docker|pm2`** scaffolds provider files.
+- **`webspresso.build.js`** project config; build diagnostics in **`.webspresso/meta/`**.
+
+#### Cloudflare Workers
+- Adapter output: **`.webspresso/worker/`** + **`templates.mjs`** (Nunjucks precompile; walks **`extends` / `include`** from `views/`).
+- Worker runtime **`createWorkerApp`** (`core/build/runtime/create-worker-app.js`) — manifest routes, no filesystem scan, no auth/bcrypt.
+- **`createAppFromManifest`** split: **`webspresso/build/runtime/create-app-from-manifest`** (worker) vs **`create-app-from-manifest-node`** (Node full stack).
+- D1: Wrangler **`env.DB`** → **`resolveWorkerDb`** → **`req.db`** / **`getDb()`** in compiled API routes.
+- Build validation: **`WS_BUILD_PLUGIN_UNSUPPORTED`**, **`WS_BUILD_EDGE_INCOMPATIBLE`**, **`WS_BUILD_SESSION_MEMORY`**.
+
+#### Package exports
+- Subpaths: **`webspresso/build`**, **`webspresso/core/auth`**, **`webspresso/core/orm`**, **`webspresso/plugins/*`**, explicit manifest runtime entries.
+
+### Changed
+
+- Replaced Express with **Hono** + **`@hono/node-server`** for Node listen.
+- **`index.d.ts`**: **`WebspressoCompatApp`**, **`WebspressoRequest`**, **`WebspressoResponse`**.
+- Version **`0.1.0-alpha.0`** (pre-release).
+
 ## [0.0.7] - 2025-01-07
 
 ### Added

@@ -685,7 +685,7 @@ function createExtensionApiHandlers(options) {
         const csvContent = [header, ...rows].join('\n');
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename="${modelName}_export.csv"`);
-        res.json({ data: csvContent, format: 'csv' });
+        return res.send(csvContent);
       } else {
         // JSON export (exclude hidden columns)
         res.json({ data: sanitizeForOutput(records, model), model: modelName, exportedAt: new Date().toISOString() });

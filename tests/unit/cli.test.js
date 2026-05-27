@@ -119,8 +119,8 @@ afterAll(() => {
   }
 });
 
-// CLI tests must run sequentially to avoid directory conflicts
-describe('CLI', () => {
+// CLI tests must run sequentially to avoid directory conflicts (spawnSync-heavy, ~90s total)
+describe('CLI', { timeout: 120000 }, () => {
   // Run all CLI tests sequentially
   describe.sequential('Help and Version', () => {
     it('should display help', () => {

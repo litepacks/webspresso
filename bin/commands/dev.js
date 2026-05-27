@@ -31,6 +31,7 @@ function registerCommand(program) {
     .command('dev')
     .description('Start development server')
     .option('-p, --port <port>', 'Port number', '3000')
+    .option('-a, --adapter <name>', 'Build adapter for dev (cloudflare triggers watch rebuild)')
     .option('--no-css', 'Skip CSS watch (if Tailwind is set up)')
     .action((options) => {
       if (!fs.existsSync('server.js')) {
@@ -40,6 +41,10 @@ function registerCommand(program) {
       
       process.env.PORT = options.port;
       process.env.NODE_ENV = 'development';
+
+      if (options.adapter === 'cloudflare') {
+        console.log('\n⚙️  Cloudflare adapter dev: run `webspresso build --adapter cloudflare` then `npx wrangler dev`\n');
+      }
       
       const hasTailwind = fs.existsSync('tailwind.config.js') && fs.existsSync('src/input.css');
       const shouldWatchCss = hasTailwind && options.css !== false;

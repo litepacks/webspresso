@@ -5,7 +5,7 @@
 const path = require('path');
 const fs = require('fs/promises');
 const os = require('os');
-const request = require('supertest');
+const request = require('../helpers/http').request;
 const { createApp } = require('../../src/server');
 const { uploadPlugin } = require('../../plugins/upload');
 

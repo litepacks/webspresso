@@ -41,6 +41,7 @@ async function createTestProject() {
       },
       dependencies: {
         webspresso: path.join(__dirname, '../../..'),
+        knex: '^3.1.0',
         'better-sqlite3': '^11.10.0',
       },
     };

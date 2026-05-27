@@ -1,5 +1,5 @@
 /**
- * Rate limit plugin — registers named `rateLimit` middleware for file routes + optional global limiter
+ * Rate limit plugin — in-memory limiter for file routes + optional global mount
  * @module plugins/rate-limit
  */
 
@@ -8,44 +8,9 @@ const PLUGIN_ONLY_KEYS = new Set(['global', 'globalOverrides', 'globalSkipPaths'
 const DEFAULT_BASE = {
   windowMs: 60_000,
   limit: 100,
-  legacyHeaders: false,
-  standardHeaders: 'draft-7',
   message: { error: 'Too many requests, please try again later.' },
 };
 
-/**
- * Load express-rate-limit (peer). Throws if missing or too old for ipKeyGenerator.
- * @returns {{ rateLimit: Function, ipKeyGenerator: Function }}
- */
-function loadPeer() {
-  let mod;
-  try {
-    // eslint-disable-next-line global-require, import/no-extraneous-dependencies
-    mod = require('express-rate-limit');
-  } catch (e) {
-    const err = new Error(
-      'rate-limit plugin: install peer dependency `express-rate-limit` (npm install express-rate-limit)'
-    );
-    err.cause = e;
-    throw err;
-  }
-  const rateLimit = mod.rateLimit || mod.default;
-  const { ipKeyGenerator } = mod;
-  if (typeof rateLimit !== 'function') {
-    throw new Error('rate-limit plugin: express-rate-limit export rateLimit not found');
-  }
-  if (typeof ipKeyGenerator !== 'function') {
-    throw new Error(
-      'rate-limit plugin: express-rate-limit must be >= 8 (ipKeyGenerator export required)'
-    );
-  }
-  return { rateLimit, ipKeyGenerator };
-}
-
-/**
- * Strip plugin-only options before passing to express-rate-limit.
- * @param {Record<string, unknown>} opts
- */
 function pickLimiterOptions(opts) {
   const out = { ...opts };
   for (const k of PLUGIN_ONLY_KEYS) {
@@ -55,54 +20,53 @@ function pickLimiterOptions(opts) {
 }
 
 /**
- * Merge layers into express-rate-limit options. Default key uses ipKeyGenerator(req.ip, subnet).
- * Custom keyGenerator and top-level ipv6Subnet are mutually exclusive in v8+ validation.
- *
- * @param {Function} ipKeyGenerator
- * @param  {...Record<string, unknown>} layers
+ * Simple sliding-window rate limiter (Express-compatible req/res/next)
+ * @param {object} options
  */
-function resolveLimiterConfig(ipKeyGenerator, ...layers) {
-  /** @type {Record<string, unknown>} */
-  const merged = Object.assign({}, ...layers);
-  const keyGenerator = merged.keyGenerator;
-  const ipv6Subnet = merged.ipv6Subnet;
-  const rest = { ...merged };
-  delete rest.keyGenerator;
-  delete rest.ipv6Subnet;
+function createRateLimitMiddleware(options = {}) {
+  const windowMs = options.windowMs ?? 60_000;
+  const limit = options.limit ?? 100;
+  const message = options.message ?? { error: 'Too many requests' };
+  const keyGenerator =
+    options.keyGenerator ||
+    ((req) => req.ip || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown');
+  const skip = options.skip;
 
-  if (typeof keyGenerator === 'function') {
-    return { ...rest, keyGenerator };
-  }
+  /** @type {Map<string, { count: number, resetAt: number }>} */
+  const buckets = new Map();
 
-  const subnet = ipv6Subnet !== undefined ? ipv6Subnet : 56;
-  return {
-    ...rest,
-    keyGenerator: (req, res) => ipKeyGenerator(req.ip, subnet),
+  return (req, res, next) => {
+    if (typeof skip === 'function' && skip(req, res)) {
+      return next();
+    }
+    const key = keyGenerator(req, res);
+    const now = Date.now();
+    let bucket = buckets.get(key);
+    if (!bucket || bucket.resetAt <= now) {
+      bucket = { count: 0, resetAt: now + windowMs };
+      buckets.set(key, bucket);
+    }
+    bucket.count += 1;
+    if (bucket.count > limit) {
+      return res.status(429).json(message);
+    }
+    return next();
   };
 }
 
-/**
- * @param {import('express').RequestHandler|undefined} userSkip
- * @param {import('express').RequestHandler} builtin
- */
+function resolveLimiterConfig(...layers) {
+  return Object.assign({}, ...layers);
+}
+
 function combineSkip(userSkip, builtin) {
   if (!userSkip) return builtin;
   return (req, res) => userSkip(req, res) || builtin(req, res);
 }
 
-/**
- * @param {string[]} extraPathPrefixes
- * @returns {import('express').RequestHandler}
- */
 function createDefaultGlobalSkip(extraPathPrefixes = []) {
   const extras = (Array.isArray(extraPathPrefixes) ? extraPathPrefixes : []).filter(Boolean);
-  /** @type {string[]} */
-  const prefixes = [
-    '/__webspresso/client-runtime',
-    '/_webspresso',
-    ...extras,
-  ];
-  return (req, res) => {
+  const prefixes = ['/__webspresso/client-runtime', '/_webspresso', ...extras];
+  return (req) => {
     const p = req.path || '';
     if (prefixes.some((x) => p.startsWith(x))) return true;
     if (p === '/health' || p === '/robots.txt' || p === '/favicon.ico') return true;
@@ -110,12 +74,6 @@ function createDefaultGlobalSkip(extraPathPrefixes = []) {
   };
 }
 
-/**
- * @param {object} [options] — express-rate-limit options plus plugin keys
- * @param {boolean} [options.global=false] — mount a global limiter on ctx.app
- * @param {object} [options.globalOverrides] — shallow merge applied only for the global limiter (after factory defaults)
- * @param {string[]} [options.globalSkipPaths] — extra path prefixes where global limiter skips counting
- */
 function rateLimitPlugin(options = {}) {
   const {
     global: applyGlobal = false,
@@ -126,41 +84,39 @@ function rateLimitPlugin(options = {}) {
 
   const factoryDefaults = pickLimiterOptions(rest);
 
-  const plugin = {
+  return {
     name: 'rate-limit',
-    version: '1.0.0',
-    description: 'Named rateLimit middleware (express-rate-limit) for file routes; optional global limiter',
-    _options: options,
+    version: '2.0.0',
+    description: 'Named rateLimit middleware for file routes; optional global limiter',
 
     api: {
-      /**
-       * Build limiter options object (for setupRoutes / tests).
-       * @param {Record<string, unknown>} [routeOpts]
-       */
       createLimiterOptions(routeOpts = {}) {
-        const { ipKeyGenerator } = loadPeer();
-        const baseDefaults = { ...DEFAULT_BASE, ...factoryDefaults };
-        return resolveLimiterConfig(ipKeyGenerator, baseDefaults, routeOpts);
+        const base = { ...DEFAULT_BASE, ...factoryDefaults };
+        if (!base.keyGenerator) {
+          base.keyGenerator = (req) =>
+            req?.ip ||
+            (req?.headers &&
+              String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) ||
+            'unknown';
+        }
+        return resolveLimiterConfig(base, routeOpts);
       },
     },
 
     register(ctx) {
-      const { rateLimit, ipKeyGenerator } = loadPeer();
-
       const baseDefaults = { ...DEFAULT_BASE, ...factoryDefaults };
 
       ctx.middlewares.rateLimit = (routeOpts = {}) =>
-        rateLimit(resolveLimiterConfig(ipKeyGenerator, baseDefaults, routeOpts));
+        createRateLimitMiddleware(resolveLimiterConfig(baseDefaults, routeOpts));
 
       if (applyGlobal) {
         const globalBuiltins = createDefaultGlobalSkip(globalSkipPaths);
         const globalResolved = resolveLimiterConfig(
-          ipKeyGenerator,
           baseDefaults,
           globalOverrides && typeof globalOverrides === 'object' ? globalOverrides : {}
         );
         const UserSkip = globalResolved.skip;
-        const middleware = rateLimit({
+        const middleware = createRateLimitMiddleware({
           ...globalResolved,
           skip: combineSkip(
             typeof UserSkip === 'function' ? UserSkip : undefined,
@@ -171,8 +127,6 @@ function rateLimitPlugin(options = {}) {
       }
     },
   };
-
-  return plugin;
 }
 
-module.exports = { rateLimitPlugin };
+module.exports = { rateLimitPlugin, createRateLimitMiddleware };

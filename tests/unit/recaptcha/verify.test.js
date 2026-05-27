@@ -6,6 +6,7 @@ const { verifyRecaptcha, getRemoteIp } = require('../../../plugins/recaptcha/ver
 describe('verifyRecaptcha', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('throws without secret', async () => {

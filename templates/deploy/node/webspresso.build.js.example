@@ -1,0 +1,7 @@
+/** @type {import('webspresso/build').BuildConfig} */
+module.exports = {
+  adapter: 'node',
+  pagesDir: 'pages',
+  viewsDir: 'views',
+  publicDir: 'public',
+};

@@ -32,13 +32,14 @@ const { registerCommand: registerDoctor } = require('./commands/doctor');
 const { registerCommand: registerSkill } = require('./commands/skill');
 const { registerCommand: registerUpgrade } = require('./commands/upgrade');
 const { registerCommand: registerOrmMap } = require('./commands/orm-map');
+const { registerCommand: registerBuild } = require('./commands/build');
+const { registerCommand: registerAddDeploy } = require('./commands/add-deploy');
 
 registerNew(program);
 registerPage(program);
 registerApi(program);
 registerDev(program);
 registerStart(program);
-registerAddTailwind(program);
 registerDbMigrate(program);
 registerDbRollback(program);
 registerDbStatus(program);
@@ -52,6 +53,11 @@ registerDoctor(program);
 registerSkill(program);
 registerUpgrade(program);
 registerOrmMap(program);
+registerBuild(program);
+
+const addCommand = program.command('add').description('Add project features (tailwind, deploy providers, …)');
+registerAddTailwind(addCommand);
+registerAddDeploy(addCommand);
 
 // Parse arguments
 program.parse();

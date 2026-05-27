@@ -2,10 +2,9 @@
  * Auth System Integration Tests
  */
 
-const express = require('express');
-const request = require('supertest');
-const cookieParser = require('cookie-parser');
-const session = require('express-session');
+const request = require('../helpers/http').request;
+const { createCompatApp } = require('../../src/http/compat-app');
+const { mountAppSession } = require('../../src/http/session');
 const {
   createAuth,
   quickAuth,
@@ -93,12 +92,11 @@ describe('Auth Integration', () => {
   });
 
   beforeEach(() => {
-    // Create fresh Express app for each test
-    app = express();
-    app.use(express.json());
-    app.use(express.urlencoded({ extended: true }));
+    app = createCompatApp({
+      cookieSecret: 'test-auth-session-secret-key-32chars',
+    });
+    app.mountBodyParsers();
 
-    // Create auth instance
     auth = createAuth({
       findUserById: async (id) => await UserRepo.findById(id),
       findUserByCredentials: async (email, password) => {
@@ -134,7 +132,10 @@ describe('Auth Integration', () => {
       },
     });
 
-    // Setup auth middleware
+    mountAppSession(app, {
+      secret: 'test-auth-session-secret-key-32chars',
+      sessionCookieName: 'connect.sid',
+    });
     setupAuthMiddleware(app, auth);
   });
 

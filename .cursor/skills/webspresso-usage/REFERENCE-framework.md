@@ -4,7 +4,7 @@ Sections follow the source repo layout (`index.js`, `src/`, `core/orm`, `doc/ind
 
 ## 1. What this framework is
 
-- **SSR**: Express + **Nunjucks**; URLs map to files under `pages/`.
+- **SSR**: **Hono** (Express-compatible handler API) + **Nunjucks**; URLs map to files under `pages/`.
 - **API**: File-based handlers under `pages/api/` with method suffixes and optional **Zod** validation (`req.input`).
 - **i18n**: JSON locales; `t('key')` in templates.
 - **ORM**: Knex-backed layer in `core/orm` — `defineModel`, `zdb` schema helpers, repositories, query builder, migrations.
@@ -49,7 +49,7 @@ project/
 | Option | Role |
 |--------|------|
 | `viewsDir` | Layouts / partials (Nunjucks paths) |
-| `publicDir` | Static files (`express.static`) |
+| `publicDir` | Static files (`@hono/node-server/serve-static`) |
 | `db` | DB instance from `createDatabase()` → **`ctx.db`** in `load`, `meta`, plugins |
 | `middlewares` | Named map; reference by string in route/API config (`middleware: ['auth']`) |
 | `plugins` | Array of plugin factories/objects |
@@ -59,7 +59,7 @@ project/
 | `assets` | `{ version, manifestPath, prefix }` for `fsy.asset` / `fsy.css` / `fsy.js` |
 | `pageAssets` | Opt-in **`true`** or **`{ enabled?, stylesheets?, scripts? }`**. When on, route **`load()`** may return reserved keys **`stylesheets`** (string or list; also `{ href, media? }` objects) and **`scripts`** (string, `{ src, defer?, async?, type? }`, or list). They are removed from the root Nunjucks context and passed as **`pageHead`** with **`pageAssets: true`**. The app layout must print them (see [`views/layout.njk`](../../../views/layout.njk) in the package). Default **off** — `stylesheets` / `scripts` in **`load()`** behave as normal data keys. |
 | `clientRuntime` | Opt-in **`{ alpine?: boolean \| object, swup?: boolean \| object }`**. Serves **`/__webspresso/client-runtime/*`** (Alpine 3, swup 4 + Head + Scripts plugins + bootstrap). Template context **`clientRuntime`**; include [`views/partials/webspresso-client-runtime.njk`](../../../views/partials/webspresso-client-runtime.njk) and set **`<main id="swup">`** when swup is on. Env overrides: **`WEBSPRESSO_ALPINE`**, **`WEBSPRESSO_SWUP`** (`1` or `true`). Admin / dev dashboard HTML is unchanged (Mithril). Use **`data-no-swup`** on links for full page loads. HTMX is not used. |
-| `auth` | `AuthManager` from **`createAuth()`** / **`quickAuth()`** (`webspresso/core/auth`). Mounts cookie parser + **`express-session`** + per-request **`authenticate`**; sets **`req.user`**, **`req.auth`**. Injects named route middleware **`auth`** and **`guest`** (overwrites same keys in `middlewares` if you passed both — avoid reusing those names for custom handlers). |
+| `auth` | `AuthManager` from **`createAuth()`** / **`quickAuth()`** (`webspresso/core/auth`). Mounts **`hono-sessions`** + per-request **`authenticate`**; sets **`req.user`**, **`req.auth`**. Injects named route middleware **`auth`** and **`guest`** (overwrites same keys in `middlewares` if you passed both — avoid reusing those names for custom handlers). |
 | `setupRoutes(app, ctx)` | **Register custom Express routes here** — runs **after** file routes and plugins’ `onRoutesReady`, **before** 404. **`ctx.clientRuntime`** is the resolved flags. **`ctx.authMiddleware`** is set when `auth` was passed (guards: `requireAuth`, `requireGuest`, `requireCan`, `requireVerified`, …). Do not rely on `app.get` *after* `createApp` returns unless routes are appended before the 404 middleware (see [`src/server.js`](../../../src/server.js)). |
 
 **Returns:** `{ app, nunjucksEnv, pluginManager, authMiddleware }` — `authMiddleware` is **`null`** when `auth` was not configured.
@@ -197,7 +197,7 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `adminPanelPlugin` | SPA admin CRUD — needs **`db`**; optional **`uploadUrl`** (or infer from **`uploadPlugin`**); optional **`userManagement: { enabled, model, fields }`** + **`auth`** (same **`AuthManager`** as **`createApp({ auth })`**) for site-user CRUD + remember-me session UI — see **Session authentication** above |
 | `dataExchangePlugin` | Admin-only **Excel export** + **CSV/XLSX import** under `${adminPath}/api/data-exchange/*`; register **after** `adminPanelPlugin` with same `db` / `adminPath`; optional `maxRows`, `maxFileBytes`; adds UI buttons + bulk `export-xlsx` |
 | `redirectPlugin` | Configurable **301–308** redirects in `register()` — runs **before** file-based SSR routes; `rules` (`from` path or `RegExp`, `to`, `status`, `methods`), `preserveQuery`, `allowExternal`, `trailingSlash`, `defaultMethods`; docs **[`doc/index.html#plugins-redirect`](../../../doc/index.html#plugins-redirect)**, README **Redirect plugin** |
-| `rateLimitPlugin` | Registers named **`rateLimit`** middleware (`express-rate-limit` ≥8 peer); default **`ipKeyGenerator(req.ip, subnet)`**; optional **`global`** limiter + **`globalSkipPaths`**; use `middleware: ['rateLimit']` or `[['rateLimit', { limit }]]` on pages/API |
+| `rateLimitPlugin` | Registers named **`rateLimit`** middleware (in-memory; optional **`hono-rate-limiter`** peer); optional **`global`** limiter + **`globalSkipPaths`**; use `middleware: ['rateLimit']` or `[['rateLimit', { limit }]]` on pages/API |
 | `uploadPlugin` | `POST` multipart (`multer`), `createLocalFileProvider` or custom `provider`; set **`mimeAllowlist`** / **`maxBytes`** in production |
 | `siteAnalyticsPlugin` | Self-hosted page views + admin charts |
 | `auditLogPlugin` | Admin mutation audit trail |

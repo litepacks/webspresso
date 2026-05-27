@@ -54,16 +54,10 @@ function createAuditMiddleware(options) {
     }
 
     const origJson = res.json.bind(res);
+    const origSend = res.send.bind(res);
     let lastJsonBody = null;
 
-    res.json = function auditWrappedJson(body) {
-      if (body !== undefined && body !== null && typeof body === 'object') {
-        lastJsonBody = body;
-      }
-      return origJson(body);
-    };
-
-    res.on('finish', () => {
+    function flushAuditRow() {
       try {
         if (res.statusCode < 200 || res.statusCode >= 300) {
           return;
@@ -99,16 +93,84 @@ function createAuditMiddleware(options) {
           console.warn('[audit-log] Failed to insert audit row:', err.message);
         });
       } catch (e) {
-        console.warn('[audit-log] finish handler error:', e.message);
+        console.warn('[audit-log] flush handler error:', e.message);
       }
-    });
+    }
+
+    function afterResponse(out) {
+      if (out && typeof out.then === 'function') {
+        return out.then((ret) => {
+          flushAuditRow();
+          return ret;
+        });
+      }
+      flushAuditRow();
+      return out;
+    }
+
+    res.json = function auditWrappedJson(body) {
+      if (body !== undefined && body !== null && typeof body === 'object') {
+        lastJsonBody = body;
+      }
+      return afterResponse(origJson(body));
+    };
+
+    res.send = function auditWrappedSend(body) {
+      return afterResponse(origSend(body));
+    };
 
     next();
   };
 }
 
+/**
+ * Post-response audit flush (Hono context; uses lastJsonBody from compat res.json)
+ * @param {import('hono').Context} c
+ * @param {{ knex: import('knex').Knex, adminPath: string, tableName: string }} options
+ */
+async function flushAuditFromContext(c, options) {
+  const { knex, adminPath, tableName } = options;
+  const req = require('../../src/http/context').buildReq(c);
+  const parsed = parseAdminModelAudit(adminPath, req.method, req.path);
+  if (!parsed) return;
+
+  const status = c.res.status;
+  if (status < 200 || status >= 300) return;
+
+  const session = req.session;
+  const actor = session && session.adminUser;
+  if (!actor) return;
+
+  const lastJsonBody = c.get('lastJsonBody');
+  const { action, resourceModel, resourceId: pathId } = parsed;
+  let resourceId = pathId;
+  if (action === 'create') {
+    resourceId = extractResourceIdFromJsonBody(lastJsonBody, action) || resourceId;
+  }
+
+  const metadata = buildMetadata(action, req);
+  const pathStr = (req.originalUrl || req.url || req.path || '').slice(0, 2000);
+  const row = {
+    actor_id: actor.id != null ? Number(actor.id) : null,
+    actor_email: actor.email || null,
+    action,
+    resource_model: resourceModel,
+    resource_id: resourceId,
+    http_method: req.method,
+    path: pathStr,
+    ip: req.ip || null,
+    user_agent: req.get && req.get('user-agent') ? req.get('user-agent').slice(0, 2000) : null,
+    metadata: metadata || null,
+  };
+
+  await knex(tableName).insert(row).catch((err) => {
+    console.warn('[audit-log] Failed to insert audit row:', err.message);
+  });
+}
+
 module.exports = {
   createAuditMiddleware,
+  flushAuditFromContext,
   stringifyId,
   extractResourceIdFromJsonBody,
   buildMetadata,

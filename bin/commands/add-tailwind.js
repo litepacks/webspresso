@@ -7,9 +7,9 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-function registerCommand(program) {
-  program
-    .command('add tailwind')
+function registerCommand(addProgram) {
+  addProgram
+    .command('tailwind')
     .description('Add Tailwind CSS to the project with build process')
     .action(async () => {
       if (!fs.existsSync('package.json')) {
