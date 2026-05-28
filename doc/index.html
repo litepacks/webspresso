@@ -570,6 +570,22 @@ const { app } = createApp({
     }),
   ],
 });</code></pre>
+      <h4 class="text-base font-semibold text-slate-800 dark:text-slate-200 mt-5 mb-3">Admin UI screenshots</h4>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-3 leading-relaxed">The examples below show the default admin plugin UI (dashboard, model list, and create-record form) from the E2E fixture app.</p>
+      <div class="grid gap-4 md:grid-cols-2 mb-2">
+        <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+          <img src="./images/admin/dashboard.png" alt="Webspresso admin dashboard" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
+          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">Dashboard overview with sidebar and widgets.</figcaption>
+        </figure>
+        <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+          <img src="./images/admin/model-list.png" alt="Webspresso admin model records list" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
+          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">Model list page with table, filters, and actions.</figcaption>
+        </figure>
+        <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 md:col-span-2">
+          <img src="./images/admin/new-record.png" alt="Webspresso admin create record form" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
+          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">Create-record form with generated fields and validation-ready inputs.</figcaption>
+        </figure>
+      </div>
     </section>
 
     <section id="routing" class="doc-section mb-14">
@@ -1180,6 +1196,12 @@ npm run test:e2e:headed</code></pre>
       <p><a href="https://github.com/litepacks/webspresso" class="text-cyan-800 dark:text-cyan-400 hover:underline">github.com/litepacks/webspresso</a> · <a href="https://github.com/litepacks/webspresso/blob/main/CHANGELOG.md" class="text-cyan-800 dark:text-cyan-400 hover:underline">CHANGELOG</a> · MIT</p>
     </footer>
   </div>
+  <div id="image-lightbox" class="hidden fixed inset-0 z-50 bg-black/80 p-4 md:p-10">
+    <button id="lightbox-close" type="button" class="absolute top-4 right-4 text-white text-sm bg-black/40 hover:bg-black/60 rounded-md px-3 py-1.5">Close</button>
+    <div class="h-full w-full flex items-center justify-center">
+      <img id="lightbox-image" src="" alt="" class="max-h-full max-w-full rounded-lg shadow-2xl border border-white/20">
+    </div>
+  </div>
 
   <script>
     hljs.highlightAll();
@@ -1195,6 +1217,34 @@ npm run test:e2e:headed</code></pre>
       document.getElementById('theme-toggle').addEventListener('click', function(){
         var isDark = document.documentElement.classList.toggle('dark');
         localStorage.setItem(themeKey, isDark ? 'dark' : 'light');
+      });
+
+      var lightbox = document.getElementById('image-lightbox');
+      var lightboxImage = document.getElementById('lightbox-image');
+      var closeButton = document.getElementById('lightbox-close');
+      var shots = document.querySelectorAll('.admin-shot');
+
+      function closeLightbox() {
+        lightbox.classList.add('hidden');
+        lightboxImage.setAttribute('src', '');
+      }
+
+      shots.forEach(function(img){
+        img.addEventListener('click', function(){
+          lightboxImage.setAttribute('src', img.getAttribute('src'));
+          lightboxImage.setAttribute('alt', img.getAttribute('alt') || 'Admin screenshot');
+          lightbox.classList.remove('hidden');
+        });
+      });
+
+      closeButton.addEventListener('click', closeLightbox);
+      lightbox.addEventListener('click', function(e){
+        if (e.target === lightbox) closeLightbox();
+      });
+      document.addEventListener('keydown', function(e){
+        if (e.key === 'Escape' && !lightbox.classList.contains('hidden')) {
+          closeLightbox();
+        }
       });
     })();
   </script>

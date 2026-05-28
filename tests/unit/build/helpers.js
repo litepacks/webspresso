@@ -26,22 +26,49 @@ function createBuildProject(opts = {}) {
 }
 
 /**
- * @param {string} cwd
+ * @param {'node'|'cloudflare'|'bun'} [adapter]
  */
-async function loadBuiltHandlers(cwd) {
+function outputSubdir(adapter = 'node') {
+  return adapter === 'cloudflare' ? 'worker' : 'server';
+}
+
+/**
+ * @param {string} cwd
+ * @param {'node'|'cloudflare'|'bun'} [adapter]
+ */
+function outputDir(cwd, adapter = 'node') {
+  return path.join(cwd, '.webspresso', outputSubdir(adapter));
+}
+
+/**
+ * @param {string} cwd
+ * @param {'node'|'cloudflare'|'bun'} [adapter]
+ */
+async function loadBuiltHandlers(cwd, adapter = 'node') {
   const { pathToFileURL } = require('url');
-  const handlersPath = path.join(cwd, '.webspresso/server/handlers.mjs');
+  const handlersPath = path.join(outputDir(cwd, adapter), 'handlers.mjs');
   const mod = await import(pathToFileURL(handlersPath).href);
   return mod.handlers;
 }
 
 /**
  * @param {string} cwd
+ * @param {'node'|'cloudflare'|'bun'} [adapter]
  */
-function readManifest(cwd) {
+function readManifest(cwd, adapter = 'node') {
   return JSON.parse(
-    fs.readFileSync(path.join(cwd, '.webspresso/server/manifest.json'), 'utf8')
+    fs.readFileSync(path.join(outputDir(cwd, adapter), 'manifest.json'), 'utf8')
   );
+}
+
+/**
+ * @param {string} cwd
+ */
+async function loadPrecompiledTemplates(cwd) {
+  const { pathToFileURL } = require('url');
+  const templatesPath = path.join(outputDir(cwd, 'cloudflare'), 'templates.mjs');
+  const mod = await import(pathToFileURL(templatesPath).href);
+  return mod.default;
 }
 
 module.exports = {
@@ -49,6 +76,9 @@ module.exports = {
   PAGES_DIR,
   VIEWS_DIR,
   createBuildProject,
+  outputSubdir,
+  outputDir,
   loadBuiltHandlers,
   readManifest,
+  loadPrecompiledTemplates,
 };
