@@ -87,6 +87,7 @@
         <a href="#application-kernel" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Kernel</a>
         <a href="#client-runtime" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Client runtime</a>
         <a href="#authentication" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Auth</a>
+        <a href="#admin-ui-screenshots" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Admin UI</a>
         <a href="#routing" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Routing</a>
         <a href="#plugins" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Plugins</a>
         <a href="#plugins-data-exchange" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Data exchange</a>
@@ -570,20 +571,54 @@ const { app } = createApp({
     }),
   ],
 });</code></pre>
-      <h4 class="text-base font-semibold text-slate-800 dark:text-slate-200 mt-5 mb-3">Admin UI screenshots</h4>
-      <p class="text-slate-600 dark:text-slate-400 text-sm mb-3 leading-relaxed">The examples below show the default admin plugin UI (dashboard, model list, and create-record form) from the E2E fixture app.</p>
-      <div class="grid gap-4 md:grid-cols-2 mb-2">
+      <h4 id="admin-ui-screenshots" class="text-base font-semibold text-slate-800 dark:text-slate-200 mt-5 mb-3 scroll-mt-20">Admin UI screenshots</h4>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-4 leading-relaxed">Click any image to zoom. Captures use the docs fixture app with <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dataExchangePlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auditLogPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">siteAnalyticsPlugin</code>, and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">ormCacheAdminPlugin</code>. Regenerate with <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">node scripts/capture-admin-doc-screenshots.js</code>.</p>
+
+      <p class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Core admin panel</p>
+      <div class="grid gap-4 md:grid-cols-2 mb-6">
         <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
           <img src="./images/admin/dashboard.png" alt="Webspresso admin dashboard" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
-          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">Dashboard overview with sidebar and widgets.</figcaption>
+          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">Dashboard — widgets, model cards, sidebar navigation.</figcaption>
         </figure>
         <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
           <img src="./images/admin/model-list.png" alt="Webspresso admin model records list" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
-          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">Model list page with table, filters, and actions.</figcaption>
+          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">Model list — table, pagination, Edit/Delete actions.</figcaption>
+        </figure>
+        <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+          <img src="./images/admin/bulk-actions.png" alt="Webspresso admin bulk actions toolbar" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
+          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">Bulk actions — export JSON/CSV/Excel, import, set field, delete.</figcaption>
+        </figure>
+        <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+          <img src="./images/admin/filters-drawer.png" alt="Webspresso admin advanced filters drawer" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
+          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">Advanced filters drawer on the list view.</figcaption>
+        </figure>
+        <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+          <img src="./images/admin/new-record.png" alt="Webspresso admin create record form" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
+          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">New record — schema-driven form (incl. rich-text fields).</figcaption>
+        </figure>
+        <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+          <img src="./images/admin/edit-record.png" alt="Webspresso admin edit record form" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
+          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">Edit record — same form layout with existing values.</figcaption>
         </figure>
         <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 md:col-span-2">
-          <img src="./images/admin/new-record.png" alt="Webspresso admin create record form" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
-          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">Create-record form with generated fields and validation-ready inputs.</figcaption>
+          <img src="./images/admin/users-list.png" alt="Webspresso admin site users list" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
+          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">Site user management (<code class="bg-stone-100 dark:bg-slate-800 px-1 rounded">userManagement</code>) — manage end-user accounts from the same admin SPA.</figcaption>
+        </figure>
+      </div>
+
+      <p class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Admin plugins (register via <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminApi.registerModule</code>)</p>
+      <div class="grid gap-4 md:grid-cols-2 mb-2">
+        <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+          <img src="./images/admin/audit-log.png" alt="Webspresso audit log admin page" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
+          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2"><code class="bg-stone-100 dark:bg-slate-800 px-1 rounded">auditLogPlugin</code> — CRUD audit trail for admin API actions.</figcaption>
+        </figure>
+        <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+          <img src="./images/admin/site-analytics.png" alt="Webspresso site analytics admin dashboard" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
+          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2"><code class="bg-stone-100 dark:bg-slate-800 px-1 rounded">siteAnalyticsPlugin</code> — self-hosted page views, referrers, bots, client errors.</figcaption>
+        </figure>
+        <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 md:col-span-2">
+          <img src="./images/admin/orm-cache.png" alt="Webspresso ORM cache admin page" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
+          <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2"><code class="bg-stone-100 dark:bg-slate-800 px-1 rounded">ormCacheAdminPlugin</code> — cache hit metrics, purge, and per-model invalidate (<code class="bg-stone-100 dark:bg-slate-800 px-1 rounded">createDatabase({ cache: true })</code>).</figcaption>
         </figure>
       </div>
     </section>
@@ -745,7 +780,31 @@ createApp({
     dataExchangePlugin({ db, adminPath: '/_admin' }),
   ],
 });</code></pre>
-      <p class="text-slate-500 dark:text-slate-500 text-sm">Full detail: <a href="https://github.com/litepacks/webspresso/blob/main/README.md#data-exchange-plugin-dataexchangeplugin" class="text-cyan-800 dark:text-cyan-400 hover:underline">README — <code class="bg-stone-200 dark:bg-slate-800 px-1 rounded text-xs">dataExchangePlugin</code></a>.</p>
+      <p class="text-slate-500 dark:text-slate-500 text-sm mb-3">Full detail: <a href="https://github.com/litepacks/webspresso/blob/main/README.md#data-exchange-plugin-dataexchangeplugin" class="text-cyan-800 dark:text-cyan-400 hover:underline">README — <code class="bg-stone-200 dark:bg-slate-800 px-1 rounded text-xs">dataExchangePlugin</code></a>. In the model list UI, spreadsheet import/export appears in the bulk toolbar (see <a href="#admin-ui-screenshots" class="text-cyan-800 dark:text-cyan-400 hover:underline">Admin UI screenshots</a> — bulk actions).</p>
+
+      <h3 id="plugins-audit-log" class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2 mt-8 scroll-mt-20">Audit log plugin</h3>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auditLogPlugin</code> records create/update/delete actions performed through the admin model API. It registers middleware on the app and adds an <strong class="text-slate-800 dark:text-slate-200">Audit log</strong> page under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/audit-log</code>. Prune old rows with <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso audit:prune --days 90</code>.</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-3"><code class="language-javascript">const { adminPanelPlugin, auditLogPlugin } = require('webspresso/plugins');
+
+createApp({
+  pagesDir: './pages',
+  db,
+  plugins: [
+    adminPanelPlugin({ db }),
+    auditLogPlugin({ db, adminPath: '/_admin' }),
+  ],
+});</code></pre>
+      <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 max-w-3xl mb-2">
+        <img src="./images/admin/audit-log.png" alt="Audit log admin page" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
+        <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">Audit log list — actor, action, model, path, timestamp.</figcaption>
+      </figure>
+
+      <h3 id="plugins-site-analytics" class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2 mt-8 scroll-mt-20">Site analytics plugin</h3>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">siteAnalyticsPlugin</code> tracks page views in your database (no third-party analytics required) and adds an <strong class="text-slate-800 dark:text-slate-200">Analytics</strong> admin page at <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/analytics</code> with charts for views over time, top pages, referrers, countries, bots, and optional client-side JS errors.</p>
+      <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 max-w-3xl mb-2">
+        <img src="./images/admin/site-analytics.png" alt="Site analytics admin dashboard" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
+        <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">Analytics dashboard — stats cards and time-series charts.</figcaption>
+      </figure>
     </section>
 
     <section id="database" class="doc-section mb-14">
@@ -821,6 +880,10 @@ createApp({
     ormCacheAdminPlugin({ db }),
   ],
 });</code></pre>
+      <figure class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 max-w-3xl mb-4">
+        <img src="./images/admin/orm-cache.png" alt="ORM cache admin page" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
+        <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">ORM Cache admin — metrics, purge all, invalidate by model.</figcaption>
+      </figure>
       <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-bash">npm install pg mysql2 better-sqlite3   # pick one
 webspresso db:migrate
 webspresso db:make add_posts_table --model Post

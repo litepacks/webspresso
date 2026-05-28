@@ -40,6 +40,7 @@
     "bench:baseline": "vitest bench --run --outputJson benchmarks/ci-baseline.json",
     "bench:ci": "vitest bench --run --outputJson benchmarks/current-benchmark.json && node scripts/check-bench-regression.mjs benchmarks/ci-baseline.json benchmarks/current-benchmark.json",
     "bench:ci:local": "npm run bench:baseline && npm run bench:ci",
+    "docs:admin-screenshots": "node scripts/capture-admin-doc-screenshots.js",
     "check:types": "tsc --project tests/ts-smoke/tsconfig.json",
     "rebuild:native": "npm rebuild better-sqlite3 bcrypt sharp",
     "release": "release-it"
