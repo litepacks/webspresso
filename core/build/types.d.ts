@@ -5,11 +5,21 @@
 export type AdapterName = 'node' | 'cloudflare' | 'bun' | 'deno';
 export type RouteType = 'ssr' | 'api';
 
+export interface EmailTemplateChunk {
+  id: string;
+  mjml?: string;
+  html?: string;
+  kind: 'bundled' | 'project' | 'config';
+  hash: string;
+  source?: string;
+}
+
 export interface BuildConfig {
   adapter: AdapterName;
   pagesDir?: string;
   viewsDir?: string;
   publicDir?: string;
+  emailDir?: string;
   plugins?: unknown[];
   alias?: Record<string, string>;
   experimental?: { incremental?: boolean };
@@ -67,6 +77,7 @@ export interface WebspressoManifest {
   compatibility: { minFramework: string; maxFramework: string; requiredCapabilities: string[] };
   routes: RouteManifestEntry[];
   templates: Record<string, TemplateChunk>;
+  emailTemplates?: Record<string, EmailTemplateChunk>;
   i18n: Record<string, Record<string, unknown>>;
   middleware: Record<string, unknown>;
   plugins: PluginBuildMeta[];

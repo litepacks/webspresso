@@ -44,6 +44,7 @@ function assembleManifest(ctx, compiled) {
     },
     routes: compiled.routeEntries,
     templates: compiled.templates,
+    emailTemplates: compiled.emailTemplates || {},
     i18n: compiled.i18n,
     middleware: compiled.middleware,
     plugins: compiled.plugins,

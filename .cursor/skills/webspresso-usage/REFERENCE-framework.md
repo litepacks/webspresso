@@ -76,7 +76,8 @@ project/
 
 - **Import:** `const { createAuth, quickAuth, hash, verify, createRememberTokensTable } = require('webspresso/core/auth')` (published `core/` tree on npm; **not** re-exported from package root).
 - **`createAuth({ findUserById, findUserByCredentials, session: { secret }, rememberTokens?, ... })`** — adapter pattern; optional **remember-me** via `rememberTokens: { create, find, delete, deleteAllForUser }` + **`createRememberTokensTable(knex)`** for the default table shape.
-- **`quickAuth({ db, userModel, identifierField, passwordField, rememberMe })`** — wires **`getRepository`** + bcrypt **`verify`**; optional Knex **`remember_tokens`** when `rememberMe: true`.
+- **`quickAuth({ db, userModel, identifierField, passwordField, rememberMe, authTokens })`** — wires **`getRepository`** + bcrypt **`verify`**; optional Knex **`remember_tokens`** when `rememberMe: true`; optional **`auth_tokens`** when **`authTokens: true`** (password reset / email verify via **`emailPlugin`** + **`authEmails`**).
+- **Password reset / email verify:** **`createAuthTokensTable(knex)`**; **`AuthManager.requestPasswordReset`**, **`completePasswordReset`**, **`requestEmailVerification`**, **`verifyEmail`**; optional automatic MJML mail via **`emailPlugin({ authEmails: { enabled: true } })`** — [`doc#auth-email-notifications`](../../../doc/index.html#auth-email-notifications).
 - **Request API** (after global authenticate): **`req.auth.attempt(id, password, { remember })`**, **`login`**, **`logout`**, **`check`**, **`guest`**, **`user`**, **`id`**, **`can` / `cannot` / `authorize`** (policies: **`auth.definePolicy`**, **`defineGate`**, **`beforePolicy`**).
 - **Route config:** `middleware: ['auth']` (must be logged in) or `['guest']` (logged-out only). For JSON APIs mounted in **`setupRoutes`**, use **`ctx.authMiddleware.requireAuth({ api: true })`** for 401 JSON instead of redirect.
 - **Login page pitfall:** a **`pages/login.njk`** can register **before** `setupRoutes` and bypass **`requireGuest`**. Prefer login GET/POST in **`setupRoutes`** with templates under **`views/`** only, or omit **`pages/login.njk`** — see [`tests/e2e/auth.spec.js`](../../../tests/e2e/auth.spec.js).
@@ -201,6 +202,7 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `uploadPlugin` | `POST` multipart (`multer`), `createLocalFileProvider` or custom `provider`; set **`mimeAllowlist`** / **`maxBytes`** in production |
 | `siteAnalyticsPlugin` | Self-hosted page views + admin charts |
 | `auditLogPlugin` | Admin mutation audit trail |
+| `emailPlugin` | MJML + Nodemailer; template registry; optional DB logs + admin UI; auth password-reset / email-verify bridge — [`doc#plugins-email`](../../../doc/index.html#plugins-email). **Edge:** no top-level `fs`; use inline `{ mjml }` / `registerTemplate`; `templatesDir` is Node-only |
 | `recaptchaPlugin` | v2/v3 + middleware |
 | `seoCheckerPlugin` | Dev SEO panel |
 | `restResourcePlugin` | Opt-in REST CRUD from models; `?include=` uses ORM eager load (single-level relations only) |
@@ -229,6 +231,7 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `webspresso favicon:generate` | Favicons + manifest |
 | `webspresso admin:setup` / `admin:password` | Admin users |
 | `webspresso audit:prune` | Audit log retention |
+| `webspresso email:prune` | Email log retention |
 
 **`webspresso new` — automation:** **`new .`** scaffolds in place. **Typical one-liners:** `webspresso new . --yes --no-tailwind` · `webspresso new . --yes -i`.
 

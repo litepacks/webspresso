@@ -10,6 +10,7 @@ const { compileTemplates } = require('./templates');
 const { compileModelImports } = require('./models');
 const { buildMiddlewareManifest } = require('./middleware');
 const { compilePlugins, runPluginBuildHooks } = require('./plugins');
+const { compileEmailTemplates } = require('./email-templates');
 const { configKey } = require('./routes-ssr');
 const { handlerKey } = require('./routes-api');
 
@@ -31,6 +32,7 @@ async function compilePhase(ctx, analyzed, viewsDir, globalHooks) {
   const api = compileApiRoutes(ctx, apiRoutes, outputDir);
   const ssr = compileSsrRoutes(ctx, ssrRoutes, outputDir);
   const tpl = compileTemplates(ctx, ssrRoutes, viewsDir);
+  const emailTpl = compileEmailTemplates(ctx);
   const middleware = buildMiddlewareManifest(analyzed);
   const { plugins } = await compilePlugins(ctx, ctx.config.plugins || []);
 
@@ -97,6 +99,7 @@ async function compilePhase(ctx, analyzed, viewsDir, globalHooks) {
     handlersSource,
     routeEntries,
     templates: tpl.templates,
+    emailTemplates: emailTpl.emailTemplates,
     i18n: tpl.i18n,
     middleware,
     plugins,

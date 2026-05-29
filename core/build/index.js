@@ -90,6 +90,7 @@ async function runBuild(opts = {}) {
     validation,
     routes: manifest.routes.length,
     templates: Object.keys(manifest.templates).length,
+    emailTemplates: Object.keys(manifest.emailTemplates || {}).length,
     buildId: manifest.buildId,
   };
 

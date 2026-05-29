@@ -22,8 +22,10 @@ webspresso add deploy --provider docker|pm2|cloudflare
 
 | Plugin | Cloudflare |
 |--------|------------|
-| health-check, sitemap, redirect, rate-limit | Yes |
+| health-check, sitemap, redirect, rate-limit, email | Yes (email: use manifest templates; admin UI Node-only) |
 | admin-panel, upload, data-exchange | No (Node only) |
+
+Build embeds MJML from `./emails/*.mjml` (configurable `emailDir`) plus bundled auth templates into `manifest.emailTemplates` and `email-templates.mjs` (Cloudflare).
 
 ## D1 ORM
 

@@ -62,6 +62,7 @@ const {
   dataExchangePlugin,
   redirectPlugin,
   rateLimitPlugin,
+  emailPlugin,
 } = require('./plugins');
 
 module.exports = {
@@ -134,4 +135,5 @@ module.exports = {
   dataExchangePlugin,
   redirectPlugin,
   rateLimitPlugin,
+  emailPlugin,
 };

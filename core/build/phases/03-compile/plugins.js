@@ -21,6 +21,7 @@ function isEdgeCompatible(name) {
   if (NODE_ONLY_PLUGINS.has(name) || NODE_ONLY_PLUGINS.has(key)) return false;
   if (name.includes('admin')) return false;
   if (name.includes('upload')) return false;
+  if (key === 'email') return true;
   return true;
 }
 

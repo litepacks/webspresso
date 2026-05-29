@@ -623,6 +623,24 @@ export function siteAnalyticsPlugin(options?: Record<string, unknown>): Webspres
 
 export function auditLogPlugin(options?: Record<string, unknown>): WebspressoPlugin;
 
+export interface EmailPluginOptions {
+  db?: unknown;
+  transport?: unknown;
+  smtp?: Record<string, unknown>;
+  defaults?: { from?: string; replyTo?: string };
+  templatesDir?: string;
+  templates?: Record<string, string | Record<string, unknown>>;
+  logToDb?: boolean;
+  tableName?: string;
+  includeAdminPage?: boolean;
+  adminPath?: string;
+  apiPrefix?: string;
+  auth?: unknown;
+  authEmails?: Record<string, unknown>;
+}
+
+export function emailPlugin(options?: EmailPluginOptions): WebspressoPlugin;
+
 export function recaptchaPlugin(options?: Record<string, unknown>): WebspressoPlugin;
 
 export function swaggerPlugin(options?: Record<string, unknown>): WebspressoPlugin;

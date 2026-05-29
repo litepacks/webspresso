@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { buildPrecompiledTemplatesMjs } = require('../phases/03-compile/templates');
+const { buildEmailTemplatesMjs } = require('../phases/03-compile/email-templates');
 
 /**
  * @param {import('../index').BuildContextInternal} ctx
@@ -46,6 +47,9 @@ async function bundlePhase(ctx, manifest, handlersSource, opts = {}) {
       });
     const templatesMjs = buildPrecompiledTemplatesMjs(ctx, ssrRoutes, viewsDir);
     fs.writeFileSync(path.join(outputDir, 'templates.mjs'), templatesMjs);
+
+    const emailTemplatesMjs = buildEmailTemplatesMjs(manifest.emailTemplates || {});
+    fs.writeFileSync(path.join(outputDir, 'email-templates.mjs'), emailTemplatesMjs);
   }
 
   const handlersPath = path.join(outputDir, 'handlers.mjs');

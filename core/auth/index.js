@@ -8,6 +8,12 @@ const { AuthManager, AuthenticationError, DEFAULT_CONFIG } = require('./manager'
 const { PolicyManager, AuthorizationError } = require('./policy');
 const { createAuthMiddleware, setupAuthMiddleware } = require('./middleware');
 const { hash, verify, needsRehash, generateToken, hashToken } = require('./hash');
+const {
+  TOKEN_TYPES,
+  createAuthTokensTable,
+  dropAuthTokensTable,
+  createKnexAuthTokensAdapter,
+} = require('./tokens');
 
 /**
  * Create authentication instance
@@ -75,6 +81,8 @@ function createAuth(config) {
  * @param {string} [options.passwordField='password'] - Password field
  * @param {Object} [options.session] - Session config
  * @param {boolean} [options.rememberMe=true] - Enable remember me
+ * @param {boolean} [options.authTokens=false] - Enable auth_tokens adapter (password reset / email verify)
+ * @param {string} [options.verifiedField='email_verified_at'] - Verified timestamp column
  * @returns {AuthManager}
  */
 function quickAuth(options) {
@@ -85,6 +93,8 @@ function quickAuth(options) {
     passwordField = 'password',
     session = {},
     rememberMe = true,
+    authTokens: enableAuthTokens = false,
+    verifiedField = 'email_verified_at',
   } = options;
 
   if (!db || typeof db.getRepository !== 'function') {
@@ -105,6 +115,18 @@ function quickAuth(options) {
       }
       return null;
     },
+
+    findUserByIdentifier: async (identifier) => {
+      return await UserRepo.findOne({ [identifierField]: identifier });
+    },
+
+    updateUser: async (userId, data) => {
+      return await UserRepo.update(userId, data);
+    },
+
+    identifierField,
+    passwordField,
+    verifiedField,
 
     session: {
       secret: process.env.SESSION_SECRET || session.secret,
@@ -133,6 +155,10 @@ function quickAuth(options) {
         await db.knex('remember_tokens').where({ user_id: userId }).delete();
       },
     };
+  }
+
+  if (enableAuthTokens) {
+    config.authTokens = createKnexAuthTokensAdapter(db);
   }
 
   return createAuth(config);
@@ -196,6 +222,10 @@ module.exports = {
   // Migration helpers
   createRememberTokensTable,
   dropRememberTokensTable,
+  createAuthTokensTable,
+  dropAuthTokensTable,
+  createKnexAuthTokensAdapter,
+  TOKEN_TYPES,
   
   // Config
   DEFAULT_CONFIG,

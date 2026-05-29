@@ -12,6 +12,7 @@ const DEFAULT_CONFIG = {
   viewsDir: 'views',
   publicDir: 'public',
   plugins: [],
+  emailDir: 'emails',
   alias: {},
   experimental: { incremental: false },
   hooks: {},

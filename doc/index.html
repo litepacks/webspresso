@@ -476,6 +476,7 @@ const app = kernel.createApp();
             <tr><td><code class="whitespace-nowrap">setupAuthMiddleware(app, authManager)</code></td><td>Applies <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">hono-sessions</code> and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">authenticate</code> on the compat <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">app</code>; returns guards (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">requireAuth</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">requireGuest</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">requireCan</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">requireVerified</code>, …) plus <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auth</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">guest</code> for route configs.</td></tr>
             <tr><td><code class="whitespace-nowrap">hash</code> / <code class="whitespace-nowrap">verify</code></td><td>Bcrypt password helpers used by credentials adapters.</td></tr>
             <tr><td><code class="whitespace-nowrap">createRememberTokensTable(knex)</code></td><td>Migration-style helper for the default <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">remember_tokens</code> shape (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">user_id</code>, hashed token, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">expires_at</code>).</td></tr>
+            <tr><td><code class="whitespace-nowrap">createAuthTokensTable(knex)</code></td><td>Migration helper for <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auth_tokens</code> (password reset + email verification tokens). <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">AuthManager</code> exposes <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">requestPasswordReset</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">completePasswordReset</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">requestEmailVerification</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">verifyEmail</code> when an <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">authTokens</code> adapter is configured.</td></tr>
             <tr><td><code class="whitespace-nowrap">PolicyManager</code></td><td>Define <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">definePolicy</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineGate</code>; <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">AuthManager</code> exposes the same via <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">definePolicy</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineGate</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">beforePolicy</code>.</td></tr>
           </tbody>
         </table>
@@ -546,6 +547,34 @@ const { app, nunjucksEnv, authMiddleware } = createApp({
 
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Remember-me tokens</h3>
       <p class="text-slate-600 dark:text-slate-400 text-sm mb-3">If you pass a <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">rememberTokens</code> adapter, the manager stores a <strong class="text-slate-800 dark:text-slate-200">hashed</strong> token in the database and a signed cookie with the raw token. Call <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createRememberTokensTable(knex)</code> or mirror its columns in a migration. <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">quickAuth</code> can wire the default Knex table when <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">rememberMe: true</code>.</p>
+
+      <h3 id="auth-email-notifications" class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2 scroll-mt-20">Password reset &amp; email verification (optional)</h3>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-3 leading-relaxed">Enable <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">authTokens: true</code> on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">quickAuth</code> (or pass an <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">authTokens</code> adapter to <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createAuth</code>) and run <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createAuthTokensTable(knex)</code>. Pair with <a href="#plugins-email" class="text-cyan-800 dark:text-cyan-400 hover:underline"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">emailPlugin</code></a> and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">authEmails: { enabled: true }</code> to send MJML mails and optionally mount <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">POST /api/auth/forgot-password</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/reset-password</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/verify-email</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/resend-verification</code>. Forgot-password always returns <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">{ ok: true }</code> (no user enumeration).</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-6"><code class="language-javascript">const { quickAuth, createAuthTokensTable } = require('webspresso/core/auth');
+const { emailPlugin, adminPanelPlugin } = require('webspresso/plugins');
+
+const auth = quickAuth({ db, authTokens: true });
+await createAuthTokensTable(db.knex);
+
+createApp({
+  pagesDir: './pages',
+  db,
+  auth,
+  plugins: [
+    emailPlugin({
+      db,
+      auth,
+      smtp: { host: process.env.SMTP_HOST, port: 587, auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } },
+      defaults: { from: process.env.MAIL_FROM },
+      authEmails: {
+        enabled: true,
+        baseUrl: process.env.BASE_URL,
+        registerRoutes: true,
+      },
+    }),
+    adminPanelPlugin({ db }),
+  ],
+});</code></pre>
 
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Admin panel auth (separate)</h3>
       <p class="text-slate-600 dark:text-slate-400 text-sm mb-3 leading-relaxed">The <strong class="text-slate-800 dark:text-slate-200">admin panel</strong> plugin uses its own session namespace (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.session.adminUser</code> via <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">hono-sessions</code>) with routes under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/api/auth/*</code>. It does not replace <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp({ auth })</code> for your public site users — use both if you need CMS staff and end-user sessions.</p>
@@ -714,6 +743,7 @@ const { app } = createApp({
             <tr><td><code class="whitespace-nowrap">redirectPlugin</code></td><td>Configurable <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">301</code>/<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">302</code>/<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">303</code>/<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">307</code>/<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">308</code> redirects in <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">register()</code> — runs <strong class="text-slate-800 dark:text-slate-200">before</strong> file-based SSR routes; see <a href="#plugins-redirect" class="text-cyan-800 dark:text-cyan-400 hover:underline">Redirect plugin</a></td></tr>
             <tr><td><code class="whitespace-nowrap">uploadPlugin</code></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">POST</code> multipart uploads (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">parseBody</code> / built-in multipart); default <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createLocalFileProvider</code>; optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">mimeAllowlist</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">maxBytes</code>; pairs with admin <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">settings.uploadUrl</code></td></tr>
             <tr><td><code class="whitespace-nowrap">rateLimitPlugin</code></td><td>In-memory rate limiting on selected routes (optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">hono-rate-limiter</code> peer for advanced setups)</td></tr>
+            <tr><td><code class="whitespace-nowrap">emailPlugin</code></td><td>MJML + Nodemailer email sending, template registry, optional DB logs + admin page; optional auth password-reset / email-verify bridge — see <a href="#plugins-email" class="text-cyan-800 dark:text-cyan-400 hover:underline">Email plugin</a></td></tr>
             <tr><td><code class="whitespace-nowrap">restResourcePlugin</code></td><td>Opt-in REST CRUD per model (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">rest.enabled</code> or plugin <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">models</code> whitelist); <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">?include=</code> uses ORM eager load (single-level relations only; no nested <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">a.b</code>)</td></tr>
           </tbody>
         </table>
@@ -805,6 +835,36 @@ createApp({
         <img src="./images/admin/site-analytics.png" alt="Site analytics admin dashboard" loading="lazy" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 cursor-zoom-in admin-shot">
         <figcaption class="text-xs text-slate-500 dark:text-slate-400 mt-2">Analytics dashboard — stats cards and time-series charts.</figcaption>
       </figure>
+
+      <h3 id="plugins-email" class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2 mt-8 scroll-mt-20">Email plugin</h3>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">emailPlugin</code> sends email via <strong class="text-slate-800 dark:text-slate-200">Nodemailer</strong> with <strong class="text-slate-800 dark:text-slate-200">MJML</strong> templates. Templates can come from a directory (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">templatesDir</code>), a config map, runtime <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">registerTemplate</code>, or inline on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">send({ mjml, data })</code>. Variables use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">{{name}}</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">{{user.email}}</code> interpolation.</p>
+      <ul class="list-disc pl-5 text-slate-600 dark:text-slate-400 space-y-2 text-sm mb-4">
+        <li><strong class="text-slate-800 dark:text-slate-200">Templates</strong> — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">templatesDir</code> scans <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">*.mjml</code> on <strong class="text-slate-800 dark:text-slate-200">Node.js only</strong> (skipped on edge/workers). On edge, use inline <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">{ mjml: "..." }</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">registerTemplate</code>, or bundled auth templates.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Transport</strong> — pass <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">transport</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">smtp</code>, or env: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">SMTP_HOST</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">SMTP_PORT</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">SMTP_USER</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">SMTP_PASS</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">SMTP_SECURE</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">MAIL_FROM</code>.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Logging</strong> — optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">email_logs</code> table when <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">db</code> is passed; prune with <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso email:prune --days 90</code>.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Admin</strong> — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/email</code>: test send, template preview, SMTP verify, log list (requires <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>).</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Auth bridge</strong> — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">authEmails: { enabled: true }</code> wires password-reset and email-verification MJML mails; see <a href="#auth-email-notifications" class="text-cyan-800 dark:text-cyan-400 hover:underline">Password reset &amp; email verification</a>.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Build</strong> — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso build</code> embeds <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">emails/*.mjml</code> (+ bundled auth templates) into <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">manifest.emailTemplates</code> and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">email-templates.mjs</code> (Cloudflare). Pass to the plugin: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">emailPlugin({ manifest })</code> or <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">emailPlugin({ emailTemplates: manifest.emailTemplates })</code>.</li>
+      </ul>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-3"><code class="language-javascript">const { createApp, adminPanelPlugin, emailPlugin } = require('webspresso');
+
+createApp({
+  pagesDir: './pages',
+  db,
+  plugins: [
+    emailPlugin({
+      db,
+      templatesDir: './emails',
+      smtp: { host: process.env.SMTP_HOST, port: 587, auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } },
+      defaults: { from: process.env.MAIL_FROM },
+    }),
+    adminPanelPlugin({ db }),
+  ],
+});
+
+// Other plugins / route handlers:
+// pluginManager.getPluginAPI('email').sendTemplate('welcome', { to, subject, data });</code></pre>
+      <p class="text-slate-500 dark:text-slate-500 text-sm mb-3">Migration helper: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">ctx.usePlugin('email').getMigrationTemplate()</code> or README <strong class="text-slate-700 dark:text-slate-300">Email plugin</strong>.</p>
     </section>
 
     <section id="database" class="doc-section mb-14">
