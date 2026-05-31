@@ -4,6 +4,7 @@
  */
 
 const { loadDbConfig, createDbInstance } = require('../utils/db');
+const { fail } = require('../utils/cli-errors');
 
 function registerCommand(program) {
   program
@@ -32,8 +33,10 @@ function registerCommand(program) {
           console.log(`\n✅ Done. ${migrations.length} migration(s) completed.\n`);
         }
       } catch (err) {
-        console.error('❌ Migration failed:', err.message);
-        process.exit(1);
+        fail(`Migration failed: ${err.message}`, {
+          hint: 'Check migration files and database connectivity.',
+          command: 'webspresso db:status',
+        });
       } finally {
         await knex.destroy();
       }

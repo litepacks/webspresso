@@ -37,7 +37,11 @@ function registerCommand(program) {
   program
     .command('new [project-name]')
     .description('Create a new Webspresso project')
-    .option('-t, --template <template>', 'Template to use (minimal, full)', 'minimal')
+    .option(
+      '-t, --template <template>',
+      'Preset: minimal, full, blog, admin, dashboard, landing',
+      'minimal'
+    )
     .option('--no-tailwind', 'Skip Tailwind CSS setup')
     .option('-i, --install', 'Auto install dependencies and build CSS')
     .option('-y, --yes', 'Non-interactive: no database, skip install unless -i/--install, skip dev server')
@@ -175,11 +179,48 @@ function registerCommand(program) {
       let databaseType = null;
       let useSeed = false;
       
-      if (skipPrompts) {
+      const template = String(options.template || 'minimal').toLowerCase();
+      const PRESET_TEMPLATES = new Set(['blog', 'admin', 'dashboard', 'landing']);
+      let usedPresetTemplate = false;
+
+      if (template === 'full') {
+        useDatabase = true;
+        databaseType = 'better-sqlite3';
+        useSeed = false;
+      } else if (skipPrompts && template === 'minimal') {
         useDatabase = false;
         databaseType = null;
         useSeed = false;
-      } else {
+      } else if (!skipPrompts && PRESET_TEMPLATES.has(template)) {
+        useDatabase = true;
+        databaseType = 'better-sqlite3';
+        useSeed = false;
+      } else if (skipPrompts) {
+        useDatabase = false;
+        databaseType = null;
+        useSeed = false;
+      }
+
+      if (PRESET_TEMPLATES.has(template)) {
+        usedPresetTemplate = true;
+        if (!useCurrentDir) {
+          fs.mkdirSync(projectPath, { recursive: true });
+        }
+        const { copyTemplateToProject } = require('../utils/copy-template');
+        const templateDir = path.join(__dirname, '../../templates/new', template);
+        try {
+          copyTemplateToProject(templateDir, projectPath, { projectName });
+        } catch (e) {
+          const { fail } = require('../utils/cli-errors');
+          fail(e.message, {
+            hint: 'Use --template minimal for the built-in scaffold.',
+            command: 'webspresso new my-app --template minimal --yes',
+          });
+        }
+        console.log(`✅ Applied "${template}" template\n`);
+      }
+
+      if (!usedPresetTemplate && !skipPrompts && template !== 'full') {
         const dbAnswers = await inquirer.prompt([
           {
             type: 'confirm',
@@ -215,6 +256,63 @@ function registerCommand(program) {
           ]);
           useSeed = generateSeed;
         }
+      }
+
+      if (usedPresetTemplate) {
+        if (autoInstall) {
+          await runInstallation(projectPath, false);
+          if (skipPrompts) {
+            console.log('✅ Project ready!\n');
+            if (!useCurrentDir) console.log(`  cd ${projectName}`);
+            console.log('  npm run dev\n');
+          } else {
+            const { shouldStartDev } = await inquirer.prompt([
+              {
+                type: 'confirm',
+                name: 'shouldStartDev',
+                message: 'Start development server?',
+                default: true,
+              },
+            ]);
+            if (shouldStartDev) startDevServer(projectPath, false);
+            else {
+              console.log('✅ Project ready!\n');
+              if (!useCurrentDir) console.log(`  cd ${projectName}`);
+              console.log('  npm run dev\n');
+            }
+          }
+        } else if (skipPrompts) {
+          console.log('\n✅ Project created successfully!\n');
+          console.log('Next steps:');
+          if (!useCurrentDir) console.log(`  cd ${projectName}`);
+          console.log('  npm install');
+          console.log('  npx webspresso db:migrate');
+          console.log('  npm run dev\n');
+        } else {
+          const { shouldInstall } = await inquirer.prompt([
+            {
+              type: 'confirm',
+              name: 'shouldInstall',
+              message: 'Install dependencies now?',
+              default: true,
+            },
+          ]);
+          if (shouldInstall) {
+            await runInstallation(projectPath, false);
+            const { shouldStartDev } = await inquirer.prompt([
+              {
+                type: 'confirm',
+                name: 'shouldStartDev',
+                message: 'Start development server?',
+                default: true,
+              },
+            ]);
+            if (shouldStartDev) startDevServer(projectPath, false);
+          } else {
+            console.log('\n✅ Project created successfully!\n');
+          }
+        }
+        return;
       }
       
       // Create directory structure (skip root if using current dir)

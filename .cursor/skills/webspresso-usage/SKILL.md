@@ -18,6 +18,7 @@ There are **three** files in this folder; open the reference that matches the ta
 | `createApp({ db })`, `ctx.db`, `defineModel`, migrations | [`REFERENCE-framework.md`](./REFERENCE-framework.md) § ORM | Knex ORM in `core/orm`. |
 | `createAuth`, `quickAuth`, `middleware: ['auth']` | [`REFERENCE-framework.md`](./REFERENCE-framework.md) § Auth | **`webspresso/core/auth`**. |
 | Admin, sitemap, upload, redirect, data-exchange plugins | [`REFERENCE-framework.md`](./REFERENCE-framework.md) § Plugins | Framework plugin API (`createApp({ plugins })`). |
+| Greenfield project, 15 min walkthrough | [`docs/getting-started.md`](../../../docs/getting-started.md) | Canonical onboarding. |
 | Greenfield project, `webspresso new`, `dev`, `db:migrate`, `doctor` | [`REFERENCE-framework.md`](./REFERENCE-framework.md) § CLI | Full command table there. |
 | Cloudflare Workers deploy, `webspresso build`, Wrangler, D1 | [`doc/index.html#cloudflare-workers`](../../../doc/index.html#cloudflare-workers), README § Deployment | Worker runtime vs Node `createApp`. |
 | Event bus, `kernel.createApp`, `defineFlow`, `definePlugin`, simulated `BaseRepository`, namespaced minimal views | [`REFERENCE-kernel.md`](./REFERENCE-kernel.md) | **Not** SSR **`createApp`** — [`doc/index.html#application-kernel`](../../../doc/index.html#application-kernel). |
@@ -28,6 +29,7 @@ There are **three** files in this folder; open the reference that matches the ta
 | Command | Purpose |
 |---------|---------|
 | `webspresso new [name]` or `webspresso new .` | Scaffold a new app (Tailwind, i18n, optional DB). |
+| `webspresso new my-app --template blog\|admin\|dashboard\|landing` | Preset scaffolds (additive). |
 | `webspresso new . --yes` | Non-interactive scaffold (CI / agents). |
 | `webspresso new . --yes -i` | Scaffold + install deps / CSS build. |
 | `webspresso dev` | Dev server (watch). |

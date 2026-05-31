@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadDbConfig } = require('../utils/db');
+const { fail } = require('../utils/cli-errors');
 const { generateAdminUsersMigration } = require('../../plugins/admin-panel/migration-template');
 
 function registerCommand(program) {
@@ -63,8 +64,10 @@ function registerCommand(program) {
         console.log(`   1. Run migration: webspresso db:migrate`);
         console.log(`   2. Create first admin user via admin panel setup page\n`);
       } catch (err) {
-        console.error('❌ Error:', err.message);
-        process.exit(1);
+        fail(err.message, {
+          hint: 'Ensure webspresso.db.js exists and adminPanelPlugin is configured.',
+          command: 'webspresso doctor --db',
+        });
       }
     });
 }

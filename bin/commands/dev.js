@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { fail } = require('../utils/cli-errors');
 
 /**
  * Build node --watch arguments with additional watch paths
@@ -35,8 +36,10 @@ function registerCommand(program) {
     .option('--no-css', 'Skip CSS watch (if Tailwind is set up)')
     .action((options) => {
       if (!fs.existsSync('server.js')) {
-        console.error('❌ server.js not found! Make sure you are in a Webspresso project.');
-        process.exit(1);
+        fail('server.js not found.', {
+          hint: 'Run this command from your Webspresso project root.',
+          command: 'webspresso new my-app --yes --install',
+        });
       }
       
       process.env.PORT = options.port;

@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { fail } = require('./cli-errors');
 
 /**
  * Load database configuration
@@ -22,8 +23,10 @@ function loadDbConfig(configPath) {
     }
   }
   
-  console.error('❌ Database config not found. Create webspresso.db.js or knexfile.js');
-  process.exit(1);
+  fail('Database config not found.', {
+    hint: 'Add webspresso.db.js or knexfile.js in the project root.',
+    command: 'webspresso db:make init',
+  });
 }
 
 /**
@@ -59,8 +62,7 @@ async function createDbInstance(config, env) {
   try {
     knex = require('knex');
   } catch {
-    console.error('❌ Knex not installed. Run: npm install knex');
-    process.exit(1);
+    fail('Knex is not installed.', { command: 'npm install knex' });
   }
   
   return knex(dbConfig);

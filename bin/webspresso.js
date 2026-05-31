@@ -10,7 +10,23 @@ const { program } = require('commander');
 program
   .name('webspresso')
   .description('Webspresso CLI - Minimal file-based SSR framework')
-  .version(require('../package.json').version);
+  .version(require('../package.json').version)
+  .addHelpText(
+    'after',
+    `
+Command groups:
+  Project     new, dev, start, doctor, build
+  Scaffolding page, api, add tailwind|deploy
+  Database    db:make, db:migrate, db:rollback, db:status, seed
+  Admin       admin:setup, admin:password
+  Maintenance audit:prune, email:prune
+
+Examples:
+  webspresso new my-app --yes --install
+  webspresso new my-blog --template blog --yes --install
+  webspresso doctor --db --strict
+`
+  );
 
 // Register commands
 const { registerCommand: registerNew } = require('./commands/new');

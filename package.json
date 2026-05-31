@@ -71,6 +71,12 @@
     "adapters/",
     "plugins/",
     "templates/",
+    "docs/",
+    "examples/",
+    "doc/",
+    "docs-audit.md",
+    "coverage-plan.md",
+    "RELEASE_CHECKLIST.md",
     "views/partials/webspresso-client-runtime.njk"
   ],
   "dependencies": {

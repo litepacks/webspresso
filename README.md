@@ -7,6 +7,8 @@ A minimal, file-based SSR framework for Node.js with Nunjucks templating.
 
 > **Current release:** `0.1.0-alpha.0` — Hono-based HTTP stack, production build compiler, and Cloudflare Workers adapter. See **[What's new](#whats-new)** and **[CHANGELOG.md](CHANGELOG.md)**.
 
+**New to Webspresso?** Follow **[docs/getting-started.md](docs/getting-started.md)** for a 15-minute walkthrough (page, API, model, migrations, admin). Example apps: **[examples/](examples/)**.
+
 ## What's new
 
 Highlights in **`0.1.0-alpha.0`** (see **[CHANGELOG.md](CHANGELOG.md)** for the full list):
@@ -31,7 +33,7 @@ Highlights in **`0.1.0-alpha.0`** (see **[CHANGELOG.md](CHANGELOG.md)** for the 
 - **Plugin System**: Extensible architecture with version control and inter-plugin communication
 - **Built-in Plugins**: Development dashboard, sitemap generator, SEO checker, analytics integration (Google, Yandex, Bing), self-hosted site analytics, optional Swagger UI for HTTP APIs, configurable HTTP health probe endpoint, optional REST CRUD routes from ORM models, optional admin UI for ORM query cache metrics and purge, optional **admin-only spreadsheet exchange** (Excel export, CSV/XLSX import via `dataExchangePlugin`)
 - **Session authentication** (optional): `createAuth` / `quickAuth` in **`webspresso/core/auth`** — pass the manager to **`createApp({ auth })`** for encrypted cookie sessions (`hono-sessions`), `req.user` / `req.auth`, remember-me tokens, and policy-style authorization. Full walkthrough: **[`doc/index.html#authentication`](doc/index.html#authentication)**.
-- **Optional client runtime** (Alpine.js + [swup](https://swup.js.org/)): **`createApp({ clientRuntime: { alpine, swup } })`** serves scripts under **`/__webspresso/client-runtime/`** and exposes **`clientRuntime`** in Nunjucks; layouts can include **`views/partials/webspresso-client-runtime.njk`**. Env overrides: **`WEBSPRESSO_ALPINE`**, **`WEBSPRESSO_SWUP`**. Demo: **`examples/alpine-swup-demo/`**. Details: **[`doc/index.html#client-runtime`](doc/index.html#client-runtime)**.
+- **Optional client runtime** (Alpine.js + [swup](https://swup.js.org/)): **`createApp({ clientRuntime: { alpine, swup } })`** serves scripts under **`/__webspresso/client-runtime/`** and exposes **`clientRuntime`** in Nunjucks; layouts can include **`views/partials/webspresso-client-runtime.njk`**. Env overrides: **`WEBSPRESSO_ALPINE`**, **`WEBSPRESSO_SWUP`**. Details: **[`doc/index.html#client-runtime`](doc/index.html#client-runtime)**.
 - **TypeScript**: Published **`index.d.ts`** (via `package.json` `"types"`) for `createApp`, ORM, plugins, and router helpers — use from TS/JS with IDE autocomplete; runtime stays CommonJS
 - **Application kernel (optional)**: In-process **`kernel`** API (`require('webspresso').kernel`) — event bus (`dispatch` / `publish`), **`kernel.createApp()`** (namespaced differently from SSR **`createApp`**), **`definePlugin`** / **`defineFlow`**, minimal **`{{ }}` view resolver**, and simulated **`BaseRepository`** with `orm.<resource>.*` events. Ships as **`core/kernel/`** on npm. Demo: **`node core/kernel/run-demo.js`**. Docs: **[`doc/index.html#application-kernel`](doc/index.html#application-kernel)**.
 - **Production builds & Cloudflare Workers**: **`webspresso build --adapter cloudflare`** emits a Wrangler-ready worker (manifest, precompiled Nunjucks, static assets). Full guide: **[`doc/index.html#cloudflare-workers`](doc/index.html#cloudflare-workers)** · summary below in **[Deployment](#deployment)**.
@@ -284,12 +286,12 @@ webspresso start --port 3000
 
 ### `webspresso doctor`
 
-Check Node.js version, `package.json` / `engines.node`, typical project files (`server.js`, `pages/`), and whether `webspresso.db.js` or `knexfile.js` exists. Use `--db` to run a quick connection test when a config is present. Warnings alone exit with code `0`; pass `--strict` to fail (exit `1`) on any warning—useful in CI.
+Check Node.js version, `package.json` / `engines.node`, lockfile, `webspresso` dependency, typical project files (`server.js`, `pages/`), session secrets, plugin scan (Node-only vs edge), and whether `webspresso.db.js` or `knexfile.js` exists. Use `--db` for a connection test and `--migrations` for pending migrations. Warnings alone exit with code `0`; pass `--strict` to fail (exit `1`) on any warning—useful in CI.
 
 ```bash
 webspresso doctor
 webspresso doctor --db
-webspresso doctor --strict
+webspresso doctor --db --migrations --strict
 ```
 
 ### `webspresso skill`
@@ -558,7 +560,7 @@ Alpine.js + swup — opt-in progressive enhancement for SSR pages:
 - **`clientRuntime: { alpine: true, swup: true }`** (each can be toggled independently). Default is off; no scripts are injected when both are disabled.
 - Include **`{% include "partials/webspresso-client-runtime.njk" %}`** in your layout (copy from the npm package’s **`views/partials/`** or the framework repo). When **swup** is on, wrap the main content in **`<main id="swup">…</main>`** so transitions replace the correct region.
 - **swup** uses Head + Scripts plugins; **Alpine** is re-bound after each visit via **`Alpine.initTree`** on the container. Use **`data-no-swup`** on links for a full page load. Paths **`/_admin`** and **`/_webspresso`** are ignored by the default bootstrap; the admin panel and dev dashboard stay separate Mithril apps.
-- Dynamic UI can call **`pages/api/*`** from Alpine with **`fetch`** (see **`examples/alpine-swup-demo/`**).
+- Dynamic UI can call **`pages/api/*`** from Alpine with **`fetch`** (enable **`clientRuntime`** on **`createApp`**; see **`doc/index.html#client-runtime`**).
 - **Helmet / CSP**: production **`script-src 'self'`** works for **`/__webspresso/client-runtime/`**; some Alpine builds may need **`unsafe-eval`** — validate for your version or use a stricter build.
 
 ```javascript
