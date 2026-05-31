@@ -42,17 +42,17 @@ function generateAuditLogComponent(options = {}) {
       });
     }
 
-    return {
-      oninit: load,
-      view: function() {
+    function pageBody() {
         if (loading) {
-          return m('div.p-8.text-gray-500', 'Loading…');
+          return m('p.text-gray-500.dark:text-slate-400', 'Loading…');
         }
         if (error) {
-          return m('div.p-8.text-red-600', error);
+          return m('p.text-red-600.dark:text-red-400', error);
         }
         var maxPage = Math.max(1, Math.ceil(total / perPage) || 1);
-        return m('div.p-6.space-y-4', [
+        return m('div.space-y-4', [
+          m('h1.text-2xl.font-bold.text-gray-900.dark:text-slate-100.mb-2', 'Audit log'),
+          m('p.text-gray-500.dark:text-slate-400.text-sm.mb-4', 'CRUD actions performed through the admin API'),
           m('div.flex.flex-wrap.items-end.gap-4', [
             m('div', [
               m('label.block.text-xs.text-gray-500.mb-1', 'Model'),
@@ -115,6 +115,17 @@ function generateAuditLogComponent(options = {}) {
               onclick: function() { if (page < maxPage) { page++; load(); m.redraw(); } },
             }, 'Next'),
           ]),
+        ]);
+    }
+
+    return {
+      oninit: load,
+      view: function() {
+        return m(Layout, [
+          typeof Breadcrumb !== 'undefined'
+            ? m(Breadcrumb, { items: [{ label: 'Audit log', href: '/audit-log' }] })
+            : null,
+          pageBody(),
         ]);
       },
     };

@@ -6,5 +6,6 @@ describe('audit-log admin component', () => {
     const src = generateAuditLogComponent({ apiPrefix: '/audit-logs' });
     expect(src).toContain('m.redraw()');
     expect(src).toMatch(/loading = false[\s\S]*m\.redraw\(\)/);
+    expect(src).toContain('m(Layout');
   });
 });
