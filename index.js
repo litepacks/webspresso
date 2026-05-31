@@ -64,6 +64,7 @@ const {
   rateLimitPlugin,
   emailPlugin,
   studioPlugin,
+  contentPlugin,
 } = require('./plugins');
 
 module.exports = {
@@ -138,4 +139,10 @@ module.exports = {
   rateLimitPlugin,
   emailPlugin,
   studioPlugin,
+  contentPlugin,
+
+  // Content layer
+  resolveContentConfig: require('./core/content/config').resolveContentConfig,
+  createContentService: require('./core/content/service').createContentService,
+  ContentIndex: require('./core/content/index').ContentIndex,
 };

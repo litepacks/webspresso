@@ -6,6 +6,7 @@ const { collectCache } = require('../collectors/cache');
 const { collectOrm } = require('../collectors/orm');
 const { collectOpenapi } = require('../collectors/openapi');
 const { collectSitemap } = require('../collectors/sitemap');
+const { collectContent } = require('../collectors/content');
 const { getRequestTimelineStore } = require('../services/request-timeline');
 const { getLogs } = require('../services/log-buffer');
 
@@ -55,6 +56,9 @@ function createApiHandlers(studioConfig) {
     },
     async logs(req, res) {
       return res.json({ logs: getLogs(req.query) });
+    },
+    async content(req, res, studioCtx) {
+      return res.json(collectContent(studioCtx));
     },
   };
 }

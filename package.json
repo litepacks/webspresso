@@ -93,6 +93,7 @@
     "hono-sessions": "^0.8.1",
     "inquirer": "^8.2.6",
     "knex": "^3.1.0",
+    "marked": "^15.0.12",
     "mjml": "^4.15.3",
     "nodemailer": "^6.10.1",
     "nunjucks": "^3.2.4",

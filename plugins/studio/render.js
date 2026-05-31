@@ -25,6 +25,7 @@ const NAV = [
   { id: 'health', label: 'Health', path: '/health' },
   { id: 'openapi', label: 'OpenAPI', path: '/openapi' },
   { id: 'sitemap', label: 'Sitemap', path: '/sitemap' },
+  { id: 'content', label: 'Content', path: '/content' },
   { id: 'env', label: 'Env', path: '/env' },
   { id: 'logs', label: 'Logs', path: '/logs' },
 ];

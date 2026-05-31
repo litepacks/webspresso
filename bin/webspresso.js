@@ -19,6 +19,7 @@ Command groups:
   Scaffolding page, api, add tailwind|deploy
   Database    db:make, db:migrate, db:rollback, db:status, seed
   Admin       admin:setup, admin:password
+  Content     content:list, content:validate, content:build-index, content:new
   Maintenance audit:prune, email:prune
 
 Examples:
@@ -51,6 +52,7 @@ const { registerCommand: registerUpgrade } = require('./commands/upgrade');
 const { registerCommand: registerOrmMap } = require('./commands/orm-map');
 const { registerCommand: registerBuild } = require('./commands/build');
 const { registerCommand: registerAddDeploy } = require('./commands/add-deploy');
+const { registerContentCommands } = require('./commands/content');
 
 registerNew(program);
 registerPage(program);
@@ -72,6 +74,7 @@ registerSkill(program);
 registerUpgrade(program);
 registerOrmMap(program);
 registerBuild(program);
+registerContentCommands(program);
 
 const addCommand = program.command('add').description('Add project features (tailwind, deploy providers, …)');
 registerAddTailwind(addCommand);

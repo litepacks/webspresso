@@ -14,6 +14,7 @@ const { collectCache } = require('./collectors/cache');
 const { collectOrm } = require('./collectors/orm');
 const { collectOpenapi } = require('./collectors/openapi');
 const { collectSitemap } = require('./collectors/sitemap');
+const { collectContent } = require('./collectors/content');
 const { getRequestTimelineStore } = require('./services/request-timeline');
 const { appendLog } = require('./services/log-buffer');
 
@@ -185,6 +186,12 @@ function studioPlugin(options = {}) {
         res.send(renderStudioPage('sitemap', { studioPath, title: 'Sitemap', sitemap }));
       });
 
+      mount('get', studioPath + '/content', async (req, res) => {
+        const contentData = collectContent(studioCtx);
+        res.type('text/html');
+        res.send(renderStudioPage('content', { studioPath, title: 'Content', content: contentData }));
+      });
+
       mount('get', studioPath + '/logs', async (req, res) => {
         const { getLogs } = require('./services/log-buffer');
         res.type('text/html');
@@ -204,6 +211,7 @@ function studioPlugin(options = {}) {
       mount('get', studioPath + '/api/cache', (req, res) => api.cache(req, res, studioCtx));
       mount('get', studioPath + '/api/orm', async (req, res) => api.orm(req, res, studioCtx));
       mount('get', studioPath + '/api/requests', (req, res) => api.requests(req, res));
+      mount('get', studioPath + '/api/content', (req, res) => api.content(req, res, studioCtx));
 
       mount('get', studioPath + '/api/cache/clear', (req, res) => {
         res.status(405).json({ error: 'Method Not Allowed. Use POST.' });

@@ -127,7 +127,29 @@ export interface CreateAppOptions {
   setupRoutes?: (app: WebspressoCompatApp, ctx: SetupRoutesContext) => void;
   /** Developer Studio at /_webspresso (default on in development). */
   studio?: boolean | StudioOptions;
+  /** Markdown content layer (`content/` collections). Default off in test. */
+  content?: boolean | ContentOptions;
   [key: string]: unknown;
+}
+
+export interface ContentCollectionOptions {
+  route?: string;
+  indexRoute?: string;
+  tagsRoute?: string;
+  layout?: string;
+  draft?: boolean;
+  sitemap?: boolean;
+  priority?: number;
+  changefreq?: string;
+  schema?: ZodObject<ZodTypeAny> | ZodTypeAny;
+}
+
+export interface ContentOptions {
+  enabled?: boolean;
+  dir?: string;
+  failOnInvalid?: boolean;
+  includeDrafts?: boolean;
+  collections?: Record<string, ContentCollectionOptions>;
 }
 
 export interface StudioOptions {
@@ -156,6 +178,7 @@ export interface CreateAppResult {
   pluginManager: PluginManager;
   authMiddleware?: WebspressoHandler;
   studioConfig?: StudioOptions & { enabled: boolean };
+  contentConfig?: ContentOptions & { enabled: boolean };
 }
 
 export function createApp(options?: CreateAppOptions): CreateAppResult;
@@ -663,6 +686,14 @@ export function swaggerPlugin(options?: Record<string, unknown>): WebspressoPlug
 export function healthCheckPlugin(options?: Record<string, unknown>): WebspressoPlugin;
 
 export function studioPlugin(options?: boolean | StudioOptions): WebspressoPlugin;
+
+export function contentPlugin(options?: boolean | ContentOptions): WebspressoPlugin;
+
+export function resolveContentConfig(
+  contentOption?: boolean | ContentOptions | null,
+  nodeEnv?: string,
+  cwd?: string
+): (ContentOptions & { enabled: boolean; dir: string; absoluteDir: string }) | null;
 
 export function dashboardPlugin(options?: Record<string, unknown>): WebspressoPlugin;
 

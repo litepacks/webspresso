@@ -174,10 +174,13 @@ function createApp(options = {}) {
     auth: authManager = null,
     setupRoutes,
     studio: studioOption,
+    content: contentOption,
   } = options;
 
   const { resolveStudioConfig } = require('../plugins/studio/config');
   const studioPlugin = require('../plugins/studio');
+  const { resolveContentConfig } = require('../core/content/config');
+  const contentPlugin = require('../plugins/content');
   const studioConfig = resolveStudioConfig(
     studioOption !== undefined ? studioOption : isDev && !isTest ? true : false,
     NODE_ENV
@@ -191,6 +194,24 @@ function createApp(options = {}) {
       throw new Error(
         'Do not pass studioPlugin/dashboardPlugin manually when createApp({ studio }) is enabled'
       );
+    }
+  }
+
+  const contentConfig = resolveContentConfig(
+    contentOption !== undefined ? contentOption : false,
+    NODE_ENV,
+    process.cwd()
+  );
+
+  if (contentConfig?.enabled) {
+    const hasContent = plugins.some((p) => p && p.name === 'content');
+    if (hasContent) {
+      throw new Error(
+        'Do not pass contentPlugin manually when createApp({ content }) is enabled'
+      );
+    }
+    if (options._manifest?.contentIndex?.items) {
+      contentConfig._manifestItems = options._manifest.contentIndex.items;
     }
   }
 
@@ -326,6 +347,9 @@ function createApp(options = {}) {
   if (studioConfig?.enabled) {
     effectivePlugins.push(studioPlugin(studioConfig));
   }
+  if (contentConfig?.enabled) {
+    effectivePlugins.push(contentPlugin(contentConfig));
+  }
 
   if (studioConfig?.enabled && studioConfig.requestTimeline?.enabled && isDev) {
     const { createTimelineMiddleware } = require('../plugins/studio/services/request-timeline');
@@ -335,7 +359,7 @@ function createApp(options = {}) {
   const pluginContext = {
     app,
     nunjucksEnv,
-    options: { ...options, studio: studioConfig, pluginManager: null },
+    options: { ...options, studio: studioConfig, content: contentConfig, pluginManager: null },
     middlewares,
   };
   pluginManager.registerSync(effectivePlugins, pluginContext);
@@ -387,11 +411,12 @@ function createApp(options = {}) {
       const ctx = {
         app,
         nunjucksEnv,
-        options: { ...options, studio: studioConfig, pluginManager },
+        options: { ...options, studio: studioConfig, content: contentConfig, pluginManager },
         middlewares,
         db: options.db ?? null,
         routes: pluginManager.routes,
         studioConfig,
+        contentConfig,
         usePlugin: (n) => pluginManager.getPluginAPI(n),
         addHelper: (n, fn) => pluginManager.registeredHelpers.set(n, fn),
         addFilter: (n, fn) => pluginManager.registeredFilters.set(n, fn),
@@ -533,7 +558,7 @@ function createApp(options = {}) {
     });
   });
 
-  return { app, nunjucksEnv, pluginManager, authMiddleware, studioConfig };
+  return { app, nunjucksEnv, pluginManager, authMiddleware, studioConfig, contentConfig };
 }
 
 module.exports = { createApp, getDefaultHelmetConfig };

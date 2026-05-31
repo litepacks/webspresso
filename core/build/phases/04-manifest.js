@@ -6,6 +6,7 @@
 const path = require('path');
 const pkg = require('../../../package.json');
 const { hashParts } = require('../graph/hash');
+const { buildContentIndexPhase } = require('./02b-content-index');
 
 const MANIFEST_SCHEMA = 'https://webspresso.dev/schemas/manifest-v3.json';
 
@@ -56,6 +57,11 @@ function assembleManifest(ctx, compiled) {
     hooks: compiled.hooks,
     seo: {},
   };
+
+  const contentIndex = buildContentIndexPhase(ctx);
+  if (contentIndex) {
+    manifest.contentIndex = contentIndex;
+  }
 
   if (ctx.config.hooks && typeof ctx.config.hooks['build:manifest'] === 'function') {
     ctx.config.hooks['build:manifest'](manifest);
