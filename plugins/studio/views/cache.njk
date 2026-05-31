@@ -1,0 +1,24 @@
+<h1>Cache inspector</h1>
+{% if not cache.enabled %}
+<p>{{ cache.message }}</p>
+{% else %}
+<table class="data">
+  <thead><tr><th>Store</th><th>Keys</th><th>Tags</th><th>Hit/miss</th></tr></thead>
+  <tbody>
+  {% for s in cache.stores %}
+  <tr>
+    <td>{{ s.id }}</td>
+    <td>{{ s.keysCount }}</td>
+    <td>{{ s.tagsCount }}</td>
+    <td>{% if s.hitMissInstrumented %}instrumented{% else %}not instrumented{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if cacheActionsEnabled %}
+<form method="post" action="{{ studioPath }}/api/cache/clear">
+  <input type="hidden" name="confirm" value="1">
+  <button type="submit">Clear all cache (POST)</button>
+</form>
+{% endif %}
+{% endif %}

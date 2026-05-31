@@ -123,6 +123,7 @@ class PluginManager {
     this.routes = [];                   // Collected route metadata
     this.customRoutes = [];             // Routes added by plugins
     this.cspDirectives = new Map();     // directive -> Set of sources (from plugins)
+    this.pluginHealth = new Map();      // name -> { status, error?, dependencyIssues? }
     this.app = null;
     this.nunjucksEnv = null;
   }
@@ -294,13 +295,28 @@ class PluginManager {
    */
   _registerPluginSync(plugin, context) {
     // Validate dependencies
-    this._validateDependencies(plugin);
+    let dependencyIssues = [];
+    try {
+      this._validateDependencies(plugin);
+    } catch (err) {
+      dependencyIssues = [err.message];
+      this.pluginHealth.set(plugin.name, {
+        status: 'failed',
+        error: err.message,
+        dependencyIssues,
+      });
+      throw err;
+    }
 
     // Create plugin context
     const ctx = this._createPluginContext(plugin, context);
 
     // Store plugin
     this.plugins.set(plugin.name, plugin);
+    this.pluginHealth.set(plugin.name, {
+      status: 'loaded',
+      dependencyIssues,
+    });
 
     // Store API if provided
     if (plugin.api) {
@@ -325,6 +341,7 @@ class PluginManager {
         console.warn(`[plugin-manager] Plugin "${plugin.name}" register() failed:`, err.message);
         this.plugins.delete(plugin.name);
         if (plugin.api) this.pluginAPIs.delete(plugin.name);
+        this.pluginHealth.set(plugin.name, { status: 'failed', error: err.message });
         return;
       }
     }

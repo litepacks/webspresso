@@ -98,6 +98,7 @@
         <a href="#database" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">ORM</a>
         <a href="#i18n-templates" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">i18n</a>
         <a href="#hooks" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Hooks</a>
+        <a href="#studio" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Studio</a>
         <a href="#tooling" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Tooling</a>
         <a href="#request-flow" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Request flow</a>
         <a href="#architecture" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Architecture</a>
@@ -734,7 +735,8 @@ const { app } = createApp({
         <table class="w-full text-sm">
           <thead><tr><th>Built-in (require path)</th><th>Purpose</th></tr></thead>
           <tbody class="text-slate-600 dark:text-slate-400">
-            <tr><td><code class="whitespace-nowrap">webspresso/plugins</code> → <code class="whitespace-nowrap">dashboardPlugin</code></td><td>Dev-only route browser at <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_webspresso</code></td></tr>
+            <tr><td><code class="whitespace-nowrap">studioPlugin</code> / <code class="whitespace-nowrap">createApp({ studio })</code></td><td>SSR developer Studio at <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_webspresso</code> — routes, plugins, health, ORM, env (see <a href="#studio" class="text-cyan-800 dark:text-cyan-400 hover:underline">Studio</a>)</td></tr>
+            <tr><td><code class="whitespace-nowrap">dashboardPlugin</code></td><td><em>Deprecated</em> — wraps <code class="whitespace-nowrap">studioPlugin</code></td></tr>
             <tr><td><code class="whitespace-nowrap">sitemapPlugin</code></td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/sitemap.xml</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/robots.txt</code>, optional DB-driven URLs</td></tr>
             <tr><td><code class="whitespace-nowrap">analyticsPlugin</code></td><td>GA4, GTM, Yandex, Bing UET, Facebook Pixel, verification meta tags</td></tr>
             <tr><td><code class="whitespace-nowrap">siteAnalyticsPlugin</code></td><td>Self-hosted page views + admin charts</td></tr>
@@ -1003,10 +1005,27 @@ module.exports = {
       <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed">Scaffolded apps use <strong class="text-slate-800 dark:text-slate-200">Tailwind CSS</strong> with <strong class="text-slate-800 dark:text-slate-200">PostCSS</strong> and <strong class="text-slate-800 dark:text-slate-200">Autoprefixer</strong> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso add tailwind</code> or the default <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">new</code> template). Compiled CSS is written under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">public/css/</code> and linked from the layout. For cache-busted assets in SSR, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp({ assets })</code> supports a static version string or a <strong class="text-slate-800 dark:text-slate-200">Vite/Webpack-style manifest</strong> so <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">fsy.asset()</code> resolves hashed filenames.</p>
 
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">In-browser dev tools</h3>
-      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed">Enable <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dashboardPlugin()</code> to get a <strong class="text-slate-800 dark:text-slate-200">route inventory</strong> at <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_webspresso</code> (development only by default). The <strong class="text-slate-800 dark:text-slate-200">SEO checker</strong> plugin adds a dev-only panel with many automated HTML/metadata checks. These tools stay out of production unless you explicitly force them on.</p>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createApp({ studio: true })</code> mounts <strong class="text-slate-800 dark:text-slate-200">Webspresso Studio</strong> at <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_webspresso</code> (on by default in development). See <a href="#studio" class="text-cyan-800 dark:text-cyan-400 hover:underline">Studio</a> and <a href="../docs/studio.md" class="text-cyan-800 dark:text-cyan-400 hover:underline">docs/studio.md</a>. The <strong class="text-slate-800 dark:text-slate-200">SEO checker</strong> plugin adds a separate dev toolbar. Production requires explicit config and authentication.</p>
 
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Images &amp; PWA assets</h3>
       <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso favicon:generate</code> uses <strong class="text-slate-800 dark:text-slate-200">sharp</strong> to resize a master PNG into Apple/Android/favicon sizes, writes a <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">manifest.json</code>, and can inject a Nunjucks partial into your layout — useful for consistent branding across devices.</p>
+    </section>
+
+    <section id="studio" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Webspresso Studio</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 text-sm leading-relaxed">Studio is the <strong class="text-slate-800 dark:text-slate-200">developer visibility panel</strong> at <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_webspresso</code> (SSR, no extra frontend framework). It is separate from the production admin panel at <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin</code>.</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">createApp({
+  pagesDir: './pages',
+  viewsDir: './views',
+  studio: {
+    enabled: true,
+    path: '/_webspresso',
+    auth: 'dev-only',
+    exposeEnv: false,
+    requestTimeline: { enabled: true, maxEntries: 100 },
+  },
+});</code></pre>
+      <p class="text-slate-600 dark:text-slate-400 text-sm">Pages: overview, routes, plugins, ORM, cache, health, OpenAPI, sitemap, env, logs. Security: <a href="../docs/studio-security.md" class="text-cyan-800 dark:text-cyan-400 hover:underline">docs/studio-security.md</a>.</p>
     </section>
 
     <section id="request-flow" class="doc-section mb-14">

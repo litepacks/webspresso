@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }} — Webspresso Studio</title>
+  <style>{{ styles }}</style>
+</head>
+<body>
+  <div class="studio-layout">
+    <aside class="studio-sidebar">
+      <div class="studio-brand">Webspresso Studio</div>
+      {% for item in nav %}
+      <a href="{{ item.href }}" class="{% if item.active %}active{% endif %}">{{ item.label }}</a>
+      {% endfor %}
+    </aside>
+    <div class="studio-main">
+      <header class="studio-topbar">
+        <span><strong>{{ nodeEnv }}</strong></span>
+        <span class="muted">Developer visibility panel — not for production use without auth</span>
+      </header>
+      <div class="studio-content">
+        {% include partial %}
+      </div>
+    </div>
+  </div>
+</body>
+</html>

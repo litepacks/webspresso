@@ -1,0 +1,27 @@
+<h1>Overview</h1>
+<p class="muted">Framework debug and development visibility at <code class="mono">{{ studioPath }}</code></p>
+
+<div class="cards">
+  <div class="card"><h3>Routes</h3><div class="value">{{ routeCount }}</div></div>
+  <div class="card"><h3>Plugins</h3><div class="value">{{ pluginCount }}</div></div>
+  <div class="card"><h3>Health</h3><div class="value"><span class="badge badge-{{ healthStatus }}">{{ healthStatus }}</span></div></div>
+  <div class="card"><h3>Requests</h3><div class="value">{{ requestCount }}</div></div>
+</div>
+
+{% if recentRequests and recentRequests.length %}
+<h2>Recent requests</h2>
+<table class="data">
+  <thead><tr><th>Method</th><th>Path</th><th>Status</th><th>Duration</th><th>DB queries</th></tr></thead>
+  <tbody>
+  {% for r in recentRequests %}
+  <tr>
+    <td>{{ r.method }}</td>
+    <td class="mono">{{ r.path }}</td>
+    <td>{{ r.status }}</td>
+    <td>{{ r.durationMs }}ms</td>
+    <td>{{ r.dbQueryCount }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}

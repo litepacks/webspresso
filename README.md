@@ -785,27 +785,37 @@ const { app } = createApp({
 
 ### Built-in Plugins
 
-**Dashboard Plugin:**
-- Development dashboard at `/_webspresso`
-- Monitor all routes (SSR pages and API endpoints)
-- View loaded plugins and configuration
-- Filter and search routes
-- Only active in development mode (disabled in production)
+**Webspresso Studio** (developer panel at `/_webspresso`):
+- SSR inspector: routes, plugins, health, ORM, cache, OpenAPI, sitemap, env, logs
+- Enabled by default in development via `createApp({ studio: true })`
+- Disabled in production unless explicitly configured with authentication
+- Separate from production admin at `/_admin`
+- Docs: [docs/studio.md](docs/studio.md), [docs/studio-security.md](docs/studio-security.md)
 
 ```javascript
-const { dashboardPlugin } = require('webspresso/plugins');
-
 const { app } = createApp({
   pagesDir: './pages',
-  plugins: [
-    dashboardPlugin()  // Available at /_webspresso in dev mode
-  ]
+  viewsDir: './views',
+  studio: {
+    enabled: true,
+    path: '/_webspresso',
+    auth: 'dev-only',
+    exposeEnv: false,
+  },
 });
 ```
 
-Options:
-- `path` - Custom dashboard path (default: `/_webspresso`)
-- `enabled` - Force enable/disable (default: auto based on NODE_ENV)
+`dashboardPlugin()` is **deprecated** and delegates to Studio.
+
+Production example:
+
+```javascript
+studio: {
+  enabled: true,
+  auth: 'basic',
+  basicAuth: { user: process.env.STUDIO_USER, pass: process.env.STUDIO_PASS },
+}
+```
 
 **Redirect plugin:**
 - Runs in `register()` **before** file-based routes, so configured paths override SSR pages.

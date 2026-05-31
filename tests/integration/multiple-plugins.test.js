@@ -75,6 +75,7 @@ describe('Multiple Plugins Integration', () => {
       pagesDir: './tests/fixtures/pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
+      studio: false,
       plugins: [
         dashboardPlugin({
           path: '/_webspresso',
@@ -103,7 +104,7 @@ describe('Multiple Plugins Integration', () => {
         .get('/_webspresso')
         .expect(200);
 
-      expect(res.text).toContain('Webspresso Dashboard');
+      expect(res.text).toContain('Webspresso Studio');
     });
 
     it('should access dashboard API routes', async () => {
@@ -112,7 +113,8 @@ describe('Multiple Plugins Integration', () => {
         .expect(200);
 
       expect(res.body).toBeDefined();
-      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body).toHaveProperty('routes');
+      expect(Array.isArray(res.body.routes)).toBe(true);
     });
   });
 
@@ -141,7 +143,7 @@ describe('Multiple Plugins Integration', () => {
       const dashboardRes = await request(app)
         .get('/_webspresso')
         .expect(200);
-      expect(dashboardRes.text).toContain('Webspresso Dashboard');
+      expect(dashboardRes.text).toContain('Webspresso Studio');
 
       // Admin Panel
       const adminRes = await request(app)
@@ -155,7 +157,7 @@ describe('Multiple Plugins Integration', () => {
       const dashboardApiRes = await request(app)
         .get('/_webspresso/api/routes')
         .expect(200);
-      expect(Array.isArray(dashboardApiRes.body)).toBe(true);
+      expect(Array.isArray(dashboardApiRes.body.routes)).toBe(true);
 
       // Admin Panel API
       const adminApiRes = await request(app)
@@ -197,7 +199,7 @@ describe('Multiple Plugins Integration', () => {
       const dashboardRes = await request(app)
         .get('/_webspresso/api/routes')
         .expect(200);
-      expect(Array.isArray(dashboardRes.body)).toBe(true);
+      expect(Array.isArray(dashboardRes.body.routes)).toBe(true);
     });
   });
 
@@ -208,7 +210,7 @@ describe('Multiple Plugins Integration', () => {
       const dashboardRes = await request(app)
         .get('/_webspresso/api/routes')
         .expect(200);
-      expect(Array.isArray(dashboardRes.body)).toBe(true);
+      expect(Array.isArray(dashboardRes.body.routes)).toBe(true);
 
       // Admin panel check endpoint should work (no auth required)
       const checkRes = await request(app)
@@ -221,7 +223,7 @@ describe('Multiple Plugins Integration', () => {
       const dashboardRes2 = await request(app)
         .get('/_webspresso/api/plugins')
         .expect(200);
-      expect(Array.isArray(dashboardRes2.body)).toBe(true);
+      expect(dashboardRes2.body).toHaveProperty('plugins');
     });
   });
 });

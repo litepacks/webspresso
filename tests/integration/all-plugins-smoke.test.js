@@ -14,11 +14,13 @@ describe('All plugins smoke', () => {
   let app;
 
   beforeAll(() => {
+    process.env.NODE_ENV = 'development';
     const { app: a } = createApp({
       pagesDir: PAGES,
       viewsDir: VIEWS,
       logging: false,
       helmet: false,
+      studio: false,
       plugins: [
         plugins.sitemapPlugin({ hostname: 'https://example.com', robots: true }),
         plugins.analyticsPlugin({ google: { measurementId: 'G-SMOKE' } }),

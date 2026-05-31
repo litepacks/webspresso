@@ -1,0 +1,25 @@
+<h1>ORM inspector</h1>
+<h2>Models</h2>
+<table class="data">
+  <thead><tr><th>Name</th><th>Table</th><th>Columns</th><th>Admin</th></tr></thead>
+  <tbody>
+  {% for m in orm.models %}
+  <tr>
+    <td>{{ m.name }}</td>
+    <td class="mono">{{ m.table }}</td>
+    <td>{{ m.columns.length }}</td>
+    <td>{% if m.adminEnabled %}yes{% else %}—{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<h2>Tables</h2>
+<table class="data">
+  <thead><tr><th>Table</th><th>Rows (estimate)</th></tr></thead>
+  <tbody>
+  {% for t in orm.tables %}
+  <tr><td class="mono">{{ t.name }}</td><td>{{ t.rowCount }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="muted">Migrations: {{ orm.migrationStatus.completed }} completed, {{ orm.migrationStatus.pending }} pending. Destructive SQL disabled.</p>

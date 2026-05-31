@@ -617,14 +617,14 @@ describe('Plugin Integration', () => {
   });
 });
 
-describe('Dashboard Plugin', () => {
+describe('Dashboard Plugin (deprecated wrapper → Studio)', () => {
   const dashboardPlugin = require('../../plugins/dashboard');
   const fixturesDir = path.join(__dirname, '../fixtures');
 
   it('should create plugin with default options', () => {
     const plugin = dashboardPlugin();
 
-    expect(plugin.name).toBe('dashboard');
+    expect(plugin.name).toBe('studio');
     expect(plugin.version).toBe('1.0.0');
     expect(plugin.onRoutesReady).toBeTypeOf('function');
   });
@@ -670,7 +670,7 @@ describe('Dashboard Plugin', () => {
     expect(addedRoutes).toContainEqual({ method: 'get', path: '/_webspresso' });
     expect(addedRoutes).toContainEqual({ method: 'get', path: '/_webspresso/api/routes' });
     expect(addedRoutes).toContainEqual({ method: 'get', path: '/_webspresso/api/plugins' });
-    expect(addedRoutes).toContainEqual({ method: 'get', path: '/_webspresso/api/config' });
+    expect(addedRoutes).toContainEqual({ method: 'get', path: '/_webspresso/api/health' });
 
     process.env.NODE_ENV = originalEnv;
   });
@@ -679,19 +679,19 @@ describe('Dashboard Plugin', () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
 
-    const plugin = dashboardPlugin({ path: '/_admin' });
+    const plugin = dashboardPlugin({ path: '/_studio-custom' });
     const addedRoutes = [];
     const mockCtx = {
       app: {},
       routes: [],
-      options: {},
+      options: { pagesDir: 'pages' },
       addRoute: (method, path, handler) => addedRoutes.push({ method, path })
     };
 
     plugin.onRoutesReady(mockCtx);
 
-    expect(addedRoutes).toContainEqual({ method: 'get', path: '/_admin' });
-    expect(addedRoutes).toContainEqual({ method: 'get', path: '/_admin/api/routes' });
+    expect(addedRoutes).toContainEqual({ method: 'get', path: '/_studio-custom' });
+    expect(addedRoutes).toContainEqual({ method: 'get', path: '/_studio-custom/api/routes' });
 
     process.env.NODE_ENV = originalEnv;
   });
@@ -700,7 +700,11 @@ describe('Dashboard Plugin', () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
 
-    const plugin = dashboardPlugin({ enabled: true });
+    const plugin = dashboardPlugin({
+      enabled: true,
+      auth: 'basic',
+      basicAuth: { user: 'dev', pass: 'secret' },
+    });
     const addedRoutes = [];
     const mockCtx = {
       app: {},
@@ -724,18 +728,17 @@ describe('Dashboard Plugin', () => {
     const { app, pluginManager } = createApp({
       pagesDir: path.join(fixturesDir, 'pages'),
       viewsDir: path.join(fixturesDir, 'views'),
-      plugins: [dashboardPlugin()]
+      studio: false,
+      plugins: [dashboardPlugin()],
     });
 
-    expect(pluginManager.hasPlugin('dashboard')).toBe(true);
+    expect(pluginManager.hasPlugin('studio')).toBe(true);
 
-    // Test dashboard endpoint
     const res = await request(app)
       .get('/_webspresso')
       .expect(200);
 
-    expect(res.text).toContain('Webspresso Dashboard');
-    expect(res.text).toContain('mithril');
+    expect(res.text).toContain('Webspresso Studio');
 
     process.env.NODE_ENV = originalEnv;
   });
@@ -747,7 +750,8 @@ describe('Dashboard Plugin', () => {
     const { app } = createApp({
       pagesDir: path.join(fixturesDir, 'pages'),
       viewsDir: path.join(fixturesDir, 'views'),
-      plugins: [dashboardPlugin()]
+      studio: false,
+      plugins: [dashboardPlugin()],
     });
 
     const res = await request(app)
@@ -755,29 +759,30 @@ describe('Dashboard Plugin', () => {
       .expect(200)
       .expect('Content-Type', /json/);
 
-    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body).toHaveProperty('routes');
+    expect(Array.isArray(res.body.routes)).toBe(true);
 
     process.env.NODE_ENV = originalEnv;
   });
 
-  it('should return JSON for API config endpoint', async () => {
+  it('should return JSON for API health endpoint', async () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
 
     const { app } = createApp({
       pagesDir: path.join(fixturesDir, 'pages'),
       viewsDir: path.join(fixturesDir, 'views'),
-      plugins: [dashboardPlugin()]
+      studio: false,
+      plugins: [dashboardPlugin()],
     });
 
     const res = await request(app)
-      .get('/_webspresso/api/config')
+      .get('/_webspresso/api/health')
       .expect(200)
       .expect('Content-Type', /json/);
 
-    expect(res.body).toHaveProperty('env');
-    expect(res.body).toHaveProperty('i18n');
-    expect(res.body).toHaveProperty('server');
+    expect(res.body).toHaveProperty('status');
+    expect(res.body).toHaveProperty('checks');
 
     process.env.NODE_ENV = originalEnv;
   });

@@ -1,0 +1,15 @@
+<h1>Plugin inspector</h1>
+<table class="data">
+  <thead><tr><th>Name</th><th>Version</th><th>Status</th><th>Hooks</th><th>Routes</th></tr></thead>
+  <tbody>
+  {% for p in plugins %}
+  <tr>
+    <td><strong>{{ p.name }}</strong><br><span class="muted">{{ p.description }}</span></td>
+    <td>{{ p.version }}</td>
+    <td><span class="badge badge-{% if p.status == 'loaded' %}healthy{% else %}critical{% endif %}">{{ p.status }}</span></td>
+    <td class="muted">{% if p.hooks.register %}register {% endif %}{% if p.hooks.onRoutesReady %}onRoutesReady {% endif %}</td>
+    <td>{{ p.routes.length }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>

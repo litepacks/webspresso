@@ -125,7 +125,21 @@ export interface CreateAppOptions {
     swup?: boolean | Record<string, unknown>;
   };
   setupRoutes?: (app: WebspressoCompatApp, ctx: SetupRoutesContext) => void;
+  /** Developer Studio at /_webspresso (default on in development). */
+  studio?: boolean | StudioOptions;
   [key: string]: unknown;
+}
+
+export interface StudioOptions {
+  enabled?: boolean;
+  path?: string;
+  auth?: 'dev-only' | 'basic' | 'none';
+  exposeEnv?: boolean;
+  basicAuth?: { user: string; pass: string };
+  requestTimeline?: { enabled?: boolean; maxEntries?: number };
+  cacheActions?: boolean;
+  slowQueryThresholdMs?: number;
+  inspectRoutes?: boolean;
 }
 
 export interface SetupRoutesContext {
@@ -141,6 +155,7 @@ export interface CreateAppResult {
   nunjucksEnv: unknown;
   pluginManager: PluginManager;
   authMiddleware?: WebspressoHandler;
+  studioConfig?: StudioOptions & { enabled: boolean };
 }
 
 export function createApp(options?: CreateAppOptions): CreateAppResult;
@@ -646,6 +661,10 @@ export function recaptchaPlugin(options?: Record<string, unknown>): WebspressoPl
 export function swaggerPlugin(options?: Record<string, unknown>): WebspressoPlugin;
 
 export function healthCheckPlugin(options?: Record<string, unknown>): WebspressoPlugin;
+
+export function studioPlugin(options?: boolean | StudioOptions): WebspressoPlugin;
+
+export function dashboardPlugin(options?: Record<string, unknown>): WebspressoPlugin;
 
 export interface RedirectRule {
   from: string | RegExp;

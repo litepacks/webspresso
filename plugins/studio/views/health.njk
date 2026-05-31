@@ -1,0 +1,14 @@
+<h1>Health dashboard</h1>
+<p>Overall: <span class="badge badge-{{ health.status }}">{{ health.status }}</span></p>
+<table class="data">
+  <thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead>
+  <tbody>
+  {% for c in health.checks %}
+  <tr>
+    <td>{{ c.label }}</td>
+    <td><span class="badge badge-{{ c.status }}">{{ c.status }}</span></td>
+    <td>{{ c.detail }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>

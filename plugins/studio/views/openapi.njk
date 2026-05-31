@@ -1,0 +1,14 @@
+<h1>OpenAPI / Swagger</h1>
+{% if openapi.error %}
+<p class="badge badge-warning">{{ openapi.error }}</p>
+{% else %}
+<div class="cards">
+  <div class="card"><h3>Endpoints</h3><div class="value">{{ openapi.totalEndpoints }}</div></div>
+  <div class="card"><h3>With schema</h3><div class="value">{{ openapi.withSchema }}</div></div>
+  <div class="card"><h3>Coverage</h3><div class="value">{{ openapi.coveragePercent }}%</div></div>
+</div>
+{% if openapi.swaggerUiPath %}
+<p><a class="link" href="{{ openapi.swaggerUiPath }}" target="_blank" rel="noopener">Open Swagger UI</a>
+ — <a class="link" href="{{ openapi.openApiJsonPath }}" target="_blank" rel="noopener">openapi.json</a></p>
+{% endif %}
+{% endif %}

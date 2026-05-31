@@ -1,0 +1,18 @@
+<h1>Logs</h1>
+<form class="filters" method="get">
+  <select name="level"><option value="">All levels</option><option value="info">info</option><option value="warn">warn</option><option value="error">error</option></select>
+  <button type="submit">Filter</button>
+</form>
+<table class="data">
+  <thead><tr><th>Time</th><th>Level</th><th>Source</th><th>Message</th></tr></thead>
+  <tbody>
+  {% for l in logs %}
+  <tr>
+    <td class="mono">{{ l.at }}</td>
+    <td>{{ l.level }}</td>
+    <td>{{ l.source }}</td>
+    <td>{{ l.message }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>

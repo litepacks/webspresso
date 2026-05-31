@@ -1,0 +1,24 @@
+<h1>Route inspector</h1>
+<form class="filters" method="get">
+  <select name="method"><option value="">All methods</option><option value="get">GET</option><option value="post">POST</option></select>
+  <select name="type"><option value="">All types</option><option value="api">API</option><option value="page">Page</option></select>
+  <select name="auth"><option value="">Auth any</option><option value="1">Auth required</option></select>
+  <button type="submit">Filter</button>
+</form>
+<table class="data">
+  <thead><tr><th>Method</th><th>Path</th><th>Type</th><th>Source</th><th>MW</th><th>Schema</th><th>Auth</th></tr></thead>
+  <tbody>
+  {% for r in routes %}
+  <tr>
+    <td>{{ r.method }}</td>
+    <td class="mono">{{ r.path }}</td>
+    <td>{{ r.type }}</td>
+    <td class="mono">{{ r.sourceFile or '—' }}</td>
+    <td>{{ r.middlewareCount }}</td>
+    <td>{% if r.hasValidation %}yes{% else %}—{% endif %}</td>
+    <td>{% if r.authRequired %}yes{% else %}—{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="muted">{{ total }} route(s)</p>

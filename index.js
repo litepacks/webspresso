@@ -63,6 +63,7 @@ const {
   redirectPlugin,
   rateLimitPlugin,
   emailPlugin,
+  studioPlugin,
 } = require('./plugins');
 
 module.exports = {
@@ -136,4 +137,5 @@ module.exports = {
   redirectPlugin,
   rateLimitPlugin,
   emailPlugin,
+  studioPlugin,
 };

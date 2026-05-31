@@ -6,6 +6,7 @@
 const sitemapPlugin = require('./sitemap');
 const analyticsPlugin = require('./analytics');
 const dashboardPlugin = require('./dashboard/index');
+const studioPlugin = require('./studio');
 const schemaExplorerPlugin = require('./schema-explorer');
 const adminPanelPlugin = require('./admin-panel');
 const seoCheckerPlugin = require('./seo-checker');
@@ -27,6 +28,7 @@ module.exports = {
   sitemapPlugin,
   analyticsPlugin,
   dashboardPlugin,
+  studioPlugin,
   schemaExplorerPlugin,
   adminPanelPlugin,
   seoCheckerPlugin,
