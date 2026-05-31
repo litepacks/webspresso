@@ -131,8 +131,7 @@ test.describe('Audit log UI', () => {
     await page.waitForURL(/\/_admin\/audit-log/, { timeout: 15000 });
     await page.waitForLoadState('load');
 
-    await expect(page.locator('text=Loading').or(page.locator('text=Total:'))).toBeVisible({
-      timeout: 15000,
-    });
+    await expect(page.locator('text=Total:')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('table tbody tr').first()).toBeVisible({ timeout: 10000 });
   });
 });

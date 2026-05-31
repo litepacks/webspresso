@@ -101,8 +101,20 @@ async function run() {
     });
 
     await shot(page, 'audit-log.png', async () => {
+      const auditApi = page.waitForResponse(
+        (res) => res.url().includes('/api/audit-logs') && res.status() === 200,
+        { timeout: 20000 }
+      );
       await page.goto(`${baseUrl}/_admin/audit-log`, { waitUntil: 'load' });
-      await page.waitForTimeout(1200);
+      await auditApi;
+      await page.waitForSelector('table tbody tr', { timeout: 15000 });
+      await page.waitForFunction(
+        () => {
+          const app = document.getElementById('app');
+          return app && !/Loading/.test(app.innerText);
+        },
+        { timeout: 15000 }
+      );
     });
 
     await shot(page, 'site-analytics.png', async () => {

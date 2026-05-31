@@ -34,9 +34,11 @@ function generateAuditLogComponent(options = {}) {
         rows = res.data || [];
         total = (res.meta && res.meta.total) || 0;
         loading = false;
+        m.redraw();
       }).catch(function(e) {
         error = e.message || String(e);
         loading = false;
+        m.redraw();
       });
     }
 
@@ -74,7 +76,7 @@ function generateAuditLogComponent(options = {}) {
               ]),
             ]),
             m('button.bg-blue-600.text-white.px-4.py-1.rounded', {
-              onclick: function() { page = 1; load(); },
+              onclick: function() { page = 1; load(); m.redraw(); },
             }, 'Apply'),
           ]),
           m('div.text-sm.text-gray-500', 'Total: ' + total),
@@ -105,12 +107,12 @@ function generateAuditLogComponent(options = {}) {
           m('div.flex.items-center.gap-2', [
             m('button.px-3.py-1.border.rounded', {
               disabled: page <= 1,
-              onclick: function() { if (page > 1) { page--; load(); } },
+              onclick: function() { if (page > 1) { page--; load(); m.redraw(); } },
             }, 'Prev'),
             m('span.text-sm', 'Page ' + page + ' / ' + maxPage),
             m('button.px-3.py-1.border.rounded', {
               disabled: page >= maxPage,
-              onclick: function() { if (page < maxPage) { page++; load(); } },
+              onclick: function() { if (page < maxPage) { page++; load(); m.redraw(); } },
             }, 'Next'),
           ]),
         ]);
