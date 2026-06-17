@@ -15,6 +15,9 @@ const api = {
     
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Request failed' }));
+      if (response.status === 401 && path.indexOf('/auth/') !== 0) {
+        redirectToLogin();
+      }
       throw new Error(error.error || 'Request failed');
     }
     
@@ -100,6 +103,44 @@ const state = {
   selectedBulkField: null, // Currently selected bulk field for update
   selectAllMode: false, // true = all records selected (not just current page)
 };
+
+var INTENDED_ROUTE_KEY = 'webspresso.admin.intendedRoute';
+
+function isSafeIntendedRoute(path) {
+  if (!path || typeof path !== 'string') return false;
+  if (path.charAt(0) !== '/') return false;
+  if (path === '/login' || path === '/setup') return false;
+  return true;
+}
+
+function saveIntendedRoute() {
+  try {
+    var path = m.route.get();
+    if (!isSafeIntendedRoute(path)) return;
+    sessionStorage.setItem(INTENDED_ROUTE_KEY, path);
+  } catch (e) {}
+}
+
+function clearIntendedRoute() {
+  try {
+    sessionStorage.removeItem(INTENDED_ROUTE_KEY);
+  } catch (e) {}
+}
+
+function consumeIntendedRoute(defaultPath) {
+  defaultPath = defaultPath || '/';
+  try {
+    var path = sessionStorage.getItem(INTENDED_ROUTE_KEY);
+    sessionStorage.removeItem(INTENDED_ROUTE_KEY);
+    if (isSafeIntendedRoute(path)) return path;
+  } catch (e) {}
+  return defaultPath;
+}
+
+function redirectToLogin() {
+  saveIntendedRoute();
+  m.route.set('/login');
+}
 
 // Breadcrumb Component
 const Breadcrumb = {

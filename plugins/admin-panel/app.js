@@ -45,7 +45,7 @@ function getUserManagementModel() {
 async function guardUserManagementRoutes() {
   var isAuth = await checkAuth();
   if (!isAuth) {
-    m.route.set('/login');
+    redirectToLogin();
     return false;
   }
   if (!getUserManagementModel()) {
@@ -135,7 +135,7 @@ var routes = {
     onmatch: async () => {
       const isAuth = await checkAuth();
       if (isAuth) {
-        m.route.set('/');
+        m.route.set(consumeIntendedRoute('/'));
         return;
       }
       return LoginForm;
@@ -155,7 +155,7 @@ var routes = {
     onmatch: async () => {
       const isAuth = await checkAuth();
       if (!isAuth) {
-        m.route.set('/login');
+        redirectToLogin();
         return;
       }
       return SettingsPage;
@@ -193,7 +193,7 @@ var routes = {
     onmatch: async () => {
       const isAuth = await checkAuth();
       if (!isAuth) {
-        m.route.set('/login');
+        redirectToLogin();
         return;
       }
       return RecordList;
@@ -203,7 +203,7 @@ var routes = {
     onmatch: async () => {
       const isAuth = await checkAuth();
       if (!isAuth) {
-        m.route.set('/login');
+        redirectToLogin();
         return;
       }
       return RecordForm;
@@ -213,7 +213,7 @@ var routes = {
     onmatch: async () => {
       const isAuth = await checkAuth();
       if (!isAuth) {
-        m.route.set('/login');
+        redirectToLogin();
         return;
       }
       return RecordForm;
@@ -230,7 +230,7 @@ if (config && config.pages) {
         onmatch: async () => {
           const isAuth = await checkAuth();
           if (!isAuth) {
-            m.route.set('/login');
+            redirectToLogin();
             return;
           }
           if (window.__customPages && window.__customPages[page.id]) {

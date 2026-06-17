@@ -19,6 +19,8 @@ describe('admin panel SPA parts', () => {
     expect(body).toContain('const api =');
     expect(body).toContain('window.__ADMIN_COMPONENTS__');
     expect(body).toContain('renderUploadedFilePreview');
+    expect(body).toContain('redirectToLogin');
+    expect(body).toContain('consumeIntendedRoute');
   });
 
   it('manifest lists all parts on disk', () => {

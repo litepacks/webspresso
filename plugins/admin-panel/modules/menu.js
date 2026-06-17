@@ -351,6 +351,7 @@ const Sidebar = {
                 await api.post('/auth/logout');
                 state.user = null;
                 sidebarOpen = false;
+                clearIntendedRoute();
                 m.route.set('/login');
               },
             }, m(Icon, { name: 'logout', class: 'w-5 h-5' })),

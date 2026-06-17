@@ -19,7 +19,7 @@ const LoginForm = {
                 password: data.get('password'),
               });
               state.user = result.user;
-              m.route.set('/');
+              m.route.set(consumeIntendedRoute('/'));
             } catch (err) {
               state.error = err.message;
             } finally {
@@ -78,7 +78,7 @@ const SetupForm = {
           });
           state.user = result.user;
           state.needsSetup = false;
-          m.route.set('/');
+          m.route.set(consumeIntendedRoute('/'));
         } catch (err) {
           state.error = err.message;
         } finally {
