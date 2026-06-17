@@ -2165,7 +2165,7 @@ const { app } = createApp({
 ```
 
 - **ORM:** `zdb.file({ maxLength: 2048, nullable: true })` — string column for the stored public URL or path; migrations use `table.string(..., maxLength)`.
-- **Admin forms:** columns with `zdb.file()` automatically render a drag-and-drop upload widget (or a manual URL text field when `uploadUrl` is not configured). Optional `ui: { label, hint, accept, maxBytes }` on the column customizes the widget. For existing `zdb.string()` columns you can use `admin.customFields: { columnName: { type: 'file-upload' } }` instead of changing the schema type.
+- **Admin forms:** columns with `zdb.file()` automatically render a drag-and-drop upload widget (or a manual URL text field when `uploadUrl` is not configured). Image URLs show an inline thumbnail preview; use `ui.accept: 'image/*'` for image-only fields. Optional `ui: { label, hint, accept, maxBytes }` on the column customizes the widget. For existing `zdb.string()` columns you can use `admin.customFields: { columnName: { type: 'file-upload' } }` instead of changing the schema type.
 - **Admin:** the panel reads **`settings.uploadUrl`** from the registry (set automatically when `uploadPlugin` is registered **before** `adminPanelPlugin`, or pass **`adminPanelPlugin({ uploadUrl: '/api/upload' })`**). File fields (`type: 'file'` or `customFields` type `file-upload`) POST to that URL with credentials; the saved record stores the returned **`url`** / **`publicUrl`** string.
 - **Response:** `{ url, publicUrl, key? }` — clients typically persist **`url`** / **`publicUrl`** in the model.
 - **Custom storage:** `uploadPlugin({ provider: { async put({ buffer, originalName, mimeType, size, req }) { return { publicUrl: '...' }; } } })`.

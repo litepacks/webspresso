@@ -114,8 +114,76 @@ const RichTextField = {
   }
 };
 
+function isImageAccept(accept) {
+  return accept && accept !== '*/*' && String(accept).indexOf('image') !== -1;
+}
+
+function isImageUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  if (url.indexOf('blob:') === 0) return true;
+  return /\.(jpe?g|png|gif|webp|svg|avif|bmp|ico)(\?|#|$)/i.test(url.trim());
+}
+
+function shouldShowImagePreview(url, accept) {
+  return isImageAccept(accept) || isImageUrl(url);
+}
+
+function renderUploadedFilePreview(url, options) {
+  var accept = options.accept;
+  var readonly = options.readonly;
+  var onRemove = options.onRemove;
+  var label = options.label;
+  if (!url) return null;
+
+  if (shouldShowImagePreview(url, accept)) {
+    return m('.mt-3.flex.flex-col.items-start.gap-2', [
+      m('a.block', { href: url, target: '_blank', rel: 'noopener noreferrer' },
+        m('img.max-h-48.max-w-full.rounded-lg.border.border-gray-200.dark:border-slate-600.object-contain.bg-white.dark:bg-slate-900.shadow-sm', {
+          src: url,
+          alt: label || 'Preview',
+          loading: 'lazy',
+        })
+      ),
+      m('p.text-xs.text-gray-500.dark:text-slate-400.break-all', url),
+      !readonly && onRemove
+        ? m('button.text-red-600.dark:text-red-400.hover:text-red-800.dark:hover:text-red-300.text-sm', {
+            type: 'button',
+            onclick: onRemove,
+          }, 'Remove')
+        : null,
+    ]);
+  }
+
+  return m('.mt-3.flex.flex-col.items-start.gap-2', [
+    m('a.text-sm.text-indigo-600.dark:text-indigo-400.break-all', {
+      href: url,
+      target: '_blank',
+      rel: 'noopener noreferrer',
+    }, url),
+    !readonly && onRemove
+      ? m('button.text-red-600.dark:text-red-400.hover:text-red-800.dark:hover:text-red-300.text-sm', {
+          type: 'button',
+          onclick: onRemove,
+        }, 'Remove')
+      : null,
+  ]);
+}
+
+function revokeLocalPreview(state) {
+  if (state && state.localPreview) {
+    try { URL.revokeObjectURL(state.localPreview); } catch (e) {}
+    state.localPreview = null;
+  }
+}
+
 // File upload field (multipart POST to settings.uploadUrl; field name "file")
 const FileUploadField = {
+  oninit: function (vnode) {
+    vnode.state.localPreview = null;
+  },
+  onremove: function (vnode) {
+    revokeLocalPreview(vnode.state);
+  },
   oncreate: (vnode) => {
     const col = vnode.attrs.col;
     const readonly = vnode.attrs.readonly;
@@ -128,6 +196,7 @@ const FileUploadField = {
     if (!dropZone) return;
     const meta = col.ui || {};
     const onChange = vnode.attrs.onChange;
+    const state = vnode.state;
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function (eventName) {
       dropZone.addEventListener(eventName, function (e) {
         e.preventDefault();
@@ -147,14 +216,14 @@ const FileUploadField = {
     dropZone.addEventListener('drop', function (e) {
       var files = e.dataTransfer.files;
       if (files.length > 0) {
-        handleAdminFileUpload(files[0], onChange, meta);
+        handleAdminFileUpload(files[0], onChange, meta, state);
       }
     });
     var fileInput = dropZone.querySelector('input[type=file]');
     if (fileInput) {
       fileInput.addEventListener('change', function (e) {
         if (e.target.files.length > 0) {
-          handleAdminFileUpload(e.target.files[0], onChange, meta);
+          handleAdminFileUpload(e.target.files[0], onChange, meta, state);
         }
       });
     }
@@ -164,6 +233,7 @@ const FileUploadField = {
     const value = vnode.attrs.value || '';
     const onChange = vnode.attrs.onChange;
     const readonly = vnode.attrs.readonly || false;
+    const state = vnode.state;
     const meta = col.ui || {};
     const label = meta.label || formatColumnLabel(col.name);
     const hint = meta.hint || '';
@@ -176,10 +246,17 @@ const FileUploadField = {
     var maxSize = meta.maxSize || meta.maxBytes || (10 * 1024 * 1024);
     var accept = meta.accept || '*/*';
     var dropZoneId = 'drop-zone-' + col.name;
+    var displayUrl = state.localPreview || value;
+    var clearValue = function () {
+      revokeLocalPreview(state);
+      if (onChange) onChange('');
+    };
     if (readonly) {
       return m('.mb-4', [
         m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', label, required ? m('span.text-red-500', ' *') : null),
-        value ? m('a.text-indigo-600.dark:text-indigo-400.break-all', { href: value, target: '_blank', rel: 'noopener noreferrer' }, value) : m('span.text-gray-400.dark:text-slate-500', '—'),
+        value
+          ? renderUploadedFilePreview(value, { accept: accept, readonly: true, label: label })
+          : m('span.text-gray-400.dark:text-slate-500', '—'),
         hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null,
       ]);
     }
@@ -196,32 +273,29 @@ const FileUploadField = {
           required: required,
           oninput: function (e) { if (onChange) onChange(e.target.value); },
         }),
+        value ? renderUploadedFilePreview(value, { accept: accept, readonly: false, onRemove: clearValue, label: label }) : null,
         hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null,
       ]);
     }
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', label, required ? m('span.text-red-500', ' *') : null),
-      m('div#' + dropZoneId + '.border-2.border-dashed.border-gray-300.dark:border-slate-600.rounded-lg.p-8.text-center.bg-gray-50.dark:bg-slate-900/40', { style: 'cursor: pointer;' }, [
+      displayUrl
+        ? renderUploadedFilePreview(displayUrl, { accept: accept, readonly: false, onRemove: clearValue, label: label })
+        : null,
+      m('div#' + dropZoneId + '.border-2.border-dashed.border-gray-300.dark:border-slate-600.rounded-lg.p-6.text-center.bg-gray-50.dark:bg-slate-900/40', { style: 'cursor: pointer;' }, [
         m('input[type=file].hidden', {
           id: 'file-input-' + col.name,
           accept: accept,
           onchange: function (e) {
             if (e.target.files.length > 0) {
-              handleAdminFileUpload(e.target.files[0], onChange, meta);
+              handleAdminFileUpload(e.target.files[0], onChange, meta, state);
             }
           },
         }),
         m('div', [
-          m('p.text-gray-600.dark:text-slate-400.mb-2', 'Drag and drop a file here, or'),
-          m('label.text-blue-600.hover:text-blue-800.dark:text-blue-400.cursor-pointer', { for: 'file-input-' + col.name }, 'browse'),
+          m('p.text-gray-600.dark:text-slate-400.mb-2', displayUrl ? 'Drag and drop to replace, or' : 'Drag and drop a file here, or'),
+          m('label.text-blue-600.hover:text-blue-800.dark:text-blue-400.cursor-pointer', { for: 'file-input-' + col.name }, displayUrl ? 'choose another file' : 'browse'),
         ]),
-        value ? m('.mt-4.text-left', [
-          m('p.text-sm.text-gray-600.dark:text-slate-400.break-all', 'Current: ' + value),
-          m('button.text-red-600.dark:text-red-400.hover:text-red-800.dark:hover:text-red-300.text-sm.mt-2', {
-            type: 'button',
-            onclick: function () { if (onChange) onChange(''); },
-          }, 'Remove'),
-        ]) : null,
       ]),
       m('input[type=hidden]', { name: col.name, value: typeof value === 'string' ? value : '' }),
       m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', 'Max ' + Math.round(maxSize / 1024 / 1024) + ' MB (server enforces limits)'),
@@ -230,7 +304,7 @@ const FileUploadField = {
   },
 };
 
-async function handleAdminFileUpload(file, onChange, meta) {
+async function handleAdminFileUpload(file, onChange, meta, state) {
   var uploadUrl = '';
   try {
     var cfg = window.__ADMIN_CONFIG__;
@@ -245,6 +319,11 @@ async function handleAdminFileUpload(file, onChange, meta) {
     alert('File too large (max ' + Math.round(maxSize / 1024 / 1024) + ' MB).');
     return;
   }
+  if (state && file.type && file.type.indexOf('image/') === 0) {
+    revokeLocalPreview(state);
+    state.localPreview = URL.createObjectURL(file);
+    m.redraw();
+  }
   var fd = new FormData();
   fd.append('file', file);
   try {
@@ -252,13 +331,18 @@ async function handleAdminFileUpload(file, onChange, meta) {
     var data = {};
     try { data = await res.json(); } catch (e2) { data = {}; }
     if (!res.ok) {
+      revokeLocalPreview(state);
+      m.redraw();
       alert(data.message || data.error || ('Upload failed (' + res.status + ')'));
       return;
     }
+    revokeLocalPreview(state);
     var url = data.url || data.publicUrl || '';
     if (onChange) onChange(url);
     m.redraw();
   } catch (err) {
+    revokeLocalPreview(state);
+    m.redraw();
     alert(err.message || 'Upload failed');
   }
 }
