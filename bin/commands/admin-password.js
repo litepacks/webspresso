@@ -3,7 +3,8 @@
  * Reset admin user password via CLI
  */
 
-const readline = require('readline');
+const inquirer = require('inquirer');
+const { hash } = require('../../core/auth/hash');
 const { loadDbConfig, createDbInstance } = require('../utils/db');
 
 function registerCommand(program) {
@@ -32,17 +33,14 @@ function registerCommand(program) {
         // Get email (interactive if not provided)
         let email = options.email;
         if (!email) {
-          const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-          });
-          
-          email = await new Promise((resolve) => {
-            rl.question('Enter admin email: ', (answer) => {
-              rl.close();
-              resolve(answer.trim());
-            });
-          });
+          const answers = await inquirer.prompt([
+            {
+              type: 'input',
+              name: 'email',
+              message: 'Enter admin email:',
+            },
+          ]);
+          email = answers.email.trim();
         }
         
         if (!email) {
@@ -70,49 +68,15 @@ function registerCommand(program) {
         // Get new password (interactive if not provided)
         let password = options.password;
         if (!password) {
-          const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-          });
-          
-          // Disable echo for password input
-          if (process.stdin.isTTY) {
-            process.stdout.write('Enter new password: ');
-            password = await new Promise((resolve) => {
-              let pwd = '';
-              process.stdin.setRawMode(true);
-              process.stdin.resume();
-              process.stdin.on('data', (char) => {
-                char = char.toString();
-                if (char === '\n' || char === '\r') {
-                  process.stdin.setRawMode(false);
-                  process.stdin.pause();
-                  console.log(); // New line after password
-                  resolve(pwd);
-                } else if (char === '\u0003') {
-                  // Ctrl+C
-                  process.exit();
-                } else if (char === '\u007F') {
-                  // Backspace
-                  if (pwd.length > 0) {
-                    pwd = pwd.slice(0, -1);
-                    process.stdout.write('\b \b');
-                  }
-                } else {
-                  pwd += char;
-                  process.stdout.write('*');
-                }
-              });
-            });
-            rl.close();
-          } else {
-            password = await new Promise((resolve) => {
-              rl.question('Enter new password: ', (answer) => {
-                rl.close();
-                resolve(answer);
-              });
-            });
-          }
+          const answers = await inquirer.prompt([
+            {
+              type: 'password',
+              name: 'password',
+              message: 'Enter new password:',
+              mask: '*',
+            },
+          ]);
+          password = answers.password;
         }
         
         if (!password || password.length < 6) {
@@ -121,8 +85,8 @@ function registerCommand(program) {
           process.exit(1);
         }
         
-        // Hash the password
-        const hashedPassword = await bcrypt.hash(password, 10);
+        // Hash the password (same rounds as admin panel setup)
+        const hashedPassword = await hash(password, 10);
         
         // Update the password
         await db('admin_users')

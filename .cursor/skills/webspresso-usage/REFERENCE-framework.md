@@ -169,6 +169,7 @@ Analytics plugin adds `fsy.analyticsHead`, `fsy.verificationTags`, etc., when co
 - **Relations:** `belongsTo`, `hasMany`, `hasOne` with `model: () => OtherModel`.
 - **Scopes:** `softDelete`, `timestamps`, optional `tenant` column.
 - **`hidden`:** columns never exposed in admin/API (e.g. `password_hash`).
+- **`zdb.file()`:** varchar column for uploaded asset URL/path; admin forms render a file upload widget when `uploadPlugin` is registered (or `adminPanelPlugin({ uploadUrl })`). Optional `ui: { label, accept, maxBytes }`. For `zdb.string()` columns use `admin.customFields: { col: { type: 'file-upload' } }`.
 - **Nanoid PK:** `zdb.nanoid()` / `zdb.nanoid({ maxLength: 12 })` — string primary key; migrations use `string(length)`. On **`create()`**, omitting the PK auto-fills a URL-safe id (built-in generator, same alphabet as `nanoid`). Use **`zdb.foreignNanoid('table', { maxLength })`** when the parent uses nanoid PKs; **`generateNanoid`** is exported from `webspresso` for manual ids. In API **`schema`**, use **`z.nanoid()`** / **`z.nanoid(12)`** / **`z.nanoid({ maxLength })`** (the `z` from `schema: ({ z })` is extended by Webspresso). **`zodNanoid`** / **`extendZ`** are also exported for non-route use.
 
 **Database:** `createDatabase({ client, connection, models: './models' })` — auto-loads `models/*.js` (ignore `_prefix`).
@@ -198,7 +199,7 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `dataExchangePlugin` | Admin-only **Excel export** + **CSV/XLSX import** under `${adminPath}/api/data-exchange/*`; register **after** `adminPanelPlugin` with same `db` / `adminPath`; optional `maxRows`, `maxFileBytes`; adds UI buttons + bulk `export-xlsx` |
 | `redirectPlugin` | Configurable **301–308** redirects in `register()` — runs **before** file-based SSR routes; `rules` (`from` path or `RegExp`, `to`, `status`, `methods`), `preserveQuery`, `allowExternal`, `trailingSlash`, `defaultMethods`; docs **[`doc/index.html#plugins-redirect`](../../../doc/index.html#plugins-redirect)**, README **Redirect plugin** |
 | `rateLimitPlugin` | Registers named **`rateLimit`** middleware (`express-rate-limit` ≥8 peer); default **`ipKeyGenerator(req.ip, subnet)`**; optional **`global`** limiter + **`globalSkipPaths`**; use `middleware: ['rateLimit']` or `[['rateLimit', { limit }]]` on pages/API |
-| `uploadPlugin` | `POST` multipart (`multer`), `createLocalFileProvider` or custom `provider`; set **`mimeAllowlist`** / **`maxBytes`** in production |
+| `uploadPlugin` | `POST` multipart (`multer`), `createLocalFileProvider` or custom `provider`; set **`mimeAllowlist`** / **`maxBytes`** in production; pairs with admin **`zdb.file()`** / **`customFields.file-upload`** when registered before **`adminPanelPlugin`** |
 | `siteAnalyticsPlugin` | Self-hosted page views + admin charts |
 | `auditLogPlugin` | Admin mutation audit trail |
 | `recaptchaPlugin` | v2/v3 + middleware |
