@@ -178,7 +178,7 @@ Analytics plugin adds `fsy.analyticsHead`, `fsy.verificationTags`, etc., when co
 
 **Query builder:** `UserRepo.query().where(...).with('relation').orderBy(...).list()` / `.first()` / `.paginate()` / `.count()`. **`with()`** eager-loads relations; **`count()`** ignores builder `.limit`/`.offset` for total; see ORM docs for edge cases.
 
-**Migrations:** `webspresso db:migrate`, `db:rollback`, `db:status`, `db:make`.
+**Migrations:** `webspresso db:migrate`, `db:rollback`, `db:status`, `db:make`, `db:scaffold` (all models → create migrations).
 
 **Transactions:** `db.transaction(async (trx) => { trx.getRepository('User') })`.
 

@@ -9,4 +9,5 @@ module.exports = {
     directory: '/Users/ahmet/projects/webspresso/tests/fixtures/cli-test-project/migrations',
     tableName: 'knex_migrations',
   },
+  models: '/Users/ahmet/projects/webspresso/tests/fixtures/cli-test-project/models',
 };

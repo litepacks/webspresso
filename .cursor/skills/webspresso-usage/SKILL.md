@@ -21,6 +21,7 @@ There are **three** files in this folder; open the reference that matches the ta
 | Greenfield project, `webspresso new`, `dev`, `db:migrate`, `doctor` | [`REFERENCE-framework.md`](./REFERENCE-framework.md) § CLI | Full command table there. |
 | Event bus, `kernel.createApp`, `defineFlow`, `definePlugin`, simulated `BaseRepository`, namespaced minimal views | [`REFERENCE-kernel.md`](./REFERENCE-kernel.md) | **Not** SSR **`createApp`** — [`doc/index.html#application-kernel`](../../../doc/index.html#application-kernel). |
 | Long-form narrative, all options | [`README.md`](../../../README.md), [`doc/index.html`](../../../doc/index.html) | Single-page HTML docs. |
+| System structure, feature sets, C4 map | [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md) | **Update when adding plugins, CLI commands, or extension points.** |
 
 ## CLI cheat sheet
 
@@ -40,3 +41,7 @@ There are **three** files in this folder; open the reference that matches the ta
 - **`REFERENCE-kernel.md`:** `kernel`, domain events, `dispatch` / `publish`, `registerFlow`, `definePlugin` inside the kernel.
 
 They are independent: most apps only need SSR **`createApp`**; the kernel is optional.
+
+## Architecture maintenance
+
+When you add or materially change a **plugin**, **CLI command**, **extension point**, or **request-pipeline rule**, update [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md) (feature-set section + changelog).

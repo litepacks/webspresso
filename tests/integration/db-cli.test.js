@@ -9,7 +9,9 @@ const path = require('path');
 describe('Database CLI Commands', () => {
   const testDir = path.join(__dirname, '../fixtures/cli-test-project');
   const migrationsDir = path.join(testDir, 'migrations');
+  const modelsDir = path.join(testDir, 'models');
   const configFile = path.join(testDir, 'webspresso.db.js');
+  const ormRequirePath = path.resolve(__dirname, '../../core/orm').replace(/\\/g, '/');
 
   beforeAll(() => {
     // Create test directory structure
@@ -19,6 +21,23 @@ describe('Database CLI Commands', () => {
     if (!fs.existsSync(migrationsDir)) {
       fs.mkdirSync(migrationsDir, { recursive: true });
     }
+    if (!fs.existsSync(modelsDir)) {
+      fs.mkdirSync(modelsDir, { recursive: true });
+    }
+
+    fs.writeFileSync(
+      path.join(modelsDir, 'User.js'),
+      `const { defineModel, zdb } = require('${ormRequirePath}');
+module.exports = defineModel({
+  name: 'User',
+  table: 'users',
+  schema: zdb.schema({
+    id: zdb.id(),
+    email: zdb.string({ maxLength: 255, unique: true }),
+  }),
+});
+`
+    );
 
     // Create test database config
     const config = `
@@ -32,6 +51,7 @@ module.exports = {
     directory: '${migrationsDir}',
     tableName: 'knex_migrations',
   },
+  models: '${modelsDir}',
 };
 `;
     fs.writeFileSync(configFile, config);
@@ -66,6 +86,10 @@ exports.down = function(knex) {
     const files = fs.readdirSync(migrationsDir);
     for (const file of files) {
       fs.unlinkSync(path.join(migrationsDir, file));
+    }
+    const modelFiles = fs.existsSync(modelsDir) ? fs.readdirSync(modelsDir) : [];
+    for (const file of modelFiles) {
+      fs.unlinkSync(path.join(modelsDir, file));
     }
   });
 
@@ -151,6 +175,39 @@ exports.down = function(knex) {
 
         // Cleanup
         fs.unlinkSync(path.join(migrationsDir, newMigration));
+      } catch (error) {
+        if (error.message.includes('Cannot find module')) {
+          console.log('Skipping CLI test - dependencies not installed');
+          return;
+        }
+        throw error;
+      }
+    });
+  });
+
+  describe('db:scaffold', () => {
+    it('should generate migrations from models directory', () => {
+      const cliPath = path.join(__dirname, '../../bin/webspresso.js');
+
+      try {
+        const result = execSync(
+          `node "${cliPath}" db:scaffold --config "${configFile}"`,
+          { encoding: 'utf-8', cwd: testDir }
+        );
+
+        expect(result).toContain('Created');
+        expect(result).toContain('users');
+
+        const files = fs.readdirSync(migrationsDir);
+        const usersMigration = files.find((f) => f.includes('create_users_table'));
+        expect(usersMigration).toBeDefined();
+
+        const content = fs.readFileSync(path.join(migrationsDir, usersMigration), 'utf-8');
+        expect(content).toContain("createTable('users'");
+
+        if (usersMigration) {
+          fs.unlinkSync(path.join(migrationsDir, usersMigration));
+        }
       } catch (error) {
         if (error.message.includes('Cannot find module')) {
           console.log('Skipping CLI test - dependencies not installed');

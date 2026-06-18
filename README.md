@@ -1792,6 +1792,11 @@ webspresso db:make create_posts_table
 # Create migration from model (scaffolding)
 webspresso db:make create_users_table --model User
 
+# Scaffold create-table migrations for all models in models/
+webspresso db:scaffold
+webspresso db:scaffold --only User,Post
+webspresso db:scaffold --dry-run
+
 # Admin Panel Setup
 webspresso admin:setup   # Create admin_users migration
 webspresso admin:list    # List all admin users
