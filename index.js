@@ -62,7 +62,10 @@ const {
   dataExchangePlugin,
   redirectPlugin,
   rateLimitPlugin,
+  contentPlugin,
 } = require('./plugins');
+
+const content = require('./core/content');
 
 module.exports = {
   // Main API
@@ -129,4 +132,8 @@ module.exports = {
   dataExchangePlugin,
   redirectPlugin,
   rateLimitPlugin,
+  contentPlugin,
+
+  // Schema-driven CMS core (framework-agnostic)
+  content,
 };

@@ -810,6 +810,13 @@ function mountPages(app, options) {
         // Create context with plugin helpers merged
         const baseHelpers = createHelpers({ req, res, locale });
         const pluginHelpers = pluginManager ? pluginManager.getHelpers() : {};
+        if (pluginManager) {
+          const contentApi = pluginManager.getPluginAPI('content');
+          if (contentApi?.createRequestHelpers) {
+            const buildHelpers = contentApi.createRequestHelpers();
+            pluginHelpers.content = buildHelpers(req);
+          }
+        }
         
         const njkTpl = loadNjkRouteTemplate(route.fullPath, isDev);
 
@@ -863,6 +870,12 @@ function mountPages(app, options) {
         await executeHook(routeHooks, 'afterMiddleware', ctx);
         
         // Execute hooks: beforeLoad
+        if (pluginManager && db) {
+          const contentApi = pluginManager.getPluginAPI('content');
+          if (contentApi?.getContentService) {
+            ctx.content = contentApi.getContentService(db);
+          }
+        }
         await executeHook(globalHooks, 'beforeLoad', ctx);
         await executeHook(routeHooks, 'beforeLoad', ctx);
         
@@ -908,10 +921,17 @@ function mountPages(app, options) {
         
         // Render the template
         const templatePath = route.file.split(path.sep).join('/');
-        const html =
+        let html =
           njkTpl.useStringRender && njkTpl.templateBody != null
             ? nunjucks.renderString(njkTpl.templateBody, renderContext, { path: route.fullPath })
             : nunjucks.render(templatePath, renderContext);
+
+        if (pluginManager) {
+          const contentApi = pluginManager.getPluginAPI('content');
+          if (contentApi?.maybeInjectInlineEdit) {
+            html = contentApi.maybeInjectInlineEdit(req, html);
+          }
+        }
         
         // Execute hooks: afterRender
         ctx.html = html;

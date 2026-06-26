@@ -595,6 +595,23 @@ export interface RateLimitPluginOptions {
 
 export function rateLimitPlugin(options?: RateLimitPluginOptions): WebspressoPlugin;
 
+export interface ContentPluginOptions {
+  db: import('./index').Database;
+  adminPath?: string;
+  publicApiPath?: string;
+  inlineEdit?: boolean;
+  cacheTtlMs?: number | null;
+}
+
+export function contentPlugin(options: ContentPluginOptions): WebspressoPlugin;
+
+export const content: {
+  createContentService: typeof import('./core/content').createContentService;
+  parseContentTypeSchema: typeof import('./core/content').parseContentTypeSchema;
+  validateEntryData: typeof import('./core/content').validateEntryData;
+  wrapEditable: typeof import('./core/content').wrapEditable;
+};
+
 export interface RestResourcePluginOptions {
   path?: string;
   middleware?: RequestHandler[];

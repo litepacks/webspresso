@@ -119,6 +119,22 @@ function adminPanelPlugin(options = {}) {
       if (typeof configure === 'function') {
         configure(registry);
       }
+
+      // Session must be registered before file routes so SSR pages can read adminUser.
+      if (enabled && ctx.app && !ctx.app._webspressoSessionInitialized) {
+        const secret = sessionSecret || process.env.SESSION_SECRET || 'webspresso-admin-secret-change-in-production';
+        ctx.app.use(session({
+          secret,
+          resave: false,
+          saveUninitialized: false,
+          cookie: {
+            secure: process.env.NODE_ENV === 'production',
+            httpOnly: true,
+            maxAge: 24 * 60 * 60 * 1000, // 24 hours
+          },
+        }));
+        ctx.app._webspressoSessionInitialized = true;
+      }
     },
 
     /**
@@ -164,24 +180,7 @@ function adminPanelPlugin(options = {}) {
         db.registerModel(AdminUser);
       }
 
-      // Setup session middleware (only once)
-      if (!app._webspressoSessionInitialized) {
-        const secret = sessionSecret || process.env.SESSION_SECRET || 'webspresso-admin-secret-change-in-production';
-
-        app.use(session({
-          secret,
-          resave: false,
-          saveUninitialized: false,
-          cookie: {
-            secure: process.env.NODE_ENV === 'production',
-            httpOnly: true,
-            maxAge: 24 * 60 * 60 * 1000, // 24 hours
-          },
-        }));
-
-        app._webspressoSessionInitialized = true;
-      }
-
+      // Session middleware is initialized in register() (before file routes).
       // Register default modules
       registerSystemMenuItems({ registry });
       registerModelMenuItems({ registry, db });

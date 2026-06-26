@@ -52,7 +52,7 @@ async function createTestProject() {
 
     // Create server.js with in-memory database for tests
     const serverJs = `const { createApp, createDatabase } = require('webspresso');
-const { adminPanelPlugin, dataExchangePlugin, auditLogPlugin, seoCheckerPlugin } = require('webspresso/plugins');
+const { adminPanelPlugin, dataExchangePlugin, auditLogPlugin, seoCheckerPlugin, contentPlugin } = require('webspresso/plugins');
 const path = require('path');
 
 const db = createDatabase({
@@ -125,10 +125,66 @@ const db = createDatabase({
       updated_at: db.knex.fn.now(),
     });
 
+    await db.knex.schema.createTableIfNotExists('content_types', (table) => {
+      table.increments('id').primary();
+      table.string('slug', 128).notNullable().unique();
+      table.string('name', 255).notNullable();
+      table.text('description').nullable();
+      table.json('schema').notNullable();
+      table.json('settings').nullable();
+      table.timestamp('created_at').defaultTo(db.knex.fn.now());
+      table.timestamp('updated_at').defaultTo(db.knex.fn.now());
+    });
+
+    await db.knex.schema.createTableIfNotExists('content_entries', (table) => {
+      table.increments('id').primary();
+      table.integer('content_type_id').unsigned().notNullable();
+      table.string('slug', 128).notNullable();
+      table.string('title', 255).nullable();
+      table.json('data').notNullable();
+      table.string('status', 32).notNullable().defaultTo('published');
+      table.string('locale', 16).nullable();
+      table.integer('revision').notNullable().defaultTo(1);
+      table.timestamp('created_at').defaultTo(db.knex.fn.now());
+      table.timestamp('updated_at').defaultTo(db.knex.fn.now());
+      table.unique(['content_type_id', 'slug', 'locale']);
+    });
+
+    const heroSchema = {
+      fields: [
+        { name: 'headline', type: 'text', label: 'Headline', required: true },
+        { name: 'body', type: 'textarea', label: 'Body' },
+      ],
+    };
+
+    const [heroTypeId] = await db.knex('content_types').insert({
+      slug: 'hero',
+      name: 'Hero',
+      description: 'Homepage hero block',
+      schema: JSON.stringify(heroSchema),
+      created_at: db.knex.fn.now(),
+      updated_at: db.knex.fn.now(),
+    });
+
+    await db.knex('content_entries').insert({
+      content_type_id: heroTypeId,
+      slug: 'home',
+      title: 'Homepage',
+      data: JSON.stringify({
+        headline: 'E2E Hero Headline',
+        body: 'E2E hero body copy for public page tests.',
+      }),
+      status: 'published',
+      revision: 1,
+      created_at: db.knex.fn.now(),
+      updated_at: db.knex.fn.now(),
+    });
+
     const { app } = createApp({
       pagesDir: path.join(__dirname, 'pages'),
       viewsDir: path.join(__dirname, 'views'),
       publicDir: path.join(__dirname, 'public'),
+      db,
       plugins: [
         adminPanelPlugin({
           path: '/_admin',
@@ -145,6 +201,11 @@ const db = createDatabase({
         }),
         seoCheckerPlugin({
           enabled: true,
+        }),
+        contentPlugin({
+          db,
+          adminPath: '/_admin',
+          inlineEdit: true,
         }),
       ],
     });
@@ -199,6 +260,41 @@ const db = createDatabase({
 `;
 
     fs.writeFileSync(path.join(projectPath, 'pages', 'index.njk'), indexPage);
+
+    const contentDemoDir = path.join(projectPath, 'pages', 'content-demo');
+    fs.mkdirSync(contentDemoDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(contentDemoDir, 'index.njk'),
+      `{% extends "layout.njk" %}
+
+{% set title = "Content Demo" %}
+
+{% block content %}
+<main>
+  <div class="ws-content-block" data-ws-content-entry="{{ heroMeta.id }}" data-ws-content-type="hero">
+    <h1 data-testid="hero-headline">{{ fsy.content.editable(hero.headline, { entryId: heroMeta.id, typeSlug: 'hero', field: 'headline', label: 'Headline' }) | safe }}</h1>
+    <p data-testid="hero-body">{{ fsy.content.editable(hero.body, { entryId: heroMeta.id, typeSlug: 'hero', field: 'body', label: 'Body' }) | safe }}</p>
+  </div>
+</main>
+{% endblock %}
+`
+    );
+
+    fs.writeFileSync(
+      path.join(contentDemoDir, 'index.js'),
+      `module.exports = {
+  async load(req, ctx) {
+    if (!ctx.content) return {};
+    const block = await ctx.content.getEntry('hero', 'home');
+    return {
+      hero: block?.data || {},
+      heroMeta: block?.meta || {},
+    };
+  },
+};
+`
+    );
 
     // Create views directory with layout
     fs.mkdirSync(path.join(projectPath, 'views'), { recursive: true });

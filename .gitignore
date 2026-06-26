@@ -185,4 +185,5 @@ vite.config.ts.timestamp-*
 playwright-report/
 test-results/
 blob-report/
+tests/e2e/screenshots/
 

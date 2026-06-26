@@ -6,7 +6,7 @@
 
 | Meta | Value |
 |------|--------|
-| Last reviewed | 2026-06-17 |
+| Last reviewed | 2026-06-25 |
 | Package version | 0.0.77 |
 | Primary runtime | Node.js ≥ 18 (HTTP server process) |
 | Secondary runtime | Optional in-process application kernel (no HTTP) |
@@ -189,6 +189,7 @@ Plugins declare `name`, `version`, optional `dependencies`, and lifecycle hooks 
 | `schemaExplorerPlugin` | API / docs | JSON ORM schema endpoint |
 | `recaptchaPlugin` | Security | reCAPTCHA verify middleware + helpers |
 | `adminPanelPlugin` | Admin | ORM-backed CRUD SPA |
+| `contentPlugin` | Admin / CMS | Schema-driven content types, entries, public API, inline edit |
 | `dataExchangePlugin` | Admin | Excel export + CSV/XLSX import |
 | `siteAnalyticsPlugin` | Analytics | Self-hosted page views + admin charts |
 | `auditLogPlugin` | Compliance | Admin mutation audit trail |
@@ -339,5 +340,6 @@ Incoming HTTP request
 
 | Date | Change |
 |------|--------|
+| 2026-06-25 | `contentPlugin` — schema-driven CMS (content types, entries, public API, admin inline edit) |
 | 2026-06-17 | `db:scaffold` CLI — generate create-table migrations from all `models/*.js` |
 | 2026-06-17 | Initial C4-style architecture doc; admin intended-route after login; file upload image preview |

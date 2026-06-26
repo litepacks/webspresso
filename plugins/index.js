@@ -21,6 +21,7 @@ const { uploadPlugin, createLocalFileProvider } = require('./upload');
 const { dataExchangePlugin } = require('./data-exchange');
 const { redirectPlugin } = require('./redirect');
 const { rateLimitPlugin } = require('./rate-limit');
+const contentPlugin = require('./content');
 
 module.exports = {
   sitemapPlugin,
@@ -41,5 +42,6 @@ module.exports = {
   dataExchangePlugin,
   redirectPlugin,
   rateLimitPlugin,
+  contentPlugin,
 };
 

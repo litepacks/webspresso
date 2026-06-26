@@ -88,6 +88,7 @@
         <a href="#routing" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Routing</a>
         <a href="#plugins" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Plugins</a>
         <a href="#plugins-data-exchange" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Data exchange</a>
+        <a href="#plugins-content" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Content CMS</a>
         <a href="#plugins-redirect" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Redirect</a>
         <a href="#database" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">ORM</a>
         <a href="#i18n-templates" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">i18n</a>
@@ -613,6 +614,7 @@ const { app } = createApp({
             <tr><td><code class="whitespace-nowrap">analyticsPlugin</code></td><td>GA4, GTM, Yandex, Bing UET, Facebook Pixel, verification meta tags</td></tr>
             <tr><td><code class="whitespace-nowrap">siteAnalyticsPlugin</code></td><td>Self-hosted page views + admin charts</td></tr>
             <tr><td><code class="whitespace-nowrap">adminPanelPlugin</code></td><td>CRUD admin SPA (Mithril), auth hooks, custom modules</td></tr>
+            <tr><td><code class="whitespace-nowrap">contentPlugin</code></td><td>Schema-driven CMS — content types &amp; entries, public <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">GET /api/content/:type/:slug</code>, inline admin edit on SSR pages; see <a href="#plugins-content" class="text-cyan-800 dark:text-cyan-400 hover:underline">Content plugin</a></td></tr>
             <tr><td><code class="whitespace-nowrap">dataExchangePlugin</code></td><td>Admin-only <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">.xlsx</code> export + CSV/XLSX import (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/api/data-exchange/…</code>); register after <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code></td></tr>
             <tr><td><code class="whitespace-nowrap">ormCacheAdminPlugin</code></td><td>Admin UI for ORM cache stats / purge / per-model invalidate (requires <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code> + <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createDatabase({ cache: … })</code>)</td></tr>
             <tr><td><code class="whitespace-nowrap">seoCheckerPlugin</code></td><td>Dev toolbar SEO audit (40+ checks)</td></tr>
@@ -712,6 +714,38 @@ createApp({
   ],
 });</code></pre>
       <p class="text-slate-500 dark:text-slate-500 text-sm">Full detail: <a href="https://github.com/litepacks/webspresso/blob/main/README.md#data-exchange-plugin-dataexchangeplugin" class="text-cyan-800 dark:text-cyan-400 hover:underline">README — <code class="bg-stone-200 dark:bg-slate-800 px-1 rounded text-xs">dataExchangePlugin</code></a>.</p>
+
+      <h3 id="plugins-content" class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2 mt-8 scroll-mt-20">Content plugin (schema-driven CMS)</h3>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed">Optional <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">contentPlugin</code> adds a lightweight, SQLite-first CMS: admins define <strong class="text-slate-800 dark:text-slate-200">content types</strong> (JSON field schemas) and <strong class="text-slate-800 dark:text-slate-200">entries</strong> from <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/content/types</code>. Templates fetch entries via <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">ctx.content</code> in <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">load()</code> or the public JSON API. When an admin is logged in, editable regions show an <strong class="text-slate-800 dark:text-slate-200">Edit</strong> toolbar and a responsive popover editor anchored to the trigger (bottom sheet on small screens; vanilla JS — no Alpine required).</p>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed"><strong class="text-slate-800 dark:text-slate-200">Field types:</strong> <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">text</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">textarea</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">rich-text</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">number</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">boolean</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">image</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">url</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">date</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">select</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">repeater</code>. Rich text is sanitized on save (same whitelist as admin Quill fields).</p>
+      <ul class="list-disc pl-5 text-slate-600 dark:text-slate-400 space-y-2 text-sm mb-4">
+        <li><strong class="text-slate-800 dark:text-slate-200">Public:</strong> <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">GET /api/content/:typeSlug/:entrySlug</code> — only <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">status=published</code>; response <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">{ type, slug, data, meta }</code>.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Admin API</strong> (session): <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/api/content/types</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">…/types/:typeSlug/entries</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">…/entries/:id</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">…/types/:typeSlug/schema</code> (inline edit form).</li>
+        <li><strong class="text-slate-800 dark:text-slate-200">Tables:</strong> <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">content_types</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">content_entries</code> — run <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">webspresso db:migrate</code> after enabling the plugin.</li>
+        <li>Options: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">db</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPath</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">publicApiPath</code> (default <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/api/content</code>), <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">inlineEdit</code> (default <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">true</code>), <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">cacheTtlMs</code> (optional TTL; default in-memory until admin writes invalidate).</li>
+      </ul>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-2"><code class="language-javascript">const { createApp, adminPanelPlugin, contentPlugin } = require('webspresso');
+
+createApp({
+  pagesDir: './pages',
+  db,
+  plugins: [
+    adminPanelPlugin({ db, path: '/_admin' }),
+    contentPlugin({ db, adminPath: '/_admin' }),
+  ],
+});</code></pre>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed"><strong class="text-slate-800 dark:text-slate-200">Template usage</strong> — in route <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">load()</code>:</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-2"><code class="language-javascript">async load(req, ctx) {
+  const hero = await ctx.content.getEntry('hero', 'homepage');
+  return { hero: hero?.data, heroMeta: hero?.meta };
+}</code></pre>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed">In Nunjucks, wrap fields for inline edit (admin-only overlay):</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-2"><code class="language-nunjucks">{% raw %}<div class="ws-content-block" data-ws-content-entry="{{ heroMeta.id }}" data-ws-content-type="hero">
+  <h1>{{ fsy.content.editable(hero.headline, { entryId: heroMeta.id, typeSlug: 'hero', field: 'headline' }) | safe }}</h1>
+  <p>{{ fsy.content.editable(hero.body, { entryId: heroMeta.id, typeSlug: 'hero', field: 'body' }) | safe }}</p>
+</div>{% endraw %}</code></pre>
+      <p class="text-slate-500 dark:text-slate-500 text-sm mb-2">The block wrapper places the Edit toolbar above the content; the popover opens anchored to that button (bottom sheet on viewports under 640px).</p>
+      <p class="text-slate-500 dark:text-slate-500 text-sm">Core module (framework-agnostic): <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">require('webspresso').content</code> exports <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createContentService</code>, schema helpers, and render utilities. Contract tests: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">tests/integration/content-contract.test.js</code>.</p>
     </section>
 
     <section id="database" class="doc-section mb-14">
@@ -886,7 +920,8 @@ module.exports = {
             <tr><td>Templates &amp; assets</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createHelpers</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">AssetManager</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">configureAssets</code></td></tr>
             <tr><td>Plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">PluginManager</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createPluginManager</code></td></tr>
             <tr><td>ORM</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">defineModel</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createDatabase</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zdb</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">generateNanoid</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">zodNanoid</code>, …</td></tr>
-            <tr><td>Convenience plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schemaExplorerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">swaggerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">healthCheckPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">uploadPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">restResourcePlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dataExchangePlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">siteAnalyticsPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auditLogPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">recaptchaPlugin</code></td></tr>
+            <tr><td>Convenience plugins</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">schemaExplorerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">swaggerPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">healthCheckPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">uploadPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">restResourcePlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">contentPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">dataExchangePlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">siteAnalyticsPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">auditLogPlugin</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">recaptchaPlugin</code></td></tr>
+            <tr><td>Content CMS core</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">content</code> — <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createContentService</code>, schema validation, render helpers (framework-agnostic)</td></tr>
             <tr><td>TypeScript</td><td><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.d.ts</code> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">package.json</code> <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">types</code>)</td></tr>
           </tbody>
         </table>
@@ -934,7 +969,7 @@ utils/             # shared utilities</pre>
 
     <section id="testing" class="doc-section mb-14">
       <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Development &amp; testing</h2>
-      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">The framework repository runs <strong class="text-slate-800 dark:text-slate-200">Vitest</strong> for fast unit and integration tests (CLI, ORM, routing, plugins, etc.) and <strong class="text-slate-800 dark:text-slate-200">Playwright</strong> for end-to-end checks in a real browser: admin panel APIs and UI, auth flows, audit log, CLI project scaffold, the SEO checker plugin, and <strong class="text-slate-800 dark:text-slate-200">data exchange</strong> admin API routes (export/import).</p>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">The framework repository runs <strong class="text-slate-800 dark:text-slate-200">Vitest</strong> for fast unit and integration tests (CLI, ORM, routing, plugins, etc.) and <strong class="text-slate-800 dark:text-slate-200">Playwright</strong> for end-to-end checks in a real browser: admin panel APIs and UI, auth flows, audit log, CLI project scaffold, the SEO checker plugin, <strong class="text-slate-800 dark:text-slate-200">data exchange</strong> admin API routes, and <strong class="text-slate-800 dark:text-slate-200">content CMS</strong> API contracts (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">tests/integration/content-contract.test.js</code>).</p>
 
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Unit &amp; integration (Vitest)</h3>
       <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-6"><code class="language-bash">npm test                 # vitest run
@@ -945,7 +980,7 @@ npm run test:coverage</code></pre>
       <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed">In this repository, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">npm run check:types</code> runs <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">tsc --noEmit</code> on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">tests/ts-smoke/</code> so <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.d.ts</code> stays aligned with exports. Consumers only need the published <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">index.d.ts</code> from npm.</p>
 
       <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">End-to-end (Playwright)</h3>
-      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed">Specs live under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">tests/e2e/</code>; the runner starts a temporary app and exercises HTTP + DOM (Chromium by default). Use UI or headed mode when debugging flaky selectors.</p>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm leading-relaxed">Specs live under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">tests/e2e/</code>; the runner starts a temporary app and exercises HTTP + DOM (Chromium by default). Content plugin UI flows and step screenshots: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">tests/e2e/content.spec.js</code> (writes PNGs to <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">tests/e2e/screenshots/content/</code>). Use UI or headed mode when debugging flaky selectors.</p>
       <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-bash">npm run test:e2e           # playwright test
 npm run test:e2e:ui      # Playwright UI
 npm run test:e2e:debug
