@@ -1,4 +1,160 @@
 // Field Renderers - render appropriate input based on column type
+
+// BelongsTo relation dropdown select component
+const BelongsToField = {
+  oninit: (vnode) => {
+    const { col } = vnode.attrs;
+    const customField = col.customField || {};
+    const relationName = customField.relation || col.name.replace(/_id$/, '');
+    const modelName = m.route.param('model');
+    vnode.state.loading = true;
+    vnode.state.options = [];
+    
+    api.get('/models/' + modelName + '/relations/' + relationName)
+      .then(result => {
+        vnode.state.options = result.data || [];
+      })
+      .catch(err => {
+        console.error('Failed to load relation data:', err);
+      })
+      .finally(() => {
+        vnode.state.loading = false;
+        m.redraw();
+      });
+  },
+  view: (vnode) => {
+    const { col, value, onChange, readonly } = vnode.attrs;
+    const customField = col.customField || {};
+    const label = col.ui?.label || formatColumnLabel(col.name);
+    const hint = col.ui?.hint || '';
+    const valueKey = customField.valueKey || 'id';
+    const displayKey = customField.displayKey || 
+      (vnode.state.options.length > 0 ? ['name', 'title', 'label', 'username', 'email'].find(k => k in vnode.state.options[0]) : null) || 
+      'id';
+    
+    if (vnode.state.loading) {
+      return m('.mb-4', [
+        m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', label),
+        m('.text-xs.text-gray-500.dark:text-slate-400', 'Loading options...')
+      ]);
+    }
+    
+    return m('.mb-4', [
+      m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', { for: col.name }, [
+        label,
+        !col.nullable && !readonly ? m('span.text-red-500', ' *') : null
+      ]),
+      m('select.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
+        id: col.name,
+        name: col.name,
+        value: value !== null && value !== undefined ? String(value) : '',
+        disabled: readonly,
+        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
+        onchange: (e) => {
+          const selectedValue = e.target.value === '' ? null : e.target.value;
+          const typedValue = (col.type === 'integer' || col.type === 'bigint' || col.type === 'float' || col.type === 'decimal') && selectedValue !== null
+            ? Number(selectedValue)
+            : selectedValue;
+          onChange(typedValue);
+        },
+      }, [
+        col.nullable ? m('option', { value: '' }, '-- Select --') : m('option', { value: '' }, '-- Select --'),
+        vnode.state.options.map(item => {
+          const itemValue = item[valueKey];
+          const itemDisplay = item[displayKey] || String(itemValue);
+          return m('option', {
+            value: String(itemValue),
+            selected: value !== null && value !== undefined && String(value) === String(itemValue)
+          }, itemDisplay);
+        }),
+      ]),
+      hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null,
+    ]);
+  }
+};
+
+// HasMany relation multi-select checkbox component
+const HasManyField = {
+  oninit: (vnode) => {
+    const { col } = vnode.attrs;
+    const customField = col.customField || {};
+    const relationName = customField.relation || col.name.replace(/_ids$/, '').replace(/_id$/, '');
+    const modelName = m.route.param('model');
+    vnode.state.loading = true;
+    vnode.state.options = [];
+    
+    api.get('/models/' + modelName + '/relations/' + relationName)
+      .then(result => {
+        vnode.state.options = result.data || [];
+      })
+      .catch(err => {
+        console.error('Failed to load relation data:', err);
+      })
+      .finally(() => {
+        vnode.state.loading = false;
+        m.redraw();
+      });
+  },
+  view: (vnode) => {
+    const { col, value = [], onChange, readonly } = vnode.attrs;
+    const customField = col.customField || {};
+    const label = col.ui?.label || formatColumnLabel(col.name);
+    const hint = col.ui?.hint || '';
+    const valueKey = customField.valueKey || 'id';
+    const displayKey = customField.displayKey || 
+      (vnode.state.options.length > 0 ? ['name', 'title', 'label', 'username', 'email'].find(k => k in vnode.state.options[0]) : null) || 
+      'id';
+    const selectedIds = Array.isArray(value) ? value.map(v => String(v)) : [];
+    
+    if (vnode.state.loading) {
+      return m('.mb-4', [
+        m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', label),
+        m('.text-xs.text-gray-500.dark:text-slate-400', 'Loading options...')
+      ]);
+    }
+    
+    return m('.mb-4', [
+      m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', [
+        label,
+        !col.nullable && !readonly ? m('span.text-red-500', ' *') : null
+      ]),
+      m('.border.border-gray-300.dark:border-slate-600.rounded-md.p-3.max-h-48.overflow-y-auto.bg-white.dark:bg-slate-900/70', [
+        vnode.state.options.map(item => {
+          const itemValue = String(item[valueKey]);
+          const itemDisplay = item[displayKey] || itemValue;
+          const isSelected = selectedIds.includes(itemValue);
+          
+          return m('label.flex.items-center.mb-2.cursor-pointer.text-sm.text-gray-700.dark:text-slate-300', [
+            m('input.mr-2.rounded.border-gray-300.dark:border-slate-600.text-indigo-600.focus:ring-indigo-500', {
+              type: 'checkbox',
+              checked: isSelected,
+              disabled: readonly,
+              onchange: (e) => {
+                let newSelected = [...selectedIds];
+                if (e.target.checked) {
+                  if (!newSelected.includes(itemValue)) {
+                    newSelected.push(itemValue);
+                  }
+                } else {
+                  newSelected = newSelected.filter(id => id !== itemValue);
+                }
+                
+                // Convert type if needed
+                const typedSelected = col.type === 'array' || typeof value[0] === 'string'
+                  ? newSelected
+                  : newSelected.map(Number);
+                onChange(typedSelected);
+              }
+            }),
+            m('span', itemDisplay),
+          ]);
+        }),
+      ]),
+      hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null,
+    ]);
+  }
+};
+
 const FieldRenderers = {
   // Text input (string)
   string: (col, value, onChange, readonly) => {
@@ -283,5 +439,15 @@ const FieldRenderers = {
       }),
       hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
     ]);
+  },
+
+  // belongsTo relation dropdown
+  belongsTo: (col, value, onChange, readonly) => {
+    return m(BelongsToField, { col, value, onChange, readonly });
+  },
+
+  // hasMany relation checklist
+  hasMany: (col, value, onChange, readonly) => {
+    return m(HasManyField, { col, value, onChange, readonly });
   },
 };

@@ -330,6 +330,25 @@ function adminPanelPlugin(options = {}) {
 }
 
 /**
+ * Helper to serialize arbitrary JS structures, including functions
+ */
+function serializeJs(obj) {
+  if (typeof obj === 'function') {
+    return obj.toString();
+  }
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(serializeJs).join(', ') + ']';
+  }
+  if (obj && typeof obj === 'object') {
+    const entries = Object.entries(obj).map(([key, val]) => {
+      return `${JSON.stringify(key)}: ${serializeJs(val)}`;
+    });
+    return '{' + entries.join(',\n') + '}';
+  }
+  return JSON.stringify(obj);
+}
+
+/**
  * Generate admin panel HTML
  * @param {string} adminPath - Admin panel path
  * @param {AdminRegistry} registry - Admin registry instance
@@ -343,6 +362,12 @@ function generateAdminPanelHtml(adminPath, registry) {
   const customPageComponent = generateCustomPageComponent();
 
   const settings = registry.settings;
+  const fieldRenderersCode = Array.from(registry.fieldRenderers.entries()).map(([type, r]) => {
+    return `window.__customFieldRenderers['${type}'] = {
+      display: ${r.display ? serializeJs(r.display) : 'null'},
+      edit: ${r.edit ? serializeJs(r.edit) : 'null'}
+    };`;
+  }).join('\n');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -418,6 +443,10 @@ function generateAdminPanelHtml(adminPath, registry) {
     // Custom page components container
     window.__customPages = window.__customPages || {};
     ${registry.getClientComponents()}
+
+    // Custom field renderers container
+    window.__customFieldRenderers = window.__customFieldRenderers || {};
+    ${fieldRenderersCode}
   </script>
   <script>${appScript}</script>
 </body>

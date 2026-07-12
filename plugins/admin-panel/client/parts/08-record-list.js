@@ -478,7 +478,7 @@ const RecordList = {
                     ...displayColumns.map((col, i) => 
                       m('td.px-4.py-3.text-sm.whitespace-nowrap.text-gray-700 dark:text-slate-300.bg-white dark:bg-slate-800',
                         i === 0 ? { style: 'position: sticky; left: 40px; z-index: 5; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' } : {},
-                        formatCellValue(record[col.name], col)
+                        formatCellValue(record[col.name], col, record)
                       )
                     ),
                     // Sticky actions cell (sticky right, box-shadow on left)

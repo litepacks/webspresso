@@ -372,7 +372,36 @@ function getFieldRenderer(col, modelMeta) {
         });
       };
     }
-    // Add other custom field types here if needed
+    if (col.customField.type === 'belongsTo') {
+      return FieldRenderers.belongsTo;
+    }
+    if (col.customField.type === 'hasMany') {
+      return FieldRenderers.hasMany;
+    }
+
+    // Check registered custom field renderers in browser
+    const custom = window.__customFieldRenderers && window.__customFieldRenderers[col.customField.type];
+    if (custom) {
+      return (col, value, onChange, readonly) => {
+        if (custom.edit && typeof custom.edit === 'object' && custom.edit.view) {
+          return m(custom.edit, { col, value, onChange, readonly });
+        } else if (typeof custom.edit === 'function') {
+          return custom.edit(value, onChange, col);
+        }
+      };
+    }
+  }
+
+  // Check schema type custom field renderers
+  if (col.type && window.__customFieldRenderers && window.__customFieldRenderers[col.type]) {
+    const custom = window.__customFieldRenderers[col.type];
+    return (col, value, onChange, readonly) => {
+      if (custom.edit && typeof custom.edit === 'object' && custom.edit.view) {
+        return m(custom.edit, { col, value, onChange, readonly });
+      } else if (typeof custom.edit === 'function') {
+        return custom.edit(value, onChange, col);
+      }
+    };
   }
 
   if (col.type === 'file') {
@@ -403,6 +432,8 @@ function getFieldRenderer(col, modelMeta) {
     array: 'array',
     uuid: 'string',
     nanoid: 'string',
+    belongsTo: 'belongsTo',
+    hasMany: 'hasMany',
   };
   return FieldRenderers[typeMap[col.type] || 'string'];
 }

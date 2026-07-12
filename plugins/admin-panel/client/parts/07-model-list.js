@@ -65,9 +65,19 @@ const ModelList = {
 };
 
 // Format cell value based on column type
-function formatCellValue(value, col) {
+function formatCellValue(value, col, record = null) {
   if (value === null || value === undefined) {
     return m('span.text-gray-400 dark:text-slate-500.italic', 'null');
+  }
+
+  const customRendererType = (col && col.customField && col.customField.type) || (col && col.type);
+  const custom = window.__customFieldRenderers && window.__customFieldRenderers[customRendererType];
+  if (custom && custom.display) {
+    if (typeof custom.display === 'object' && custom.display.view) {
+      return m(custom.display, { value, col, record });
+    } else if (typeof custom.display === 'function') {
+      return custom.display(value, record);
+    }
   }
   
   switch (col?.type) {

@@ -83,6 +83,12 @@ describe('Admin Panel Integration', () => {
         adminPanelPlugin({
           path: '/_admin',
           db,
+          configure: (reg) => {
+            reg.registerFieldRenderer('color', {
+              display: (value, record) => m('span', value),
+              edit: (value, onChange, col) => m('input', { value })
+            });
+          }
         }),
       ],
     });
@@ -95,6 +101,18 @@ describe('Admin Panel Integration', () => {
       await db.destroy();
     }
     clearRegistry();
+  });
+
+  describe('Custom Field Renderers', () => {
+    it('should serialize custom field renderers in HTML output', async () => {
+      const res = await request(app)
+        .get('/_admin')
+        .expect(200);
+
+      expect(res.text).toContain("window.__customFieldRenderers['color']");
+      expect(res.text).toContain("display: (value, record) => m('span', value)");
+      expect(res.text).toContain("edit: (value, onChange, col) => m('input', { value })");
+    });
   });
 
   describe('Setup Flow', () => {

@@ -510,6 +510,15 @@ const { app, authMiddleware } = createApp({
   ui: { label: 'Cover', accept: 'image/*' },
 }),</code></pre>
 
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-3 leading-relaxed"><strong class="text-slate-800 dark:text-slate-200">Custom field renderers & relationships</strong> (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">registerFieldRenderer</code>): Register custom components to format and edit fields in the browser. Registered renderers are automatically serialized and connected to the client side. The admin panel includes built-in renderers for relationships: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">belongsTo</code> (dropdown selection) and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">hasMany</code> (checkbox lists). For foreign key columns, use <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">admin.customFields: { category_id: { type: 'belongsTo', relation: 'category', displayKey: 'name' } }</code> to render a dropdown instead of a numeric ID field.</p>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-3"><code class="language-javascript">registry.registerFieldRenderer('rating', {
+  display: (value, record) => m('span', '⭐'.repeat(value)),
+  edit: (value, onChange, col) => m('input[type=number]', {
+    value,
+    oninput: (e) => onChange(Number(e.target.value))
+  })
+});</code></pre>
+
       <h3 id="admin-user-management" class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Site user management inside the admin plugin</h3>
       <p class="text-slate-600 dark:text-slate-400 text-sm mb-3 leading-relaxed">To manage <strong class="text-slate-800 dark:text-slate-200">end-user</strong> accounts (the same rows your site login uses) from the admin SPA, enable <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">userManagement</code> on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>. The <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">model</code> option must match your ORM user model (e.g. <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">User</code> with <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">quickAuth({ userModel: 'User', ... })</code>). The UI lives under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/users</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/users/new</code>, etc., and talks to <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/api/users*</code>.</p>
       <ul class="list-disc pl-5 text-slate-600 dark:text-slate-400 text-sm mb-3 space-y-2">
