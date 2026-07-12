@@ -12,7 +12,7 @@ function getJsonColumns(model) {
   const jsonCols = new Set();
   if (model.columns) {
     for (const [name, meta] of model.columns) {
-      if (meta.type === 'json') {
+      if (meta.type === 'json' || meta.type === 'array' || meta.type === 'files') {
         jsonCols.add(name);
       }
     }

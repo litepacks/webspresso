@@ -440,6 +440,24 @@ function createSchemaHelpers(z) {
     },
 
     /**
+     * Multiple Files / URLs column (stored as JSON array in database)
+     * @param {Partial<import('./types').ColumnMeta>} [options={}]
+     * @returns {SchemaBuilder}
+     */
+    files(options = {}) {
+      const { nullable = false, ...rest } = options;
+      let schema = z.array(z.string());
+      if (nullable) {
+        schema = schema.nullable().optional();
+      }
+      return createSchemaBuilder(schema, {
+        type: 'files',
+        nullable,
+        ...rest,
+      }, z);
+    },
+
+    /**
      * Integer column
      * @param {Partial<import('./types').ColumnMeta>} [options={}]
      * @returns {SchemaBuilder}

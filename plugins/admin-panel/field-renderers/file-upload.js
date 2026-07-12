@@ -219,6 +219,166 @@ module.exports = {
       ]);
     },
   },
+
+  FilesUploadField: {
+    oninit: (vnode) => {
+      vnode.state.uploading = false;
+    },
+    oncreate: (vnode) => {
+      const { name, meta = {} } = vnode.attrs;
+      if (!getUploadUrlFromAdminConfig()) return;
+
+      const dropZoneId = 'drop-zone-multiple-' + name;
+      const dropZone = document.getElementById(dropZoneId);
+      if (!dropZone) return;
+
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach((eventName) => {
+        dropZone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+      });
+
+      ['dragenter', 'dragover'].forEach((eventName) => {
+        dropZone.addEventListener(eventName, () => {
+          dropZone.classList.add('border-blue-500', 'bg-blue-50', 'dark:bg-slate-800');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach((eventName) => {
+        dropZone.addEventListener(eventName, () => {
+          dropZone.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-slate-800');
+        });
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+          handleMultipleFilesUpload(files, vnode, meta);
+        }
+      });
+
+      const fileInput = dropZone.querySelector('input[type=file]');
+      if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+          if (e.target.files.length > 0) {
+            handleMultipleFilesUpload(e.target.files, vnode, meta);
+          }
+        });
+      }
+    },
+    view: (vnode) => {
+      const { name, value = [], meta = {}, required = false, readonly = false } = vnode.attrs;
+      const state = vnode.state;
+      const dropZoneId = 'drop-zone-multiple-' + name;
+      const maxSize = meta.maxSize || meta.maxBytes || 10 * 1024 * 1024;
+      const accept = meta.accept || '*/*';
+      const uploadUrl = getUploadUrlFromAdminConfig();
+      const label = meta.label || name;
+
+      const urls = Array.isArray(value) ? value : (value ? [value] : []);
+
+      if (!uploadUrl) {
+        return m('.mb-4', [
+          m(
+            'label.block.text-sm.font-medium.mb-2',
+            label,
+            required ? m('span.text-red-500', ' *') : null
+          ),
+          m('p.text-xs.text-amber-700.dark:text-amber-400.mb-2', 'Upload URL is not configured.'),
+        ]);
+      }
+
+      return m('.mb-4', [
+        m(
+          'label.block.text-sm.font-medium.mb-2',
+          label,
+          required ? m('span.text-red-500', ' *') : null
+        ),
+
+        urls.length > 0
+          ? m('.grid.grid-cols-2.sm:grid-cols-3.md:grid-cols-4.gap-4.mb-3', urls.map((url, idx) => {
+              return m('.relative.group.border.border-gray-200.dark:border-slate-700.rounded-lg.p-2.bg-gray-50.dark:bg-slate-900', [
+                shouldShowImagePreview(url, accept)
+                  ? m('a.block', { href: url, target: '_blank', rel: 'noopener noreferrer' },
+                      m('img.h-32.w-full.rounded.object-contain.bg-white.dark:bg-slate-950', {
+                        src: url,
+                        alt: `${label} ${idx + 1}`,
+                        loading: 'lazy',
+                      })
+                    )
+                  : m('a.flex.items-center.justify-center.h-32.w-full.text-sm.text-indigo-600.dark:text-indigo-400.break-all.p-2', {
+                      href: url,
+                      target: '_blank',
+                      rel: 'noopener noreferrer',
+                    }, url.substring(url.lastIndexOf('/') + 1) || url),
+                !readonly
+                  ? m('button.absolute.top-1.right-1.bg-red-500.text-white.rounded-full.p-1.shadow-md.opacity-0.group-hover:opacity-100.hover:bg-red-700.transition-opacity', {
+                      type: 'button',
+                      onclick: () => {
+                        const newUrls = urls.filter((_, i) => i !== idx);
+                        if (vnode.attrs.onchange) vnode.attrs.onchange(newUrls);
+                      },
+                      title: 'Remove file',
+                    }, [
+                      m('svg.w-4.h-4', { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                        m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M6 18L18 6M6 6l12 12' })
+                      )
+                    ])
+                  : null,
+              ]);
+            }))
+          : null,
+
+        m(
+          'div.border-2.border-dashed.border-gray-300.dark:border-slate-600.rounded.p-6.text-center',
+          {
+            id: dropZoneId,
+            style: readonly || state.uploading ? undefined : 'cursor: pointer;',
+          },
+          [
+            m('input[type=file]', {
+              class: 'hidden',
+              id: 'file-input-multiple-' + name,
+              accept,
+              multiple: true,
+              disabled: readonly || state.uploading,
+              onchange: (e) => {
+                if (e.target.files.length > 0) {
+                  handleMultipleFilesUpload(e.target.files, vnode, meta);
+                }
+              },
+            }),
+            readonly
+              ? null
+              : m('div', [
+                  state.uploading
+                    ? m('p.text-blue-600.dark:text-blue-400.animate-pulse', 'Uploading files...')
+                    : m('div', [
+                        m(
+                          'p.text-gray-600.dark:text-slate-400.mb-2',
+                          'Drag and drop files here, or'
+                        ),
+                        m(
+                          'label.text-blue-600.hover:text-blue-800.cursor-pointer',
+                          { for: 'file-input-multiple-' + name },
+                          'browse'
+                        ),
+                      ]),
+                ]),
+          ]
+        ),
+        m('input[type=hidden]', {
+          name,
+          value: JSON.stringify(urls),
+        }),
+        m(
+          'p.text-xs.text-gray-500.mt-1',
+          'Max ' + Math.round(maxSize / 1024 / 1024) + ' MB per file (server enforces limits)'
+        ),
+      ]);
+    },
+  },
 };
 
 /**
@@ -270,5 +430,68 @@ async function handleFileUpload(file, vnode, meta) {
     revokeLocalPreview(vnode.state);
     if (typeof m !== 'undefined' && m.redraw) m.redraw();
     alert(err.message || 'Upload failed');
+  }
+}
+
+/**
+ * @param {FileList} files
+ * @param {import('mithril').Vnode} vnode
+ * @param {Object} meta
+ */
+async function handleMultipleFilesUpload(files, vnode, meta) {
+  const maxSize = meta.maxSize || meta.maxBytes || 10 * 1024 * 1024;
+  const uploadUrl = getUploadUrlFromAdminConfig();
+  if (!uploadUrl) {
+    alert('Upload URL is not configured.');
+    return;
+  }
+
+  const currentUrls = Array.isArray(vnode.attrs.value)
+    ? [...vnode.attrs.value]
+    : (vnode.attrs.value ? [vnode.attrs.value] : []);
+
+  vnode.state.uploading = true;
+  if (typeof m !== 'undefined' && m.redraw) m.redraw();
+
+  const uploadPromises = Array.from(files).map(async (file) => {
+    if (file.size > maxSize) {
+      alert(`File ${file.name} is too large (max ${Math.round(maxSize / 1024 / 1024)} MB) and was skipped.`);
+      return null;
+    }
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    try {
+      const res = await fetch(uploadUrl, { method: 'POST', body: fd, credentials: 'include' });
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
+      if (!res.ok) {
+        alert(`Upload failed for ${file.name}: ${data.message || data.error || res.status}`);
+        return null;
+      }
+      return data.url || data.publicUrl || '';
+    } catch (err) {
+      alert(`Upload failed for ${file.name}: ${err.message}`);
+      return null;
+    }
+  });
+
+  try {
+    const results = await Promise.all(uploadPromises);
+    const newUrls = results.filter(Boolean);
+    if (newUrls.length > 0) {
+      const updatedUrls = [...currentUrls, ...newUrls];
+      if (vnode.attrs.onchange) {
+        vnode.attrs.onchange(updatedUrls);
+      }
+    }
+  } finally {
+    vnode.state.uploading = false;
+    if (typeof m !== 'undefined' && m.redraw) m.redraw();
   }
 }

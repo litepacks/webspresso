@@ -128,6 +128,24 @@ function formatCellValue(value, col, record = null) {
       }
       return short || m('span.text-gray-400', '—');
     }
+
+    case 'files': {
+      if (Array.isArray(value)) {
+        return value.length > 0
+          ? m('div.flex.gap-1.items-center', [
+              m('span.text-xs.bg-gray-100.dark:bg-slate-800.px-2.py-1.rounded.mr-1', `${value.length} files`),
+              ...value.slice(0, 2).map(s => {
+                const isImg = /\.(jpe?g|png|gif|webp|svg|avif|bmp|ico)(\?|#|$)/i.test(s);
+                if (isImg) {
+                  return m('img.h-6.w-6.rounded.object-cover.border.border-gray-200.dark:border-slate-700.bg-white', { src: s });
+                }
+                return m('a.text-xs.text-indigo-600.dark:text-indigo-400.hover:underline', { href: s, target: '_blank' }, '📄');
+              })
+            ])
+          : m('span.text-gray-400.dark:text-slate-500.italic', 'empty');
+      }
+      return String(value);
+    }
     
     default: {
       const str = String(value);

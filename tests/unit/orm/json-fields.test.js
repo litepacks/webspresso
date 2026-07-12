@@ -14,15 +14,17 @@ describe('json-fields', () => {
       expect(getJsonColumns({})).toEqual(new Set());
     });
 
-    it('collects only json-typed columns', () => {
+    it('collects json, array, and files-typed columns', () => {
       const model = {
         columns: new Map([
           ['meta', { type: 'json' }],
+          ['tags', { type: 'array' }],
+          ['images', { type: 'files' }],
           ['name', { type: 'string' }],
           ['count', { type: 'integer' }],
         ]),
       };
-      expect(getJsonColumns(model)).toEqual(new Set(['meta']));
+      expect(getJsonColumns(model)).toEqual(new Set(['meta', 'tags', 'images']));
     });
   });
 

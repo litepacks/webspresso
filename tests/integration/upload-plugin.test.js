@@ -99,4 +99,23 @@ describe('uploadPlugin', () => {
 
     await request(app).post('/api/upload').attach('file', Buffer.from('a'), 'a.txt').expect(401);
   });
+
+  it('should support multiple file uploads when multiple option is true', async () => {
+    const { app } = await makeUploadApp({
+      plugin: { multiple: true },
+    });
+
+    const res = await request(app)
+      .post('/api/upload')
+      .attach('file', Buffer.from('file 1 content'), 'file1.txt')
+      .attach('file', Buffer.from('file 2 content'), 'file2.txt')
+      .expect(200);
+
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBe(2);
+    expect(res.body[0].url).toBeTruthy();
+    expect(res.body[0].publicUrl).toBe(res.body[0].url);
+    expect(res.body[1].url).toBeTruthy();
+    expect(res.body[1].publicUrl).toBe(res.body[1].url);
+  });
 });

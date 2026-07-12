@@ -162,6 +162,17 @@ describe('Schema Helpers', () => {
       });
     });
 
+    describe('files()', () => {
+      it('should create a files column storing array of URL/path strings', () => {
+        const builder = zdb.files();
+        const schema = builder._finalize();
+        const meta = getColumnMeta(schema);
+
+        expect(meta.type).toBe('files');
+        expect(schema.parse(['/uploads/a.png', '/uploads/b.png'])).toEqual(['/uploads/a.png', '/uploads/b.png']);
+      });
+    });
+
     describe('integer()', () => {
       it('should create an integer column', () => {
         const builder = zdb.integer();

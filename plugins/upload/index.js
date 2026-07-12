@@ -54,12 +54,12 @@ function extensionFromName(name) {
  * @param {string} fieldName
  * @returns {import('express').RequestHandler}
  */
-function createMulterSingleMiddleware(maxBytes, fieldName) {
+function createMulterMiddleware(maxBytes, fieldName, multiple, maxFiles) {
   const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: maxBytes, files: 1 },
+    limits: { fileSize: maxBytes, files: multiple ? maxFiles : 1 },
   });
-  return upload.single(fieldName);
+  return multiple ? upload.array(fieldName, maxFiles) : upload.single(fieldName);
 }
 
 /**
@@ -91,6 +91,8 @@ function multerErrorResponse(err) {
  * @param {string[]|null} [options.extensionAllowlist] — Optional extra guard on original extension
  * @param {import('express').RequestHandler|import('express').RequestHandler[]} [options.middleware]
  * @param {string} [options.fieldName='file'] — Multipart field name
+ * @param {boolean} [options.multiple=false] — Allow multiple file uploads
+ * @param {number} [options.maxFiles=10] — Max files to allow when multiple is true
  * @returns {Object} Webspresso plugin
  */
 function uploadPlugin(options = {}) {
@@ -103,6 +105,8 @@ function uploadPlugin(options = {}) {
     extensionAllowlist = null,
     middleware = [],
     fieldName = 'file',
+    multiple = false,
+    maxFiles = 10,
   } = options;
 
   const normalizedPath = normalizeRoutePath(routePath);
@@ -115,7 +119,7 @@ function uploadPlugin(options = {}) {
     });
 
   const mw = (Array.isArray(middleware) ? middleware : [middleware]).filter(Boolean);
-  const parseMultipart = createMulterSingleMiddleware(maxBytes, fieldName);
+  const parseMultipart = createMulterMiddleware(maxBytes, fieldName, multiple, maxFiles);
 
   return {
     name: 'upload',
@@ -133,39 +137,58 @@ function uploadPlugin(options = {}) {
             return res.status(status).json({ error: message, message });
           }
 
-          const file = req.file;
-          if (!file || !file.buffer) {
+          const files = multiple ? (req.files || []) : (req.file ? [req.file] : []);
+          if (files.length === 0) {
             return res.status(400).json({ error: 'No file uploaded', message: 'No file uploaded' });
           }
 
-          const mime = file.mimetype || 'application/octet-stream';
-          const originalName = file.originalname || 'upload';
-          const ext = extensionFromName(originalName);
+          // Validate all files first
+          for (const file of files) {
+            if (!file || !file.buffer) {
+              return res.status(400).json({ error: 'No file uploaded', message: 'No file uploaded' });
+            }
 
-          if (mimeAllowlist && mimeAllowlist.length && !mimeAllowlist.includes(mime)) {
-            return res.status(415).json({ error: 'MIME type not allowed', message: 'MIME type not allowed' });
-          }
-          if (
-            extensionAllowlist &&
-            extensionAllowlist.length &&
-            (!ext || !extensionAllowlist.includes(ext))
-          ) {
-            return res.status(400).json({ error: 'File extension not allowed', message: 'File extension not allowed' });
+            const mime = file.mimetype || 'application/octet-stream';
+            const originalName = file.originalname || 'upload';
+            const ext = extensionFromName(originalName);
+
+            if (mimeAllowlist && mimeAllowlist.length && !mimeAllowlist.includes(mime)) {
+              return res.status(415).json({ error: 'MIME type not allowed', message: 'MIME type not allowed' });
+            }
+            if (
+              extensionAllowlist &&
+              extensionAllowlist.length &&
+              (!ext || !extensionAllowlist.includes(ext))
+            ) {
+              return res.status(400).json({ error: 'File extension not allowed', message: 'File extension not allowed' });
+            }
           }
 
           try {
-            const result = await provider.put({
-              buffer: file.buffer,
-              originalName,
-              mimeType: mime,
-              size: file.size,
-              req,
+            const uploadPromises = files.map(async (file) => {
+              const mime = file.mimetype || 'application/octet-stream';
+              const originalName = file.originalname || 'upload';
+              const result = await provider.put({
+                buffer: file.buffer,
+                originalName,
+                mimeType: mime,
+                size: file.size,
+                req,
+              });
+              return {
+                url: result.publicUrl,
+                publicUrl: result.publicUrl,
+                key: result.key,
+              };
             });
-            res.json({
-              url: result.publicUrl,
-              publicUrl: result.publicUrl,
-              key: result.key,
-            });
+
+            const results = await Promise.all(uploadPromises);
+
+            if (multiple) {
+              res.json(results);
+            } else {
+              res.json(results[0]);
+            }
           } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
             res.status(500).json({ error: message, message });
