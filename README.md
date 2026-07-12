@@ -2137,7 +2137,7 @@ List query parameters: `page`, `perPage`, `sort`, `order`, `include`, `trashed` 
 
 ### File upload plugin
 
-Registers **POST** `multipart/form-data` (field name **`file`** by default) and stores the file via a pluggable provider. The framework ships with **`createLocalFileProvider({ destDir, publicBasePath })`** (writes to disk and returns a public URL path). Use **`mimeAllowlist`** / **`extensionAllowlist`** and **`maxBytes`** (default **10 MiB**) on the server; production apps should prefer an explicit MIME allowlist.
+Registers **POST** `multipart/form-data` (field name **`file`** by default) and stores the file(s) via a pluggable provider. The framework ships with **`createLocalFileProvider({ destDir, publicBasePath })`** (writes to disk and returns public URL paths). Use **`mimeAllowlist`** / **`extensionAllowlist`**, **`maxBytes`** (default **10 MiB**), **`multiple`** (default **`false`**), and **`maxFiles`** (default **10**) on the server; production apps should prefer an explicit MIME allowlist.
 
 **Setup:**
 
@@ -2160,6 +2160,8 @@ const { app } = createApp({
       extensionAllowlist: ['jpg', 'jpeg', 'png', 'pdf'],
       middleware: [], // optional Express handlers (e.g. session auth)
       fieldName: 'file',
+      multiple: false, // set to true to allow multiple file uploads in a single request
+      maxFiles: 10,     // max number of files to accept when multiple is true
     }),
     adminPanelPlugin({
       db,
@@ -2169,13 +2171,14 @@ const { app } = createApp({
 });
 ```
 
-- **ORM:** `zdb.file({ maxLength: 2048, nullable: true })` — string column for the stored public URL or path; migrations use `table.string(..., maxLength)`.
-- **Admin forms:** columns with `zdb.file()` automatically render a drag-and-drop upload widget (or a manual URL text field when `uploadUrl` is not configured). Image URLs show an inline thumbnail preview; use `ui.accept: 'image/*'` for image-only fields. Optional `ui: { label, hint, accept, maxBytes }` on the column customizes the widget. For existing `zdb.string()` columns you can use `admin.customFields: { columnName: { type: 'file-upload' } }` instead of changing the schema type.
-- **Admin:** the panel reads **`settings.uploadUrl`** from the registry (set automatically when `uploadPlugin` is registered **before** `adminPanelPlugin`, or pass **`adminPanelPlugin({ uploadUrl: '/api/upload' })`**). File fields (`type: 'file'` or `customFields` type `file-upload`) POST to that URL with credentials; the saved record stores the returned **`url`** / **`publicUrl`** string.
-- **Response:** `{ url, publicUrl, key? }` — clients typically persist **`url`** / **`publicUrl`** in the model.
+- **ORM (Single File):** `zdb.file({ maxLength: 2048, nullable: true })` — string column for the stored public URL or path; migrations use `table.string(..., maxLength)`.
+- **ORM (Multiple Files):** `zdb.files({ nullable: true })` — array column that stores a list of file URLs/paths as a JSON field in the database; migrations use `table.json()`.
+- **Admin forms:** columns with `zdb.file()` or `zdb.files()` automatically render a drag-and-drop upload widget (or a manual URL text field when `uploadUrl` is not configured). Multiple file upload fields (`zdb.files()`) allow adding and removing multiple files concurrently and show preview grids. Image URLs show an inline thumbnail preview; use `ui.accept: 'image/*'` for image-only fields. Optional `ui: { label, hint, accept, maxBytes }` on the column customizes the widget. For existing `zdb.string()` columns you can use `admin.customFields: { columnName: { type: 'file-upload' } }` instead of changing the schema type.
+- **Admin:** the panel reads **`settings.uploadUrl`** from the registry (set automatically when `uploadPlugin` is registered **before** `adminPanelPlugin`, or pass **`adminPanelPlugin({ uploadUrl: '/api/upload' })`**). File fields (`type: 'file'`, `'files'` or `customFields` type `file-upload`) POST to that URL with credentials; the saved record stores the returned **`url`** / **`publicUrl`** string (or an array of URLs for `'files'`).
+- **Response:** Single: `{ url, publicUrl, key? }`. Multiple: `[{ url, publicUrl, key? }, ...]`.
 - **Custom storage:** `uploadPlugin({ provider: { async put({ buffer, originalName, mimeType, size, req }) { return { publicUrl: '...' }; } } })`.
 
-**Admin model example** (`zdb.file()` picks up the upload widget from schema; no extra `customFields` needed):
+**Admin model example** (`zdb.file()` and `zdb.files()` pick up the upload widgets from schema; no extra `customFields` needed):
 
 ```javascript
 const { defineModel, zdb } = require('webspresso');
@@ -2190,6 +2193,10 @@ const Post = defineModel({
       maxLength: 2048,
       nullable: true,
       ui: { label: 'Cover', accept: 'image/*', hint: 'JPEG or PNG' },
+    }),
+    gallery: zdb.files({
+      nullable: true,
+      ui: { label: 'Gallery Images', accept: 'image/*' },
     }),
   }),
   admin: { enabled: true, label: 'Posts' },
