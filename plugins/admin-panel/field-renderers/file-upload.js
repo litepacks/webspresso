@@ -223,6 +223,8 @@ module.exports = {
   FilesUploadField: {
     oninit: (vnode) => {
       vnode.state.uploading = false;
+      vnode.state.draggedIndex = null;
+      vnode.state.dragOverIndex = null;
     },
     oncreate: (vnode) => {
       const { name, meta = {} } = vnode.attrs;
@@ -298,19 +300,63 @@ module.exports = {
 
         urls.length > 0
           ? m('.grid.grid-cols-2.sm:grid-cols-3.md:grid-cols-4.gap-4.mb-3', urls.map((url, idx) => {
-              return m('.relative.group.border.border-gray-200.dark:border-slate-700.rounded-lg.p-2.bg-gray-50.dark:bg-slate-900', [
+              const isDragOver = state.dragOverIndex === idx;
+              const baseClasses = '.relative.group.border.rounded-lg.p-2.transition-all';
+              const cursorClass = readonly ? '' : '.cursor-move';
+              const borderClasses = isDragOver ? '.border-blue-500.border-2.dark:border-blue-500' : '.border-gray-200.dark:border-slate-700';
+              const bgClasses = isDragOver ? '.bg-blue-50.dark:bg-slate-800' : '.bg-gray-50.dark:bg-slate-900';
+              
+              return m(baseClasses + cursorClass + borderClasses + bgClasses, {
+                draggable: !readonly,
+                ondragstart: (e) => {
+                  state.draggedIndex = idx;
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('text/plain', idx);
+                },
+                ondragover: (e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                },
+                ondragenter: (e) => {
+                  state.dragOverIndex = idx;
+                },
+                ondragleave: (e) => {
+                  if (state.dragOverIndex === idx) {
+                    state.dragOverIndex = null;
+                  }
+                },
+                ondrop: (e) => {
+                  e.preventDefault();
+                  const fromIdx = state.draggedIndex;
+                  const toIdx = idx;
+                  if (fromIdx !== null && fromIdx !== undefined && fromIdx !== toIdx) {
+                    const newUrls = [...urls];
+                    const [movedItem] = newUrls.splice(fromIdx, 1);
+                    newUrls.splice(toIdx, 0, movedItem);
+                    if (vnode.attrs.onchange) vnode.attrs.onchange(newUrls);
+                  }
+                  state.draggedIndex = null;
+                  state.dragOverIndex = null;
+                },
+                ondragend: (e) => {
+                  state.draggedIndex = null;
+                  state.dragOverIndex = null;
+                }
+              }, [
                 shouldShowImagePreview(url, accept)
-                  ? m('a.block', { href: url, target: '_blank', rel: 'noopener noreferrer' },
+                  ? m('a.block', { href: url, target: '_blank', rel: 'noopener noreferrer', draggable: false },
                       m('img.h-32.w-full.rounded.object-contain.bg-white.dark:bg-slate-950', {
                         src: url,
                         alt: `${label} ${idx + 1}`,
                         loading: 'lazy',
+                        draggable: false,
                       })
                     )
                   : m('a.flex.items-center.justify-center.h-32.w-full.text-sm.text-indigo-600.dark:text-indigo-400.break-all.p-2', {
                       href: url,
                       target: '_blank',
                       rel: 'noopener noreferrer',
+                      draggable: false,
                     }, url.substring(url.lastIndexOf('/') + 1) || url),
                 !readonly
                   ? m('button.absolute.top-1.right-1.bg-red-500.text-white.rounded-full.p-1.shadow-md.opacity-0.group-hover:opacity-100.hover:bg-red-700.transition-opacity', {
