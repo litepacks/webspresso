@@ -595,6 +595,29 @@ export interface RateLimitPluginOptions {
 
 export function rateLimitPlugin(options?: RateLimitPluginOptions): WebspressoPlugin;
 
+export interface CsrfCookieOptions {
+  key?: string;
+  signed?: boolean;
+  path?: string;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: 'lax' | 'strict' | 'none';
+  maxAge?: number;
+  [key: string]: unknown;
+}
+
+export interface CsrfPluginOptions {
+  cookie?: boolean | CsrfCookieOptions;
+  sessionKey?: string;
+  methods?: string[];
+  ignorePaths?: Array<string | RegExp | ((req: Request) => boolean)>;
+  global?: boolean;
+  errorMessage?: string;
+  errorStatus?: number;
+}
+
+export function csrfPlugin(options?: CsrfPluginOptions): WebspressoPlugin;
+
 export interface ContentPluginOptions {
   db: import('./index').Database;
   adminPath?: string;

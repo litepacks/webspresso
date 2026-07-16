@@ -2314,6 +2314,46 @@ const app = createApp({
 
 In production, keep the plugin disabled or protect it with `authorize` / your own middleware.
 
+### CSRF protection plugin
+
+Protects mutating requests against Cross-Site Request Forgery (CSRF) using the double-submit token pattern. Supports session storage (when `req.session` is available) and automatically falls back to cookie-based storage.
+
+**Setup:**
+
+```javascript
+const { createApp, csrfPlugin } = require('webspresso');
+
+const app = createApp({
+  plugins: [
+    csrfPlugin({
+      global: true,                 // Enable globally for all routes
+      cookie: true,                 // Use cookie-based storage (default uses session if present)
+      ignorePaths: ['/api/webhook'], // Skip CSRF verification for specific routes
+    }),
+  ],
+});
+```
+
+**Route-Specific Middleware:**
+
+If `global: false` (default), you can protect specific routes by applying the named route middleware `csrf` in your route configuration:
+
+```javascript
+// pages/submit.js
+module.exports = {
+  middleware: ['csrf'],
+  post(req, res) {
+    res.send('Success!');
+  }
+};
+```
+
+**Template Helpers:**
+
+The plugin registers two Nunjucks template helpers:
+- `{{ fsy.csrfToken() }}`: Returns the raw token string (useful for API fetch/headers).
+- `{{ fsy.csrfInput() }}`: Renders a hidden input field: `<input type="hidden" name="_csrf" value="...">`.
+
 ## Development
 
 Native addons (**better-sqlite3**, **bcrypt**, **sharp**) are compiled for your current Node ABI. After switching Node major versions (e.g. nvm, fnm, Volta), run **`npm run rebuild:native`** or a clean install: `rm -rf node_modules && npm ci`. **chokidar** is not ABI-tied like those drivers; if file watching misbehaves, reinstall dependencies. The repo includes [`.nvmrc`](.nvmrc) (Node 20 LTS) as a known-good default for this project.

@@ -63,6 +63,7 @@ const {
   redirectPlugin,
   rateLimitPlugin,
   contentPlugin,
+  csrfPlugin,
 } = require('./plugins');
 
 const content = require('./core/content');
@@ -133,6 +134,7 @@ module.exports = {
   redirectPlugin,
   rateLimitPlugin,
   contentPlugin,
+  csrfPlugin,
 
   // Schema-driven CMS core (framework-agnostic)
   content,
