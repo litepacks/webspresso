@@ -188,6 +188,7 @@ Plugins declare `name`, `version`, optional `dependencies`, and lifecycle hooks 
 | `swaggerPlugin` | API / docs | OpenAPI 3 + Swagger UI from API routes |
 | `schemaExplorerPlugin` | API / docs | JSON ORM schema endpoint |
 | `recaptchaPlugin` | Security | reCAPTCHA verify middleware + helpers |
+| `emailPlugin` | HTTP / Admin | MJML + Nodemailer email sending with optional admin UI and auth integration |
 | `adminPanelPlugin` | Admin | ORM-backed CRUD SPA |
 | `contentPlugin` | Admin / CMS | Schema-driven content types, entries, public API, inline edit |
 | `dataExchangePlugin` | Admin | Excel export + CSV/XLSX import |
@@ -268,7 +269,7 @@ Incoming HTTP request
 | Rule | Reason |
 |------|--------|
 | `uploadPlugin` before `adminPanelPlugin` | Admin reads `uploadUrl` / `webspresso.uploadPath` for file fields |
-| `adminPanelPlugin` before `dataExchangePlugin`, `siteAnalyticsPlugin`, `auditLogPlugin`, `ormCacheAdminPlugin` | Shared admin session and registry |
+| `adminPanelPlugin` before `dataExchangePlugin`, `siteAnalyticsPlugin`, `auditLogPlugin`, `ormCacheAdminPlugin`, `emailPlugin` | Shared admin session and registry |
 | `redirectPlugin` early | Must run before file routes |
 | `createApp({ db })` when using ORM plugins | Exposes `ctx.db` / `req.db` |
 | Site `auth` + `adminPanelPlugin({ auth })` | Optional site-user session UI in admin |

@@ -1,0 +1,13 @@
+<mjml>
+  <mj-body background-color="#f4f4f5">
+    <mj-section background-color="#ffffff" padding="32px 24px">
+      <mj-column>
+        <mj-text font-size="20px" font-weight="600" color="#18181b">Verify your email</mj-text>
+        <mj-text color="#52525b">Hi {{name}},</mj-text>
+        <mj-text color="#52525b">Please confirm your email address by clicking the button below.</mj-text>
+        <mj-button background-color="#2563eb" href="{{verifyUrl}}">Verify email</mj-button>
+        <mj-text color="#71717a" font-size="12px">If you did not create an account, you can ignore this message.</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

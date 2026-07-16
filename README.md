@@ -982,6 +982,57 @@ const { app } = createApp({
 
 Programmatic API (other plugins): `ctx.usePlugin('audit-log')` exposes `queryLogs`, `purgeAuditLogs`, and `getMigrationTemplate()`.
 
+**Email plugin:**
+- Sends email via **Nodemailer** with **MJML** templates (`{{variable}}` interpolation)
+- Template sources: `templatesDir` (`*.mjml`, **Node.js only** — skipped on edge/workers), `templates` map with inline `{ mjml }`, runtime `registerTemplate`, or inline `send({ mjml, html, data })`
+- Transport: `transport`, `smtp`, or env (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `MAIL_FROM`)
+- Optional DB logging to `email_logs` when `db` is passed; prune with `webspresso email:prune --days 90`
+- **Build:** `webspresso build` embeds `emails/*.mjml` (config `emailDir`) + bundled auth templates into `manifest.emailTemplates` and `email-templates.mjs` (Cloudflare). Use `emailPlugin({ manifest })` or `emailPlugin({ emailTemplates: manifest.emailTemplates })` on edge.
+- Admin page at `/_admin/email` (test send, preview, SMTP verify, logs) when `adminPanelPlugin` is loaded
+- Optional **auth bridge**: `authEmails: { enabled: true }` sends password-reset / email-verification mails and can register `POST /api/auth/forgot-password`, `/reset-password`, `/verify-email`, `/resend-verification`
+
+```javascript
+const { quickAuth, createAuthTokensTable } = require('webspresso/core/auth');
+const { adminPanelPlugin, emailPlugin } = require('webspresso/plugins');
+
+const auth = quickAuth({ db, authTokens: true });
+await createAuthTokensTable(db.knex);
+
+const { app, pluginManager } = createApp({
+  pagesDir: './pages',
+  db,
+  auth,
+  plugins: [
+    emailPlugin({
+      db,
+      auth,
+      templatesDir: './emails',
+      smtp: {
+        host: process.env.SMTP_HOST,
+        port: 587,
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      },
+      defaults: { from: process.env.MAIL_FROM },
+      authEmails: {
+        enabled: true,
+        baseUrl: process.env.BASE_URL,
+        registerRoutes: true,
+      },
+    }),
+    adminPanelPlugin({ db }),
+  ],
+});
+
+// From a route handler or another plugin:
+await pluginManager.getPluginAPI('email').sendTemplate('welcome', {
+  to: 'user@example.com',
+  subject: 'Welcome',
+  data: { name: 'Ali' },
+});
+```
+
+Programmatic API: `ctx.usePlugin('email')` exposes `send`, `sendTemplate`, `preview`, `registerTemplate`, `listTemplates`, `verifyConnection`, `queryLogs`, `purgeLogs`, `getMigrationTemplate()`.
+
 **ORM cache admin plugin:**
 - Depends on **`adminPanelPlugin`** and a database instance created with **`createDatabase({ cache: true | { … } })`** so **`db.cache`** is non-null
 - Registers an **ORM Cache** admin page (metrics, full purge, per-model invalidation, reset counters) backed by **`db.cache`**

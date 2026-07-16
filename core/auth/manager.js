@@ -6,6 +6,13 @@
 
 const { generateToken, hashToken } = require('./hash');
 const { PolicyManager } = require('./policy');
+const {
+  TOKEN_TYPES,
+  createAuthToken,
+  verifyAuthToken,
+  consumeAuthToken,
+  hash: hashPassword,
+} = require('./tokens');
 
 /**
  * Authentication error
@@ -79,7 +86,18 @@ class AuthManager {
     
     this.findUserById = config.findUserById;
     this.findUserByCredentials = config.findUserByCredentials;
+    this.findUserByIdentifier = config.findUserByIdentifier || null;
     this.rememberTokens = config.rememberTokens || null;
+    this.authTokens = config.authTokens || null;
+    this.updateUser = config.updateUser || null;
+    this.identifierField = config.identifierField || 'email';
+    this.verifiedField = config.verifiedField || 'email_verified_at';
+    this.passwordField = config.passwordField || 'password';
+    this.notifications = {
+      passwordReset: config.notifications?.passwordReset || null,
+      emailVerification: config.notifications?.emailVerification || null,
+      welcome: config.notifications?.welcome || null,
+    };
     
     // Policy manager instance
     this.policies = new PolicyManager();
@@ -101,6 +119,14 @@ class AuthManager {
       for (const method of required) {
         if (typeof config.rememberTokens[method] !== 'function') {
           throw new Error(`rememberTokens.${method} function is required`);
+        }
+      }
+    }
+    if (config.authTokens) {
+      const required = ['create', 'find', 'delete', 'deleteAllForUser'];
+      for (const method of required) {
+        if (typeof config.authTokens[method] !== 'function') {
+          throw new Error(`authTokens.${method} function is required`);
         }
       }
     }
@@ -407,6 +433,170 @@ class AuthManager {
    */
   beforePolicy(callback) {
     this.policies.before(callback);
+  }
+
+  /**
+   * Find user by login identifier (email, username, …)
+   * @param {string} identifier
+   * @returns {Promise<Object|null>}
+   */
+  async resolveUserByIdentifier(identifier) {
+    if (typeof this.findUserByIdentifier === 'function') {
+      return this.findUserByIdentifier(identifier);
+    }
+    return null;
+  }
+
+  /**
+   * Request password reset — always resolves (no user enumeration)
+   * @param {string} identifier
+   * @param {Object} [options]
+   * @param {number} [options.tokenTtlMs=3600000]
+   * @param {Function} [options.buildResetUrl] - (rawToken) => string
+   * @returns {Promise<{ sent: boolean }>}
+   */
+  async requestPasswordReset(identifier, options = {}) {
+    if (!this.authTokens) {
+      throw new Error('authTokens adapter is required for password reset');
+    }
+
+    const user = await this.resolveUserByIdentifier(identifier);
+    if (!user) {
+      return { sent: false };
+    }
+
+    const tokenTtlMs = options.tokenTtlMs ?? 60 * 60 * 1000;
+    const { rawToken, expiresAt } = await createAuthToken(
+      this.authTokens,
+      TOKEN_TYPES.PASSWORD_RESET,
+      user.id,
+      tokenTtlMs
+    );
+
+    const resetUrl = typeof options.buildResetUrl === 'function'
+      ? options.buildResetUrl(rawToken)
+      : null;
+
+    if (typeof this.notifications.passwordReset === 'function') {
+      await this.notifications.passwordReset(user, {
+        token: rawToken,
+        expiresAt,
+        resetUrl,
+      });
+    }
+
+    return { sent: true };
+  }
+
+  /**
+   * Complete password reset with token
+   * @param {string} rawToken
+   * @param {string} newPassword
+   * @returns {Promise<{ ok: true }>}
+   */
+  async completePasswordReset(rawToken, newPassword) {
+    if (!this.authTokens) {
+      throw new Error('authTokens adapter is required for password reset');
+    }
+    if (!this.updateUser) {
+      throw new Error('updateUser function is required for password reset');
+    }
+
+    const verified = await verifyAuthToken(
+      this.authTokens,
+      TOKEN_TYPES.PASSWORD_RESET,
+      rawToken
+    );
+    if (!verified) {
+      throw new AuthenticationError('Invalid or expired reset token', 'INVALID_TOKEN');
+    }
+
+    const hashed = await hashPassword(newPassword);
+    await this.updateUser(verified.userId, { [this.passwordField]: hashed });
+    await consumeAuthToken(this.authTokens, verified.tokenHash);
+    await this.authTokens.deleteAllForUser(verified.userId, TOKEN_TYPES.PASSWORD_RESET);
+
+    return { ok: true };
+  }
+
+  /**
+   * Send email verification token
+   * @param {*} userId
+   * @param {Object} [options]
+   * @param {number} [options.tokenTtlMs=86400000]
+   * @param {Function} [options.buildVerifyUrl] - (rawToken) => string
+   * @returns {Promise<{ sent: boolean }>}
+   */
+  async requestEmailVerification(userId, options = {}) {
+    if (!this.authTokens) {
+      throw new Error('authTokens adapter is required for email verification');
+    }
+
+    const user = await this.findUserById(userId);
+    if (!user) {
+      return { sent: false };
+    }
+
+    const tokenTtlMs = options.tokenTtlMs ?? 24 * 60 * 60 * 1000;
+    const { rawToken, expiresAt } = await createAuthToken(
+      this.authTokens,
+      TOKEN_TYPES.EMAIL_VERIFY,
+      user.id,
+      tokenTtlMs
+    );
+
+    const verifyUrl = typeof options.buildVerifyUrl === 'function'
+      ? options.buildVerifyUrl(rawToken)
+      : null;
+
+    if (typeof this.notifications.emailVerification === 'function') {
+      await this.notifications.emailVerification(user, {
+        token: rawToken,
+        expiresAt,
+        verifyUrl,
+      });
+    }
+
+    return { sent: true };
+  }
+
+  /**
+   * Verify email with token
+   * @param {string} rawToken
+   * @returns {Promise<{ ok: true, userId: * }>}
+   */
+  async verifyEmail(rawToken) {
+    if (!this.authTokens) {
+      throw new Error('authTokens adapter is required for email verification');
+    }
+    if (!this.updateUser) {
+      throw new Error('updateUser function is required for email verification');
+    }
+
+    const verified = await verifyAuthToken(
+      this.authTokens,
+      TOKEN_TYPES.EMAIL_VERIFY,
+      rawToken
+    );
+    if (!verified) {
+      throw new AuthenticationError('Invalid or expired verification token', 'INVALID_TOKEN');
+    }
+
+    await this.updateUser(verified.userId, { [this.verifiedField]: new Date() });
+    await consumeAuthToken(this.authTokens, verified.tokenHash);
+
+    return { ok: true, userId: verified.userId };
+  }
+
+  /**
+   * Send welcome notification if configured
+   * @param {Object} user
+   * @returns {Promise<void>}
+   */
+  async sendWelcomeNotification(user) {
+    if (typeof this.notifications.welcome === 'function') {
+      await this.notifications.welcome(user, {});
+    }
   }
 }
 

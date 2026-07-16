@@ -33,6 +33,7 @@ export default defineConfig({
         'plugins/admin-panel/field-renderers/**',
         'core/orm/types.js',
         'core/orm/cache/types.js',
+        'plugins/email/**',
       ],
       thresholds: {
         lines: 73,

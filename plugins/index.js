@@ -21,6 +21,7 @@ const { uploadPlugin, createLocalFileProvider } = require('./upload');
 const { dataExchangePlugin } = require('./data-exchange');
 const { redirectPlugin } = require('./redirect');
 const { rateLimitPlugin } = require('./rate-limit');
+const emailPlugin = require('./email');
 const contentPlugin = require('./content');
 
 module.exports = {
@@ -42,6 +43,7 @@ module.exports = {
   dataExchangePlugin,
   redirectPlugin,
   rateLimitPlugin,
+  emailPlugin,
   contentPlugin,
 };
 

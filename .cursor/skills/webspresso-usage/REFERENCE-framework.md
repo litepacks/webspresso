@@ -203,6 +203,7 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `siteAnalyticsPlugin` | Self-hosted page views + admin charts |
 | `auditLogPlugin` | Admin mutation audit trail |
 | `recaptchaPlugin` | v2/v3 + middleware |
+| `emailPlugin` | MJML + Nodemailer sending with optional admin UI and auth bridge |
 | `seoCheckerPlugin` | Dev SEO panel |
 | `restResourcePlugin` | Opt-in REST CRUD from models; `?include=` uses ORM eager load (single-level relations only) |
 | `ormCacheAdminPlugin` | Admin page for ORM cache metrics / purge / invalidate (`db.cache` required) |
