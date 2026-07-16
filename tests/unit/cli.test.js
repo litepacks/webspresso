@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const sharp = require('sharp');
+const sharp = require('../mocks/sharp');
 
 const CLI_PATH = path.join(__dirname, '../../bin/webspresso.js');
 const TEST_DIR = path.join(__dirname, '../fixtures/cli-test-projects');

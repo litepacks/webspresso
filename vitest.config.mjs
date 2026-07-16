@@ -10,6 +10,7 @@ export default defineConfig({
     environment: 'node',
     testTimeout: 10000,
     setupFiles: ['./tests/setup.js'],
+    globalSetup: ['./tests/global-setup.js'],
     include: ['tests/**/*.test.js'],
     exclude: ['node_modules', 'dist'],
     pool: 'forks',

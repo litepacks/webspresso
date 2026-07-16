@@ -16,7 +16,7 @@ try {
  * Default bcrypt cost factor
  * Higher = more secure but slower
  */
-const DEFAULT_ROUNDS = 12;
+const DEFAULT_ROUNDS = process.env.NODE_ENV === 'test' ? 1 : 12;
 
 /**
  * Hash a password using bcrypt

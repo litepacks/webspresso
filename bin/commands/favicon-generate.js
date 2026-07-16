@@ -5,7 +5,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const sharp = require('sharp');
+const sharp = process.env.NODE_ENV === 'test'
+  ? require('../../tests/mocks/sharp')
+  : require('sharp');
 
 const APPLE_SIZES = [57, 60, 72, 76, 114, 120, 144, 152, 180];
 const ANDROID_SIZE = 192;
