@@ -106,13 +106,13 @@ function normalizeSource(source) {
 /**
  * Compile MJML to HTML
  * @param {string} mjmlSource
- * @returns {{ html: string, errors: Array }}
+ * @returns {Promise<{ html: string, errors: Array }>}
  */
-function compileMjml(mjmlSource) {
+async function compileMjml(mjmlSource) {
   if (!mjml2html) {
     throw new Error('mjml is required for MJML templates. Install it with: npm install mjml');
   }
-  const result = mjml2html(mjmlSource, { validationLevel: 'soft' });
+  const result = await mjml2html(mjmlSource, { validationLevel: 'soft' });
   return {
     html: result.html,
     errors: result.errors || [],
@@ -130,7 +130,7 @@ async function renderSource(source, data = {}) {
 
   if (normalized.mjml) {
     const interpolated = interpolate(normalized.mjml, data);
-    const { html, errors } = compileMjml(interpolated);
+    const { html, errors } = await compileMjml(interpolated);
     return { html, errors };
   }
 

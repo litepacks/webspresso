@@ -67,9 +67,9 @@
     "helmet": "^7.2.0",
     "inquirer": "^8.2.6",
     "knex": "^3.1.0",
-    "mjml": "^4.15.3",
+    "mjml": "^5.4.0",
     "multer": "^2.1.1",
-    "nodemailer": "^6.10.1",
+    "nodemailer": "^9.0.3",
     "nunjucks": "^3.2.4",
     "sanitize-html": "^2.17.3",
     "sharp": "^0.33.5",
@@ -127,6 +127,7 @@
   "overrides": {
     "basic-ftp": "^5.3.0",
     "tar": "^7.5.11",
-    "undici": "^6.24.0"
+    "undici": "^6.24.0",
+    "uuid": "^11.1.1"
   }
 }
