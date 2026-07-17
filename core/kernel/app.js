@@ -50,7 +50,13 @@ function createApp(options = {}) {
       }
     };
     events.on(flowDef.trigger, handler);
-    const unregister = () => events.off(flowDef.trigger, handler);
+    const unregister = () => {
+      events.off(flowDef.trigger, handler);
+      const idx = flowHandles.findIndex((h) => h.unregister === unregister);
+      if (idx !== -1) {
+        flowHandles.splice(idx, 1);
+      }
+    };
     flowHandles.push({
       id,
       trigger: flowDef.trigger,

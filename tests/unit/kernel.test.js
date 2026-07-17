@@ -201,7 +201,7 @@ describe('kernel repo + flows', () => {
     expect(ran).toEqual([]);
   });
 
-  it('registerFlow unregister removes handler', async () => {
+  it('registerFlow unregister removes handler and cleans up flowHandles', async () => {
     let n = 0;
     const app = createApp();
     const unregister = app.registerFlow(
@@ -215,9 +215,11 @@ describe('kernel repo + flows', () => {
         ],
       }),
     );
+    expect(app.flows.some(f => f.id === 'one-shot')).toBe(true);
     await app.events.publish('tick', app.events.buildContext({}, { source: 'system' }));
     expect(n).toBe(1);
     unregister();
+    expect(app.flows.some(f => f.id === 'one-shot')).toBe(false);
     await app.events.publish('tick', app.events.buildContext({}, { source: 'system' }));
     expect(n).toBe(1);
   });
