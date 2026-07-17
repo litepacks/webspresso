@@ -797,6 +797,71 @@ describe('CLI', () => {
     });
   });
 
+  describe.sequential('Doctor Command', () => {
+    let doctorTestDir;
+
+    beforeAll(() => {
+      doctorTestDir = path.join(TEST_DIR, 'doctor-project');
+      fs.mkdirSync(doctorTestDir, { recursive: true });
+      fs.writeFileSync(path.join(doctorTestDir, 'package.json'), JSON.stringify({ name: 'doctor-test' }));
+    });
+
+    afterAll(() => {
+      if (fs.existsSync(doctorTestDir)) {
+        fs.rmSync(doctorTestDir, { recursive: true, force: true });
+      }
+    });
+
+    beforeEach(() => {
+      const pagesPath = path.join(doctorTestDir, 'pages');
+      if (fs.existsSync(pagesPath)) {
+        fs.rmSync(pagesPath, { recursive: true, force: true });
+      }
+      fs.mkdirSync(pagesPath, { recursive: true });
+    });
+
+    it('should display doctor help', () => {
+      const result = runCli('doctor --help', { cwd: doctorTestDir });
+      expect(result.stdout).toContain('Check Node version, project layout, and optional database connectivity');
+      expect(result.exitCode).toBe(0);
+    });
+
+    it('should report success when routing is clean', () => {
+      fs.writeFileSync(path.join(doctorTestDir, 'pages', 'index.njk'), 'index');
+      fs.mkdirSync(path.join(doctorTestDir, 'pages', 'products'), { recursive: true });
+      fs.writeFileSync(path.join(doctorTestDir, 'pages', 'products', '[slug].njk'), 'slug');
+      
+      const result = runCli('doctor', { cwd: doctorTestDir });
+      expect(result.stdout).toContain('All route paths are lowercase and free of dynamic collisions');
+      expect(result.exitCode).toBe(0);
+    });
+
+    it('should report warnings for uppercase naming', () => {
+      fs.writeFileSync(path.join(doctorTestDir, 'pages', 'About.njk'), 'about');
+      
+      const result = runCli('doctor', { cwd: doctorTestDir });
+      expect(result.stdout).toContain('contains uppercase letters');
+      expect(result.exitCode).toBe(0);
+    });
+
+    it('should fail in strict mode with warnings', () => {
+      fs.writeFileSync(path.join(doctorTestDir, 'pages', 'About.njk'), 'about');
+      
+      const result = runCli('doctor --strict', { cwd: doctorTestDir });
+      expect(result.exitCode).toBe(1);
+    });
+
+    it('should report warnings for dynamic sibling collisions', () => {
+      fs.mkdirSync(path.join(doctorTestDir, 'pages', 'products'), { recursive: true });
+      fs.writeFileSync(path.join(doctorTestDir, 'pages', 'products', '[id].njk'), 'id');
+      fs.writeFileSync(path.join(doctorTestDir, 'pages', 'products', '[slug].njk'), 'slug');
+      
+      const result = runCli('doctor', { cwd: doctorTestDir });
+      expect(result.stdout).toContain('Dynamic route collision in "pages/products"');
+      expect(result.stdout).toContain('resolve to the same segment ":param" and will conflict at runtime');
+    });
+  });
+
   describe.sequential('Favicon Generate Command', () => {
     let faviconTestDir;
 

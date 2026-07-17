@@ -102,6 +102,89 @@ function registerCommand(program) {
       const pagesPath = path.join(cwd, 'pages');
       if (fs.existsSync(pagesPath) && fs.statSync(pagesPath).isDirectory()) {
         line('✓', 'pages/ directory present');
+
+        console.log('\nRouting and file-system checks');
+        console.log('------------------------------');
+
+        let routingChecksPassed = true;
+
+        function getGenericSegment(name) {
+          if (name.startsWith('[') && name.endsWith(']')) {
+            const inner = name.slice(1, -1);
+            if (inner.startsWith('...')) {
+              return '*';
+            }
+            return ':param';
+          }
+          return name;
+        }
+
+        function scanRoutes(dirPath, relativeDir = '', isApi = false) {
+          const children = fs.readdirSync(dirPath);
+          const kept = [];
+
+          for (const child of children) {
+            const fullPath = path.join(dirPath, child);
+            const relPath = relativeDir ? path.join(relativeDir, child) : child;
+            const stats = fs.statSync(fullPath);
+
+            // 1. Check case-sensitivity issues
+            if (child !== child.toLowerCase()) {
+              line('⚠', `Path "pages/${relPath}" contains uppercase letters. Use lowercase to avoid routing issues on case-sensitive filesystems.`);
+              warnings += 1;
+              routingChecksPassed = false;
+            }
+
+            if (stats.isDirectory()) {
+              if (child === 'api' && relativeDir === '') {
+                scanRoutes(fullPath, relPath, true);
+              } else {
+                scanRoutes(fullPath, relPath, isApi);
+                if (!isApi) {
+                  kept.push({ name: child, isDir: true, original: child });
+                }
+              }
+            } else {
+              const ext = path.extname(child);
+              if (isApi) {
+                if (ext === '.js') {
+                  const base = path.basename(child, ext);
+                  kept.push({ name: base, isDir: false, original: child });
+                }
+              } else {
+                if (ext === '.njk') {
+                  const base = path.basename(child, ext);
+                  kept.push({ name: base, isDir: false, original: child });
+                }
+              }
+            }
+          }
+
+          // 2. Check dynamic route collisions
+          const groups = new Map();
+          for (const item of kept) {
+            const normalized = getGenericSegment(item.name);
+            if (!groups.has(normalized)) {
+              groups.set(normalized, []);
+            }
+            groups.get(normalized).push(item);
+          }
+
+          for (const [norm, items] of groups.entries()) {
+            if (items.length > 1) {
+              const namesList = items.map(item => `"${item.original}"`).join(' and ');
+              line('⚠', `Dynamic route collision in "pages/${relativeDir}": ${namesList} resolve to the same segment "${norm}" and will conflict at runtime.`);
+              warnings += 1;
+              routingChecksPassed = false;
+            }
+          }
+        }
+
+        scanRoutes(pagesPath, '');
+
+        if (routingChecksPassed) {
+          line('✓', 'All route paths are lowercase and free of dynamic collisions');
+        }
       } else {
         line('⚠', 'pages/ not found (file-based routes may be missing)');
         warnings += 1;

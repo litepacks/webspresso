@@ -644,6 +644,81 @@ function mountPages(app, options) {
   
   // Get absolute path to pages directory
   const absolutePagesDir = path.resolve(pagesDir);
+
+  // Routing and file-system checks at startup
+  function checkRoutesAtStartup() {
+    function getGenericSegment(name) {
+      if (name.startsWith('[') && name.endsWith(']')) {
+        const inner = name.slice(1, -1);
+        if (inner.startsWith('...')) return '*';
+        return ':param';
+      }
+      return name;
+    }
+
+    function checkDir(dirPath, relativeDir = '', isApi = false) {
+      if (!fs.existsSync(dirPath)) return;
+      const children = fs.readdirSync(dirPath);
+      const kept = [];
+
+      for (const child of children) {
+        if (child.startsWith('_') || child === 'locales') continue;
+        const fullPath = path.join(dirPath, child);
+        const relPath = relativeDir ? path.join(relativeDir, child) : child;
+        const stats = fs.statSync(fullPath);
+
+        // 1. Check case-sensitivity issues
+        if (child !== child.toLowerCase()) {
+          console.warn(`[webspresso] WARNING: Path "pages/${relPath.split(path.sep).join('/')}" contains uppercase letters. Use lowercase to avoid routing issues on case-sensitive filesystems.`);
+        }
+
+        if (stats.isDirectory()) {
+          if (child === 'api' && relativeDir === '') {
+            checkDir(fullPath, relPath, true);
+          } else {
+            checkDir(fullPath, relPath, isApi);
+            if (!isApi) {
+              kept.push({ name: child, isDir: true, original: child });
+            }
+          }
+        } else {
+          const ext = path.extname(child);
+          if (isApi) {
+            if (ext === '.js') {
+              const base = path.basename(child, ext);
+              kept.push({ name: base, isDir: false, original: child });
+            }
+          } else {
+            if (ext === '.njk') {
+              const base = path.basename(child, ext);
+              kept.push({ name: base, isDir: false, original: child });
+            }
+          }
+        }
+      }
+
+      // 2. Check dynamic route collisions
+      const groups = new Map();
+      for (const item of kept) {
+        const normalized = getGenericSegment(item.name);
+        if (!groups.has(normalized)) {
+          groups.set(normalized, []);
+        }
+        groups.get(normalized).push(item);
+      }
+
+      for (const [norm, items] of groups.entries()) {
+        if (items.length > 1) {
+          const namesList = items.map(item => `"${item.original}"`).join(' and ');
+          console.warn(`[webspresso] WARNING: Dynamic route collision in "pages/${relativeDir.split(path.sep).join('/')}": ${namesList} resolve to the same segment "${norm}" and will conflict at runtime.`);
+        }
+      }
+    }
+
+    checkDir(absolutePagesDir, '');
+  }
+
+  checkRoutesAtStartup();
   
   // Load global hooks
   const globalHooks = loadGlobalHooks(absolutePagesDir, isDev);

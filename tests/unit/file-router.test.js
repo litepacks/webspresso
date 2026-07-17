@@ -4,6 +4,7 @@
 
 const path = require('path');
 const {
+  mountPages,
   filePathToRoute,
   extractMethodFromFilename,
   scanDirectory,
@@ -323,6 +324,45 @@ describe('file-router.js', () => {
       );
       expect(r.data).toEqual({ scripts: ['/z.js'] });
       expect(r.pageHead).toEqual({ stylesheets: [], scripts: [] });
+    });
+  });
+
+  describe('mountPages startup warnings', () => {
+    const fs = require('fs');
+    const express = require('express');
+    const tempDir = path.join(__dirname, '../fixtures/temp-mountpages-test');
+
+    beforeEach(() => {
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+      fs.mkdirSync(tempDir, { recursive: true });
+    });
+
+    afterEach(() => {
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+      vi.restoreAllMocks();
+    });
+
+    it('should warn about uppercase paths and dynamic route collisions', () => {
+      fs.mkdirSync(path.join(tempDir, 'pages', 'Products'), { recursive: true });
+      fs.writeFileSync(path.join(tempDir, 'pages', 'Products', '[id].njk'), 'id');
+      fs.writeFileSync(path.join(tempDir, 'pages', 'Products', '[slug].njk'), 'slug');
+
+      const mockWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const mockApp = express();
+      mountPages(mockApp, {
+        pagesDir: path.join(tempDir, 'pages'),
+        silent: true
+      });
+
+      const calls = mockWarn.mock.calls.map(c => c[0]);
+      
+      expect(calls.some(c => c.includes('contains uppercase letters'))).toBe(true);
+      expect(calls.some(c => c.includes('Dynamic route collision'))).toBe(true);
     });
   });
 });
