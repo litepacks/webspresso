@@ -74,6 +74,15 @@ export interface CreateAppResult {
 
 export function createApp(options?: CreateAppOptions): CreateAppResult;
 
+export function resolveClientRuntime(options?: {
+  clientRuntime?: {
+    alpine?: boolean | Record<string, unknown>;
+    swup?: boolean | Record<string, unknown>;
+  };
+}): { alpine: boolean; swup: boolean };
+
+export const CLIENT_RUNTIME_BASE: string;
+
 // --- App context ---
 
 export function attachDbMiddleware(req: Request, res: Response, next: NextFunction): void;
