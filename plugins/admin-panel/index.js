@@ -15,7 +15,8 @@ const { registerDashboardWidgets, generateDashboardComponent } = require('./modu
 const { registerDefaultBulkActions, generateBulkActionsComponent } = require('./modules/bulk-actions');
 const { registerDefaultPages, createCustomPageApiHandlers, generateCustomPageComponent } = require('./modules/custom-pages');
 const { registerModelMenuItems, registerSystemMenuItems, generateMenuComponent } = require('./modules/menu');
-const { registerModule } = require('./core/admin-module');
+const { registerModule, registerPageDir } = require('./core/admin-module');
+
 
 /**
  * Admin Panel Plugin Factory
@@ -105,6 +106,21 @@ function adminPanelPlugin(options = {}) {
           serveAdminPanel,
         });
       },
+      registerPageDir(dirPath) {
+        const ctx = this.api?._ctx ?? this._ctx;
+        if (!ctx) {
+          throw new Error('registerPageDir can only be called during or after onRoutesReady');
+        }
+        return registerPageDir(dirPath, {
+          registry,
+          adminPath,
+          ctx,
+          requireAuth,
+          optionalAuth,
+          serveAdminPanel,
+        });
+      },
+
       _ctx: null,
     },
 

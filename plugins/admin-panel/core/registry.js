@@ -412,9 +412,12 @@ class AdminRegistry {
         title: p.title,
         path: p.path,
         icon: p.icon,
+        description: p.description,
         permission: p.permission,
+        layout: p.layout !== undefined ? p.layout : true,
         hasClientComponent: this.clientComponents.has(p.id),
       })),
+
       widgets: this.getWidgets().map(w => ({
         id: w.id,
         title: w.title,

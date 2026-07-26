@@ -169,7 +169,8 @@ C4Container
 | CRUD API | List/create/update/delete from model metadata |
 | Field renderers | Types: text, number, boolean, json, rich-text, **file-upload**, relations |
 | `customFields` | Override UI for columns (e.g. `file-upload` on string columns) |
-| `registerModule` | Plugin extension: pages, menu, API, widgets |
+| `registerModule` / `registerPageDir` | Plugin extension: pages, menu, API, widgets (`componentFile`, `pagesDir`, auto `layout`) |
+
 | User management | Optional CRUD for site users inside admin |
 | Rich text | Quill (CDN); HTML sanitized on save by default |
 | File upload UI | POST to `uploadUrl`; image preview; stores URL in model |

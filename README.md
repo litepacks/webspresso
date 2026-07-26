@@ -809,12 +809,13 @@ See **`doc/index.html#admin-user-management`** and **Session authentication** in
 
 **Custom Admin Pages (registerModule):**
 
-Plugins can add custom admin pages using `registerModule` in `onRoutesReady`:
+Plugins can add custom admin pages using `registerModule` (or `registerPageDir`) in `onRoutesReady`:
 
 ```javascript
 // In your plugin's onRoutesReady(ctx)
 const adminApi = ctx.usePlugin('admin-panel');
 if (adminApi) {
+  // Option 1: File-based registration with auto Layout wrapping
   adminApi.registerModule({
     id: 'my-module',
 
@@ -824,7 +825,8 @@ if (adminApi) {
       path: '/reports',
       icon: 'chart',
       description: 'View reports',
-      component: `window.__customPages["reports"] = { view: () => m("div", "My Report") };`,  // Mithril.js
+      componentFile: path.join(__dirname, 'admin/reports.js'), // JS component file
+      layout: true, // Auto-wraps view in Admin Layout (default: true)
     }],
 
     menu: [{ id: 'reports', label: 'Reports', path: '/reports', icon: 'chart', order: 5 }],
@@ -835,15 +837,10 @@ if (adminApi) {
         { method: 'get', path: '/summary', handler: getSummaryHandler, auth: true },
       ],
     },
-
-    widgets: [{
-      id: 'reports-widget',
-      title: 'Quick Stats',
-      dataLoader: async () => ({ count: 42 }),
-    }],
-
-    menuGroups: [{ id: 'analytics', label: 'Analytics', order: 2 }],
   });
+
+  // Option 2: Folder-based auto registration (dir containing page.json + component.js)
+  adminApi.registerPageDir(path.join(__dirname, 'admin/pages'));
 }
 ```
 
@@ -851,13 +848,41 @@ if (adminApi) {
 | Field | Description |
 |-------|-------------|
 | `id` | Unique module identifier (required) |
-| `pages` | Custom admin pages (each: `id`, `title`, `path`, `icon`, `description`, optional `component`) |
+| `pages` | Custom admin pages (`id`, `title`, `path`, `icon`, `description`, `componentFile`, `component`, `layout`) |
+| `pagesDir` | Path to directory containing page folders/configs for automatic discovery |
 | `menu` | Sidebar menu items (`id`, `label`, `path`, `icon`, `order`) |
 | `menuGroups` | Collapsible menu groups (`id`, `label`, `order`) |
 | `api` | API routes (`prefix`, `routes`: `method`, `path`, `handler`, `auth`) |
 | `widgets` | Dashboard widgets (`id`, `title`, `dataLoader`) |
 
-For pages with `component`: provide Mithril.js code that assigns to `window.__customPages[pageId]`. Without `component`, the page shows a static placeholder.
+Pages support `componentFile` (path to a `.js` file exporting/returning a Mithril component), `pagesDir` (directory auto-discovery), or `component` (code string). By default (`layout: true`), page views are automatically wrapped in the Admin Layout with Breadcrumbs. Set `layout: false` for full-screen / custom canvas pages.
+
+**Example component file (`admin/reports.js`):**
+
+```javascript
+// Clean Mithril.js component object (no manual m(Layout, ...) needed!)
+({
+  oninit: async (vnode) => {
+    vnode.state.data = [];
+    try {
+      const res = await api.get('/reports/summary');
+      vnode.state.data = res.data || [];
+      m.redraw();
+    } catch (err) {
+      console.error('Failed to load report data:', err);
+    }
+  },
+  view: (vnode) => {
+    const data = vnode.state.data || [];
+    return m('div.space-y-4', [
+      m('h1.text-2xl.font-bold.text-gray-900.dark:text-slate-100', 'Report Summary'),
+      m('p.text-gray-600.dark:text-slate-400', `Total records: ${data.length}`),
+    ]);
+  }
+})
+```
+
+
 
 **Manual registry API** (alternative to registerModule):
 

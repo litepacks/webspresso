@@ -221,6 +221,47 @@ var routes = {
   },
 };
 
+function wrapCustomPageWithLayout(page, rawComp) {
+  if (!rawComp) return createCustomPage(page);
+  if (page.layout === false) return rawComp;
+
+  return {
+    oninit: function(vnode) {
+      if (typeof rawComp.oninit === 'function') return rawComp.oninit.call(this, vnode);
+    },
+    oncreate: function(vnode) {
+      if (typeof rawComp.oncreate === 'function') return rawComp.oncreate.call(this, vnode);
+    },
+    onupdate: function(vnode) {
+      if (typeof rawComp.onupdate === 'function') return rawComp.onupdate.call(this, vnode);
+    },
+    onbeforeremove: function(vnode) {
+      if (typeof rawComp.onbeforeremove === 'function') return rawComp.onbeforeremove.call(this, vnode);
+    },
+    onremove: function(vnode) {
+      if (typeof rawComp.onremove === 'function') return rawComp.onremove.call(this, vnode);
+    },
+    view: function(vnode) {
+      var content;
+      if (typeof rawComp.view === 'function') {
+        content = rawComp.view.call(this, vnode);
+      } else if (typeof rawComp === 'function') {
+        content = rawComp.call(this, vnode);
+      } else {
+        content = rawComp;
+      }
+      if (content && (content.tag === Layout || (content.tag && content.tag.name === 'Layout'))) {
+        return content;
+      }
+      var breadcrumbs = [{ label: page.title, href: page.path }];
+      return m(Layout, [
+        m(Breadcrumb, { items: breadcrumbs }),
+        content
+      ]);
+    }
+  };
+}
+
 // Dynamic routes for custom pages registered via plugins
 var config = window.__ADMIN_CONFIG__;
 if (config && config.pages) {
@@ -234,7 +275,7 @@ if (config && config.pages) {
             return;
           }
           if (window.__customPages && window.__customPages[page.id]) {
-            return window.__customPages[page.id];
+            return wrapCustomPageWithLayout(page, window.__customPages[page.id]);
           }
           return createCustomPage(page);
         }
@@ -245,3 +286,4 @@ if (config && config.pages) {
 
 m.route(document.getElementById('app'), '/', routes);
 `;
+
