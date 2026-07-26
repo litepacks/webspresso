@@ -330,8 +330,9 @@ Incoming HTTP request
 | **`docs/ARCHITECTURE.md`** (this file) | C4-style structure; feature-set index; update on structural changes |
 | `README.md` | Narrative reference, examples, pitfalls |
 | `doc/index.html` | Single-page HTML docs with anchors |
-| `.cursor/skills/webspresso-usage/REFERENCE-framework.md` | Condensed SSR/API/ORM/plugins/CLI |
-| `.cursor/skills/webspresso-usage/REFERENCE-kernel.md` | Kernel-only reference |
+| `.agents/skills/webspresso-usage/REFERENCE-framework.md` | Condensed SSR/API/ORM/plugins/CLI |
+| `.agents/skills/webspresso-usage/REFERENCE-kernel.md` | Kernel-only reference |
+
 | `docs/getting-started.md` | Onboarding |
 | `docs/production-checklist.md` | Production hardening |
 | `plugins/admin-panel/client/README.md` | Admin SPA parts layout |

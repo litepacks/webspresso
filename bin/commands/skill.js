@@ -20,8 +20,9 @@ function validateSkillName(name) {
 }
 
 function skillDir(base, skillName) {
-  return path.join(base, '.cursor', 'skills', skillName);
+  return path.join(base, '.agents', 'skills', skillName);
 }
+
 
 function defaultDescription(skillName) {
   const label = skillName.replace(/-/g, ' ');
@@ -72,14 +73,15 @@ Example prompt or command
 function registerCommand(program) {
   program
     .command('skill [name]')
-    .description('Create an Agent Skill folder with SKILL.md (Cursor / AI tools)')
-    .option('-g, --global', 'Write to ~/.cursor/skills/ instead of ./.cursor/skills/')
+    .description('Create an Agent Skill folder with SKILL.md')
+    .option('-g, --global', 'Write to ~/.agents/skills/ instead of ./.agents/skills/')
     .option('-d, --description <text>', 'Skill description (for YAML frontmatter)')
     .option('-f, --force', 'Overwrite existing SKILL.md')
     .option(
       '-p, --preset <name>',
-      'Install bundled skill: webspresso → agent reference (SKILL.md + REFERENCE-*.md in .cursor/skills/webspresso-usage/)',
+      'Install bundled skill: webspresso → agent reference (SKILL.md + REFERENCE-*.md in .agents/skills/webspresso-usage/)',
     )
+
     .action(async (nameArg, options) => {
       const presetKey = options.preset ? String(options.preset).trim().toLowerCase() : '';
 

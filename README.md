@@ -245,9 +245,10 @@ webspresso doctor --strict
 
 ### `webspresso skill`
 
-Scaffold a **Cursor Agent Skill**: creates `.cursor/skills/<name>/SKILL.md` with valid YAML frontmatter (`name`, `description`) and a short markdown template for AI tooling. Use `--global` to write under `~/.cursor/skills/` instead of the current project.
+Scaffold an **Agent Skill**: creates `.agents/skills/<name>/SKILL.md` with valid YAML frontmatter (`name`, `description`) and a short markdown template for AI tooling. Use `--global` to write under `~/.agents/skills/` instead of the current project.
 
-**Bundled preset:** `--preset webspresso` copies **`SKILL.md`** (short index), **`REFERENCE-framework.md`** (SSR `createApp`, routes, ORM, auth, plugins, CLI), and **`REFERENCE-kernel.md`** (`kernel` event bus / flows) into **`.cursor/skills/webspresso-usage/`** — no prompts.
+**Bundled preset:** `--preset webspresso` copies **`SKILL.md`** (short index), **`REFERENCE-framework.md`** (SSR `createApp`, routes, ORM, auth, plugins, CLI), and **`REFERENCE-kernel.md`** (`kernel` event bus / flows) into **`.agents/skills/webspresso-usage/`** — no prompts.
+
 
 ```bash
 webspresso skill my-workflow
@@ -805,7 +806,8 @@ Options:
 - `userManagement` - Site-user admin UI (`enabled`, `model` matching ORM user table, optional `fields` map). SPA routes: `/_admin/users`, `/_admin/users/new`, …; APIs: `/_admin/api/users*`. Admin staff still use **`admin_users`** / `/_admin` login; this is separate from **`req.user`** on the public site
 - `configure` - Callback `(registry) => void` for manual setup
 
-See **`doc/index.html#admin-user-management`** and **Session authentication** in **`.cursor/skills/webspresso-usage/REFERENCE-framework.md`** for the split between **`adminUser`** and **`createApp({ auth })`**.
+See **`doc/index.html#admin-user-management`** and **Session authentication** in **`.agents/skills/webspresso-usage/REFERENCE-framework.md`** for the split between **`adminUser`** and **`createApp({ auth })`**.
+
 
 **Custom Admin Pages (registerModule):**
 

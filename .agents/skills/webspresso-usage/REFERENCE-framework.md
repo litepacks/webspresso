@@ -195,7 +195,8 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `dashboardPlugin` | Dev route `/_webspresso` — route list |
 | `sitemapPlugin` | `/sitemap.xml`, robots; optional DB-driven URLs |
 | `analyticsPlugin` | GA / GTM / Yandex / Bing / Facebook — `fsy` helpers |
-| `adminPanelPlugin` | SPA admin CRUD — needs **`db`**; optional **`uploadUrl`** (or infer from **`uploadPlugin`**); optional **`userManagement: { enabled, model, fields }`** + **`auth`** (same **`AuthManager`** as **`createApp({ auth })`**) for site-user CRUD + remember-me session UI — see **Session authentication** above |
+| `adminPanelPlugin` | SPA admin CRUD — needs **`db`**; optional **`uploadUrl`** (or infer from **`uploadPlugin`**); optional **`userManagement: { enabled, model, fields }`** + **`auth`**; custom pages via `registerModule` / `registerPageDir` (`componentFile`, `pagesDir`, auto `layout: true`) — see **Session authentication** above |
+
 | `contentPlugin` | Schema-driven CMS — **`content_types`** / **`content_entries`** tables; admin UI under `/_admin/content/*`; public **`GET /api/content/:type/:slug`**; **`ctx.content.getEntry(type, slug)`** in `load()`; **`fsy.content.editable()`** + inline edit modal when admin session on SSR pages; register **after** `adminPanelPlugin` |
 | `redirectPlugin` | Configurable **301–308** redirects in `register()` — runs **before** file-based SSR routes; `rules` (`from` path or `RegExp`, `to`, `status`, `methods`), `preserveQuery`, `allowExternal`, `trailingSlash`, `defaultMethods`; docs **[`doc/index.html#plugins-redirect`](../../../doc/index.html#plugins-redirect)**, README **Redirect plugin** |
 | `rateLimitPlugin` | Registers named **`rateLimit`** middleware (`express-rate-limit` ≥8 peer); default **`ipKeyGenerator(req.ip, subnet)`**; optional **`global`** limiter + **`globalSkipPaths`**; use `middleware: ['rateLimit']` or `[['rateLimit', { limit }]]` on pages/API |

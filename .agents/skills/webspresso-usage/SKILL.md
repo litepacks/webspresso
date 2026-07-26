@@ -33,7 +33,8 @@ There are **three** files in this folder; open the reference that matches the ta
 | `webspresso dev` | Dev server (watch). |
 | `webspresso db:migrate` / `db:rollback` / `db:status` | ORM migrations. |
 | `webspresso doctor` | Environment / project sanity checks. |
-| `webspresso skill --preset webspresso` | Copies this skill bundle under `.cursor/skills/webspresso-usage/` (`SKILL.md` + `REFERENCE-*.md`). |
+| `webspresso skill --preset webspresso` | Copies this skill bundle under `.agents/skills/webspresso-usage/` (`SKILL.md` + `REFERENCE-*.md`). |
+
 
 ## When to use this skill
 
