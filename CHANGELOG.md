@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.83] - 2026-08-02
+
+### Fixed
+
+#### Admin Panel Module API Error Handling (`plugins/admin-panel/core/admin-module.js`)
+- **`registerModule` API routes**: Wrapped registered API route handlers in an `async (req, res, next)` error wrapper (`safeHandler`). Synchronous errors and rejected Promises in module API routes are caught and forwarded to Express global error handling (`next(err)`), preventing Node.js process crashes.
+
+#### Custom Page Closure Component Lifecycle (`plugins/admin-panel/app.js`)
+- **`wrapCustomPageWithLayout`**: Instantiates closure component factory functions (`typeof rawComp === 'function'`) into `vnode.state.instance` during `oninit`. Executes component lifecycle hooks (`oninit`, `oncreate`, `onupdate`, `onbeforeremove`, `onremove`) on `vnode.state.instance`, ensuring custom pages (such as `audit-log` admin UI) run their `oninit` data loaders properly.
+
+#### Audit Log Admin Component (`plugins/audit-log/admin-component.js`)
+- **`m.redraw()` on async fetch**: Added `m.redraw()` invocation inside `AuditLogPage`'s `api.get` `.then()` and `.catch()` handlers so Mithril re-renders the component view as soon as data arrives.
+
+#### Audit Log E2E Test (`tests/e2e/audit-log.spec.js`)
+- Updated test locator to wait directly for the `/Total:/` text element on page load.
+
 ### Security
 
 #### Locale & i18n file paths (`src/file-router.js`)
