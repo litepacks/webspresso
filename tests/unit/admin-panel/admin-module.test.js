@@ -276,7 +276,7 @@ describe('registerModule', () => {
       expect(route).toBeTruthy();
       expect(route.method).toBe('get');
       expect(route.handlers).toContain(deps.requireAuth);
-      expect(route.handlers).toContain(handler);
+      expect(route.handlers.some(h => h === handler || h._originalHandler === handler)).toBe(true);
     });
 
     it('should default method to get', () => {
@@ -423,6 +423,88 @@ describe('registerModule', () => {
         },
       }, deps);
       expect(deps._routes[0].path).toBe('/_admin/api/audit-logs');
+    });
+
+    it('should catch errors in API route handlers and forward them to next(err)', async () => {
+      const syncErr = new Error('Database connection failed');
+      const asyncErr = new Error('Repository update failed');
+
+      const syncHandler = () => { throw syncErr; };
+      const asyncHandler = async () => { throw asyncErr; };
+
+      const deps = createMockDeps();
+      registerModule({
+        id: 'error-test',
+        api: {
+          prefix: '/categories',
+          routes: [
+            { method: 'get', path: '/sync', handler: syncHandler },
+            { method: 'post', path: '/save', handler: asyncHandler },
+          ],
+        },
+      }, deps);
+
+      const syncRoute = deps._routes.find(r => r.path === '/_admin/api/categories/sync');
+      const asyncRoute = deps._routes.find(r => r.path === '/_admin/api/categories/save');
+
+      const wrappedSyncHandler = syncRoute.handlers[1];
+      const wrappedAsyncHandler = asyncRoute.handlers[1];
+
+      let caughtSyncErr = null;
+      let caughtAsyncErr = null;
+
+      await wrappedSyncHandler({}, {}, (err) => { caughtSyncErr = err; });
+      await wrappedAsyncHandler({}, {}, (err) => { caughtAsyncErr = err; });
+
+      expect(caughtSyncErr).toBe(syncErr);
+      expect(caughtAsyncErr).toBe(asyncErr);
+    });
+
+    it('should execute successfully without calling next(err) when route handler resolves', async () => {
+      const deps = createMockDeps();
+      let resJsonCalled = false;
+      const successHandler = async (req, res) => {
+        res.json({ ok: true });
+      };
+
+      registerModule({
+        id: 'success-test',
+        api: {
+          prefix: '/categories',
+          routes: [{ method: 'post', path: '/save', handler: successHandler }],
+        },
+      }, deps);
+
+      const route = deps._routes.find(r => r.path === '/_admin/api/categories/save');
+      const wrappedHandler = route.handlers[1];
+
+      let nextCalledWith = undefined;
+      const fakeRes = {
+        json: (data) => { resJsonCalled = data.ok; },
+      };
+
+      await wrappedHandler({}, fakeRes, (err) => { nextCalledWith = err; });
+
+      expect(resJsonCalled).toBe(true);
+      expect(nextCalledWith).toBeUndefined();
+    });
+
+    it('should rethrow error when next callback is omitted', async () => {
+      const deps = createMockDeps();
+      const customErr = new Error('Custom error');
+      customErr.status = 422;
+
+      registerModule({
+        id: 'rethrow-test',
+        api: {
+          routes: [{ method: 'get', path: '/test', handler: async () => { throw customErr; } }],
+        },
+      }, deps);
+
+      const route = deps._routes[0];
+      const wrappedHandler = route.handlers[1];
+
+      await expect(wrappedHandler({}, {})).rejects.toThrow('Custom error');
     });
   });
 

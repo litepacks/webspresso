@@ -265,7 +265,20 @@ function registerApiRoutes(moduleId, apiConfig, deps) {
     const useAuth = route.auth !== undefined ? route.auth : defaultAuth;
     const authMiddleware = useAuth ? requireAuth : optionalAuth;
 
-    ctx.addRoute(method, fullPath, authMiddleware, route.handler);
+    const safeHandler = async (req, res, next) => {
+      try {
+        await route.handler(req, res, next);
+      } catch (err) {
+        if (typeof next === 'function') {
+          next(err);
+        } else {
+          throw err;
+        }
+      }
+    };
+    safeHandler._originalHandler = route.handler;
+
+    ctx.addRoute(method, fullPath, authMiddleware, safeHandler);
   }
 }
 
