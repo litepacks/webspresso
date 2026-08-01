@@ -131,7 +131,7 @@ test.describe('Audit log UI', () => {
     await page.waitForURL(/\/_admin\/audit-log/, { timeout: 15000 });
     await page.waitForLoadState('load');
 
-    await expect(page.getByText(/Loading/).or(page.getByText(/Total:/))).toBeVisible({
+    await expect(page.getByText(/Total:/)).toBeVisible({
       timeout: 15000,
     });
   });

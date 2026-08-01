@@ -227,28 +227,36 @@ function wrapCustomPageWithLayout(page, rawComp) {
 
   return {
     oninit: function(vnode) {
-      if (typeof rawComp.oninit === 'function') return rawComp.oninit.call(this, vnode);
+      vnode.state.instance = typeof rawComp === 'function' ? rawComp.call(this, vnode) : rawComp;
+      if (vnode.state.instance && typeof vnode.state.instance.oninit === 'function') {
+        return vnode.state.instance.oninit.call(this, vnode);
+      }
     },
     oncreate: function(vnode) {
-      if (typeof rawComp.oncreate === 'function') return rawComp.oncreate.call(this, vnode);
+      const comp = vnode.state.instance || rawComp;
+      if (comp && typeof comp.oncreate === 'function') return comp.oncreate.call(this, vnode);
     },
     onupdate: function(vnode) {
-      if (typeof rawComp.onupdate === 'function') return rawComp.onupdate.call(this, vnode);
+      const comp = vnode.state.instance || rawComp;
+      if (comp && typeof comp.onupdate === 'function') return comp.onupdate.call(this, vnode);
     },
     onbeforeremove: function(vnode) {
-      if (typeof rawComp.onbeforeremove === 'function') return rawComp.onbeforeremove.call(this, vnode);
+      const comp = vnode.state.instance || rawComp;
+      if (comp && typeof comp.onbeforeremove === 'function') return comp.onbeforeremove.call(this, vnode);
     },
     onremove: function(vnode) {
-      if (typeof rawComp.onremove === 'function') return rawComp.onremove.call(this, vnode);
+      const comp = vnode.state.instance || rawComp;
+      if (comp && typeof comp.onremove === 'function') return comp.onremove.call(this, vnode);
     },
     view: function(vnode) {
+      const comp = vnode.state.instance || rawComp;
       var content;
-      if (typeof rawComp.view === 'function') {
-        content = rawComp.view.call(this, vnode);
-      } else if (typeof rawComp === 'function') {
-        content = rawComp.call(this, vnode);
+      if (comp && typeof comp.view === 'function') {
+        content = comp.view.call(this, vnode);
+      } else if (typeof comp === 'function') {
+        content = comp.call(this, vnode);
       } else {
-        content = rawComp;
+        content = comp;
       }
       if (content && (content.tag === Layout || (content.tag && content.tag.name === 'Layout'))) {
         return content;

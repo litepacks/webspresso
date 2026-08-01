@@ -34,9 +34,11 @@ function generateAuditLogComponent(options = {}) {
         rows = res.data || [];
         total = (res.meta && res.meta.total) || 0;
         loading = false;
+        if (typeof m !== 'undefined' && m.redraw) m.redraw();
       }).catch(function(e) {
         error = e.message || String(e);
         loading = false;
+        if (typeof m !== 'undefined' && m.redraw) m.redraw();
       });
     }
 
