@@ -162,6 +162,78 @@ function createApiHandlers(options) {
   }
 
   /**
+   * Update current user profile
+   */
+  async function updateProfileHandler(req, res) {
+    try {
+      if (!req.session || !req.session.adminUser) {
+        return res.status(401).json({ error: 'Not authenticated' });
+      }
+
+      const userId = req.session.adminUser.id;
+      const { name, email, currentPassword, newPassword } = req.body || {};
+
+      if (!AdminUserRepo) {
+        return res.status(500).json({ error: 'Admin user system not initialized' });
+      }
+
+      const user = await AdminUserRepo.findById(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const updateData = {};
+
+      if (name && typeof name === 'string' && name.trim()) {
+        updateData.name = name.trim();
+      }
+
+      if (email && typeof email === 'string' && email.trim() && email.trim() !== user.email) {
+        const existing = await AdminUserRepo.query().where('email', email.trim()).whereNot('id', userId).first();
+        if (existing) {
+          return res.status(400).json({ error: 'Email is already in use by another user' });
+        }
+        updateData.email = email.trim();
+      }
+
+      if (newPassword) {
+        if (!currentPassword) {
+          return res.status(400).json({ error: 'Current password is required to set a new password' });
+        }
+        if (!comparePassword) {
+          return res.status(500).json({ error: 'Password comparison helper not available' });
+        }
+        const isValid = await comparePassword(currentPassword, user.password);
+        if (!isValid) {
+          return res.status(400).json({ error: 'Current password is incorrect' });
+        }
+        if (typeof newPassword !== 'string' || newPassword.length < 6) {
+          return res.status(400).json({ error: 'New password must be at least 6 characters long' });
+        }
+        updateData.password = await hashPassword(newPassword, 10);
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await AdminUserRepo.update(userId, updateData);
+      }
+
+      const updatedUser = await AdminUserRepo.findById(userId);
+      const sanitized = sanitizeForOutput(updatedUser, getModelFromDb('AdminUser') || { hidden: ['password'] });
+      if (sanitized) delete sanitized.password;
+
+      req.session.adminUser = {
+        ...req.session.adminUser,
+        name: updatedUser.name,
+        email: updatedUser.email,
+      };
+
+      res.json({ success: true, user: sanitized });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
    * Get all models (admin enabled)
    */
   function modelsHandler(req, res) {
@@ -680,6 +752,7 @@ function createApiHandlers(options) {
     loginHandler,
     logoutHandler,
     meHandler,
+    updateProfileHandler,
     modelsHandler,
     modelHandler,
     recordsListHandler,

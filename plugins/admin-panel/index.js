@@ -15,6 +15,7 @@ const { registerDashboardWidgets, generateDashboardComponent } = require('./modu
 const { registerDefaultBulkActions, generateBulkActionsComponent } = require('./modules/bulk-actions');
 const { registerDefaultPages, createCustomPageApiHandlers, generateCustomPageComponent } = require('./modules/custom-pages');
 const { registerModelMenuItems, registerSystemMenuItems, generateMenuComponent } = require('./modules/menu');
+const { generateProfileComponent } = require('./modules/profile');
 const { registerModule, registerPageDir } = require('./core/admin-module');
 
 
@@ -252,6 +253,7 @@ function adminPanelPlugin(options = {}) {
       ctx.addRoute('post', `${adminPath}/api/auth/login`, apiHandlers.loginHandler);
       ctx.addRoute('post', `${adminPath}/api/auth/logout`, requireAuth, apiHandlers.logoutHandler);
       ctx.addRoute('get', `${adminPath}/api/auth/me`, requireAuth, apiHandlers.meHandler);
+      ctx.addRoute('put', `${adminPath}/api/auth/profile`, requireAuth, apiHandlers.updateProfileHandler);
 
       // Extensions API routes
       ctx.addRoute('get', `${adminPath}/api/extensions/config`, requireAuth, extensionHandlers.configHandler);
@@ -376,6 +378,7 @@ function generateAdminPanelHtml(adminPath, registry) {
   const dashboardComponent = generateDashboardComponent();
   const bulkActionsComponent = generateBulkActionsComponent();
   const customPageComponent = generateCustomPageComponent();
+  const profileComponent = generateProfileComponent();
 
   const settings = registry.settings;
   const fieldRenderersCode = Array.from(registry.fieldRenderers.entries()).map(([type, r]) => {
@@ -455,6 +458,7 @@ function generateAdminPanelHtml(adminPath, registry) {
     ${dashboardComponent}
     ${bulkActionsComponent}
     ${customPageComponent}
+    ${profileComponent}
 
     // Custom page components container
     window.__customPages = window.__customPages || {};

@@ -336,16 +336,25 @@ const Sidebar = {
         // User section
         state.user && m('div.p-4.border-t.border-gray-200.dark:border-slate-600', [
           m('div.flex.items-center.gap-3', [
-            m('div.w-8.h-8.bg-gray-200 dark:bg-slate-700.rounded-full.flex.items-center.justify-center', [
-              m('span.text-sm.font-medium.text-gray-600.dark:text-slate-300', 
-                (state.user.name || state.user.email || 'A').charAt(0).toUpperCase()
-              ),
+            m('div.flex-1.flex.items-center.gap-3.min-w-0.cursor-pointer.hover:opacity-80.transition-opacity', {
+              title: 'Edit Profile',
+              onclick: () => { sidebarOpen = false; m.route.set('/profile'); },
+            }, [
+              m('div.w-8.h-8.bg-blue-100.dark:bg-blue-900/50.rounded-full.flex.items-center.justify-center.flex-shrink-0', [
+                m('span.text-sm.font-semibold.text-blue-600.dark:text-blue-300', 
+                  (state.user.name || state.user.email || 'A').charAt(0).toUpperCase()
+                ),
+              ]),
+              m('div.flex-1.min-w-0', [
+                m('p.text-sm.font-medium.text-gray-900.dark:text-slate-100.truncate', state.user.name || 'Admin'),
+                m('p.text-xs.text-gray-500.dark:text-slate-400.truncate', state.user.email),
+              ]),
             ]),
-            m('div.flex-1.min-w-0', [
-              m('p.text-sm.font-medium.text-gray-900 dark:text-slate-100.truncate', state.user.name || 'Admin'),
-              m('p.text-xs.text-gray-500 dark:text-slate-400.truncate', state.user.email),
-            ]),
-            m('button.p-1.text-gray-400 dark:text-slate-500.hover:text-gray-600 dark:hover:text-slate-300', {
+            m('button.p-1.text-gray-400.dark:text-slate-500.hover:text-blue-600.dark:hover:text-blue-400.transition-colors', {
+              title: 'My Profile',
+              onclick: () => { sidebarOpen = false; m.route.set('/profile'); },
+            }, m(Icon, { name: 'user', class: 'w-4 h-4' })),
+            m('button.p-1.text-gray-400.dark:text-slate-500.hover:text-red-600.dark:hover:text-red-400.transition-colors', {
               title: 'Logout',
               onclick: async () => {
                 await api.post('/auth/logout');
@@ -354,7 +363,7 @@ const Sidebar = {
                 clearIntendedRoute();
                 m.route.set('/login');
               },
-            }, m(Icon, { name: 'logout', class: 'w-5 h-5' })),
+            }, m(Icon, { name: 'logout', class: 'w-4 h-4' })),
           ]),
         ]),
       ]),

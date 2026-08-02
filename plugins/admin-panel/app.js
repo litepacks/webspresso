@@ -161,6 +161,16 @@ var routes = {
       return SettingsPage;
     }
   },
+  '/profile': {
+    onmatch: async () => {
+      const isAuth = await checkAuth();
+      if (!isAuth) {
+        redirectToLogin();
+        return;
+      }
+      return ProfilePage;
+    }
+  },
   '/users/sessions': {
     onmatch: async () => {
       if (!(await guardUserManagementRoutes())) return;
