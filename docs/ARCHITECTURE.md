@@ -6,8 +6,8 @@
 
 | Meta | Value |
 |------|--------|
-| Last reviewed | 2026-06-25 |
-| Package version | 0.0.77 |
+| Last reviewed | 2026-08-10 |
+| Package version | 0.0.84 |
 | Primary runtime | Node.js ≥ 18 (HTTP server process) |
 | Secondary runtime | Optional in-process application kernel (no HTTP) |
 
@@ -169,7 +169,7 @@ C4Container
 | CRUD API | List/create/update/delete from model metadata |
 | Field renderers | Types: text, number, boolean, json, rich-text, **file-upload**, relations |
 | `customFields` | Override UI for columns (e.g. `file-upload` on string columns) |
-| `registerModule` / `registerPageDir` | Plugin extension: pages, menu, API, widgets (`componentFile`, `pagesDir`, auto `layout`) |
+| `registerModule` / `registerPageDir` | Plugin extension: pages, menu, API, widgets (`componentFile`, `pagesDir`, custom HTML/URL pages, SSR scripts & styles, auto `layout`) |
 
 | User management | Optional CRUD for site users inside admin |
 | Rich text | Quill (CDN); HTML sanitized on save by default |

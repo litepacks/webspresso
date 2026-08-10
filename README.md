@@ -846,18 +846,19 @@ if (adminApi) {
 }
 ```
 
-**registerModule config:**
 | Field | Description |
 |-------|-------------|
 | `id` | Unique module identifier (required) |
-| `pages` | Custom admin pages (`id`, `title`, `path`, `icon`, `description`, `componentFile`, `component`, `layout`) |
+| `pages` | Custom admin pages (`id`, `title`, `path`, `icon`, `description`, `url`, `iframeUrl`, `html`, `htmlFile`, `componentFile`, `component`, `layout`) |
 | `pagesDir` | Path to directory containing page folders/configs for automatic discovery |
 | `menu` | Sidebar menu items (`id`, `label`, `path`, `icon`, `order`) |
 | `menuGroups` | Collapsible menu groups (`id`, `label`, `order`) |
 | `api` | API routes (`prefix`, `routes`: `method`, `path`, `handler`, `auth`) |
 | `widgets` | Dashboard widgets (`id`, `title`, `dataLoader`) |
+| `scripts` | External script URLs, script objects, or inline scripts injected into SSR Admin Panel (`registerScript`) |
+| `styles` | External stylesheet URLs or inline CSS injected into SSR Admin Panel (`registerStyle`) |
 
-Pages support `componentFile` (path to a `.js` file exporting/returning a Mithril component), `pagesDir` (directory auto-discovery), or `component` (code string). By default (`layout: true`), page views are automatically wrapped in the Admin Layout with Breadcrumbs. Set `layout: false` for full-screen / custom canvas pages.
+Pages support JavaScript client components (`componentFile`, `pagesDir`, `component`) as well as **custom HTML & external URL pages** (`url` or `iframeUrl` for external web apps, and `html` or `htmlFile` for local HTML files like EUIX Engine apps). By default (`layout: true`), custom page views are automatically wrapped in the Admin Layout with Breadcrumbs. Set `layout: false` for full-screen / custom canvas pages.
 
 **Example component file (`admin/reports.js`):**
 

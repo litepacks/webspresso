@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.84] - 2026-08-10
+
+### Added
+
+#### Admin Panel Custom HTML & External URL Pages (`plugins/admin-panel`)
+- **Custom Pages (`url` / `iframeUrl`, `html` / `htmlFile`)**: `registerPage` and `registerModule` support embedding external web pages (`url`) or custom HTML documents (`html` or `htmlFile` path) inside clean `<iframe>` containers within the Admin Panel SPA.
+- **Automatic Layout Wrapping**: Custom pages are automatically wrapped inside the Admin Panel layout (breadcrumbs, header, title) unless `layout: false` is configured for full-screen pages.
+
+#### SSR Script & Style Import Registration (`plugins/admin-panel`)
+- **`registerScript` & `registerStyle`**: Added `registerScript(script)` and `registerStyle(style)` methods to `AdminRegistry`, `adminApi`, and `registerModule({ scripts: [...], styles: [...] })`.
+- **SSR Injection**: External scripts (e.g. `<script src="https://unpkg.com/euixjs@latest/dist/EUIXEngine.umd.js"></script>`) and custom CSS links are rendered directly into the Admin Panel SSR `<head>` and `</body>` markup.
+
+### Fixed
+
+#### Inline HTML Script Tag Escaping (`plugins/admin-panel/index.js`)
+- Escaped `<` as `\u003c` during JSON serialization of `window.__ADMIN_CONFIG__` in `generateAdminPanelHtml`, preventing raw HTML documents embedded in custom pages from breaking the Admin Panel `<script>` context.
+
+#### SPA Navigation & Route Resolution (`plugins/admin-panel/modules/menu.js`, `plugins/admin-panel/app.js`)
+- Updated `MenuItem` href generation to correctly prefix custom route paths with `adminPath` (`/_admin/euix`).
+- Scheduled `m.redraw()` on async route resolution to ensure seamless client-side SPA navigation without manual workaround hacks.
+
+#### E2E & Unit Test Coverage
+- Added automated E2E tests for interactive EUIX counter components and EUIX documentation site embedding (`tests/e2e/admin-panel.spec.js`).
+
 ## [0.0.83] - 2026-08-02
 
 ### Fixed

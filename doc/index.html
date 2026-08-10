@@ -524,6 +524,28 @@ gallery: zdb.files({
   })
 });</code></pre>
 
+      <h3 id="admin-custom-pages-and-scripts" class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Custom HTML/URL Pages & SSR Script/Style Imports</h3>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-3 leading-relaxed">The admin panel supports registering custom pages that embed external URLs or direct HTML files (such as custom UI frameworks like EUIX Engine) inside clean <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">&lt;iframe&gt;</code> containers with automatic layout wrapping.</p>
+      <ul class="list-disc pl-5 text-slate-600 dark:text-slate-400 text-sm mb-3 space-y-2">
+        <li><strong class="text-slate-800 dark:text-slate-200"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">url</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">iframeUrl</code></strong>: URL of an external page or web app to embed inside the Admin Panel.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">html</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">htmlFile</code></strong>: Inline HTML string or path to an HTML document to render within the iframe.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">layout: false</code></strong>: Removes the default header and breadcrumbs wrapper for full-screen / custom canvas pages.</li>
+        <li><strong class="text-slate-800 dark:text-slate-200"><code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">scripts</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">styles</code></strong>: Array of external script URLs, script objects (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">{ src, position: 'head'|'body' }</code>), or CSS links injected directly into the Admin Panel SSR template via <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">registerScript</code> / <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">registerStyle</code>.</li>
+      </ul>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-3"><code class="language-javascript">adminApi.registerModule({
+  id: 'euix-module',
+  scripts: ['https://unpkg.com/euixjs@latest/dist/EUIXEngine.umd.js'],
+  styles: ['https://cdn.example.com/admin.css'],
+  pages: [
+    { id: 'euix-docs', title: 'EUIX Docs', path: '/euix', url: 'https://litepacks.github.io/euix/' },
+    { id: 'euix-counter', title: 'EUIX Counter', path: '/euix-counter', htmlFile: './euix-counter.html' }
+  ],
+  menu: [
+    { id: 'euix-docs', label: 'EUIX Docs', path: '/euix', icon: 'code' },
+    { id: 'euix-counter', label: 'EUIX Counter', path: '/euix-counter', icon: 'zap' }
+  ]
+});</code></pre>
+
       <h3 id="admin-user-management" class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Site user management inside the admin plugin</h3>
       <p class="text-slate-600 dark:text-slate-400 text-sm mb-3 leading-relaxed">To manage <strong class="text-slate-800 dark:text-slate-200">end-user</strong> accounts (the same rows your site login uses) from the admin SPA, enable <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">userManagement</code> on <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">adminPanelPlugin</code>. The <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">model</code> option must match your ORM user model (e.g. <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">User</code> with <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">quickAuth({ userModel: 'User', ... })</code>). The UI lives under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/users</code>, <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/users/new</code>, etc., and talks to <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">/_admin/api/users*</code>.</p>
       <ul class="list-disc pl-5 text-slate-600 dark:text-slate-400 text-sm mb-3 space-y-2">
