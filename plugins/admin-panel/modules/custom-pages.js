@@ -128,7 +128,15 @@ function createCustomPageApiHandlers(options) {
         return res.status(404).json({ error: 'Action not found' });
       }
 
-      const result = await action({ db, req, body: req.body, user: req.session?.adminUser });
+      const payload = { ...(req.query || {}), ...(req.body || {}) };
+      const result = await action({
+        db,
+        req,
+        body: payload,
+        payload,
+        query: req.query || {},
+        user: req.session?.adminUser,
+      });
       res.json({ success: true, result });
     } catch (error) {
       res.status(500).json({ error: error.message });

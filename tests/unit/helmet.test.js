@@ -243,6 +243,28 @@ describe('Helmet Configuration', () => {
         process.env.NODE_ENV = originalEnv;
       }
     });
+
+    it('adminPanelPlugin merges frameSrc and replaces default \'none\' in production CSP', async () => {
+      const originalEnv = process.env.NODE_ENV;
+      try {
+        process.env.NODE_ENV = 'production';
+        const adminPanelPlugin = require('../../plugins/admin-panel');
+        const mockDb = { getRepository: vi.fn(), knex: { schema: { hasTable: vi.fn().mockResolvedValue(true) } } };
+        const { app } = createApp({
+          pagesDir,
+          viewsDir,
+          plugins: [
+            adminPanelPlugin({ db: mockDb }),
+          ],
+        });
+        const csp = (await request(app).get('/')).headers['content-security-policy'] || '';
+        expect(csp).toContain('frame-src');
+        expect(csp).not.toContain("frame-src 'none'");
+        expect(csp).toContain("frame-src 'self' data: blob: https:");
+      } finally {
+        process.env.NODE_ENV = originalEnv;
+      }
+    });
   });
 });
 

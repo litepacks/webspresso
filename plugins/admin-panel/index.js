@@ -71,10 +71,15 @@ function adminPanelPlugin(options = {}) {
     version: '2.0.0',
     description: 'Modular admin panel for Webspresso with extensions support',
     
-    // CSP requirements for admin panel scripts
+    // CSP requirements for admin panel scripts, styles, and custom page iframe sources
     // Note: cdn.quilljs.com 301-redirects to cdn.jsdelivr.net; CSP is enforced on the final URL.
     csp: {
-      styleSrc: ['https://cdn.quilljs.com', 'https://cdn.jsdelivr.net'],
+      styleSrc: [
+        'https://cdn.quilljs.com',
+        'https://cdn.jsdelivr.net',
+        'https://unpkg.com',
+        'https://cdn.tailwindcss.com',
+      ],
       scriptSrc: [
         'https://cdn.quilljs.com',
         'https://cdn.jsdelivr.net',
@@ -82,6 +87,7 @@ function adminPanelPlugin(options = {}) {
         'https://cdn.tailwindcss.com',
       ],
       connectSrc: ['https://unpkg.com', 'https://cdn.tailwindcss.com', 'https://cdn.jsdelivr.net'],
+      frameSrc: ["'self'", 'data:', 'blob:', 'https:'],
     },
     enabled,
     registry, // Expose registry for external configuration
@@ -281,7 +287,7 @@ function adminPanelPlugin(options = {}) {
 
       // Custom pages API routes
       ctx.addRoute('get', `${adminPath}/api/extensions/pages/:pageId/data`, requireAuth, pageHandlers.getPageData);
-      ctx.addRoute('post', `${adminPath}/api/extensions/pages/:pageId/actions/:actionId`, requireAuth, pageHandlers.executePageAction);
+      ctx.addRoute('all', `${adminPath}/api/extensions/pages/:pageId/actions/:actionId`, requireAuth, pageHandlers.executePageAction);
 
       // User management API routes
       if (userHandlers) {

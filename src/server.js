@@ -349,8 +349,9 @@ function createApp(options = {}) {
       if (finalConfig.contentSecurityPolicy && finalConfig.contentSecurityPolicy.directives) {
         const directives = finalConfig.contentSecurityPolicy.directives;
         for (const [directive, sources] of Object.entries(pluginCspSources)) {
-          if (sources.size > 0 && directives[directive]) {
-            directives[directive] = [...directives[directive], ...Array.from(sources)];
+          if (sources.size > 0) {
+            const existing = (directives[directive] || []).filter(s => s !== "'none'");
+            directives[directive] = [...existing, ...Array.from(sources)];
           }
         }
       }
