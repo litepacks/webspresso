@@ -50,6 +50,52 @@ async function createTestProject() {
       JSON.stringify(packageJson, null, 2)
     );
 
+    fs.writeFileSync(
+      path.join(projectPath, 'euix-counter.html'),
+      `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/euixjs@latest/dist/EUIXEngine.umd.js"></script>
+</head>
+<body class="p-8 bg-slate-50 font-sans">
+  <div id="euix-app" class="max-w-md mx-auto">
+    <div class="p-6 bg-white rounded-xl shadow-md border border-slate-200">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg">⚡</div>
+        <div>
+          <h2 class="text-xl font-bold text-slate-800">EUIX Reactive Counter</h2>
+          <p class="text-xs text-slate-500">Declarative XML UI Engine with fine-grained reactivity</p>
+        </div>
+      </div>
+      
+      <p class="text-sm text-slate-600 mb-6 bg-slate-100 p-3 rounded-lg border border-slate-200">
+        This page is an <strong>EUIX Engine</strong> HTML component running inside Webspresso Admin Panel.
+      </p>
+
+      <div class="flex items-center justify-between bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4">
+        <span class="text-sm font-semibold text-blue-900">Counter Value:</span>
+        <span id="counter-display" class="text-3xl font-extrabold text-blue-600">0</span>
+      </div>
+
+      <div class="flex gap-3">
+        <button id="btn-increment" onclick="count++; document.getElementById('counter-display').textContent = count;" class="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-95 transition text-white font-semibold rounded-lg shadow-sm">
+          + Increment
+        </button>
+        <button id="btn-reset" onclick="count=0; document.getElementById('counter-display').textContent = count;" class="py-2.5 px-4 bg-slate-200 hover:bg-slate-300 active:scale-95 transition text-slate-700 font-semibold rounded-lg">
+          Reset
+        </button>
+      </div>
+    </div>
+  </div>
+  <script>
+    var count = 0;
+  </script>
+</body>
+</html>`
+    );
+
     // Create server.js with in-memory database for tests
     const serverJs = `const { createApp, createDatabase } = require('webspresso');
 const { adminPanelPlugin, dataExchangePlugin, auditLogPlugin, seoCheckerPlugin, contentPlugin } = require('webspresso/plugins');
@@ -207,6 +253,36 @@ const db = createDatabase({
           adminPath: '/_admin',
           inlineEdit: true,
         }),
+        {
+          name: 'euix-test-plugin',
+          onRoutesReady(ctx) {
+            const adminApi = ctx.usePlugin('admin-panel');
+            if (adminApi) {
+              adminApi.registerModule({
+                id: 'euix-module',
+                scripts: ['https://unpkg.com/euixjs@latest/dist/EUIXEngine.umd.js'],
+                pages: [
+                  {
+                    id: 'euix-page',
+                    title: 'EUIX Framework',
+                    path: '/euix',
+                    url: 'https://litepacks.github.io/euix/',
+                  },
+                  {
+                    id: 'euix-counter',
+                    title: 'EUIX Counter Demo',
+                    path: '/euix-counter',
+                    htmlFile: path.join(__dirname, 'euix-counter.html')
+                  }
+                ],
+                menu: [
+                  { id: 'euix-page', label: 'EUIX Docs', path: '/euix', icon: 'code' },
+                  { id: 'euix-counter', label: 'EUIX Counter', path: '/euix-counter', icon: 'zap' }
+                ],
+              });
+            }
+          },
+        },
       ],
     });
 

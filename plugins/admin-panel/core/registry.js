@@ -46,6 +46,10 @@ class AdminRegistry {
 
     // Client components: JS code strings for custom page rendering
     this.clientComponents = new Map();
+
+    // Custom scripts & styles for Admin Panel SSR rendering
+    this.scripts = [];
+    this.styles = [];
     
     // Hooks: lifecycle hooks
     this.hooks = {
@@ -267,6 +271,66 @@ class AdminRegistry {
   }
 
   /**
+   * Register a custom script URL or definition
+   * @param {string|Object} script - Script URL string or config object { src, code, async, defer, type, position }
+   */
+  registerScript(script) {
+    if (!script) return this;
+    if (typeof script === 'string') {
+      this.scripts.push({ src: script, position: 'head' });
+    } else if (typeof script === 'object') {
+      this.scripts.push({ position: 'head', ...script });
+    }
+    return this;
+  }
+
+  /**
+   * Register a custom style URL or CSS definition
+   * @param {string|Object} style - Style URL string or config object { href, code, rel }
+   */
+  registerStyle(style) {
+    if (!style) return this;
+    if (typeof style === 'string') {
+      this.styles.push({ href: style, rel: 'stylesheet' });
+    } else if (typeof style === 'object') {
+      this.styles.push({ rel: 'stylesheet', ...style });
+    }
+    return this;
+  }
+
+  /**
+   * Get formatted HTML tags for registered styles
+   */
+  getStylesHtml() {
+    return this.styles.map(s => {
+      if (s.code) return `<style>${s.code}</style>`;
+      if (s.href) return `<link rel="${s.rel || 'stylesheet'}" href="${s.href}">`;
+      return '';
+    }).filter(Boolean).join('\n');
+  }
+
+  /**
+   * Get formatted HTML tags for registered scripts
+   * @param {string} [position] - Filter by position ('head' or 'body')
+   */
+  getScriptsHtml(position) {
+    return this.scripts
+      .filter(s => !position || s.position === position)
+      .map(s => {
+        if (s.code) return `<script>${s.code}</script>`;
+        if (s.src) {
+          const asyncAttr = s.async ? ' async' : '';
+          const deferAttr = s.defer ? ' defer' : '';
+          const typeAttr = s.type ? ` type="${s.type}"` : '';
+          return `<script src="${s.src}"${asyncAttr}${deferAttr}${typeAttr}></script>`;
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  /**
    * Register a client-side component for a custom page
    * @param {string} pageId - Page ID (must match a registered page)
    * @param {string} jsCode - JavaScript code string that defines the component.
@@ -415,6 +479,8 @@ class AdminRegistry {
         description: p.description,
         permission: p.permission,
         layout: p.layout !== undefined ? p.layout : true,
+        url: p.url || p.iframeUrl,
+        html: p.html,
         hasClientComponent: this.clientComponents.has(p.id),
       })),
 
@@ -460,6 +526,8 @@ class AdminRegistry {
     this.menuGroups.clear();
     this.fieldRenderers.clear();
     this.clientComponents.clear();
+    this.scripts = [];
+    this.styles = [];
     Object.keys(this.hooks).forEach(k => this.hooks[k] = []);
   }
 }

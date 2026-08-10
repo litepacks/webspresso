@@ -4,6 +4,7 @@
  */
 
 const { test, expect } = require('@playwright/test');
+const { captureStepScreenshot } = require('./helpers/screenshot');
 
 const BASE_URL = 'http://127.0.0.1:3001';
 
@@ -19,17 +20,21 @@ async function ensureLoggedIn(page) {
 
   // Admin UI mounts via Mithril from CDN; avoid networkidle (unreliable with external scripts).
   await page.waitForSelector('h1', { timeout: 45_000 });
-  const heading = await page.locator('h1').textContent();
+  let heading = await page.locator('h1').textContent();
 
   if (heading.includes('Setup Admin Account')) {
-    // Create admin account
+    // Try creating admin account
     await page.fill('input[name="name"]', TEST_ADMIN.name);
     await page.fill('input[name="email"]', TEST_ADMIN.email);
     await page.fill('input[name="password"]', TEST_ADMIN.password);
     await page.click('button[type="submit"]');
-    await page.waitForURL(/\/(_admin)?(\/)?$/, { timeout: 15_000 });
-    await page.waitForLoadState('load');
-  } else if (heading.includes('Admin Login')) {
+    await page.waitForTimeout(1000);
+    if (await page.locator('h1').count() > 0) {
+      heading = await page.locator('h1').textContent();
+    }
+  }
+
+  if (heading.includes('Admin Login')) {
     // Login
     await page.fill('input[name="email"]', TEST_ADMIN.email);
     await page.fill('input[name="password"]', TEST_ADMIN.password);
@@ -37,7 +42,6 @@ async function ensureLoggedIn(page) {
     await page.waitForURL(/\/(_admin)?(\/)?$/, { timeout: 15_000 });
     await page.waitForLoadState('load');
   }
-  // else: Already logged in (showing Admin Panel)
 
   // Verify we're logged in
   await page.waitForSelector('text=Admin Panel', { timeout: 15_000 });
@@ -1401,6 +1405,62 @@ test.describe('Admin Panel UI', () => {
       await page.getByRole('link', { name: 'Add User' }).click();
       await expect(page).toHaveURL(/\/models\/User\/new(\?|$)/, { timeout: 15000 });
       await expect(page.getByRole('heading', { name: 'New Record' })).toBeVisible({ timeout: 15000 });
+    });
+  });
+
+  test.describe('Custom HTML and URL Pages (EUIX Integration)', () => {
+    test('renders server-registered EUIX page with iframe and SSR script injection', async ({ page }, testInfo) => {
+      await ensureLoggedIn(page);
+
+      // Verify SSR script tag for EUIXEngine is present in the document head
+      const scriptTag = page.locator('script[src="https://unpkg.com/euixjs@latest/dist/EUIXEngine.umd.js"]');
+      await expect(scriptTag).toBeAttached();
+
+      // Click the EUIX Docs sidebar link directly
+      const menuLink = page.getByRole('link', { name: 'EUIX Docs' });
+      await expect(menuLink).toBeVisible({ timeout: 15000 });
+      await menuLink.click();
+
+      // Verify page heading
+      await expect(page.getByRole('heading', { name: 'EUIX Framework' })).toBeVisible({ timeout: 15000 });
+
+      // Verify iframe embedding EUIX documentation site
+      const iframe = page.locator('iframe[src="https://litepacks.github.io/euix/"]');
+      await expect(iframe).toBeVisible({ timeout: 15000 });
+
+      // Capture screenshot into tests/e2e/screenshots/admin-panel/euix-page-view.png
+      await captureStepScreenshot(page, 'admin-panel', 'euix-page-view', testInfo);
+    });
+
+    test('renders interactive EUIX counter component page inside admin panel', async ({ page }, testInfo) => {
+      await ensureLoggedIn(page);
+
+      // Click the EUIX Counter sidebar link directly
+      const counterLink = page.getByRole('link', { name: 'EUIX Counter' });
+      await expect(counterLink).toBeVisible({ timeout: 15000 });
+      await counterLink.click();
+
+      // Verify page heading
+      await expect(page.getByRole('heading', { name: 'EUIX Counter Demo' })).toBeVisible({ timeout: 15000 });
+
+      // Frame locator for the custom HTML iframe
+      const frameLocator = page.frameLocator('iframe');
+      
+      // Verify initial counter value is 0
+      const counterDisplay = frameLocator.locator('#counter-display');
+      await expect(counterDisplay).toHaveText('0', { timeout: 15000 });
+
+      // Click increment button 3 times
+      const btnIncrement = frameLocator.locator('#btn-increment');
+      await btnIncrement.click();
+      await btnIncrement.click();
+      await btnIncrement.click();
+
+      // Verify counter value is now 3
+      await expect(counterDisplay).toHaveText('3', { timeout: 15000 });
+
+      // Capture screenshot into tests/e2e/screenshots/admin-panel/euix-counter-view.png
+      await captureStepScreenshot(page, 'admin-panel', 'euix-counter-view', testInfo);
     });
   });
 });

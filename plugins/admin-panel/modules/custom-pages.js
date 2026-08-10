@@ -148,6 +148,37 @@ function generateCustomPageComponent() {
   return `
 // Custom Page Component Factory
 function createCustomPage(pageConfig) {
+  if (pageConfig && (pageConfig.url || pageConfig.html)) {
+    var iframeAttrs = {
+      src: pageConfig.url || undefined,
+      srcdoc: pageConfig.html || undefined,
+      style: 'width: 100%; height: ' + (pageConfig.layout === false ? '100vh' : 'calc(100vh - 12rem)') + '; min-height: 600px; border: 0; border-radius: 0.5rem;',
+      allow: 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen',
+      allowfullscreen: true
+    };
+    if (pageConfig.layout === false) {
+      return {
+        view: function() {
+          return m('iframe', iframeAttrs);
+        }
+      };
+    }
+    return {
+      view: function() {
+        return m(Layout, [
+          m(Breadcrumb, { items: [{ label: pageConfig.title, href: pageConfig.path }] }),
+          m('div.mb-4.flex.items-start.justify-between.gap-4', [
+            m('div', [
+              m('h1.text-2xl.font-bold.text-gray-900.dark:text-slate-100', pageConfig.title),
+              pageConfig.description && m('p.text-gray-500.dark:text-slate-400.mt-1', pageConfig.description)
+            ])
+          ]),
+          m('iframe', iframeAttrs)
+        ]);
+      }
+    };
+  }
+
   return {
     oninit(vnode) {
       vnode.state.data = null;

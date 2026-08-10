@@ -200,9 +200,11 @@ const ThemeToggle = {
 const MenuItem = {
   view(vnode) {
     const { item, active } = vnode.attrs;
+    const adminPath = window.__ADMIN_PATH__ || '/_admin';
+    const href = item.path ? (item.path.startsWith('/') ? adminPath + item.path : adminPath + '/' + item.path) : '#';
     
     return m('a.flex.items-center.gap-3.px-3.py-2.rounded-lg.text-sm.font-medium.transition-colors', {
-      href: item.path,
+      href: href,
       class: active 
         ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' 
         : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700',
@@ -210,6 +212,7 @@ const MenuItem = {
         e.preventDefault();
         sidebarOpen = false;
         m.route.set(item.path);
+        setTimeout(() => m.redraw(), 0);
       },
     }, [
       item.icon && m(Icon, { name: item.icon, class: 'w-5 h-5 flex-shrink-0' }),

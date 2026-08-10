@@ -41,6 +41,7 @@ function loadPagesFromDir(dirPath) {
 
     let pageConfig = null;
     let componentFile = null;
+    let htmlFile = null;
 
     if (entry.isDirectory()) {
       const folderPath = path.join(resolvedDir, entry.name);
@@ -63,19 +64,43 @@ function loadPagesFromDir(dirPath) {
           break;
         }
       }
+
+      if (!componentFile) {
+        const htmlCandidates = ['index.html', 'page.html', 'component.html', `${entry.name}.html`];
+        for (const cand of htmlCandidates) {
+          const fullCandPath = path.join(folderPath, cand);
+          if (fs.existsSync(fullCandPath)) {
+            htmlFile = fullCandPath;
+            break;
+          }
+        }
+      }
     } else if (entry.isFile() && entry.name.endsWith('.json')) {
       const jsonPath = path.join(resolvedDir, entry.name);
       pageConfig = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
       const baseName = entry.name.slice(0, -5);
       const jsCandidate = path.join(resolvedDir, baseName + '.js');
+      const htmlCandidate = path.join(resolvedDir, baseName + '.html');
       if (fs.existsSync(jsCandidate)) {
         componentFile = jsCandidate;
+      } else if (fs.existsSync(htmlCandidate)) {
+        htmlFile = htmlCandidate;
+      }
+    } else if (entry.isFile() && entry.name.endsWith('.html')) {
+      const baseName = entry.name.slice(0, -5);
+      const jsonCandidate = path.join(resolvedDir, baseName + '.json');
+      if (!fs.existsSync(jsonCandidate)) {
+        pageConfig = { id: baseName, title: baseName, path: '/' + baseName };
+        htmlFile = path.join(resolvedDir, entry.name);
       }
     }
 
     if (pageConfig) {
       if (componentFile && !pageConfig.componentFile) {
         pageConfig.componentFile = componentFile;
+      }
+      if (htmlFile && !pageConfig.htmlFile && !pageConfig.componentFile) {
+        pageConfig.htmlFile = htmlFile;
       }
       if (pageConfig.menu) {
         if (pageConfig.menu === true) {
@@ -129,6 +154,24 @@ function registerModule(config, deps) {
     registerMenuGroups(config.menuGroups, registry);
   }
 
+  if (config.scripts) {
+    if (!Array.isArray(config.scripts)) {
+      throw new Error(`Module "${config.id}": scripts must be an array`);
+    }
+    for (const s of config.scripts) {
+      registry.registerScript(s);
+    }
+  }
+
+  if (config.styles) {
+    if (!Array.isArray(config.styles)) {
+      throw new Error(`Module "${config.id}": styles must be an array`);
+    }
+    for (const s of config.styles) {
+      registry.registerStyle(s);
+    }
+  }
+
   if (config.pages !== undefined) {
     if (!Array.isArray(config.pages)) {
       throw new Error(`Module "${config.id}": pages must be an array`);
@@ -148,6 +191,27 @@ function registerModule(config, deps) {
     const { pages: dirPages, menuItems: dirMenuItems } = loadPagesFromDir(config.pagesDir);
     pagesList = pagesList.concat(dirPages);
     menuList = menuList.concat(dirMenuItems);
+  }
+
+  for (const p of pagesList) {
+    if (p.menu && !menuList.some(m => m.id === p.id)) {
+      if (p.menu === true) {
+        menuList.push({
+          id: p.id,
+          label: p.title,
+          path: p.path,
+          icon: p.icon,
+        });
+      } else if (typeof p.menu === 'object') {
+        menuList.push({
+          id: p.id,
+          label: p.title,
+          path: p.path,
+          icon: p.icon,
+          ...p.menu,
+        });
+      }
+    }
   }
 
   if (pagesList.length > 0) {
@@ -192,8 +256,13 @@ function registerPages(moduleId, pages, deps) {
   for (const page of pages) {
     const pageId = page.id || moduleId;
 
-    if (!page.title || !page.path) {
-      throw new Error(`Module "${moduleId}", page "${pageId}": requires title and path`);
+    let htmlContent = page.html || null;
+    if (page.htmlFile) {
+      const resolvedHtmlPath = path.resolve(page.htmlFile);
+      if (!fs.existsSync(resolvedHtmlPath)) {
+        throw new Error(`Module "${moduleId}", page "${pageId}": htmlFile not found at ${page.htmlFile}`);
+      }
+      htmlContent = fs.readFileSync(resolvedHtmlPath, 'utf8');
     }
 
     registry.registerPage(pageId, {
@@ -203,6 +272,8 @@ function registerPages(moduleId, pages, deps) {
       description: page.description,
       permission: page.permission,
       layout: page.layout !== undefined ? page.layout : true,
+      url: page.url || page.iframeUrl || undefined,
+      html: htmlContent || undefined,
     });
 
     if (page.componentFile) {
@@ -218,7 +289,8 @@ function registerPages(moduleId, pages, deps) {
       registry.registerClientComponent(pageId, formattedCode);
     }
 
-    ctx.addRoute('get', `${adminPath}${page.path}`, optionalAuth, serveAdminPanel);
+    const normPath = page.path.startsWith('/') ? page.path : '/' + page.path;
+    ctx.addRoute('get', `${adminPath}${normPath}`, optionalAuth, serveAdminPanel);
   }
 }
 

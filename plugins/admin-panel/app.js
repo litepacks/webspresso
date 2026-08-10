@@ -284,20 +284,28 @@ function wrapCustomPageWithLayout(page, rawComp) {
 var config = window.__ADMIN_CONFIG__;
 if (config && config.pages) {
   config.pages.forEach(function(page) {
-    if (!routes[page.path]) {
-      routes[page.path] = {
-        onmatch: async () => {
-          const isAuth = await checkAuth();
-          if (!isAuth) {
-            redirectToLogin();
-            return;
-          }
-          if (window.__customPages && window.__customPages[page.id]) {
-            return wrapCustomPageWithLayout(page, window.__customPages[page.id]);
-          }
-          return createCustomPage(page);
+    var normPath = page.path ? (page.path.startsWith('/') ? page.path : '/' + page.path) : '/';
+    var routeHandler = {
+      onmatch: async () => {
+        const isAuth = await checkAuth();
+        if (!isAuth) {
+          redirectToLogin();
+          return;
         }
-      };
+        const comp = (window.__customPages && window.__customPages[page.id])
+          ? wrapCustomPageWithLayout(page, window.__customPages[page.id])
+          : createCustomPage(page);
+        setTimeout(function() { m.redraw(); }, 10);
+        setTimeout(function() { m.redraw(); }, 100);
+        return comp;
+      }
+    };
+
+    if (!routes[normPath]) {
+      routes[normPath] = routeHandler;
+    }
+    if (normPath !== '/' && !routes[normPath + '/']) {
+      routes[normPath + '/'] = routeHandler;
     }
   });
 }

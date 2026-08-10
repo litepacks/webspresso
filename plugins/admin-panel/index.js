@@ -121,6 +121,12 @@ function adminPanelPlugin(options = {}) {
           serveAdminPanel,
         });
       },
+      registerScript(script) {
+        return registry.registerScript(script);
+      },
+      registerStyle(style) {
+        return registry.registerStyle(style);
+      },
 
       _ctx: null,
     },
@@ -434,12 +440,14 @@ function generateAdminPanelHtml(adminPath, registry) {
     .dark .ql-snow .ql-fill { fill: #94a3b8; }
     .dark .ql-picker { color: #cbd5e1; }
   </style>
+  ${registry.getStylesHtml()}
+  ${registry.getScriptsHtml('head')}
 </head>
 <body class="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-slate-100 antialiased">
   <div id="app"></div>
   <script>
     window.__ADMIN_PATH__ = ${JSON.stringify(adminPath)};
-    window.__ADMIN_CONFIG__ = ${JSON.stringify(registry.toClientConfig())};
+    window.__ADMIN_CONFIG__ = ${JSON.stringify(registry.toClientConfig()).replace(/</g, '\\u003c')};
   </script>
   <script>
     // Helper functions
@@ -469,6 +477,7 @@ function generateAdminPanelHtml(adminPath, registry) {
     ${fieldRenderersCode}
   </script>
   <script>${appScript}</script>
+  ${registry.getScriptsHtml('body')}
 </body>
 </html>`;
 }
