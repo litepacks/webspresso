@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.85] - 2026-08-12
+
+### Added
+
+#### Zero-Dependency JWT & Refresh Token System (`core/auth`)
+- **HS256 JWT Generator & Verifier (`core/auth/jwt.js`)**: Native, zero-dependency JWT signing (`signJwt`), verification (`verifyJwt`), and decoding (`decodeJwt`) using Node.js's native `crypto` module (HMAC-SHA256, timing-safe signatures, duration parsing for `'15m'`, `'24h'`, `'30d'`, etc.).
+- **Dual Authentication Architecture**: Supports **Session + Cookie** (stateful for browser SSR routes & Admin Panel) and **JWT Bearer + Refresh Tokens** (stateless for REST APIs, Mobile Apps & SPAs).
+- **Refresh Token Rotation**: `auth.generateRefreshToken(user)` creates long-lived refresh tokens with `jti` nonces. `auth.refreshAccessToken(refreshToken, { rotate: true })` handles token rotation and issues fresh access/refresh token pairs. Automatically rejects refresh tokens when passed to access endpoints.
+- **Request & Middleware Integration**:
+  - `req.auth` helper methods: `generateUserToken`, `generateRefreshToken`, `refreshAccessToken`, `createJwt`, `verifyJwt`.
+  - Global `authenticate` middleware automatically prioritizes `Authorization: Bearer <token>` headers before falling back to Session and Remember-Me cookies.
+  - Guard middleware `requireJwt()` (and `middleware: ['jwt']` on file-based API routes) enforces valid Bearer Access Tokens.
+- **`quickAuth({ db, jwt: true })`**: Opt-in `jwt` option (`jwt: true` or `jwt: { secret, refreshSecret, expiresIn, refreshExpiresIn }`) to enable JWT & Refresh Token support alongside ORM integration.
+
+#### Zero-Dependency CORS Plugin (`plugins/cors.js`)
+- **`corsPlugin(options)`**: Zero-dependency CORS plugin supporting string origins (`'https://app.com'`), origin arrays, RegExp patterns (`/\.domain\.com$/`), and custom callback functions `(origin, callback)`.
+- **Preflight & Credentials Support**: Handles `OPTIONS` preflight requests (`204 No Content`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`, `Access-Control-Max-Age`). Supports `credentials: true` with automatic `Access-Control-Allow-Credentials: true` and dynamic origin reflection.
+- **Route Filtering**: Supports route prefix filtering (`routes: ['/api']`) and registers named route middleware (`middleware: ['cors']`).
+- **Exported from `plugins`**: Re-exported via `webspresso/plugins`.
+
+### Fixed
+
+#### Server Middleware Registration (`src/server.js`)
+- Registered `middlewares.jwt` in `createApp` when `authManager` is provided, enabling file-based API route configs (`pages/api/*`) to specify `middleware: ['jwt']` natively.
+
 ## [0.0.84] - 2026-08-10
 
 ### Added
