@@ -253,7 +253,7 @@ describe('Admin Panel Integration', () => {
           password: 'password123',
         });
 
-      adminCookie = loginRes.headers['set-cookie'];
+      adminCookie = loginRes.headers['set-cookie'] || [];
     });
 
     it('should list enabled models', async () => {
@@ -309,7 +309,7 @@ describe('Admin Panel Integration', () => {
           password: 'password123',
         });
 
-      adminCookie = loginRes.headers['set-cookie'];
+      adminCookie = loginRes.headers['set-cookie'] || [];
 
       // Get test model repository
       testRepo = db.getRepository('TestModel');

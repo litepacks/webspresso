@@ -8,13 +8,17 @@ import {
   defineModel,
   zdb,
   restResourcePlugin,
+  corsPlugin,
   getAllModels,
 } from '../..';
 
 const { app }: { app: Application } = createApp({
   pagesDir: 'tests/fixtures/pages',
   viewsDir: 'tests/fixtures/views',
-  plugins: [restResourcePlugin({ path: '/api/rest' })],
+  plugins: [
+    restResourcePlugin({ path: '/api/rest' }),
+    corsPlugin({ origin: ['https://example.com'], credentials: true }),
+  ],
 });
 
 void app;

@@ -54,7 +54,7 @@ function openFile(filePath, cwd) {
   if (process.platform === 'darwin') {
     execFileSync('open', [fp], { stdio: 'ignore' });
   } else if (process.platform === 'win32') {
-    execFileSync('cmd', ['/c', 'start', '', fp], { stdio: 'ignore' });
+    execFileSync('explorer.exe', [fp.replace(/\//g, '\\')], { stdio: 'ignore' });
   } else {
     execFileSync('xdg-open', [fp], { stdio: 'ignore' });
   }

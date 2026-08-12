@@ -32,6 +32,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Server Middleware Registration (`src/server.js`)
 - Registered `middlewares.jwt` in `createApp` when `authManager` is provided, enabling file-based API route configs (`pages/api/*`) to specify `middleware: ['jwt']` natively.
 
+### Security
+
+#### CodeQL Vulnerability Audit & Fixes
+- **CSRF Cookie Options & Storage (`plugins/csrf/index.js`)**: Resolved CodeQL "Clear text storage of sensitive information" alert by computing `effectiveCookieOptions` dynamically inside CSRF middleware, ensuring `httpOnly: true`, `sameSite: 'lax'`, and dynamic HTTPS/secure evaluation (`req.secure || req.headers['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production'`).
+- **DOM XSS Sanitization (`plugins/content/client/inline-edit.js`)**: Resolved CodeQL "DOM text reinterpreted as HTML" alert by introducing `sanitizeClientHtml(htmlStr)` using browser `DOMParser` to strip dangerous tags (`<script>`, `<iframe>`, `<object>`, `<embed>`, `<applet>`, `<base>`), inline `on...` event attributes, and `javascript:` URIs before updating DOM elements.
+- **HTML Sanitization Regex in Tests (`tests/unit/content/field-types.test.js`)**: Resolved CodeQL "Bad HTML filtering regexp" alert by replacing naive regex `/<script>.*?<\/script>/g` in test mock with the robust `sanitize-html` library.
+- **Session Cookie Security in Tests (`tests/integration/csrf.test.js`)**: Resolved CodeQL "Clear text transmission of sensitive cookie" alert by updating test session configuration to explicitly set `secure: process.env.NODE_ENV === 'production'`, `httpOnly: true`, and `sameSite: 'lax'`.
+- **Windows Command Execution (`bin/commands/orm-map.js`)**: Resolved CodeQL "Shell command built from environment values" alert by replacing `execFileSync('cmd', ['/c', 'start', '', fp])` with direct `execFileSync('explorer.exe', [fp.replace(/\//g, '\\')])` on Windows, eliminating shell interpreter invocation and command injection risk.
+- **Auth Session Cookie Configuration (`core/auth/manager.js`)**: Resolved CodeQL "Clear text transmission of sensitive cookie" alert by enforcing `httpOnly: true` and `sameSite: 'lax'` defaults in `getSessionConfig()` alongside dynamic secure cookie computation.
+
 ## [0.0.84] - 2026-08-10
 
 ### Added

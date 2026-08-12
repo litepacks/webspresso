@@ -108,7 +108,7 @@ describe('CORS Plugin', () => {
   describe('createApp Plugin Integration', () => {
     it('should register corsPlugin into createApp and register named middleware', async () => {
       const pagesDir = path.join(process.cwd(), 'pages');
-      const { app, pluginManager } = createApp({
+      const { app } = createApp({
         pagesDir,
         plugins: [
           corsPlugin({
@@ -116,9 +116,10 @@ describe('CORS Plugin', () => {
             credentials: true,
           }),
         ],
+        setupRoutes(appInstance) {
+          appInstance.get('/test-plugin-cors', (req, res) => res.json({ cors: true }));
+        },
       });
-
-      app.get('/test-plugin-cors', (req, res) => res.json({ cors: true }));
 
       const res = await request(app)
         .get('/test-plugin-cors')

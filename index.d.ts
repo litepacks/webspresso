@@ -567,6 +567,28 @@ export function swaggerPlugin(options?: Record<string, unknown>): WebspressoPlug
 
 export function healthCheckPlugin(options?: Record<string, unknown>): WebspressoPlugin;
 
+export interface CorsPluginOptions {
+  origin?:
+    | string
+    | string[]
+    | RegExp
+    | ((
+        origin: string,
+        callback: (err: Error | null, allow?: boolean | string) => void
+      ) => void);
+  methods?: string | string[];
+  allowedHeaders?: string | string[];
+  exposedHeaders?: string | string[];
+  credentials?: boolean;
+  maxAge?: number;
+  preflightContinue?: boolean;
+  optionsSuccessStatus?: number;
+  routes?: string | string[] | boolean;
+  global?: boolean;
+}
+
+export function corsPlugin(options?: CorsPluginOptions): WebspressoPlugin;
+
 export interface RedirectRule {
   from: string | RegExp;
   to: string;

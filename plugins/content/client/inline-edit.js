@@ -243,6 +243,38 @@
       });
   }
 
+  function sanitizeClientHtml(htmlStr) {
+    if (!htmlStr) return '';
+    try {
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(htmlStr, 'text/html');
+      var forbiddenTags = ['script', 'iframe', 'object', 'embed', 'applet', 'base'];
+      forbiddenTags.forEach(function (tag) {
+        var nodes = doc.querySelectorAll(tag);
+        for (var i = 0; i < nodes.length; i++) {
+          nodes[i].parentNode.removeChild(nodes[i]);
+        }
+      });
+      var allNodes = doc.querySelectorAll('*');
+      for (var i = 0; i < allNodes.length; i++) {
+        var node = allNodes[i];
+        var attrs = Array.prototype.slice.call(node.attributes);
+        for (var j = 0; j < attrs.length; j++) {
+          var attrName = attrs[j].name.toLowerCase();
+          var attrVal = attrs[j].value.toLowerCase().trim();
+          if (attrName.indexOf('on') === 0) {
+            node.removeAttribute(attrs[j].name);
+          } else if ((attrName === 'href' || attrName === 'src') && attrVal.indexOf('javascript:') === 0) {
+            node.removeAttribute(attrs[j].name);
+          }
+        }
+      }
+      return doc.body.innerHTML;
+    } catch (e) {
+      return '';
+    }
+  }
+
   function updateDomFields(entryId, data) {
     qsa('[data-ws-content-entry="' + entryId + '"][data-ws-content-field]').forEach(function (el) {
       var field = el.getAttribute('data-ws-content-field');
@@ -250,7 +282,7 @@
       var val = data[field];
       var isHtml = el.getAttribute('data-ws-content-html') === 'true';
       if (isHtml) {
-        el.innerHTML = val || '';
+        el.innerHTML = sanitizeClientHtml(val);
       } else {
         el.textContent = val != null ? val : '';
       }

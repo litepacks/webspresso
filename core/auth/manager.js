@@ -176,6 +176,8 @@ class AuthManager {
     }
 
     const mergedCookie = {
+      httpOnly: true,
+      sameSite: 'lax',
       ...DEFAULT_CONFIG.session.cookie,
       ...(config.cookie || {}),
     };

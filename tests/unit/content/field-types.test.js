@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import sanitizeHtml from 'sanitize-html';
 import {
   normalizeFieldValue,
   normalizeEntryData,
@@ -85,7 +86,7 @@ describe('content field types', () => {
       name: 'body',
       type: 'rich-text',
     }, {
-      sanitizeRichHtml: (html) => html.replace(/<script>.*?<\/script>/g, ''),
+      sanitizeRichHtml: (html) => sanitizeHtml(html),
     });
     expect(sanitized).toBe('<p>ok</p>');
   });

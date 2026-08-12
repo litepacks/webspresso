@@ -150,7 +150,14 @@ function csrfPlugin(options = {}) {
         secret = cookieOptions.signed ? req.signedCookies[cookieKey] : req.cookies[cookieKey];
         if (!secret) {
           secret = crypto.randomBytes(32).toString('hex');
-          res.cookie(cookieKey, secret, cookieOptions);
+          const isHttps = req.secure || req.headers?.['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true';
+          const effectiveCookieOptions = {
+            httpOnly: true,
+            sameSite: 'lax',
+            ...cookieOptions,
+            secure: cookieOpts.secure !== undefined ? cookieOpts.secure : isHttps,
+          };
+          res.cookie(cookieKey, secret, effectiveCookieOptions);
         }
       } else {
         // Session based
