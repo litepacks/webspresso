@@ -191,6 +191,7 @@ Plugins declare `name`, `version`, optional `dependencies`, and lifecycle hooks 
 
 | Plugin | Feature set | One-line purpose |
 |--------|-------------|------------------|
+| `corsPlugin` | Security / HTTP | Zero-dependency CORS middleware & preflight handling |
 | `redirectPlugin` | HTTP | Configurable redirects before file routes |
 | `rateLimitPlugin` | HTTP | Named rate-limit middleware + optional global limiter |
 | `uploadPlugin` | HTTP / admin | Multipart upload endpoint + pluggable storage |

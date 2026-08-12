@@ -24,6 +24,7 @@ const { rateLimitPlugin } = require('./rate-limit');
 const emailPlugin = require('./email');
 const contentPlugin = require('./content');
 const csrfPlugin = require('./csrf');
+const corsPlugin = require('./cors');
 
 module.exports = {
   sitemapPlugin,
@@ -47,5 +48,6 @@ module.exports = {
   emailPlugin,
   contentPlugin,
   csrfPlugin,
+  corsPlugin,
 };
 
