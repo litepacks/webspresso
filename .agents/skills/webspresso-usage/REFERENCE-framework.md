@@ -72,19 +72,27 @@ project/
 - **CSP / Helmet:** production **`script-src 'self'`** works for **`/__webspresso/client-runtime/`**; some Alpine builds may need **`unsafe-eval`** — validate for your version or use a stricter build.
 - **Longer doc:** **[`doc/index.html#client-runtime`](../../../doc/index.html#client-runtime)** · README **Client runtime**.
 
-### Session authentication — essentials
+### Dual authentication (Session + JWT & Refresh Tokens) — essentials
 
-- **Import:** `const { createAuth, quickAuth, hash, verify, createRememberTokensTable } = require('webspresso/core/auth')` (published `core/` tree on npm; **not** re-exported from package root).
-- **`createAuth({ findUserById, findUserByCredentials, session: { secret }, rememberTokens?, ... })`** — adapter pattern; optional **remember-me** via `rememberTokens: { create, find, delete, deleteAllForUser }` + **`createRememberTokensTable(knex)`** for the default table shape.
-- **`quickAuth({ db, userModel, identifierField, passwordField, rememberMe })`** — wires **`getRepository`** + bcrypt **`verify`**; optional Knex **`remember_tokens`** when `rememberMe: true`.
+- **Import:** `const { createAuth, quickAuth, hash, verify, signJwt, verifyJwt, decodeJwt, createRememberTokensTable } = require('webspresso/core/auth')` (published `core/` tree on npm; **not** re-exported from package root).
+- **Dual Architecture:**
+  - **Session + Cookie (Stateful):** Primary for browser SSR routes and Admin Panel (`/`, `/_admin`). Uses `httpOnly` secure cookies.
+  - **JWT + Refresh Token (Stateless):** Built-in zero-dependency HS256 auth for REST APIs, Mobile Apps, and SPAs (`/api/*`). Uses `Authorization: Bearer <token>` for access tokens and rotatable Refresh Tokens.
+- **`createAuth({ findUserById, findUserByCredentials, session: { secret }, jwt: { secret, refreshSecret, expiresIn, refreshExpiresIn }, rememberTokens?, ... })`** — adapter pattern; optional **remember-me** via `rememberTokens` and opt-in **JWT / Refresh Tokens**.
+- **`quickAuth({ db, userModel, identifierField, passwordField, rememberMe, jwt })`** — wires **`getRepository`** + bcrypt **`verify`**; optional Knex **`remember_tokens`** and **JWT / Refresh Token** manager (`jwt: true` or `jwt: { expiresIn: '15m', refreshExpiresIn: '30d' }`).
+- **JWT Helper Methods:**
+  - **`auth.generateUserToken(user, options)`** — generates short-lived access JWT (`type: 'access'`).
+  - **`auth.generateRefreshToken(user, options)`** — generates long-lived refresh JWT (`type: 'refresh'`).
+  - **`auth.refreshAccessToken(refreshToken, options)`** — verifies refresh token and issues new access token + rotated refresh token.
+  - **`auth.requireJwt()`** — guard middleware enforcing valid `Bearer` access token.
 - **Request API** (after global authenticate): **`req.auth.attempt(id, password, { remember })`**, **`login`**, **`logout`**, **`check`**, **`guest`**, **`user`**, **`id`**, **`can` / `cannot` / `authorize`** (policies: **`auth.definePolicy`**, **`defineGate`**, **`beforePolicy`**).
-- **Route config:** `middleware: ['auth']` (must be logged in) or `['guest']` (logged-out only). For JSON APIs mounted in **`setupRoutes`**, use **`ctx.authMiddleware.requireAuth({ api: true })`** for 401 JSON instead of redirect.
+- **Route config:** `middleware: ['auth']` (SSR logged in), `middleware: ['jwt']` (API Bearer token), or `['guest']` (logged-out only). For JSON APIs mounted in **`setupRoutes`**, use **`ctx.authMiddleware.requireJwt()`** or **`requireAuth({ api: true })`**.
 - **Login page pitfall:** a **`pages/login.njk`** can register **before** `setupRoutes` and bypass **`requireGuest`**. Prefer login GET/POST in **`setupRoutes`** with templates under **`views/`** only, or omit **`pages/login.njk`** — see [`tests/e2e/auth.spec.js`](../../../tests/e2e/auth.spec.js).
 - **Admin panel** uses a **separate** session (`req.session.adminUser`, `/_admin/api/auth/*`); it does **not** replace **`createApp({ auth })`** for site users.
 - **Site users in the admin UI (`userManagement`):** Opt-in on **`adminPanelPlugin`**. Set **`userManagement: { enabled: true, model: 'User', fields?: { ... } }`** so the SPA shows **Users**: sidebar **All Users** / **Add User** link to **`/_admin/models/{model}`** and **`/_admin/models/{model}/new`** (same RecordList/RecordForm as other models). **`/_admin/users`**, **`/_admin/users/new`**, **`/_admin/users/:id/edit`** remain SPA aliases that redirect there; **`/_admin/users/sessions`** is **Active Sessions**. The **`model`** must match site auth (e.g. **`quickAuth({ userModel: 'User', ... })`** / **`createAuth`**) and must have **`admin: { enabled: true, ... }`** on **`defineModel`** so admin CRUD metadata loads; otherwise Users screens look empty. Pass **`auth: authManager`** with the **same** **`AuthManager`** as **`createApp({ auth: authManager })`** for **Active Sessions** / revoke (**`rememberTokens`** / **`remember_me`**); without **`auth`**, user CRUD still works via **`db.getRepository(model)`**, but session endpoints return empty or “not enabled”.
 - **Wiring:** `plugins: [ adminPanelPlugin({ db, auth: authManager, userManagement: { enabled: true, model: 'User' } }) ]` alongside `createApp({ ..., auth: authManager })`. Admin staff log in at **`/_admin`**; end users use your normal site login — two different cookies/sessions.
 
-Longer narrative: **[`doc/index.html#authentication`](../../../doc/index.html#authentication)** · **[`#admin-user-management`](../../../doc/index.html#admin-user-management)** · README **Authentication (session)** and **Admin Panel Plugin**.
+Longer narrative: **[`doc/index.html#authentication`](../../../doc/index.html#authentication)** · **[`#admin-user-management`](../../../doc/index.html#admin-user-management)** · README **Authentication (session & JWT)** and **Admin Panel Plugin**.
 
 ---
 

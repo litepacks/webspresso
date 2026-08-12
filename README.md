@@ -1316,6 +1316,86 @@ createApp({
 });
 ```
 
+### Authentication & JWT Support (`quickAuth`)
+
+Webspresso provides a zero-dependency **Dual Authentication** system (`webspresso/core/auth`):
+- **Session + Cookie**: Stateful auth for browser SSR routes and Admin Panel (`/`, `/_admin`).
+- **JWT + Refresh Token**: Stateless HS256 auth for REST APIs, Mobile Apps, and SPAs (`/api/*`).
+
+```javascript
+// createApp setup with quickAuth
+const { quickAuth } = require('webspresso/core/auth');
+
+const auth = quickAuth({
+  db,
+  userModel: 'User',
+  jwt: {
+    expiresIn: '15m',        // Access token duration (default: 24h)
+    refreshExpiresIn: '30d', // Refresh token duration (default: 30d)
+  },
+});
+
+createApp({
+  pagesDir: './pages',
+  db,
+  auth,
+});
+```
+
+**File-Based API Route Examples (`pages/api/*`):**
+
+```javascript
+// 1. pages/api/auth/login.post.js (Login & Token Generation)
+module.exports = {
+  schema: ({ z }) => ({
+    body: z.object({
+      email: z.string().email(),
+      password: z.string().min(1),
+    }),
+  }),
+  async handler(req, res) {
+    const { email, password } = req.input.body;
+    const user = await req.auth.attempt(email, password);
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+    const accessToken = req.auth.generateUserToken(user);
+    const refreshToken = req.auth.generateRefreshToken(user);
+
+    return res.json({ accessToken, refreshToken, user: { id: user.id, email: user.email } });
+  },
+};
+```
+
+```javascript
+// 2. pages/api/auth/refresh.post.js (Token Rotation Endpoint)
+module.exports = {
+  schema: ({ z }) => ({
+    body: z.object({
+      refreshToken: z.string(),
+    }),
+  }),
+  async handler(req, res) {
+    const { refreshToken } = req.input.body;
+    try {
+      const result = await req.auth.refreshAccessToken(refreshToken, { rotate: true });
+      return res.json({ accessToken: result.accessToken, refreshToken: result.refreshToken });
+    } catch (err) {
+      return res.status(401).json({ error: err.message });
+    }
+  },
+};
+```
+
+```javascript
+// 3. pages/api/profile.get.js (Protected REST API Route)
+module.exports = {
+  middleware: ['jwt'],
+  async handler(req, res) {
+    return res.json({ user: req.user, token: req.token });
+  },
+};
+```
+
 **With Schema Validation (same object shape):**
 
 ```javascript

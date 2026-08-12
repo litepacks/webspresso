@@ -8,6 +8,7 @@ const { AuthManager, AuthenticationError, DEFAULT_CONFIG } = require('./manager'
 const { PolicyManager, AuthorizationError } = require('./policy');
 const { createAuthMiddleware, setupAuthMiddleware } = require('./middleware');
 const { hash, verify, needsRehash, generateToken, hashToken } = require('./hash');
+const { signJwt, verifyJwt, decodeJwt } = require('./jwt');
 const {
   TOKEN_TYPES,
   createAuthTokensTable,
@@ -23,50 +24,9 @@ const {
  * @param {Object} [config.rememberTokens] - Remember token adapter
  * @param {Object} [config.session] - Session configuration
  * @param {Object} [config.rememberMe] - Remember me configuration
+ * @param {Object|boolean} [config.jwt] - JWT configuration
  * @param {Object} [config.routes] - Route configuration
  * @returns {AuthManager}
- * 
- * @example
- * const auth = createAuth({
- *   findUserById: async (id) => {
- *     return await UserRepo.findById(id);
- *   },
- *   
- *   findUserByCredentials: async (email, password) => {
- *     const user = await UserRepo.findOne({ email });
- *     if (user && await verify(password, user.password)) {
- *       return user;
- *     }
- *     return null;
- *   },
- *   
- *   // Optional: Remember me tokens
- *   rememberTokens: {
- *     create: async (userId, token, expiresAt) => {
- *       await db.knex('remember_tokens').insert({
- *         user_id: userId,
- *         token,
- *         expires_at: expiresAt,
- *       });
- *     },
- *     find: async (token) => {
- *       return await db.knex('remember_tokens').where({ token }).first();
- *     },
- *     delete: async (token) => {
- *       await db.knex('remember_tokens').where({ token }).delete();
- *     },
- *     deleteAllForUser: async (userId) => {
- *       await db.knex('remember_tokens').where({ user_id: userId }).delete();
- *     },
- *   },
- *   
- *   session: {
- *     secret: process.env.SESSION_SECRET,
- *     cookie: {
- *       maxAge: 24 * 60 * 60 * 1000, // 1 day
- *     },
- *   },
- * });
  */
 function createAuth(config) {
   return new AuthManager(config);
@@ -82,6 +42,7 @@ function createAuth(config) {
  * @param {Object} [options.session] - Session config
  * @param {boolean} [options.rememberMe=true] - Enable remember me
  * @param {boolean} [options.authTokens=false] - Enable auth_tokens adapter (password reset / email verify)
+ * @param {Object|boolean} [options.jwt=false] - Enable JWT support or JWT config
  * @param {string} [options.verifiedField='email_verified_at'] - Verified timestamp column
  * @returns {AuthManager}
  */
@@ -94,6 +55,7 @@ function quickAuth(options) {
     session = {},
     rememberMe = true,
     authTokens: enableAuthTokens = false,
+    jwt = false,
     verifiedField = 'email_verified_at',
   } = options;
 
@@ -127,6 +89,7 @@ function quickAuth(options) {
     identifierField,
     passwordField,
     verifiedField,
+    jwt,
 
     session: {
       secret: process.env.SESSION_SECRET || session.secret,
@@ -218,6 +181,11 @@ module.exports = {
   needsRehash,
   generateToken,
   hashToken,
+
+  // JWT utilities
+  signJwt,
+  verifyJwt,
+  decodeJwt,
   
   // Migration helpers
   createRememberTokensTable,

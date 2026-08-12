@@ -28,7 +28,7 @@ function createAuthMiddleware(authManager) {
 
   /**
    * Authenticate middleware
-   * Loads user from session or remember me token
+   * Loads user from Bearer JWT header, session, or remember me token
    * Should run on every request
    */
   async function authenticate(req, res, next) {
@@ -39,8 +39,27 @@ function createAuthMiddleware(authManager) {
       // Create request-bound auth helper
       req.auth = authManager.createRequestAuth(req, res);
 
-      // Try to load user from session
-      if (req.session?.userId) {
+      // Check Bearer JWT token header first
+      const authHeader = req.headers?.authorization || req.headers?.Authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7).trim();
+        try {
+          const payload = authManager.verifyJwt(token);
+          req.token = token;
+          req.jwtPayload = payload;
+          if (payload.id) {
+            const user = await authManager.findUserById(payload.id);
+            req.user = user || payload;
+          } else {
+            req.user = payload;
+          }
+        } catch (jwtErr) {
+          // Invalid or expired JWT token header
+        }
+      }
+
+      // Try to load user from session if not authenticated by JWT
+      if (!req.user && req.session?.userId) {
         const user = await authManager.findUserById(req.session.userId);
         if (user) {
           req.user = user;
@@ -50,7 +69,7 @@ function createAuthMiddleware(authManager) {
         }
       }
 
-      // If no user in session, try remember me token
+      // If no user in session or JWT, try remember me token
       if (!req.user && authManager.rememberTokens) {
         const user = await authManager.verifyRememberToken(req, res);
         if (user) {
@@ -93,6 +112,44 @@ function createAuthMiddleware(authManager) {
         return res.redirect(redirectTo);
       }
       next();
+    };
+  }
+
+  /**
+   * Require JWT middleware
+   * Enforces valid Bearer JWT token in Authorization header
+   * @param {Object} [options] - Verification options
+   */
+  function requireJwt(options = {}) {
+    return async (req, res, next) => {
+      const authHeader = req.headers?.authorization || req.headers?.Authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({
+          error: 'Unauthorized',
+          message: 'Bearer token required',
+        });
+      }
+
+      const token = authHeader.substring(7).trim();
+      try {
+        const payload = authManager.verifyJwt(token, options);
+        req.token = token;
+        req.jwtPayload = payload;
+
+        if (payload.id) {
+          const user = await authManager.findUserById(payload.id);
+          req.user = user || payload;
+        } else {
+          req.user = payload;
+        }
+
+        next();
+      } catch (err) {
+        return res.status(401).json({
+          error: 'Unauthorized',
+          message: err.message || 'Invalid JWT token',
+        });
+      }
     };
   }
 
@@ -192,6 +249,9 @@ function createAuthMiddleware(authManager) {
       case 'auth':
         return requireAuth({ api: args.includes('api') });
       
+      case 'jwt':
+        return requireJwt();
+      
       case 'guest':
         return requireGuest();
       
@@ -216,6 +276,7 @@ function createAuthMiddleware(authManager) {
     
     // Guard middleware
     requireAuth,
+    requireJwt,
     requireGuest,
     requireCan,
     requireVerified,
@@ -225,6 +286,7 @@ function createAuthMiddleware(authManager) {
     
     // Aliases for route config (factories — file-router calls requireAuth(opts) / requireGuest(opts))
     auth: requireAuth,
+    jwt: requireJwt,
     guest: requireGuest,
   };
 }

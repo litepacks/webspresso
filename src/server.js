@@ -386,6 +386,7 @@ function createApp(options = {}) {
     // Add auth middleware to named middlewares for route config
     middlewares.auth = authMiddleware.auth;
     middlewares.guest = authMiddleware.guest;
+    middlewares.jwt = authMiddleware.jwt;
   }
 
   // Under Vitest, shared API fixtures use `fixtureRequireAuth`; default no-op unless overridden.

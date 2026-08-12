@@ -433,4 +433,210 @@ describe('Auth Integration', () => {
       expect(quickAuthInstance).toBeInstanceOf(require('../../core/auth').AuthManager);
     });
   });
+
+  describe('JWT & Dual-Auth File-Based API Integration', () => {
+    let jwtAuthApp;
+    let jwtAuth;
+    const { z } = require('zod');
+
+    beforeEach(() => {
+      jwtAuthApp = express();
+      jwtAuthApp.use(express.json());
+
+      jwtAuth = quickAuth({
+        db,
+        userModel: 'User',
+        identifierField: 'email',
+        passwordField: 'password',
+        session: { secret: 'jwt-dual-auth-secret' },
+        jwt: {
+          secret: 'jwt-dual-auth-secret',
+          expiresIn: '1h',
+          refreshExpiresIn: '7d',
+        },
+      });
+
+      const authMiddleware = setupAuthMiddleware(jwtAuthApp, jwtAuth);
+
+      // Helper function to mount Webspresso-style file-based API route object
+      function mountApiRoute(appInstance, path, routeObject) {
+        const middlewaresToRun = [];
+
+        // 1. Zod schema validation middleware (mimics Webspresso file router)
+        if (routeObject.schema) {
+          const schemaObj = routeObject.schema({ z });
+          middlewaresToRun.push((req, res, next) => {
+            req.input = {};
+            if (schemaObj.body) {
+              const parsed = schemaObj.body.safeParse(req.body);
+              if (!parsed.success) {
+                return res.status(400).json({
+                  error: 'Validation Error',
+                  issues: parsed.error.issues,
+                });
+              }
+              req.input.body = parsed.data;
+            }
+            next();
+          });
+        }
+
+        // 2. Named middleware resolution (e.g. middleware: ['jwt'])
+        if (routeObject.middleware) {
+          for (const mw of routeObject.middleware) {
+            if (mw === 'jwt') {
+              middlewaresToRun.push(authMiddleware.jwt());
+            } else if (mw === 'auth') {
+              middlewaresToRun.push(authMiddleware.requireAuth({ api: true }));
+            }
+          }
+        }
+
+        // 3. Handler execution
+        middlewaresToRun.push(routeObject.handler);
+        appInstance.post(path, ...middlewaresToRun);
+        appInstance.get(path, ...middlewaresToRun);
+      }
+
+      // 1. pages/api/auth/login.post.js
+      mountApiRoute(jwtAuthApp, '/api/auth/login', {
+        schema: ({ z }) => ({
+          body: z.object({
+            email: z.string().email(),
+            password: z.string().min(1),
+          }),
+        }),
+        async handler(req, res) {
+          const { email, password } = req.input.body;
+          const user = await req.auth.attempt(email, password);
+          if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+          const accessToken = req.auth.generateUserToken(user);
+          const refreshToken = req.auth.generateRefreshToken(user);
+
+          return res.json({ accessToken, refreshToken, user: { id: user.id, email: user.email } });
+        },
+      });
+
+      // 2. pages/api/auth/refresh.post.js
+      mountApiRoute(jwtAuthApp, '/api/auth/refresh', {
+        schema: ({ z }) => ({
+          body: z.object({
+            refreshToken: z.string().min(1),
+          }),
+        }),
+        async handler(req, res) {
+          const { refreshToken } = req.input.body;
+          try {
+            const result = await req.auth.refreshAccessToken(refreshToken, { rotate: true });
+            return res.json({ accessToken: result.accessToken, refreshToken: result.refreshToken });
+          } catch (err) {
+            return res.status(401).json({ error: err.message });
+          }
+        },
+      });
+
+      // 3. pages/api/profile.get.js
+      mountApiRoute(jwtAuthApp, '/api/profile', {
+        middleware: ['jwt'],
+        async handler(req, res) {
+          return res.json({ user: req.user, token: req.token });
+        },
+      });
+    });
+
+    it('should validate request body with Zod schema on API login', async () => {
+      // Invalid email schema format
+      const res = await request(jwtAuthApp)
+        .post('/api/auth/login')
+        .send({ email: 'not-an-email', password: 'password123' })
+        .expect(400);
+
+      expect(res.body.error).toBe('Validation Error');
+      expect(res.body.issues).toBeDefined();
+    });
+
+    it('should handle login and return access & refresh tokens via file route handler', async () => {
+      const loginRes = await request(jwtAuthApp)
+        .post('/api/auth/login')
+        .send({ email: 'user@test.com', password: 'password123' })
+        .expect(200);
+
+      expect(loginRes.body.accessToken).toBeDefined();
+      expect(loginRes.body.refreshToken).toBeDefined();
+      expect(loginRes.body.user.email).toBe('user@test.com');
+    });
+
+    it('should reject invalid credentials with 401', async () => {
+      const res = await request(jwtAuthApp)
+        .post('/api/auth/login')
+        .send({ email: 'user@test.com', password: 'wrongpassword' })
+        .expect(401);
+
+      expect(res.body.error).toBe('Invalid credentials');
+    });
+
+    it('should allow Bearer access to protected API route using middleware: ["jwt"]', async () => {
+      const loginRes = await request(jwtAuthApp)
+        .post('/api/auth/login')
+        .send({ email: 'user@test.com', password: 'password123' })
+        .expect(200);
+
+      const profileRes = await request(jwtAuthApp)
+        .get('/api/profile')
+        .set('Authorization', `Bearer ${loginRes.body.accessToken}`)
+        .expect(200);
+
+      expect(profileRes.body.user.email).toBe('user@test.com');
+      expect(profileRes.body.token).toBe(loginRes.body.accessToken);
+    });
+
+    it('should handle token refresh with rotation via file route handler', async () => {
+      const loginRes = await request(jwtAuthApp)
+        .post('/api/auth/login')
+        .send({ email: 'user@test.com', password: 'password123' })
+        .expect(200);
+
+      const refreshRes = await request(jwtAuthApp)
+        .post('/api/auth/refresh')
+        .send({ refreshToken: loginRes.body.refreshToken })
+        .expect(200);
+
+      expect(refreshRes.body.accessToken).toBeDefined();
+      expect(refreshRes.body.refreshToken).toBeDefined();
+      expect(refreshRes.body.refreshToken).not.toBe(loginRes.body.refreshToken); // Rotated
+
+      // Access protected route with new rotated access token
+      const profileRes = await request(jwtAuthApp)
+        .get('/api/profile')
+        .set('Authorization', `Bearer ${refreshRes.body.accessToken}`)
+        .expect(200);
+
+      expect(profileRes.body.user.email).toBe('user@test.com');
+    });
+
+    it('should edge case: reject tampered or invalid refresh token on refresh endpoint', async () => {
+      const res = await request(jwtAuthApp)
+        .post('/api/auth/refresh')
+        .send({ refreshToken: 'invalid.refresh.token' })
+        .expect(401);
+
+      expect(res.body.error).toBeDefined();
+    });
+
+    it('should edge case: reject access token passed to refresh endpoint', async () => {
+      const loginRes = await request(jwtAuthApp)
+        .post('/api/auth/login')
+        .send({ email: 'user@test.com', password: 'password123' })
+        .expect(200);
+
+      // Send access token instead of refresh token
+      const res = await request(jwtAuthApp)
+        .post('/api/auth/refresh')
+        .send({ refreshToken: loginRes.body.accessToken })
+        .expect(401);
+
+      expect(res.body.error).toBe('Invalid refresh token type');
+    });
+  });
 });

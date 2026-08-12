@@ -145,17 +145,27 @@ C4Container
 | Query cache | Opt-in memory provider; `db.cache.*` API |
 | ORM events | `beforeCreate`, `afterFind`, … |
 
-### Authentication (dual boundary)
+### Authentication (dual boundary & dual auth)
 
-| Layer | Session | Identity store | Typical login |
-|-------|---------|----------------|---------------|
-| **Site auth** | App session (`userId`) | App model (e.g. `users`) | Custom routes via `setupRoutes` |
+Webspresso features a **Dual Authentication (Session + JWT)** architecture designed to seamlessly serve both SSR web applications and REST API / Mobile / SPA clients:
+
+- **Session + Cookie Auth (Stateful)**: Primary auth mechanism for browser-rendered SSR routes (`/`, `/dashboard`) and Admin Panel (`/_admin`). Uses `httpOnly` secure cookies for XSS protection and immediate server-side session revocation.
+- **JWT + Refresh Token Auth (Stateless)**: Built-in zero-dependency HS256 JWT auth for REST APIs and mobile/SPA clients (`/api/*`). Uses `Authorization: Bearer <token>` for access tokens (short-lived) and rotatable Refresh Tokens (long-lived).
+
+| Layer | Session / Token | Identity store | Typical login |
+|-------|-----------------|----------------|---------------|
+| **Site SSR auth** | App session (`userId`) & `remember_token` | App model (e.g. `User`) | Custom routes via `setupRoutes` |
+| **Site REST/API auth** | JWT Bearer Access Token & Refresh Token | App model (e.g. `User`) | `/api/login` returning `{ accessToken, refreshToken }` |
 | **Admin auth** | Admin session (`adminUser`) | `admin_users` table | `/_admin` SPA |
 
 | Component | Responsibility |
 |-----------|----------------|
-| `createAuth` / `quickAuth` | Credential verify, session, remember-me |
-| Policies / gates | `can`, `authorize`, route `middleware: ['auth']` |
+| `createAuth` / `quickAuth` | Credential verify, session, remember-me, and opt-in JWT / Refresh Token manager |
+| `signJwt` / `verifyJwt` | Zero-dependency HS256 HMAC-SHA256 JWT signing, verifying, and duration parsing |
+| `generateRefreshToken` / `refreshAccessToken` | Long-lived refresh token generation & automatic token rotation |
+| `authenticate` middleware | **Dual-Auth Evaluator**: Checks `Authorization: Bearer <token>` header first; falls back to Session cookie, then Remember-Me cookie |
+| `requireJwt` middleware | Enforces valid Bearer Access Token on API endpoints (rejects refresh tokens for access) |
+| Policies / gates | `can`, `authorize`, route `middleware: ['auth']` / `middleware: ['jwt']` |
 | `requireAuth` / `requireGuest` | Redirect or JSON 401; stores `intendedUrl` on site auth (app must consume on login POST) |
 | Admin `auth.js` | Setup, login, logout, `requireAuth` for admin API |
 | Admin intended route | Client `sessionStorage` — return to protected SPA route after login |

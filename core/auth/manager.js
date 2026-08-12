@@ -6,6 +6,7 @@
 
 const { generateToken, hashToken } = require('./hash');
 const { PolicyManager } = require('./policy');
+const { signJwt, verifyJwt, decodeJwt } = require('./jwt');
 const {
   TOKEN_TYPES,
   createAuthToken,
@@ -46,6 +47,13 @@ const DEFAULT_CONFIG = {
     enabled: true,
     cookieName: 'remember_token',
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+  },
+  jwt: {
+    enabled: false,
+    secret: null,
+    refreshSecret: null,
+    expiresIn: '24h',
+    refreshExpiresIn: '30d',
   },
   routes: {
     login: '/login',
@@ -98,6 +106,30 @@ class AuthManager {
       emailVerification: config.notifications?.emailVerification || null,
       welcome: config.notifications?.welcome || null,
     };
+
+    if (config.jwt) {
+      const jwtSecret = typeof config.jwt === 'object' && config.jwt.secret
+        ? config.jwt.secret
+        : (config.session?.secret || process.env.JWT_SECRET || process.env.AUTH_SESSION_SECRET || 'webspresso-jwt-secret');
+      const refreshSecret = typeof config.jwt === 'object' && config.jwt.refreshSecret
+        ? config.jwt.refreshSecret
+        : (process.env.JWT_REFRESH_SECRET || jwtSecret);
+      const expiresIn = typeof config.jwt === 'object' && config.jwt.expiresIn
+        ? config.jwt.expiresIn
+        : '24h';
+      const refreshExpiresIn = typeof config.jwt === 'object' && config.jwt.refreshExpiresIn
+        ? config.jwt.refreshExpiresIn
+        : '30d';
+      this.jwt = {
+        enabled: true,
+        secret: jwtSecret,
+        refreshSecret,
+        expiresIn,
+        refreshExpiresIn,
+      };
+    } else {
+      this.jwt = null;
+    }
     
     // Policy manager instance
     this.policies = new PolicyManager();
@@ -170,6 +202,42 @@ class AuthManager {
     const self = this;
     
     return {
+      manager: self,
+
+      /**
+       * Generate JWT access token for user
+       */
+      generateUserToken(user, options) {
+        return self.generateUserToken(user, options);
+      },
+
+      /**
+       * Generate JWT refresh token for user
+       */
+      generateRefreshToken(user, options) {
+        return self.generateRefreshToken(user, options);
+      },
+
+      /**
+       * Refresh access token using refresh token
+       */
+      async refreshAccessToken(refreshToken, options) {
+        return await self.refreshAccessToken(refreshToken, options);
+      },
+
+      /**
+       * Create JWT payload
+       */
+      createJwt(payload, options) {
+        return self.createJwt(payload, options);
+      },
+
+      /**
+       * Verify JWT token
+       */
+      verifyJwt(token, options) {
+        return self.verifyJwt(token, options);
+      },
       /**
        * Attempt login with credentials
        * @param {string} identifier - Email or username
@@ -597,6 +665,129 @@ class AuthManager {
     if (typeof this.notifications.welcome === 'function') {
       await this.notifications.welcome(user, {});
     }
+  }
+
+  /**
+   * Create JWT token
+   * @param {Object} payload
+   * @param {Object} [options]
+   * @returns {string} JWT string
+   */
+  createJwt(payload, options = {}) {
+    const secret = options.secret || this.jwt?.secret || this.config.session?.secret || process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error('JWT secret is missing');
+    }
+    const expiresIn = options.expiresIn || this.jwt?.expiresIn || '24h';
+    return signJwt(payload, secret, { expiresIn, ...options });
+  }
+
+  /**
+   * Verify JWT token
+   * @param {string} token
+   * @param {Object} [options]
+   * @returns {Object} Decoded payload
+   */
+  verifyJwt(token, options = {}) {
+    const secret = options.secret || this.jwt?.secret || this.config.session?.secret || process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error('JWT secret is missing');
+    }
+    const payload = verifyJwt(token, secret, options);
+    if (options.isAccess !== false && payload.type === 'refresh') {
+      throw new Error('Refresh token cannot be used as an access token');
+    }
+    return payload;
+  }
+
+  /**
+   * Generate JWT token for user
+   * @param {Object} user
+   * @param {Object} [options]
+   * @returns {string} JWT string
+   */
+  generateUserToken(user, options = {}) {
+    if (!user || !user.id) {
+      throw new Error('User object with id is required');
+    }
+    const payload = {
+      id: user.id,
+      type: 'access',
+      [this.identifierField]: user[this.identifierField],
+      ...options.payload,
+    };
+    return this.createJwt(payload, options);
+  }
+
+  /**
+   * Generate JWT Refresh token for user
+   * @param {Object} user
+   * @param {Object} [options]
+   * @returns {string} Refresh token string
+   */
+  generateRefreshToken(user, options = {}) {
+    if (!user || !user.id) {
+      throw new Error('User object with id is required');
+    }
+    const secret = options.secret || this.jwt?.refreshSecret || this.jwt?.secret || this.config.session?.secret || process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error('JWT refresh secret is missing');
+    }
+    const expiresIn = options.expiresIn || this.jwt?.refreshExpiresIn || '30d';
+    const payload = {
+      id: user.id,
+      type: 'refresh',
+      jti: generateToken(16),
+      [this.identifierField]: user[this.identifierField],
+      ...options.payload,
+    };
+    return signJwt(payload, secret, { expiresIn, ...options });
+  }
+
+  /**
+   * Refresh access token using valid refresh token
+   * @param {string} refreshToken
+   * @param {Object} [options]
+   * @returns {Promise<{ accessToken: string, refreshToken: string, user: Object }>}
+   */
+  async refreshAccessToken(refreshToken, options = {}) {
+    const secret = options.secret || this.jwt?.refreshSecret || this.jwt?.secret || this.config.session?.secret || process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error('JWT refresh secret is missing');
+    }
+
+    const payload = verifyJwt(refreshToken, secret, options);
+    if (payload.type !== 'refresh') {
+      throw new AuthenticationError('Invalid refresh token type', 'INVALID_REFRESH_TOKEN');
+    }
+
+    const user = await this.findUserById(payload.id);
+    if (!user) {
+      throw new AuthenticationError('User not found for refresh token', 'USER_NOT_FOUND');
+    }
+
+    const accessToken = this.generateUserToken(user, options.accessOptions);
+    const rotate = options.rotate ?? true;
+    const newRefreshToken = rotate ? this.generateRefreshToken(user, options.refreshOptions) : refreshToken;
+
+    return {
+      accessToken,
+      refreshToken: newRefreshToken,
+      user,
+    };
+  }
+
+  /**
+   * Get requireJwt guard middleware for Express routes
+   * @param {Object} [options]
+   * @returns {Function} Express middleware
+   */
+  requireJwt(options = {}) {
+    if (!this._authMiddleware) {
+      const { createAuthMiddleware } = require('./middleware');
+      this._authMiddleware = createAuthMiddleware(this);
+    }
+    return this._authMiddleware.requireJwt(options);
   }
 }
 
