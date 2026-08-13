@@ -121,7 +121,15 @@ module.exports = {
   DateField: {
     view: (vnode) => {
       const { name, value = '', meta = {}, required = false } = vnode.attrs;
-      const dateValue = value ? new Date(value).toISOString().split('T')[0] : '';
+      let dateValue = '';
+      if (value) {
+        try {
+          const d = new Date(value);
+          if (!isNaN(d.getTime())) {
+            dateValue = d.toISOString().split('T')[0];
+          }
+        } catch {}
+      }
       return m('.mb-4', [
         m('label.block.text-sm.font-medium.mb-2', { for: name },
           meta.label || name,
@@ -149,7 +157,15 @@ module.exports = {
   DateTimeField: {
     view: (vnode) => {
       const { name, value = '', meta = {}, required = false } = vnode.attrs;
-      const dateTimeValue = value ? new Date(value).toISOString().slice(0, 16) : '';
+      let dateTimeValue = '';
+      if (value) {
+        try {
+          const d = new Date(value);
+          if (!isNaN(d.getTime())) {
+            dateTimeValue = d.toISOString().slice(0, 16);
+          }
+        } catch {}
+      }
       return m('.mb-4', [
         m('label.block.text-sm.font-medium.mb-2', { for: name },
           meta.label || name,

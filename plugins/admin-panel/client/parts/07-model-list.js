@@ -90,13 +90,13 @@ function formatCellValue(value, col, record = null) {
     case 'timestamp':
       try {
         const date = new Date(value);
-        return date.toLocaleString();
+        return isNaN(date.getTime()) ? String(value) : date.toLocaleString();
       } catch { return String(value); }
     
     case 'date':
       try {
         const date = new Date(value);
-        return date.toLocaleDateString();
+        return isNaN(date.getTime()) ? String(value) : date.toLocaleDateString();
       } catch { return String(value); }
     
     case 'json':

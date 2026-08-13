@@ -300,7 +300,15 @@ const FieldRenderers = {
     const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
-    const dateValue = value ? new Date(value).toISOString().split('T')[0] : '';
+    let dateValue = '';
+    if (value) {
+      try {
+        const d = new Date(value);
+        if (!isNaN(d.getTime())) {
+          dateValue = d.toISOString().split('T')[0];
+        }
+      } catch {}
+    }
     
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
@@ -329,7 +337,15 @@ const FieldRenderers = {
     const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
-    const dateTimeValue = value ? new Date(value).toISOString().slice(0, 16) : '';
+    let dateTimeValue = '';
+    if (value) {
+      try {
+        const d = new Date(value);
+        if (!isNaN(d.getTime())) {
+          dateTimeValue = d.toISOString().slice(0, 16);
+        }
+      } catch {}
+    }
     
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
