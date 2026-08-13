@@ -91,6 +91,9 @@ function defineModel(options) {
       icon: admin.icon || null,
       customFields: admin.customFields || {},
       queries: admin.queries || {},
+      sortable: admin.sortable,
+      sortableColumns: admin.sortableColumns,
+      columns: admin.columns,
     },
     rest: {
       enabled: rest.enabled === true,

@@ -441,12 +441,54 @@ const RecordList = {
                       }),
                     ]),
                     // Dynamic column headers (first column sticky left with box-shadow)
-                    ...displayColumns.map((col, i) => 
-                      m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500 dark:text-slate-400.uppercase.tracking-wider.whitespace-nowrap.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200 dark:border-slate-700', 
-                        i === 0 ? { style: 'position: sticky; left: 40px; z-index: 15; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' } : {},
-                        formatColumnLabel(col.name)
-                      )
-                    ),
+                    ...displayColumns.map((col, i) => {
+                      const isSortable = col.sortable !== false;
+                      const isSorted = isSortable && state.sortColumn === col.name;
+                      const dir = isSorted ? state.sortDirection : null;
+                      const stickyStyle = i === 0 ? 'position: sticky; left: 40px; z-index: 15; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' : '';
+
+                      if (!isSortable) {
+                        return m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500.dark:text-slate-400.uppercase.tracking-wider.whitespace-nowrap.bg-gray-50.dark:bg-slate-900.border-b.border-gray-200.dark:border-slate-700',
+                          stickyStyle ? { style: stickyStyle } : {},
+                          formatColumnLabel(col.name)
+                        );
+                      }
+
+                      return m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500.dark:text-slate-400.uppercase.tracking-wider.whitespace-nowrap.bg-gray-50.dark:bg-slate-900.border-b.border-gray-200.dark:border-slate-700.cursor-pointer.select-none.hover:bg-gray-100.dark:hover:bg-slate-800/80.transition-colors.group',
+                        {
+                          style: stickyStyle || undefined,
+                          onclick: () => {
+                            let nextSort = col.name;
+                            let nextDir = 'asc';
+                            if (state.sortColumn === col.name) {
+                              if (state.sortDirection === 'asc') {
+                                nextDir = 'desc';
+                              } else if (state.sortDirection === 'desc') {
+                                nextSort = null;
+                                nextDir = null;
+                              }
+                            }
+                            state.sortColumn = nextSort;
+                            state.sortDirection = nextDir;
+                            loadRecords(modelName, 1, state.filters, nextSort, nextDir);
+                          },
+                        },
+                        m('.flex.items-center.gap-1.5', [
+                          m('span', formatColumnLabel(col.name)),
+                          dir === 'asc'
+                            ? m('svg.w-3.5.h-3.5.text-indigo-600.dark:text-indigo-400.flex-shrink-0', { fill: 'currentColor', viewBox: '0 0 20 20' },
+                                m('path', { 'fill-rule': 'evenodd', d: 'M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z', 'clip-rule': 'evenodd' })
+                              )
+                            : dir === 'desc'
+                              ? m('svg.w-3.5.h-3.5.text-indigo-600.dark:text-indigo-400.flex-shrink-0', { fill: 'currentColor', viewBox: '0 0 20 20' },
+                                  m('path', { 'fill-rule': 'evenodd', d: 'M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z', 'clip-rule': 'evenodd' })
+                                )
+                              : m('svg.w-3.5.h-3.5.text-gray-300.dark:text-slate-600.group-hover:text-gray-400.flex-shrink-0', { fill: 'currentColor', viewBox: '0 0 20 20' },
+                                  m('path', { d: 'M5 12a1 1 0 100 2h10a1 1 0 100-2H5zM5 6a1 1 0 100 2h10a1 1 0 100-2H5z' })
+                                )
+                        ])
+                      );
+                    }),
                     // Sticky actions header (sticky right, box-shadow on left)
                     m('th.px-4.py-3.text-right.text-xs.font-medium.text-gray-500 dark:text-slate-400.uppercase.tracking-wider.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200 dark:border-slate-700', {
                       style: 'position: sticky; right: 0; min-width: 120px; z-index: 15; box-shadow: -4px 0 8px -4px rgba(0,0,0,0.08);',

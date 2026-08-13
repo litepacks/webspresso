@@ -1000,6 +1000,31 @@ test.describe('Admin Panel Integration', () => {
         expect(record.published === true || record.published === 1).toBeTruthy();
       });
     });
+
+    test('should sort records by column asc and desc', async ({ page }) => {
+      await ensureLoggedIn(page);
+      
+      await page.request.post(`${BASE_URL}/_admin/api/models/TestPost/records`, {
+        data: { title: 'AAA Sorting Title', content: 'Content A', published: true },
+      });
+      await page.request.post(`${BASE_URL}/_admin/api/models/TestPost/records`, {
+        data: { title: 'BBB Sorting Title', content: 'Content B', published: true },
+      });
+
+      // Sort title ASC
+      const resAsc = await page.request.get(`${BASE_URL}/_admin/api/models/TestPost/records?sort=title&order=asc`);
+      expect(resAsc.status()).toBe(200);
+      const dataAsc = await resAsc.json();
+      const titlesAsc = dataAsc.data.map(r => r.title);
+      expect(titlesAsc.indexOf('AAA Sorting Title')).toBeLessThan(titlesAsc.indexOf('BBB Sorting Title'));
+
+      // Sort title DESC
+      const resDesc = await page.request.get(`${BASE_URL}/_admin/api/models/TestPost/records?sort=title&order=desc`);
+      expect(resDesc.status()).toBe(200);
+      const dataDesc = await resDesc.json();
+      const titlesDesc = dataDesc.data.map(r => r.title);
+      expect(titlesDesc.indexOf('BBB Sorting Title')).toBeLessThan(titlesDesc.indexOf('AAA Sorting Title'));
+    });
   });
 
   test.describe('Error Handling', () => {

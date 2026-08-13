@@ -268,6 +268,28 @@ function createApiHandlers(options) {
     }
   }
 
+/**
+ * Helper to determine if a column is sortable based on model and column configs
+ */
+function isColumnSortable(name, meta, model) {
+  if (!meta) return false;
+  if (model.admin && model.admin.sortable === false) return false;
+  if (model.admin && Array.isArray(model.admin.sortableColumns)) {
+    return model.admin.sortableColumns.includes(name);
+  }
+  if (model.admin?.columns?.[name]?.sortable !== undefined) {
+    return Boolean(model.admin.columns[name].sortable);
+  }
+  if (meta.sortable !== undefined) {
+    return Boolean(meta.sortable);
+  }
+  if (meta.ui?.sortable !== undefined) {
+    return Boolean(meta.ui.sortable);
+  }
+  const nonSortableTypes = ['json', 'array', 'file'];
+  return !nonSortableTypes.includes(meta.type);
+}
+
   /**
    * Get model metadata
    */
@@ -304,6 +326,7 @@ function createApiHandlers(options) {
           validations: meta.validations || null,
           ui: meta.ui ? { ...meta.ui, hidden: isHidden || meta.ui.hidden } : (isHidden ? { hidden: true } : null),
           hidden: isHidden, // Excluded from list display and API responses
+          sortable: isColumnSortable(name, meta, model),
         });
       }
 
@@ -486,9 +509,22 @@ function createApiHandlers(options) {
       // Apply pagination
       query = query.offset(offset).limit(perPage);
 
-      // Apply sorting (newest first by default)
+      // Apply sorting
       const primaryKey = model.primaryKey || 'id';
-      query = query.orderBy(primaryKey, 'desc');
+      const sortParam = req.query.sort;
+      const orderParam = (req.query.order || 'desc').toLowerCase();
+      const sortOrder = orderParam === 'asc' ? 'asc' : 'desc';
+
+      if (sortParam && model.columns.has(sortParam)) {
+        const colMeta = model.columns.get(sortParam);
+        if (isColumnSortable(sortParam, colMeta, model)) {
+          query = query.orderBy(sortParam, sortOrder);
+        } else {
+          query = query.orderBy(primaryKey, 'desc');
+        }
+      } else {
+        query = query.orderBy(primaryKey, 'desc');
+      }
 
       // Get records
       const records = await query.list();

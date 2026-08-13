@@ -523,20 +523,30 @@ function parseFilterQuery(queryString) {
   return filters;
 }
 
-// Load records with pagination and filters
-function loadRecords(modelName, page = 1, filters = null) {
+// Load records with pagination, filters, and sorting
+function loadRecords(modelName, page = 1, filters = null, sortColumn = undefined, sortDirection = undefined) {
   state.loading = true;
   state.error = null;
   
   const perPage = state.pagination.perPage || 20;
   const activeFilters = filters !== null ? filters : state.filters;
+  const activeSortCol = sortColumn !== undefined ? sortColumn : state.sortColumn;
+  const activeSortDir = sortDirection !== undefined ? sortDirection : state.sortDirection;
+  
+  state.sortColumn = activeSortCol;
+  state.sortDirection = activeSortDir;
+  
   const filterQuery = buildFilterQuery(activeFilters);
   
-  // Update URL with filters
+  // Update URL with filters and sort params
   const queryParams = new URLSearchParams();
   queryParams.set('page', page);
   if (state.trashedView) {
     queryParams.set('trashed', 'only');
+  }
+  if (activeSortCol && activeSortDir) {
+    queryParams.set('sort', activeSortCol);
+    queryParams.set('order', activeSortDir);
   }
   if (Object.keys(activeFilters).length > 0) {
     for (const [col, filter] of Object.entries(activeFilters)) {
@@ -566,7 +576,8 @@ function loadRecords(modelName, page = 1, filters = null) {
   window.history.replaceState({}, '', newUrl);
   
   const trashedParam = state.trashedView ? '&trashed=only' : '';
-  return api.get('/models/' + modelName + '/records?page=' + page + '&perPage=' + perPage + trashedParam + filterQuery)
+  const sortParam = activeSortCol && activeSortDir ? '&sort=' + encodeURIComponent(activeSortCol) + '&order=' + encodeURIComponent(activeSortDir) : '';
+  return api.get('/models/' + modelName + '/records?page=' + page + '&perPage=' + perPage + trashedParam + filterQuery + sortParam)
     .then(result => {
       state.records = result.data || [];
       state.pagination = {
@@ -601,10 +612,15 @@ function initializeModelView(modelName) {
   state.selectedBulkField = null;
   state._currentModelName = modelName;
   
-  // Parse filters from URL query string
+  // Parse filters and sorting from URL query string
   const urlParams = new URLSearchParams(window.location.search);
   const page = parseInt(urlParams.get('page')) || 1;
   state.filters = parseFilterQuery(window.location.search);
+  
+  const rawSort = urlParams.get('sort');
+  const rawOrder = (urlParams.get('order') || '').toLowerCase();
+  state.sortColumn = rawSort || null;
+  state.sortDirection = rawOrder === 'asc' ? 'asc' : rawOrder === 'desc' ? 'desc' : null;
   
   // Load model metadata first, then records
   state.loading = true;
@@ -614,7 +630,7 @@ function initializeModelView(modelName) {
       state.currentModel = modelMeta;
       // Load bulk-updatable fields for this model
       loadBulkFields(modelName);
-      return loadRecords(modelName, page, state.filters);
+      return loadRecords(modelName, page, state.filters, state.sortColumn, state.sortDirection);
     })
     .catch(err => {
       state.error = err.message;

@@ -46,13 +46,15 @@ export default defineModel({
 
 ### Supported `zdb` Data Types
 - `zdb.id()` — Primary key (BigInt / Auto-increment)
-- `zdb.string({ max, unique, optional })` — String / VarChar
-- `zdb.text()` — Text blob
-- `zdb.integer()`, `zdb.number()` — Numeric types
-- `zdb.boolean({ default })` — Boolean flag
-- `zdb.file()` — File asset URL / upload path
-- `zdb.json()` — Serialized JSON column (auto object parse/stringify)
-- `zdb.timestamp({ auto })` — Timestamp (`auto: 'create'` / `auto: 'update'`)
+- `zdb.string({ max, unique, optional, sortable })` — String / VarChar
+- `zdb.text({ sortable })` — Text blob
+- `zdb.integer()`, `zdb.number({ sortable })` — Numeric types
+- `zdb.boolean({ default, sortable })` — Boolean flag
+- `zdb.file()` — File asset URL / upload path (non-sortable by default)
+- `zdb.json()` — Serialized JSON column (non-sortable by default)
+- `zdb.timestamp({ auto, sortable })` — Timestamp (`auto: 'create'` / `auto: 'update'`)
+
+*Note: All `zdb` types support chainable `.config({ sortable: boolean })` or options object `{ sortable: boolean }`.*
 
 ---
 

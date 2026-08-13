@@ -96,6 +96,8 @@ const state = {
   formData: {}, // Form field values
   editing: false,
   filters: {}, // Active filters { column: { op, value, from, to } }
+  sortColumn: null, // Currently sorted column name
+  sortDirection: null, // Sort direction: 'asc' | 'desc' | null
   filterPanelOpen: false, // Filter panel visibility (deprecated)
   filterDrawerOpen: false, // Filter drawer visibility
   bulkFields: [], // Bulk-updatable fields (enum/boolean/date/datetime/timestamp)

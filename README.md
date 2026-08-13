@@ -808,6 +808,33 @@ Options:
 
 See **`doc/index.html#admin-user-management`** and **Session authentication** in **`.agents/skills/webspresso-usage/REFERENCE-framework.md`** for the split between **`adminUser`** and **`createApp({ auth })`**.
 
+**3-State Table Column Sorting & Configuration:**
+
+Admin Panel table headers support interactive 3-state column sorting:
+- **State 1 (`Unsorted`)**: Default state (`↕` icon).
+- **State 2 (`ASC`)**: 1st click sorts ascending (`▲` icon, `?sort=col&order=asc`).
+- **State 3 (`DESC`)**: 2nd click sorts descending (`▼` icon, `?sort=col&order=desc`).
+- **State 4 (`Unsorted`)**: 3rd click clears sorting and reverts to default primary key ordering.
+
+Configuration options:
+- **Column-level**: Standard scalar columns (`string`, `number`, `boolean`, `timestamp`) are sortable by default. Disable or enable per column:
+  ```javascript
+  schema: zdb.schema({
+    name: zdb.string({ sortable: true }),
+    secret_notes: zdb.text().config({ sortable: false }), // or zdb.text({ sortable: false })
+  })
+  ```
+- **Model-level**: Restrict sortable columns or disable sorting completely on a model in `defineModel`:
+  ```javascript
+  admin: {
+    enabled: true,
+    sortableColumns: ['name', 'price'], // Only name and price are sortable
+    // Or disable all sorting:
+    // sortable: false,
+  }
+  ```
+
+
 
 **Custom Admin Pages (registerModule):**
 

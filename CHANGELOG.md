@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.86] - 2026-08-13
+
+### Added
+
+#### 3-State Column Sorting in Admin Panel SPA (`plugins/admin-panel`)
+- **3-State Dynamic Column Sorting**: Interactive column header sorting cycling through `Unsorted` (↕) → `Ascending` (`asc`, ▲) → `Descending` (`desc`, ▼) → `Unsorted` on click.
+- **URL Parameter Sync**: Automatically synchronizes `sort` and `order` query parameters with browser history (`window.history.replaceState`) for shareable, bookmarkable table views.
+- **Column-Level Configuration**: Configure sorting per column in `zdb` schemas via `zdb.string({ sortable: true })` / `zdb.text({ sortable: false })` or chainable `.config({ sortable: boolean })`. Complex column types (`json`, `array`, `file`) default to non-sortable.
+- **Model-Level Configuration**: Configure model-level sortable column whitelists (`sortableColumns: ['name', 'price']`) or disable table sorting completely (`sortable: false`) in `defineModel({ admin: { ... } })`.
+
+### Fixed
+
+#### Safe Date Parsing in Admin Panel Field Renderers
+- **RangeError Prevention**: Fixed `RangeError: Invalid time value` in Mithril.js Admin Panel SPA date/datetime field renderers (`basic.js` and `04-field-renderers.js`) by validating date validity (`!isNaN(d.getTime())`) before calling `.toISOString()`.
+- **Model Admin Sorting Options Propagation (`core/orm/model.js`)**: Ensured `sortable`, `sortableColumns`, and `columns` admin configuration options set in `defineModel` are correctly preserved on `model.admin`.
+
 ## [0.0.85] - 2026-08-12
 
 ### Added

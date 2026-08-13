@@ -43,10 +43,23 @@ export default defineModel({
     searchFields: ['name', 'slug'], // Fields searched by table search input
     filterable: ['status'],  // Column filters enabled in table header
     defaultSort: { column: 'id', order: 'desc' },
+    sortableColumns: ['name', 'price'], // Optional whitelist of sortable columns
+    sortable: true,          // Set false to disable table sorting completely
     readOnly: false,         // Disable create/edit/delete actions
   },
 });
 ```
+
+### 3-State Table Column Sorting
+Table column headers support interactive 3-state cycling:
+1. `Unsorted` (default, `↕` icon)
+2. `ASC` (1st click, `▲` icon)
+3. `DESC` (2nd click, `▼` icon)
+4. `Unsorted` (3rd click, reverts to default primary key order)
+
+Column sortability can be configured per-column:
+- `zdb.string({ sortable: true })` / `zdb.text({ sortable: false })`
+- `zdb.string().config({ sortable: false })`
 
 ---
 

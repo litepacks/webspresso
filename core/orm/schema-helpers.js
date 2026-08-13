@@ -231,6 +231,7 @@ class SchemaBuilder {
     if (options.readonly !== undefined) this._ui.readonly = options.readonly;
     if (options.width !== undefined) this._ui.width = options.width;
     if (options.rows !== undefined) this._ui.rows = options.rows;
+    if (options.sortable !== undefined) this._ui.sortable = options.sortable;
     return this;
   }
 
