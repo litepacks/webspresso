@@ -885,7 +885,7 @@ if (adminApi) {
 | `scripts` | External script URLs, script objects, or inline scripts injected into SSR Admin Panel (`registerScript`) |
 | `styles` | External stylesheet URLs or inline CSS injected into SSR Admin Panel (`registerStyle`) |
 
-Pages support JavaScript client components (`componentFile`, `pagesDir`, `component`) as well as **custom HTML & external URL pages** (`url` or `iframeUrl` for external web apps, and `html` or `htmlFile` for local HTML files like EUIX Engine apps). By default (`layout: true`), custom page views are automatically wrapped in the Admin Layout with Breadcrumbs. Set `layout: false` for full-screen / custom canvas pages.
+Pages support JavaScript client components (`componentFile`, `pagesDir`, `component`), external URLs (`url` or `iframeUrl` inside `<iframe>`), as well as **native custom HTML pages** (`html` or `htmlFile` for local HTML files like EUIX Engine apps, Vue, or Alpine). HTML pages render directly in the page DOM with full Tailwind CSS styling, dark mode, and script execution without iframe overhead. Set `iframe: true` to isolate in an iframe if needed. By default (`layout: true`), custom page views are automatically wrapped in the Admin Layout with Breadcrumbs. Set `layout: false` for full-screen / custom canvas pages.
 
 **Example component file (`admin/reports.js`):**
 

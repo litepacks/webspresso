@@ -79,11 +79,15 @@ The Admin SPA communicates with the backend via JSON REST endpoints:
 
 ## 4. Custom Pages (`registerModule` / `registerPageDir`)
 
-Custom Admin pages are defined as clean, standalone Mithril.js component files (`component.js`):
+Custom Admin pages support:
+1. **Clean Mithril.js Component Files** (`componentFile` / `component`)
+2. **Native Custom HTML Pages** (`html` / `htmlFile`) — e.g. EUIX Engine, Vue, Alpine apps rendered directly in the DOM with full Tailwind CSS styling.
+3. **External URL Pages** (`url` / `iframeUrl`) — Embedded in clean `<iframe>` containers.
 
 ```js
 const { registry } = adminPanelPlugin({ db });
 
+// Example 1: Mithril Component
 registry.registerModule('analytics-report', {
   label: 'Analytics Report',
   icon: '📊',
@@ -91,16 +95,36 @@ registry.registerModule('analytics-report', {
   componentFile: path.join(__dirname, 'admin-pages/analytics/component.js'),
   layout: true, // Auto-wrap inside Admin layout header & sidebar (set false for full-screen view)
 });
+
+// Example 2: EUIX Engine / Native HTML Page
+registry.registerModule('euix-module', {
+  id: 'euix-module',
+  scripts: ['https://unpkg.com/euixjs@latest/dist/EUIXEngine.umd.js'],
+  pages: [
+    {
+      id: 'euix-counter',
+      title: 'EUIX Counter',
+      path: '/euix-counter',
+      htmlFile: path.join(__dirname, 'admin-pages/euix-counter.html') // Rendered directly into DOM with Tailwind & scripts
+    }
+  ],
+  menu: [
+    { id: 'euix-counter', label: 'EUIX Counter', path: '/euix-counter', icon: 'zap' }
+  ]
+});
 ```
 
 ### Automatic Directory Discovery (`registerPageDir`)
-Directories containing page folders with `page.json` and `component.js` are auto-discovered:
+Directories containing page folders with `page.json` and `component.js` (or `index.html`) are auto-discovered:
 
 ```text
 admin-pages/
-└── analytics/
-    ├── page.json    # { "id": "analytics", "label": "Analytics", "icon": "📊", "layout": true }
-    └── component.js # clean Mithril component (export default { view() { return m('div', 'Content'); } })
+├── analytics/
+│   ├── page.json    # { "id": "analytics", "label": "Analytics", "icon": "📊", "layout": true }
+│   └── component.js # clean Mithril component (export default { view() { return m('div', 'Content'); } })
+└── custom-tool/
+    ├── page.json    # { "id": "custom-tool", "label": "Custom Tool", "icon": "⚡" }
+    └── index.html   # Native HTML file
 ```
 
 ```js

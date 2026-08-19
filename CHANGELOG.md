@@ -63,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### Admin Panel Custom HTML & External URL Pages (`plugins/admin-panel`)
-- **Custom Pages (`url` / `iframeUrl`, `html` / `htmlFile`)**: `registerPage` and `registerModule` support embedding external web pages (`url`) or custom HTML documents (`html` or `htmlFile` path) inside clean `<iframe>` containers within the Admin Panel SPA.
+- **Custom Pages (`url` / `iframeUrl`, `html` / `htmlFile`)**: `registerPage` and `registerModule` support embedding external web pages (`url` inside `<iframe>`) or custom HTML documents (`html` or `htmlFile` path rendered directly into the native DOM via `m.trust` with full Tailwind CSS styling and script execution). Optional `iframe: true` allows sandboxed iframe isolation if needed.
 - **Automatic Layout Wrapping**: Custom pages are automatically wrapped inside the Admin Panel layout (breadcrumbs, header, title) unless `layout: false` is configured for full-screen pages.
 
 #### SSR Script & Style Import Registration (`plugins/admin-panel`)
