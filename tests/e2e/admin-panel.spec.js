@@ -1468,15 +1468,13 @@ test.describe('Admin Panel UI', () => {
       // Verify page heading
       await expect(page.getByRole('heading', { name: 'EUIX Counter Demo' })).toBeVisible({ timeout: 15000 });
 
-      // Frame locator for the custom HTML iframe
-      const frameLocator = page.frameLocator('iframe');
-      
-      // Verify initial counter value is 0
-      const counterDisplay = frameLocator.locator('#counter-display');
+      // Verify native DOM rendering of custom HTML (no iframe)
+      const counterDisplay = page.locator('#counter-display');
+      await expect(counterDisplay).toBeVisible({ timeout: 15000 });
       await expect(counterDisplay).toHaveText('0', { timeout: 15000 });
 
       // Click increment button 3 times
-      const btnIncrement = frameLocator.locator('#btn-increment');
+      const btnIncrement = page.locator('#btn-increment');
       await btnIncrement.click();
       await btnIncrement.click();
       await btnIncrement.click();

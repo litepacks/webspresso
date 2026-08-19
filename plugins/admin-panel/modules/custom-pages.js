@@ -156,7 +156,7 @@ function generateCustomPageComponent() {
   return `
 // Custom Page Component Factory
 function createCustomPage(pageConfig) {
-  if (pageConfig && (pageConfig.url || pageConfig.html)) {
+  if (pageConfig && (pageConfig.url || (pageConfig.html && pageConfig.iframe))) {
     var iframeAttrs = {
       src: pageConfig.url || undefined,
       srcdoc: pageConfig.html || undefined,
@@ -182,6 +182,46 @@ function createCustomPage(pageConfig) {
             ])
           ]),
           m('iframe', iframeAttrs)
+        ]);
+      }
+    };
+  }
+
+  if (pageConfig && pageConfig.html) {
+    var executeScripts = function(vnode) {
+      if (!vnode.dom) return;
+      var scripts = vnode.dom.querySelectorAll('script');
+      scripts.forEach(function(oldScript) {
+        if (oldScript.dataset && oldScript.dataset.executed) return;
+        var newScript = document.createElement('script');
+        Array.from(oldScript.attributes).forEach(function(attr) {
+          newScript.setAttribute(attr.name, attr.value);
+        });
+        newScript.dataset.executed = 'true';
+        newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+        oldScript.parentNode.replaceChild(newScript, oldScript);
+      });
+    };
+    if (pageConfig.layout === false) {
+      return {
+        oncreate: executeScripts,
+        view: function() {
+          return m('div.custom-html-container', m.trust(pageConfig.html));
+        }
+      };
+    }
+    return {
+      oncreate: executeScripts,
+      view: function() {
+        return m(Layout, [
+          m(Breadcrumb, { items: [{ label: pageConfig.title, href: pageConfig.path }] }),
+          m('div.mb-4.flex.items-start.justify-between.gap-4', [
+            m('div', [
+              m('h1.text-2xl.font-bold.text-gray-900.dark:text-slate-100', pageConfig.title),
+              pageConfig.description && m('p.text-gray-500.dark:text-slate-400.mt-1', pageConfig.description)
+            ])
+          ]),
+          m('div.custom-html-container', m.trust(pageConfig.html))
         ]);
       }
     };

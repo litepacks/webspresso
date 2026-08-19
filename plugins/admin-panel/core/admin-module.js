@@ -272,6 +272,7 @@ function registerPages(moduleId, pages, deps) {
       description: page.description,
       permission: page.permission,
       layout: page.layout !== undefined ? page.layout : true,
+      iframe: page.iframe,
       url: page.url || page.iframeUrl || undefined,
       html: htmlContent || undefined,
     });

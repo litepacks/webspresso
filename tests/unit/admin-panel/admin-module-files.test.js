@@ -279,5 +279,13 @@ describe('admin-module file and folder custom pages', () => {
       const bodyScriptsHtml = deps.registry.getScriptsHtml('body');
       expect(bodyScriptsHtml).toContain('<script src="https://example.com/custom.js" defer></script>');
     });
+
+    it('should generate custom page component code with m.trust for inline HTML rendering', () => {
+      const { generateCustomPageComponent } = require('../../../plugins/admin-panel/modules/custom-pages');
+      const code = generateCustomPageComponent();
+      expect(code).toContain('m.trust(pageConfig.html)');
+      expect(code).toContain('custom-html-container');
+      expect(code).toContain('pageConfig.iframe');
+    });
   });
 });

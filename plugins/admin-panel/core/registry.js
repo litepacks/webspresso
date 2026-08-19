@@ -479,6 +479,7 @@ class AdminRegistry {
         description: p.description,
         permission: p.permission,
         layout: p.layout !== undefined ? p.layout : true,
+        iframe: p.iframe,
         url: p.url || p.iframeUrl,
         html: p.html,
         hasClientComponent: this.clientComponents.has(p.id),
