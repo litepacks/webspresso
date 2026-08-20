@@ -82,6 +82,8 @@ function createTrackingMiddleware(options) {
   // Sessions tracked in-memory (visitor_id -> last activity timestamp)
   const sessionMap = new Map();
   const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+  const MAX_SESSIONS = 10000;
+  const MAX_QUEUE_SIZE = 5000;
 
   // Periodic session cleanup
   setInterval(() => {
@@ -102,6 +104,11 @@ function createTrackingMiddleware(options) {
       return existing.sessionId;
     }
 
+    if (sessionMap.size >= MAX_SESSIONS) {
+      const firstKey = sessionMap.keys().next().value;
+      if (firstKey !== undefined) sessionMap.delete(firstKey);
+    }
+
     const sessionId = quickHash(visitorId + '-' + now + '-' + Math.random());
     sessionMap.set(visitorId, { sessionId, lastSeen: now });
     return sessionId;
@@ -119,8 +126,15 @@ function createTrackingMiddleware(options) {
       await knex(tableName).insert(batch);
     } catch (e) {
       console.error('[site-analytics] Batch insert failed:', e.message);
-      // Re-queue failed items (optional - could drop to avoid loops)
-      queue.unshift(...batch);
+      // Re-queue failed items with max size limit to prevent memory leak
+      if (queue.length + batch.length <= MAX_QUEUE_SIZE) {
+        queue.unshift(...batch);
+      } else {
+        const available = Math.max(0, MAX_QUEUE_SIZE - queue.length);
+        if (available > 0) {
+          queue.unshift(...batch.slice(batch.length - available));
+        }
+      }
     }
   }
 

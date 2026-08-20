@@ -11,6 +11,10 @@ const nunjucks = require('nunjucks');
 // Storage to pass the active request to Nunjucks template helpers in a thread-safe manner
 const csrfStorage = new AsyncLocalStorage();
 
+const NOOP = () => {};
+const EMPTY_OBJECT = Object.freeze({});
+const ignoreRegexCache = new Map();
+
 /**
  * Compare two strings in constant time to prevent timing attacks
  * @param {string} a
@@ -43,11 +47,18 @@ function isIgnored(req, ignorePaths) {
       if (path.startsWith(pattern)) return true;
       // Basic glob matching
       if (pattern.includes('*')) {
-        const regexPattern = pattern
-          .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-          .replace(/\*\*/g, '.*')
-          .replace(/\*/g, '[^/]*');
-        if (new RegExp(`^${regexPattern}$`).test(path)) return true;
+        let regex = ignoreRegexCache.get(pattern);
+        if (regex === undefined) {
+          const regexPattern = pattern
+            .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+            .replace(/\*\*/g, '.*')
+            .replace(/\*/g, '[^/]*');
+          regex = new RegExp(`^${regexPattern}$`);
+          if (ignoreRegexCache.size < 500) {
+            ignoreRegexCache.set(pattern, regex);
+          }
+        }
+        if (regex.test(path)) return true;
       }
     } else if (pattern instanceof RegExp) {
       if (pattern.test(path)) return true;
@@ -126,11 +137,14 @@ function csrfPlugin(options = {}) {
     cookieOptions.maxAge = cookieOpts.maxAge;
   }
 
+  const cookieSecret = cookieOptions.signed ? (cookieOpts.secret || process.env.SESSION_SECRET) : undefined;
+  const parseCookies = cookieParser(cookieSecret);
+
   /**
    * Internal middleware creator
    * @param {Object} [overrideOpts]
    */
-  function createMiddleware(overrideOpts = {}) {
+  function createMiddleware(overrideOpts = EMPTY_OBJECT) {
     const activeMethods = overrideOpts.methods || methods;
     const activeIgnorePaths = overrideOpts.ignorePaths || ignorePaths;
 
@@ -140,8 +154,7 @@ function csrfPlugin(options = {}) {
 
       // Initialize cookie parser dynamically if needed
       if (useCookie && !req.cookies) {
-        const secret = cookieOptions.signed ? (cookieOpts.secret || process.env.SESSION_SECRET) : undefined;
-        cookieParser(secret)(req, res, () => {});
+        parseCookies(req, res, NOOP);
       }
 
       // 1. Retrieve or generate secret token
@@ -173,8 +186,8 @@ function csrfPlugin(options = {}) {
       // 2. Perform CSRF verification for mutating HTTP methods
       const method = req.method ? req.method.toUpperCase() : 'GET';
       if (activeMethods.includes(method) && !isIgnored(req, activeIgnorePaths)) {
-        const body = req.body && typeof req.body === 'object' ? req.body : {};
-        const query = req.query && typeof req.query === 'object' ? req.query : {};
+        const body = req.body && typeof req.body === 'object' ? req.body : EMPTY_OBJECT;
+        const query = req.query && typeof req.query === 'object' ? req.query : EMPTY_OBJECT;
         const submitted = (
           body._csrf ||
           query._csrf ||

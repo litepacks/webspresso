@@ -18,6 +18,9 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(customParseFormat);
 
+// Cache for isPath regex patterns
+const isPathRegexCache = new Map();
+
 /**
  * Asset Manager - handles asset paths, versioning, and manifest
  */
@@ -385,7 +388,13 @@ function createHelpers(ctx) {
       const currentPath = req.path;
       if (pattern === currentPath) return true;
       if (pattern.includes('*')) {
-        const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+        let regex = isPathRegexCache.get(pattern);
+        if (regex === undefined) {
+          regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+          if (isPathRegexCache.size < 500) {
+            isPathRegexCache.set(pattern, regex);
+          }
+        }
         return regex.test(currentPath);
       }
       return false;

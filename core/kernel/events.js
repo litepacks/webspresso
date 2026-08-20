@@ -40,6 +40,8 @@ function buildContext(payload, meta) {
   };
 }
 
+const EMPTY_ARRAY = Object.freeze([]);
+
 /**
  * @returns {{ dispatch: Function, publish: Function, on: Function, off: Function, buildContext: typeof buildContext }}
  */
@@ -74,7 +76,8 @@ function createEventBus() {
    * @param {KernelEventContext} ctx
    */
   async function dispatch(eventName, ctx) {
-    const list = listeners.get(eventName) || [];
+    const list = listeners.get(eventName);
+    if (!list || list.length === 0) return undefined;
     let last;
     for (const fn of list) {
       last = await fn(ctx);
@@ -87,8 +90,13 @@ function createEventBus() {
    * @param {KernelEventContext} ctx
    */
   async function publish(eventName, ctx) {
-    const list = listeners.get(eventName) || [];
-    await Promise.all(list.map((fn) => Promise.resolve(fn(ctx))));
+    const list = listeners.get(eventName);
+    if (!list || list.length === 0) return;
+    const promises = [];
+    for (const fn of list) {
+      promises.push(Promise.resolve(fn(ctx)));
+    }
+    await Promise.all(promises);
   }
 
   return { dispatch, publish, on, off, buildContext };

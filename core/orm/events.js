@@ -15,6 +15,13 @@
  * @property {import('knex').Knex.Transaction|null} trx - Transaction if in one
  */
 
+const EMPTY_ARRAY = Object.freeze([]);
+
+function cancelContext(reason = 'Operation cancelled') {
+  this.isCancelled = true;
+  this.cancelReason = reason;
+}
+
 /**
  * Create a cancellation context for before hooks
  * @param {string} model - Model name
@@ -23,18 +30,14 @@
  * @returns {EventContext}
  */
 function createEventContext(model, operation, trx = null) {
-  const context = {
+  return {
     model,
     operation,
     trx,
     isCancelled: false,
     cancelReason: null,
-    cancel(reason = 'Operation cancelled') {
-      context.isCancelled = true;
-      context.cancelReason = reason;
-    },
+    cancel: cancelContext,
   };
-  return context;
 }
 
 /**
@@ -114,6 +117,10 @@ class ModelEventsClass {
    * @returns {Function[]} Array of matching listeners
    */
   getMatchingListeners(model, hook) {
+    if (this.listeners.size === 0) {
+      return EMPTY_ARRAY;
+    }
+
     const listeners = [];
     const specificEvent = `${model}.${hook}`;
     const wildcardModel = `*.${hook}`;
@@ -121,26 +128,30 @@ class ModelEventsClass {
     const wildcardAll = '*.*';
 
     // Check specific event
-    if (this.listeners.has(specificEvent)) {
-      listeners.push(...this.listeners.get(specificEvent));
+    const sList = this.listeners.get(specificEvent);
+    if (sList) {
+      listeners.push(...sList);
     }
 
     // Check wildcard model (*.beforeCreate)
-    if (this.listeners.has(wildcardModel)) {
-      listeners.push(...this.listeners.get(wildcardModel));
+    const wmList = this.listeners.get(wildcardModel);
+    if (wmList) {
+      listeners.push(...wmList);
     }
 
     // Check wildcard hook (User.*)
-    if (this.listeners.has(wildcardHook)) {
-      listeners.push(...this.listeners.get(wildcardHook));
+    const whList = this.listeners.get(wildcardHook);
+    if (whList) {
+      listeners.push(...whList);
     }
 
     // Check full wildcard (*.*)
-    if (this.listeners.has(wildcardAll)) {
-      listeners.push(...this.listeners.get(wildcardAll));
+    const waList = this.listeners.get(wildcardAll);
+    if (waList) {
+      listeners.push(...waList);
     }
 
-    return listeners;
+    return listeners.length > 0 ? listeners : EMPTY_ARRAY;
   }
 
   /**

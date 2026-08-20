@@ -10,6 +10,7 @@ const { getModel } = require('../model');
 /** @type {Set<import('./layer').OrmCacheLayer>} */
 const layers = new Set();
 let hooked = false;
+let unsubs = [];
 
 /**
  * @param {import('./layer').OrmCacheLayer} cacheLayer
@@ -37,21 +38,20 @@ function registerOrmCacheListeners(cacheLayer) {
     }
   }
 
-  ModelEvents.on(`*.${Hooks.AFTER_CREATE}`, (record, ctx) => {
-    handleMutation(record, ctx, 'create');
-  });
-
-  ModelEvents.on(`*.${Hooks.AFTER_UPDATE}`, (record, ctx) => {
-    handleMutation(record, ctx, 'update');
-  });
-
-  ModelEvents.on(`*.${Hooks.AFTER_DELETE}`, (record, ctx) => {
-    handleMutation(record, ctx, 'delete');
-  });
-
-  ModelEvents.on(`*.${Hooks.AFTER_RESTORE}`, (record, ctx) => {
-    handleMutation(record, ctx, 'restore');
-  });
+  unsubs = [
+    ModelEvents.on(`*.${Hooks.AFTER_CREATE}`, (record, ctx) => {
+      handleMutation(record, ctx, 'create');
+    }),
+    ModelEvents.on(`*.${Hooks.AFTER_UPDATE}`, (record, ctx) => {
+      handleMutation(record, ctx, 'update');
+    }),
+    ModelEvents.on(`*.${Hooks.AFTER_DELETE}`, (record, ctx) => {
+      handleMutation(record, ctx, 'delete');
+    }),
+    ModelEvents.on(`*.${Hooks.AFTER_RESTORE}`, (record, ctx) => {
+      handleMutation(record, ctx, 'restore');
+    }),
+  ];
 }
 
 /**
@@ -59,6 +59,13 @@ function registerOrmCacheListeners(cacheLayer) {
  */
 function unregisterOrmCacheListeners(cacheLayer) {
   layers.delete(cacheLayer);
+  if (layers.size === 0 && hooked) {
+    for (const unsub of unsubs) {
+      if (typeof unsub === 'function') unsub();
+    }
+    unsubs = [];
+    hooked = false;
+  }
 }
 
 module.exports = {

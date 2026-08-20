@@ -16,8 +16,15 @@ const {
   clearNjkFrontmatterCaches,
 } = require('./njk-frontmatter');
 
+const NOOP = () => {};
+const EMPTY_OBJECT = Object.freeze({});
+const EMPTY_ARRAY = Object.freeze([]);
+
 // Cache for i18n files (key: filePath, value: { mtime, data })
 const i18nCache = new Map();
+
+// Cache for merged i18n (key: `${pagesDir}::${routeDir}::${locale}`, value: { globalMtime, routeMtime, data })
+const mergedI18nCache = new Map();
 
 // Cache for route configs in production
 const configCache = new Map();
@@ -28,14 +35,25 @@ const routeConfigDevCache = new Map();
 // Cache for API filename -> { method, baseName } (basename keys; stable per process)
 const methodFromFilenameCache = new Map();
 
+// Cache for translation param replacement regexes
+const paramRegexCache = new Map();
+
 const MAX_LOCALE_LEN = 16;
+
+let cachedSupportedLocalesRaw = null;
+let cachedSupportedLocaleSet = null;
 
 /** @returns {Set<string>} */
 function parseSupportedLocaleSet() {
   const raw = process.env.SUPPORTED_LOCALES || 'en';
-  return new Set(
+  if (raw === cachedSupportedLocalesRaw && cachedSupportedLocaleSet !== null) {
+    return cachedSupportedLocaleSet;
+  }
+  cachedSupportedLocalesRaw = raw;
+  cachedSupportedLocaleSet = new Set(
     raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
   );
+  return cachedSupportedLocaleSet;
 }
 
 /**
@@ -352,7 +370,7 @@ function scanDirectory(dir, baseDir = dir) {
  */
 function loadI18nFile(filePath) {
   if (!fs.existsSync(filePath)) {
-    return {};
+    return EMPTY_OBJECT;
   }
   
   try {
@@ -370,7 +388,7 @@ function loadI18nFile(filePath) {
     return data;
   } catch (err) {
     console.error('Error loading i18n file:', filePath, err.message);
-    return {};
+    return EMPTY_OBJECT;
   }
 }
 
@@ -390,8 +408,28 @@ function loadI18n(pagesDir, routeDir, locale) {
   const routePath = path.join(routeDir, 'locales', `${locale}.json`);
   const routeTranslations = loadI18nFile(routePath);
   
+  const gEmpty = globalTranslations === EMPTY_OBJECT || !globalTranslations || Object.keys(globalTranslations).length === 0;
+  const rEmpty = routeTranslations === EMPTY_OBJECT || !routeTranslations || Object.keys(routeTranslations).length === 0;
+
+  if (gEmpty && rEmpty) return EMPTY_OBJECT;
+  if (gEmpty) return routeTranslations;
+  if (rEmpty) return globalTranslations;
+
+  const cacheKey = `${pagesDir}::${routeDir}::${locale}`;
+  const gCached = i18nCache.get(globalPath);
+  const rCached = i18nCache.get(routePath);
+  const gm = gCached?.mtime ?? 0;
+  const rm = rCached?.mtime ?? 0;
+
+  const mergedCached = mergedI18nCache.get(cacheKey);
+  if (mergedCached && mergedCached.gm === gm && mergedCached.rm === rm) {
+    return mergedCached.data;
+  }
+
   // Merge: route-specific overrides global
-  return { ...globalTranslations, ...routeTranslations };
+  const data = { ...globalTranslations, ...routeTranslations };
+  mergedI18nCache.set(cacheKey, { gm, rm, data });
+  return data;
 }
 
 /**
@@ -400,7 +438,7 @@ function loadI18n(pagesDir, routeDir, locale) {
  * @returns {Function} Translation function t(key)
  */
 function createTranslator(translations) {
-  return function t(key, params = {}) {
+  return function t(key, params = EMPTY_OBJECT) {
     let value = translations[key];
     
     if (value === undefined) {
@@ -422,10 +460,17 @@ function createTranslator(translations) {
     }
     
     // Replace params like {{name}} in the translation
-    if (typeof value === 'string' && Object.keys(params).length > 0) {
+    if (typeof value === 'string' && params && params !== EMPTY_OBJECT && Object.keys(params).length > 0) {
       for (const [paramKey, paramValue] of Object.entries(params)) {
-        const escaped = escapeRegExp(paramKey);
-        value = value.replace(new RegExp(`{{\\s*${escaped}\\s*}}`, 'g'), paramValue);
+        let regex = paramRegexCache.get(paramKey);
+        if (regex === undefined) {
+          const escaped = escapeRegExp(paramKey);
+          regex = new RegExp(`{{\\s*${escaped}\\s*}}`, 'g');
+          if (paramRegexCache.size < 500) {
+            paramRegexCache.set(paramKey, regex);
+          }
+        }
+        value = value.replace(regex, paramValue);
       }
     }
     
@@ -585,9 +630,9 @@ function resolveNamedMiddleware(name, entry, fromTuple, tupleOptions, middleware
  * @param {Object} middlewareRegistry - Named middleware registry (plain handlers or option factories)
  * @returns {Array} Array of resolved middleware functions
  */
-function resolveMiddlewares(middlewareConfig, middlewareRegistry = {}) {
-  if (!middlewareConfig || !Array.isArray(middlewareConfig)) {
-    return [];
+function resolveMiddlewares(middlewareConfig, middlewareRegistry = EMPTY_OBJECT) {
+  if (!middlewareConfig || !Array.isArray(middlewareConfig) || middlewareConfig.length === 0) {
+    return EMPTY_ARRAY;
   }
   
   return middlewareConfig.map((mw, index) => {
@@ -640,7 +685,7 @@ function mountPages(app, options) {
     ? { alpine: !!clientRuntimeOpt.alpine, swup: !!clientRuntimeOpt.swup }
     : { alpine: false, swup: false };
   const isDev = process.env.NODE_ENV !== 'production';
-  const log = silent ? () => {} : console.log.bind(console);
+  const log = silent ? NOOP : console.log.bind(console);
   
   // Get absolute path to pages directory
   const absolutePagesDir = path.resolve(pagesDir);
@@ -783,7 +828,7 @@ function mountPages(app, options) {
 
     const preResolvedMw = routeMiddleware
       ? resolveMiddlewares(routeMiddleware, middlewares)
-      : [];
+      : EMPTY_ARRAY;
     
     if (typeof handlerFn !== 'function') {
       console.warn(`API route ${route.file} does not export a function`);
@@ -867,7 +912,7 @@ function mountPages(app, options) {
     const mountConfig = loadRouteConfig(route.configPath, isDev);
     const preResolvedPageMw = mountConfig?.middleware
       ? resolveMiddlewares(mountConfig.middleware, middlewares)
-      : [];
+      : EMPTY_ARRAY;
 
     app.get(route.routePath, async (req, res, next) => {
       try {
@@ -880,11 +925,11 @@ function mountPages(app, options) {
         
         // Load route config
         const config = loadRouteConfig(route.configPath, isDev);
-        const routeHooks = config?.hooks || {};
+        const routeHooks = config?.hooks || EMPTY_OBJECT;
         
         // Create context with plugin helpers merged
         const baseHelpers = createHelpers({ req, res, locale });
-        const pluginHelpers = pluginManager ? pluginManager.getHelpers() : {};
+        const pluginHelpers = pluginManager ? pluginManager.getHelpers() : EMPTY_OBJECT;
         if (pluginManager) {
           const contentApi = pluginManager.getPluginAPI('content');
           if (contentApi?.createRequestHelpers) {
