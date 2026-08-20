@@ -63,39 +63,37 @@ async function loadRelations(records, relationNames, model, knex, scopeContext) 
  * @param {import('./types').ScopeContext} scopeContext - Scope context
  */
 async function loadBelongsTo(records, relationName, localKey, foreignKey, relatedModel, knex, scopeContext) {
-  // Collect unique foreign key values
-  const foreignKeyValues = [...new Set(
-    records
-      .map(r => r[foreignKey])
-      .filter(v => v !== null && v !== undefined)
-  )];
+  const fkSet = new Set();
+  const len = records.length;
+  for (let i = 0; i < len; i++) {
+    const v = records[i][foreignKey];
+    if (v !== null && v !== undefined) fkSet.add(v);
+  }
 
-  if (foreignKeyValues.length === 0) {
-    // No foreign keys, set all relations to null
-    for (const record of records) {
-      record[relationName] = null;
+  if (fkSet.size === 0) {
+    for (let i = 0; i < len; i++) {
+      records[i][relationName] = null;
     }
     return;
   }
 
-  // Build query for related records
+  const foreignKeyValues = Array.from(fkSet);
   let qb = knex(relatedModel.table).whereIn(relatedModel.primaryKey, foreignKeyValues);
-  
-  // Apply scopes to related model
   qb = applyScopes(qb, scopeContext, relatedModel);
-
   const relatedRecords = await qb;
 
-  // Index related records by primary key
   const relatedMap = new Map();
-  for (const related of relatedRecords) {
-    relatedMap.set(related[relatedModel.primaryKey], related);
+  const rLen = relatedRecords.length;
+  const pk = relatedModel.primaryKey;
+  for (let i = 0; i < rLen; i++) {
+    const item = relatedRecords[i];
+    relatedMap.set(item[pk], item);
   }
 
-  // Attach related records to parent records
-  for (const record of records) {
-    const fkValue = record[foreignKey];
-    record[relationName] = fkValue !== null && fkValue !== undefined
+  for (let i = 0; i < len; i++) {
+    const rec = records[i];
+    const fkValue = rec[foreignKey];
+    rec[relationName] = fkValue !== null && fkValue !== undefined
       ? relatedMap.get(fkValue) || null
       : null;
   }
@@ -115,43 +113,42 @@ async function loadBelongsTo(records, relationName, localKey, foreignKey, relate
  * @param {import('./types').ScopeContext} scopeContext - Scope context
  */
 async function loadHasMany(records, relationName, localKey, foreignKey, relatedModel, knex, scopeContext) {
-  // Collect unique primary key values from parent records
-  const primaryKeyValues = [...new Set(
-    records
-      .map(r => r[localKey])
-      .filter(v => v !== null && v !== undefined)
-  )];
+  const pkSet = new Set();
+  const len = records.length;
+  for (let i = 0; i < len; i++) {
+    const v = records[i][localKey];
+    if (v !== null && v !== undefined) pkSet.add(v);
+  }
 
-  if (primaryKeyValues.length === 0) {
-    // No primary keys, set all relations to empty arrays
-    for (const record of records) {
-      record[relationName] = [];
+  if (pkSet.size === 0) {
+    for (let i = 0; i < len; i++) {
+      records[i][relationName] = [];
     }
     return;
   }
 
-  // Build query for related records
+  const primaryKeyValues = Array.from(pkSet);
   let qb = knex(relatedModel.table).whereIn(foreignKey, primaryKeyValues);
-  
-  // Apply scopes to related model
   qb = applyScopes(qb, scopeContext, relatedModel);
-
   const relatedRecords = await qb;
 
-  // Group related records by foreign key
   const relatedGroups = new Map();
-  for (const related of relatedRecords) {
-    const fkValue = related[foreignKey];
-    if (!relatedGroups.has(fkValue)) {
-      relatedGroups.set(fkValue, []);
+  const rLen = relatedRecords.length;
+  for (let i = 0; i < rLen; i++) {
+    const item = relatedRecords[i];
+    const fkValue = item[foreignKey];
+    let group = relatedGroups.get(fkValue);
+    if (group === undefined) {
+      group = [];
+      relatedGroups.set(fkValue, group);
     }
-    relatedGroups.get(fkValue).push(related);
+    group.push(item);
   }
 
-  // Attach related records to parent records
-  for (const record of records) {
-    const pkValue = record[localKey];
-    record[relationName] = relatedGroups.get(pkValue) || [];
+  for (let i = 0; i < len; i++) {
+    const rec = records[i];
+    const pkValue = rec[localKey];
+    rec[relationName] = (pkValue !== null && pkValue !== undefined ? relatedGroups.get(pkValue) : undefined) || [];
   }
 }
 
@@ -169,42 +166,39 @@ async function loadHasMany(records, relationName, localKey, foreignKey, relatedM
  * @param {import('./types').ScopeContext} scopeContext - Scope context
  */
 async function loadHasOne(records, relationName, localKey, foreignKey, relatedModel, knex, scopeContext) {
-  // Collect unique primary key values from parent records
-  const primaryKeyValues = [...new Set(
-    records
-      .map(r => r[localKey])
-      .filter(v => v !== null && v !== undefined)
-  )];
+  const pkSet = new Set();
+  const len = records.length;
+  for (let i = 0; i < len; i++) {
+    const v = records[i][localKey];
+    if (v !== null && v !== undefined) pkSet.add(v);
+  }
 
-  if (primaryKeyValues.length === 0) {
-    // No primary keys, set all relations to null
-    for (const record of records) {
-      record[relationName] = null;
+  if (pkSet.size === 0) {
+    for (let i = 0; i < len; i++) {
+      records[i][relationName] = null;
     }
     return;
   }
 
-  // Build query for related records
+  const primaryKeyValues = Array.from(pkSet);
   let qb = knex(relatedModel.table).whereIn(foreignKey, primaryKeyValues);
-  
-  // Apply scopes to related model
   qb = applyScopes(qb, scopeContext, relatedModel);
-
   const relatedRecords = await qb;
 
-  // Index related records by foreign key (first occurrence wins for hasOne)
   const relatedMap = new Map();
-  for (const related of relatedRecords) {
-    const fkValue = related[foreignKey];
+  const rLen = relatedRecords.length;
+  for (let i = 0; i < rLen; i++) {
+    const item = relatedRecords[i];
+    const fkValue = item[foreignKey];
     if (!relatedMap.has(fkValue)) {
-      relatedMap.set(fkValue, related);
+      relatedMap.set(fkValue, item);
     }
   }
 
-  // Attach related records to parent records
-  for (const record of records) {
-    const pkValue = record[localKey];
-    record[relationName] = relatedMap.get(pkValue) || null;
+  for (let i = 0; i < len; i++) {
+    const rec = records[i];
+    const pkValue = rec[localKey];
+    rec[relationName] = (pkValue !== null && pkValue !== undefined ? relatedMap.get(pkValue) : undefined) || null;
   }
 }
 

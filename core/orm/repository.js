@@ -28,6 +28,7 @@ const { getJsonColumns, serializeJsonFields, deserializeJsonFields } = require('
 function createRepository(model, knex, initialContext, cacheLayer = null) {
   const scopeContext = initialContext || createScopeContext();
   const jsonColumns = getJsonColumns(model);
+  const hasJson = jsonColumns.size > 0;
 
   /**
    * Get base query builder
@@ -47,12 +48,15 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    */
   async function findById(id, options = {}, emitEvents = true) {
     const { with: withs = [], select } = options;
-    const ctx = createEventContext(model.name, 'find');
-    const query = { [model.primaryKey]: id };
+    const shouldEmit = emitEvents && (
+      ModelEvents.hasListeners(model.name, Hooks.BEFORE_FIND) ||
+      ModelEvents.hasListeners(model.name, Hooks.AFTER_FIND)
+    );
+    const ctx = shouldEmit ? createEventContext(model.name, 'find') : null;
 
     async function loadFromDb() {
-      if (emitEvents) {
-        await ModelEvents.emitAsync(model.name, Hooks.BEFORE_FIND, query, ctx);
+      if (shouldEmit) {
+        await ModelEvents.emitAsync(model.name, Hooks.BEFORE_FIND, { [model.primaryKey]: id }, ctx);
         if (ctx.isCancelled) {
           throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_FIND);
         }
@@ -70,13 +74,15 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
         return null;
       }
 
-      deserializeJsonFields(record, jsonColumns);
+      if (hasJson) {
+        deserializeJsonFields(record, jsonColumns);
+      }
 
       if (withs.length > 0) {
         await loadRelations([record], ensureArray(withs), model, knex, scopeContext);
       }
 
-      if (emitEvents) {
+      if (shouldEmit) {
         ModelEvents.emit(model.name, Hooks.AFTER_FIND, record, ctx);
       }
 
@@ -113,7 +119,11 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    */
   async function findOne(conditions, options = {}) {
     const { with: withs = [], select } = options;
-    const ctx = createEventContext(model.name, 'find');
+    const shouldEmit = (
+      ModelEvents.hasListeners(model.name, Hooks.BEFORE_FIND) ||
+      ModelEvents.hasListeners(model.name, Hooks.AFTER_FIND)
+    );
+    const ctx = shouldEmit ? createEventContext(model.name, 'find') : null;
 
     const condKeys = Object.keys(conditions);
     const isPkOnly =
@@ -122,9 +132,11 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
       condKeys[0] === model.primaryKey;
 
     async function loadFromDb() {
-      await ModelEvents.emitAsync(model.name, Hooks.BEFORE_FIND, conditions, ctx);
-      if (ctx.isCancelled) {
-        throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_FIND);
+      if (shouldEmit) {
+        await ModelEvents.emitAsync(model.name, Hooks.BEFORE_FIND, conditions, ctx);
+        if (ctx.isCancelled) {
+          throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_FIND);
+        }
       }
 
       let qb = baseQuery();
@@ -143,13 +155,17 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
         return null;
       }
 
-      deserializeJsonFields(record, jsonColumns);
+      if (hasJson) {
+        deserializeJsonFields(record, jsonColumns);
+      }
 
       if (withs.length > 0) {
         await loadRelations([record], ensureArray(withs), model, knex, scopeContext);
       }
 
-      ModelEvents.emit(model.name, Hooks.AFTER_FIND, record, ctx);
+      if (shouldEmit) {
+        ModelEvents.emit(model.name, Hooks.AFTER_FIND, record, ctx);
+      }
 
       return record;
     }
@@ -183,12 +199,18 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    */
   async function findAll(options = {}) {
     const { with: withs = [], select } = options;
-    const ctx = createEventContext(model.name, 'find');
+    const shouldEmit = (
+      ModelEvents.hasListeners(model.name, Hooks.BEFORE_FIND) ||
+      ModelEvents.hasListeners(model.name, Hooks.AFTER_FIND)
+    );
+    const ctx = shouldEmit ? createEventContext(model.name, 'find') : null;
 
     async function loadFromDb() {
-      await ModelEvents.emitAsync(model.name, Hooks.BEFORE_FIND, {}, ctx);
-      if (ctx.isCancelled) {
-        throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_FIND);
+      if (shouldEmit) {
+        await ModelEvents.emitAsync(model.name, Hooks.BEFORE_FIND, {}, ctx);
+        if (ctx.isCancelled) {
+          throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_FIND);
+        }
       }
 
       let qb = baseQuery();
@@ -199,16 +221,22 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
 
       const records = await qb;
 
-      for (const record of records) {
-        deserializeJsonFields(record, jsonColumns);
+      if (hasJson) {
+        const len = records.length;
+        for (let i = 0; i < len; i++) {
+          deserializeJsonFields(records[i], jsonColumns);
+        }
       }
 
       if (withs.length > 0 && records.length > 0) {
         await loadRelations(records, ensureArray(withs), model, knex, scopeContext);
       }
 
-      for (const record of records) {
-        ModelEvents.emit(model.name, Hooks.AFTER_FIND, record, ctx);
+      if (shouldEmit) {
+        const len = records.length;
+        for (let i = 0; i < len; i++) {
+          ModelEvents.emit(model.name, Hooks.AFTER_FIND, records[i], ctx);
+        }
       }
 
       return records;
@@ -261,7 +289,9 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     let insertData = applyInsertModifiers(validated, scopeContext, model);
 
     // Serialize JSON fields
-    insertData = serializeJsonFields(insertData, jsonColumns);
+    if (hasJson) {
+      insertData = serializeJsonFields(insertData, jsonColumns);
+    }
 
     // Insert and return the record
     const [id] = await knex(model.table).insert(insertData).returning(model.primaryKey);
@@ -341,7 +371,9 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     delete updateData[model.primaryKey];
 
     // Serialize JSON fields
-    updateData = serializeJsonFields(updateData, jsonColumns);
+    if (hasJson) {
+      updateData = serializeJsonFields(updateData, jsonColumns);
+    }
 
     // Update the record
     const updated = await baseQuery()

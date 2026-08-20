@@ -155,6 +155,23 @@ class ModelEventsClass {
   }
 
   /**
+   * Fast boolean check whether any listener matches
+   * @param {string} model - Model name
+   * @param {string} hook - Hook name
+   * @returns {boolean}
+   */
+  hasListeners(model, hook) {
+    if (this.listeners.size === 0) return false;
+    const l = this.listeners;
+    return (
+      l.has(`${model}.${hook}`) ||
+      l.has(`*.${hook}`) ||
+      l.has(`${model}.*`) ||
+      l.has('*.*')
+    );
+  }
+
+  /**
    * Emit an event synchronously (for after hooks)
    * @param {string} model - Model name
    * @param {string} hook - Hook name
@@ -163,6 +180,7 @@ class ModelEventsClass {
    */
   emit(model, hook, data, context) {
     const listeners = this.getMatchingListeners(model, hook);
+    if (listeners.length === 0) return;
     const ctx = context || createEventContext(model, hook);
 
     for (const listener of listeners) {
@@ -187,6 +205,7 @@ class ModelEventsClass {
   async emitAsync(model, hook, data, context) {
     const listeners = this.getMatchingListeners(model, hook);
     const ctx = context || createEventContext(model, hook);
+    if (listeners.length === 0) return ctx;
 
     for (const listener of listeners) {
       if (ctx.isCancelled) break;

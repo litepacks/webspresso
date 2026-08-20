@@ -5,6 +5,9 @@
  */
 
 const METADATA_MARKER = '__wdb__';
+const metaWeakMap = new WeakMap();
+const metaStringCache = new Map();
+const schemaColumnsWeakMap = new WeakMap();
 
 /**
  * Encode column metadata into a JSON string for Zod .describe()
@@ -22,13 +25,24 @@ function encodeColumnMeta(meta) {
  */
 function decodeColumnMeta(description) {
   if (!description) return null;
+  const cached = metaStringCache.get(description);
+  if (cached !== undefined) return cached;
+
   try {
     const parsed = JSON.parse(description);
     if (parsed && parsed[METADATA_MARKER]) {
-      return parsed.meta;
+      const meta = parsed.meta;
+      if (metaStringCache.size < 500) {
+        metaStringCache.set(description, meta);
+      }
+      return meta;
     }
   } catch {
     // Not our metadata, ignore
+  }
+
+  if (metaStringCache.size < 500) {
+    metaStringCache.set(description, null);
   }
   return null;
 }
@@ -39,7 +53,7 @@ function decodeColumnMeta(description) {
  * @returns {boolean}
  */
 function hasColumnMeta(schema) {
-  return decodeColumnMeta(schema.description) !== null;
+  return getColumnMeta(schema) !== null;
 }
 
 /**
@@ -48,6 +62,10 @@ function hasColumnMeta(schema) {
  * @returns {import('./types').ColumnMeta|null}
  */
 function getColumnMeta(schema) {
+  if (!schema) return null;
+  const direct = metaWeakMap.get(schema);
+  if (direct !== undefined) return direct;
+  if (schema._wdbMeta) return schema._wdbMeta;
   return decodeColumnMeta(schema.description);
 }
 
@@ -253,6 +271,7 @@ class SchemaBuilder {
 
     // Apply metadata to schema
     this._schema = this._schema.describe(encodeColumnMeta(finalMeta));
+    metaWeakMap.set(this._schema, finalMeta);
     this._finalized = true;
     return this._schema;
   }
@@ -770,6 +789,15 @@ function createSchemaHelpers(z) {
  * @returns {Map<string, import('./types').ColumnMeta>}
  */
 function extractColumnsFromSchema(schema) {
+  if (!schema || typeof schema !== 'object' || !schema.shape) {
+    return new Map();
+  }
+
+  const cached = schemaColumnsWeakMap.get(schema);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   const columns = new Map();
   const shape = schema.shape;
 
@@ -806,6 +834,7 @@ function extractColumnsFromSchema(schema) {
     }
   }
 
+  schemaColumnsWeakMap.set(schema, columns);
   return columns;
 }
 
