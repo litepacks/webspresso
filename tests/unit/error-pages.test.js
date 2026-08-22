@@ -6,6 +6,7 @@ const { createApp } = require('../../src/server');
 const path = require('path');
 const request = require('supertest');
 const fs = require('fs');
+const os = require('os');
 
 describe('Error Pages', () => {
   const pagesDir = path.join(__dirname, '../fixtures/pages');
@@ -168,6 +169,84 @@ describe('Error Pages', () => {
       const res = await request(testApp).get('/forbidden');
       
       expect(res.status).toBe(403);
+    });
+  });
+
+  describe('404 Auto-Discovery and Fallback Hierarchy', () => {
+    let autoDir;
+    let autoPagesDir;
+    let autoViewsDir;
+
+    beforeEach(() => {
+      autoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-auto-404-'));
+      autoPagesDir = path.join(autoDir, 'pages');
+      autoViewsDir = path.join(autoDir, 'views');
+      fs.mkdirSync(autoPagesDir, { recursive: true });
+      fs.mkdirSync(autoViewsDir, { recursive: true });
+    });
+
+    afterEach(() => {
+      fs.rmSync(autoDir, { recursive: true, force: true });
+    });
+
+    it('should auto-discover views/404.njk when errorPages.notFound is not explicitly passed', async () => {
+      fs.writeFileSync(path.join(autoViewsDir, '404.njk'), '<h1>Views 404 Auto: {{ url }}</h1>');
+
+      const { app } = createApp({
+        pagesDir: autoPagesDir,
+        viewsDir: autoViewsDir,
+      });
+
+      const res = await request(app).get('/non-existent-route');
+      expect(res.status).toBe(404);
+      expect(res.text).toContain('Views 404 Auto: /non-existent-route');
+    });
+
+    it('should auto-discover pages/404.njk when views/404.njk is absent', async () => {
+      fs.writeFileSync(path.join(autoPagesDir, '404.njk'), '<h1>Pages 404 Auto: {{ url }}</h1>');
+
+      const { app } = createApp({
+        pagesDir: autoPagesDir,
+        viewsDir: autoViewsDir,
+      });
+
+      const res = await request(app).get('/another-missing-route');
+      expect(res.status).toBe(404);
+      expect(res.text).toContain('Pages 404 Auto: /another-missing-route');
+    });
+
+    it('should execute pages/404.js load() and provide data to 404 template', async () => {
+      fs.writeFileSync(
+        path.join(autoPagesDir, '404.js'),
+        'module.exports = { load: async ({ req }) => ({ customMessage: "Helpful 404", requestedPath: req.url }) };'
+      );
+      fs.writeFileSync(
+        path.join(autoPagesDir, '404.njk'),
+        '<h1>{{ customMessage }}</h1><p>{{ requestedPath }}</p>'
+      );
+
+      const { app } = createApp({
+        pagesDir: autoPagesDir,
+        viewsDir: autoViewsDir,
+      });
+
+      const res = await request(app).get('/where-is-this');
+      expect(res.status).toBe(404);
+      expect(res.text).toContain('Helpful 404');
+      expect(res.text).toContain('/where-is-this');
+    });
+
+    it('should set HTTP 404 status when directly requesting /404 route', async () => {
+      fs.writeFileSync(path.join(autoPagesDir, '404.njk'), '<h1>404 Page</h1>');
+
+      const { app } = createApp({
+        pagesDir: autoPagesDir,
+        viewsDir: autoViewsDir,
+      });
+
+      const res = await request(app).get('/404');
+      expect(res.status).toBe(404);
+      expect(res.text).toContain('404 Page');
     });
   });
 });

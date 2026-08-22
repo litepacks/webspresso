@@ -3,6 +3,9 @@
  * Express + Nunjucks SSR server with file-based routing
  */
 
+const fs = require('fs');
+const path = require('path');
+const { AsyncLocalStorage } = require('async_hooks');
 const express = require('express');
 const helmet = require('helmet');
 const nunjucks = require('nunjucks');
@@ -14,6 +17,99 @@ const { resolveClientRuntime } = require('./client-runtime/resolve');
 const { mountPages, detectLocale } = require('./file-router');
 const { configureAssets, createHelpers, getScriptInjector } = require('./helpers');
 const { createPluginManager } = require('./plugin-manager');
+
+// Async storage for tracking template render call stacks (circular extends guard)
+const renderStackStorage = new AsyncLocalStorage();
+
+/**
+ * Configure Nunjucks environment with circular extends guard and loader protection
+ * @param {string|string[]} templateDirs - Template directory paths
+ * @param {Object} options - Nunjucks options
+ * @returns {nunjucks.Environment}
+ */
+function configureSafeNunjucks(templateDirs, options = {}) {
+  const env = nunjucks.configure(templateDirs, options);
+  const origGetTemplate = env.getTemplate.bind(env);
+  const origRender = env.render.bind(env);
+  const origRenderString = env.renderString.bind(env);
+
+  function wrapTemplateRoot(tmpl, name, store) {
+    if (!tmpl || tmpl._safeWrapped) return;
+    tmpl._safeWrapped = true;
+    const origRoot = tmpl.rootRenderFunc;
+    if (typeof origRoot !== 'function') return;
+
+    tmpl.rootRenderFunc = function(e, context, frame, runtime, renderCb) {
+      const normalizedName = String(name || tmpl.path || 'anonymous');
+      store.stack.push(normalizedName);
+      let finished = false;
+      const done = (err, out) => {
+        if (!finished) {
+          finished = true;
+          const idx = store.stack.lastIndexOf(normalizedName);
+          if (idx !== -1) store.stack.splice(idx, 1);
+        }
+        renderCb(err, out);
+      };
+      try {
+        return origRoot.call(this, e, context, frame, runtime, done);
+      } catch (ex) {
+        const idx = store.stack.lastIndexOf(normalizedName);
+        if (idx !== -1) store.stack.splice(idx, 1);
+        throw ex;
+      }
+    };
+  }
+
+  env.getTemplate = function(name, eagerCompile, parentName, ignoreMissing, cb) {
+    if (typeof parentName === 'function') {
+      cb = parentName;
+      parentName = null;
+    }
+    if (typeof eagerCompile === 'function') {
+      cb = eagerCompile;
+      eagerCompile = false;
+    }
+
+    const store = renderStackStorage.getStore();
+    if (store && name) {
+      const normalizedName = String(name);
+      if (store.stack.includes(normalizedName)) {
+        const cycle = [...store.stack, normalizedName].join(' -> ');
+        const err = new Error(`Circular template extension detected: ${cycle}`);
+        if (typeof cb === 'function') return cb(err);
+        throw err;
+      }
+    }
+
+    const wrappedCb = typeof cb === 'function' ? function(err, tmpl) {
+      if (tmpl && store) {
+        wrapTemplateRoot(tmpl, name, store);
+      }
+      cb(err, tmpl);
+    } : undefined;
+
+    const res = origGetTemplate(name, eagerCompile, parentName, ignoreMissing, wrappedCb);
+    if (res && store) {
+      wrapTemplateRoot(res, name, store);
+    }
+    return res;
+  };
+
+  env.render = function(name, ctx, cb) {
+    return renderStackStorage.run({ stack: [] }, () => {
+      return origRender(name, ctx, cb);
+    });
+  };
+
+  env.renderString = function(src, ctx, opts, cb) {
+    return renderStackStorage.run({ stack: [] }, () => {
+      return origRenderString(src, ctx, opts, cb);
+    });
+  };
+
+  return env;
+}
 
 /**
  * Get default Helmet configuration
@@ -405,10 +501,10 @@ function createApp(options = {}) {
 
   mountClientRuntime(app, clientRuntime);
 
-  // Configure Nunjucks
-  const templateDirs = viewsDir ? [pagesDir, viewsDir] : [pagesDir];
+  // Configure Nunjucks with viewsDir priority and circular extension guard
+  const templateDirs = viewsDir ? [viewsDir, pagesDir] : [pagesDir];
   
-  const nunjucksEnv = nunjucks.configure(templateDirs, {
+  const nunjucksEnv = configureSafeNunjucks(templateDirs, {
     autoescape: true,
     express: app,
     watch: isDev && !isTest,
@@ -540,19 +636,50 @@ function createApp(options = {}) {
   }
   
   // 404 handler
-  app.use((req, res) => {
+  app.use(async (req, res) => {
     res.status(404);
     const ctx = createErrorContext(req);
     
-    // Custom handler function
+    // 1. Custom handler function
     if (typeof errorPages.notFound === 'function') {
       return errorPages.notFound(req, res, ctx);
     }
     
-    // Custom template
-    if (typeof errorPages.notFound === 'string') {
+    // 2. Custom template or auto-discovered 404 template
+    let notFoundTemplate = typeof errorPages.notFound === 'string' ? errorPages.notFound : null;
+    
+    // Auto-detect 404.njk if not explicitly passed
+    if (!notFoundTemplate) {
+      if (viewsDir && fs.existsSync(path.join(viewsDir, '404.njk'))) {
+        notFoundTemplate = '404.njk';
+      } else if (fs.existsSync(path.join(pagesDir, '404.njk'))) {
+        notFoundTemplate = '404.njk';
+      }
+    }
+    
+    if (notFoundTemplate) {
       try {
-        const html = nunjucksEnv.render(errorPages.notFound, ctx);
+        // If pages/404.js exists, execute load() data loader
+        const config404Path = path.join(pagesDir, '404.js');
+        if (fs.existsSync(config404Path)) {
+          try {
+            if (isDev && require.cache[require.resolve(config404Path)]) {
+              delete require.cache[require.resolve(config404Path)];
+            }
+            const config404 = require(config404Path);
+            const loadFn = typeof config404 === 'function' ? config404 : config404.load;
+            if (typeof loadFn === 'function') {
+              const loadData = await loadFn({ req, res, db: ctx.db || null, ctx });
+              if (loadData && typeof loadData === 'object') {
+                Object.assign(ctx, loadData);
+              }
+            }
+          } catch (loadErr) {
+            console.error('Error executing 404.js load():', loadErr);
+          }
+        }
+
+        const html = nunjucksEnv.render(notFoundTemplate, ctx);
         return res.send(html);
       } catch (e) {
         console.error('Error rendering 404 template:', e);

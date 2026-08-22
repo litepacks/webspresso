@@ -1058,6 +1058,9 @@ function mountPages(app, options) {
         await executeHook(globalHooks, 'afterRender', ctx);
         await executeHook(routeHooks, 'afterRender', ctx);
         
+        if (route.routePath === '/404' || route.file === '404.njk') {
+          res.status(404);
+        }
         res.send(ctx.html);
       } catch (err) {
         console.error(`SSR error ${route.routePath}:`, err);
