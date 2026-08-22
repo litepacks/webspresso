@@ -47,7 +47,10 @@ function createCorsMiddleware(options = {}) {
 
   function isOriginAllowed(reqOrigin, callback) {
     if (!config.origin || config.origin === '*') {
-      return callback(null, config.origin);
+      return callback(null, '*');
+    }
+    if (config.origin === true) {
+      return callback(null, reqOrigin || '*');
     }
     if (!reqOrigin) {
       return callback(null, false);
@@ -96,11 +99,7 @@ function createCorsMiddleware(options = {}) {
       }
 
       if (allowedOrigin) {
-        if (allowedOrigin === '*' && config.credentials) {
-          res.setHeader('Access-Control-Allow-Origin', reqOrigin || '*');
-        } else {
-          res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-        }
+        res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
         res.setHeader('Vary', 'Origin');
       }
 

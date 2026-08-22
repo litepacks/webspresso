@@ -654,6 +654,28 @@ function createApp(options = {}) {
     };
   }
   
+  // Pre-resolve error templates and loaders once at startup to avoid runtime synchronous fs operations
+  const resolved404Template = typeof errorPages.notFound === 'string'
+    ? errorPages.notFound
+    : ((viewsDir && fs.existsSync(path.join(viewsDir, '404.njk'))) || fs.existsSync(path.join(pagesDir, '404.njk')))
+      ? '404.njk'
+      : null;
+
+  const config404Path = path.join(pagesDir, '404.js');
+  const has404DataLoader = fs.existsSync(config404Path);
+
+  const resolved500Template = typeof errorPages.serverError === 'string'
+    ? errorPages.serverError
+    : ((viewsDir && fs.existsSync(path.join(viewsDir, '500.njk'))) || fs.existsSync(path.join(pagesDir, '500.njk')))
+      ? '500.njk'
+      : null;
+
+  const resolved503Template = typeof errorPages.timeout === 'string'
+    ? errorPages.timeout
+    : ((viewsDir && fs.existsSync(path.join(viewsDir, '503.njk'))) || fs.existsSync(path.join(pagesDir, '503.njk')))
+      ? '503.njk'
+      : null;
+
   // 404 handler
   app.use(async (req, res) => {
     res.status(404);
@@ -664,23 +686,13 @@ function createApp(options = {}) {
       return errorPages.notFound(req, res, ctx);
     }
     
-    // 2. Custom template or auto-discovered 404 template
-    let notFoundTemplate = typeof errorPages.notFound === 'string' ? errorPages.notFound : null;
-    
-    // Auto-detect 404.njk if not explicitly passed
-    if (!notFoundTemplate) {
-      if (viewsDir && fs.existsSync(path.join(viewsDir, '404.njk'))) {
-        notFoundTemplate = '404.njk';
-      } else if (fs.existsSync(path.join(pagesDir, '404.njk'))) {
-        notFoundTemplate = '404.njk';
-      }
-    }
+    // 2. Custom or auto-discovered 404 template (pre-resolved at startup)
+    const notFoundTemplate = resolved404Template;
     
     if (notFoundTemplate && !preferJsonErrorResponse(req)) {
       try {
         // If pages/404.js exists, execute load() data loader
-        const config404Path = path.join(pagesDir, '404.js');
-        if (fs.existsSync(config404Path)) {
+        if (has404DataLoader) {
           try {
             if (isDev && require.cache[require.resolve(config404Path)]) {
               delete require.cache[require.resolve(config404Path)];
@@ -730,15 +742,8 @@ function createApp(options = {}) {
         return errorPages.timeout(req, res, ctx);
       }
       
-      // Custom or auto-discovered timeout template
-      let timeoutTemplate = typeof errorPages.timeout === 'string' ? errorPages.timeout : null;
-      if (!timeoutTemplate) {
-        if (viewsDir && fs.existsSync(path.join(viewsDir, '503.njk'))) {
-          timeoutTemplate = '503.njk';
-        } else if (fs.existsSync(path.join(pagesDir, '503.njk'))) {
-          timeoutTemplate = '503.njk';
-        }
-      }
+      // Custom or auto-discovered timeout template (pre-resolved at startup)
+      const timeoutTemplate = resolved503Template;
 
       if (timeoutTemplate && !preferJsonErrorResponse(req)) {
         try {
@@ -769,15 +774,8 @@ function createApp(options = {}) {
       return errorPages.serverError(err, req, res, ctx);
     }
     
-    // Custom or auto-discovered 500 template (skipped for /api and JSON-preferring clients)
-    let serverErrorTemplate = typeof errorPages.serverError === 'string' ? errorPages.serverError : null;
-    if (!serverErrorTemplate) {
-      if (viewsDir && fs.existsSync(path.join(viewsDir, '500.njk'))) {
-        serverErrorTemplate = '500.njk';
-      } else if (fs.existsSync(path.join(pagesDir, '500.njk'))) {
-        serverErrorTemplate = '500.njk';
-      }
-    }
+    // Custom or auto-discovered 500 template (pre-resolved at startup)
+    const serverErrorTemplate = resolved500Template;
 
     if (serverErrorTemplate && !preferJsonErrorResponse(req)) {
       try {

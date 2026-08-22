@@ -261,10 +261,11 @@
         var attrs = Array.prototype.slice.call(node.attributes);
         for (var j = 0; j < attrs.length; j++) {
           var attrName = attrs[j].name.toLowerCase();
-          var attrVal = attrs[j].value.toLowerCase().trim();
+          var attrVal = attrs[j].value.toLowerCase().replace(/[\x00-\x20\s]+/g, '').trim();
           if (attrName.indexOf('on') === 0) {
             node.removeAttribute(attrs[j].name);
-          } else if ((attrName === 'href' || attrName === 'src') && attrVal.indexOf('javascript:') === 0) {
+          } else if ((attrName === 'href' || attrName === 'src' || attrName === 'action' || attrName === 'formaction' || attrName === 'xlink:href') &&
+                     /^(?:javascript|data|vbscript):/i.test(attrVal)) {
             node.removeAttribute(attrs[j].name);
           }
         }

@@ -51,10 +51,10 @@ describe('CORS Plugin', () => {
       expect(res3.headers['access-control-allow-origin']).toBeUndefined();
     });
 
-    it('should support credentials: true and echo origin', async () => {
+    it('should support credentials: true and echo origin when origin is true', async () => {
       const app = express();
       const corsMiddleware = corsPlugin.createCorsMiddleware({
-        origin: '*',
+        origin: true,
         credentials: true,
       });
       app.use(corsMiddleware);
