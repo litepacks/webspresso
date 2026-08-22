@@ -419,8 +419,8 @@ const RecordList = {
                 }, 'Clear'),
               ]),
             ]) : null,
-            // Desktop Table container with sticky header, fixed columns, and overflow scroll (visible on >= md)
-            m('.hidden.md:block.overflow-auto.max-h-[calc(100vh-380px)]', { style: 'position: relative;' }, [
+            // Table container with sticky header, fixed columns, and overflow scroll
+            m('.overflow-auto.max-h-[calc(100vh-380px)]', { style: 'position: relative;' }, [
               m('table.w-full.border-collapse', { style: 'min-width: 100%;' }, [
                 // Sticky header
                 m('thead.bg-gray-50.dark:bg-slate-900', { style: 'position: sticky; top: 0; z-index: 20;' }, [
@@ -563,105 +563,6 @@ const RecordList = {
                   ])
                 )),
               ]),
-            ]),
-
-            // Mobile Cards List (visible on mobile screens < md)
-            m('.block.md:hidden.divide-y.divide-gray-100.dark:divide-slate-700', [
-              // Mobile Select All Header Bar
-              m('.px-4.py-2.5.bg-gray-50.dark:bg-slate-900.border-b.border-gray-200.dark:border-slate-700.flex.items-center.justify-between', [
-                m('label.flex.items-center.gap-2.text-xs.font-medium.text-gray-700.dark:text-slate-300.cursor-pointer', [
-                  m('input[type=checkbox].rounded.border-gray-300.dark:border-slate-600.text-indigo-600.focus:ring-indigo-500', {
-                    checked: state.records.length > 0 && state.selectedRecords && state.selectedRecords.size === state.records.length,
-                    indeterminate: state.selectedRecords && state.selectedRecords.size > 0 && state.selectedRecords.size < state.records.length,
-                    onchange: (e) => {
-                      if (e.target.checked) {
-                        state.selectedRecords = new Set(state.records.map(r => r[primaryKey]));
-                      } else {
-                        state.selectedRecords = new Set();
-                      }
-                      m.redraw();
-                    },
-                  }),
-                  'Select all on page',
-                ]),
-                m('span.text-xs.text-gray-500.dark:text-slate-400', `${state.records.length} records`),
-              ]),
-              // Mobile Record Cards
-              state.records.map((record) => {
-                const isSelected = state.selectedRecords && state.selectedRecords.has(record[primaryKey]);
-                return m('.p-4.bg-white.dark:bg-slate-800.transition-colors.space-y-2.5', {
-                  key: 'mob-' + record[primaryKey],
-                  class: isSelected ? 'bg-indigo-50/70 dark:bg-indigo-950/40 border-l-4 border-l-indigo-600' : '',
-                }, [
-                  // Card Header: Checkbox, Primary column title / ID, and Quick Action buttons
-                  m('.flex.items-start.justify-between.gap-2', [
-                    m('label.flex.items-start.gap-2.5.min-w-0.cursor-pointer', [
-                      m('input[type=checkbox].rounded.border-gray-300.dark:border-slate-600.text-indigo-600.focus:ring-indigo-500.mt-0.5', {
-                        checked: isSelected,
-                        onchange: (e) => {
-                          if (!state.selectedRecords) state.selectedRecords = new Set();
-                          if (e.target.checked) {
-                            state.selectedRecords.add(record[primaryKey]);
-                          } else {
-                            state.selectedRecords.delete(record[primaryKey]);
-                          }
-                          m.redraw();
-                        },
-                      }),
-                      m('div.min-w-0', [
-                        m('.font-semibold.text-sm.text-gray-900.dark:text-slate-100.truncate', 
-                          displayColumns[0] ? formatCellValue(record[displayColumns[0].name], displayColumns[0], record) : '#' + record[primaryKey]
-                        ),
-                        displayColumns[0] && m('.text-xs.text-gray-500.dark:text-slate-400', '#' + record[primaryKey]),
-                      ]),
-                    ]),
-                    // Quick Action buttons
-                    m('.flex.items-center.gap-1.flex-shrink-0', [
-                      state.trashedView && modelMeta?.softDelete
-                        ? m('button.px-2.5.py-1.text-xs.font-medium.text-green-600.dark:text-green-400.hover:bg-green-50.dark:hover:bg-green-950/40.rounded.transition-colors', {
-                            onclick: async () => {
-                              try {
-                                await api.post('/models/' + modelName + '/records/' + record[primaryKey] + '/restore');
-                                loadRecords(modelName, state.pagination.page);
-                              } catch (err) {
-                                alert('Error: ' + err.message);
-                              }
-                            },
-                          }, 'Restore')
-                        : [
-                            m('button.px-2.5.py-1.text-xs.font-medium.text-indigo-600.dark:text-indigo-400.hover:bg-indigo-50.dark:hover:bg-indigo-950/40.rounded.transition-colors', {
-                              onclick: () => {
-                                state.currentRecord = record;
-                                state.editing = true;
-                                m.route.set('/models/' + modelName + '/edit/' + record[primaryKey]);
-                              },
-                            }, 'Edit'),
-                            m('button.px-2.5.py-1.text-xs.font-medium.text-red-600.dark:text-red-400.hover:bg-red-50.dark:hover:bg-red-950/40.rounded.transition-colors', {
-                              onclick: async () => {
-                                if (confirm('Are you sure you want to delete this record?')) {
-                                  try {
-                                    await api.delete('/models/' + modelName + '/records/' + record[primaryKey]);
-                                    loadRecords(modelName, state.pagination.page);
-                                  } catch (err) {
-                                    alert('Error: ' + err.message);
-                                  }
-                                }
-                              },
-                            }, 'Delete'),
-                          ],
-                    ]),
-                  ]),
-                  // Field key-values grid (remaining display columns)
-                  displayColumns.length > 1 && m('.grid.grid-cols-1.gap-1.5.pt-1.border-t.border-gray-100.dark:border-slate-700/60.text-xs', 
-                    displayColumns.slice(1).map(col => 
-                      m('.flex.items-baseline.justify-between.gap-2', [
-                        m('span.text-gray-500.dark:text-slate-400.font-medium.flex-shrink-0', formatColumnLabel(col.name) + ':'),
-                        m('span.text-gray-900.dark:text-slate-200.truncate.text-right', formatCellValue(record[col.name], col, record)),
-                      ])
-                    )
-                  ),
-                ]);
-              }),
             ]),
             // Pagination
             m(Pagination, {
