@@ -14,7 +14,7 @@ const timeout = require('connect-timeout');
 const { setAppContext } = require('./app-context');
 const { mountClientRuntime } = require('./client-runtime/mount');
 const { resolveClientRuntime } = require('./client-runtime/resolve');
-const { mountPages, detectLocale } = require('./file-router');
+const { mountPages, detectLocale, loadI18n, createTranslator } = require('./file-router');
 const { configureAssets, createHelpers, getScriptInjector } = require('./helpers');
 const { createPluginManager } = require('./plugin-manager');
 
@@ -154,13 +154,27 @@ function getDefaultHelmetConfig(isDev) {
 }
 
 /**
- * Use JSON error responses for `pages/api/*` routes and clients that do not prefer HTML.
+ * Use JSON error responses for `pages/api/*` routes, XHR requests, and clients that prefer JSON.
  * @param {import('express').Request} req
  * @returns {boolean}
  */
 function preferJsonErrorResponse(req) {
+  if (!req) return false;
   if (req.path && req.path.startsWith('/api')) return true;
-  return !req.accepts('html');
+  if (req.xhr) return true;
+  
+  if (typeof req.accepts === 'function') {
+    const preferred = req.accepts(['html', 'json']);
+    if (preferred === 'json') return true;
+    if (preferred === 'html') return false;
+    return !req.accepts('html');
+  }
+
+  const accept = req.headers && req.headers.accept;
+  if (accept && accept.includes('application/json') && !accept.includes('text/html')) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -624,10 +638,15 @@ function createApp(options = {}) {
     // Merge plugin helpers
     const pluginHelpers = pluginManager.getHelpers();
     Object.assign(fsy, pluginHelpers);
+
+    // Provide safe i18n translator helper
+    const translations = loadI18n(pagesDir, '', locale);
+    const t = createTranslator(translations);
     
     return {
       fsy,
       locale,
+      t,
       isDev,
       url: req.url,
       method: req.method,
@@ -657,7 +676,7 @@ function createApp(options = {}) {
       }
     }
     
-    if (notFoundTemplate) {
+    if (notFoundTemplate && !preferJsonErrorResponse(req)) {
       try {
         // If pages/404.js exists, execute load() data loader
         const config404Path = path.join(pagesDir, '404.js');
@@ -687,7 +706,7 @@ function createApp(options = {}) {
     }
     
     // Default response
-    if (req.accepts('html')) {
+    if (!preferJsonErrorResponse(req)) {
       res.send(default404Html());
     } else {
       res.json({ error: 'Not Found', status: 404 });
@@ -696,6 +715,10 @@ function createApp(options = {}) {
   
   // Error handler
   app.use((err, req, res, next) => {
+    if (res.headersSent) {
+      return next(err);
+    }
+    
     // Handle timeout errors
     if (req.timedout) {
       console.error('Request timed out:', req.method, req.url);
@@ -707,10 +730,19 @@ function createApp(options = {}) {
         return errorPages.timeout(req, res, ctx);
       }
       
-      // Custom timeout template
-      if (typeof errorPages.timeout === 'string' && !preferJsonErrorResponse(req)) {
+      // Custom or auto-discovered timeout template
+      let timeoutTemplate = typeof errorPages.timeout === 'string' ? errorPages.timeout : null;
+      if (!timeoutTemplate) {
+        if (viewsDir && fs.existsSync(path.join(viewsDir, '503.njk'))) {
+          timeoutTemplate = '503.njk';
+        } else if (fs.existsSync(path.join(pagesDir, '503.njk'))) {
+          timeoutTemplate = '503.njk';
+        }
+      }
+
+      if (timeoutTemplate && !preferJsonErrorResponse(req)) {
         try {
-          const html = nunjucksEnv.render(errorPages.timeout, ctx);
+          const html = nunjucksEnv.render(timeoutTemplate, ctx);
           return res.send(html);
         } catch (e) {
           console.error('Error rendering timeout template:', e);
@@ -737,10 +769,19 @@ function createApp(options = {}) {
       return errorPages.serverError(err, req, res, ctx);
     }
     
-    // Custom template (skipped for /api and JSON-preferring clients so they never get HTML)
-    if (typeof errorPages.serverError === 'string' && !preferJsonErrorResponse(req)) {
+    // Custom or auto-discovered 500 template (skipped for /api and JSON-preferring clients)
+    let serverErrorTemplate = typeof errorPages.serverError === 'string' ? errorPages.serverError : null;
+    if (!serverErrorTemplate) {
+      if (viewsDir && fs.existsSync(path.join(viewsDir, '500.njk'))) {
+        serverErrorTemplate = '500.njk';
+      } else if (fs.existsSync(path.join(pagesDir, '500.njk'))) {
+        serverErrorTemplate = '500.njk';
+      }
+    }
+
+    if (serverErrorTemplate && !preferJsonErrorResponse(req)) {
       try {
-        const html = nunjucksEnv.render(errorPages.serverError, ctx);
+        const html = nunjucksEnv.render(serverErrorTemplate, ctx);
         return res.send(html);
       } catch (e) {
         console.error('Error rendering 500 template:', e);

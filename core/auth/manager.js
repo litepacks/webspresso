@@ -272,9 +272,11 @@ class AuthManager {
           throw new AuthenticationError('Invalid user object', 'INVALID_USER');
         }
         
-        // Set session
-        req.session.userId = user.id;
-        req.session.loggedInAt = Date.now();
+        // Set session if active
+        if (req.session) {
+          req.session.userId = user.id;
+          req.session.loggedInAt = Date.now();
+        }
         
         // Set req.user
         req.user = user;
@@ -284,19 +286,21 @@ class AuthManager {
           await self.createRememberToken(user.id, res);
         }
         
-        // Regenerate session ID for security
-        return new Promise((resolve, reject) => {
-          req.session.regenerate((err) => {
-            if (err) {
-              reject(new AuthenticationError('Session regeneration failed', 'SESSION_ERROR'));
-            } else {
-              // Restore userId after regenerate
-              req.session.userId = user.id;
-              req.session.loggedInAt = Date.now();
-              resolve();
-            }
+        // Regenerate session ID for security if supported
+        if (req.session && typeof req.session.regenerate === 'function') {
+          return new Promise((resolve, reject) => {
+            req.session.regenerate((err) => {
+              if (err) {
+                reject(new AuthenticationError('Session regeneration failed', 'SESSION_ERROR'));
+              } else {
+                // Restore userId after regenerate
+                req.session.userId = user.id;
+                req.session.loggedInAt = Date.now();
+                resolve();
+              }
+            });
           });
-        });
+        }
       },
 
       /**
@@ -320,21 +324,25 @@ class AuthManager {
           }
           
           // Clear cookie
-          res.clearCookie(self.config.rememberMe.cookieName);
+          if (typeof res?.clearCookie === 'function') {
+            res.clearCookie(self.config.rememberMe.cookieName);
+          }
         }
         
         // Clear user
         req.user = null;
         
-        // Destroy session
-        return new Promise((resolve) => {
-          req.session.destroy((err) => {
-            if (err) {
-              console.error('Session destroy error:', err);
-            }
-            resolve();
+        // Destroy session if supported
+        if (req.session && typeof req.session.destroy === 'function') {
+          return new Promise((resolve) => {
+            req.session.destroy((err) => {
+              if (err) {
+                console.error('Session destroy error:', err);
+              }
+              resolve();
+            });
           });
-        });
+        }
       },
 
       /**
@@ -715,7 +723,9 @@ class AuthManager {
     const payload = {
       id: user.id,
       type: 'access',
-      [this.identifierField]: user[this.identifierField],
+      ...(this.identifierField && user[this.identifierField] ? { [this.identifierField]: user[this.identifierField] } : {}),
+      ...(user.email && { email: user.email }),
+      ...(user.role && { role: user.role }),
       ...options.payload,
     };
     return this.createJwt(payload, options);

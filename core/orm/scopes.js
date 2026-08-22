@@ -185,11 +185,12 @@ function applyUpdateModifiers(data, model) {
  * Create default scope context
  * @returns {import('./types').ScopeContext}
  */
-function createScopeContext() {
+function createScopeContext(overrides = {}) {
   return {
     tenantId: undefined,
     withTrashed: false,
     onlyTrashed: false,
+    ...overrides,
   };
 }
 

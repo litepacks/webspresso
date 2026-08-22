@@ -432,16 +432,14 @@ function loadI18n(pagesDir, routeDir, locale) {
   return data;
 }
 
-/**
- * Create a translation function
- * @param {Object} translations - Translation object
- * @returns {Function} Translation function t(key)
- */
-function createTranslator(translations) {
-  return function t(key, params = EMPTY_OBJECT) {
-    let value = translations[key];
+function createTranslator(translations = {}) {
+  return function t(key, params = EMPTY_OBJECT, defaultVal = null) {
+    const defaultValue = typeof params === 'string' ? params : defaultVal;
+    const interpolationParams = typeof params === 'object' && params !== null ? params : EMPTY_OBJECT;
+
+    let value = translations ? translations[key] : undefined;
     
-    if (value === undefined) {
+    if (value === undefined && translations) {
       // Try nested key lookup (e.g., "meta.title")
       const parts = key.split('.');
       value = translations;
@@ -456,12 +454,12 @@ function createTranslator(translations) {
     }
     
     if (value === undefined) {
-      return key; // Return key if translation not found
+      return defaultValue !== null && defaultValue !== undefined ? defaultValue : key;
     }
     
     // Replace params like {{name}} in the translation
-    if (typeof value === 'string' && params && params !== EMPTY_OBJECT && Object.keys(params).length > 0) {
-      for (const [paramKey, paramValue] of Object.entries(params)) {
+    if (typeof value === 'string' && interpolationParams && interpolationParams !== EMPTY_OBJECT && Object.keys(interpolationParams).length > 0) {
+      for (const [paramKey, paramValue] of Object.entries(interpolationParams)) {
         let regex = paramRegexCache.get(paramKey);
         if (regex === undefined) {
           const escaped = escapeRegExp(paramKey);
@@ -814,6 +812,18 @@ function mountPages(app, options) {
   sortRoutes(apiRoutes);
   sortRoutes(ssrRoutes);
 
+  // Check for duplicate route bindings
+  const registeredRouteMap = new Map();
+  for (const r of [...apiRoutes, ...ssrRoutes]) {
+    const key = `${(r.method || 'GET').toUpperCase()} ${r.routePath}`;
+    if (registeredRouteMap.has(key)) {
+      const existing = registeredRouteMap.get(key);
+      console.warn(`[webspresso] WARNING: Duplicate route detected: ${key} in "${r.file}" conflicts with existing route in "${existing.file}".`);
+    } else {
+      registeredRouteMap.set(key, r);
+    }
+  }
+
   const apiStatic = apiRoutes.filter((r) => routeRegistrationMeta(r.routePath).tier === 0);
   const apiDynamic = apiRoutes.filter((r) => routeRegistrationMeta(r.routePath).tier !== 0);
   const ssrStatic = ssrRoutes.filter((r) => routeRegistrationMeta(r.routePath).tier === 0);
@@ -1002,7 +1012,9 @@ function mountPages(app, options) {
         // Run load function
         if (config?.load && typeof config.load === 'function') {
           const loadData = await config.load(req, ctx);
-          ctx.data = { ...ctx.data, ...loadData };
+          if (loadData && typeof loadData === 'object' && !Array.isArray(loadData)) {
+            ctx.data = { ...ctx.data, ...loadData };
+          }
         }
         
         // Execute hooks: afterLoad
@@ -1012,7 +1024,9 @@ function mountPages(app, options) {
         // Run meta function
         if (config?.meta && typeof config.meta === 'function') {
           const metaData = await config.meta(req, ctx);
-          ctx.meta = { ...ctx.meta, ...metaData };
+          if (metaData && typeof metaData === 'object' && !Array.isArray(metaData)) {
+            ctx.meta = { ...ctx.meta, ...metaData };
+          }
         }
         
         // Execute hooks: beforeRender

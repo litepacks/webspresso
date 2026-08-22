@@ -248,6 +248,54 @@ describe('Error Pages', () => {
       expect(res.status).toBe(404);
       expect(res.text).toContain('404 Page');
     });
+
+    it('should auto-discover views/500.njk and render with layout and i18n t helper', async () => {
+      fs.writeFileSync(
+        path.join(autoViewsDir, 'layout.njk'),
+        '<html><body><header>{{ t("site.title", "My App") }}</header>{% block content %}{% endblock %}</body></html>'
+      );
+      fs.writeFileSync(
+        path.join(autoViewsDir, '500.njk'),
+        '{% extends "layout.njk" %}\n{% block content %}<h1>Server Error 500: {{ error.message }}</h1>{% endblock %}'
+      );
+      fs.writeFileSync(
+        path.join(autoPagesDir, 'throw-err.js'),
+        'module.exports = { load: async () => { throw new Error("DB connection crash"); } };'
+      );
+      fs.writeFileSync(path.join(autoPagesDir, 'throw-err.njk'), '<h1>Never rendered</h1>');
+
+      const { app } = createApp({
+        pagesDir: autoPagesDir,
+        viewsDir: autoViewsDir,
+      });
+
+      const res = await request(app).get('/throw-err');
+      expect(res.status).toBe(500);
+      expect(res.text).toContain('My App');
+      expect(res.text).toContain('Server Error 500');
+    });
+
+    it('should fall back gracefully to default500Html when custom 500 template throws a render error', async () => {
+      fs.writeFileSync(
+        path.join(autoViewsDir, '500.njk'),
+        '<h1>Broken: {{ undefinedVar.nonExistentMethod() }}</h1>'
+      );
+      fs.writeFileSync(
+        path.join(autoPagesDir, 'throw-err2.js'),
+        'module.exports = { load: async () => { throw new Error("Loader failed"); } };'
+      );
+      fs.writeFileSync(path.join(autoPagesDir, 'throw-err2.njk'), '<h1>Never</h1>');
+
+      const { app } = createApp({
+        pagesDir: autoPagesDir,
+        viewsDir: autoViewsDir,
+      });
+
+      const res = await request(app).get('/throw-err2');
+      expect(res.status).toBe(500);
+      expect(res.text).toContain('500');
+      expect(res.text).toContain('Internal Server Error');
+    });
   });
 });
 

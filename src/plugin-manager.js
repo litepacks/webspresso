@@ -202,7 +202,10 @@ class PluginManager {
         continue;
       }
       pluginMap.set(plugin.name, plugin);
-      graph.set(plugin.name, new Set(Object.keys(plugin.dependencies || {})));
+      const depNames = Array.isArray(plugin.dependencies)
+        ? plugin.dependencies
+        : Object.keys(plugin.dependencies || {});
+      graph.set(plugin.name, new Set(depNames));
     }
 
     // Topological sort (Kahn's algorithm)
@@ -339,7 +342,11 @@ class PluginManager {
   _validateDependencies(plugin) {
     if (!plugin.dependencies) return;
 
-    for (const [depName, versionRange] of Object.entries(plugin.dependencies)) {
+    const depEntries = Array.isArray(plugin.dependencies)
+      ? plugin.dependencies.map(d => [d, '*'])
+      : Object.entries(plugin.dependencies);
+
+    for (const [depName, versionRange] of depEntries) {
       const dep = this.plugins.get(depName);
 
       if (!dep) {
@@ -350,7 +357,7 @@ class PluginManager {
         continue;
       }
 
-      if (dep.version && !semver.satisfies(dep.version, versionRange)) {
+      if (dep.version && versionRange !== '*' && !semver.satisfies(dep.version, versionRange)) {
         console.warn(
           `[plugin-manager] Plugin "${plugin.name}" requires "${depName}@${versionRange}" ` +
           `but found v${dep.version}. Plugin may not work correctly.`

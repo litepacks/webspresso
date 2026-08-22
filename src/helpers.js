@@ -236,7 +236,7 @@ function createHelpers(ctx) {
      * @returns {*}
      */
     q(name, def = null) {
-      return req.query[name] !== undefined ? req.query[name] : def;
+      return req && req.query && req.query[name] !== undefined ? req.query[name] : def;
     },
 
     /**
@@ -246,7 +246,7 @@ function createHelpers(ctx) {
      * @returns {*}
      */
     param(name, def = null) {
-      return req.params[name] !== undefined ? req.params[name] : def;
+      return req && req.params && req.params[name] !== undefined ? req.params[name] : def;
     },
 
     /**
@@ -256,7 +256,8 @@ function createHelpers(ctx) {
      * @returns {*}
      */
     hdr(name, def = null) {
-      return req.get(name) || def;
+      if (!req) return def;
+      return (typeof req.get === 'function' ? req.get(name) : (req.headers && req.headers[name.toLowerCase()])) || def;
     },
 
     /**

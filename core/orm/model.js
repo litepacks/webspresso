@@ -54,6 +54,7 @@ function defineModel(options) {
   const columns = extractColumnsFromSchema(schema);
 
   // Validate relations
+  const normalizedRelations = {};
   for (const [relationName, relation] of Object.entries(relations)) {
     if (!['belongsTo', 'hasMany', 'hasOne'].includes(relation.type)) {
       throw new Error(
@@ -70,6 +71,8 @@ function defineModel(options) {
         `Relation "${relationName}" in model "${name}" must have a foreignKey string`
       );
     }
+
+    normalizedRelations[relationName] = relation;
   }
 
   // Create model definition
@@ -78,7 +81,7 @@ function defineModel(options) {
     table,
     schema,
     primaryKey,
-    relations,
+    relations: normalizedRelations,
     scopes: {
       softDelete: scopes.softDelete || false,
       timestamps: scopes.timestamps || false,
@@ -186,7 +189,10 @@ function unregisterModel(name) {
  * @returns {import('./types').ModelDefinition}
  */
 function resolveRelationModel(relation) {
-  const model = relation.model();
+  let model = typeof relation.model === 'function' ? relation.model() : relation.model;
+  if (typeof model === 'string') {
+    model = getModel(model);
+  }
   if (!model || !model.name) {
     throw new Error('Invalid relation model reference');
   }
