@@ -152,13 +152,20 @@ function adminPanelPlugin(options = {}) {
       // Session must be registered before file routes so SSR pages can read adminUser.
       if (enabled && ctx.app && !ctx.app._webspressoSessionInitialized) {
         const secret = sessionSecret || process.env.SESSION_SECRET || 'webspresso-admin-secret-change-in-production';
+        const secureMode =
+          process.env.NODE_ENV === 'production' ||
+          process.env.COOKIE_SECURE === 'true' ||
+          /^https:/i.test(String(process.env.BASE_URL || '').trim())
+            ? true
+            : 'auto';
         ctx.app.use(session({
           secret,
           resave: false,
           saveUninitialized: false,
           cookie: {
-            secure: process.env.NODE_ENV === 'production',
+            secure: secureMode,
             httpOnly: true,
+            sameSite: 'lax',
             maxAge: 24 * 60 * 60 * 1000, // 24 hours
           },
         }));

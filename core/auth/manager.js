@@ -38,7 +38,7 @@ const DEFAULT_CONFIG = {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production' ? true : 'auto',
       sameSite: 'lax',
       maxAge: 24 * 60 * 60 * 1000, // 1 day
     },
