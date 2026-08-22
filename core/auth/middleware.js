@@ -15,11 +15,21 @@ const cookieParser = require('cookie-parser');
 function createAuthMiddleware(authManager) {
   const config = authManager.config;
 
+  const sessionConfig = authManager.getSessionConfig();
+
   /**
    * Session middleware
-   * Sets up express-session
+   * Sets up express-session with secure cookie enforcement
    */
-  const sessionMiddleware = session(authManager.getSessionConfig());
+  const sessionMiddleware = session({
+    ...sessionConfig,
+    cookie: {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: 'auto',
+      ...(sessionConfig.cookie || {}),
+    },
+  });
 
   /**
    * Cookie parser middleware (needed for signed cookies / remember me)
