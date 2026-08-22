@@ -707,7 +707,6 @@ const AdminUsersPage = {
                     ]),
                   ]),
                 ],
-                ]),
         ]),
 
         // Modal for Add / Edit Administrator
