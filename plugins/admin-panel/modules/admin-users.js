@@ -580,6 +580,80 @@ const AdminUsersPage = {
                   m('p.text-sm.text-gray-500.dark:text-slate-400.mt-1', 'Create your first additional admin account or change your search filter.'),
                 ])
               : [
+                  // Desktop Table (visible on desktop >= md)
+                  m('div.hidden.md:block.overflow-x-auto', [
+                    m('table.min-w-full.divide-y.divide-gray-200.dark:divide-slate-700.text-sm.text-left', [
+                      m('thead.bg-gray-50.dark:bg-slate-900/60', [
+                        m('tr', [
+                          m('th.px-6.py-3.5.text-xs.font-semibold.text-gray-500.dark:text-slate-400.uppercase.tracking-wider', 'Administrator'),
+                          m('th.px-6.py-3.5.text-xs.font-semibold.text-gray-500.dark:text-slate-400.uppercase.tracking-wider', 'Role'),
+                          m('th.px-6.py-3.5.text-xs.font-semibold.text-gray-500.dark:text-slate-400.uppercase.tracking-wider', 'Status'),
+                          m('th.px-6.py-3.5.text-xs.font-semibold.text-gray-500.dark:text-slate-400.uppercase.tracking-wider', 'Created At'),
+                          m('th.px-6.py-3.5.text-right.text-xs.font-semibold.text-gray-500.dark:text-slate-400.uppercase.tracking-wider', 'Actions'),
+                        ]),
+                      ]),
+                      m('tbody.divide-y.divide-gray-200.dark:divide-slate-700', s.admins.map((admin) => {
+                        const isSelf = currentAdminId && String(admin.id) === currentAdminId;
+                        return m('tr.hover:bg-gray-50/50.dark:hover:bg-slate-700/30.transition-colors', { key: admin.id }, [
+                          // User info
+                          m('td.px-6.py-4', [
+                            m('div.flex.items-center.gap-3', [
+                              m('div.w-9.h-9.bg-blue-100.dark:bg-blue-900/50.rounded-full.flex.items-center.justify-center.flex-shrink-0', [
+                                m('span.text-sm.font-semibold.text-blue-600.dark:text-blue-300', 
+                                  (admin.name || admin.email || 'A').charAt(0).toUpperCase()
+                                ),
+                              ]),
+                              m('div', [
+                                m('div.flex.items-center.gap-2', [
+                                  m('span.font-medium.text-gray-900.dark:text-slate-100', admin.name || 'Unnamed'),
+                                  isSelf && m('span.px-2.py-0.5.text-xs.bg-blue-100.dark:bg-blue-900/50.text-blue-700.dark:text-blue-300.rounded-full.font-medium', 'You'),
+                                ]),
+                                m('span.text-xs.text-gray-500.dark:text-slate-400', admin.email),
+                              ]),
+                            ]),
+                          ]),
+
+                          // Role
+                          m('td.px-6.py-4', [
+                            m('span.inline-flex.items-center.px-2.5.py-0.5.rounded-md.text-xs.font-medium.bg-gray-100.dark:bg-slate-700.text-gray-800.dark:text-slate-200', 
+                              admin.role || 'admin'
+                            ),
+                          ]),
+
+                          // Status
+                          m('td.px-6.py-4', [
+                            admin.active
+                              ? m('span.inline-flex.items-center.gap-1.5.px-2.5.py-0.5.rounded-full.text-xs.font-medium.bg-green-100.dark:bg-green-900/40.text-green-800.dark:text-green-300', [
+                                  m('span.w-1.5.h-1.5.rounded-full.bg-green-500'),
+                                  'Active',
+                                ])
+                              : m('span.inline-flex.items-center.gap-1.5.px-2.5.py-0.5.rounded-full.text-xs.font-medium.bg-red-100.dark:bg-red-900/40.text-red-800.dark:text-red-300', [
+                                  m('span.w-1.5.h-1.5.rounded-full.bg-red-500'),
+                                  'Inactive',
+                              ]),
+                          ]),
+
+                          // Created Date
+                          m('td.px-6.py-4.text-gray-500.dark:text-slate-400.text-xs', 
+                            formatDate(admin.created_at)
+                          ),
+
+                          // Actions
+                          m('td.px-6.py-4.text-right.space-x-2', [
+                            m('button.px-2.5.py-1.5.text-xs.font-medium.text-blue-600.dark:text-blue-400.hover:bg-blue-50.dark:hover:bg-blue-900/30.rounded.transition-colors', {
+                              title: 'Edit Administrator',
+                              onclick: () => s.openEditModal(admin),
+                            }, 'Edit'),
+                            !isSelf && m('button.px-2.5.py-1.5.text-xs.font-medium.text-red-600.dark:text-red-400.hover:bg-red-50.dark:hover:bg-red-900/30.rounded.transition-colors', {
+                              title: 'Delete Administrator',
+                              onclick: () => s.deleteAdmin(admin),
+                            }, 'Delete'),
+                          ]),
+                        ]);
+                      })),
+                    ]),
+                  ]),
+
                   // Mobile Cards List (visible on mobile < md)
                   m('div.block.md:hidden.divide-y.divide-gray-100.dark:divide-slate-700', s.admins.map((admin) => {
                     const isSelf = currentAdminId && String(admin.id) === currentAdminId;
@@ -632,80 +706,6 @@ const AdminUsersPage = {
                       ]),
                     ]);
                   })),
-
-                  // Desktop Table (visible on desktop >= md)
-                  m('div.hidden.md:block.overflow-x-auto', [
-                    m('table.min-w-full.divide-y.divide-gray-200.dark:divide-slate-700.text-sm.text-left', [
-                      m('thead.bg-gray-50.dark:bg-slate-900/60', [
-                        m('tr', [
-                          m('th.px-6.py-3.5.text-xs.font-semibold.text-gray-500.dark:text-slate-400.uppercase.tracking-wider', 'Administrator'),
-                          m('th.px-6.py-3.5.text-xs.font-semibold.text-gray-500.dark:text-slate-400.uppercase.tracking-wider', 'Role'),
-                          m('th.px-6.py-3.5.text-xs.font-semibold.text-gray-500.dark:text-slate-400.uppercase.tracking-wider', 'Status'),
-                          m('th.px-6.py-3.5.text-xs.font-semibold.text-gray-500.dark:text-slate-400.uppercase.tracking-wider', 'Created At'),
-                          m('th.px-6.py-3.5.text-right.text-xs.font-semibold.text-gray-500.dark:text-slate-400.uppercase.tracking-wider', 'Actions'),
-                        ]),
-                      ]),
-                      m('tbody.divide-y.divide-gray-200.dark:divide-slate-700', s.admins.map((admin) => {
-                        const isSelf = currentAdminId && String(admin.id) === currentAdminId;
-                        return m('tr.hover:bg-gray-50/50.dark:hover:bg-slate-700/30.transition-colors', { key: admin.id }, [
-                          // User info
-                          m('td.px-6.py-4', [
-                            m('div.flex.items-center.gap-3', [
-                              m('div.w-9.h-9.bg-blue-100.dark:bg-blue-900/50.rounded-full.flex.items-center.justify-center.flex-shrink-0', [
-                                m('span.text-sm.font-semibold.text-blue-600.dark:text-blue-300', 
-                                  (admin.name || admin.email || 'A').charAt(0).toUpperCase()
-                                ),
-                              ]),
-                              m('div', [
-                                m('div.flex.items-center.gap-2', [
-                                  m('span.font-medium.text-gray-900.dark:text-slate-100', admin.name || 'Unnamed'),
-                                  isSelf && m('span.px-2.py-0.5.text-xs.bg-blue-100.dark:bg-blue-900/50.text-blue-700.dark:text-blue-300.rounded-full.font-medium', 'You'),
-                                ]),
-                                m('span.text-xs.text-gray-500.dark:text-slate-400', admin.email),
-                              ]),
-                            ]),
-                          ]),
-
-                          // Role
-                          m('td.px-6.py-4', [
-                            m('span.inline-flex.items-center.px-2.5.py-0.5.rounded-md.text-xs.font-medium.bg-gray-100.dark:bg-slate-700.text-gray-800.dark:text-slate-200', 
-                              admin.role || 'admin'
-                            ),
-                          ]),
-
-                          // Status
-                          m('td.px-6.py-4', [
-                            admin.active
-                              ? m('span.inline-flex.items-center.gap-1.5.px-2.5.py-0.5.rounded-full.text-xs.font-medium.bg-green-100.dark:bg-green-900/40.text-green-800.dark:text-green-300', [
-                                  m('span.w-1.5.h-1.5.rounded-full.bg-green-500'),
-                                  'Active',
-                                ])
-                              : m('span.inline-flex.items-center.gap-1.5.px-2.5.py-0.5.rounded-full.text-xs.font-medium.bg-red-100.dark:bg-red-900/40.text-red-800.dark:text-red-300', [
-                                  m('span.w-1.5.h-1.5.rounded-full.bg-red-500'),
-                                  'Inactive',
-                                ]),
-                          ]),
-
-                          // Created Date
-                          m('td.px-6.py-4.text-gray-500.dark:text-slate-400.text-xs', 
-                            formatDate(admin.created_at)
-                          ),
-
-                          // Actions
-                          m('td.px-6.py-4.text-right.space-x-2', [
-                            m('button.px-2.5.py-1.5.text-xs.font-medium.text-blue-600.dark:text-blue-400.hover:bg-blue-50.dark:hover:bg-blue-900/30.rounded.transition-colors', {
-                              title: 'Edit Administrator',
-                              onclick: () => s.openEditModal(admin),
-                            }, 'Edit'),
-                            !isSelf && m('button.px-2.5.py-1.5.text-xs.font-medium.text-red-600.dark:text-red-400.hover:bg-red-50.dark:hover:bg-red-900/30.rounded.transition-colors', {
-                              title: 'Delete Administrator',
-                              onclick: () => s.deleteAdmin(admin),
-                            }, 'Delete'),
-                          ]),
-                        ]);
-                      })),
-                    ]),
-                  ]),
                 ],
         ]),
 
