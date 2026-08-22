@@ -16,52 +16,59 @@ const Pagination = {
       pages.push(i);
     }
     
-    return m('.flex.items-center.justify-between.px-4.py-3.bg-white dark:bg-slate-800.border-t', [
-      m('.text-sm.text-gray-700', [
+    return m('.flex.flex-col.sm:flex-row.items-center.justify-between.gap-3.px-4.py-3.bg-white.dark:bg-slate-800.border-t.border-gray-200.dark:border-slate-700', [
+      m('.text-xs.sm:text-sm.text-gray-600.dark:text-slate-400.text-center.sm:text-left', [
         'Showing ',
-        m('span.font-medium', ((page - 1) * perPage) + 1),
+        m('span.font-semibold.text-gray-900.dark:text-slate-200', ((page - 1) * perPage) + 1),
         ' to ',
-        m('span.font-medium', Math.min(page * perPage, total)),
+        m('span.font-semibold.text-gray-900.dark:text-slate-200', Math.min(page * perPage, total)),
         ' of ',
-        m('span.font-medium', total),
+        m('span.font-semibold.text-gray-900.dark:text-slate-200', total),
         ' results',
       ]),
-      m('nav.flex.items-center.space-x-1', [
+      m('nav.flex.items-center.gap-1', [
         // Previous button
-        m('button.px-3.py-1.rounded.border.text-sm', {
+        m('button.px-3.py-1.5.rounded-lg.border.border-gray-200.dark:border-slate-600.text-xs.sm:text-sm.font-medium.transition-colors', {
           disabled: page <= 1,
-          class: page <= 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:bg-slate-700',
+          class: page <= 1 
+            ? 'text-gray-300 dark:text-slate-600 cursor-not-allowed bg-gray-50 dark:bg-slate-900/50' 
+            : 'text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-700 bg-white dark:bg-slate-800',
           onclick: () => page > 1 && onPageChange(page - 1),
         }, '← Prev'),
+
+        // Mobile page indicator
+        m('span.sm:hidden.px-2.text-xs.font-medium.text-gray-600.dark:text-slate-400', `${page} / ${totalPages}`),
         
-        // Page numbers
+        // Page numbers (desktop only)
         start > 1 ? [
-          m('button.px-3.py-1.rounded.text-sm.text-gray-700 dark:text-slate-300.hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:bg-slate-700', {
+          m('button.hidden.sm:inline-flex.px-3.py-1.5.rounded-lg.text-xs.sm:text-sm.font-medium.text-gray-700.dark:text-slate-300.hover:bg-gray-100.dark:hover:bg-slate-700.transition-colors', {
             onclick: () => onPageChange(1),
           }, '1'),
-          start > 2 ? m('span.px-2.text-gray-400', '...') : null,
+          start > 2 ? m('span.hidden.sm:inline-flex.px-1.text-gray-400.dark:text-slate-500', '...') : null,
         ] : null,
         
         ...pages.map(p => 
-          m('button.px-3.py-1.rounded.text-sm', {
+          m('button.hidden.sm:inline-flex.px-3.py-1.5.rounded-lg.text-xs.sm:text-sm.font-medium.transition-colors', {
             class: p === page 
-              ? 'bg-blue-600 text-white' 
-              : 'text-gray-700 hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:bg-slate-700',
+              ? 'bg-blue-600 dark:bg-blue-500 text-white shadow-sm' 
+              : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700',
             onclick: () => onPageChange(p),
           }, p)
         ),
         
         end < totalPages ? [
-          end < totalPages - 1 ? m('span.px-2.text-gray-400', '...') : null,
-          m('button.px-3.py-1.rounded.text-sm.text-gray-700 dark:text-slate-300.hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:bg-slate-700', {
+          end < totalPages - 1 ? m('span.hidden.sm:inline-flex.px-1.text-gray-400.dark:text-slate-500', '...') : null,
+          m('button.hidden.sm:inline-flex.px-3.py-1.5.rounded-lg.text-xs.sm:text-sm.font-medium.text-gray-700.dark:text-slate-300.hover:bg-gray-100.dark:hover:bg-slate-700.transition-colors', {
             onclick: () => onPageChange(totalPages),
           }, totalPages),
         ] : null,
         
         // Next button
-        m('button.px-3.py-1.rounded.border.text-sm', {
+        m('button.px-3.py-1.5.rounded-lg.border.border-gray-200.dark:border-slate-600.text-xs.sm:text-sm.font-medium.transition-colors', {
           disabled: page >= totalPages,
-          class: page >= totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:bg-slate-700',
+          class: page >= totalPages 
+            ? 'text-gray-300 dark:text-slate-600 cursor-not-allowed bg-gray-50 dark:bg-slate-900/50' 
+            : 'text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-700 bg-white dark:bg-slate-800',
           onclick: () => page < totalPages && onPageChange(page + 1),
         }, 'Next →'),
       ]),
