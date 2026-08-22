@@ -528,24 +528,39 @@ const { app } = createApp({
   pagesDir: './pages',
   viewsDir: './views',
   errorPages: {
-    // Option 1: Custom handler function
-    notFound: (req, res) => {
-      res.render('errors/404.njk', { url: req.url });
-    },
+    // 404 Not Found: Template path (relative to viewsDir) or custom handler fn
+    notFound: '404.njk', // or 'errors/404.njk', or (req, res, ctx) => res.render('404.njk', ctx)
     
-    // Option 2: Template path (rendered with Nunjucks)
-    serverError: 'errors/500.njk',
+    // 500 Internal Server Error: Template path or custom handler fn
+    serverError: 'errors/500.njk', // or (err, req, res, ctx) => ...
     
-    // Timeout error page (503)
-    timeout: 'errors/503.njk'
+    // 503 Request Timeout: Template path or custom handler fn
+    timeout: 'errors/503.njk' // or (req, res, ctx) => ...
   }
 });
 ```
 
-Error templates receive these variables:
-- `404.njk`: `{ url, method }`
-- `500.njk`: `{ error, status, isDev }`
-- `503.njk`: `{ url, method, isDev }`
+#### Error Template Context & Behavior
+
+All error templates rendered with Nunjucks automatically receive a rich request context:
+- **`404.njk` (`notFound`)**: `{ fsy, locale, isDev, url, method }` — sets HTTP status `404`. If omitted, Webspresso provides a responsive built-in HTML 404 page for browsers, or `{ error: 'Not Found', status: 404 }` JSON for API requests.
+- **`500.njk` (`serverError`)**: `{ fsy, locale, isDev, url, method, error, status }` — sets HTTP status `500` (or `err.status`).
+- **`503.njk` (`timeout`)**: `{ fsy, locale, isDev, url, method }` — sets HTTP status `503`.
+
+```njk
+{# Example views/404.njk #}
+{% extends "layout.njk" %}
+
+{% block content %}
+<div class="max-w-xl mx-auto text-center py-20">
+  <h1 class="text-6xl font-bold text-slate-800">404</h1>
+  <p class="text-xl text-slate-600 mt-4">Page Not Found: <code>{{ url }}</code></p>
+  <a href="{{ fsy.url('/') }}" class="mt-6 inline-block bg-blue-600 text-white px-6 py-2 rounded-lg">
+    Back to Home
+  </a>
+</div>
+{% endblock %}
+```
 
 **How errors reach this handler**
 
@@ -568,9 +583,11 @@ const { app } = createApp({
 });
 ```
 
-**Asset Management:**
+**Asset Management & Cache-Busting:**
 
-Configure asset handling with versioning and manifest support:
+Webspresso includes a built-in `AssetManager` that automates static asset URL resolution, query-string cache-busting, Vite/Webpack build manifest lookups, and CDN prefixing in Nunjucks SSR templates.
+
+Configure asset handling in `createApp`:
 
 ```javascript
 const { createApp } = require('webspresso');
@@ -579,54 +596,84 @@ const path = require('path');
 const { app } = createApp({
   pagesDir: './pages',
   viewsDir: './views',
-  publicDir: './public',
+  publicDir: './public', // default: 'public'
   assets: {
-    // Option 1: Simple versioning (cache busting)
-    version: '1.2.3',  // or process.env.APP_VERSION
-    
-    // Option 2: Manifest file (Vite, Webpack, etc.)
+    // 1. Static query-string versioning (Cache Busting)
+    // Appends ?v=1.2.3 (or &v=... if existing query params) to asset URLs
+    version: process.env.APP_VERSION || '1.0.0', // or Git commit hash, build timestamp
+
+    // 2. Build Tool Manifest (Vite, Webpack, etc.)
+    // Resolves hashed bundle filenames automatically (e.g. style.css -> assets/style-abc123.css)
     manifestPath: path.join(__dirname, 'public/.vite/manifest.json'),
-    
-    // URL prefix for assets
-    prefix: '/static'
+
+    // 3. Asset URL Prefix / CDN
+    // Prepended to all resolved asset paths
+    prefix: process.env.CDN_URL || '' // e.g. 'https://cdn.example.com' or '/static'
   }
 });
 ```
 
-Use asset helpers in templates:
+#### How Asset Resolution Works
 
-```njk
-{# Using fsy helpers (auto-resolved) #}
-<link rel="stylesheet" href="{{ fsy.asset('/css/style.css') }}">
-
-{# Or generate full HTML tags #}
-{{ fsy.css('/css/style.css') | safe }}
-{{ fsy.js('/js/app.js', { defer: true, type: 'module' }) | safe }}
-{{ fsy.img('/images/logo.png', 'Site Logo', { class: 'logo', loading: 'lazy' }) | safe }}
-```
-
-Asset helpers available in `fsy`:
-- `asset(path)` - Returns versioned/manifest-resolved URL
-- `css(href, attrs)` - Generates `<link>` tag
-- `js(src, attrs)` - Generates `<script>` tag
-- `img(src, alt, attrs)` - Generates `<img>` tag
-
-**Manifest Support:**
-
-Works with Vite and Webpack manifest formats:
+1. **Manifest Match First**: If `manifestPath` is configured and an entry matches the asset key, `AssetManager` resolves to the hashed filename (from Vite or Webpack manifest) and prepends `prefix`.
+2. **Fallback to Path & Versioning**: If no manifest is provided or the asset is not listed in the manifest, `AssetManager` uses the original path, prepends `prefix`, and appends `?v=<version>` (or `&v=<version>`) if `version` is set.
+3. **Leading Slash Normalization**: Paths with or without leading slashes (e.g., `'css/style.css'` or `'/css/style.css'`) are handled seamlessly.
 
 ```json
-// Vite manifest format (.vite/manifest.json)
+// Example Vite manifest format (.vite/manifest.json)
 {
-  "css/style.css": { "file": "assets/style-abc123.css" },
-  "js/app.js": { "file": "assets/app-xyz789.js" }
+  "css/style.css": { "file": "assets/style-abc123.css", "src": "css/style.css" },
+  "js/app.js": { "file": "assets/app-xyz789.js", "src": "js/app.js" }
 }
 
-// Webpack manifest format
+// Example Webpack manifest format (manifest.json)
 {
   "/css/style.css": "/dist/style.abc123.css",
   "/js/app.js": "/dist/app.xyz789.js"
 }
+```
+
+#### Template Helpers (`fsy`)
+
+Use `fsy` helpers inside your Nunjucks layouts and pages:
+
+```njk
+{# 1. URL string resolution #}
+<link rel="stylesheet" href="{{ fsy.asset('/css/style.css') }}">
+{# Outputs: <link rel="stylesheet" href="/css/style.css?v=1.0.0"> (or /assets/style-abc123.css) #}
+
+{# 2. CSS link tag helper #}
+{{ fsy.css('/css/style.css') | safe }}
+{# With custom attributes (media, id, integrity, etc.): #}
+{{ fsy.css('/css/print.css', { media: 'print', id: 'print-styles' }) | safe }}
+
+{# 3. JS script tag helper #}
+{{ fsy.js('/js/app.js') | safe }}
+{# Supports boolean flags (async, defer) and module type: #}
+{{ fsy.js('/js/main.js', { defer: true, type: 'module' }) | safe }}
+{# Outputs: <script src="/js/main.js?v=1.0.0" defer type="module"></script> #}
+
+{# 4. Image tag helper #}
+{{ fsy.img('/images/logo.png', 'Company Logo') | safe }}
+{# With attributes (loading, class, width, height): #}
+{{ fsy.img('/images/hero.jpg', 'Hero Banner', { loading: 'lazy', class: 'w-full rounded', width: 1200, height: 600 }) | safe }}
+```
+
+#### Programmatic Asset Manager API
+
+You can also import and use `AssetManager` directly:
+
+```javascript
+const { AssetManager, configureAssets, getAssetManager } = require('webspresso');
+
+// Configure global manager
+configureAssets({
+  version: '2.0.0',
+  prefix: 'https://cdn.example.com'
+});
+
+const manager = getAssetManager();
+console.log(manager.asset('/css/style.css')); // -> 'https://cdn.example.com/css/style.css?v=2.0.0'
 ```
 
 **Returns:** `{ app, nunjucksEnv, pluginManager, authMiddleware }` — `authMiddleware` is `null` when `auth` was not passed.

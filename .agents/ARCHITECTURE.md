@@ -12,7 +12,26 @@
   - `pages/api/posts.post.js` → `POST /api/posts`
 - **Data Loaders (`load()`)**: Page routes export `async function load({ req, res, db, ctx })` to fetch data server-side before Nunjucks template rendering.
 - **API Endpoints**: Defined as file route modules exporting `{ schema, middleware, handler }`. Input validation via Zod (`schema: ({ z }) => ({ body, query, params })`) assigns validated data to `req.input.body` / `req.input.query`.
-- **Templating**: Nunjucks (`.njk`) templates rendered with layouts (e.g. `views/layout.njk`). Access helpers via `fsy` object in templates.
+- **Templating & Helpers**: Nunjucks (`.njk`) templates rendered with layouts (e.g. `views/layout.njk`). Access helpers via `fsy` object in templates.
+- **Asset Management & Cache-Busting (`assets`, `AssetManager`, `fsy`)**:
+  - Configured via `createApp({ assets: { version, manifestPath, prefix, publicDir } })` or `configureAssets()`.
+  - **Static Query Versioning (`version`)**: Appends `?v=<version>` (or `&v=...`) to asset URLs (e.g. `version: '1.2.3'` or `process.env.APP_VERSION`) for cache busting.
+  - **Build Manifests (`manifestPath`)**: Automatically resolves hashed output files from Vite (`.vite/manifest.json` mapping `{ "css/style.css": { "file": "assets/style-abc.css" } }`) or Webpack manifests (`{ "/css/style.css": "/dist/style.abc.css" }`). Falls back gracefully if an asset is not in the manifest.
+  - **URL Prefix (`prefix`)**: Prepends CDN or mount path prefixes (e.g. `prefix: 'https://cdn.example.com'` or `'/static'`).
+  - **Template Helpers**:
+    - `{{ fsy.asset('/css/style.css') }}` → Resolves URL with manifest/versioning.
+    - `{{ fsy.css('/css/style.css', { media: 'print' }) | safe }}` → Generates `<link rel="stylesheet" ...>`.
+    - `{{ fsy.js('/js/app.js', { defer: true, type: 'module' }) | safe }}` → Generates `<script ...></script>`.
+    - `{{ fsy.img('/images/logo.png', 'Logo', { loading: 'lazy' }) | safe }}` → Generates `<img ...>` with escaped attributes.
+  - **Page-Level Assets (`pageAssets`)**: Route `load()` can return `stylesheets` and `scripts` arrays, which are promoted to `pageHead` for per-route asset loading.
+- **Custom Error & 404 Pages (`errorPages`)**:
+  - Configured via `createApp({ errorPages: { notFound, serverError, timeout } })`.
+  - **404 Not Found (`notFound`)**:
+    - **Template path**: e.g. `notFound: '404.njk'` or `'errors/404.njk'` (relative to `viewsDir`). Automatically renders with HTTP status 404 and provides `{ fsy, locale, isDev, url, method }` to the template.
+    - **Handler function**: `notFound: (req, res, ctx) => res.render('404.njk', ctx)`.
+    - **Default fallback**: If omitted, renders built-in responsive styled 404 HTML for browsers, or JSON `{ error: 'Not Found', status: 404 }` for API requests.
+  - **500 Server Error (`serverError`)**: Template path (`'errors/500.njk'`) or handler `(err, req, res, ctx) => ...`. Automatically bypassed for `/api/*` requests in favor of JSON error output. Context: `{ fsy, locale, isDev, url, method, error, status }`.
+  - **503 Timeout (`timeout`)**: Template path (`'errors/503.njk'`) or handler `(req, res, ctx) => ...` when `timeout` (e.g. `'30s'`) is configured.
 - **Middleware & Hooks**: Route lifecycle hooks can be declared per-page (`module.exports = { middleware: ['auth', 'jwt'] }`) or globally via `pages/_hooks.js`.
 
 ---

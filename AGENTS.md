@@ -7,7 +7,9 @@ Webspresso is a lightweight, zero-dependency-sprawl Express SSR framework featur
 ### 1.1 Core SSR & Routing (`pages/`, `views/`)
 - **File-based Routing**: Pages located in `pages/` automatically map to URL routes (e.g. `pages/index.njk` → `/`, `pages/products/[id].njk` → `/products/:id`).
 - **Data Loaders (`load()`)**: Page routes export `async function load({ req, res, db, ctx })` to fetch data server-side before template rendering.
-- **Templating**: Nunjucks (`.njk`) templates rendered with layouts (e.g. `views/layout.njk`). Access helpers via `fsy` object in templates.
+- **Templating & Helpers**: Nunjucks (`.njk`) templates rendered with layouts (e.g. `views/layout.njk`). Access helpers via `fsy` object in templates.
+- **Asset Versioning & Cache-Busting**: Configured via `createApp({ assets: { version, manifestPath, prefix } })`. Supports query-string versioning (`?v=1.2.3`), Vite/Webpack manifest resolution (`.vite/manifest.json`), CDN prefixing, and `fsy.asset()`, `fsy.css()`, `fsy.js()`, `fsy.img()` template helpers.
+- **Custom Error & 404 Pages**: Configured via `createApp({ errorPages: { notFound, serverError, timeout } })`. Supports template paths (e.g. `notFound: '404.njk'`) or custom handler functions, passing `{ fsy, locale, isDev, url, method }` to templates.
 - **Middleware & Hooks**: Route lifecycle hooks can be declared per-page or globally via `pages/_hooks.js`.
 - **API Endpoints**: Defined under `pages/api/...` or mounted programmatically via `createApp({ setupRoutes })`.
 

@@ -8,7 +8,7 @@ Webspresso is a lightweight, zero-dependency-sprawl Express SSR framework featur
 
 This `.agents/` customization root is organized into modular topic guides:
 
-1. **[Architecture & Structure](.agents/ARCHITECTURE.md)** — File-based routing (`pages/`), ORM models & `zdb` schemas (`core/orm`), Mithril.js Admin Panel SPA (`plugins/admin-panel`), and Plugin Ecosystem.
+1. **[Architecture & Structure](.agents/ARCHITECTURE.md)** — File-based routing (`pages/`), Asset Management & Versioning (`AssetManager`, `fsy.asset`), Custom Error & 404 Pages (`errorPages`), ORM models & `zdb` schemas (`core/orm`), Mithril.js Admin Panel SPA (`plugins/admin-panel`), and Plugin Ecosystem.
 2. **[Dual Authentication System](.agents/AUTH.md)** — Stateful Session + Cookie & Stateless HS256 JWT + Refresh Token Rotation, `req.auth` helpers, and `middleware: ['jwt']` guard integrations.
 3. **[ORM & Database Layer](.agents/ORM.md)** — Model definitions with `defineModel`, `zdb` schemas, Repositories API, Query Caching, Relations, Soft Delete, Scopes & Migrations.
 4. **[Plugin Ecosystem Guide](.agents/PLUGINS.md)** — Lifecycle hooks (`register`, `onRoutesReady`), CSP headers, and detailed reference for all 13 built-in official plugins.

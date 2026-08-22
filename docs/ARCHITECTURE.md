@@ -230,7 +230,8 @@ Plugins declare `name`, `version`, optional `dependencies`, and lifecycle hooks 
 | Component | Responsibility |
 |-----------|----------------|
 | `resolveClientRuntime` | Feature flags: Alpine, swup |
-| Asset manager | Manifest-based hashed CSS/JS URLs in templates |
+| `AssetManager` / `configureAssets` | Asset path resolution, cache-busting query strings (`?v=1.2.3`), Vite/Webpack manifest resolution (`manifestPath`), and CDN prefixes (`prefix`) for `fsy.asset`, `fsy.css`, `fsy.js`, `fsy.img` |
+| `pageAssets` | Per-route asset loading via `load()` return (`stylesheets`, `scripts` promoted to `pageHead`) |
 | Tailwind (scaffold) | App-level `build:css`; not part of core HTTP container |
 
 ### Application kernel (optional)
@@ -297,6 +298,7 @@ Incoming HTTP request
 | `createApp({ setupRoutes })` | Login, webhooks, custom Express routes |
 | `createApp({ middlewares })` | Reusable named middleware in route configs |
 | `createApp({ auth })` | Site-wide session authentication |
+| `createApp({ errorPages })` | Custom 404 (`notFound`), 500 (`serverError`), and 503 (`timeout`) templates or handler functions |
 | Plugin `register` / `onRoutesReady` | Routes, helpers, CSP, injections |
 | `ctx.usePlugin(name)` | Inter-plugin APIs |
 | `ctx.addHelper` / `addFilter` | Template surface |

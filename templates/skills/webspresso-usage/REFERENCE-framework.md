@@ -53,7 +53,7 @@ project/
 | `db` | DB instance from `createDatabase()` → **`ctx.db`** in `load`, `meta`, plugins |
 | `middlewares` | Named map; reference by string in route/API config (`middleware: ['auth']`) |
 | `plugins` | Array of plugin factories/objects |
-| `errorPages` | `{ notFound, serverError, timeout }` — function or template path. File-based SSR/API errors are passed to this Express error middleware via `next(err)`. **`serverError` / `timeout` as a template path** is not used for paths under **`/api`** (those get default JSON). |
+| `errorPages` | `{ notFound?: string \| Function, serverError?: string \| Function, timeout?: string \| Function }` — Nunjucks template path (e.g. `notFound: '404.njk'`, relative to `viewsDir`) or Express handler fn `(req, res, ctx) => ...`. Template context receives `{ fsy, locale, isDev, url, method }` (and `{ error, status }` for 500). File-based SSR/API errors are passed to this Express error middleware via `next(err)`. **`serverError` / `timeout` as a template path** is not used for paths under **`/api`** (those get default JSON). |
 | `timeout` | e.g. `'30s'` or `false` |
 | `helmet` | `true` / `false` / object |
 | `assets` | `{ version, manifestPath, prefix }` for `fsy.asset` / `fsy.css` / `fsy.js` |
@@ -160,7 +160,7 @@ Available in all Nunjucks templates:
 - **Request:** `fsy.q`, `fsy.param`, `fsy.hdr`
 - **Utils:** `fsy.slugify`, `fsy.truncate`, `fsy.prettyBytes`, `fsy.prettyMs`
 - **Dates:** `fsy.date`, `fsy.dateFormat`, `fsy.dateFromNow`, `fsy.dateDiff`, …
-- **Assets:** `fsy.asset`, `fsy.css`, `fsy.js`, `fsy.img` (with `assets` config)
+- **Assets & Versioning:** `fsy.asset(path)` (returns versioned `?v=...` or Vite/Webpack manifest resolved URL), `fsy.css(href, attrs)` (generates `<link>` tag), `fsy.js(src, attrs)` (generates `<script>` tag with boolean attributes), `fsy.img(src, alt, attrs)` (generates `<img>` tag). Configured via `createApp({ assets: { version, manifestPath, prefix } })`.
 - **Dev:** `fsy.isDev()`
 - **SEO:** `fsy.jsonld`
 
