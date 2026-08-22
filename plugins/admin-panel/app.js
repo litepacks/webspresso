@@ -171,6 +171,16 @@ var routes = {
       return ProfilePage;
     }
   },
+  '/admins': {
+    onmatch: async () => {
+      const isAuth = await checkAuth();
+      if (!isAuth) {
+        redirectToLogin();
+        return;
+      }
+      return AdminUsersPage;
+    }
+  },
   '/users/sessions': {
     onmatch: async () => {
       if (!(await guardUserManagementRoutes())) return;

@@ -16,6 +16,7 @@ const { registerDefaultBulkActions, generateBulkActionsComponent } = require('./
 const { registerDefaultPages, createCustomPageApiHandlers, generateCustomPageComponent } = require('./modules/custom-pages');
 const { registerModelMenuItems, registerSystemMenuItems, generateMenuComponent } = require('./modules/menu');
 const { generateProfileComponent } = require('./modules/profile');
+const { registerAdminUsersManagement, createAdminUsersApiHandlers, generateAdminUsersComponent } = require('./modules/admin-users');
 const { registerModule, registerPageDir } = require('./core/admin-module');
 
 
@@ -44,10 +45,13 @@ function adminPanelPlugin(options = {}) {
     db,
     auth,
     userManagement: userMgmtConfig,
+    adminUsers: adminUsersOption = true,
     configure,
     uploadUrl: uploadUrlOption,
     richTextSanitize = true,
   } = options;
+
+  const adminUsersConfig = typeof adminUsersOption === 'object' ? adminUsersOption : { enabled: adminUsersOption !== false };
 
   // Validate required options
   if (!db) {
@@ -234,6 +238,14 @@ function adminPanelPlugin(options = {}) {
         });
       }
 
+      // Register admin user management if enabled
+      if (adminUsersConfig.enabled !== false) {
+        registerAdminUsersManagement({
+          registry,
+          config: adminUsersConfig,
+        });
+      }
+
       // Create API handlers
       const apiHandlers = createApiHandlers({
         path: adminPath,
@@ -251,6 +263,16 @@ function adminPanelPlugin(options = {}) {
       });
 
       const pageHandlers = createCustomPageApiHandlers({ registry, db });
+
+      // Admin users management API handlers
+      let adminUsersHandlers = null;
+      if (adminUsersConfig.enabled !== false) {
+        adminUsersHandlers = createAdminUsersApiHandlers({
+          db,
+          AdminUser,
+          hashPassword: (password, rounds) => bcrypt.hash(password, rounds),
+        });
+      }
 
       // User management API handlers
       let userHandlers = null;
@@ -295,6 +317,15 @@ function adminPanelPlugin(options = {}) {
       // Custom pages API routes
       ctx.addRoute('get', `${adminPath}/api/extensions/pages/:pageId/data`, requireAuth, pageHandlers.getPageData);
       ctx.addRoute('all', `${adminPath}/api/extensions/pages/:pageId/actions/:actionId`, requireAuth, pageHandlers.executePageAction);
+
+      // Admin users management API routes
+      if (adminUsersHandlers) {
+        ctx.addRoute('get', `${adminPath}/api/admins`, requireAuth, adminUsersHandlers.listAdmins);
+        ctx.addRoute('get', `${adminPath}/api/admins/:id`, requireAuth, adminUsersHandlers.getAdmin);
+        ctx.addRoute('post', `${adminPath}/api/admins`, requireAuth, adminUsersHandlers.createAdmin);
+        ctx.addRoute('put', `${adminPath}/api/admins/:id`, requireAuth, adminUsersHandlers.updateAdmin);
+        ctx.addRoute('delete', `${adminPath}/api/admins/:id`, requireAuth, adminUsersHandlers.deleteAdmin);
+      }
 
       // User management API routes
       if (userHandlers) {
@@ -398,6 +429,7 @@ function generateAdminPanelHtml(adminPath, registry) {
   const bulkActionsComponent = generateBulkActionsComponent();
   const customPageComponent = generateCustomPageComponent();
   const profileComponent = generateProfileComponent();
+  const adminUsersComponent = generateAdminUsersComponent();
 
   const settings = registry.settings;
   const fieldRenderersCode = Array.from(registry.fieldRenderers.entries()).map(([type, r]) => {
@@ -480,6 +512,7 @@ function generateAdminPanelHtml(adminPath, registry) {
     ${bulkActionsComponent}
     ${customPageComponent}
     ${profileComponent}
+    ${adminUsersComponent}
 
     // Custom page components container
     window.__customPages = window.__customPages || {};
