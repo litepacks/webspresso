@@ -158,11 +158,11 @@ function csrfPlugin(options = {}) {
       }
 
       // 1. Retrieve or generate secret token
-      let secret;
+      let csrfTokenValue;
       if (useCookie) {
-        secret = cookieOptions.signed ? req.signedCookies[cookieKey] : req.cookies[cookieKey];
-        if (!secret) {
-          secret = crypto.randomBytes(32).toString('hex');
+        csrfTokenValue = cookieOptions.signed ? req.signedCookies[cookieKey] : req.cookies[cookieKey];
+        if (!csrfTokenValue) {
+          csrfTokenValue = crypto.randomBytes(32).toString('hex');
           const isHttps = req.secure || req.headers?.['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true';
           const effectiveCookieOptions = {
             httpOnly: true,
@@ -170,18 +170,18 @@ function csrfPlugin(options = {}) {
             ...cookieOptions,
             secure: cookieOpts.secure !== undefined ? cookieOpts.secure : isHttps,
           };
-          res.cookie(cookieKey, secret, effectiveCookieOptions);
+          res.cookie(cookieKey, csrfTokenValue, effectiveCookieOptions);
         }
       } else {
         // Session based
         if (!req.session[sessionKey]) {
           req.session[sessionKey] = crypto.randomBytes(32).toString('hex');
         }
-        secret = req.session[sessionKey];
+        csrfTokenValue = req.session[sessionKey];
       }
 
       // Define standard req.csrfToken()
-      req.csrfToken = () => secret;
+      req.csrfToken = () => csrfTokenValue;
 
       // 2. Perform CSRF verification for mutating HTTP methods
       const method = req.method ? req.method.toUpperCase() : 'GET';
@@ -196,7 +196,7 @@ function csrfPlugin(options = {}) {
           req.headers['x-xsrf-token']
         );
 
-        if (!submitted || !safeCompare(submitted, secret)) {
+        if (!submitted || !safeCompare(submitted, csrfTokenValue)) {
           res.status(errorStatus);
           if (req.accepts('html') && !req.path.startsWith('/api')) {
             return res.send(`<h1>${errorStatus} Forbidden</h1><p>${errorMessage}</p>`);

@@ -243,30 +243,43 @@
       });
   }
 
-  function sanitizeClientHtml(htmlStr) {
+    function sanitizeClientHtml(htmlStr) {
     if (!htmlStr) return '';
     try {
       var parser = new DOMParser();
       var doc = parser.parseFromString(htmlStr, 'text/html');
-      var forbiddenTags = ['script', 'iframe', 'object', 'embed', 'applet', 'base'];
-      forbiddenTags.forEach(function (tag) {
-        var nodes = doc.querySelectorAll(tag);
-        for (var i = 0; i < nodes.length; i++) {
-          nodes[i].parentNode.removeChild(nodes[i]);
-        }
-      });
-      var allNodes = doc.querySelectorAll('*');
-      for (var i = 0; i < allNodes.length; i++) {
+      var allowedTags = {
+        p: 1, br: 1, b: 1, i: 1, strong: 1, em: 1, u: 1, s: 1, strike: 1,
+        h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1, ul: 1, ol: 1, li: 1,
+        blockquote: 1, pre: 1, code: 1, a: 1, span: 1, div: 1, hr: 1,
+        table: 1, thead: 1, tbody: 1, tr: 1, th: 1, td: 1, img: 1
+      };
+      var allowedAttrs = {
+        href: 1, title: 1, target: 1, rel: 1, class: 1, id: 1, src: 1, alt: 1, width: 1, height: 1
+      };
+      var allNodes = doc.body.querySelectorAll('*');
+      for (var i = allNodes.length - 1; i >= 0; i--) {
         var node = allNodes[i];
+        var tag = node.tagName.toLowerCase();
+        if (!allowedTags[tag]) {
+          if (node.parentNode) {
+            node.parentNode.removeChild(node);
+          } else {
+            node.remove();
+          }
+          continue;
+        }
         var attrs = Array.prototype.slice.call(node.attributes);
         for (var j = 0; j < attrs.length; j++) {
           var attrName = attrs[j].name.toLowerCase();
           var attrVal = attrs[j].value.toLowerCase().replace(/[\x00-\x20\s]+/g, '').trim();
-          if (attrName.indexOf('on') === 0) {
+          if (attrName.indexOf('on') === 0 || !allowedAttrs[attrName]) {
             node.removeAttribute(attrs[j].name);
           } else if ((attrName === 'href' || attrName === 'src' || attrName === 'action' || attrName === 'formaction' || attrName === 'xlink:href') &&
                      /^(?:javascript|data|vbscript):/i.test(attrVal)) {
             node.removeAttribute(attrs[j].name);
+          } else if (tag === 'a' && node.getAttribute('target') === '_blank') {
+            node.setAttribute('rel', 'noopener noreferrer');
           }
         }
       }

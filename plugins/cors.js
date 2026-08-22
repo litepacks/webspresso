@@ -45,22 +45,25 @@ function createCorsMiddleware(options = {}) {
     ? config.exposedHeaders.join(',')
     : String(config.exposedHeaders);
 
-  function isOriginAllowed(reqOrigin, callback) {
-    if (!config.origin || config.origin === '*') {
-      return callback(null, '*');
+      function isOriginAllowed(reqOrigin, callback) {
+    if (!config.origin || config.origin === "*") {
+      if (config.credentials) {
+        return callback(null, false);
+      }
+      return callback(null, "*");
     }
     if (config.origin === true) {
-      return callback(null, reqOrigin || '*');
+      return callback(null, reqOrigin || "*");
     }
-    if (!reqOrigin) {
+    if (!reqOrigin || reqOrigin === "null") {
       return callback(null, false);
     }
-    if (typeof config.origin === 'string') {
+    if (typeof config.origin === "string") {
       return callback(null, config.origin === reqOrigin ? reqOrigin : false);
     }
     if (Array.isArray(config.origin)) {
       for (const item of config.origin) {
-        if (typeof item === 'string' && item === reqOrigin) {
+        if (typeof item === "string" && item === reqOrigin) {
           return callback(null, reqOrigin);
         }
         if (item instanceof RegExp && item.test(reqOrigin)) {
@@ -72,7 +75,7 @@ function createCorsMiddleware(options = {}) {
     if (config.origin instanceof RegExp) {
       return callback(null, config.origin.test(reqOrigin) ? reqOrigin : false);
     }
-    if (typeof config.origin === 'function') {
+    if (typeof config.origin === "function") {
       return config.origin(reqOrigin, callback);
     }
     return callback(null, false);
@@ -100,10 +103,12 @@ function createCorsMiddleware(options = {}) {
 
       if (allowedOrigin) {
         res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-        res.setHeader('Vary', 'Origin');
+        if (allowedOrigin !== '*') {
+          res.setHeader('Vary', 'Origin');
+        }
       }
 
-      if (config.credentials) {
+      if (config.credentials && allowedOrigin && allowedOrigin !== '*') {
         res.setHeader('Access-Control-Allow-Credentials', 'true');
       }
 
