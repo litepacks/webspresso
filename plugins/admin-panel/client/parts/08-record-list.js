@@ -425,8 +425,8 @@ const RecordList = {
                 // Sticky header
                 m('thead.bg-gray-50.dark:bg-slate-900', { style: 'position: sticky; top: 0; z-index: 20;' }, [
                   m('tr', [
-                    // Checkbox column header (sticky left, box-shadow on right)
-                    m('th.px-4.py-3.text-left.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200 dark:border-slate-700', { style: 'width: 40px; position: sticky; left: 0; z-index: 15; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' }, [
+                    // Checkbox column header (sticky left on md+, box-shadow on right)
+                    m('th.px-4.py-3.text-left.bg-gray-50.dark:bg-slate-900.border-b.border-gray-200.dark:border-slate-700.admin-table-sticky-check', { style: 'width: 40px;' }, [
                       m('input[type=checkbox].rounded.border-gray-300 dark:border-slate-600.text-indigo-600.focus:ring-indigo-500', {
                         checked: state.records.length > 0 && state.selectedRecords && state.selectedRecords.size === state.records.length,
                         indeterminate: state.selectedRecords && state.selectedRecords.size > 0 && state.selectedRecords.size < state.records.length,
@@ -440,23 +440,21 @@ const RecordList = {
                         },
                       }),
                     ]),
-                    // Dynamic column headers (first column sticky left with box-shadow)
+                    // Dynamic column headers (first column sticky left on md+ with box-shadow)
                     ...displayColumns.map((col, i) => {
                       const isSortable = col.sortable !== false;
                       const isSorted = isSortable && state.sortColumn === col.name;
                       const dir = isSorted ? state.sortDirection : null;
-                      const stickyStyle = i === 0 ? 'position: sticky; left: 40px; z-index: 15; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' : '';
+                      const stickyClass = i === 0 ? '.admin-table-sticky-first' : '';
 
                       if (!isSortable) {
-                        return m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500.dark:text-slate-400.uppercase.tracking-wider.whitespace-nowrap.bg-gray-50.dark:bg-slate-900.border-b.border-gray-200.dark:border-slate-700',
-                          stickyStyle ? { style: stickyStyle } : {},
+                        return m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500.dark:text-slate-400.uppercase.tracking-wider.whitespace-nowrap.bg-gray-50.dark:bg-slate-900.border-b.border-gray-200.dark:border-slate-700' + stickyClass,
                           formatColumnLabel(col.name)
                         );
                       }
 
-                      return m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500.dark:text-slate-400.uppercase.tracking-wider.whitespace-nowrap.bg-gray-50.dark:bg-slate-900.border-b.border-gray-200.dark:border-slate-700.cursor-pointer.select-none.hover:bg-gray-100.dark:hover:bg-slate-800/80.transition-colors.group',
+                      return m('th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500.dark:text-slate-400.uppercase.tracking-wider.whitespace-nowrap.bg-gray-50.dark:bg-slate-900.border-b.border-gray-200.dark:border-slate-700.cursor-pointer.select-none.hover:bg-gray-100.dark:hover:bg-slate-800/80.transition-colors.group' + stickyClass,
                         {
-                          style: stickyStyle || undefined,
                           onclick: () => {
                             let nextSort = col.name;
                             let nextDir = 'asc';
@@ -489,21 +487,19 @@ const RecordList = {
                         ])
                       );
                     }),
-                    // Sticky actions header (sticky right, box-shadow on left)
-                    m('th.px-4.py-3.text-right.text-xs.font-medium.text-gray-500 dark:text-slate-400.uppercase.tracking-wider.bg-gray-50 dark:bg-slate-900.border-b.border-gray-200 dark:border-slate-700', {
-                      style: 'position: sticky; right: 0; min-width: 120px; z-index: 15; box-shadow: -4px 0 8px -4px rgba(0,0,0,0.08);',
+                    // Sticky actions header (sticky right on md+, box-shadow on left)
+                    m('th.px-4.py-3.text-right.text-xs.font-medium.text-gray-500.dark:text-slate-400.uppercase.tracking-wider.bg-gray-50.dark:bg-slate-900.border-b.border-gray-200.dark:border-slate-700.admin-table-sticky-actions', {
+                      style: 'min-width: 120px;',
                     }, 'Actions'),
                   ]),
                 ]),
                 m('tbody.divide-y.divide-gray-100.dark:divide-slate-700', state.records.map(record => 
-                  m('tr.hover:bg-gray-50 dark:hover:bg-slate-800/50.transition-colors', {
+                  m('tr.hover:bg-gray-50.dark:hover:bg-slate-800/50.transition-colors', {
                     class: state.selectedRecords && state.selectedRecords.has(record[primaryKey]) ? 'bg-indigo-50 dark:bg-indigo-950/50' : '',
                   }, [
-                    // Checkbox cell (sticky left, box-shadow on right)
-                    m('td.px-4.py-3.bg-white.dark:bg-slate-800', {
-                      style: 'position: sticky; left: 0; z-index: 5; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);',
-                    }, [
-                      m('input[type=checkbox].rounded.border-gray-300 dark:border-slate-600.text-indigo-600.focus:ring-indigo-500', {
+                    // Checkbox cell (sticky left on md+, box-shadow on right)
+                    m('td.px-4.py-3.bg-white.dark:bg-slate-800.admin-table-sticky-check', [
+                      m('input[type=checkbox].rounded.border-gray-300.dark:border-slate-600.text-indigo-600.focus:ring-indigo-500', {
                         checked: state.selectedRecords && state.selectedRecords.has(record[primaryKey]),
                         onchange: (e) => {
                           if (!state.selectedRecords) state.selectedRecords = new Set();
@@ -516,17 +512,14 @@ const RecordList = {
                         },
                       }),
                     ]),
-                    // Dynamic cell values (first column sticky left with box-shadow)
+                    // Dynamic cell values (first column sticky left on md+ with box-shadow)
                     ...displayColumns.map((col, i) => 
-                      m('td.px-4.py-3.text-sm.whitespace-nowrap.text-gray-700 dark:text-slate-300.bg-white dark:bg-slate-800',
-                        i === 0 ? { style: 'position: sticky; left: 40px; z-index: 5; box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);' } : {},
+                      m('td.px-4.py-3.text-sm.whitespace-nowrap.text-gray-700.dark:text-slate-300.bg-white.dark:bg-slate-800' + (i === 0 ? '.admin-table-sticky-first' : ''),
                         formatCellValue(record[col.name], col, record)
                       )
                     ),
-                    // Sticky actions cell (sticky right, box-shadow on left)
-                    m('td.px-4.py-3.text-sm.text-right.whitespace-nowrap.text-gray-700 dark:text-slate-300.bg-white dark:bg-slate-800', {
-                      style: 'position: sticky; right: 0; z-index: 5; box-shadow: -4px 0 8px -4px rgba(0,0,0,0.08);',
-                    }, [
+                    // Sticky actions cell (sticky right on md+, box-shadow on left)
+                    m('td.px-4.py-3.text-sm.text-right.whitespace-nowrap.text-gray-700.dark:text-slate-300.bg-white.dark:bg-slate-800.admin-table-sticky-actions', [
                       state.trashedView && modelMeta?.softDelete
                         ? m('button.inline-flex.items-center.px-2.py-1.text-sm.text-green-600.dark:text-green-400.hover:text-green-800.dark:hover:text-green-300.hover:bg-green-50.dark:hover:bg-green-950/40.rounded.transition-colors', {
                             onclick: async () => {

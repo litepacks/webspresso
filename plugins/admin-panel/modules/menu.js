@@ -389,6 +389,90 @@ const MobileHeader = {
   },
 };
 
+// Webspresso Version Check State
+var versionCheckState = {
+  checked: false,
+  loading: false,
+  data: null,
+  dismissed: false,
+};
+
+async function checkWebspressoVersion(force) {
+  if (versionCheckState.loading) return;
+  if (versionCheckState.checked && !force) return;
+  versionCheckState.loading = true;
+  try {
+    const res = await api.get('/extensions/system-info' + (force ? '?force=true' : ''));
+    versionCheckState.data = res;
+    versionCheckState.checked = true;
+    if (res && res.latestVersion) {
+      try {
+        const dismissedVer = sessionStorage.getItem('webspresso_dismiss_update_' + res.latestVersion);
+        if (dismissedVer === 'true') {
+          versionCheckState.dismissed = true;
+        }
+      } catch (e) {}
+    }
+  } catch (err) {
+    // Silent fail for background check
+  } finally {
+    versionCheckState.loading = false;
+    m.redraw();
+  }
+}
+
+// Version Update Toast Notification
+const VersionUpdateToast = {
+  oninit() {
+    if (!versionCheckState.checked && !versionCheckState.loading) {
+      checkWebspressoVersion();
+    }
+  },
+  view() {
+    const data = versionCheckState.data;
+    if (!data || !data.hasUpdate || versionCheckState.dismissed) return null;
+
+    return m('div.fixed.bottom-5.right-5.z-50.max-w-sm.bg-white.dark:bg-slate-900.border.border-indigo-200.dark:border-indigo-800.rounded-xl.shadow-2xl.p-4.transition-all', [
+      m('div.flex.items-start.gap-3', [
+        m('div.flex-shrink-0.w-9.h-9.rounded-lg.bg-indigo-100.dark:bg-indigo-950/80.text-indigo-600.dark:text-indigo-400.flex.items-center.justify-center.font-bold', [
+          m('svg.w-5.h-5', { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+            m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M13 10V3L4 14h7v7l9-11h-7z' })
+          )
+        ]),
+        m('div.flex-1.min-w-0', [
+          m('div.flex.items-center.justify-between.gap-2', [
+            m('h4.text-sm.font-semibold.text-gray-900.dark:text-slate-100', 'Update Available'),
+            m('button.text-gray-400.hover:text-gray-600.dark:hover:text-slate-300.-mr-1.-mt-1.p-1.rounded-md.hover:bg-gray-100.dark:hover:bg-slate-800.transition-colors', {
+              title: 'Dismiss notification',
+              onclick: () => {
+                versionCheckState.dismissed = true;
+                if (data.latestVersion) {
+                  try { sessionStorage.setItem('webspresso_dismiss_update_' + data.latestVersion, 'true'); } catch (e) {}
+                }
+              }
+            }, m('svg.w-4.h-4', { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+              m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M6 18L18 6M6 6l12 12' })
+            ))
+          ]),
+          m('p.text-xs.text-gray-600.dark:text-slate-300.mt-1', [
+            'Webspresso ',
+            m('span.font-bold.text-indigo-600.dark:text-indigo-400', 'v' + data.latestVersion),
+            ' is available (current: v' + data.webspressoVersion + ').'
+          ]),
+          m('div.mt-2.5.flex.items-center.gap-2', [
+            m('code.text-[11px].bg-gray-100.dark:bg-slate-800.text-gray-800.dark:text-slate-200.px-2.py-1.rounded.font-mono.border.border-gray-200.dark:border-slate-700.select-all', 'npm i webspresso@latest'),
+            m('a.text-xs.font-medium.text-indigo-600.dark:text-indigo-400.hover:underline.ml-auto', {
+              href: 'https://github.com/webspresso/webspresso/releases',
+              target: '_blank',
+              rel: 'noopener noreferrer',
+            }, 'Changelog')
+          ])
+        ])
+      ])
+    ]);
+  }
+};
+
 // Layout Component (with sidebar)
 const Layout = {
   view(vnode) {
@@ -396,6 +480,7 @@ const Layout = {
       m(MobileHeader),
       m(Sidebar),
       m('main.lg:ml-64.p-6.pt-20.lg:pt-6', vnode.children),
+      m(VersionUpdateToast),
     ]);
   },
 };

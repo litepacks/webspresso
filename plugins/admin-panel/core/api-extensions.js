@@ -4,7 +4,109 @@
  * @module plugins/admin-panel/core/api-extensions
  */
 
+const os = require('os');
+const https = require('https');
 const { sanitizeForOutput } = require('../../../core/orm/utils');
+
+function getWebspressoVersion() {
+  try {
+    const pkg = require('../../../package.json');
+    return pkg.version || '0.0.1';
+  } catch {
+    return '0.0.1';
+  }
+}
+
+let npmVersionCache = {
+  latestVersion: null,
+  checkedAt: 0,
+  inFlight: null,
+};
+
+function fetchLatestNpmVersion(force = false) {
+  const now = Date.now();
+  if (!force && npmVersionCache.latestVersion && (now - npmVersionCache.checkedAt < 30 * 60 * 1000)) {
+    return Promise.resolve(npmVersionCache.latestVersion);
+  }
+
+  if (npmVersionCache.inFlight) {
+    return npmVersionCache.inFlight;
+  }
+
+  npmVersionCache.inFlight = new Promise((resolve) => {
+    const req = https.get('https://registry.npmjs.org/webspresso/latest', {
+      headers: {
+        'User-Agent': 'Webspresso-Admin-Version-Check',
+        'Accept': 'application/json',
+      },
+      timeout: 3000,
+    }, (res) => {
+      if (res.statusCode !== 200) {
+        res.resume();
+        return resolve(npmVersionCache.latestVersion);
+      }
+      let rawData = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { rawData += chunk; });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(rawData);
+          if (parsed && typeof parsed.version === 'string') {
+            npmVersionCache.latestVersion = parsed.version;
+            npmVersionCache.checkedAt = Date.now();
+            return resolve(parsed.version);
+          }
+        } catch {}
+        resolve(npmVersionCache.latestVersion);
+      });
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(npmVersionCache.latestVersion);
+    });
+
+    req.on('error', () => {
+      resolve(npmVersionCache.latestVersion);
+    });
+  }).finally(() => {
+    npmVersionCache.inFlight = null;
+  });
+
+  return npmVersionCache.inFlight;
+}
+
+function compareSemver(v1, v2) {
+  if (!v1 || !v2) return 0;
+  const p1 = String(v1).replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+  const p2 = String(v2).replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+    const n1 = p1[i] || 0;
+    const n2 = p2[i] || 0;
+    if (n1 > n2) return 1;
+    if (n1 < n2) return -1;
+  }
+  return 0;
+}
+
+function formatUptime(seconds) {
+  const sec = Math.floor(seconds || 0);
+  const d = Math.floor(sec / (3600 * 24));
+  const h = Math.floor((sec % (3600 * 24)) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  const parts = [];
+  if (d > 0) parts.push(`${d}d`);
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0) parts.push(`${m}m`);
+  if (s > 0 || parts.length === 0) parts.push(`${s}s`);
+  return parts.join(' ');
+}
+
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 MB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
 
 /**
  * Build query with filters applied
@@ -730,6 +832,44 @@ function createExtensionApiHandlers(options) {
     }
   }
 
+  /**
+   * System info & Webspresso version check
+   */
+  async function systemInfoHandler(req, res) {
+    try {
+      const force = req.query && req.query.force === 'true';
+      const currentVersion = getWebspressoVersion();
+      const latestVersion = await fetchLatestNpmVersion(force);
+      const hasUpdate = Boolean(latestVersion && compareSemver(latestVersion, currentVersion) > 0);
+
+      const mem = process.memoryUsage();
+      const dbClient = db?.knex?.client?.config?.client || 'knex';
+
+      res.json({
+        success: true,
+        webspressoVersion: currentVersion,
+        latestVersion: latestVersion || currentVersion,
+        hasUpdate,
+        nodeVersion: process.version,
+        platform: `${os.type()} ${os.release()} (${process.platform})`,
+        arch: process.arch,
+        environment: process.env.NODE_ENV || 'development',
+        uptimeSeconds: Math.floor(process.uptime()),
+        uptimeFormatted: formatUptime(process.uptime()),
+        memory: {
+          heapUsed: formatBytes(mem.heapUsed),
+          heapTotal: formatBytes(mem.heapTotal),
+          rss: formatBytes(mem.rss),
+        },
+        database: {
+          client: String(dbClient),
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
   return {
     configHandler,
     widgetDataHandler,
@@ -742,6 +882,7 @@ function createExtensionApiHandlers(options) {
     activityLogHandler,
     settingsGetHandler,
     settingsUpdateHandler,
+    systemInfoHandler,
   };
 }
 
@@ -750,4 +891,9 @@ module.exports = {
   buildFilteredQuery,
   getAllMatchingIds,
   coerceBulkTemporalValue,
+  getWebspressoVersion,
+  fetchLatestNpmVersion,
+  compareSemver,
+  formatUptime,
+  formatBytes,
 };

@@ -313,6 +313,8 @@ function adminPanelPlugin(options = {}) {
       // Settings API routes
       ctx.addRoute('get', `${adminPath}/api/extensions/settings`, requireAuth, extensionHandlers.settingsGetHandler);
       ctx.addRoute('post', `${adminPath}/api/extensions/settings`, requireAuth, extensionHandlers.settingsUpdateHandler);
+      ctx.addRoute('get', `${adminPath}/api/extensions/system-info`, requireAuth, extensionHandlers.systemInfoHandler);
+      ctx.addRoute('get', `${adminPath}/api/system-info`, requireAuth, extensionHandlers.systemInfoHandler);
 
       // Custom pages API routes
       ctx.addRoute('get', `${adminPath}/api/extensions/pages/:pageId/data`, requireAuth, pageHandlers.getPageData);
@@ -484,6 +486,35 @@ function generateAdminPanelHtml(adminPath, registry) {
     .dark .ql-snow .ql-stroke { stroke: #94a3b8; }
     .dark .ql-snow .ql-fill { fill: #94a3b8; }
     .dark .ql-picker { color: #cbd5e1; }
+    @media (min-width: 768px) {
+      .admin-table-sticky-check {
+        position: sticky;
+        left: 0;
+        z-index: 5;
+        box-shadow: 4px 0 8px -4px rgba(0, 0, 0, 0.08);
+      }
+      th.admin-table-sticky-check {
+        z-index: 15;
+      }
+      .admin-table-sticky-first {
+        position: sticky;
+        left: 40px;
+        z-index: 5;
+        box-shadow: 4px 0 8px -4px rgba(0, 0, 0, 0.08);
+      }
+      th.admin-table-sticky-first {
+        z-index: 15;
+      }
+      .admin-table-sticky-actions {
+        position: sticky;
+        right: 0;
+        z-index: 5;
+        box-shadow: -4px 0 8px -4px rgba(0, 0, 0, 0.08);
+      }
+      th.admin-table-sticky-actions {
+        z-index: 15;
+      }
+    }
   </style>
   ${registry.getStylesHtml()}
   ${registry.getScriptsHtml('head')}
