@@ -4,6 +4,16 @@
   "description": "Minimal, production-ready SSR framework for Node.js with file-based routing, Nunjucks templating, built-in i18n, and CLI tooling",
   "main": "index.js",
   "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./errors": {
+      "types": "./index.d.ts",
+      "default": "./core/errors/index.js"
+    }
+  },
   "bin": {
     "webspresso": "./bin/webspresso.js"
   },

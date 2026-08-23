@@ -132,6 +132,7 @@ export interface WebspressoApplication extends Application {
   close(reason?: string): Promise<void>;
   enableShutdownHooks(): this;
   disableShutdownHooks(): this;
+  setErrorHandler(handler: (error: unknown, req: Request, res: Response, next: NextFunction) => Promise<unknown> | unknown): this;
 }
 
 export interface CreateAppResult {
@@ -143,6 +144,62 @@ export interface CreateAppResult {
 }
 
 export function createApp(options?: CreateAppOptions): CreateAppResult;
+
+// --- Exceptions & Errors ---
+
+export interface ErrorOptions {
+  code?: string;
+  details?: unknown;
+  cause?: unknown;
+  status?: number;
+  headers?: Record<string, string>;
+  expose?: boolean;
+  [key: string]: unknown;
+}
+
+export class WebspressoError extends Error {
+  name: string;
+  code?: string;
+  details?: unknown;
+  cause?: unknown;
+  status?: number;
+  constructor(message: string, options?: ErrorOptions);
+}
+
+export class HttpError extends WebspressoError {
+  status: number;
+  headers: Record<string, string>;
+  expose: boolean;
+  constructor(status?: number, message?: string, options?: ErrorOptions);
+}
+
+export class BadRequestError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
+export class UnauthorizedError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
+export class ForbiddenError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
+export class NotFoundError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
+export class MethodNotAllowedError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
+export class ConflictError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
+export class PayloadTooLargeError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
+export class UnsupportedMediaTypeError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
+export class UnprocessableEntityError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
+export class TooManyRequestsError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
+
+export class ValidationError extends HttpError {
+  fields: Record<string, string[] | string>;
+  constructor(message?: string, options?: ErrorOptions & { fields?: Record<string, string[] | string> });
+}
+
+export class ConfigurationError extends WebspressoError { constructor(message: string, options?: ErrorOptions); }
+export class PluginError extends WebspressoError { plugin?: string | null; constructor(message: string, options?: ErrorOptions & { plugin?: string }); }
+export class SecurityError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
+export class RequestError extends HttpError { constructor(status?: number, message?: string, options?: ErrorOptions); }
+export class RequestAbortedError extends RequestError { constructor(message?: string, options?: ErrorOptions); }
+export class RouterError extends WebspressoError { constructor(message: string, options?: ErrorOptions); }
+export class RouteNotFoundError extends NotFoundError { path?: string; constructor(pathOrMessage?: string, options?: ErrorOptions); }
+export class RouteGenerationError extends RouterError { constructor(message: string, options?: ErrorOptions); }
+
+export function normalizeError(err: unknown, isDev?: boolean): HttpError | WebspressoError;
+export function toErrorResponseObject(error: unknown, isDev?: boolean): Record<string, unknown>;
 
 export function createCompressionMiddleware(options?: CompressionOptions): RequestHandler;
 

@@ -84,6 +84,7 @@
         <a href="#create-app" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">createApp</a>
         <a href="#graceful-shutdown" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Shutdown</a>
         <a href="#http-compression" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Compression</a>
+        <a href="#error-handling" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Errors</a>
         <a href="#application-kernel" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Kernel</a>
         <a href="#client-runtime" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Client runtime</a>
         <a href="#authentication" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Auth</a>
@@ -513,6 +514,112 @@ module.exports = async function handler(req, res) {
     generatedAt: new Date().toISOString(),
   });
 };</code></pre>
+    </section>
+
+    <section id="error-handling" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Framework Exceptions & Error Handling</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
+        Webspresso features a centralized, lightweight, zero-dependency exception hierarchy inspired by Django's failure domain separation. Thrown synchronous and asynchronous exceptions are automatically caught by the global error boundary, normalized, and formatted as standardized JSON responses for API routes or styled HTML pages for web clients.
+      </p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Exception Hierarchy & Imports</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">import {
+  WebspressoError,
+  HttpError,
+  BadRequestError,           // 400
+  UnauthorizedError,         // 401
+  ForbiddenError,            // 403
+  NotFoundError,             // 404
+  MethodNotAllowedError,     // 405
+  ConflictError,             // 409
+  PayloadTooLargeError,      // 413
+  UnsupportedMediaTypeError, // 415
+  UnprocessableEntityError,  // 422
+  TooManyRequestsError,      // 429
+  ValidationError,           // 422 with { fields }
+  ConfigurationError,        // Bootstrap & config validation
+  PluginError,               // Plugin lifecycle & dependency issues
+  SecurityError,             // 400 with masked internal details
+  RequestAbortedError,       // Client socket disconnection
+  RouteNotFoundError,        // 404 URL resolution error
+  RouteGenerationError,      // Named route URL generation error
+} from 'webspresso';
+
+// Or via subpath import:
+// import { NotFoundError, ValidationError } from 'webspresso/errors';</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">HTTP Exceptions in API Routes</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">/**
+ * GET /api/users/[id]
+ * File: pages/api/users/[id].get.js
+ */
+import { NotFoundError } from 'webspresso';
+
+module.exports = async function handler(req, res) {
+  const user = await req.db.getRepository('User').findById(req.params.id);
+
+  if (!user) {
+    throw new NotFoundError('User not found', {
+      code: 'USER_NOT_FOUND',
+    });
+  }
+
+  res.json({ user });
+};</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Validation Errors (422 Unprocessable Entity)</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">import { ValidationError } from 'webspresso';
+
+module.exports = async function handler(req, res) {
+  const { email, age } = req.body;
+
+  if (!email || age < 18) {
+    throw new ValidationError('Validation failed', {
+      code: 'INVALID_INPUT',
+      fields: {
+        email: !email ? ['Email address is required'] : [],
+        age: age < 18 ? ['Must be at least 18 years old'] : [],
+      },
+    });
+  }
+};</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Custom Error Handler (<code class="text-base">app.setErrorHandler</code>)</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">const { app } = createApp({ pagesDir: './pages' });
+
+app.setErrorHandler(async (err, req, res, next) => {
+  if (err instanceof ValidationError) {
+    return res.status(422).json({
+      success: false,
+      errors: err.fields,
+    });
+  }
+
+  // Rethrowing or returning nothing safely delegates to Webspresso default handler
+});</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Development vs Production Response Format</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div class="bg-slate-900 p-4 rounded-xl text-xs font-mono">
+          <p class="text-amber-400 font-semibold mb-2 font-sans text-sm">Development (NODE_ENV !== 'production')</p>
+          <pre><code>{
+  "status": 500,
+  "error": "Internal Server Error",
+  "message": "Cannot read properties of null",
+  "code": "INTERNAL_SERVER_ERROR",
+  "stack": "TypeError: Cannot read properties...",
+  "cause": "..."
+}</code></pre>
+        </div>
+        <div class="bg-slate-900 p-4 rounded-xl text-xs font-mono">
+          <p class="text-emerald-400 font-semibold mb-2 font-sans text-sm">Production (NODE_ENV === 'production')</p>
+          <pre><code>{
+  "status": 500,
+  "error": "Internal Server Error",
+  "message": "Internal Server Error"
+}</code></pre>
+        </div>
+      </div>
     </section>
 
     <section id="application-kernel" class="doc-section mb-14">

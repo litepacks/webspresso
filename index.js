@@ -17,6 +17,7 @@ const {
 } = require('./src/app-context');
 const { ShutdownManager, NodeHttpAdapter } = require('./core/shutdown');
 const compression = require('./core/compression');
+const errors = require('./core/errors');
 const { 
   mountPages, 
   filePathToRoute, 
@@ -94,6 +95,32 @@ module.exports = {
   // HTTP Response Compression
   compression,
   createCompressionMiddleware: compression.createCompressionMiddleware,
+
+  // Exceptions & Error Handling
+  errors,
+  WebspressoError: errors.WebspressoError,
+  HttpError: errors.HttpError,
+  BadRequestError: errors.BadRequestError,
+  UnauthorizedError: errors.UnauthorizedError,
+  ForbiddenError: errors.ForbiddenError,
+  NotFoundError: errors.NotFoundError,
+  MethodNotAllowedError: errors.MethodNotAllowedError,
+  ConflictError: errors.ConflictError,
+  PayloadTooLargeError: errors.PayloadTooLargeError,
+  UnsupportedMediaTypeError: errors.UnsupportedMediaTypeError,
+  UnprocessableEntityError: errors.UnprocessableEntityError,
+  TooManyRequestsError: errors.TooManyRequestsError,
+  ValidationError: errors.ValidationError,
+  ConfigurationError: errors.ConfigurationError,
+  PluginError: errors.PluginError,
+  SecurityError: errors.SecurityError,
+  RequestError: errors.RequestError,
+  RequestAbortedError: errors.RequestAbortedError,
+  RouterError: errors.RouterError,
+  RouteNotFoundError: errors.RouteNotFoundError,
+  RouteGenerationError: errors.RouteGenerationError,
+  normalizeError: errors.normalizeError,
+  toErrorResponseObject: errors.toErrorResponseObject,
   
   // Router utilities (for advanced use)
   mountPages,

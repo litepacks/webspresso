@@ -19,6 +19,17 @@ const { configureAssets, createHelpers, getScriptInjector } = require('./helpers
 const { createPluginManager } = require('./plugin-manager');
 const { ShutdownManager, NodeHttpAdapter } = require('../core/shutdown');
 const { createCompressionMiddleware } = require('../core/compression');
+const {
+  WebspressoError,
+  HttpError,
+  NotFoundError,
+  RouteNotFoundError,
+  RequestAbortedError,
+  ValidationError,
+  normalizeError,
+  toErrorResponseObject,
+  preferJsonErrorResponse,
+} = require('../core/errors');
 
 // Async storage for tracking template render call stacks (circular extends guard)
 const renderStackStorage = new AsyncLocalStorage();
@@ -155,29 +166,7 @@ function getDefaultHelmetConfig(isDev) {
   };
 }
 
-/**
- * Use JSON error responses for `pages/api/*` routes, XHR requests, and clients that prefer JSON.
- * @param {import('express').Request} req
- * @returns {boolean}
- */
-function preferJsonErrorResponse(req) {
-  if (!req) return false;
-  if (req.path && req.path.startsWith('/api')) return true;
-  if (req.xhr) return true;
-  
-  if (typeof req.accepts === 'function') {
-    const preferred = req.accepts(['html', 'json']);
-    if (preferred === 'json') return true;
-    if (preferred === 'html') return false;
-    return !req.accepts('html');
-  }
 
-  const accept = req.headers && req.headers.accept;
-  if (accept && accept.includes('application/json') && !accept.includes('text/html')) {
-    return true;
-  }
-  return false;
-}
 
 /**
  * Shared CSS for built-in HTML error pages (viewport-safe, fluid type, dark mode)
@@ -437,6 +426,47 @@ function createApp(options = {}) {
   setAppContext({ db: options.db ?? null, shutdownManager });
   
   const app = express();
+
+  // Async handler wrapper helper for automatic promise rejection handling
+  function wrapAsync(fn) {
+    if (typeof fn !== 'function') return fn;
+    if (fn.length === 4) {
+      return function(err, req, res, next) {
+        try {
+          const ret = fn.call(this, err, req, res, next);
+          if (ret && typeof ret.catch === 'function') {
+            ret.catch(next);
+          }
+          return ret;
+        } catch (syncErr) {
+          return next(syncErr);
+        }
+      };
+    }
+    return function(req, res, next) {
+      try {
+        const ret = fn.call(this, req, res, next);
+        if (ret && typeof ret.catch === 'function') {
+          ret.catch(next);
+        }
+        return ret;
+      } catch (syncErr) {
+        return next(syncErr);
+      }
+    };
+  }
+
+  // Wrap routing methods on app to catch uncaught async errors
+  const HTTP_METHODS = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head', 'all'];
+  for (const method of HTTP_METHODS) {
+    const origMethod = app[method];
+    if (typeof origMethod === 'function') {
+      app[method] = function(path, ...handlers) {
+        const wrappedHandlers = handlers.flat().map((h) => wrapAsync(h));
+        return origMethod.call(this, path, ...wrappedHandlers);
+      };
+    }
+  }
 
   // Request draining check during graceful shutdown (zero overhead during normal operation)
   app.use((req, res, next) => {
@@ -769,12 +799,28 @@ function createApp(options = {}) {
     }
   });
   
-  // Error handler
-  app.use((err, req, res, next) => {
+  let customErrorHandler = null;
+  app.setErrorHandler = function(handler) {
+    customErrorHandler = typeof handler === 'function' ? handler : null;
+    return app;
+  };
+
+  // Central Error Handler
+  app.use(async (err, req, res, next) => {
     if (res.headersSent) {
       return next(err);
     }
     
+    // Client connection aborted
+    if (err instanceof RequestAbortedError || req.aborted || (req.socket && req.socket.destroyed)) {
+      if (!res.headersSent && !res.writableEnded) {
+        try {
+          res.end();
+        } catch (_) {}
+      }
+      return;
+    }
+
     // Handle timeout errors
     if (req.timedout) {
       console.error('Request timed out:', req.method, req.url);
@@ -805,12 +851,41 @@ function createApp(options = {}) {
         return res.json({ error: 'Request Timeout', status: 503 });
       }
     }
-    
-    console.error('Server error:', err);
-    res.status(err.status || 500);
+
+    const normalized = normalizeError(err, isDev);
+    const status = normalized.status || 500;
+
+    // Attach custom headers from HttpError if present
+    if (normalized.headers && typeof normalized.headers === 'object') {
+      for (const [key, value] of Object.entries(normalized.headers)) {
+        res.setHeader(key, value);
+      }
+    }
+
+    // Custom Error Handler hook (app.setErrorHandler)
+    if (customErrorHandler) {
+      try {
+        const handled = await customErrorHandler(err, req, res, next);
+        if (res.headersSent || handled === true) {
+          return;
+        }
+      } catch (customErr) {
+        console.error('[webspresso] Error in custom error handler:', customErr);
+      }
+    }
+
+    // Log errors based on severity
+    if (status >= 500) {
+      console.error('Server error:', err);
+    } else if (isDev && status >= 400) {
+      console.warn(`[webspresso] HTTP ${status}:`, normalized.message);
+    }
+
+    res.status(status);
     const ctx = createErrorContext(req, {
-      error: isDev ? err : { message: 'Internal Server Error' },
-      status: err.status || 500
+      error: isDev ? err : { message: normalized.message },
+      status,
+      normalizedError: normalized,
     });
     
     // Custom handler function
@@ -821,7 +896,7 @@ function createApp(options = {}) {
     // Custom or auto-discovered 500 template (pre-resolved at startup)
     const serverErrorTemplate = resolved500Template;
 
-    if (serverErrorTemplate && !preferJsonErrorResponse(req)) {
+    if (status >= 500 && serverErrorTemplate && !preferJsonErrorResponse(req)) {
       try {
         const html = nunjucksEnv.render(serverErrorTemplate, ctx);
         return res.send(html);
@@ -832,13 +907,9 @@ function createApp(options = {}) {
     
     // Default response
     if (!preferJsonErrorResponse(req)) {
-      res.send(default500Html(err, isDev));
+      res.send(default500Html(normalized, isDev));
     } else {
-      res.json({ 
-        error: 'Internal Server Error', 
-        status: err.status || 500,
-        ...(isDev && { message: err.message, stack: err.stack })
-      });
+      res.json(toErrorResponseObject(normalized, isDev));
     }
   });
 
