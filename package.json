@@ -12,7 +12,14 @@
     "./errors": {
       "types": "./index.d.ts",
       "default": "./core/errors/index.js"
-    }
+    },
+    "./plugins": "./plugins/index.js",
+    "./plugins/*": "./plugins/*",
+    "./core/*": "./core/*",
+    "./src/*": "./src/*",
+    "./views/*": "./views/*",
+    "./templates/*": "./templates/*",
+    "./package.json": "./package.json"
   },
   "bin": {
     "webspresso": "./bin/webspresso.js"
