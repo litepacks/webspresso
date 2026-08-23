@@ -24,13 +24,20 @@
     - `{{ fsy.js('/js/app.js', { defer: true, type: 'module' }) | safe }}` → Generates `<script ...></script>`.
     - `{{ fsy.img('/images/logo.png', 'Logo', { loading: 'lazy' }) | safe }}` → Generates `<img ...>` with escaped attributes.
   - **Page-Level Assets (`pageAssets`)**: Route `load()` can return `stylesheets` and `scripts` arrays, which are promoted to `pageHead` for per-route asset loading.
+- **Framework Exceptions & Central Error Boundary (`core/errors`, `app.setErrorHandler`)**:
+  - Django-inspired hierarchy: `WebspressoError`, `HttpError` (400-429), `ValidationError` (422), `SecurityError`, `RequestAbortedError`, `ConfigurationError`, `PluginError`, `RouteNotFoundError`.
+  - Automatic async error wrapping: all rejected promises in route handlers pass automatically to `next(err)`.
+  - Safe production masking: 500 errors stripped of stack traces and internal messages; exposed strictly in development.
+- **Graceful Shutdown & Lifecycle Management (`core/shutdown`, `ShutdownManager`)**:
+  - Configured via `createApp({ server: { shutdown: { enabled: true, mode: 'graceful'|'force', timeout: 10000 } } })`.
+  - `NodeHttpAdapter` single-listener socket tracking, request draining with `Connection: close`, and reverse-order plugin disposer cleanup.
+- **HTTP Response Compression (`core/compression`)**:
+  - Zero-dependency streaming zlib compression configured via `createApp({ server: { compression: true } })`.
+  - Content negotiation for Brotli (`br`), Gzip (`gzip`), Deflate (`deflate`), threshold filtering (1 KB), and `res.compress(false)` route opt-out.
 - **Custom Error & 404 Pages (`errorPages`)**:
   - Configured via `createApp({ errorPages: { notFound, serverError, timeout } })`.
-  - **404 Not Found (`notFound`)**:
-    - **Template path**: e.g. `notFound: '404.njk'` or `'errors/404.njk'` (relative to `viewsDir`). Automatically renders with HTTP status 404 and provides `{ fsy, locale, isDev, url, method }` to the template.
-    - **Handler function**: `notFound: (req, res, ctx) => res.render('404.njk', ctx)`.
-    - **Default fallback**: If omitted, renders built-in responsive styled 404 HTML for browsers, or JSON `{ error: 'Not Found', status: 404 }` for API requests.
-  - **500 Server Error (`serverError`)**: Template path (`'errors/500.njk'`) or handler `(err, req, res, ctx) => ...`. Automatically bypassed for `/api/*` requests in favor of JSON error output. Context: `{ fsy, locale, isDev, url, method, error, status }`.
+  - **404 Not Found (`notFound`)**: Template path (`'404.njk'`) or handler `(req, res, ctx) => ...`.
+  - **500 Server Error (`serverError`)**: Template path (`'errors/500.njk'`) or handler `(err, req, res, ctx) => ...`. Context: `{ fsy, locale, isDev, url, method, error, status }`.
   - **503 Timeout (`timeout`)**: Template path (`'errors/503.njk'`) or handler `(req, res, ctx) => ...` when `timeout` (e.g. `'30s'`) is configured.
 - **Middleware & Hooks**: Route lifecycle hooks can be declared per-page (`module.exports = { middleware: ['auth', 'jwt'] }`) or globally via `pages/_hooks.js`.
 
