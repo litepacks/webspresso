@@ -10,9 +10,12 @@ const {
   getAppContext,
   getDb,
   hasDb,
+  getShutdownManager,
+  hasShutdownManager,
   resetAppContext,
   setAppContext,
 } = require('./src/app-context');
+const { ShutdownManager, NodeHttpAdapter } = require('./core/shutdown');
 const { 
   mountPages, 
   filePathToRoute, 
@@ -78,8 +81,14 @@ module.exports = {
   getAppContext,
   getDb,
   hasDb,
+  getShutdownManager,
+  hasShutdownManager,
   resetAppContext,
   setAppContext,
+
+  // Shutdown & Lifecycle
+  ShutdownManager,
+  NodeHttpAdapter,
   
   // Router utilities (for advanced use)
   mountPages,

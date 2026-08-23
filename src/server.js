@@ -17,6 +17,7 @@ const { resolveClientRuntime } = require('./client-runtime/resolve');
 const { mountPages, detectLocale, loadI18n, createTranslator } = require('./file-router');
 const { configureAssets, createHelpers, getScriptInjector } = require('./helpers');
 const { createPluginManager } = require('./plugin-manager');
+const { ShutdownManager, NodeHttpAdapter } = require('../core/shutdown');
 
 // Async storage for tracking template render call stacks (circular extends guard)
 const renderStackStorage = new AsyncLocalStorage();
@@ -420,9 +421,42 @@ function createApp(options = {}) {
 
   const clientRuntime = resolveClientRuntime(options);
 
-  setAppContext({ db: options.db ?? null });
+  const shutdownConfig = {
+    enabled: true,
+    mode: 'graceful',
+    timeout: 10_000,
+    ...(options.shutdown || options.server?.shutdown || {}),
+  };
+
+  const shutdownManager = new ShutdownManager({
+    ...shutdownConfig,
+    logger: logging ? console : null,
+  });
+
+  setAppContext({ db: options.db ?? null, shutdownManager });
   
   const app = express();
+
+  // Request draining check during graceful shutdown (zero overhead during normal operation)
+  app.use((req, res, next) => {
+    if (shutdownManager.isShuttingDown) {
+      res.set('Connection', 'close');
+      if (!res.headersSent) {
+        if (preferJsonErrorResponse(req)) {
+          return res.status(503).json({ error: 'Service Unavailable', message: 'Server is shutting down', status: 503 });
+        }
+        return res.status(503).send('Server is shutting down');
+      }
+      res.on('finish', () => {
+        try {
+          if (req.socket && !req.socket.destroyed) {
+            req.socket.end();
+          }
+        } catch (e) {}
+      });
+    }
+    next();
+  });
   
   // Security headers with Helmet
   if (helmetConfig !== false) {
@@ -550,7 +584,7 @@ function createApp(options = {}) {
   });
   
   // Register plugins (sync) — middlewares is the same object later passed to mountPages
-  const pluginContext = { app, nunjucksEnv, options, middlewares };
+  const pluginContext = { app, nunjucksEnv, options, middlewares, shutdownManager };
   pluginManager.registerSync(plugins, pluginContext);
   
   // Request logging middleware
@@ -797,8 +831,50 @@ function createApp(options = {}) {
       });
     }
   });
+
+  // Decorate app with shutdown lifecycle helpers
+  app.shutdownManager = shutdownManager;
+  Object.defineProperty(app, 'isShuttingDown', {
+    get: () => shutdownManager.isShuttingDown,
+    configurable: true,
+    enumerable: true,
+  });
+
+  app.onShutdown = function(fn) {
+    shutdownManager.onShutdown(fn);
+    return app;
+  };
+
+  app.close = function(reason) {
+    return shutdownManager.close(reason);
+  };
+
+  app.enableShutdownHooks = function() {
+    shutdownManager.enableShutdownHooks();
+    return app;
+  };
+
+  app.disableShutdownHooks = function() {
+    shutdownManager.disableShutdownHooks();
+    return app;
+  };
+
+  // Wrap app.listen to register server adapter and signal hooks
+  const origListen = app.listen.bind(app);
+  app.listen = function(...args) {
+    const server = origListen(...args);
+    app.server = server;
+    const adapter = new NodeHttpAdapter(server);
+    shutdownManager.registerAdapter(adapter);
+
+    if (shutdownConfig.enabled !== false && !isTest) {
+      shutdownManager.enableShutdownHooks();
+    }
+
+    return server;
+  };
   
-  return { app, nunjucksEnv, pluginManager, authMiddleware };
+  return { app, nunjucksEnv, pluginManager, authMiddleware, shutdownManager };
 }
 
 // Export for use as library

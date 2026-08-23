@@ -123,20 +123,37 @@ class PluginManager {
     this.routes = [];                   // Collected route metadata
     this.customRoutes = [];             // Routes added by plugins
     this.cspDirectives = new Map();     // directive -> Set of sources (from plugins)
+    this.disposers = [];                // Array<{ name: string, fn: Function }>
     this.app = null;
     this.nunjucksEnv = null;
+    this.shutdownManager = null;
+  }
+
+  /**
+   * Register a plugin disposer
+   * @param {string} name
+   * @param {Function} fn
+   */
+  registerDisposer(name, fn) {
+    if (typeof fn === 'function') {
+      this.disposers.push({ name: name || 'plugin', fn });
+      if (this.shutdownManager && typeof this.shutdownManager.registerDisposer === 'function') {
+        this.shutdownManager.registerDisposer(name, fn);
+      }
+    }
   }
 
   /**
    * Register plugins with the manager (async version)
    * @param {Array} plugins - Array of plugin definitions or factory functions
-   * @param {Object} context - Context object `{ app, nunjucksEnv, options, middlewares? }`
+   * @param {Object} context - Context object `{ app, nunjucksEnv, options, middlewares?, shutdownManager? }`
    */
   async register(plugins, context) {
     if (!plugins || !Array.isArray(plugins)) return;
 
     this.app = context.app;
     this.nunjucksEnv = context.nunjucksEnv;
+    this.shutdownManager = context.shutdownManager || null;
 
     // Normalize plugins (handle factory functions)
     const normalizedPlugins = plugins.map(p => {
@@ -159,13 +176,14 @@ class PluginManager {
   /**
    * Register plugins with the manager (sync version)
    * @param {Array} plugins - Array of plugin definitions or factory functions
-   * @param {Object} context - Context object `{ app, nunjucksEnv, options, middlewares? }`
+   * @param {Object} context - Context object `{ app, nunjucksEnv, options, middlewares?, shutdownManager? }`
    */
   registerSync(plugins, context) {
     if (!plugins || !Array.isArray(plugins)) return;
 
     this.app = context.app;
     this.nunjucksEnv = context.nunjucksEnv;
+    this.shutdownManager = context.shutdownManager || null;
 
     // Normalize plugins (handle factory functions)
     const normalizedPlugins = plugins.map(p => {
@@ -276,15 +294,46 @@ class PluginManager {
       this._collectCspDirectives(plugin.csp);
     }
 
+    let hasDisposer = false;
+
+    // Call setup hook if provided
+    if (typeof plugin.setup === 'function') {
+      try {
+        const result = await plugin.setup(ctx.app || ctx);
+        if (typeof result === 'function') {
+          this.registerDisposer(plugin.name, result);
+          hasDisposer = true;
+        }
+      } catch (err) {
+        console.warn(`[plugin-manager] Plugin "${plugin.name}" setup() failed:`, err.message);
+        this.plugins.delete(plugin.name);
+        if (plugin.api) this.pluginAPIs.delete(plugin.name);
+        return;
+      }
+    }
+
     // Call register hook
     if (typeof plugin.register === 'function') {
       try {
-        await plugin.register(ctx);
+        const result = await plugin.register(ctx);
+        if (typeof result === 'function') {
+          this.registerDisposer(plugin.name, result);
+          hasDisposer = true;
+        }
       } catch (err) {
         console.warn(`[plugin-manager] Plugin "${plugin.name}" register() failed:`, err.message);
         this.plugins.delete(plugin.name);
         if (plugin.api) this.pluginAPIs.delete(plugin.name);
         return;
+      }
+    }
+
+    // Support explicit shutdown or dispose methods if not already registered
+    if (!hasDisposer) {
+      if (typeof plugin.shutdown === 'function') {
+        this.registerDisposer(plugin.name, () => plugin.shutdown(ctx.app || ctx));
+      } else if (typeof plugin.dispose === 'function') {
+        this.registerDisposer(plugin.name, () => plugin.dispose(ctx));
       }
     }
 
@@ -320,15 +369,46 @@ class PluginManager {
       this._collectCspDirectives(plugin.csp);
     }
 
+    let hasDisposer = false;
+
+    // Call setup hook if provided
+    if (typeof plugin.setup === 'function') {
+      try {
+        const result = plugin.setup(ctx.app || ctx);
+        if (typeof result === 'function') {
+          this.registerDisposer(plugin.name, result);
+          hasDisposer = true;
+        }
+      } catch (err) {
+        console.warn(`[plugin-manager] Plugin "${plugin.name}" setup() failed:`, err.message);
+        this.plugins.delete(plugin.name);
+        if (plugin.api) this.pluginAPIs.delete(plugin.name);
+        return;
+      }
+    }
+
     // Call register hook (sync - if plugin has async register, it won't wait)
     if (typeof plugin.register === 'function') {
       try {
-        plugin.register(ctx);
+        const result = plugin.register(ctx);
+        if (typeof result === 'function') {
+          this.registerDisposer(plugin.name, result);
+          hasDisposer = true;
+        }
       } catch (err) {
         console.warn(`[plugin-manager] Plugin "${plugin.name}" register() failed:`, err.message);
         this.plugins.delete(plugin.name);
         if (plugin.api) this.pluginAPIs.delete(plugin.name);
         return;
+      }
+    }
+
+    // Support explicit shutdown or dispose methods if not already registered
+    if (!hasDisposer) {
+      if (typeof plugin.shutdown === 'function') {
+        this.registerDisposer(plugin.name, () => plugin.shutdown(ctx.app || ctx));
+      } else if (typeof plugin.dispose === 'function') {
+        this.registerDisposer(plugin.name, () => plugin.dispose(ctx));
       }
     }
 
@@ -420,6 +500,22 @@ class PluginManager {
       // ============================================
       // Script Injection API
       // ============================================
+
+      /**
+       * Register a cleanup / disposer hook for this plugin
+       * @param {Function} fn
+       */
+      onDispose(fn) {
+        self.registerDisposer(plugin.name, fn);
+      },
+
+      /**
+       * Alias for onDispose
+       * @param {Function} fn
+       */
+      onShutdown(fn) {
+        self.registerDisposer(plugin.name, fn);
+      },
 
       /**
        * Inject content into head section
@@ -581,6 +677,30 @@ class PluginManager {
    */
   hasPlugin(name) {
     return this.plugins.has(name);
+  }
+
+  /**
+   * Get all registered disposers
+   * @returns {Array<{ name: string, fn: Function }>}
+   */
+  getDisposers() {
+    return this.disposers.slice();
+  }
+
+  /**
+   * Execute all registered plugin disposers in reverse registration order
+   * @returns {Promise<void>}
+   */
+  async dispose() {
+    const reverseDisposers = this.disposers.slice().reverse();
+    for (const { name, fn } of reverseDisposers) {
+      try {
+        await fn();
+      } catch (err) {
+        console.warn(`[plugin-manager] Plugin "${name}" disposer failed:`, err.message);
+      }
+    }
+    this.disposers = [];
   }
 
   /**

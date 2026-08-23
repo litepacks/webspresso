@@ -48,6 +48,13 @@ export interface CreateAppOptions {
   timeout?: string | false;
   auth?: unknown;
   db?: DatabaseInstance | null;
+  /** Shutdown and lifecycle configuration */
+  shutdown?: ShutdownOptions;
+  server?: {
+    port?: number;
+    shutdown?: ShutdownOptions;
+    [key: string]: unknown;
+  };
   /** Opt-in Alpine / swup assets under `/__webspresso/client-runtime/*`. Env: WEBSPRESSO_ALPINE, WEBSPRESSO_SWUP. */
   clientRuntime?: {
     alpine?: boolean | Record<string, unknown>;
@@ -55,6 +62,44 @@ export interface CreateAppOptions {
   };
   setupRoutes?: (app: Application, ctx: SetupRoutesContext) => void;
   [key: string]: unknown;
+}
+
+export interface ShutdownOptions {
+  enabled?: boolean;
+  mode?: 'graceful' | 'force';
+  timeout?: number;
+  signals?: string[];
+  logger?: unknown;
+  exitOnSignal?: boolean;
+}
+
+export interface ServerAdapter {
+  close(): Promise<void>;
+  forceClose?(): void;
+  closeIdleConnections?(): void;
+}
+
+export class NodeHttpAdapter implements ServerAdapter {
+  constructor(server: unknown);
+  close(): Promise<void>;
+  forceClose(): void;
+  closeIdleConnections(): void;
+  destroy(): void;
+  readonly isListening: boolean;
+}
+
+export class ShutdownManager {
+  constructor(options?: ShutdownOptions);
+  readonly isShuttingDown: boolean;
+  readonly isClosed: boolean;
+  mode: 'graceful' | 'force';
+  timeout: number;
+  onShutdown(fn: () => Promise<void> | void): this;
+  registerDisposer(nameOrFn: string | (() => Promise<void> | void), maybeFn?: () => Promise<void> | void): this;
+  registerAdapter(adapter: ServerAdapter): this;
+  enableShutdownHooks(): this;
+  disableShutdownHooks(): this;
+  close(reason?: string): Promise<void>;
 }
 
 export interface SetupRoutesContext {
@@ -65,11 +110,22 @@ export interface SetupRoutesContext {
   clientRuntime: { alpine: boolean; swup: boolean };
 }
 
+export interface WebspressoApplication extends Application {
+  server?: unknown;
+  readonly isShuttingDown: boolean;
+  shutdownManager: ShutdownManager;
+  onShutdown(fn: () => Promise<void> | void): this;
+  close(reason?: string): Promise<void>;
+  enableShutdownHooks(): this;
+  disableShutdownHooks(): this;
+}
+
 export interface CreateAppResult {
-  app: Application;
+  app: WebspressoApplication;
   nunjucksEnv: unknown;
   pluginManager: PluginManager;
   authMiddleware?: RequestHandler;
+  shutdownManager: ShutdownManager;
 }
 
 export function createApp(options?: CreateAppOptions): CreateAppResult;
@@ -87,15 +143,19 @@ export const CLIENT_RUNTIME_BASE: string;
 
 export function attachDbMiddleware(req: Request, res: Response, next: NextFunction): void;
 
-export function getAppContext(): { db: DatabaseInstance | null };
+export function getAppContext(): { db: DatabaseInstance | null; shutdownManager: ShutdownManager | null };
 
 export function getDb(): DatabaseInstance;
 
 export function hasDb(): boolean;
 
+export function getShutdownManager(): ShutdownManager | null;
+
+export function hasShutdownManager(): boolean;
+
 export function resetAppContext(): void;
 
-export function setAppContext(partial: { db?: DatabaseInstance | null }): void;
+export function setAppContext(partial: { db?: DatabaseInstance | null; shutdownManager?: ShutdownManager | null }): void;
 
 // --- File router ---
 

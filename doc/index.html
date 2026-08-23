@@ -82,6 +82,7 @@
         <a href="#environment" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Env</a>
         <a href="#cli" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">CLI</a>
         <a href="#create-app" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">createApp</a>
+        <a href="#graceful-shutdown" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Shutdown</a>
         <a href="#application-kernel" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Kernel</a>
         <a href="#client-runtime" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Client runtime</a>
         <a href="#authentication" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Auth</a>
@@ -384,6 +385,71 @@ const { app } = createApp({
   publicDir: './public',
   clientRuntime: { alpine: true, swup: true },
 });</code></pre>
+    </section>
+
+    <section id="graceful-shutdown" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Graceful Shutdown</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
+        Webspresso features native, framework-level <strong class="text-slate-800 dark:text-slate-200">Graceful Shutdown</strong> and <strong class="text-slate-800 dark:text-slate-200">Plugin Cleanup Lifecycle</strong> management. It coordinates <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">SIGINT</code> and <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">SIGTERM</code> signals, stops accepting new HTTP connections, drains in-flight requests, executes shutdown hooks, and disposes plugins in reverse dependency order.
+      </p>
+
+      <div class="overflow-x-auto mb-6">
+        <table class="w-full text-sm">
+          <thead><tr><th>Option / API</th><th>Description</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">shutdown: { mode: 'graceful', timeout: 10_000 }</code></td><td>Default production mode. Waits up to <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">timeout</code> ms for active requests to finish before force closing lingering connections.</td></tr>
+            <tr><td><code class="whitespace-nowrap">shutdown: { mode: 'force', timeout: 1000 }</code></td><td>Immediate connection termination. Recommended for development/watch environments to prevent hanging keep-alive sockets during reload.</td></tr>
+            <tr><td><code class="whitespace-nowrap">app.onShutdown(async () => {})</code></td><td>Register application-level cleanup callbacks (e.g. database disconnect, background queues).</td></tr>
+            <tr><td><code class="whitespace-nowrap">await app.close()</code></td><td>Idempotent programmatic shutdown method. Safely closes the server and executes all teardown hooks without calling <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">process.exit()</code>.</td></tr>
+            <tr><td><code class="whitespace-nowrap">Plugin Disposer Return</code></td><td>Plugins returning a cleanup function from <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">setup(app)</code> or <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">register(ctx)</code> are automatically registered and executed in reverse registration order.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Example — Standard Configuration</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">const { createApp } = require('webspresso');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  server: {
+    shutdown: {
+      mode: 'graceful',
+      timeout: 10_000,
+    },
+  },
+});
+
+await app.listen(3000);</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Development / Watch Mode (Force Close)</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">const { app } = createApp({
+  pagesDir: './pages',
+  shutdown: {
+    mode: 'force',
+    timeout: 1000,
+  },
+});</code></pre>
+      <p class="text-slate-500 dark:text-slate-400 text-xs mb-4">
+        <em>Note:</em> <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">mode: 'force'</code> is generally not needed in production. It is designed for development and watch runners to prevent dangling keep-alive sockets from keeping the process alive.
+      </p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Manual Application Teardown</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">app.onShutdown(async () => {
+  await database.close();
+});</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Plugin Disposer Lifecycle</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">module.exports = {
+  name: 'my-resource-plugin',
+  async setup(app) {
+    const resource = await createResource();
+
+    // Returning a disposer automatically registers it in reverse teardown order:
+    return async () => {
+      await resource.close();
+    };
+  },
+};</code></pre>
     </section>
 
     <section id="application-kernel" class="doc-section mb-14">

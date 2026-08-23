@@ -57,16 +57,19 @@ function fetchLatestNpmVersion(force = false) {
             return resolve(parsed.version);
           }
         } catch {}
+        npmVersionCache.checkedAt = Date.now();
         resolve(npmVersionCache.latestVersion);
       });
     });
 
     req.on('timeout', () => {
       req.destroy();
+      npmVersionCache.checkedAt = Date.now();
       resolve(npmVersionCache.latestVersion);
     });
 
     req.on('error', () => {
+      npmVersionCache.checkedAt = Date.now();
       resolve(npmVersionCache.latestVersion);
     });
   }).finally(() => {

@@ -3,21 +3,22 @@
  * @module src/app-context
  */
 
-/** @type {{ db: object|null }} */
+/** @type {{ db: object|null, shutdownManager: object|null }} */
 let context = {
   db: null,
+  shutdownManager: null,
 };
 
 /**
  * Merge into the current context (typically called once from createApp).
- * @param {{ db?: object|null }} partial
+ * @param {{ db?: object|null, shutdownManager?: object|null }} partial
  */
 function setAppContext(partial) {
   context = { ...context, ...partial };
 }
 
 /**
- * @returns {{ db: object|null }}
+ * @returns {{ db: object|null, shutdownManager: object|null }}
  */
 function getAppContext() {
   return context;
@@ -46,10 +47,24 @@ function hasDb() {
 }
 
 /**
+ * @returns {object|null}
+ */
+function getShutdownManager() {
+  return context.shutdownManager;
+}
+
+/**
+ * @returns {boolean}
+ */
+function hasShutdownManager() {
+  return context.shutdownManager != null;
+}
+
+/**
  * Clear context (e.g. between tests).
  */
 function resetAppContext() {
-  context = { db: null };
+  context = { db: null, shutdownManager: null };
 }
 
 /**
@@ -70,6 +85,8 @@ module.exports = {
   getAppContext,
   getDb,
   hasDb,
+  getShutdownManager,
+  hasShutdownManager,
   resetAppContext,
   attachDbMiddleware,
 };
