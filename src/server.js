@@ -18,6 +18,7 @@ const { mountPages, detectLocale, loadI18n, createTranslator } = require('./file
 const { configureAssets, createHelpers, getScriptInjector } = require('./helpers');
 const { createPluginManager } = require('./plugin-manager');
 const { ShutdownManager, NodeHttpAdapter } = require('../core/shutdown');
+const { createCompressionMiddleware } = require('../core/compression');
 
 // Async storage for tracking template render call stacks (circular extends guard)
 const renderStackStorage = new AsyncLocalStorage();
@@ -502,6 +503,15 @@ function createApp(options = {}) {
     }
     
     app.use(helmet(finalConfig));
+  }
+
+  // HTTP Response Compression
+  const compressionOpt = options.compression ?? options.server?.compression ?? false;
+  if (compressionOpt) {
+    const compressionConfig = typeof compressionOpt === 'object' ? compressionOpt : {};
+    if (compressionConfig.enabled !== false) {
+      app.use(createCompressionMiddleware(compressionConfig));
+    }
   }
   
   // Request timeout middleware

@@ -83,6 +83,7 @@
         <a href="#cli" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">CLI</a>
         <a href="#create-app" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">createApp</a>
         <a href="#graceful-shutdown" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Shutdown</a>
+        <a href="#http-compression" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Compression</a>
         <a href="#application-kernel" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Kernel</a>
         <a href="#client-runtime" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Client runtime</a>
         <a href="#authentication" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Auth</a>
@@ -449,6 +450,68 @@ await app.listen(3000);</code></pre>
       await resource.close();
     };
   },
+};</code></pre>
+    </section>
+
+    <section id="http-compression" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">HTTP Compression</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
+        Webspresso features native, streaming-first <strong class="text-slate-800 dark:text-slate-200">HTTP Response Compression</strong> built directly on Node's native <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">node:zlib</code> module. It supports <strong class="text-slate-800 dark:text-slate-200">Brotli (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">br</code>)</strong>, <strong class="text-slate-800 dark:text-slate-200">Gzip (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">gzip</code>)</strong>, and <strong class="text-slate-800 dark:text-slate-200">Deflate (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">deflate</code>)</strong> with full <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">Accept-Encoding</code> negotiation (including quality <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">q</code> values and wildcard <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">*</code>).
+      </p>
+
+      <div class="overflow-x-auto mb-6">
+        <table class="w-full text-sm">
+          <thead><tr><th>Option / Feature</th><th>Default</th><th>Description</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code class="whitespace-nowrap">compression</code></td><td><code class="whitespace-nowrap">false</code></td><td>Opt-in compression flag or configuration object. Zero overhead when disabled.</td></tr>
+            <tr><td><code class="whitespace-nowrap">threshold</code></td><td><code class="whitespace-nowrap">1024</code></td><td>Minimum response size in bytes before applying compression (default: 1 KB).</td></tr>
+            <tr><td><code class="whitespace-nowrap">level</code></td><td><code class="whitespace-nowrap">6</code></td><td>Compression level for Gzip/Deflate (0–9) and default quality for Brotli (0–11).</td></tr>
+            <tr><td><code class="whitespace-nowrap">encodings</code></td><td><code class="whitespace-nowrap">['br', 'gzip', 'deflate']</code></td><td>Preferred algorithm order. If runtime lacks Brotli support, automatically falls back to Gzip/Deflate.</td></tr>
+            <tr><td><code class="whitespace-nowrap">res.compress(false)</code></td><td>—</td><td>Route/response-level opt-out method for sensitive or pre-compressed responses.</td></tr>
+            <tr><td><code class="whitespace-nowrap">filter(req, res)</code></td><td>—</td><td>Custom filter predicate returning <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">false</code> to bypass compression.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Basic Usage</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">const { createApp } = require('webspresso');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  server: {
+    compression: true, // Enables default 1 KB threshold with Brotli + Gzip
+  },
+});</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Detailed Configuration</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">const { app } = createApp({
+  pagesDir: './pages',
+  server: {
+    compression: {
+      threshold: 2048,           // 2 KB minimum
+      encodings: ['br', 'gzip'], // Algorithm preference
+      level: 6,
+      filter: (req, res) => {
+        // Exclude specific paths or headers
+        if (req.path.startsWith('/downloads')) return false;
+        return true;
+      },
+    },
+  },
+});</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">API Route Opt-out (pages/api/sensitive-export.get.js)</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">/**
+ * GET /api/sensitive-export
+ */
+module.exports = async function handler(req, res) {
+  // Disable compression for sensitive or attacker-influenced response data:
+  res.compress(false);
+
+  res.json({
+    secret: 'confidential-token-value',
+    generatedAt: new Date().toISOString(),
+  });
 };</code></pre>
     </section>
 

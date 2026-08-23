@@ -48,11 +48,14 @@ export interface CreateAppOptions {
   timeout?: string | false;
   auth?: unknown;
   db?: DatabaseInstance | null;
+  /** HTTP response compression options */
+  compression?: boolean | CompressionOptions;
   /** Shutdown and lifecycle configuration */
   shutdown?: ShutdownOptions;
   server?: {
     port?: number;
     shutdown?: ShutdownOptions;
+    compression?: boolean | CompressionOptions;
     [key: string]: unknown;
   };
   /** Opt-in Alpine / swup assets under `/__webspresso/client-runtime/*`. Env: WEBSPRESSO_ALPINE, WEBSPRESSO_SWUP. */
@@ -62,6 +65,17 @@ export interface CreateAppOptions {
   };
   setupRoutes?: (app: Application, ctx: SetupRoutesContext) => void;
   [key: string]: unknown;
+}
+
+export interface CompressionOptions {
+  enabled?: boolean;
+  threshold?: number;
+  level?: number;
+  encodings?: string[];
+  filter?: (req: Request, res: Response) => boolean;
+  brotli?: Record<string, unknown>;
+  gzip?: Record<string, unknown>;
+  deflate?: Record<string, unknown>;
 }
 
 export interface ShutdownOptions {
@@ -129,6 +143,19 @@ export interface CreateAppResult {
 }
 
 export function createApp(options?: CreateAppOptions): CreateAppResult;
+
+export function createCompressionMiddleware(options?: CompressionOptions): RequestHandler;
+
+export namespace compression {
+  export function supportsBrotli(): boolean;
+  export function getDefaultSupportedEncodings(includeBrotli?: boolean): string[];
+  export function parseAcceptEncoding(header?: string | null): Array<{ encoding: string; q: number; index: number }>;
+  export function selectEncoding(acceptEncoding?: string | null, supportedEncodings?: string[]): string | null;
+  export function isCompressible(contentType?: string | null): boolean;
+  export function createCompressionStream(encoding: string, options?: CompressionOptions): unknown;
+  export function createCompressionMiddleware(options?: CompressionOptions): RequestHandler;
+  export function appendVary(res: unknown, field: string): void;
+}
 
 export function resolveClientRuntime(options?: {
   clientRuntime?: {

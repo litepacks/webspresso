@@ -16,6 +16,7 @@ const {
   setAppContext,
 } = require('./src/app-context');
 const { ShutdownManager, NodeHttpAdapter } = require('./core/shutdown');
+const compression = require('./core/compression');
 const { 
   mountPages, 
   filePathToRoute, 
@@ -89,6 +90,10 @@ module.exports = {
   // Shutdown & Lifecycle
   ShutdownManager,
   NodeHttpAdapter,
+
+  // HTTP Response Compression
+  compression,
+  createCompressionMiddleware: compression.createCompressionMiddleware,
   
   // Router utilities (for advanced use)
   mountPages,
