@@ -561,5 +561,6 @@ function generateAdminPanelHtml(adminPath, registry) {
 
 // Export registry and utilities for external use
 module.exports = adminPanelPlugin;
+module.exports.adminPanelPlugin = adminPanelPlugin;
 module.exports.AdminRegistry = AdminRegistry;
 module.exports.defaultRegistry = defaultRegistry;

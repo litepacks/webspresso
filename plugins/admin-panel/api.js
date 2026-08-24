@@ -384,6 +384,9 @@ function isColumnSortable(name, meta, model) {
 
       // Apply filters
       for (const [colName, filter] of Object.entries(filterParams)) {
+        if (!model.columns.has(colName) || !filter || typeof filter !== 'object') {
+          continue;
+        }
         const colMeta = model.columns.get(colName);
         const colType = colMeta?.type || 'string';
         const op = filter.op || (colType === 'boolean' ? 'eq' : 'contains');

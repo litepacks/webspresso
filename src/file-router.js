@@ -468,7 +468,7 @@ function createTranslator(translations = {}) {
             paramRegexCache.set(paramKey, regex);
           }
         }
-        value = value.replace(regex, paramValue);
+        value = value.replace(regex, () => String(paramValue));
       }
     }
     

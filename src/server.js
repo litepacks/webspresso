@@ -549,8 +549,15 @@ function createApp(options = {}) {
     app.use(timeout(timeoutConfig));
   }
   
-  // Trust proxy (for correct req.ip, req.protocol behind reverse proxy)
-  app.set('trust proxy', 1);
+  // Trust proxy (for correct req.ip, req.protocol behind reverse proxy; configurable via options.trustProxy)
+  const trustProxySetting = options.trustProxy !== undefined
+    ? options.trustProxy
+    : (options.server?.trustProxy !== undefined ? options.server.trustProxy : 1);
+  if (trustProxySetting !== false) {
+    app.set('trust proxy', trustProxySetting);
+  } else {
+    app.set('trust proxy', false);
+  }
   
   // JSON body parser for API routes
   app.use(express.json());
@@ -601,7 +608,12 @@ function createApp(options = {}) {
   
   // Add custom Nunjucks filters
   nunjucksEnv.addFilter('json', (obj) => {
-    return JSON.stringify(obj, null, 2);
+    const raw = JSON.stringify(obj, null, 2);
+    if (!raw) return '';
+    return raw
+      .replace(/</g, '\\u003c')
+      .replace(/>/g, '\\u003e')
+      .replace(/&/g, '\\u0026');
   });
   
   nunjucksEnv.addFilter('date', (date, format = 'short') => {

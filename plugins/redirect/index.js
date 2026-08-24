@@ -12,7 +12,15 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 function isExternalTarget(to) {
   if (!to || typeof to !== 'string') return false;
   const t = to.trim();
-  return /^https?:\/\//i.test(t) || t.startsWith('//');
+  // Protocol-relative (//, \\, /\, \/) or URL schemes (http:, https:, javascript:, data:, vbscript:, etc.)
+  return (
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(t) ||
+    t.startsWith('//') ||
+    t.startsWith('\\\\') ||
+    t.startsWith('/\\') ||
+    t.startsWith('\\/') ||
+    t.startsWith('\\')
+  );
 }
 
 /**

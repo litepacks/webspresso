@@ -140,7 +140,7 @@ class AssetManager {
    */
   buildAttributes(attrs) {
     return Object.entries(attrs)
-      .filter(([_, v]) => v !== undefined && v !== null && v !== false)
+      .filter(([k, v]) => v !== undefined && v !== null && v !== false && /^[a-zA-Z0-9_\-:]+$/.test(k))
       .map(([k, v]) => v === true ? k : `${k}="${this.escapeHtml(String(v))}"`)
       .join(' ');
   }

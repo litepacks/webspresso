@@ -107,11 +107,14 @@ function deepClone(obj) {
   if (Array.isArray(obj)) {
     return obj.map(deepClone);
   }
-  const cloned = {};
-  for (const key in obj) {
+  const cloned = Object.create(null);
+  for (const key of Object.keys(obj)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      continue;
+    }
     cloned[key] = deepClone(obj[key]);
   }
-  return cloned;
+  return { ...cloned };
 }
 
 /**

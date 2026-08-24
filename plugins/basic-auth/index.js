@@ -116,7 +116,9 @@ function sendUnauthorized(req, res, config) {
   res.statusCode = 401;
 
   if (config.challenge !== false) {
-    const realm = (config.realm || 'Restricted Area').replace(/"/g, '\\"');
+    const realm = String(config.realm || 'Restricted Area')
+      .split(/[\r\n]/)[0]
+      .replace(/"/g, '\\"');
     res.setHeader('WWW-Authenticate', `Basic realm="${realm}"`);
   }
 

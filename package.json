@@ -27,6 +27,8 @@
   },
   "scripts": {
     "test": "vitest run",
+    "test:security": "vitest run tests/security/",
+    "security": "npm run test:security && npm audit",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
