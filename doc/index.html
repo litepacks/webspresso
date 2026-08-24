@@ -93,6 +93,7 @@
         <a href="#plugins-data-exchange" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Data exchange</a>
         <a href="#plugins-content" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Content CMS</a>
         <a href="#plugins-redirect" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Redirect</a>
+        <a href="#services" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Services</a>
         <a href="#database" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">ORM</a>
         <a href="#i18n-templates" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">i18n</a>
         <a href="#hooks" class="text-slate-500 hover:text-cyan-800 dark:text-slate-400 dark:hover:text-cyan-300">Hooks</a>
@@ -1026,6 +1027,78 @@ createApp({
 </div>{% endraw %}</code></pre>
       <p class="text-slate-500 dark:text-slate-500 text-sm mb-2">The block wrapper places the Edit toolbar above the content; the popover opens anchored to that button (bottom sheet on viewports under 640px).</p>
       <p class="text-slate-500 dark:text-slate-500 text-sm">Core module (framework-agnostic): <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">require('webspresso').content</code> exports <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">createContentService</code>, schema helpers, and render utilities. Contract tests: <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">tests/integration/content-contract.test.js</code>.</p>
+    </section>
+
+    <section id="services" class="doc-section mb-14">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Services Layer</h2>
+      <p class="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">The <strong class="text-slate-800 dark:text-slate-200">Services Layer</strong> provides a lightweight, framework-agnostic abstraction to organize business logic, multi-step mutations, and queries under <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">services/</code>. Services are automatically discovered from the filesystem and can be invoked from SSR data loaders (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">ctx.service()</code>), API handlers (<code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">req.service()</code>), CLI tasks, background workers, or nested services.</p>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">File-based Auto-Discovery</h3>
+      <p class="text-slate-600 dark:text-slate-400 mb-3 text-sm">Files inside <code class="bg-stone-200 dark:bg-slate-700 px-1 rounded">services/</code> map directly to dot-separated service names and kebab/snake to camelCase aliases:</p>
+      <div class="overflow-x-auto mb-4">
+        <table class="w-full text-sm">
+          <thead><tr><th>File path</th><th>Service name</th><th>camelCase alias</th></tr></thead>
+          <tbody class="text-slate-600 dark:text-slate-400">
+            <tr><td><code>services/user/get.js</code></td><td><code>'user.get'</code></td><td>—</td></tr>
+            <tr><td><code>services/user/reset-password.js</code></td><td><code>'user.reset-password'</code></td><td><code>'user.resetPassword'</code></td></tr>
+            <tr><td><code>services/order-items/get-by-id.js</code></td><td><code>'order-items.get-by-id'</code></td><td><code>'orderItems.getById'</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Service Definition</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">// services/user/create.js
+const { z } = require('zod');
+
+module.exports = {
+  // 1. Declarative Zod validation
+  schema: z.object({
+    email: z.string().email(),
+    name: z.string().min(2),
+    role: z.enum(['user', 'admin']).default('user'),
+  }),
+
+  // 2. Declarative Auth & RBAC guard
+  auth: 'admin', // true | 'admin' | ['admin', 'manager'] | (user, ctx) => boolean
+
+  // 3. Execution timeout in ms
+  timeout: 5000,
+
+  // 4. Automatic ACID transaction propagation across nested calls
+  transaction: true,
+
+  // 5. In-memory response memoization
+  cache: {
+    ttl: 60000,
+  },
+
+  async handler(input, ctx) {
+    const { email, name, role } = input;
+    const { db, trx } = ctx;
+
+    const user = await db.getRepository('User').create(
+      { email, name, role },
+      { trx }
+    );
+
+    return user;
+  },
+};</code></pre>
+
+      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Unified Invocation &amp; Composition</h3>
+      <pre class="bg-slate-900 p-5 rounded-xl text-sm overflow-x-auto mb-4"><code class="language-javascript">// From SSR Page Loader (pages/users/[id].js)
+module.exports = {
+  async load({ req, ctx }) {
+    const user = await ctx.service('user.get', { id: req.params.id });
+    return { user };
+  },
+};
+
+// From Express API Route (pages/api/users.js)
+module.exports = async function (req, res) {
+  const newUser = await req.service('user.create', req.body);
+  res.status(201).json({ data: newUser });
+};</code></pre>
     </section>
 
     <section id="database" class="doc-section mb-14">

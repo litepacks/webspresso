@@ -16,14 +16,19 @@ Webspresso is a lightweight, zero-dependency-sprawl Express SSR framework featur
 - **Middleware & Hooks**: Route lifecycle hooks can be declared per-page or globally via `pages/_hooks.js`.
 - **API Endpoints**: Defined under `pages/api/...` or mounted programmatically via `createApp({ setupRoutes })`.
 
-### 1.2 ORM & Database Layer (`core/orm`, `models/`)
+### 1.2 Services Layer (`services/`, `src/services/`)
+- **File-based Auto-Discovery**: Services located in `services/` map directly to dot-separated service names (e.g. `services/user/create.js` → `'user.create'`) and camelCase aliases (`'user.reset-password'` & `'user.resetPassword'`).
+- **Declarative Validation & Authorization**: Define optional Zod `schema`, `auth` (boolean, role string/array, predicate), `timeout` (ms), `transaction: true` (ACID transaction propagation across nested calls), and `cache: { ttl, key }`.
+- **Unified Invocation**: Consumed via `ctx.service('service.name', input)` from SSR loaders, `req.service()` in Express routes, or standalone `createServiceRegistry()`.
+
+### 1.3 ORM & Database Layer (`core/orm`, `models/`)
 - **Model Definition**: Defined in `models/*.js` using `defineModel({ name, table, schema, relations, scopes, hidden, admin, cache })`.
 - **Schema & Types**: Built with `zdb` schema builder (`zdb.string()`, `zdb.integer()`, `zdb.boolean()`, `zdb.file()`, `zdb.json()`).
 - **Repositories**: Accessed via `db.getRepository(modelName)` or `ctx.db`. Supports `find`, `findById`, `findOne`, `create`, `update`, `delete`, and `query()`.
 - **Query Caching**: Memory/provider query cache configured per database instance or model (`cache: 'auto'|'smart'|true`).
 - **Migrations**: Database schema changes managed via Knex migrations in `migrations/` (`webspresso db:migrate`).
 
-### 1.3 Admin Panel Architecture (`plugins/admin-panel`)
+### 1.4 Admin Panel Architecture (`plugins/admin-panel`)
 - **SPA CRUD Engine**: Modular Mithril.js SPA mounted at `/_admin` powered by `adminPanelPlugin({ db })`.
 - **Admin Module Registration**: Registered using `adminApi.registerModule` or `adminApi.registerPageDir`.
 - **Custom Admin Pages**:
