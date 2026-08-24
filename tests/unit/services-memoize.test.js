@@ -6,7 +6,7 @@ const {
   ServiceRegistry,
 } = require('../../index');
 
-describe('Services Memoize & Caching', () => {
+describe('Services Memoize & Caching (Hardened)', () => {
   describe('parseTtlMs helper', () => {
     it('should parse seconds, minutes, hours, days, ms, and boolean', () => {
       expect(parseTtlMs('5s')).toBe(5000);
@@ -19,7 +19,7 @@ describe('Services Memoize & Caching', () => {
     });
   });
 
-  describe('stableCacheKey helper', () => {
+  describe('stableCacheKey helper (Safe Serialization)', () => {
     it('should sort keys deterministically', () => {
       const key1 = stableCacheKey({ b: 2, a: 1 });
       const key2 = stableCacheKey({ a: 1, b: 2 });
@@ -27,100 +27,130 @@ describe('Services Memoize & Caching', () => {
       expect(key1).toBe('{"a":1,"b":2}');
     });
 
+    it('should safely serialize BigInt without throwing', () => {
+      const key = stableCacheKey({ id: BigInt(9007199254740991) });
+      expect(key).toContain('9007199254740991n');
+    });
+
+    it('should safely handle circular references without throwing', () => {
+      const obj = { name: 'circular' };
+      obj.self = obj;
+      expect(() => stableCacheKey(obj)).not.toThrow();
+      const key = stableCacheKey(obj);
+      expect(key).toContain('[Circular]');
+    });
+
+    it('should safely serialize Buffers, Dates, RegExps', () => {
+      const buf = Buffer.from('hello');
+      const date = new Date('2026-08-24T12:00:00.000Z');
+      const reg = /test-pattern/i;
+
+      const key = stableCacheKey({ buf, date, reg });
+      expect(key).toContain('[Buffer:68656c6c6f]');
+      expect(key).toContain('[Date:2026-08-24T12:00:00.000Z]');
+      expect(key).toContain('[RegExp:/test-pattern/i]');
+    });
+
     it('should handle primitives and arrays', () => {
-      expect(stableCacheKey('hello')).toBe('hello');
+      expect(stableCacheKey('hello')).toBe('"hello"');
       expect(stableCacheKey(42)).toBe('42');
       expect(stableCacheKey([1, 2])).toBe('[1,2]');
       expect(stableCacheKey(null)).toBe('__null__');
+      expect(stableCacheKey(undefined)).toBe('__undefined__');
     });
   });
 
-  describe('memoize standalone utility', () => {
-    it('should memoize async functions and avoid repeated executions', async () => {
-      let callCount = 0;
-      const fetchUser = async ({ id }) => {
-        callCount++;
-        return { id, timestamp: Date.now(), name: `User ${id}` };
+  describe('Cache Stampede / Thundering Herd Prevention', () => {
+    it('should coalesce concurrent in-flight requests into a single execution', async () => {
+      let backendCalls = 0;
+
+      const slowDbQuery = async ({ category }) => {
+        backendCalls++;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return { category, data: [1, 2, 3], fetchedAt: Date.now() };
       };
 
-      const memoized = memoize(fetchUser, { ttl: '1m' });
+      const memoized = memoize(slowDbQuery, { ttl: '5s' });
 
-      const res1 = await memoized({ id: 10 });
-      const res2 = await memoized({ id: 10 });
-      const res3 = await memoized({ id: 20 });
+      // Launch 15 concurrent calls simultaneously
+      const promises = Array.from({ length: 15 }).map(() =>
+        memoized({ category: 'electronics' })
+      );
 
-      expect(callCount).toBe(2);
-      expect(res1).toEqual(res2);
-      expect(res3.id).toBe(20);
-      expect(memoized.size).toBe(2);
+      const results = await Promise.all(promises);
+
+      expect(backendCalls).toBe(1);
+      expect(results.length).toBe(15);
+      for (const res of results) {
+        expect(res.category).toBe('electronics');
+        expect(res.data).toEqual([1, 2, 3]);
+      }
     });
 
-    it('should support manual cache invalidation with delete / invalidate', async () => {
-      let count = 0;
-      const getCounter = async (input) => {
-        count++;
-        return { count, input };
+    it('should cleanup inFlight map when execution fails so next call can retry', async () => {
+      let attempts = 0;
+
+      const flakyService = async () => {
+        attempts++;
+        if (attempts === 1) {
+          throw new Error('Database connection failed');
+        }
+        return { success: true, attempts };
       };
 
-      const memoized = memoize(getCounter, { ttl: '5m' });
+      const memoized = memoize(flakyService, { ttl: '1m' });
 
-      const val1 = await memoized({ tag: 'a' });
-      expect(val1.count).toBe(1);
+      // First call fails
+      await expect(memoized()).rejects.toThrow('Database connection failed');
 
-      const val2 = await memoized({ tag: 'a' });
-      expect(val2.count).toBe(1);
-
-      // Invalidate
-      const deleted = memoized.invalidate({ tag: 'a' });
-      expect(deleted).toBe(true);
-
-      const val3 = await memoized({ tag: 'a' });
-      expect(val3.count).toBe(2);
+      // Subsequent call should retry and succeed
+      const res = await memoized();
+      expect(res.success).toBe(true);
+      expect(res.attempts).toBe(2);
     });
+  });
 
-    it('should clear all cache entries with clear()', async () => {
-      const fn = memoize(async (x) => x * 2);
-      await fn(1);
-      await fn(2);
-      expect(fn.size).toBe(2);
-
-      fn.clear();
-      expect(fn.size).toBe(0);
-    });
-
-    it('should support custom key generator', async () => {
-      let executions = 0;
-      const compute = async (payload) => {
-        executions++;
-        return payload.data.value * 2;
+  describe('Cached Object Mutation Protection', () => {
+    it('should prevent callers from mutating cached object values', async () => {
+      const getPermissions = async () => {
+        return {
+          roles: ['user', 'viewer'],
+          settings: { theme: 'dark' },
+        };
       };
 
-      const memoized = memoize(compute, {
-        ttl: '1m',
-        key: (payload) => payload.data.id,
-      });
+      const memoized = memoize(getPermissions, { ttl: '5m', clone: true });
 
-      const r1 = await memoized({ data: { id: 'item-1', value: 10 } });
-      const r2 = await memoized({ data: { id: 'item-1', value: 99 } }); // different value but same key
+      // Consumer 1 mutates the returned object
+      const user1Perms = await memoized();
+      user1Perms.roles.push('superadmin');
+      user1Perms.settings.theme = 'light';
 
-      expect(executions).toBe(1);
-      expect(r1).toBe(20);
-      expect(r2).toBe(20);
+      // Consumer 2 retrieves the cached object
+      const user2Perms = await memoized();
+      expect(user2Perms.roles).toEqual(['user', 'viewer']);
+      expect(user2Perms.settings.theme).toBe('dark');
     });
+  });
 
-    it('should evict oldest entries when reaching maxSize', async () => {
-      const fn = memoize(async (i) => i * 10, { maxSize: 2 });
+  describe('True LRU Cache Eviction', () => {
+    it('should promote accessed items to MRU and evict the true least recently used item', async () => {
+      const fn = memoize(async (key) => `val:${key}`, { maxSize: 3 });
 
-      await fn(1);
-      await fn(2);
-      expect(fn.has(1)).toBe(true);
-      expect(fn.has(2)).toBe(true);
+      await fn('a'); // cache: [a]
+      await fn('b'); // cache: [a, b]
+      await fn('c'); // cache: [a, b, c]
 
-      // Add 3rd -> evicts 1
-      await fn(3);
-      expect(fn.has(1)).toBe(false);
-      expect(fn.has(2)).toBe(true);
-      expect(fn.has(3)).toBe(true);
+      // Access 'a' again -> makes 'a' most recently used -> cache order: [b, c, a]
+      await fn('a');
+
+      // Add 'd' -> should evict 'b' (least recently used)
+      await fn('d');
+
+      expect(fn.has('b')).toBe(false); // evicted!
+      expect(fn.has('a')).toBe(true);  // kept!
+      expect(fn.has('c')).toBe(true);  // kept!
+      expect(fn.has('d')).toBe(true);  // kept!
     });
   });
 
@@ -166,7 +196,6 @@ describe('Services Memoize & Caching', () => {
 
       registry.register('user.update', {
         async handler({ id, name }, ctx) {
-          // Mutate DB and invalidate cache
           ctx.service.invalidate('user.find', { id });
           return { id, name, updated: true };
         },

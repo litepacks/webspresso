@@ -147,11 +147,17 @@ export function parseTtlMs(ttl: string | number | boolean): number;
 
 export function stableCacheKey(input: unknown): string;
 
+export function sanitizeInput<T = unknown>(input: T): T;
+
+export function maskSensitiveData<T = unknown>(data: T, customRedactKeys?: string[]): T;
+
 export function discoverServices(
   servicesDir: string
 ): Array<{ name: string; aliases: string[]; filePath: string; relativePath: string }>;
 
 export function filePathToServiceName(relativePath: string): { name: string; aliases: string[] };
+
+export function toCamelCase(str: string): string;
 
 export function validateServiceInput(schema: unknown, input: unknown, serviceName: string): unknown;
 

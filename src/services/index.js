@@ -5,9 +5,9 @@
  */
 
 const { ServiceRegistry } = require('./registry');
-const { discoverServices, filePathToServiceName } = require('./discovery');
-const { validateServiceInput } = require('./validator');
-const { executeService, SERVICE_CALL_STACK_SYMBOL } = require('./executor');
+const { discoverServices, filePathToServiceName, toCamelCase } = require('./discovery');
+const { validateServiceInput, sanitizeInput } = require('./validator');
+const { executeService, SERVICE_CALL_STACK_SYMBOL, maskSensitiveData } = require('./executor');
 
 const { memoize, parseTtlMs, stableCacheKey } = require('./memoize');
 
@@ -48,6 +48,9 @@ module.exports = {
   memoize,
   parseTtlMs,
   stableCacheKey,
+  sanitizeInput,
+  maskSensitiveData,
+  toCamelCase,
   discoverServices,
   filePathToServiceName,
   validateServiceInput,

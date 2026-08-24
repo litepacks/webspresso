@@ -1,6 +1,6 @@
 /**
  * Webspresso Services Discovery
- * Recursively scans directory and maps file paths to service names
+ * Recursively scans directory and maps file paths to service names with cross-platform normalization & camelCase aliases
  * @module src/services/discovery
  */
 
@@ -8,6 +8,15 @@ const fs = require('fs');
 const path = require('path');
 
 const VALID_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
+
+/**
+ * Convert kebab-case or snake_case segment to camelCase
+ * @param {string} str
+ * @returns {string}
+ */
+function toCamelCase(str) {
+  return str.replace(/[-_]+([a-zA-Z0-9])/g, (_, char) => char.toUpperCase());
+}
 
 /**
  * Check if a file should be included as a service
@@ -26,43 +35,57 @@ function isValidServiceFile(filename) {
 }
 
 /**
- * Convert relative file path to dot-separated service name
+ * Convert relative file path to dot-separated service name with cross-platform normalization & aliases
  * @example
- * filePathToServiceName('user/get.js') -> 'user.get'
- * filePathToServiceName('user/profile/update.js') -> 'user.profile.update'
- * filePathToServiceName('payment/refund.js') -> 'payment.refund'
- * filePathToServiceName('health.js') -> 'health'
- * filePathToServiceName('user/index.js') -> 'user' (with alias 'user.index')
+ * filePathToServiceName('user/get.js') -> { name: 'user.get', aliases: [] }
+ * filePathToServiceName('order-items/get-by-id.js') -> { name: 'order-items.get-by-id', aliases: ['orderItems.getById'] }
+ * filePathToServiceName('user/index.js') -> { name: 'user', aliases: ['user.index'] }
  *
  * @param {string} relativePath - Path relative to services root
  * @returns {{ name: string, aliases: string[] }}
  */
 function filePathToServiceName(relativePath) {
-  // Normalize slashes
-  const normalized = relativePath.split(path.sep).join('/');
+  if (!relativePath || typeof relativePath !== 'string') {
+    return { name: '', aliases: [] };
+  }
+
+  // Cross-platform slash normalization (Windows \ to Unix /)
+  const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
   const ext = path.extname(normalized);
-  const withoutExt = normalized.slice(0, -ext.length);
+  const withoutExt = ext ? normalized.slice(0, -ext.length) : normalized;
   const segments = withoutExt.split('/').filter(Boolean);
 
   if (segments.length === 0) {
     return { name: '', aliases: [] };
   }
 
+  const aliases = new Set();
   const isIndex = segments[segments.length - 1] === 'index';
+
+  let primarySegments;
   if (isIndex) {
-    const parentSegments = segments.slice(0, -1);
-    const primaryName = parentSegments.length > 0 ? parentSegments.join('.') : 'index';
-    const indexName = segments.join('.');
-    return {
-      name: primaryName,
-      aliases: primaryName !== indexName ? [indexName] : [],
-    };
+    primarySegments = segments.slice(0, -1);
+    if (primarySegments.length === 0) {
+      primarySegments = ['index'];
+    } else {
+      aliases.add(segments.join('.')); // e.g. user.index alias
+    }
+  } else {
+    primarySegments = segments;
   }
 
-  const name = segments.join('.');
+  const primaryName = primarySegments.join('.');
+
+  // Generate camelCase alias if segments contain kebab-case or snake_case
+  const camelSegments = primarySegments.map(toCamelCase);
+  const camelName = camelSegments.join('.');
+  if (camelName !== primaryName) {
+    aliases.add(camelName);
+  }
+
   return {
-    name,
-    aliases: [],
+    name: primaryName,
+    aliases: Array.from(aliases),
   };
 }
 
@@ -98,7 +121,7 @@ function discoverServices(servicesDir) {
             name,
             aliases,
             filePath: fullPath,
-            relativePath: relPath,
+            relativePath: relPath.replace(/\\/g, '/'),
           });
         }
       }
@@ -111,6 +134,7 @@ function discoverServices(servicesDir) {
 
 module.exports = {
   isValidServiceFile,
+  toCamelCase,
   filePathToServiceName,
   discoverServices,
 };

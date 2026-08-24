@@ -114,8 +114,11 @@ module.exports = {
   memoize: require('./src/services').memoize,
   parseTtlMs: require('./src/services').parseTtlMs,
   stableCacheKey: require('./src/services').stableCacheKey,
+  sanitizeInput: require('./src/services').sanitizeInput,
+  maskSensitiveData: require('./src/services').maskSensitiveData,
   discoverServices: require('./src/services').discoverServices,
   filePathToServiceName: require('./src/services').filePathToServiceName,
+  toCamelCase: require('./src/services').toCamelCase,
   validateServiceInput: require('./src/services').validateServiceInput,
   executeService: require('./src/services').executeService,
 

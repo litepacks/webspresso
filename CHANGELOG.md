@@ -13,8 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Auto-Discovery & File Naming**: Recursively scans `services/` directory and converts file paths into dot-separated service identifiers (e.g. `services/user/get.js` → `user.get`, `services/post/publish.js` → `post.publish`, `services/user/profile/get.js` → `user.profile.get`).
 - **Shared Context Service Composition**: Execute services from SSR loaders (`ctx.service()`), API routes (`req.service()`), or within other services while sharing the exact same request context (`ctx.db`, `ctx.auth`, `ctx.session`, `ctx.user`).
 - **Circular Call Detection**: Automatically tracks service call stacks and catches recursion/dependency cycles early (`user.get -> profile.get -> user.get`), throwing a clean `Circular service call detected` error.
-- **Lightweight Input Schema Validation**: Validates arguments prior to handler execution using simple descriptors (`'number'`, `'string'`, `'email'`, `'boolean'`, `'object'`, `'array'`, `'date'`), custom validator functions, or Zod schemas without adding runtime overhead.
-- **Standalone Execution & Testability**: Services can be executed and tested in isolation without spinning up an HTTP server via `createServiceRegistry({ servicesDir })` or `registry.call(name, input, mockCtx)`.
+- **Zod & Lightweight Input Schema Validation**: Validates arguments prior to handler execution using Zod functional schemas (`({ z }) => z.object(...)`), Zod instances, or simple type descriptors (`'number'`, `'string'`, `'email'`, `'boolean'`, `'object'`, `'array'`, `'date'`).
+- **In-Memory Caching & Memoization (`src/services/memoize.js`)**: Cache service results with TTL expiration, Cache Stampede / Thundering Herd in-flight request deduping, true LRU eviction, object mutation protection (`clone: true`), and safe serialization for `BigInt`, `Buffer`, and circular references.
+- **Cache Invalidation**: Explicitly invalidate cache keys via `ctx.service.invalidate(name, input)` or clear service cache via `ctx.service.clearCache(name)`.
+- **Interactive CLI Runner (`webspresso service`)**: Test and run services interactively from the command line with automatic database resolution without spinning up the HTTP server.
+- **Execution Timeouts (`timeout: '5s'`)**: Protect services against hanging handlers with automatic timeout abortion throwing `SERVICE_TIMEOUT` with HTTP 504 status.
+- **Database Transaction Boundaries (`transaction: true`)**: Automatic Knex transaction lifecycle handling with seamless rollback on unhandled errors and single-transaction reuse across nested service calls.
+- **Branch-Safe Concurrency & Call Stacks**: Parallel sibling service calls (`Promise.all`) execute across isolated call stack branches without colliding.
+- **Authorization & Role-Based Access Control (`auth`)**: Built-in RBAC declarative guards (`auth: true`, `auth: 'admin'`, `auth: ['admin', 'finance']`, or custom predicate functions) throwing `UnauthorizedError` (401) or `ForbiddenError` (403).
 - **`defineService` Helper & Registry**: Added `defineService()` / `service()` definition helpers and `createServiceRegistry()` factory with duplicate name detection and hot-reload support.
 
 #### Zero-Dependency Native i18n & Localization Enhancements (`src/file-router.js`, `src/helpers.js`, `src/server.js`)

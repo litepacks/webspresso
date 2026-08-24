@@ -1,6 +1,6 @@
 /**
  * Webspresso Services Input Validation
- * Powered by Zod with support for functions ({ z }), Zod schemas, and concise type descriptors
+ * Powered by Zod with sync/async validation, prototype poisoning defense, and functional schema compilation
  * @module src/services/validator
  */
 
@@ -10,6 +10,54 @@ const { extendZ } = require('../../core/orm/utils/nanoid');
 
 /** Zod instance extended with z.nanoid() */
 const zForServices = extendZ(z);
+
+/**
+ * Check if object contains dangerous prototype pollution keys
+ * @param {*} obj
+ * @returns {boolean}
+ */
+function hasDangerousKeys(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    return false;
+  }
+  if (Array.isArray(obj)) {
+    return obj.some(item => hasDangerousKeys(item));
+  }
+  for (const key of Object.keys(obj)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      return true;
+    }
+    if (typeof obj[key] === 'object' && obj[key] !== null && hasDangerousKeys(obj[key])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Sanitize input against prototype pollution
+ * @param {*} input
+ * @returns {*} Sanitized input
+ */
+function sanitizeInput(input) {
+  if (input === null || typeof input !== 'object') {
+    return input;
+  }
+  if (!hasDangerousKeys(input)) {
+    return input;
+  }
+  if (Array.isArray(input)) {
+    return input.map(item => sanitizeInput(item));
+  }
+  const clean = {};
+  for (const key of Object.keys(input)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      continue;
+    }
+    clean[key] = sanitizeInput(input[key]);
+  }
+  return clean;
+}
 
 /**
  * Compile a concise type string descriptor into a Zod schema
@@ -142,44 +190,74 @@ function formatZodErrors(zodError, serviceName) {
 }
 
 /**
- * Validate service input against compiled schema
+ * Validate service input against compiled schema (supports sync & async Zod/custom schemas)
  * @param {Object|Function|null} schema - Schema definition
  * @param {*} input - Input to validate
  * @param {string} serviceName - Service name
- * @returns {*} Validated input
+ * @returns {*|Promise<*>} Validated input
  * @throws {ValidationError} When validation fails
  */
 function validateServiceInput(schema, input, serviceName) {
+  const sanitized = sanitizeInput(input);
+
   if (!schema) {
-    return input;
+    return sanitized;
   }
 
   const compiled = compileServiceSchema(schema);
   if (!compiled) {
-    return input;
+    return sanitized;
   }
 
   // 1. Zod schema validation
   if (compiled instanceof z.ZodType || typeof compiled.safeParse === 'function') {
-    const result = compiled.safeParse(input);
-    if (!result.success) {
-      const { message, fields } = formatZodErrors(result.error, serviceName);
-      throw new ValidationError(message, {
-        fields,
-        details: result.error.issues,
-      });
+    try {
+      const result = compiled.safeParse(sanitized);
+      if (!result.success) {
+        const { message, fields } = formatZodErrors(result.error, serviceName);
+        throw new ValidationError(message, {
+          fields,
+          details: result.error.issues,
+        });
+      }
+      return result.data;
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        throw err;
+      }
+      // If error occurred because of async refinements, evaluate with safeParseAsync
+      if (typeof compiled.safeParseAsync === 'function') {
+        return compiled.safeParseAsync(sanitized).then((asyncResult) => {
+          if (!asyncResult.success) {
+            const { message, fields } = formatZodErrors(asyncResult.error, serviceName);
+            throw new ValidationError(message, {
+              fields,
+              details: asyncResult.error.issues,
+            });
+          }
+          return asyncResult.data;
+        });
+      }
+      throw err;
     }
-    return result.data;
   }
 
-  // 2. Custom validation function
+  // 2. Custom validation function (sync or async)
   if (typeof compiled === 'function') {
     try {
-      const res = compiled(input);
+      const res = compiled(sanitized);
+      if (res instanceof Promise) {
+        return res.then((asyncRes) => {
+          if (asyncRes === false) {
+            throw new ValidationError(`Invalid service input for ${serviceName}: custom validation rejected input`);
+          }
+          return typeof asyncRes === 'object' && asyncRes !== null ? asyncRes : sanitized;
+        });
+      }
       if (res === false) {
         throw new ValidationError(`Invalid service input for ${serviceName}: custom validation rejected input`);
       }
-      return typeof res === 'object' && res !== null ? res : input;
+      return typeof res === 'object' && res !== null ? res : sanitized;
     } catch (err) {
       if (err instanceof ValidationError) {
         throw err;
@@ -190,7 +268,7 @@ function validateServiceInput(schema, input, serviceName) {
     }
   }
 
-  return input;
+  return sanitized;
 }
 
 module.exports = {
@@ -198,5 +276,6 @@ module.exports = {
   compileServiceSchema,
   descriptorToZod,
   formatZodErrors,
+  sanitizeInput,
   validateServiceInput,
 };

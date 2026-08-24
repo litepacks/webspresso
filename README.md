@@ -1962,7 +1962,49 @@ const fetchRemoteRates = memoize(async () => {
 }, { ttl: '10m', maxSize: 100 });
 ```
 
-### 6. Interactive CLI Runner (`webspresso service`)
+### 6. Timeouts & Database Transactions (`timeout`, `transaction`)
+
+You can protect services against hanging handlers and ensure automatic ACID transaction rollbacks:
+
+```javascript
+// services/order/checkout.js
+module.exports = {
+  // Abort with 504 Gateway Timeout if execution exceeds 5 seconds
+  timeout: '5s',
+
+  // Wrap execution in an automatic Knex transaction (rolls back on any error)
+  transaction: true,
+
+  async handler({ orderId, items }, ctx) {
+    // ctx.trx and ctx.db are automatically bound to the active transaction
+    await ctx.db('orders').where({ id: orderId }).update({ status: 'paid' });
+    await ctx.service('inventory.deduct', { items }); // Nested services reuse the exact same transaction!
+
+    return { orderId, success: true };
+  },
+};
+```
+
+### 7. Authorization & Role Guards (`auth`)
+
+Services can enforce authentication and role-based access control (RBAC) automatically:
+
+```javascript
+// services/admin/billing.js
+module.exports = {
+  // Requires authenticated user with 'admin' or 'finance' role
+  auth: ['admin', 'finance'], // or auth: true (any logged in user) or auth: (user, ctx) => boolean
+
+  async handler(input, ctx) {
+    // Guaranteed to have authorized ctx.user
+    return ctx.db('billing_records').select();
+  },
+};
+```
+
+Throws `UnauthorizedError` (401) when unauthenticated or `ForbiddenError` (403) when role permissions are insufficient.
+
+### 8. Interactive CLI Runner (`webspresso service`)
 
 You can test and run any service directly from the command line without starting the HTTP server:
 
