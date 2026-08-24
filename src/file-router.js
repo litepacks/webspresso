@@ -432,33 +432,103 @@ function loadI18n(pagesDir, routeDir, locale) {
   return data;
 }
 
-function createTranslator(translations = {}) {
-  return function t(key, params = EMPTY_OBJECT, defaultVal = null) {
+// Cache for Intl.PluralRules instances
+const pluralRulesCache = new Map();
+
+function getPluralRules(locale) {
+  let pr = pluralRulesCache.get(locale);
+  if (!pr) {
+    try {
+      pr = new Intl.PluralRules(locale);
+    } catch {
+      pr = new Intl.PluralRules('en');
+    }
+    if (pluralRulesCache.size < 100) {
+      pluralRulesCache.set(locale, pr);
+    }
+  }
+  return pr;
+}
+
+function resolveTranslationValue(dict, key) {
+  if (!dict || typeof dict !== 'object') return undefined;
+  if (dict[key] !== undefined) return dict[key];
+
+  const parts = key.split('.');
+  let curr = dict;
+  for (const part of parts) {
+    if (curr && typeof curr === 'object') {
+      curr = curr[part];
+    } else {
+      return undefined;
+    }
+  }
+  return curr;
+}
+
+/**
+ * Create a translation helper function with pluralization, fallback, and formatting support
+ * @param {Object} translations - Primary locale translations dictionary
+ * @param {Object|string} [options] - Options object or locale string
+ * @param {string} [options.locale='en'] - Active locale code
+ * @param {Object} [options.fallbackTranslations] - Fallback translations dictionary
+ * @param {string} [options.fallbackLocale='en'] - Fallback locale code
+ * @returns {Function} Translation function `t`
+ */
+function createTranslator(translations = {}, options = EMPTY_OBJECT) {
+  const opts = typeof options === 'string' ? { locale: options } : (options || EMPTY_OBJECT);
+  const locale = opts.locale || 'en';
+  const fallbackTranslations = opts.fallbackTranslations || null;
+
+  function t(key, params = EMPTY_OBJECT, defaultVal = null) {
     const defaultValue = typeof params === 'string' ? params : defaultVal;
     const interpolationParams = typeof params === 'object' && params !== null ? params : EMPTY_OBJECT;
 
-    let value = translations ? translations[key] : undefined;
-    
-    if (value === undefined && translations) {
-      // Try nested key lookup (e.g., "meta.title")
-      const parts = key.split('.');
-      value = translations;
-      for (const part of parts) {
-        if (value && typeof value === 'object') {
-          value = value[part];
+    let value = resolveTranslationValue(translations, key);
+
+    // If missing in primary locale, fallback to fallback translations
+    if (value === undefined && fallbackTranslations) {
+      value = resolveTranslationValue(fallbackTranslations, key);
+    }
+
+    // Handle Pluralization if value is an object (or when count is passed)
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const count = interpolationParams.count !== undefined
+        ? Number(interpolationParams.count)
+        : (interpolationParams.n !== undefined
+          ? Number(interpolationParams.n)
+          : (interpolationParams.cardinal !== undefined ? Number(interpolationParams.cardinal) : undefined));
+
+      if (count !== undefined && !Number.isNaN(count)) {
+        const countStr = String(count);
+        if (typeof value[countStr] === 'string') {
+          value = value[countStr];
+        } else if (count === 0 && typeof value.zero === 'string') {
+          value = value.zero;
         } else {
-          value = undefined;
-          break;
+          const category = getPluralRules(locale).select(count);
+          if (typeof value[category] === 'string') {
+            value = value[category];
+          } else if (typeof value.other === 'string') {
+            value = value.other;
+          } else {
+            const firstString = Object.values(value).find((v) => typeof v === 'string');
+            value = firstString !== undefined ? firstString : key;
+          }
         }
       }
     }
-    
+
     if (value === undefined) {
       return defaultValue !== null && defaultValue !== undefined ? defaultValue : key;
     }
-    
+
+    if (typeof value !== 'string') {
+      return value;
+    }
+
     // Replace params like {{name}} in the translation
-    if (typeof value === 'string' && interpolationParams && interpolationParams !== EMPTY_OBJECT && Object.keys(interpolationParams).length > 0) {
+    if (interpolationParams && interpolationParams !== EMPTY_OBJECT && Object.keys(interpolationParams).length > 0) {
       for (const [paramKey, paramValue] of Object.entries(interpolationParams)) {
         let regex = paramRegexCache.get(paramKey);
         if (regex === undefined) {
@@ -471,9 +541,81 @@ function createTranslator(translations = {}) {
         value = value.replace(regex, () => String(paramValue));
       }
     }
-    
+
     return value;
+  }
+
+  // Attach metadata & native formatting helpers to `t`
+  t.locale = locale;
+  t.translations = translations;
+
+  t.number = function formatNumber(num, numOpts) {
+    if (num === null || num === undefined || Number.isNaN(Number(num))) return '';
+    try {
+      return new Intl.NumberFormat(locale, numOpts).format(Number(num));
+    } catch {
+      return String(num);
+    }
   };
+  t.formatNumber = t.number;
+
+  t.currency = function formatCurrency(amount, currency = 'USD', currOpts = {}) {
+    if (amount === null || amount === undefined || Number.isNaN(Number(amount))) return '';
+    try {
+      return new Intl.NumberFormat(locale, { style: 'currency', currency, ...currOpts }).format(Number(amount));
+    } catch {
+      return `${amount} ${currency}`;
+    }
+  };
+  t.formatCurrency = t.currency;
+
+  t.date = function formatDate(date, dateOpts = { dateStyle: 'medium' }) {
+    if (!date) return '';
+    try {
+      const d = date instanceof Date ? date : new Date(date);
+      if (Number.isNaN(d.getTime())) return '';
+      return new Intl.DateTimeFormat(locale, dateOpts).format(d);
+    } catch {
+      return String(date);
+    }
+  };
+  t.formatDate = t.date;
+
+  t.relativeTime = function formatRelativeTime(val, unit = 'day', relOpts = { numeric: 'auto' }) {
+    if (val === null || val === undefined || Number.isNaN(Number(val))) return '';
+    try {
+      return new Intl.RelativeTimeFormat(locale, relOpts).format(Number(val), unit);
+    } catch {
+      return `${val} ${unit}`;
+    }
+  };
+  t.formatRelativeTime = t.relativeTime;
+
+  t.plural = function inlinePlural(count, forms, params = {}) {
+    if (!forms || typeof forms !== 'object') return '';
+    const num = Number(count);
+    const countStr = String(num);
+    let template = forms[countStr];
+    if (typeof template !== 'string') {
+      if (num === 0 && typeof forms.zero === 'string') {
+        template = forms.zero;
+      } else {
+        const category = getPluralRules(locale).select(num);
+        template = forms[category] || forms.other || Object.values(forms)[0] || '';
+      }
+    }
+    const allParams = { count: num, ...params };
+    return template.replace(/{{\s*(\w+)\s*}}/g, (_, k) => String(allParams[k] ?? ''));
+  };
+
+  t.has = function hasKey(key) {
+    if (resolveTranslationValue(translations, key) !== undefined) return true;
+    if (fallbackTranslations && resolveTranslationValue(fallbackTranslations, key) !== undefined) return true;
+    return false;
+  };
+  t.exists = t.has;
+
+  return t;
 }
 
 /**
@@ -928,17 +1070,26 @@ function mountPages(app, options) {
       try {
         // Detect locale
         const locale = detectLocale(req);
+        const defaultLocale = process.env.DEFAULT_LOCALE || 'en';
         
-        // Load translations
+        // Load translations (primary + fallback)
         const translations = loadI18n(absolutePagesDir, route.routeDir, locale);
-        const t = createTranslator(translations);
+        const fallbackTranslations = (locale !== defaultLocale)
+          ? loadI18n(absolutePagesDir, route.routeDir, defaultLocale)
+          : EMPTY_OBJECT;
+
+        const t = createTranslator(translations, {
+          locale,
+          fallbackTranslations,
+          fallbackLocale: defaultLocale,
+        });
         
         // Load route config
         const config = loadRouteConfig(route.configPath, isDev);
         const routeHooks = config?.hooks || EMPTY_OBJECT;
         
         // Create context with plugin helpers merged
-        const baseHelpers = createHelpers({ req, res, locale });
+        const baseHelpers = createHelpers({ req, res, locale, t });
         const pluginHelpers = pluginManager ? pluginManager.getHelpers() : EMPTY_OBJECT;
         if (pluginManager) {
           const contentApi = pluginManager.getPluginAPI('content');

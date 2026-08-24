@@ -1660,31 +1660,87 @@ module.exports = {
 };
 ```
 
-## i18n
+## i18n & Localization
 
-### Global Translations
+Webspresso features a zero-dependency, ultra-fast internationalization engine built directly on native Node.js `Intl` APIs (`Intl.PluralRules`, `Intl.NumberFormat`, `Intl.DateTimeFormat`, `Intl.RelativeTimeFormat`).
 
-Add JSON files to `pages/locales/`:
+### 1. Global & Route-Specific Translations
+
+Add JSON files to `pages/locales/` for global dictionary entries, or inside any route directory `pages/catalog/locales/` for route-specific overrides:
 
 ```json
+// pages/locales/en.json
 {
   "nav": {
     "home": "Home",
     "about": "About"
+  },
+  "cart": {
+    "zero": "Your cart is empty",
+    "one": "You have 1 item in your cart",
+    "other": "You have {{count}} items in your cart"
   }
 }
 ```
 
-### Route-Specific Translations
-
-Add a `locales/` folder inside any route directory to override global translations.
-
-### Using Translations
-
-In templates:
+### 2. Basic Translation & Interpolation
 
 ```nunjucks
+{# Direct function call #}
 <h1>{{ t('nav.home') }}</h1>
+
+{# With parameter interpolation #}
+<p>{{ t('welcome', { name: currentUser.username }) }}</p>
+
+{# With Nunjucks filter #}
+<h1>{{ 'nav.home' | t }}</h1>
+<p>{{ 'welcome' | t({ name: currentUser.username }) }}</p>
+```
+
+### 3. Native Pluralization (`Intl.PluralRules`)
+
+Pass `count` (or `n`, `cardinal`) to automatically select the correct CLDR plural category (`zero`, `one`, `two`, `few`, `many`, `other`) or exact number (`0`, `1`):
+
+```nunjucks
+<p>{{ t('cart', { count: cart.items.length }) }}</p>
+```
+
+You can also use the inline `t.plural()` helper:
+```nunjucks
+<p>{{ t.plural(items.length, { one: '1 item', other: '{{count}} items' }) }}</p>
+```
+
+### 4. Fallback Locales Chain
+
+If a translation key is missing in the requested locale (e.g. `tr`), Webspresso automatically falls back to `DEFAULT_LOCALE` (default: `en`) before returning the key name or default fallback value. Check key existence with `t.has('key')` or `t.exists('key')`.
+
+### 5. Built-in `Intl` Formatters on `t`
+
+Format numbers, currencies, dates, and relative times according to the active locale without external date/number libraries:
+
+```nunjucks
+{# Numbers #}
+<span>{{ t.number(1234567.89) }}</span> {# TR: 1.234.567,89 | EN: 1,234,567.89 #}
+
+{# Currencies #}
+<span>{{ t.currency(199.99, 'TRY') }}</span> {# ₺199,99 #}
+<span>{{ t.currency(49.99, 'USD') }}</span>  {# $49.99 #}
+
+{# Dates #}
+<span>{{ t.date(post.created_at, { dateStyle: 'long' }) }}</span>
+
+{# Relative Time #}
+<span>{{ t.relativeTime(-2, 'day') }}</span> {# "2 days ago" or "2 gün önce" #}
+```
+
+### 6. Language Switcher Helpers
+
+Use `fsy.localeUrl(targetLocale)` to generate a URL with the current page path and query parameters preserved:
+
+```nunjucks
+<a href="{{ fsy.localeUrl('en') }}">English</a>
+<a href="{{ fsy.localeUrl('tr') }}">Türkçe</a>
+<a href="{{ fsy.localeUrl('de') }}">Deutsch</a>
 ```
 
 ## Template Helpers

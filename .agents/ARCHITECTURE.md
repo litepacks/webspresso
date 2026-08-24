@@ -39,6 +39,13 @@
   - **404 Not Found (`notFound`)**: Template path (`'404.njk'`) or handler `(req, res, ctx) => ...`.
   - **500 Server Error (`serverError`)**: Template path (`'errors/500.njk'`) or handler `(err, req, res, ctx) => ...`. Context: `{ fsy, locale, isDev, url, method, error, status }`.
   - **503 Timeout (`timeout`)**: Template path (`'errors/503.njk'`) or handler `(req, res, ctx) => ...` when `timeout` (e.g. `'30s'`) is configured.
+- **i18n & Localization Engine (`loadI18n`, `createTranslator`, `detectLocale`)**:
+  - Zero-dependency internationalization built on native Node.js `Intl` APIs (`Intl.PluralRules`, `Intl.NumberFormat`, `Intl.DateTimeFormat`, `Intl.RelativeTimeFormat`).
+  - **Hierarchical Dictionaries**: Global `pages/locales/[locale].json` merged with route-specific overrides `pages/[route]/locales/[locale].json` using `mtime` cache.
+  - **Pluralization**: Automatic CLDR plural selection (`zero`, `one`, `two`, `few`, `many`, `other`) or exact number mapping (`0`, `1`) via `t('key', { count })` or `t.plural(count, forms)`.
+  - **Fallback Chain**: Missing keys fall back to `DEFAULT_LOCALE` (`en`) automatically. Key check via `t.has('key')` or `t.exists('key')`.
+  - **Native Formatters on `t`**: `t.number(1234.5)`, `t.currency(199.99, 'TRY')`, `t.date(d)`, `t.relativeTime(-2, 'day')`.
+  - **Template Helpers & Filter**: `{{ fsy.localeUrl('tr') }}`, `{{ 'nav.home' | t }}`, `{{ t('key') }}`.
 - **Middleware & Hooks**: Route lifecycle hooks can be declared per-page (`module.exports = { middleware: ['auth', 'jwt'] }`) or globally via `pages/_hooks.js`.
 
 ---

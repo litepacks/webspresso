@@ -186,9 +186,27 @@ function getAssetManager() {
  * @returns {Object} fsy helper object
  */
 function createHelpers(ctx) {
-  const { req, res, baseUrl = process.env.BASE_URL || 'http://localhost:3000' } = ctx;
+  const { req, res, baseUrl = process.env.BASE_URL || 'http://localhost:3000', locale = 'en', t = null } = ctx || {};
 
   return {
+    /** Active request locale */
+    locale,
+
+    /** Active i18n translator function */
+    t,
+
+    /**
+     * Generate URL for switching to a target locale with current query parameters preserved
+     * @param {string} targetLocale - Locale code to switch to (e.g. 'en', 'tr')
+     * @param {string} [customPath] - Optional custom path (defaults to current req.path)
+     * @returns {string} URL string with updated locale query param
+     */
+    localeUrl(targetLocale, customPath) {
+      const p = customPath || (req && req.path ? req.path : '/');
+      const q = { ...(req && req.query ? req.query : {}), lang: targetLocale };
+      return this.url(p, q);
+    },
+
     /**
      * Build a URL path with optional query parameters
      * @param {string} path - URL path

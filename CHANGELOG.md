@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### Zero-Dependency Native i18n & Localization Enhancements (`src/file-router.js`, `src/helpers.js`, `src/server.js`)
+- **Native Pluralization (`Intl.PluralRules`)**: Support for CLDR plural forms (`zero`, `one`, `two`, `few`, `many`, `other`) and explicit numerical keys (`0`, `1`) via `t('key', { count })` and `t.plural(count, forms)`.
+- **Automatic Fallback Locale Chain**: Missing dictionary keys in target locales fall back gracefully to `DEFAULT_LOCALE` (`en`) before returning key names. Check key presence via `t.has('key')` / `t.exists('key')`.
+- **Built-in `Intl` Formatters on `t`**: Native locale-aware formatters: `t.number()` / `t.formatNumber()`, `t.currency()` / `t.formatCurrency()`, `t.date()` / `t.formatDate()`, and `t.relativeTime()` / `t.formatRelativeTime()`.
+- **Nunjucks Template Helpers & Filter**: Added `{{ 'key' | t(params) }}` filter and `fsy.localeUrl(targetLocale)` URL switcher helper with preserved query strings.
+
+#### Security Hardening & Automated Security Testing
+- **Open Redirect Protection (`plugins/redirect/index.js`)**: Hardened `isExternalTarget(to)` against backslash evasion (`\\`, `/\`, `\/`) and dangerous pseudo-schemes (`javascript:`, `data:`).
+- **Admin Panel Filter Validation (`plugins/admin-panel/api.js`)**: Validates `req.query.filter` column keys strictly against `model.columns` to prevent query builder injection.
+- **Prototype Pollution Immunity (`core/orm/utils.js`)**: Protected `deepClone` against `__proto__`, `constructor`, and `prototype` manipulation.
+- **CRLF Header Splitting Defense (`plugins/basic-auth/index.js`)**: Sanitized `config.realm` against newline characters before injecting into `WWW-Authenticate` headers.
+- **XSS & Script Breakout Defense (`src/server.js`, `src/helpers.js`)**: Nunjucks `json` filter encodes `<` to `\u003c` preventing `</script>` breakouts in templates; `AssetManager.buildAttributes` strictly validates HTML attribute key characters.
+- **Configurable `trustProxy`**: Support for `options.trustProxy` (or `options.server.trustProxy`), allowing applications to disable proxy trust (`trustProxy: false`) when running directly without reverse proxies.
+- **Automated Security Test Suite & Policy**: Added 14 dedicated security test suites in `tests/security/` (`npm run test:security`), added `npm run security` script, and created [`SECURITY.md`](file:///Users/ahmet/projects/webspresso/SECURITY.md).
+
 ## [0.0.86] - 2026-08-13
 
 ### Added

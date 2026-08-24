@@ -265,10 +265,31 @@ export function scanDirectory(
 
 export function loadI18n(pagesDir: string, routePath?: string): Record<string, unknown>;
 
+export interface Translator {
+  (key: string, params?: Record<string, unknown> | string, defaultVal?: string | null): string;
+  locale: string;
+  translations: Record<string, unknown>;
+  number(num: number | string | null | undefined, options?: Intl.NumberFormatOptions): string;
+  formatNumber(num: number | string | null | undefined, options?: Intl.NumberFormatOptions): string;
+  currency(amount: number | string | null | undefined, currency?: string, options?: Intl.NumberFormatOptions): string;
+  formatCurrency(amount: number | string | null | undefined, currency?: string, options?: Intl.NumberFormatOptions): string;
+  date(date: Date | string | number | null | undefined, options?: Intl.DateTimeFormatOptions): string;
+  formatDate(date: Date | string | number | null | undefined, options?: Intl.DateTimeFormatOptions): string;
+  relativeTime(val: number | string | null | undefined, unit?: Intl.RelativeTimeFormatUnit, options?: Intl.RelativeTimeFormatOptions): string;
+  formatRelativeTime(val: number | string | null | undefined, unit?: Intl.RelativeTimeFormatUnit, options?: Intl.RelativeTimeFormatOptions): string;
+  plural(count: number | string, forms: Record<string, string>, params?: Record<string, unknown>): string;
+}
+
+export interface CreateTranslatorOptions {
+  locale?: string;
+  fallbackTranslations?: Record<string, unknown>;
+  fallbackLocale?: string;
+}
+
 export function createTranslator(
-  dictionaries: Record<string, unknown>,
-  locale: string
-): (key: string, params?: Record<string, unknown>) => string;
+  dictionaries?: Record<string, unknown>,
+  options?: CreateTranslatorOptions | string
+): Translator;
 
 export function detectLocale(
   req: Request,

@@ -615,6 +615,15 @@ function createApp(options = {}) {
       .replace(/>/g, '\\u003e')
       .replace(/&/g, '\\u0026');
   });
+
+  // Translation filter: {{ 'nav.home' | t }} or {{ 'cart.items' | t({ count: 5 }) }}
+  nunjucksEnv.addFilter('t', function(key, params, defaultVal) {
+    const tFunc = this.ctx?.t || this.ctx?.fsy?.t;
+    if (typeof tFunc === 'function') {
+      return tFunc(key, params, defaultVal);
+    }
+    return defaultVal !== undefined && defaultVal !== null ? defaultVal : key;
+  });
   
   nunjucksEnv.addFilter('date', (date, format = 'short') => {
     const d = new Date(date);
@@ -726,9 +735,17 @@ function createApp(options = {}) {
     const pluginHelpers = pluginManager.getHelpers();
     Object.assign(fsy, pluginHelpers);
 
-    // Provide safe i18n translator helper
+    // Provide safe i18n translator helper (primary + fallback)
+    const defaultLocale = process.env.DEFAULT_LOCALE || 'en';
     const translations = loadI18n(pagesDir, '', locale);
-    const t = createTranslator(translations);
+    const fallbackTranslations = (locale !== defaultLocale)
+      ? loadI18n(pagesDir, '', defaultLocale)
+      : undefined;
+    const t = createTranslator(translations, {
+      locale,
+      fallbackTranslations,
+      fallbackLocale: defaultLocale,
+    });
     
     return {
       fsy,
