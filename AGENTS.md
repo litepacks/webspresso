@@ -50,6 +50,7 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 - `ormCacheAdminPlugin`: Cache inspection and invalidation dashboard.
 - `corsPlugin`: Zero-dependency Cross-Origin Resource Sharing handler.
 - `csrfPlugin`: CSRF token validation and Nunjucks form helpers.
+- `realtimePlugin`: Framework-agnostic, plugin-based realtime layer (`core/realtime`) with WebSocket, SSE, and Socket.IO adapters.
 
 ---
 

@@ -1244,6 +1244,82 @@ The SEO Checker panel appears as a floating widget and can be opened via:
 - Dev toolbar "SEO Check" button
 - Floating toggle button (🔍) in bottom-right corner
 
+**Basic Auth Plugin:**
+- Zero-dependency HTTP Basic Authentication (RFC 7617) with timing-safe password verification (`crypto.timingSafeEqual`).
+- Can protect the entire application globally or expose named route middleware (`middleware: ['basicAuth']`).
+
+```javascript
+const { basicAuthPlugin } = require('webspresso/plugins');
+
+const { app } = createApp({
+  pagesDir: './pages',
+  plugins: [
+    basicAuthPlugin({
+      global: false, // Set to true to protect the whole app
+      users: {
+        admin: 'supersecret',
+      },
+      realm: 'Protected Area',
+    }),
+  ],
+});
+```
+
+**Realtime Layer & Plugin:**
+- Framework-agnostic, plugin-based, and adapter-supported realtime layer (`core/realtime` and `plugins/realtime`).
+- Adapters for **Generic WebSocket**, **SSE (Server-Sent Events)**, and **Socket.IO**.
+- Universal API for browsers and SSR safety (never initializes network connections during server-side rendering).
+- Built-in exponential backoff reconnection with jitter, multi-strategy authentication (token, cookie, custom), auto-recovery of subscriptions on reconnect, and token sanitization.
+
+```javascript
+const { createApp } = require('webspresso');
+const { realtimePlugin, websocket } = require('webspresso/plugins');
+
+// 1. App Plugin Setup
+const { app } = createApp({
+  plugins: [
+    realtimePlugin({
+      adapter: websocket({ url: '/realtime' }),
+      auth: { strategy: 'cookie' },
+      autoConnect: true,
+    }),
+  ],
+});
+
+// 2. Subscription & RPC
+const sub = app.realtime.subscribe('project:123', { role: 'editor' }, {
+  connected() {
+    console.log('Connected to project:123');
+  },
+  received(data) {
+    console.log('Live message:', data);
+  },
+});
+
+sub.perform('user_typing', { userId: 42, isTyping: true });
+sub.send({ text: 'Hello team!' });
+
+// 3. Standalone Client Usage (with Token Auth & Refresh)
+const { realtime, websocket } = require('webspresso');
+
+const client = realtime({
+  adapter: websocket({ url: 'wss://api.example.com/realtime' }),
+  auth: {
+    strategy: 'token',
+    getToken: async () => localStorage.getItem('token'),
+    refreshToken: async () => {
+      const res = await fetch('/api/auth/refresh', { method: 'POST' });
+      const { token } = await res.json();
+      localStorage.setItem('token', token);
+      return token;
+    },
+    onUnauthorized: (err) => {
+      window.location.href = '/login';
+    },
+  },
+});
+```
+
 ### Creating Custom Plugins
 
 ```javascript

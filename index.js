@@ -72,6 +72,12 @@ const {
   corsPlugin,
   emailPlugin,
   basicAuthPlugin,
+  realtimePlugin,
+  realtime,
+  createRealtime,
+  websocket,
+  sse,
+  socketIo,
 } = require('./plugins');
 
 const content = require('./core/content');
@@ -182,6 +188,12 @@ module.exports = {
   corsPlugin,
   emailPlugin,
   basicAuthPlugin,
+  realtimePlugin,
+  realtime,
+  createRealtime,
+  websocket,
+  sse,
+  socketIo,
 
   // Schema-driven CMS core (framework-agnostic)
   content,

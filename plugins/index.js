@@ -26,6 +26,17 @@ const contentPlugin = require('./content');
 const csrfPlugin = require('./csrf');
 const corsPlugin = require('./cors');
 const { basicAuthPlugin, createBasicAuthMiddleware } = require('./basic-auth');
+const {
+  realtimePlugin,
+  realtime,
+  createRealtime,
+  websocket,
+  createWebSocketAdapter,
+  sse,
+  createSseAdapter,
+  socketIo,
+  createSocketIoAdapter,
+} = require('./realtime');
 
 module.exports = {
   sitemapPlugin,
@@ -52,5 +63,14 @@ module.exports = {
   corsPlugin,
   basicAuthPlugin,
   createBasicAuthMiddleware,
+  realtimePlugin,
+  realtime,
+  createRealtime,
+  websocket,
+  createWebSocketAdapter,
+  sse,
+  createSseAdapter,
+  socketIo,
+  createSocketIoAdapter,
 };
 

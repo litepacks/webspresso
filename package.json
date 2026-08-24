@@ -15,6 +15,7 @@
     },
     "./plugins": "./plugins/index.js",
     "./plugins/*": "./plugins/*",
+    "./realtime": "./core/realtime/index.js",
     "./core/*": "./core/*",
     "./src/*": "./src/*",
     "./views/*": "./views/*",

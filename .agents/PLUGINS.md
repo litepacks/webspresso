@@ -129,3 +129,117 @@ Interactive JSON schema & OpenAPI route specification generator.
 
 ### 2.14 `swaggerPlugin` (`plugins/swagger`)
 Interactive OpenAPI 3.0 Swagger UI documentation.
+
+### 2.15 `realtimePlugin` (`plugins/realtime`, `core/realtime`)
+Framework-agnostic, plugin-based, and adapter-driven Realtime layer supporting WebSocket, SSE, and Socket.IO transports with zero SSR execution hazards.
+
+- **Architecture**:
+  - `core/realtime`: Connection lifecycle, subscription registry (`identifier::params` composite keys), auth strategies, exponential backoff reconnect with jitter, and capability assertions.
+  - `core/realtime/adapters`: `websocket`, `sse`, `socketIo`.
+  - `plugins/realtime`: Webspresso app integration and shutdown lifecycle management.
+
+- **Examples**:
+
+#### 1. Basic (WebSocket + Cookie Auth)
+```js
+const { createApp } = require('webspresso');
+const { realtimePlugin, websocket } = require('webspresso/plugins');
+
+const { app } = createApp({
+  plugins: [
+    realtimePlugin({
+      adapter: websocket({ url: '/realtime' }),
+      auth: { strategy: 'cookie' },
+      autoConnect: true,
+    }),
+  ],
+});
+```
+
+#### 2. Token Auth & Refresh
+```js
+const { realtime, websocket } = require('webspresso');
+
+const client = realtime({
+  adapter: websocket({ url: 'wss://api.example.com/realtime' }),
+  auth: {
+    strategy: 'token',
+    getToken: async () => localStorage.getItem('token'),
+    refreshToken: async () => {
+      const res = await fetch('/api/auth/refresh', { method: 'POST' });
+      const { token } = await res.json();
+      localStorage.setItem('token', token);
+      return token;
+    },
+    onUnauthorized: (err) => {
+      window.location.href = '/login';
+    },
+  },
+});
+```
+
+#### 3. Subscriptions & Messages
+```js
+const sub = app.realtime.subscribe('project:123', { role: 'editor' }, {
+  connected() {
+    console.log('Subscribed to project:123');
+  },
+  disconnected() {
+    console.log('Temporarily disconnected');
+  },
+  received(data) {
+    console.log('New update received:', data);
+  },
+  rejected(err) {
+    console.error('Subscription denied:', err);
+  },
+});
+```
+
+#### 4. Perform Action & Send Data
+```js
+// Send raw data
+sub.send({ text: 'Hello team!' });
+
+// Perform named RPC action
+sub.perform('user_typing', { userId: 42, isTyping: true });
+```
+
+#### 5. Cleanup & Unsubscribe
+```js
+// Unsubscribe single topic
+sub.unsubscribe();
+
+// Destroy entire realtime client and teardown socket connections
+app.realtime.destroy();
+```
+
+#### 6. Reauthenticate Workflow
+```js
+// Trigger token refresh, disconnect, reconnect, and automatic subscription restore
+await app.realtime.reauthenticate();
+```
+
+#### 7. Custom Adapter Implementation
+```js
+const myCustomAdapter = {
+  capabilities: { send: true, perform: true, multiplexing: true },
+  async connect({ auth, client }) {
+    // initialize connection with auth
+  },
+  disconnect() {
+    // teardown
+  },
+  isConnected() {
+    return true;
+  },
+  subscribe(identifier, params, callbacks) {
+    // subscribe to remote channel and invoke callbacks.received(data)
+    return {
+      send: (data) => { /* ... */ },
+      perform: (action, data) => { /* ... */ },
+      unsubscribe: () => { /* ... */ },
+    };
+  },
+};
+```

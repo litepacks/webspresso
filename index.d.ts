@@ -902,6 +902,147 @@ export function createLocalFileProvider(options?: {
   publicBasePath?: string;
 }): UploadStorageProvider;
 
+// --- Realtime Layer Types ---
+
+export interface RealtimeSubscriptionCallbacks {
+  connected?: () => void;
+  disconnected?: () => void;
+  rejected?: (error: Error) => void;
+  received?: (data: unknown) => void;
+}
+
+export interface RealtimeSubscription {
+  id: string;
+  identifier: string;
+  params: Record<string, unknown>;
+  send(data: unknown): void;
+  perform(action: string, data?: unknown): void;
+  unsubscribe(): void;
+}
+
+export interface RealtimeAdapter {
+  capabilities?: {
+    send?: boolean;
+    perform?: boolean;
+    multiplexing?: boolean;
+    serverEvents?: boolean;
+    binary?: boolean;
+    [key: string]: boolean | undefined;
+  };
+  connect(context: { auth: Record<string, unknown>; client: RealtimeClient }): Promise<void>;
+  disconnect(): void;
+  isConnected(): boolean;
+  subscribe(
+    identifier: string,
+    params: Record<string, unknown>,
+    callbacks: RealtimeSubscriptionCallbacks
+  ): {
+    send?(data: unknown): void;
+    perform?(action: string, data?: unknown): void;
+    unsubscribe(): void;
+  };
+  send?(identifier: string, data: unknown, sub?: RealtimeSubscription): void;
+  perform?(identifier: string, action: string, data?: unknown, sub?: RealtimeSubscription): void;
+  unsubscribe?(identifier: string, params: Record<string, unknown>, sub?: RealtimeSubscription): void;
+  on?(event: string, handler: (...args: any[]) => void): () => void;
+  destroy?(): void;
+}
+
+export type RealtimeAuthStrategy =
+  | false
+  | {
+      strategy: 'cookie';
+    }
+  | {
+      strategy: 'token';
+      getToken: () => string | Promise<string>;
+      refreshToken?: () => string | Promise<string>;
+      onUnauthorized?: (error: Error) => void;
+    }
+  | {
+      strategy: 'custom';
+      resolve: () => Record<string, unknown> | Promise<Record<string, unknown>>;
+    };
+
+export interface RealtimeReconnectOptions {
+  enabled?: boolean;
+  maxAttempts?: number;
+  baseDelay?: number;
+  maxDelay?: number;
+  factor?: number;
+  jitter?: boolean;
+}
+
+export interface RealtimeOptions {
+  adapter: RealtimeAdapter;
+  auth?: RealtimeAuthStrategy;
+  autoConnect?: boolean;
+  reconnect?: RealtimeReconnectOptions;
+  isBrowser?: boolean;
+}
+
+export interface RealtimeClient {
+  capabilities: Record<string, boolean>;
+  isConnected(): boolean;
+  connect(overrideAuth?: Record<string, unknown> | null): Promise<void>;
+  disconnect(): void;
+  reconnect(): Promise<void>;
+  reauthenticate(): Promise<void>;
+  subscribe(
+    identifier: string,
+    params?: Record<string, unknown>,
+    callbacks?: RealtimeSubscriptionCallbacks
+  ): RealtimeSubscription;
+  on(event: 'connected' | 'disconnected' | 'reconnecting' | 'reconnected' | 'unauthorized' | 'error', handler: (...args: any[]) => void): () => void;
+  once(event: string, handler: (...args: any[]) => void): () => void;
+  off(event: string, handler: (...args: any[]) => void): () => void;
+  destroy(): void;
+}
+
+export function createRealtime(options: RealtimeOptions): RealtimeClient;
+export function realtime(options: RealtimeOptions): RealtimeClient & { plugin: WebspressoPlugin };
+export function realtimePlugin(options: RealtimeOptions): WebspressoPlugin;
+
+export interface WebSocketAdapterOptions {
+  url: string | ((context: { auth: Record<string, unknown> }) => string | Promise<string>);
+  authTransport?: 'query' | 'header' | 'protocol' | 'message';
+  queryParamName?: string;
+  protocols?: string | string[];
+  WebSocket?: any;
+  messages?: {
+    subscribe?: (args: { identifier: string; params: Record<string, unknown> }) => unknown;
+    unsubscribe?: (args: { identifier: string; params: Record<string, unknown> }) => unknown;
+    perform?: (args: { identifier: string; action: string; data?: unknown }) => unknown;
+    send?: (args: { identifier: string; data: unknown }) => unknown;
+    auth?: (args: { token: string; metadata: Record<string, unknown> }) => unknown;
+  };
+  capabilities?: Record<string, boolean>;
+}
+
+export function websocket(options: WebSocketAdapterOptions): RealtimeAdapter;
+export function createWebSocketAdapter(options: WebSocketAdapterOptions): RealtimeAdapter;
+
+export interface SseAdapterOptions {
+  url: string | ((context: { auth: Record<string, unknown> }) => string | Promise<string>);
+  queryParamName?: string;
+  EventSource?: any;
+  capabilities?: Record<string, boolean>;
+}
+
+export function sse(options: SseAdapterOptions): RealtimeAdapter;
+export function createSseAdapter(options: SseAdapterOptions): RealtimeAdapter;
+
+export interface SocketIoAdapterOptions {
+  url?: string | ((context: { auth: Record<string, unknown> }) => string | Promise<string>);
+  path?: string;
+  io?: any;
+  socketOptions?: Record<string, unknown>;
+  capabilities?: Record<string, boolean>;
+}
+
+export function socketIo(options: SocketIoAdapterOptions): RealtimeAdapter;
+export function createSocketIoAdapter(options: SocketIoAdapterOptions): RealtimeAdapter;
+
 // --- Application kernel (use `kernel.createApp`; not the SSR `createApp`) ---
 
 export type KernelEventSource = 'orm' | 'auth' | 'route' | 'plugin' | 'system';
