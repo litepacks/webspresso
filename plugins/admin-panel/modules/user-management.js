@@ -508,9 +508,12 @@ function createUserManagementApiHandlers(options) {
         return res.json({ data: [] });
       }
 
+      const repo = db.getRepository(modelName);
+      const tableName = repo?.model?.table || modelName;
+
       const sessions = await db.knex('remember_tokens')
-        .select('remember_tokens.*', `${modelName}.${fieldMap.email} as user_email`, `${modelName}.${fieldMap.name} as user_name`)
-        .leftJoin(modelName, 'remember_tokens.user_id', `${modelName}.id`)
+        .select('remember_tokens.*', `${tableName}.${fieldMap.email} as user_email`, `${tableName}.${fieldMap.name} as user_name`)
+        .leftJoin(tableName, 'remember_tokens.user_id', `${tableName}.id`)
         .orderBy('remember_tokens.created_at', 'desc');
 
       res.json({ data: sessions });
