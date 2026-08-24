@@ -192,6 +192,8 @@ Plugins declare `name`, `version`, optional `dependencies`, and lifecycle hooks 
 | Plugin | Feature set | One-line purpose |
 |--------|-------------|------------------|
 | `corsPlugin` | Security / HTTP | Zero-dependency CORS middleware & preflight handling |
+| `basicAuthPlugin` | Security / HTTP | Zero-dependency HTTP Basic Auth (RFC 7617) with named route middleware & global guard |
+| `csrfPlugin` | Security / HTTP | Double-submit CSRF token validation and Nunjucks helpers |
 | `redirectPlugin` | HTTP | Configurable redirects before file routes |
 | `rateLimitPlugin` | HTTP | Named rate-limit middleware + optional global limiter |
 | `uploadPlugin` | HTTP / admin | Multipart upload endpoint + pluggable storage |

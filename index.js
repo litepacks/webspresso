@@ -69,6 +69,9 @@ const {
   rateLimitPlugin,
   contentPlugin,
   csrfPlugin,
+  corsPlugin,
+  emailPlugin,
+  basicAuthPlugin,
 } = require('./plugins');
 
 const content = require('./core/content');
@@ -176,6 +179,9 @@ module.exports = {
   rateLimitPlugin,
   contentPlugin,
   csrfPlugin,
+  corsPlugin,
+  emailPlugin,
+  basicAuthPlugin,
 
   // Schema-driven CMS core (framework-agnostic)
   content,

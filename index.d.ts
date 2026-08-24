@@ -793,6 +793,56 @@ export interface CsrfPluginOptions {
 
 export function csrfPlugin(options?: CsrfPluginOptions): WebspressoPlugin;
 
+export interface CorsPluginOptions {
+  origin?: string | string[] | RegExp | ((origin: string, cb: (err: Error | null, allow?: boolean | string) => void) => void) | boolean;
+  methods?: string | string[];
+  allowedHeaders?: string | string[];
+  exposedHeaders?: string | string[];
+  credentials?: boolean;
+  maxAge?: number;
+  preflightContinue?: boolean;
+  optionsSuccessStatus?: number;
+  routes?: string | string[] | boolean;
+  global?: boolean;
+}
+
+export function corsPlugin(options?: CorsPluginOptions): WebspressoPlugin;
+
+export interface BasicAuthCredentials {
+  username: string;
+  password?: string;
+  [key: string]: unknown;
+}
+
+export interface BasicAuthPluginOptions {
+  /** Apply basic auth as a global middleware across the application. Default false. */
+  global?: boolean;
+  /** Static username-password dictionary. */
+  users?: Record<string, string>;
+  /** Custom async/sync credential verification function. */
+  verify?: (
+    username: string,
+    password: string,
+    req: Request
+  ) => boolean | BasicAuthCredentials | Promise<boolean | BasicAuthCredentials>;
+  /** Realm string included in WWW-Authenticate header. Default 'Restricted Area'. */
+  realm?: string;
+  /** Whether to send WWW-Authenticate header on 401. Default true. */
+  challenge?: boolean;
+  /** Route prefixes to protect when global: true. Default true (all routes). */
+  routes?: string | string[] | boolean;
+  /** Path prefixes to bypass basic authentication. */
+  skipPaths?: string[];
+  /** Custom predicate function to skip basic authentication. */
+  skip?: (req: Request) => boolean;
+  /** Custom 401 Unauthorized response handler, string, or object. */
+  unauthorizedResponse?: ((req: Request, res: Response) => unknown) | string | Record<string, unknown>;
+  /** Callback hook on successful authentication. */
+  onAuthenticated?: (req: Request, user: BasicAuthCredentials) => void;
+}
+
+export function basicAuthPlugin(options?: BasicAuthPluginOptions): WebspressoPlugin;
+
 export interface ContentPluginOptions {
   db: import('./index').Database;
   adminPath?: string;

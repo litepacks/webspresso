@@ -34,4 +34,19 @@ describe('createRecaptchaMiddleware + resolve spread', () => {
     });
     expect(typeof mw).toBe('function');
   });
+
+  it('recaptchaPlugin.register adds named middleware to ctx.middlewares', () => {
+    const { recaptchaPlugin } = require('../../../plugins/recaptcha');
+    const p = recaptchaPlugin({ siteKey: 'dummySiteKey', secretKey: 'dummySecretKey' });
+    const middlewares = {};
+    const helpers = new Map();
+    p.register({
+      middlewares,
+      addHelper: (k, v) => helpers.set(k, v),
+    });
+
+    expect(typeof middlewares.recaptcha).toBe('function');
+    const mw = middlewares.recaptcha();
+    expect(typeof mw).toBe('function');
+  });
 });

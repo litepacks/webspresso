@@ -107,6 +107,17 @@ function recaptchaPlugin(options = {}) {
     },
 
     register(ctx) {
+      if (ctx.middlewares) {
+        ctx.middlewares.recaptcha = (mwOpts = {}) =>
+          createRecaptchaMiddleware({
+            secret: resolveSecret(),
+            bodyField: mwOpts.bodyField,
+            version: mwOpts.version || version,
+            minScore: mwOpts.minScore ?? minScore,
+            expectedAction: mwOpts.expectedAction ?? expectedAction,
+          });
+      }
+
       ctx.addHelper('recaptchaScript', () =>
         version === 'v3' ? recaptchaScriptTag(siteKey) : recaptchaScriptTag()
       );

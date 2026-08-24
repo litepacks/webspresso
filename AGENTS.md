@@ -39,6 +39,7 @@ Webspresso is a lightweight, zero-dependency-sprawl Express SSR framework featur
 ### 1.4 Plugin Ecosystem (`plugins/`)
 Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register(ctx)`, `onRoutesReady(ctx)`):
 - `adminPanelPlugin`: Model CRUD, custom pages, widgets, user management.
+- `basicAuthPlugin`: Zero-dependency HTTP Basic Authentication (RFC 7617) with named route middleware (`ctx.middlewares.basicAuth`) and global protection.
 - `contentPlugin`: Schema-driven CMS with inline editing and headless API.
 - `uploadPlugin`: Multipart file uploads with local/cloud storage providers.
 - `redirectPlugin`: Configurable HTTP 301–308 redirects.
@@ -47,6 +48,8 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 - `emailPlugin`: MJML template compilation & Nodemailer integration.
 - `auditLogPlugin`: Admin mutation audit logging.
 - `ormCacheAdminPlugin`: Cache inspection and invalidation dashboard.
+- `corsPlugin`: Zero-dependency Cross-Origin Resource Sharing handler.
+- `csrfPlugin`: CSRF token validation and Nunjucks form helpers.
 
 ---
 

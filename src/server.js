@@ -694,6 +694,7 @@ function createApp(options = {}) {
       pluginManager,
       options,
       clientRuntime,
+      middlewares,
     });
   }
 

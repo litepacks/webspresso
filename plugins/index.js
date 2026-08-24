@@ -25,6 +25,7 @@ const emailPlugin = require('./email');
 const contentPlugin = require('./content');
 const csrfPlugin = require('./csrf');
 const corsPlugin = require('./cors');
+const { basicAuthPlugin, createBasicAuthMiddleware } = require('./basic-auth');
 
 module.exports = {
   sitemapPlugin,
@@ -49,5 +50,7 @@ module.exports = {
   contentPlugin,
   csrfPlugin,
   corsPlugin,
+  basicAuthPlugin,
+  createBasicAuthMiddleware,
 };
 
