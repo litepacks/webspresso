@@ -74,3 +74,20 @@ Scaffolds a localized `.agents/skills` entry:
 ```bash
 npx webspresso skill --preset webspresso
 ```
+
+---
+
+## 6. Interactive Service Runner (`service`, `service:run`)
+
+Test and run services interactively without starting the HTTP server:
+
+```bash
+# Interactive selection & prompt mode
+npx webspresso service
+
+# Run specific service with JSON payload
+npx webspresso service user.get -i '{"id": 42}'
+
+# Run with key=value query string
+npx webspresso service payment.refund -i 'transactionId=tx_123 amount=49.99'
+```

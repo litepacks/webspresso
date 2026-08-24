@@ -33,6 +33,7 @@ const { registerCommand: registerDoctor } = require('./commands/doctor');
 const { registerCommand: registerSkill } = require('./commands/skill');
 const { registerCommand: registerUpgrade } = require('./commands/upgrade');
 const { registerCommand: registerOrmMap } = require('./commands/orm-map');
+const { registerCommand: registerService } = require('./commands/service');
 
 registerNew(program);
 registerPage(program);
@@ -54,6 +55,7 @@ registerDoctor(program);
 registerSkill(program);
 registerUpgrade(program);
 registerOrmMap(program);
+registerService(program);
 
 // Parse arguments
 program.parse();

@@ -17,6 +17,7 @@ const { resolveClientRuntime } = require('./client-runtime/resolve');
 const { mountPages, detectLocale, loadI18n, createTranslator } = require('./file-router');
 const { configureAssets, createHelpers, getScriptInjector } = require('./helpers');
 const { createPluginManager } = require('./plugin-manager');
+const { createServiceRegistry } = require('./services');
 const { ShutdownManager, NodeHttpAdapter } = require('../core/shutdown');
 const { createCompressionMiddleware } = require('../core/compression');
 const {
@@ -423,9 +424,31 @@ function createApp(options = {}) {
     logger: logging ? console : null,
   });
 
-  setAppContext({ db: options.db ?? null, shutdownManager });
+  // Services Layer initialization
+  const servicesDirOption = options.servicesDir ?? options.services?.dir;
+  const resolvedServicesDir = servicesDirOption
+    ? path.resolve(servicesDirOption)
+    : (fs.existsSync(path.join(process.cwd(), 'services'))
+      ? path.join(process.cwd(), 'services')
+      : null);
+
+  const serviceRegistry = createServiceRegistry({
+    servicesDir: resolvedServicesDir,
+    isDev,
+    logger: logging ? console : null,
+  });
+
+  setAppContext({ db: options.db ?? null, shutdownManager, serviceRegistry });
   
   const app = express();
+  app.serviceRegistry = serviceRegistry;
+
+  // Services caller middleware
+  app.use((req, res, next) => {
+    req.service = (name, input, opts) =>
+      serviceRegistry.call(name, input, { req, res, db: options.db ?? null, ...(req.context || {}) }, opts);
+    next();
+  });
 
   // Async handler wrapper helper for automatic promise rejection handling
   function wrapAsync(fn) {
@@ -673,6 +696,7 @@ function createApp(options = {}) {
     db: options.db ?? null,
     clientRuntime,
     pageAssets: options.pageAssets,
+    serviceRegistry,
   });
 
   // Set route metadata in plugin manager
@@ -751,6 +775,8 @@ function createApp(options = {}) {
       fsy,
       locale,
       t,
+      service: (name, input, opts) =>
+        serviceRegistry.call(name, input, { req, res: {}, fsy, locale, t, db: options.db ?? null }, opts),
       isDev,
       url: req.url,
       method: req.method,

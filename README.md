@@ -1814,6 +1814,182 @@ module.exports = {
 10. Nunjucks render
 11. Route `afterRender`
 
+## Services Layer
+
+Webspresso includes a lightweight, framework-agnostic **Services Layer** to organize reusable business logic, query flows, and multi-step mutations under `services/`.
+
+Services are automatically discovered from the filesystem and can be invoked from SSR data loaders (`ctx.service()`), API routes (`req.service()`), background jobs, cron, CLI tasks, or other services.
+
+### 1. File Structure & Service Names
+
+Files inside `services/` map directly to dot-separated service names:
+
+```text
+services/
+  user/
+    get.js           → user.get
+    create.js        → user.create
+    profile/
+      get.js         → user.profile.get
+  post/
+    publish.js       → post.publish
+    listByUser.js    → post.listByUser
+  payment/
+    refund.js        → payment.refund
+```
+
+### 2. Service Definition
+
+Services export a handler and an optional input validation schema:
+
+```javascript
+// services/user/get.js
+module.exports = {
+  schema: {
+    id: 'number',
+  },
+
+  async handler({ id }, ctx) {
+    return ctx.db.users.findById(id);
+  },
+};
+```
+
+You can also use the `defineService` helper:
+
+```javascript
+// services/payment/refund.js
+const { defineService } = require('webspresso');
+
+module.exports = defineService({
+  // Zod functional schema syntax ({ z }) with built-in nanoid support
+  schema: ({ z }) => z.object({
+    transactionId: z.string().min(3),
+    amount: z.number().positive(),
+    reason: z.string().optional(),
+  }),
+
+  async handler({ transactionId, amount, reason }, ctx) {
+    // Process refund logic...
+    return { refundId: 'ref_123', transactionId, amount, status: 'succeeded' };
+  },
+});
+```
+
+### 3. Service-to-Service Composition
+
+Services can seamlessly call other services via `ctx.service()` while sharing the exact same request context (`ctx.db`, `ctx.auth`, `ctx.session`, `ctx.user`):
+
+```javascript
+// services/post/publish.js
+module.exports = {
+  schema: ({ z }) => z.object({
+    title: z.string(),
+    authorId: z.number(),
+  }),
+
+  async handler({ title, authorId }, ctx) {
+    const author = await ctx.service('user.get', { id: authorId });
+
+    return ctx.db.posts.create({
+      title,
+      author_id: author.id,
+      published_at: new Date(),
+    });
+  },
+};
+```
+
+> **Circular Call Protection**: Webspresso automatically tracks service call stacks and detects recursive/circular dependencies (e.g. `user.get -> profile.get -> user.get`), throwing an informative `Circular service call detected` error.
+
+### 4. Invoking from SSR & API Routes
+
+In SSR page data loaders (`pages/users/[id].njk`):
+
+```javascript
+// pages/users/[id].js
+module.exports = {
+  async load(req, ctx) {
+    const user = await ctx.service('user.get', { id: Number(req.params.id) });
+    return { user };
+  },
+};
+```
+
+In API routes or Express middleware:
+
+```javascript
+// pages/api/users.post.js
+module.exports = async function(req, res) {
+  const user = await req.service('user.create', req.body);
+  res.status(201).json(user);
+};
+```
+
+### 5. Service Caching & Memoization (`cache: '5m'`)
+
+Services can be cached in-memory with automatic TTL expiration and deterministic key serialization:
+
+```javascript
+// services/product/stats.js
+module.exports = {
+  // Cache result for 5 minutes based on input arguments
+  cache: '5m', // supports '30s', '5m', '1h', '1d', ms numbers, or { ttl: '5m', key: (input) => input.id }
+
+  async handler({ productId }, ctx) {
+    return ctx.db.stats.getProductStats(productId);
+  },
+};
+```
+
+You can invalidate cache keys explicitly on mutations:
+
+```javascript
+// From any service or route:
+ctx.service.invalidate('product.stats', { productId: 42 });
+
+// Or clear all cached entries for a service:
+ctx.service.clearCache('product.stats');
+```
+
+You can also use `memoize` as a standalone utility for any async function:
+
+```javascript
+const { memoize } = require('webspresso');
+
+const fetchRemoteRates = memoize(async () => {
+  return fetchExchangeRates();
+}, { ttl: '10m', maxSize: 100 });
+```
+
+### 6. Interactive CLI Runner (`webspresso service`)
+
+You can test and run any service directly from the command line without starting the HTTP server:
+
+```bash
+# Interactive selection & prompt mode
+npx webspresso service
+
+# Run a specific service with JSON payload
+npx webspresso service user.get -i '{"id": 42}'
+
+# Run with key=value query string
+npx webspresso service payment.refund -i 'transactionId=tx_123 amount=49.99'
+```
+
+### 7. Programmatic Usage & Testing
+
+You can execute services directly in unit tests or background scripts:
+
+```javascript
+const { createServiceRegistry } = require('webspresso');
+
+const services = createServiceRegistry({ servicesDir: './services' });
+const user = await services.call('user.get', { id: 42 }, { db: mockDb });
+```
+
+---
+
 ## Environment Variables
 
 | Variable | Default | Description |

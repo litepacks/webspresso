@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Lightweight Reusable Services Layer (`src/services`, `ctx.service`, `req.service`)
+- **Auto-Discovery & File Naming**: Recursively scans `services/` directory and converts file paths into dot-separated service identifiers (e.g. `services/user/get.js` → `user.get`, `services/post/publish.js` → `post.publish`, `services/user/profile/get.js` → `user.profile.get`).
+- **Shared Context Service Composition**: Execute services from SSR loaders (`ctx.service()`), API routes (`req.service()`), or within other services while sharing the exact same request context (`ctx.db`, `ctx.auth`, `ctx.session`, `ctx.user`).
+- **Circular Call Detection**: Automatically tracks service call stacks and catches recursion/dependency cycles early (`user.get -> profile.get -> user.get`), throwing a clean `Circular service call detected` error.
+- **Lightweight Input Schema Validation**: Validates arguments prior to handler execution using simple descriptors (`'number'`, `'string'`, `'email'`, `'boolean'`, `'object'`, `'array'`, `'date'`), custom validator functions, or Zod schemas without adding runtime overhead.
+- **Standalone Execution & Testability**: Services can be executed and tested in isolation without spinning up an HTTP server via `createServiceRegistry({ servicesDir })` or `registry.call(name, input, mockCtx)`.
+- **`defineService` Helper & Registry**: Added `defineService()` / `service()` definition helpers and `createServiceRegistry()` factory with duplicate name detection and hot-reload support.
+
 #### Zero-Dependency Native i18n & Localization Enhancements (`src/file-router.js`, `src/helpers.js`, `src/server.js`)
 - **Native Pluralization (`Intl.PluralRules`)**: Support for CLDR plural forms (`zero`, `one`, `two`, `few`, `many`, `other`) and explicit numerical keys (`0`, `1`) via `t('key', { count })` and `t.plural(count, forms)`.
 - **Automatic Fallback Locale Chain**: Missing dictionary keys in target locales fall back gracefully to `DEFAULT_LOCALE` (`en`) before returning key names. Check key presence via `t.has('key')` / `t.exists('key')`.

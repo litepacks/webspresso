@@ -63,9 +63,105 @@ export interface CreateAppOptions {
     alpine?: boolean | Record<string, unknown>;
     swup?: boolean | Record<string, unknown>;
   };
+  /** Path to services directory (auto-discovered) */
+  servicesDir?: string;
+  services?: {
+    dir?: string;
+  };
   setupRoutes?: (app: Application, ctx: SetupRoutesContext) => void;
   [key: string]: unknown;
 }
+
+export interface ServiceContext {
+  req?: Request;
+  res?: Response;
+  db?: DatabaseInstance | null;
+  service: <T = unknown>(name: string, input?: unknown, options?: unknown) => Promise<T>;
+  [key: string]: unknown;
+}
+
+export type ServiceHandler<TInput = unknown, TOutput = unknown> = (
+  input: TInput,
+  ctx: ServiceContext
+) => Promise<TOutput> | TOutput;
+
+export interface ServiceDefinition<TInput = unknown, TOutput = unknown> {
+  schema?: Record<string, unknown> | ((input: unknown) => unknown) | null;
+  handler: ServiceHandler<TInput, TOutput>;
+  metadata?: Record<string, unknown>;
+  auth?: boolean | string | string[];
+  cache?: boolean | string | number;
+  timeout?: number;
+  transaction?: boolean;
+  [key: string]: unknown;
+}
+
+export class ServiceRegistry {
+  constructor(options?: { servicesDir?: string; isDev?: boolean; logger?: unknown });
+  readonly services: Map<string, ServiceDefinition>;
+  load(): this;
+  register(name: string, definition: ServiceDefinition | ServiceHandler): this;
+  get(name: string): ServiceDefinition | undefined;
+  has(name: string): boolean;
+  list(): string[];
+  invalidate(name: string, input?: unknown, ctx?: unknown): boolean;
+  clearCache(name?: string): boolean;
+  call<T = unknown>(name: string, input?: unknown, ctx?: unknown, options?: unknown): Promise<T>;
+  reload(): this;
+}
+
+export function createServiceRegistry(options?: {
+  servicesDir?: string;
+  isDev?: boolean;
+  logger?: unknown;
+  autoLoad?: boolean;
+}): ServiceRegistry;
+
+export function defineService<TInput = unknown, TOutput = unknown>(
+  definition: ServiceDefinition<TInput, TOutput> | ServiceHandler<TInput, TOutput>
+): ServiceDefinition<TInput, TOutput>;
+
+export const service: typeof defineService;
+
+export interface MemoizeOptions {
+  ttl?: string | number | boolean;
+  maxSize?: number;
+  key?: (input: unknown, ctx?: unknown) => string;
+}
+
+export interface MemoizedFunction<TArgs extends unknown[], TReturn> {
+  (...args: TArgs): Promise<TReturn>;
+  invalidate(...args: TArgs): boolean;
+  delete(...args: TArgs): boolean;
+  clear(): void;
+  has(...args: TArgs): boolean;
+  readonly size: number;
+}
+
+export function memoize<TArgs extends unknown[], TReturn>(
+  fn: (...args: TArgs) => Promise<TReturn> | TReturn,
+  options?: MemoizeOptions
+): MemoizedFunction<TArgs, TReturn>;
+
+export function parseTtlMs(ttl: string | number | boolean): number;
+
+export function stableCacheKey(input: unknown): string;
+
+export function discoverServices(
+  servicesDir: string
+): Array<{ name: string; aliases: string[]; filePath: string; relativePath: string }>;
+
+export function filePathToServiceName(relativePath: string): { name: string; aliases: string[] };
+
+export function validateServiceInput(schema: unknown, input: unknown, serviceName: string): unknown;
+
+export function executeService(
+  registry: ServiceRegistry,
+  name: string,
+  input?: unknown,
+  ctx?: unknown,
+  options?: unknown
+): Promise<unknown>;
 
 export interface CompressionOptions {
   enabled?: boolean;
@@ -227,7 +323,11 @@ export const CLIENT_RUNTIME_BASE: string;
 
 export function attachDbMiddleware(req: Request, res: Response, next: NextFunction): void;
 
-export function getAppContext(): { db: DatabaseInstance | null; shutdownManager: ShutdownManager | null };
+export function getAppContext(): {
+  db: DatabaseInstance | null;
+  shutdownManager: ShutdownManager | null;
+  serviceRegistry: ServiceRegistry | null;
+};
 
 export function getDb(): DatabaseInstance;
 
@@ -237,9 +337,17 @@ export function getShutdownManager(): ShutdownManager | null;
 
 export function hasShutdownManager(): boolean;
 
+export function getServiceRegistry(): ServiceRegistry | null;
+
+export function hasServiceRegistry(): boolean;
+
 export function resetAppContext(): void;
 
-export function setAppContext(partial: { db?: DatabaseInstance | null; shutdownManager?: ShutdownManager | null }): void;
+export function setAppContext(partial: {
+  db?: DatabaseInstance | null;
+  shutdownManager?: ShutdownManager | null;
+  serviceRegistry?: ServiceRegistry | null;
+}): void;
 
 // --- File router ---
 

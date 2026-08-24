@@ -3,22 +3,23 @@
  * @module src/app-context
  */
 
-/** @type {{ db: object|null, shutdownManager: object|null }} */
+/** @type {{ db: object|null, shutdownManager: object|null, serviceRegistry: object|null }} */
 let context = {
   db: null,
   shutdownManager: null,
+  serviceRegistry: null,
 };
 
 /**
  * Merge into the current context (typically called once from createApp).
- * @param {{ db?: object|null, shutdownManager?: object|null }} partial
+ * @param {{ db?: object|null, shutdownManager?: object|null, serviceRegistry?: object|null }} partial
  */
 function setAppContext(partial) {
   context = { ...context, ...partial };
 }
 
 /**
- * @returns {{ db: object|null, shutdownManager: object|null }}
+ * @returns {{ db: object|null, shutdownManager: object|null, serviceRegistry: object|null }}
  */
 function getAppContext() {
   return context;
@@ -61,21 +62,41 @@ function hasShutdownManager() {
 }
 
 /**
- * Clear context (e.g. between tests).
+ * Get the registered ServiceRegistry instance
+ * @returns {object|null}
  */
-function resetAppContext() {
-  context = { db: null, shutdownManager: null };
+function getServiceRegistry() {
+  return context.serviceRegistry;
 }
 
 /**
- * Express middleware: sets `req.db` from registered app context.
+ * Check if a ServiceRegistry is registered
+ * @returns {boolean}
+ */
+function hasServiceRegistry() {
+  return context.serviceRegistry != null;
+}
+
+/**
+ * Clear context (e.g. between tests).
+ */
+function resetAppContext() {
+  context = { db: null, shutdownManager: null, serviceRegistry: null };
+}
+
+/**
+ * Express middleware: sets `req.db` and `req.service` from registered app context.
  * File-based `pages/api/*` routes attach this automatically; use in `setupRoutes`
- * for manually registered handlers that need `req.db`.
+ * for manually registered handlers that need `req.db` and `req.service`.
  * @type {import('express').RequestHandler}
  */
 function attachDbMiddleware(req, res, next) {
   if (context.db != null) {
     req.db = context.db;
+  }
+  if (context.serviceRegistry != null) {
+    req.service = (name, input, opts) =>
+      context.serviceRegistry.call(name, input, req.context || { req, res, db: context.db }, opts);
   }
   next();
 }
@@ -87,6 +108,8 @@ module.exports = {
   hasDb,
   getShutdownManager,
   hasShutdownManager,
+  getServiceRegistry,
+  hasServiceRegistry,
   resetAppContext,
   attachDbMiddleware,
 };

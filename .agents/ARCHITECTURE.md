@@ -46,6 +46,12 @@
   - **Fallback Chain**: Missing keys fall back to `DEFAULT_LOCALE` (`en`) automatically. Key check via `t.has('key')` or `t.exists('key')`.
   - **Native Formatters on `t`**: `t.number(1234.5)`, `t.currency(199.99, 'TRY')`, `t.date(d)`, `t.relativeTime(-2, 'day')`.
   - **Template Helpers & Filter**: `{{ fsy.localeUrl('tr') }}`, `{{ 'nav.home' | t }}`, `{{ t('key') }}`.
+- **Services Layer (`services/`, `ServiceRegistry`, `defineService`, `ctx.service`, `req.service`)**:
+  - Auto-discovered file-based service modules: `services/user/get.js` → `user.get`, `services/post/publish.js` → `post.publish`.
+  - **Shared Request Context**: Service-to-service composition (`ctx.service()`) shares the exact same `ctx` (`ctx.db`, `ctx.auth`, `ctx.session`, `ctx.user`).
+  - **Circular Call Protection**: Automatically tracks service call stack per request and aborts cycles (`user.get -> profile.get -> user.get`).
+  - **Optional Schema Validation**: Validates inputs with simple descriptors (`'number'`, `'string'`, `'email'`, etc.), custom functions, or Zod schemas before handler execution.
+  - **HTTP Independence**: Services can be executed without starting an HTTP server via `createServiceRegistry().call(name, input, mockCtx)`.
 - **Middleware & Hooks**: Route lifecycle hooks can be declared per-page (`module.exports = { middleware: ['auth', 'jwt'] }`) or globally via `pages/_hooks.js`.
 
 ---

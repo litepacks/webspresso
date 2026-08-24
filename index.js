@@ -12,9 +12,16 @@ const {
   hasDb,
   getShutdownManager,
   hasShutdownManager,
+  getServiceRegistry,
+  hasServiceRegistry,
   resetAppContext,
   setAppContext,
 } = require('./src/app-context');
+const {
+  createServiceRegistry,
+  defineService,
+  ServiceRegistry,
+} = require('./src/services');
 const { ShutdownManager, NodeHttpAdapter } = require('./core/shutdown');
 const compression = require('./core/compression');
 const errors = require('./core/errors');
@@ -94,8 +101,23 @@ module.exports = {
   hasDb,
   getShutdownManager,
   hasShutdownManager,
+  getServiceRegistry,
+  hasServiceRegistry,
   resetAppContext,
   setAppContext,
+
+  // Services Layer
+  createServiceRegistry,
+  defineService,
+  service: defineService,
+  ServiceRegistry,
+  memoize: require('./src/services').memoize,
+  parseTtlMs: require('./src/services').parseTtlMs,
+  stableCacheKey: require('./src/services').stableCacheKey,
+  discoverServices: require('./src/services').discoverServices,
+  filePathToServiceName: require('./src/services').filePathToServiceName,
+  validateServiceInput: require('./src/services').validateServiceInput,
+  executeService: require('./src/services').executeService,
 
   // Shutdown & Lifecycle
   ShutdownManager,

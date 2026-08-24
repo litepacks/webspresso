@@ -819,6 +819,7 @@ function mountPages(app, options) {
     db = null,
     clientRuntime: clientRuntimeOpt = null,
     pageAssets: pageAssetsOpt = null,
+    serviceRegistry = null,
   } = options;
   const pageAssetsResolved = resolvePageAssets(pageAssetsOpt);
   const clientRuntime = clientRuntimeOpt && typeof clientRuntimeOpt === 'object'
@@ -993,6 +994,10 @@ function mountPages(app, options) {
         if (db != null) {
           req.db = db;
         }
+        if (serviceRegistry != null) {
+          req.service = (name, input, opts) =>
+            serviceRegistry.call(name, input, { req, res, db }, opts);
+        }
 
         // Reload handler in dev mode
         if (isDev && require.cache[require.resolve(route.fullPath)]) {
@@ -1110,6 +1115,12 @@ function mountPages(app, options) {
           routeDir: route.routeDir,
           locale,
           t,
+          service: (name, input, opts) => {
+            if (serviceRegistry) {
+              return serviceRegistry.call(name, input, ctx, opts);
+            }
+            throw new Error(`Services not configured. Cannot call service '${name}'.`);
+          },
           data: { ...njkTpl.dataPatch },
           meta: {
             title: t('meta.title') !== 'meta.title' ? t('meta.title') : null,
