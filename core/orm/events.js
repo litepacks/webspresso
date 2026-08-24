@@ -1,6 +1,6 @@
 /**
  * Webspresso ORM - Events/Signals System
- * Django-style signal system for model lifecycle events
+ * Django-style signal system for model lifecycle events with leak detection and maxListeners bounds
  * @module core/orm/events
  */
 
@@ -16,6 +16,7 @@
  */
 
 const EMPTY_ARRAY = Object.freeze([]);
+const DEFAULT_MAX_LISTENERS = 50;
 
 function cancelContext(reason = 'Operation cancelled') {
   this.isCancelled = true;
@@ -42,12 +43,34 @@ function createEventContext(model, operation, trx = null) {
 
 /**
  * ModelEvents - Global event bus for ORM lifecycle events
- * Singleton class that manages event listeners and emission
+ * Singleton class that manages event listeners, emission, and memory leak warnings
  */
 class ModelEventsClass {
   constructor() {
     /** @type {Map<string, Set<Function>>} */
     this.listeners = new Map();
+    this.maxListeners = DEFAULT_MAX_LISTENERS;
+  }
+
+  /**
+   * Set maximum number of listeners allowed per event before warning
+   * @param {number} n
+   * @returns {this}
+   */
+  setMaxListeners(n) {
+    if (typeof n !== 'number' || n < 0 || Number.isNaN(n)) {
+      throw new TypeError('The value of "n" must be a non-negative number');
+    }
+    this.maxListeners = n;
+    return this;
+  }
+
+  /**
+   * Get current maximum listeners threshold
+   * @returns {number}
+   */
+  getMaxListeners() {
+    return this.maxListeners;
   }
 
   /**
@@ -64,7 +87,19 @@ class ModelEventsClass {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
-    this.listeners.get(event).add(callback);
+
+    const set = this.listeners.get(event);
+    set.add(callback);
+
+    // Memory leak detection & warning
+    if (this.maxListeners > 0 && set.size > this.maxListeners) {
+      const warnMsg = `Possible ModelEvents memory leak detected. ${set.size} '${event}' listeners added. Use setMaxListeners() to increase limit.`;
+      if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
+        process.emitWarning(warnMsg, 'MaxListenersExceededWarning');
+      } else {
+        console.warn(`[webspresso:warning] ${warnMsg}`);
+      }
+    }
 
     // Return unsubscribe function
     return () => this.off(event, callback);
@@ -85,6 +120,27 @@ class ModelEventsClass {
   }
 
   /**
+   * Attach a listener scoped to an HTTP request or lifecycle target (auto-removes on finish/close)
+   * @param {string} event - Event name
+   * @param {Function} callback - Callback function
+   * @param {Object} [lifecycleTarget] - Optional target with on/once (e.g. Express `res` or `req`)
+   * @returns {Function} Unsubscribe function
+   */
+  listenScoped(event, callback, lifecycleTarget) {
+    const unsubscribe = this.on(event, callback);
+
+    if (lifecycleTarget && typeof lifecycleTarget.once === 'function') {
+      const cleanup = () => {
+        unsubscribe();
+      };
+      lifecycleTarget.once('finish', cleanup);
+      lifecycleTarget.once('close', cleanup);
+    }
+
+    return unsubscribe;
+  }
+
+  /**
    * Remove an event listener
    * @param {string} event - Event name
    * @param {Function} callback - Callback function to remove
@@ -93,7 +149,11 @@ class ModelEventsClass {
   off(event, callback) {
     const listeners = this.listeners.get(event);
     if (listeners) {
-      return listeners.delete(callback);
+      const removed = listeners.delete(callback);
+      if (listeners.size === 0) {
+        this.listeners.delete(event);
+      }
+      return removed;
     }
     return false;
   }
@@ -225,16 +285,6 @@ class ModelEventsClass {
     }
 
     return ctx;
-  }
-
-  /**
-   * Check if there are any listeners for an event
-   * @param {string} model - Model name
-   * @param {string} hook - Hook name
-   * @returns {boolean}
-   */
-  hasListeners(model, hook) {
-    return this.getMatchingListeners(model, hook).length > 0;
   }
 
   /**

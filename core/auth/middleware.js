@@ -17,6 +17,15 @@ function createAuthMiddleware(authManager) {
 
   const sessionConfig = authManager.getSessionConfig();
 
+  if (!sessionConfig.store && process.env.NODE_ENV === 'production') {
+    const warnMsg = '[webspresso:auth] Warning: Default MemoryStore is being used in production. It is not designed for production environments and will leak memory under high load. Please configure a persistent session store (e.g. Knex or Redis).';
+    if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
+      process.emitWarning(warnMsg, 'SecurityWarning');
+    } else {
+      console.warn(warnMsg);
+    }
+  }
+
   /**
    * Session middleware
    * Sets up express-session with secure cookie enforcement

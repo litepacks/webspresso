@@ -162,6 +162,15 @@ function adminPanelPlugin(options = {}) {
           /^https:/i.test(String(process.env.BASE_URL || '').trim())
             ? true
             : 'auto';
+        if (process.env.NODE_ENV === 'production') {
+          const warnMsg = '[webspresso:admin] Warning: Admin panel is using default MemoryStore in production. Please configure a persistent session store to prevent memory leaks.';
+          if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
+            process.emitWarning(warnMsg, 'SecurityWarning');
+          } else {
+            console.warn(warnMsg);
+          }
+        }
+
         ctx.app.use(session({
           secret,
           resave: false,

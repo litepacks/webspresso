@@ -34,9 +34,12 @@ class NodeHttpAdapter {
 
     const cleanup = () => {
       this.sockets.delete(socket);
+      socket.removeListener('close', cleanup);
+      socket.removeListener('error', cleanup);
     };
 
     socket.once('close', cleanup);
+    socket.once('error', cleanup);
   }
 
   _onConnection(socket) {
