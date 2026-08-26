@@ -33,6 +33,20 @@ function dataExchangePlugin(options = {}) {
     description: 'Admin spreadsheet import (CSV/XLSX) and Excel export',
     enabled,
 
+    register(ctx) {
+      if (!enabled) return;
+      const db = dbOption ?? ctx.db ?? ctx.app?.get?.('db') ?? null;
+      if (ctx.app && ctx.app.serviceRegistry) {
+        const { createExchangeServices } = require('../../src/services/builtins/exchange');
+        const exchangeServices = createExchangeServices({ db });
+        for (const [name, def] of Object.entries(exchangeServices)) {
+          if (!ctx.app.serviceRegistry.has(name)) {
+            ctx.app.serviceRegistry.register(name, def);
+          }
+        }
+      }
+    },
+
     onRoutesReady(ctx) {
       if (!enabled) return;
 

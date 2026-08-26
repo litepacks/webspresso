@@ -159,6 +159,34 @@ export function filePathToServiceName(relativePath: string): { name: string; ali
 
 export function toCamelCase(str: string): string;
 
+export function createAuthServices(options?: {
+  userModel?: string;
+  fields?: Record<string, string>;
+}): Record<string, ServiceDefinition>;
+
+export function createMailServices(options?: {
+  emailService: unknown;
+  registry?: unknown;
+  db?: unknown;
+  tableName?: string;
+}): Record<string, ServiceDefinition>;
+
+export function createMediaServices(options?: {
+  provider?: unknown;
+  destDir?: string;
+  publicBasePath?: string;
+}): Record<string, ServiceDefinition>;
+
+export function createSystemServices(options?: {
+  db?: unknown;
+  serviceRegistry?: unknown;
+  pluginManager?: unknown;
+}): Record<string, ServiceDefinition>;
+
+export function createExchangeServices(options?: {
+  db?: unknown;
+}): Record<string, ServiceDefinition>;
+
 export function validateServiceInput(schema: unknown, input: unknown, serviceName: string): unknown;
 
 export function executeService(

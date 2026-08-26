@@ -438,6 +438,30 @@ function createApp(options = {}) {
     logger: logging ? console : null,
   });
 
+  // Auto-register built-in auth services if database is present and service is not custom-defined
+  if (options.db) {
+    const { createAuthServices } = require('./services/builtins/auth');
+    const authServices = createAuthServices({ db: options.db });
+    for (const [name, def] of Object.entries(authServices)) {
+      if (!serviceRegistry.has(name)) {
+        serviceRegistry.register(name, def);
+      }
+    }
+  }
+
+  // Auto-register built-in system services (health, cleanup, cache flush, info)
+  const { createSystemServices } = require('./services/builtins/system');
+  const systemServices = createSystemServices({
+    db: options.db ?? null,
+    serviceRegistry,
+    pluginManager,
+  });
+  for (const [name, def] of Object.entries(systemServices)) {
+    if (!serviceRegistry.has(name)) {
+      serviceRegistry.register(name, def);
+    }
+  }
+
   setAppContext({ db: options.db ?? null, shutdownManager, serviceRegistry });
   
   const app = express();

@@ -169,3 +169,126 @@ await services.discover();
 // Execute service directly
 const result = await services.call('order.getById', { id: 123 });
 ```
+
+---
+
+## 6. Built-in `auth.*` Services
+
+When a database connection (`options.db`) is configured, Webspresso automatically registers production-ready, standardized authentication services into `serviceRegistry` (unless custom implementations are provided in `services/auth/`):
+
+| Service Name | Description | Schema / Input | Guard / ACID |
+|---|---|---|---|
+| `auth.login` | Authenticates user credentials, sets session cookie and returns user data | `{ email, password, remember? }` | Validates hash, sets `req.session.user` |
+| `auth.register` | Validates and hashes password, prevents duplicate emails, creates user record | `{ email, password, name?, role? }` | `transaction: true` |
+| `auth.request-password-reset` | Generates secure password reset token (user enumeration resistant) | `{ email, ttlMs? }` | Returns `{ sent: true }` safely |
+| `auth.reset-password` | Consumes token, validates TTL, updates password hash | `{ token, password }` | `transaction: true` |
+| `auth.change-password` | Verifies current password and updates with new password | `{ currentPassword, newPassword }` | `auth: true`, `transaction: true` |
+| `auth.verify-email` | Consumes verification token and updates `email_verified_at` | `{ token }` | `transaction: true` |
+
+### Customizing Built-in Auth Services
+```javascript
+const { createAuthServices } = require('webspresso/services');
+
+// Customize model name or column mappings
+const customAuth = createAuthServices({
+  userModel: 'Account',
+  fields: {
+    email: 'email_address',
+    password: 'password_hash',
+    emailVerifiedAt: 'verified_at',
+  },
+});
+```
+
+---
+
+## 7. Built-in `mail.*` Services
+
+When `emailPlugin` is loaded, Webspresso automatically registers standardized transactional email services into `serviceRegistry`:
+
+| Service Name | Description | Schema / Input | Features |
+|---|---|---|---|
+| `mail.send` | Sends HTML/plain/MJML transactional email via Nodemailer | `{ to, subject, html?, text?, mjml?, template?, data?, attachments? }` | DB send logging, MJML compilation |
+| `mail.send-templated` | Sends pre-registered MJML template with payload variables | `{ template, to, subject, data?, from?, replyTo? }` | Template caching & variable interpolation |
+| `mail.preview` | Compiles and previews MJML/template without sending | `{ template?, mjml?, data? }` | In-memory HTML & text preview rendering |
+| `mail.query-logs` | Queries email send logs and delivery status | `{ limit?, offset?, status?, to?, template? }` | `auth: 'admin'` |
+
+### Customizing or Standalone Mail Services
+```javascript
+const { createMailServices } = require('webspresso/services');
+
+// Initialize standalone mail services
+const mail = createMailServices({
+  emailService,
+  registry: templateRegistry,
+  db: appDb,
+  tableName: 'email_logs',
+});
+```
+
+---
+
+## 8. Built-in `media.*` Services
+
+When `uploadPlugin` is loaded, Webspresso automatically registers standardized file upload and media handling services into `serviceRegistry`:
+
+| Service Name | Description | Schema / Input | Features |
+|---|---|---|---|
+| `media.upload` | Saves Buffer, Base64 data URL, or local file to storage | `{ buffer?, base64?, filePath?, originalName?, mimeType?, destDir?, publicBasePath? }` | Safe filename generation, MIME extraction, storage provider abstraction |
+| `media.delete` | Safely removes stored file from disk/provider | `{ key, destDir? }` | Strict path traversal protection (`..` prevention) |
+| `media.info` | Retrieves file existence, size, and modified timestamp | `{ key, destDir? }` | Fast filesystem stat inspection |
+
+### Customizing or Standalone Media Services
+```javascript
+const { createMediaServices } = require('webspresso/services');
+
+// Initialize standalone media services
+const media = createMediaServices({
+  destDir: '/path/to/custom/uploads',
+  publicBasePath: '/static/uploads',
+});
+```
+
+---
+
+## 9. Built-in `system.*` Services
+
+Webspresso automatically registers core system diagnostics, maintenance, and cache invalidation services into `serviceRegistry`:
+
+| Service Name | Description | Schema / Input | Guard / Features |
+|---|---|---|---|
+| `system.health` | Live DB ping, latency measurement, memory footprint (`rss`, `heap`), uptime | `{ detailed? }` | Zero downtime monitoring & load balancer health checks |
+| `system.cleanup` | Purges expired auth tokens and old audit logs | `{ olderThanDays?, purgeAuthTokens?, purgeAuditLogs? }` | `auth: 'admin'`, cron/worker ready |
+| `system.cache-flush` | Flushes ORM query cache and service memoization | `{ scope?: 'all'\|'orm'\|'services', model? }` | `auth: 'admin'` |
+| `system.info` | Runtime diagnostics: Node version, platform, registered models, plugins & services | `{}` | `auth: 'admin'` |
+
+### Customizing or Standalone System Services
+```javascript
+const { createSystemServices } = require('webspresso/services');
+
+// Initialize standalone system services
+const system = createSystemServices({
+  db,
+  serviceRegistry,
+  pluginManager,
+});
+```
+
+---
+
+## 10. Built-in `exchange.*` Services
+
+When `dataExchangePlugin` is loaded, Webspresso automatically registers spreadsheet export and import services into `serviceRegistry`:
+
+| Service Name | Description | Schema / Input | Guard / Features |
+|---|---|---|---|
+| `exchange.export` | Exports ORM model records to Excel (.xlsx) buffer | `{ model, ids?, where?, limit? }` | `auth: 'admin'`, frozen header rows, clean output sanitization |
+| `exchange.import` | Imports CSV or XLSX spreadsheets into database models | `{ model, buffer?, base64?, csvText?, mode?: 'insert'\|'upsert', upsertKey? }` | `auth: 'admin'`, `transaction: true` (atomic batch rollback), column type coercion |
+
+### Customizing or Standalone Exchange Services
+```javascript
+const { createExchangeServices } = require('webspresso/services');
+
+// Initialize standalone exchange services
+const exchange = createExchangeServices({ db });
+```

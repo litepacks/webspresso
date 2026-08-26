@@ -246,6 +246,14 @@ class ServiceRegistry {
   }
 
   /**
+   * Clear all service caches
+   * @returns {boolean}
+   */
+  clearAllCaches() {
+    return this.clearCache();
+  }
+
+  /**
    * Execute a service by name
    * @param {string} name - Service name
    * @param {*} [input={}] - Input data

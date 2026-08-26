@@ -40,11 +40,22 @@ function createServiceRegistry(options = {}) {
   return registry;
 }
 
+const { createAuthServices } = require('./builtins/auth');
+const { createMailServices } = require('./builtins/mail');
+const { createMediaServices } = require('./builtins/media');
+const { createSystemServices } = require('./builtins/system');
+const { createExchangeServices } = require('./builtins/exchange');
+
 module.exports = {
   ServiceRegistry,
   createServiceRegistry,
   defineService,
   service: defineService, // alias
+  createAuthServices,
+  createMailServices,
+  createMediaServices,
+  createSystemServices,
+  createExchangeServices,
   memoize,
   parseTtlMs,
   stableCacheKey,

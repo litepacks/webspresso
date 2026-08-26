@@ -126,6 +126,22 @@ function uploadPlugin(options = {}) {
     version: '1.0.0',
     description: 'Multipart file uploads with pluggable storage',
 
+    register(ctx) {
+      if (ctx.app && ctx.app.serviceRegistry) {
+        const { createMediaServices } = require('../../src/services/builtins/media');
+        const mediaServices = createMediaServices({
+          provider,
+          destDir: local?.destDir,
+          publicBasePath: local?.publicBasePath,
+        });
+        for (const [name, def] of Object.entries(mediaServices)) {
+          if (!ctx.app.serviceRegistry.has(name)) {
+            ctx.app.serviceRegistry.register(name, def);
+          }
+        }
+      }
+    },
+
     onRoutesReady(ctx) {
       const { app } = ctx;
       app.set('webspresso.uploadPath', normalizedPath);

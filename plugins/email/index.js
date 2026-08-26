@@ -106,7 +106,20 @@ function emailPlugin(options = {}) {
     },
 
     register(ctx) {
-      // noop — templates loaded at plugin init; register available for future hot-reload
+      if (ctx.app && ctx.app.serviceRegistry) {
+        const { createMailServices } = require('../../src/services/builtins/mail');
+        const mailServices = createMailServices({
+          emailService,
+          registry,
+          db,
+          tableName,
+        });
+        for (const [name, def] of Object.entries(mailServices)) {
+          if (!ctx.app.serviceRegistry.has(name)) {
+            ctx.app.serviceRegistry.register(name, def);
+          }
+        }
+      }
     },
 
     onRoutesReady(ctx) {

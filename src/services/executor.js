@@ -74,7 +74,7 @@ async function checkServiceAuth(serviceDef, ctx, options = {}) {
   }
 
   const authRequirement = serviceDef.auth;
-  const user = ctx.user || ctx.auth?.user || (ctx.req && ctx.req.user) || null;
+  const user = ctx.user || ctx.auth?.user || (ctx.req && (ctx.req.user || ctx.req.session?.user)) || null;
 
   // 1. Boolean check (must be authenticated)
   if (authRequirement === true) {
@@ -113,27 +113,33 @@ async function checkServiceAuth(serviceDef, ctx, options = {}) {
     return;
   }
 
-  // 4. Custom predicate function (e.g. (user, ctx) => boolean)
+  // 4. Custom predicate function check: (user, ctx) => boolean
   if (typeof authRequirement === 'function') {
-    const isAllowed = await authRequirement(user, ctx);
-    if (!isAllowed) {
-      if (!user) {
-        throw new UnauthorizedError(`Authentication required to execute service '${serviceDef.name}'`);
-      }
-      throw new ForbiddenError(`Access denied to execute service '${serviceDef.name}'`);
+    let isAuthorized = false;
+    try {
+      isAuthorized = await authRequirement(user, ctx);
+    } catch (authFnErr) {
+      throw new ForbiddenError(
+        `Authorization check failed for service '${serviceDef.name}': ${authFnErr.message}`,
+        { cause: authFnErr }
+      );
     }
-    return;
+    if (!isAuthorized) {
+      throw new ForbiddenError(
+        `Access denied to execute service '${serviceDef.name}' by authorization policy`
+      );
+    }
   }
 }
 
 /**
- * Execute a registered service
- * @param {import('./registry').ServiceRegistry} registry - Service registry instance
- * @param {string} name - Service name to execute
- * @param {*} [input={}] - Input arguments
- * @param {Object} [ctx={}] - Request or execution context
+ * Execute a service with schema validation, auth checks, and error boundary
+ * @param {ServiceRegistry} registry - Service registry instance
+ * @param {string} name - Service name
+ * @param {unknown} [input] - Raw input payload
+ * @param {Object} [ctx={}] - Context object
  * @param {Object} [options={}] - Execution options
- * @returns {Promise<*>} Service execution result
+ * @returns {Promise<unknown>} Service execution result
  */
 async function executeService(registry, name, input = {}, ctx = {}, options = {}) {
   if (!name || typeof name !== 'string') {
@@ -141,6 +147,7 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
   }
 
   const serviceDef = registry.get(name);
+
   if (!serviceDef) {
     const notFoundErr = new NotFoundError(`Service not found: ${name}`);
     notFoundErr.code = 'SERVICE_NOT_FOUND';
@@ -148,45 +155,39 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
     throw notFoundErr;
   }
 
-  // Ensure context is an object
-  const execCtx = ctx && typeof ctx === 'object' ? ctx : {};
-
   // Check authorization requirements
-  await checkServiceAuth(serviceDef, execCtx, options);
+  await checkServiceAuth(serviceDef, ctx, options);
 
-  // Branch-safe circular call stack detection (immutable stack branching)
-  const currentStack = Array.isArray(execCtx[SERVICE_CALL_STACK_SYMBOL])
-    ? execCtx[SERVICE_CALL_STACK_SYMBOL]
+  // Check call stack depth for circular service invocations
+  const activeStack = Array.isArray(ctx[SERVICE_CALL_STACK_SYMBOL])
+    ? ctx[SERVICE_CALL_STACK_SYMBOL]
     : [];
 
-  if (currentStack.includes(name)) {
-    const cycle = [...currentStack, name].join(' -> ');
+  if (activeStack.includes(name)) {
+    const cycle = [...activeStack, name].join(' -> ');
     const circularErr = new WebspressoError(`Circular service call detected:\n${cycle}`);
     circularErr.code = 'CIRCULAR_SERVICE_CALL';
     circularErr.service = name;
-    circularErr.callStack = [...currentStack, name];
+    circularErr.callStack = [...activeStack, name];
     throw circularErr;
   }
 
-  // Create isolated child context branch with updated call stack
-  const branchCtx = Object.create(execCtx);
-  branchCtx[SERVICE_CALL_STACK_SYMBOL] = [...currentStack, name];
-
-  // Bind service caller into context so nested services reuse the branch context
-  branchCtx.service = (subName, subInput, subOpts) =>
-    executeService(registry, subName, subInput, branchCtx, subOpts);
-  branchCtx.service.invalidate = (subName, subInput, subCtx) =>
-    registry.invalidate(subName, subInput, subCtx || branchCtx);
-  branchCtx.service.clearCache = (subName) =>
+  // Configure execution context
+  const executionContext = Object.create(ctx);
+  executionContext[SERVICE_CALL_STACK_SYMBOL] = [...activeStack, name];
+  executionContext.service = (subName, subInput, subOpts) =>
+    executeService(registry, subName, subInput, executionContext, subOpts);
+  executionContext.service.invalidate = (subName, subInput, subCtx) =>
+    registry.invalidate(subName, subInput, subCtx || executionContext);
+  executionContext.service.clearCache = (subName) =>
     registry.clearCache(subName);
 
-  // Validate input against schema (supports sync & async Zod schemas + sanitizes prototype keys)
+  // Validate input
   const validatedInput = await validateServiceInput(serviceDef.schema, input, name);
 
   const startTime = Date.now();
-  const logger = branchCtx.logger || registry.logger || null;
+  const logger = executionContext.logger || registry.logger || null;
 
-  // Determine timeout
   const timeoutConfig = options.timeout ?? serviceDef.timeout;
   const timeoutMs = timeoutConfig ? parseTtlMs(timeoutConfig) : null;
 
@@ -202,9 +203,24 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
       return await knexInstance.transaction(async (trx) => {
         const txCtx = Object.create(activeCtx);
         txCtx.trx = trx;
-        txCtx.db = trx;
+        if (activeCtx.db && typeof activeCtx.db.getRepository === 'function') {
+          const { createRepository } = require('../../core/orm/repository');
+          txCtx.db = Object.assign(Object.create(activeCtx.db), {
+            knex: trx,
+            getRepository: (modelName, scopeCtx) => {
+              const origRepo = activeCtx.db.getRepository(modelName, scopeCtx);
+              return createRepository(origRepo.model, trx, scopeCtx);
+            },
+          });
+        } else {
+          txCtx.db = trx;
+        }
         txCtx.service = (subName, subInput, subOpts) =>
           executeService(registry, subName, subInput, txCtx, subOpts);
+        txCtx.service.invalidate = (subName, subInput, subCtx) =>
+          registry.invalidate(subName, subInput, subCtx || txCtx);
+        txCtx.service.clearCache = (subName) =>
+          registry.clearCache(subName);
         return await serviceDef.handler(validatedInput, txCtx);
       });
     }
@@ -229,14 +245,14 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
 
       try {
         result = await Promise.race([
-          executeHandler(branchCtx),
+          executeHandler(executionContext),
           timeoutPromise,
         ]);
       } finally {
         clearTimeout(timerId);
       }
     } else {
-      result = await executeHandler(branchCtx);
+      result = await executeHandler(executionContext);
     }
 
     const duration = Date.now() - startTime;

@@ -119,6 +119,11 @@ module.exports = {
   discoverServices: require('./src/services').discoverServices,
   filePathToServiceName: require('./src/services').filePathToServiceName,
   toCamelCase: require('./src/services').toCamelCase,
+  createAuthServices: require('./src/services').createAuthServices,
+  createMailServices: require('./src/services').createMailServices,
+  createMediaServices: require('./src/services').createMediaServices,
+  createSystemServices: require('./src/services').createSystemServices,
+  createExchangeServices: require('./src/services').createExchangeServices,
   validateServiceInput: require('./src/services').validateServiceInput,
   executeService: require('./src/services').executeService,
 

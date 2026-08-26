@@ -15,7 +15,11 @@ const { resolveExportRecords } = require('./record-selection');
 async function buildXlsxBuffer(model, records) {
   const clean = sanitizeForOutput(records, model);
   const hiddenSet = new Set(model.hidden || []);
-  const columns = Array.from(model.columns.keys()).filter((c) => !hiddenSet.has(c));
+  const columns = (model.columns && model.columns.size > 0)
+    ? Array.from(model.columns.keys()).filter((c) => !hiddenSet.has(c))
+    : (model.schema?.shape
+        ? Object.keys(model.schema.shape).filter((c) => !hiddenSet.has(c))
+        : Object.keys(clean[0] || {}));
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Export', {

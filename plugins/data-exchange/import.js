@@ -10,7 +10,13 @@ const { buildHeaderMapping, dataRowsToObjects } = require('./parse-table');
 
 function allowedImportColumns(model) {
   const hidden = new Set(model.hidden || []);
-  return Array.from(model.columns.keys()).filter((c) => !hidden.has(c));
+  if (model.columns && model.columns.size > 0) {
+    return Array.from(model.columns.keys()).filter((c) => !hidden.has(c));
+  }
+  if (model.schema && model.schema.shape) {
+    return Object.keys(model.schema.shape).filter((c) => !hidden.has(c));
+  }
+  return [];
 }
 
 /**
@@ -28,7 +34,15 @@ function coerceCell(raw, meta, column) {
     raw = t;
   }
 
-  if (!meta || !meta.type) return raw;
+  if (!meta || !meta.type) {
+    if (raw === 'true' || raw === '1' || raw === 'yes') return true;
+    if (raw === 'false' || raw === '0' || raw === 'no') return false;
+    if (typeof raw === 'string' && /^-?\d+(\.\d+)?$/.test(raw)) {
+      const num = Number(raw);
+      if (!Number.isNaN(num)) return num;
+    }
+    return raw;
+  }
 
   switch (meta.type) {
     case 'bigint':
