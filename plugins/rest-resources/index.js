@@ -7,6 +7,7 @@ const { attachDbMiddleware } = require('../../src/app-context');
 const { getAllModels } = require('../../core/orm/model');
 const { omit } = require('../../core/orm/utils');
 const { trimUrlPathSlashes } = require('../../core/url-path-normalize');
+const { validateQueryComplexity } = require('../../core/orm/complexity');
 
 const RESERVED_QUERY_KEYS = new Set(['page', 'perPage', 'sort', 'order', 'include', 'trashed']);
 
@@ -167,22 +168,276 @@ function applySoftDeleteScope(query, countQuery, model, trashed) {
   return { query, countQuery };
 }
 
+/**
+ * Parse sort parameters into an array of { column, direction }
+ * @param {import('../../core/orm/types').ModelDefinition} model
+ * @param {*} rawSort
+ * @param {*} rawOrder
+ * @returns {Array<{ column: string, direction: 'asc'|'desc' }>}
+ */
+function parseSortParams(model, rawSort, rawOrder) {
+  const result = [];
+  const seen = new Set();
+
+  function addSort(col, dir) {
+    if (!col || typeof col !== 'string') return;
+    const cleanCol = col.trim();
+    if (!model.columns.has(cleanCol) || seen.has(cleanCol)) return;
+    seen.add(cleanCol);
+    const cleanDir = String(dir || 'asc').toLowerCase() === 'desc' ? 'desc' : 'asc';
+    result.push({ column: cleanCol, direction: cleanDir });
+  }
+
+  if (Array.isArray(rawSort)) {
+    for (const item of rawSort) {
+      if (typeof item === 'string') {
+        const tokens = item.split(',').map((s) => s.trim()).filter(Boolean);
+        for (const token of tokens) {
+          if (token.startsWith('-')) {
+            addSort(token.slice(1), 'desc');
+          } else if (token.startsWith('+')) {
+            addSort(token.slice(1), 'asc');
+          } else if (token.includes(':')) {
+            const [c, d] = token.split(':');
+            addSort(c, d);
+          } else {
+            addSort(token, rawOrder || 'asc');
+          }
+        }
+      }
+    }
+  } else if (typeof rawSort === 'string' && rawSort.trim() !== '') {
+    const tokens = rawSort.split(',').map((s) => s.trim()).filter(Boolean);
+    for (const token of tokens) {
+      if (token.startsWith('-')) {
+        addSort(token.slice(1), 'desc');
+      } else if (token.startsWith('+')) {
+        addSort(token.slice(1), 'asc');
+      } else if (token.includes(':')) {
+        const [c, d] = token.split(':');
+        addSort(c, d);
+      } else if (tokens.length === 1 && rawOrder) {
+        addSort(token, rawOrder);
+      } else {
+        addSort(token, 'asc');
+      }
+    }
+  }
+
+  if (result.length === 0) {
+    result.push({
+      column: model.primaryKey,
+      direction: String(rawOrder || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc',
+    });
+  }
+
+  return result;
+}
+
 function applyColumnFilters(query, countQuery, model, req) {
   let q = query;
   let c = countQuery;
+
+  function applyCondition(col, op, rawVal) {
+    if (!model.columns.has(col)) return;
+    const meta = model.columns.get(col);
+    const colType = meta?.type;
+
+    let operator = String(op || 'eq').toLowerCase();
+    let val = rawVal;
+
+    // Normalize booleans
+    if (colType === 'boolean' && typeof val === 'string') {
+      if (val === 'true' || val === '1') val = true;
+      else if (val === 'false' || val === '0') val = false;
+    }
+
+    switch (operator) {
+      case 'eq':
+      case '=':
+        if (val !== undefined && val !== '') {
+          q = q.where(col, '=', val);
+          c = c.where(col, '=', val);
+        }
+        break;
+
+      case 'ne':
+      case '!=':
+      case '<>':
+        if (val !== undefined && val !== '') {
+          q = q.where(col, '!=', val);
+          c = c.where(col, '!=', val);
+        }
+        break;
+
+      case 'gt':
+      case '>':
+        if (val !== undefined && val !== '') {
+          q = q.where(col, '>', val);
+          c = c.where(col, '>', val);
+        }
+        break;
+
+      case 'gte':
+      case '>=':
+        if (val !== undefined && val !== '') {
+          q = q.where(col, '>=', val);
+          c = c.where(col, '>=', val);
+        }
+        break;
+
+      case 'lt':
+      case '<':
+        if (val !== undefined && val !== '') {
+          q = q.where(col, '<', val);
+          c = c.where(col, '<', val);
+        }
+        break;
+
+      case 'lte':
+      case '<=':
+        if (val !== undefined && val !== '') {
+          q = q.where(col, '<=', val);
+          c = c.where(col, '<=', val);
+        }
+        break;
+
+      case 'in': {
+        const arr = Array.isArray(val)
+          ? val
+          : (typeof val === 'string' ? val.split(',').map(s => s.trim()).filter(Boolean) : [val]);
+        if (arr.length > 0) {
+          q = q.whereIn(col, arr);
+          c = c.whereIn(col, arr);
+        }
+        break;
+      }
+
+      case 'nin':
+      case 'notin': {
+        const arr = Array.isArray(val)
+          ? val
+          : (typeof val === 'string' ? val.split(',').map(s => s.trim()).filter(Boolean) : [val]);
+        if (arr.length > 0) {
+          q = q.whereNotIn(col, arr);
+          c = c.whereNotIn(col, arr);
+        }
+        break;
+      }
+
+      case 'like':
+        if (val !== undefined && val !== '') {
+          q = q.where(col, 'like', String(val));
+          c = c.where(col, 'like', String(val));
+        }
+        break;
+
+      case 'ilike':
+        if (val !== undefined && val !== '') {
+          q = q.where(col, 'ilike', String(val));
+          c = c.where(col, 'ilike', String(val));
+        }
+        break;
+
+      case 'contains':
+        if (val !== undefined && val !== '') {
+          q = q.where(col, 'like', `%${String(val)}%`);
+          c = c.where(col, 'like', `%${String(val)}%`);
+        }
+        break;
+
+      case 'startswith':
+        if (val !== undefined && val !== '') {
+          q = q.where(col, 'like', `${String(val)}%`);
+          c = c.where(col, 'like', `${String(val)}%`);
+        }
+        break;
+
+      case 'endswith':
+        if (val !== undefined && val !== '') {
+          q = q.where(col, 'like', `%${String(val)}`);
+          c = c.where(col, 'like', `%${String(val)}`);
+        }
+        break;
+
+      case 'isnull':
+      case 'is_null': {
+        const isTrue = val === true || val === 'true' || val === '1' || val === 1 || val === '';
+        if (isTrue) {
+          q = q.whereNull(col);
+          c = c.whereNull(col);
+        }
+        break;
+      }
+
+      case 'isnotnull':
+      case 'is_not_null': {
+        const isTrue = val === true || val === 'true' || val === '1' || val === 1 || val === '';
+        if (isTrue) {
+          q = q.whereNotNull(col);
+          c = c.whereNotNull(col);
+        }
+        break;
+      }
+
+      case 'between': {
+        let parts = [];
+        if (Array.isArray(val)) {
+          parts = val;
+        } else if (typeof val === 'string') {
+          parts = val.split(',').map(s => s.trim());
+        }
+        if (parts.length === 2 && parts[0] !== '' && parts[1] !== '') {
+          q = q.where(col, '>=', parts[0]).where(col, '<=', parts[1]);
+          c = c.where(col, '>=', parts[0]).where(col, '<=', parts[1]);
+        }
+        break;
+      }
+
+      default:
+        if (val !== undefined && val !== '') {
+          q = q.where(col, '=', val);
+          c = c.where(col, '=', val);
+        }
+        break;
+    }
+  }
+
+  // 1. Process dedicated filter object ?filter[col]=... or ?filter[col][op]=...
+  if (req.query.filter && typeof req.query.filter === 'object') {
+    for (const [col, colFilter] of Object.entries(req.query.filter)) {
+      if (!model.columns.has(col)) continue;
+      if (colFilter && typeof colFilter === 'object' && !Array.isArray(colFilter)) {
+        if (colFilter.op !== undefined && colFilter.value !== undefined) {
+          applyCondition(col, colFilter.op, colFilter.value);
+        } else {
+          for (const [op, val] of Object.entries(colFilter)) {
+            applyCondition(col, op, val);
+          }
+        }
+      } else if (colFilter !== undefined && colFilter !== '') {
+        applyCondition(col, 'eq', colFilter);
+      }
+    }
+  }
+
+  // 2. Process top-level query parameters ?price[gte]=100 or ?status=active
   for (const [key, value] of Object.entries(req.query)) {
-    if (RESERVED_QUERY_KEYS.has(key)) {
+    if (RESERVED_QUERY_KEYS.has(key) || key === 'filter') {
       continue;
     }
     if (!model.columns.has(key)) {
       continue;
     }
-    if (value === undefined || value === '') {
-      continue;
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      for (const [op, val] of Object.entries(value)) {
+        applyCondition(key, op, val);
+      }
+    } else if (value !== undefined && value !== '') {
+      applyCondition(key, 'eq', value);
     }
-    q = q.where(key, value);
-    c = c.where(key, value);
   }
+
   return { query: q, countQuery: c };
 }
 
@@ -235,21 +490,29 @@ function restResourcePlugin(options = {}) {
           ...chain(async (req, res) => {
             try {
               const repo = db.getRepository(model.name);
+              const complexity = validateQueryComplexity(model, {
+                perPage: req.query.perPage,
+                includes: parseIncludeParam(model, req.query.include),
+                strict: false,
+              });
               const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-              const perPage = Math.min(100, Math.max(1, parseInt(req.query.perPage, 10) || 15));
+              const perPage = complexity.perPage;
               const offset = (page - 1) * perPage;
-              const include = parseIncludeParam(model, req.query.include);
+              const include = complexity.includes;
 
               let query = repo.query();
               let countQuery = repo.query();
               ({ query, countQuery } = applySoftDeleteScope(query, countQuery, model, req.query.trashed));
               ({ query, countQuery } = applyColumnFilters(query, countQuery, model, req));
 
-              const sortCol = req.query.sort && model.columns.has(req.query.sort) ? req.query.sort : model.primaryKey;
-              const order = String(req.query.order || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+              const sortEntries = parseSortParams(model, req.query.sort, req.query.order);
 
               const total = await countQuery.count();
-              let listQ = query.orderBy(sortCol, order).offset(offset).limit(perPage);
+              let listQ = query;
+              for (const s of sortEntries) {
+                listQ = listQ.orderBy(s.column, s.direction);
+              }
+              listQ = listQ.offset(offset).limit(perPage);
               if (include.length > 0) {
                 listQ = listQ.with(...include);
               }
@@ -276,7 +539,11 @@ function restResourcePlugin(options = {}) {
           ...chain(async (req, res) => {
             try {
               const repo = db.getRepository(model.name);
-              const include = parseIncludeParam(model, req.query.include);
+              const complexity = validateQueryComplexity(model, {
+                includes: parseIncludeParam(model, req.query.include),
+                strict: false,
+              });
+              const include = complexity.includes;
               const record = await repo.findById(req.params.id, { with: include });
 
               if (!record) {
@@ -346,6 +613,8 @@ function restResourcePlugin(options = {}) {
 module.exports = restResourcePlugin;
 module.exports.pluralizeSegment = pluralizeSegment;
 module.exports.parseIncludeParam = parseIncludeParam;
+module.exports.parseSortParams = parseSortParams;
+module.exports.applyColumnFilters = applyColumnFilters;
 module.exports.sanitizeRecordTree = sanitizeRecordTree;
 module.exports.pickWritableColumns = pickWritableColumns;
 module.exports.resolveExposedModels = resolveExposedModels;

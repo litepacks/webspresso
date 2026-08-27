@@ -15,6 +15,7 @@ const {
   frontmatterToPatches,
   clearNjkFrontmatterCaches,
 } = require('./njk-frontmatter');
+const { renderStream } = require('../core/ssr/stream');
 
 const NOOP = () => {};
 const EMPTY_OBJECT = Object.freeze({});
@@ -1217,6 +1218,18 @@ function mountPages(app, options) {
         
         // Render the template
         const templatePath = route.file.split(path.sep).join('/');
+
+        // SSR Streaming mode (chunked transfer)
+        if (config?.stream || ctx.data?.__stream || ctx.defer) {
+          const streamDefer = ctx.defer || ctx.data?.__defer || {};
+          const status = (route.routePath === '/404' || route.file === '404.njk') ? 404 : 200;
+          return await renderStream(res, templatePath, renderContext, {
+            env: nunjucks,
+            defer: streamDefer,
+            status,
+          });
+        }
+
         let html =
           njkTpl.useStringRender && njkTpl.templateBody != null
             ? nunjucks.renderString(njkTpl.templateBody, renderContext, { path: route.fullPath })

@@ -13,6 +13,10 @@ const {
 } = require('../../core/errors');
 const { validateServiceInput } = require('./validator');
 const { parseTtlMs } = require('./memoize');
+const {
+  runWithAmbientTransaction,
+  hasAmbientTransaction,
+} = require('../../core/orm/transaction');
 
 const SERVICE_CALL_STACK_SYMBOL = Symbol.for('webspresso.service.call_stack');
 
@@ -198,30 +202,33 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
 
     // Check if knex or transaction-capable database is present
     const knexInstance = db && (db.knex || (typeof db.transaction === 'function' ? db : null));
+    const alreadyInTx = Boolean(activeCtx.trx || hasAmbientTransaction());
 
-    if (shouldUseTx && knexInstance && !activeCtx.trx) {
+    if (shouldUseTx && knexInstance && !alreadyInTx) {
       return await knexInstance.transaction(async (trx) => {
-        const txCtx = Object.create(activeCtx);
-        txCtx.trx = trx;
-        if (activeCtx.db && typeof activeCtx.db.getRepository === 'function') {
-          const { createRepository } = require('../../core/orm/repository');
-          txCtx.db = Object.assign(Object.create(activeCtx.db), {
-            knex: trx,
-            getRepository: (modelName, scopeCtx) => {
-              const origRepo = activeCtx.db.getRepository(modelName, scopeCtx);
-              return createRepository(origRepo.model, trx, scopeCtx);
-            },
-          });
-        } else {
-          txCtx.db = trx;
-        }
-        txCtx.service = (subName, subInput, subOpts) =>
-          executeService(registry, subName, subInput, txCtx, subOpts);
-        txCtx.service.invalidate = (subName, subInput, subCtx) =>
-          registry.invalidate(subName, subInput, subCtx || txCtx);
-        txCtx.service.clearCache = (subName) =>
-          registry.clearCache(subName);
-        return await serviceDef.handler(validatedInput, txCtx);
+        return await runWithAmbientTransaction(trx, async () => {
+          const txCtx = Object.create(activeCtx);
+          txCtx.trx = trx;
+          if (activeCtx.db && typeof activeCtx.db.getRepository === 'function') {
+            const { createRepository } = require('../../core/orm/repository');
+            txCtx.db = Object.assign(Object.create(activeCtx.db), {
+              knex: trx,
+              getRepository: (modelName, scopeCtx) => {
+                const origRepo = activeCtx.db.getRepository(modelName, scopeCtx);
+                return createRepository(origRepo.model, trx, scopeCtx);
+              },
+            });
+          } else {
+            txCtx.db = trx;
+          }
+          txCtx.service = (subName, subInput, subOpts) =>
+            executeService(registry, subName, subInput, txCtx, subOpts);
+          txCtx.service.invalidate = (subName, subInput, subCtx) =>
+            registry.invalidate(subName, subInput, subCtx || txCtx);
+          txCtx.service.clearCache = (subName) =>
+            registry.clearCache(subName);
+          return await serviceDef.handler(validatedInput, txCtx);
+        });
       });
     }
 

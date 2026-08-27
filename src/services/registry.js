@@ -266,6 +266,13 @@ class ServiceRegistry {
   }
 
   /**
+   * Alias for call()
+   */
+  execute(name, input = {}, ctx = {}, options = {}) {
+    return this.call(name, input, ctx, options);
+  }
+
+  /**
    * Reload services from disk (useful in development)
    * @returns {ServiceRegistry}
    */

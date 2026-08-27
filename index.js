@@ -179,6 +179,11 @@ module.exports = {
   // Template helpers
   createHelpers,
   utils,
+
+  // SSR Streaming
+  ssr: require('./core/ssr'),
+  renderStream: require('./core/ssr').renderStream,
+  createHtmlStream: require('./core/ssr').createHtmlStream,
   
   // Asset management
   AssetManager,
@@ -228,6 +233,10 @@ module.exports = {
   socketIo,
   redis,
   createRedisAdapter,
+  queuePlugin: require('./plugins/queue'),
+  queue: require('./core/queue'),
+  createQueueManager: require('./core/queue').createQueueManager,
+  QueueManager: require('./core/queue').QueueManager,
 
   // Schema-driven CMS core (framework-agnostic)
   content,

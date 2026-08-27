@@ -571,6 +571,32 @@ function isColumnSortable(name, meta, model) {
     }
   }
 
+  /** Extract structured field errors from Zod, ORM or database validation exceptions */
+  function extractValidationErrors(error) {
+    if (!error) return null;
+    const fields = {};
+    if (error.errors && typeof error.errors === 'object') {
+      if (Array.isArray(error.errors)) {
+        for (const item of error.errors) {
+          if (item.path && item.message) {
+            const key = Array.isArray(item.path) ? item.path.join('.') : String(item.path);
+            fields[key] = item.message;
+          }
+        }
+      } else {
+        Object.assign(fields, error.errors);
+      }
+    } else if (error.issues && Array.isArray(error.issues)) {
+      for (const issue of error.issues) {
+        const key = issue.path && issue.path.length > 0 ? issue.path.join('.') : 'root';
+        fields[key] = issue.message;
+      }
+    } else if (error.fields && typeof error.fields === 'object') {
+      Object.assign(fields, error.fields);
+    }
+    return Object.keys(fields).length > 0 ? fields : null;
+  }
+
   /**
    * Create record
    */
@@ -591,7 +617,8 @@ function isColumnSortable(name, meta, model) {
           const value = req.body[colName];
           if (isRichTextEmpty(value)) {
             return res.status(400).json({ 
-              error: `Field "${colName}" is required` 
+              error: `Field "${colName}" is required`,
+              fields: { [colName]: `Field "${colName}" is required` },
             });
           }
         }
@@ -602,7 +629,8 @@ function isColumnSortable(name, meta, model) {
 
       res.status(201).json({ data: sanitizeForOutput(record, model) });
     } catch (error) {
-      res.status(400).json({ error: error.message });
+      const fields = extractValidationErrors(error);
+      res.status(400).json({ error: error.message, ...(fields ? { fields } : {}) });
     }
   }
 
@@ -626,7 +654,8 @@ function isColumnSortable(name, meta, model) {
           const value = req.body[colName];
           if (isRichTextEmpty(value)) {
             return res.status(400).json({ 
-              error: `Field "${colName}" is required` 
+              error: `Field "${colName}" is required`,
+              fields: { [colName]: `Field "${colName}" is required` },
             });
           }
         }
@@ -641,7 +670,8 @@ function isColumnSortable(name, meta, model) {
 
       res.json({ data: sanitizeForOutput(record, model) });
     } catch (error) {
-      res.status(400).json({ error: error.message });
+      const fields = extractValidationErrors(error);
+      res.status(400).json({ error: error.message, ...(fields ? { fields } : {}) });
     }
   }
 

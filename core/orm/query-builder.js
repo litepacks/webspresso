@@ -13,6 +13,8 @@ const {
   serializeJsonFields,
   deserializeJsonFields,
 } = require('./json-fields');
+const { getAmbientTransaction } = require('./transaction');
+const { validateQueryComplexity } = require('./complexity');
 
 /**
  * Create a new query builder
@@ -236,7 +238,8 @@ class QueryBuilder {
    * @returns {this}
    */
   limit(limit) {
-    this.state.limitValue = limit;
+    const validated = validateQueryComplexity(this.model, { limit });
+    this.state.limitValue = validated.limit;
     return this;
   }
 
@@ -256,7 +259,9 @@ class QueryBuilder {
    * @returns {this}
    */
   with(...relations) {
-    this.state.withs.push(...relations.flat());
+    const flat = relations.flat();
+    const validated = validateQueryComplexity(this.model, { includes: [...this.state.withs, ...flat] });
+    this.state.withs = validated.includes;
     return this;
   }
 
@@ -289,11 +294,27 @@ class QueryBuilder {
   }
 
   /**
+   * Resolve active Knex instance (explicit or ambient transaction)
+   * @returns {import('knex').Knex|import('knex').Knex.Transaction}
+   */
+  getActiveKnex() {
+    if (this.knex && (this.knex.isTransaction || typeof this.knex.commit === 'function')) {
+      return this.knex;
+    }
+    const ambientTrx = getAmbientTransaction();
+    if (ambientTrx) {
+      return ambientTrx;
+    }
+    return this.knex;
+  }
+
+  /**
    * Transaction handle for lifecycle hooks (matches repository pattern)
    * @returns {import('knex').Knex.Transaction|null}
    */
   _hookTrx() {
-    return this.knex.isTransaction ? this.knex : null;
+    const active = this.getActiveKnex();
+    return (active && (active.isTransaction || typeof active.commit === 'function')) ? active : null;
   }
 
   /**
@@ -304,7 +325,8 @@ class QueryBuilder {
    */
   toKnex(options = {}) {
     const { includeLimitOffset = true } = options;
-    let qb = this.knex(this.model.table);
+    const activeKnex = this.getActiveKnex();
+    let qb = activeKnex(this.model.table);
 
     // Apply global scopes
     qb = applyScopes(qb, this.scopeContext, this.model);
@@ -564,6 +586,10 @@ class QueryBuilder {
    * @returns {Promise<import('./types').PaginatedResult>}
    */
   async paginate(page = 1, perPage = 15) {
+    const validated = validateQueryComplexity(this.model, { perPage });
+    perPage = validated.perPage;
+    page = Math.max(1, parseInt(page, 10) || 1);
+
     const ctx = createEventContext(this.model.name, 'find', this._hookTrx());
     const self = this;
 

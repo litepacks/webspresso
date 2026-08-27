@@ -76,7 +76,7 @@ export interface ServiceContext {
   req?: Request;
   res?: Response;
   db?: DatabaseInstance | null;
-  service: <T = unknown>(name: string, input?: unknown, options?: unknown) => Promise<T>;
+  service?: <T = unknown>(name: string, input?: unknown, options?: unknown) => Promise<T>;
   [key: string]: unknown;
 }
 
@@ -86,7 +86,7 @@ export type ServiceHandler<TInput = unknown, TOutput = unknown> = (
 ) => Promise<TOutput> | TOutput;
 
 export interface ServiceDefinition<TInput = unknown, TOutput = unknown> {
-  schema?: Record<string, unknown> | ((input: unknown) => unknown) | null;
+  schema?: import('zod').ZodType<any> | Record<string, unknown> | ((input: unknown) => unknown) | null;
   handler: ServiceHandler<TInput, TOutput>;
   metadata?: Record<string, unknown>;
   auth?: boolean | string | string[];
@@ -116,6 +116,22 @@ export function createServiceRegistry(options?: {
   logger?: unknown;
   autoLoad?: boolean;
 }): ServiceRegistry;
+
+export type InferServiceInput<T> = T extends ServiceDefinition<infer TInput, any>
+  ? TInput
+  : T extends { schema: import('zod').ZodType<infer TInput> }
+    ? TInput
+    : T extends (input: infer TInput, ...args: any[]) => any
+      ? TInput
+      : unknown;
+
+export type InferServiceOutput<T> = T extends ServiceDefinition<any, infer TOutput>
+  ? TOutput
+  : T extends (...args: any[]) => Promise<infer TOutput>
+    ? TOutput
+    : T extends (...args: any[]) => infer TOutput
+      ? TOutput
+      : unknown;
 
 export function defineService<TInput = unknown, TOutput = unknown>(
   definition: ServiceDefinition<TInput, TOutput> | ServiceHandler<TInput, TOutput>
@@ -572,10 +588,23 @@ export interface ScopeOptions {
   tenant?: string | null;
 }
 
-export interface ModelOptions {
+// --- ORM: Type Inference Helpers ---
+
+export type InferModel<T> = T extends ModelDefinition<infer TModel>
+  ? TModel
+  : T extends ZodObject<infer TShape>
+    ? import('zod').z.infer<T>
+    : T extends ZodTypeAny
+      ? import('zod').z.infer<T>
+      : Record<string, any>;
+
+export type InferModelCreate<T> = Partial<InferModel<T>> & Record<string, any>;
+export type InferModelUpdate<T> = Partial<InferModel<T>>;
+
+export interface ModelOptions<TSchema extends ZodObject<any> = ZodObject<Record<string, ZodTypeAny>>> {
   name: string;
   table: string;
-  schema: ZodObject<Record<string, ZodTypeAny>>;
+  schema: TSchema;
   primaryKey?: string;
   relations?: Record<string, RelationDefinition>;
   scopes?: ScopeOptions;
@@ -583,10 +612,16 @@ export interface ModelOptions {
   rest?: RestMetadata;
   hooks?: Record<string, (...args: unknown[]) => unknown>;
   hidden?: string[];
+  queryLimits?: {
+    maxLimit?: number;
+    defaultLimit?: number;
+    maxIncludes?: number;
+    maxFilterConditions?: number;
+  };
   cache?: boolean | 'auto' | 'smart' | { strategy: 'auto' | 'smart' };
 }
 
-export interface ModelDefinition {
+export interface ModelDefinition<TModel = Record<string, any>> {
   name: string;
   table: string;
   schema: ZodObject<Record<string, ZodTypeAny>>;
@@ -603,7 +638,7 @@ export interface ModelDefinition {
     label: string;
     icon: string | null;
     customFields: Record<string, unknown>;
-    queries: Record<string, (repo: Repository) => Promise<unknown>>;
+    queries: Record<string, (repo: Repository<TModel>) => Promise<unknown>>;
   };
   rest: {
     enabled: boolean;
@@ -611,15 +646,23 @@ export interface ModelDefinition {
     allowInclude: string[] | null;
   };
   hidden: string[];
+  queryLimits: {
+    maxLimit?: number;
+    defaultLimit?: number;
+    maxIncludes?: number;
+    maxFilterConditions?: number;
+  };
   hooks: Record<string, unknown>;
   cache?: boolean | 'auto' | 'smart' | { strategy: 'auto' | 'smart' };
 }
 
-export function defineModel(options: ModelOptions): ModelDefinition;
+export function defineModel<TSchema extends ZodObject<any>>(
+  options: ModelOptions<TSchema>
+): ModelDefinition<import('zod').z.infer<TSchema>>;
 
-export function getModel(name: string): ModelDefinition | undefined;
+export function getModel<T = Record<string, any>>(name: string): ModelDefinition<T> | undefined;
 
-export function getAllModels(): Map<string, ModelDefinition>;
+export function getAllModels(): Map<string, ModelDefinition<any>>;
 
 export function hasModel(name: string): boolean;
 
@@ -647,58 +690,58 @@ export interface FindOptions {
   select?: string[];
 }
 
-export interface PaginatedResult {
-  data: Record<string, unknown>[];
+export interface PaginatedResult<T = Record<string, any>> {
+  data: T[];
   total: number;
   page: number;
   perPage: number;
   totalPages: number;
 }
 
-export interface QueryBuilder {
-  where(column: string, value: unknown): this;
-  where(column: string, operator: string, value: unknown): this;
-  where(conditions: Record<string, unknown>): this;
+export interface QueryBuilder<T = Record<string, any>> {
+  where(column: keyof T | string, value: unknown): this;
+  where(column: keyof T | string, operator: string, value: unknown): this;
+  where(conditions: Partial<T> | Record<string, unknown>): this;
   orWhere(...args: unknown[]): this;
-  whereIn(column: string, values: unknown[]): this;
-  whereBetween(column: string, range: [unknown, unknown]): this;
-  select(...columns: string[]): this;
-  orderBy(column: string, direction?: 'asc' | 'desc'): this;
+  whereIn(column: keyof T | string, values: unknown[]): this;
+  whereBetween(column: keyof T | string, range: [unknown, unknown]): this;
+  select(...columns: (keyof T | string)[]): this;
+  orderBy(column: keyof T | string, direction?: 'asc' | 'desc'): this;
   limit(n: number): this;
   offset(n: number): this;
   with(...relations: string[]): this;
   withTrashed(): this;
   onlyTrashed(): this;
-  first(): Promise<Record<string, unknown> | null>;
-  list(): Promise<Record<string, unknown>[]>;
-  get(): Promise<Record<string, unknown>[]>;
+  first(): Promise<T | null>;
+  list(): Promise<T[]>;
+  get(): Promise<T[]>;
   count(): Promise<number>;
-  paginate(page?: number, perPage?: number): Promise<PaginatedResult>;
+  paginate(page?: number, perPage?: number): Promise<PaginatedResult<T>>;
   exists(): Promise<boolean>;
-  clone(): QueryBuilder;
+  clone(): QueryBuilder<T>;
   getWiths(): string[];
   delete(): Promise<number>;
-  update(data: Record<string, unknown>): Promise<number>;
+  update(data: Partial<T> | Record<string, unknown>): Promise<number>;
   [key: string]: unknown;
 }
 
-export interface Repository {
-  findById(id: string | number, options?: FindOptions): Promise<Record<string, unknown> | null>;
-  findOne(conditions: Record<string, unknown>, options?: FindOptions): Promise<Record<string, unknown> | null>;
-  findAll(options?: FindOptions): Promise<Record<string, unknown>[]>;
-  create(data: Record<string, unknown>): Promise<Record<string, unknown>>;
-  createMany(data: Record<string, unknown>[]): Promise<Record<string, unknown>[]>;
-  update(id: string | number, data: Record<string, unknown>): Promise<Record<string, unknown> | null>;
-  updateWhere(conditions: Record<string, unknown>, data: Record<string, unknown>): Promise<number>;
+export interface Repository<T = Record<string, any>> {
+  findById(id: string | number, options?: FindOptions): Promise<T | null>;
+  findOne(conditions: Partial<T> | Record<string, unknown>, options?: FindOptions): Promise<T | null>;
+  findAll(options?: FindOptions): Promise<T[]>;
+  create(data: Partial<T> | Record<string, unknown>): Promise<T>;
+  createMany(data: (Partial<T> | Record<string, unknown>)[]): Promise<T[]>;
+  update(id: string | number, data: Partial<T> | Record<string, unknown>): Promise<T | null>;
+  updateWhere(conditions: Partial<T> | Record<string, unknown>, data: Partial<T> | Record<string, unknown>): Promise<number>;
   delete(id: string | number): Promise<boolean>;
   forceDelete(id: string | number): Promise<boolean>;
-  restore(id: string | number): Promise<Record<string, unknown> | null>;
-  query(): QueryBuilder;
+  restore(id: string | number): Promise<T | null>;
+  query(): QueryBuilder<T>;
   raw(sql: string, bindings?: unknown[]): Promise<unknown>;
-  count(conditions?: Record<string, unknown>): Promise<number>;
-  exists(conditions: Record<string, unknown>): Promise<boolean>;
-  with(...relations: string[]): QueryBuilder;
-  model: ModelDefinition;
+  count(conditions?: Partial<T> | Record<string, unknown>): Promise<number>;
+  exists(conditions: Partial<T> | Record<string, unknown>): Promise<boolean>;
+  with(...relations: string[]): QueryBuilder<T>;
+  model: ModelDefinition<T>;
 }
 
 // --- ORM: database ---
@@ -778,27 +821,36 @@ export interface MigrationManager {
 
 export interface TransactionContext {
   trx: Knex.Transaction;
-  getRepository(modelName: string, scopeContext?: ScopeContext): Repository;
-  createRepository(model: ModelDefinition, scopeContext?: ScopeContext): Repository;
+  getRepository<T = Record<string, any>>(modelName: string, scopeContext?: ScopeContext): Repository<T>;
+  createRepository<T = Record<string, any>>(model: ModelDefinition<T>, scopeContext?: ScopeContext): Repository<T>;
 }
 
 export interface DatabaseInstance {
   knex: Knex;
   migrate: MigrationManager;
-  getModel(name: string): ModelDefinition;
+  getModel<T = Record<string, any>>(name: string): ModelDefinition<T>;
   hasModel(name: string): boolean;
-  getAllModels(): ModelDefinition[];
-  registerModel(model: ModelDefinition): void;
-  getRepository(modelName: string, scopeContext?: ScopeContext): Repository;
-  createRepository(model: ModelDefinition, scopeContext?: ScopeContext): Repository;
-  query(modelName: string, scopeContext?: ScopeContext): QueryBuilder;
-  transaction<T>(callback: (ctx: TransactionContext) => Promise<T>): Promise<T>;
+  getAllModels(): ModelDefinition<any>[];
+  registerModel<T = Record<string, any>>(model: ModelDefinition<T>): void;
+  getRepository<T = Record<string, any>>(modelName: string, scopeContext?: ScopeContext): Repository<T>;
+  createRepository<T = Record<string, any>>(model: ModelDefinition<T>, scopeContext?: ScopeContext): Repository<T>;
+  query<T = Record<string, any>>(modelName: string, scopeContext?: ScopeContext): QueryBuilder<T>;
+  transaction<T>(callback: (ctx: TransactionContext) => Promise<T>, scopeContext?: ScopeContext): Promise<T>;
+  runInTransaction<T>(callback: (ctx: TransactionContext) => Promise<T>, scopeContext?: ScopeContext): Promise<T>;
+  getAmbientTransaction(): Knex.Transaction | null;
+  hasActiveTransaction(): boolean;
   createSeeder(): unknown;
   cache: OrmCachePublicApi | null;
   destroy(): Promise<void>;
 }
 
 export function createDatabase(config: DatabaseConfig): DatabaseInstance;
+
+export function runWithAmbientTransaction<T>(trx: Knex.Transaction, callback: () => Promise<T> | T): Promise<T>;
+export function getAmbientTransaction(): Knex.Transaction | null;
+export function hasAmbientTransaction(): boolean;
+export function createTransactionContext(trx: Knex.Transaction, scopeContext?: ScopeContext): TransactionContext;
+export function runTransaction<T>(knex: Knex, callback: (ctx: TransactionContext) => Promise<T>, scopeContext?: ScopeContext): Promise<T>;
 
 export function createMemoryCacheProvider(options?: OrmMemoryCacheOptions): {
   get(key: string): unknown;
@@ -854,6 +906,36 @@ export function createEventContext(
   isCancelled: boolean;
   cancelReason: string | null;
   cancel(reason?: string): void;
+};
+
+// --- ORM: Query Complexity & DoS Protection ---
+
+export class QueryComplexityError extends BadRequestError {
+  code: string;
+}
+
+export const DEFAULT_QUERY_LIMITS: {
+  maxLimit: number;
+  defaultLimit: number;
+  maxIncludes: number;
+  maxFilterConditions: number;
+};
+
+export function resolveQueryLimits(model?: ModelDefinition): typeof DEFAULT_QUERY_LIMITS;
+
+export function validateQueryComplexity(
+  model?: ModelDefinition,
+  params?: {
+    perPage?: number;
+    limit?: number;
+    includes?: string[];
+    filterCount?: number;
+    strict?: boolean;
+  }
+): {
+  limit: number;
+  perPage: number;
+  includes: string[];
 };
 
 // --- Built-in plugins (subset re-exported from main index.js) ---
@@ -1327,3 +1409,178 @@ export interface WebspressoKernel {
 }
 
 export const kernel: WebspressoKernel;
+
+// --- Background Job Queue ---
+
+export interface JobJSON {
+  id: string | number;
+  name: string;
+  data: unknown;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  attempts: number;
+  maxAttempts: number;
+  backoff: unknown;
+  priority: number;
+  timeout: number;
+  progress: number;
+  result: unknown;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+  runAt: string;
+}
+
+export class Job {
+  id: string | number;
+  name: string;
+  data: any;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  attempts: number;
+  maxAttempts: number;
+  backoff: number | { type?: 'exponential' | 'fixed'; delay?: number };
+  priority: number;
+  timeout: number;
+  progressValue: number;
+  result: any;
+  error: any;
+  createdAt: Date;
+  updatedAt: Date;
+  runAt: Date;
+  constructor(options?: Record<string, any>);
+  progress(percent: number, message?: string): void;
+  getNextRetryDelay(): number;
+  toJSON(): JobJSON;
+}
+
+export interface QueueAdapter {
+  enqueue(job: Job): Promise<Job>;
+  dequeue(jobNames?: string[]): Promise<Job | null>;
+  complete(jobId: string | number, result?: unknown): Promise<Job | null>;
+  fail(jobId: string | number, error?: unknown): Promise<Job | null>;
+  retry(jobId: string | number, delayMs: number, error?: unknown): Promise<Job | null>;
+  getJob(jobId: string | number): Promise<Job | null>;
+  getStats(): Promise<{ pending: number; running: number; completed: number; failed: number; total: number }>;
+  clear(): Promise<void>;
+}
+
+export class MemoryQueueAdapter implements QueueAdapter {
+  enqueue(job: Job): Promise<Job>;
+  dequeue(jobNames?: string[]): Promise<Job | null>;
+  complete(jobId: string | number, result?: unknown): Promise<Job | null>;
+  fail(jobId: string | number, error?: unknown): Promise<Job | null>;
+  retry(jobId: string | number, delayMs: number, error?: unknown): Promise<Job | null>;
+  getJob(jobId: string | number): Promise<Job | null>;
+  getStats(): Promise<{ pending: number; running: number; completed: number; failed: number; total: number }>;
+  clear(): Promise<void>;
+}
+
+export class DatabaseQueueAdapter implements QueueAdapter {
+  constructor(options: { knex: Knex; tableName?: string });
+  ensureTable(): Promise<void>;
+  enqueue(job: Job): Promise<Job>;
+  dequeue(jobNames?: string[]): Promise<Job | null>;
+  complete(jobId: string | number, result?: unknown): Promise<Job | null>;
+  fail(jobId: string | number, error?: unknown): Promise<Job | null>;
+  retry(jobId: string | number, delayMs: number, error?: unknown): Promise<Job | null>;
+  getJob(jobId: string | number): Promise<Job | null>;
+  getStats(): Promise<{ pending: number; running: number; completed: number; failed: number; total: number }>;
+  clear(): Promise<void>;
+}
+
+export class RedisQueueAdapter implements QueueAdapter {
+  constructor(options: { client: unknown; prefix?: string });
+  enqueue(job: Job): Promise<Job>;
+  dequeue(jobNames?: string[]): Promise<Job | null>;
+  complete(jobId: string | number, result?: unknown): Promise<Job | null>;
+  fail(jobId: string | number, error?: unknown): Promise<Job | null>;
+  retry(jobId: string | number, delayMs: number, error?: unknown): Promise<Job | null>;
+  getJob(jobId: string | number): Promise<Job | null>;
+  getStats(): Promise<{ pending: number; running: number; completed: number; failed: number; total: number }>;
+  clear(): Promise<void>;
+}
+
+export interface DispatchOptions {
+  delay?: number | Date;
+  attempts?: number;
+  priority?: number;
+  timeout?: number;
+  backoff?: number | { type?: 'exponential' | 'fixed'; delay?: number };
+}
+
+export class QueueManager extends import('events').EventEmitter {
+  adapter: QueueAdapter;
+  concurrency: number;
+  pollInterval: number;
+  isRunning: boolean;
+  isPaused: boolean;
+  isDraining: boolean;
+  constructor(options?: {
+    adapter?: QueueAdapter;
+    concurrency?: number;
+    pollInterval?: number;
+    jobsDir?: string | null;
+    autoStart?: boolean;
+  });
+  define(name: string, handler: (job: Job, ctx: { queue: QueueManager }) => Promise<any> | any, options?: DispatchOptions): this;
+  has(name: string): boolean;
+  dispatch(name: string, data?: unknown, options?: DispatchOptions): Promise<Job>;
+  start(): this;
+  pause(): this;
+  resume(): this;
+  drain(timeoutMs?: number): Promise<void>;
+  stop(): Promise<void>;
+  getStats(): Promise<Record<string, unknown>>;
+  getJob(jobId: string | number): Promise<Job | null>;
+  loadJobsFromDirectory(dirPath: string): void;
+}
+
+export function createQueueManager(options?: {
+  adapter?: QueueAdapter;
+  concurrency?: number;
+  pollInterval?: number;
+  jobsDir?: string | null;
+  autoStart?: boolean;
+}): QueueManager;
+
+export function queuePlugin(options?: {
+  adapter?: 'memory' | 'database' | 'db' | 'redis' | QueueAdapter;
+  db?: { knex: Knex };
+  knex?: Knex;
+  redisClient?: unknown;
+  tableName?: string;
+  concurrency?: number;
+  pollInterval?: number;
+  jobsDir?: string;
+  autoStart?: boolean;
+}): PluginDefinition;
+
+// --- SSR Streaming & Chunked Transfer ---
+
+export interface HtmlStreamOptions {
+  env: import('nunjucks').Environment;
+  templatePath: string;
+  context?: Record<string, unknown>;
+  defer?: Record<string, Promise<unknown> | { promise: Promise<unknown>; template?: string }>;
+}
+
+export interface RenderStreamOptions {
+  env?: import('nunjucks').Environment;
+  defer?: Record<string, Promise<unknown> | { promise: Promise<unknown>; template?: string }>;
+  status?: number;
+  flushImmediately?: boolean;
+}
+
+export function createHtmlStream(options: HtmlStreamOptions): import('stream').Readable;
+export function renderStream(
+  res: import('express').Response,
+  templatePath: string,
+  context?: Record<string, unknown>,
+  options?: RenderStreamOptions
+): Promise<void>;
+
+export const ssr: {
+  createHtmlStream: typeof createHtmlStream;
+  renderStream: typeof renderStream;
+};
+
+

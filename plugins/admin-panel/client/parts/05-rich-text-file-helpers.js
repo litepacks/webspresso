@@ -5,13 +5,14 @@ const RichTextField = {
       
       // Load Quill if not already loaded
       if (typeof window.Quill === 'undefined') {
+        const adminPath = window.__ADMIN_PATH__ || '/_admin';
         const link = document.createElement('link');
         link.rel = 'stylesheet';
-        link.href = 'https://cdn.quilljs.com/1.3.6/quill.snow.css';
+        link.href = adminPath + '/vendor/quill.snow.min.css';
         document.head.appendChild(link);
         
         const script = document.createElement('script');
-        script.src = 'https://cdn.quilljs.com/1.3.6/quill.js';
+        script.src = adminPath + '/vendor/quill.min.js';
         script.onload = () => {
           initEditor(vnode);
         };
@@ -87,21 +88,22 @@ const RichTextField = {
   },
   
   view: (vnode) => {
-    const { name, col, value = '', onChange, readonly } = vnode.attrs;
+    const { name, col, value = '', onChange, readonly, error } = vnode.attrs;
     const ui = col.ui || {};
     const label = ui.label || formatColumnLabel(col.name);
     const hint = ui.hint || '';
     const editorId = 'quill-editor-' + name;
     const required = !col.nullable && !readonly;
+    const borderClass = error ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-slate-600';
     
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: name },
         label,
         required ? m('span.text-red-500', ' *') : null
       ),
-      m('div.border.border-gray-300.dark:border-slate-600.rounded.bg-white.dark:bg-slate-900/50', {
+      m('div.border.rounded.bg-white.dark:bg-slate-900/50', {
         id: editorId,
-        class: readonly ? 'bg-gray-100 dark:bg-slate-800 opacity-50' : '',
+        class: (readonly ? 'bg-gray-100 dark:bg-slate-800 opacity-50 ' : '') + borderClass,
         style: 'min-height: 200px;'
       }),
       m('input[type=hidden]', {
@@ -109,7 +111,7 @@ const RichTextField = {
         id: name + '-value',
         value: value || '',
       }),
-      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
+      error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
     ]);
   }
 };
@@ -251,38 +253,47 @@ const FileUploadField = {
       revokeLocalPreview(state);
       if (onChange) onChange('');
     };
+    var error = vnode.attrs.error;
+    var borderClass = error ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-slate-600';
     if (readonly) {
       return m('.mb-4', [
-        m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', label, required ? m('span.text-red-500', ' *') : null),
+        m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', label),
         value
           ? renderUploadedFilePreview(value, { accept: accept, readonly: true, label: label })
           : m('span.text-gray-400.dark:text-slate-500', '—'),
-        hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null,
+        error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
       ]);
     }
     if (!uploadUrl) {
       return m('.mb-4', [
-        m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', { for: col.name }, label, required ? m('span.text-red-500', ' *') : null),
+        m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', { for: col.name }, [
+          label,
+          required ? m('span.text-red-500', ' *') : null,
+        ]),
         m('p.text-xs.text-amber-700.dark:text-amber-400.mb-2', 'Upload URL is not configured. Enter a public URL or path manually.'),
-        m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500', {
+        m('input.w-full.px-3.py-2.border.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500', {
           type: 'text',
           id: col.name,
           name: col.name,
           value: value,
           placeholder: 'https://… or /uploads/…',
           required: required,
+          class: borderClass,
           oninput: function (e) { if (onChange) onChange(e.target.value); },
         }),
         value ? renderUploadedFilePreview(value, { accept: accept, readonly: false, onRemove: clearValue, label: label }) : null,
-        hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null,
+        error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
       ]);
     }
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', label, required ? m('span.text-red-500', ' *') : null),
+      m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', [
+        label,
+        required ? m('span.text-red-500', ' *') : null,
+      ]),
       displayUrl
         ? renderUploadedFilePreview(displayUrl, { accept: accept, readonly: false, onRemove: clearValue, label: label })
         : null,
-      m('div#' + dropZoneId + '.border-2.border-dashed.border-gray-300.dark:border-slate-600.rounded-lg.p-6.text-center.bg-gray-50.dark:bg-slate-900/40', { style: 'cursor: pointer;' }, [
+      m('div#' + dropZoneId + '.border-2.border-dashed.rounded-lg.p-6.text-center.bg-gray-50.dark:bg-slate-900/40', { class: borderClass, style: 'cursor: pointer;' }, [
         m('input[type=file].hidden', {
           id: 'file-input-' + col.name,
           accept: accept,
@@ -299,7 +310,7 @@ const FileUploadField = {
       ]),
       m('input[type=hidden]', { name: col.name, value: typeof value === 'string' ? value : '' }),
       m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', 'Max ' + Math.round(maxSize / 1024 / 1024) + ' MB (server enforces limits)'),
-      hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null,
+      error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
     ]);
   },
 };
@@ -352,23 +363,25 @@ function getFieldRenderer(col, modelMeta) {
   // Check for custom field first
   if (col.customField && col.customField.type) {
     if (col.customField.type === 'rich-text') {
-      return (col, value, onChange, readonly) => {
+      return (col, value, onChange, readonly, error) => {
         return m(RichTextField, {
           name: col.name,
           col,
           value: value || '',
           onChange,
           readonly: readonly || false,
+          error,
         });
       };
     }
     if (col.customField.type === 'file-upload') {
-      return (col, value, onChange, readonly) => {
+      return (col, value, onChange, readonly, error) => {
         return m(FileUploadField, {
           col,
           value: value || '',
           onChange,
           readonly: readonly || false,
+          error,
         });
       };
     }
@@ -382,11 +395,11 @@ function getFieldRenderer(col, modelMeta) {
     // Check registered custom field renderers in browser
     const custom = window.__customFieldRenderers && window.__customFieldRenderers[col.customField.type];
     if (custom) {
-      return (col, value, onChange, readonly) => {
+      return (col, value, onChange, readonly, error) => {
         if (custom.edit && typeof custom.edit === 'object' && custom.edit.view) {
-          return m(custom.edit, { col, value, onChange, readonly });
+          return m(custom.edit, { col, value, onChange, readonly, error });
         } else if (typeof custom.edit === 'function') {
-          return custom.edit(value, onChange, col);
+          return custom.edit(value, onChange, col, readonly, error);
         }
       };
     }
@@ -395,22 +408,23 @@ function getFieldRenderer(col, modelMeta) {
   // Check schema type custom field renderers
   if (col.type && window.__customFieldRenderers && window.__customFieldRenderers[col.type]) {
     const custom = window.__customFieldRenderers[col.type];
-    return (col, value, onChange, readonly) => {
+    return (col, value, onChange, readonly, error) => {
       if (custom.edit && typeof custom.edit === 'object' && custom.edit.view) {
-        return m(custom.edit, { col, value, onChange, readonly });
+        return m(custom.edit, { col, value, onChange, readonly, error });
       } else if (typeof custom.edit === 'function') {
-        return custom.edit(value, onChange, col);
+        return custom.edit(value, onChange, col, readonly, error);
       }
     };
   }
 
   if (col.type === 'file') {
-    return (col, value, onChange, readonly) => {
+    return (col, value, onChange, readonly, error) => {
       return m(FileUploadField, {
         col,
         value: value || '',
         onChange,
         readonly: readonly || false,
+        error,
       });
     };
   }

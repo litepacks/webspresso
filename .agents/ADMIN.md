@@ -210,3 +210,16 @@ registry.registerClientComponent('custom-banner', `
   });
 `);
 ```
+
+---
+
+## 9. Offline & Zero-CDN Architecture
+
+The Admin Panel is 100% self-contained and operates completely offline without external CDN dependencies (`unpkg.com`, `cdn.jsdelivr.net`, or `cdn.tailwindcss.com`):
+- **Vendored Static Assets (`plugins/admin-panel/vendor/`)**:
+  - `mithril.min.js` — Client SPA runtime (~28 KB).
+  - `tailwind.min.js` — Client utility compiler & style runtime (~412 KB).
+  - `quill.min.js` & `quill.snow.min.css` — Rich-text WYSIWYG editor.
+- **Local Asset Serving**: Served locally at `GET /_admin/vendor/:file` with proper MIME types, path traversal protections, and `Cache-Control: public, max-age=86400` caching.
+- **Hardened CSP**: Works in air-gapped / intranet environments with strict `'self'` Content Security Policy without leaking third-party network requests.
+

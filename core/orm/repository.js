@@ -16,6 +16,7 @@ const {
 const { ensureArray } = require('./utils');
 const { ModelEvents, createEventContext, Hooks, HookCancellationError } = require('./events');
 const { getJsonColumns, serializeJsonFields, deserializeJsonFields } = require('./json-fields');
+const { getAmbientTransaction } = require('./transaction');
 
 /**
  * Create a repository for a model
@@ -31,11 +32,36 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
   const hasJson = jsonColumns.size > 0;
 
   /**
+   * Resolve active Knex instance (explicit or ambient transaction)
+   * @returns {import('knex').Knex|import('knex').Knex.Transaction}
+   */
+  function getActiveKnex() {
+    if (knex && (knex.isTransaction || typeof knex.commit === 'function')) {
+      return knex;
+    }
+    const ambientTrx = getAmbientTransaction();
+    if (ambientTrx) {
+      return ambientTrx;
+    }
+    return knex;
+  }
+
+  /**
+   * Get transaction handle for lifecycle hooks
+   * @returns {import('knex').Knex.Transaction|null}
+   */
+  function getHookTrx() {
+    const active = getActiveKnex();
+    return (active && (active.isTransaction || typeof active.commit === 'function')) ? active : null;
+  }
+
+  /**
    * Get base query builder
    * @returns {import('knex').Knex.QueryBuilder}
    */
   function baseQuery() {
-    let qb = knex(model.table);
+    const activeKnex = getActiveKnex();
+    let qb = activeKnex(model.table);
     return applyScopes(qb, scopeContext, model);
   }
 
@@ -79,7 +105,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
       }
 
       if (withs.length > 0) {
-        await loadRelations([record], ensureArray(withs), model, knex, scopeContext);
+        await loadRelations([record], ensureArray(withs), model, getActiveKnex(), scopeContext);
       }
 
       if (shouldEmit) {
@@ -105,7 +131,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
         kind,
         kind === 'pk' ? id : null
       );
-      return cacheLayer.wrapRead(model, knex, scopeContext, fingerprint, tags, loadFromDb, (r) => r != null);
+      return cacheLayer.wrapRead(model, getActiveKnex(), scopeContext, fingerprint, tags, loadFromDb, (r) => r != null);
     }
 
     return loadFromDb();
@@ -160,7 +186,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
       }
 
       if (withs.length > 0) {
-        await loadRelations([record], ensureArray(withs), model, knex, scopeContext);
+        await loadRelations([record], ensureArray(withs), model, getActiveKnex(), scopeContext);
       }
 
       if (shouldEmit) {
@@ -172,7 +198,18 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
 
     if (cacheLayer && cacheLayer.strategyFor(model)) {
       const strat = cacheLayer.strategyFor(model);
-      const kind = isPkOnly ? 'pk' : 'collection';
+      if (isPkOnly) {
+        const pkVal = conditions[model.primaryKey];
+        const fingerprint = cacheLayer.findByIdFingerprint(
+          model,
+          scopeContext,
+          pkVal,
+          select || [],
+          withs
+        );
+        const tags = cacheLayer.buildReadTags(model, strat, 'pk', pkVal);
+        return cacheLayer.wrapRead(model, getActiveKnex(), scopeContext, fingerprint, tags, loadFromDb, (r) => r != null);
+      }
       const fingerprint = cacheLayer.findOneFingerprint(
         model,
         scopeContext,
@@ -180,20 +217,15 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
         select || [],
         withs
       );
-      const tags = cacheLayer.buildReadTags(
-        model,
-        strat,
-        kind,
-        kind === 'pk' ? conditions[model.primaryKey] : null
-      );
-      return cacheLayer.wrapRead(model, knex, scopeContext, fingerprint, tags, loadFromDb, (r) => r != null);
+      const tags = cacheLayer.buildReadTags(model, strat, 'collection', null);
+      return cacheLayer.wrapRead(model, getActiveKnex(), scopeContext, fingerprint, tags, loadFromDb, (r) => r != null);
     }
 
     return loadFromDb();
   }
 
   /**
-   * Find all records
+   * Find all records matching scope
    * @param {import('./types').FindOptions} [options={}] - Find options
    * @returns {Promise<Object[]>}
    */
@@ -229,7 +261,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
       }
 
       if (withs.length > 0 && records.length > 0) {
-        await loadRelations(records, ensureArray(withs), model, knex, scopeContext);
+        await loadRelations(records, ensureArray(withs), model, getActiveKnex(), scopeContext);
       }
 
       if (shouldEmit) {
@@ -246,7 +278,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
       const strat = cacheLayer.strategyFor(model);
       const fingerprint = cacheLayer.findAllFingerprint(model, scopeContext, select || []);
       const tags = cacheLayer.buildReadTags(model, strat, 'collection', null);
-      return cacheLayer.wrapRead(model, knex, scopeContext, fingerprint, tags, loadFromDb, () => true);
+      return cacheLayer.wrapRead(model, getActiveKnex(), scopeContext, fingerprint, tags, loadFromDb, () => true);
     }
 
     return loadFromDb();
@@ -258,7 +290,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    * @returns {Promise<Object>}
    */
   async function create(data) {
-    const ctx = createEventContext(model.name, 'create', knex.isTransaction ? knex : null);
+    const ctx = createEventContext(model.name, 'create', getHookTrx());
     let workingData = { ...data };
 
     // Emit beforeValidation
@@ -294,7 +326,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     }
 
     // Insert and return the record
-    const [id] = await knex(model.table).insert(insertData).returning(model.primaryKey);
+    const [id] = await getActiveKnex()(model.table).insert(insertData).returning(model.primaryKey);
 
     // For databases that don't support returning (SQLite), id might be the row itself
     const insertedId = typeof id === 'object' ? id[model.primaryKey] : id;
@@ -334,7 +366,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    * @returns {Promise<Object|null>}
    */
   async function update(id, data) {
-    const ctx = createEventContext(model.name, 'update', knex.isTransaction ? knex : null);
+    const ctx = createEventContext(model.name, 'update', getHookTrx());
     // Don't include primary key in working data for validation
     // to avoid type mismatch issues (URL params come as strings)
     let workingData = { ...data };
@@ -431,7 +463,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    * @returns {Promise<boolean>}
    */
   async function del(id) {
-    const ctx = createEventContext(model.name, 'delete', knex.isTransaction ? knex : null);
+    const ctx = createEventContext(model.name, 'delete', getHookTrx());
     
     // Get the record before deletion for hooks
     const record = await findById(id);
@@ -476,7 +508,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    */
   async function forceDelete(id) {
     // Use raw query to bypass soft delete scope
-    const deleted = await knex(model.table)
+    const deleted = await getActiveKnex()(model.table)
       .where(model.primaryKey, id)
       .delete();
     if (cacheLayer && deleted > 0) {
@@ -495,10 +527,10 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
       throw new Error(`Model "${model.name}" does not have soft delete enabled`);
     }
 
-    const ctx = createEventContext(model.name, 'restore', knex.isTransaction ? knex : null);
+    const ctx = createEventContext(model.name, 'restore', getHookTrx());
 
     // Get the trashed record for hooks (bypass soft delete scope)
-    const trashedRecord = await knex(model.table)
+    const trashedRecord = await getActiveKnex()(model.table)
       .where(model.primaryKey, id)
       .whereNotNull('deleted_at')
       .first();
@@ -514,7 +546,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     }
 
     // Update directly without scopes (to find trashed record)
-    const updated = await knex(model.table)
+    const updated = await getActiveKnex()(model.table)
       .where(model.primaryKey, id)
       .whereNotNull('deleted_at')
       .update({ deleted_at: null });
@@ -536,7 +568,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    * @returns {import('./query-builder').QueryBuilder}
    */
   function query() {
-    return createQueryBuilder(model, knex, scopeContext, cacheLayer);
+    return createQueryBuilder(model, getActiveKnex(), scopeContext, cacheLayer);
   }
 
   /**
@@ -546,7 +578,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    * @returns {Promise<Object[]>}
    */
   async function raw(sql, bindings = []) {
-    const result = await knex.raw(sql, bindings);
+    const result = await getActiveKnex().raw(sql, bindings);
     // Normalize result across database drivers
     return result.rows || result;
   }

@@ -16,6 +16,14 @@ const { ModelEvents, Hooks, HookCancellationError, createEventContext } = requir
 const { omitHiddenColumns, sanitizeForOutput } = require('./utils');
 const { generateNanoid, zodNanoid, extendZ } = require('./utils/nanoid');
 const { createOrmCacheFromConfig, unregisterOrmCacheListeners } = require('./cache');
+const {
+  ambientTransactionStorage,
+  runWithAmbientTransaction,
+  getAmbientTransaction,
+  hasAmbientTransaction,
+  createTransactionContext,
+  runTransaction,
+} = require('./transaction');
 
 /**
  * Create a database instance
@@ -128,10 +136,14 @@ function createDatabase(config) {
 
   /**
    * Get a model by name
-   * @param {string} name - Model name
+   * @param {string|import('./types').ModelDefinition} nameOrModel - Model name or model definition
    * @returns {import('./types').ModelDefinition}
    */
-  function getModelInstance(name) {
+  function getModelInstance(nameOrModel) {
+    const name = typeof nameOrModel === 'object' && nameOrModel !== null && nameOrModel.name
+      ? nameOrModel.name
+      : nameOrModel;
+
     // First check local registry
     let model = models.get(name);
     
@@ -221,26 +233,34 @@ function createDatabase(config) {
   }
 
   /**
-   * Run operations in a transaction
+   * Run operations in an ambient transaction
    * @param {Function} callback - Callback receiving transaction context
+   * @param {import('./types').ScopeContext} [scopeContext] - Optional scope context
    * @returns {Promise<*>} Result of callback
    */
-  async function transaction(callback) {
+  async function transaction(callback, scopeContext) {
     return knexInstance.transaction(async (trx) => {
-      // Create transaction context with repository methods
       const trxContext = {
         trx,
-        getRepository(modelName, scopeContext) {
+        getRepository(modelName, sContext) {
           const model = getModelInstance(modelName);
-          const ctx = scopeContext || createScopeContext();
+          const ctx = sContext || scopeContext || createScopeContext();
           return createRepository(model, trx, ctx, ormCacheLayer);
         },
-        createRepository(model, scopeContext) {
-          const ctx = scopeContext || createScopeContext();
+        createRepository(model, sContext) {
+          const ctx = sContext || scopeContext || createScopeContext();
           return createRepository(model, trx, ctx, ormCacheLayer);
+        },
+        forTenant(tenantId) {
+          if (!scopeContext) scopeContext = createScopeContext();
+          scopeContext.tenantId = tenantId;
+          return this;
+        },
+        getScopeContext() {
+          return { ...(scopeContext || createScopeContext()) };
         },
       };
-      return callback(trxContext);
+      return runWithAmbientTransaction(trx, () => callback(trxContext));
     });
   }
 
@@ -255,6 +275,9 @@ function createDatabase(config) {
     createRepository: createRepositoryFromModel,
     query,
     transaction,
+    runInTransaction: transaction,
+    getAmbientTransaction,
+    hasActiveTransaction: hasAmbientTransaction,
     createSeeder: createSeederInstance,
     cache: ormCachePublicApi,
     destroy: () => {
@@ -275,6 +298,13 @@ module.exports = {
   createMemoryCacheProvider: require('./cache/memory-provider').createMemoryCacheProvider,
   OrmCacheLayer: require('./cache/layer').OrmCacheLayer,
   createOrmCacheFromConfig: require('./cache').createOrmCacheFromConfig,
+  // Ambient transaction management
+  ambientTransactionStorage,
+  runWithAmbientTransaction,
+  getAmbientTransaction,
+  hasAmbientTransaction,
+  createTransactionContext,
+  runTransaction,
   // Schema helpers
   zdb,
   createSchemaHelpers,
@@ -298,4 +328,9 @@ module.exports = {
   Hooks,
   HookCancellationError,
   createEventContext,
+  // Query Complexity & DoS Protection
+  QueryComplexityError: require('./complexity').QueryComplexityError,
+  validateQueryComplexity: require('./complexity').validateQueryComplexity,
+  resolveQueryLimits: require('./complexity').resolveQueryLimits,
+  DEFAULT_QUERY_LIMITS: require('./complexity').DEFAULT_QUERY_LIMITS,
 };

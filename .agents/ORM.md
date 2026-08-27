@@ -98,7 +98,34 @@ const productsWithCategory = await productRepo.query()
 
 ---
 
-## 4. Query Caching (`cache`)
+## 4. Ambient Transactions & AsyncLocalStorage
+
+Webspresso features transparent **Ambient Transactions** (`core/orm/transaction.js`). When code executes inside `db.transaction()` or a service with `transaction: true`, all standard repository operations and query builders (`db.getRepository(...)`, `repo.create()`, `repo.update()`, `repo.query()`) automatically bind to the active transaction context without requiring manual `trx` passing:
+
+```js
+// 1. Database Ambient Transaction
+await db.transaction(async () => {
+  // All repositories automatically bind to the current transaction!
+  const user = await db.getRepository('User').create({ name: 'Alice', email: 'alice@example.com' });
+  await db.getRepository('Wallet').create({ user_id: user.id, balance: 100 });
+  // If an error is thrown anywhere in this block, all operations roll back automatically!
+});
+
+// 2. Checking active transaction state
+if (db.hasActiveTransaction()) {
+  const currentTrx = db.getAmbientTransaction();
+}
+
+// 3. Low-level ambient runner
+import { runWithAmbientTransaction } from 'webspresso';
+await runWithAmbientTransaction(trx, async () => {
+  await db.getRepository('Order').update(orderId, { status: 'paid' });
+});
+```
+
+---
+
+## 5. Query Caching (`cache`)
 
 - **`cache: 'auto'`**: Caches primary key lookups (`findById`) and invalidates automatically on `create`, `update`, `delete`.
 - **`cache: 'smart'`**: Selective invalidation per updated record ID.
@@ -139,3 +166,28 @@ defineModel({
 ```
 
 See [Plugin Ecosystem Guide](.agents/PLUGINS.md#216-restresourceplugin-pluginsrest-resources) for full details on querying, filtering, pagination, and soft-delete scoping.
+
+---
+
+## 7. Query Complexity & DoS Protection (`queryLimits`)
+
+Webspresso protects your database against unconstrained queries, heavy relation eager loading, and connection pool exhaustion:
+
+```js
+defineModel({
+  name: 'Product',
+  table: 'products',
+  schema: zdb.schema({ /* ... */ }),
+  queryLimits: {
+    maxLimit: 100,            // Max items allowed in a single page (default: 100)
+    defaultLimit: 20,         // Default perPage limit (default: 15)
+    maxIncludes: 5,           // Max relations eager loaded in one query (default: 5)
+    maxFilterConditions: 25,  // Max WHERE filters permitted (default: 25)
+  },
+});
+```
+
+- **QueryBuilder Enforcement**: `query().paginate()` and `query().limit()` clamp requested limits to `maxLimit`.
+- **Include Guards**: Excessive `query().with(...)` or `?include=...` relations beyond `maxIncludes` throw `QueryComplexityError` or safely cap relations.
+- **REST Resources Protection**: Automatically validates client parameters (`?perPage=5000` or `?include=...`) against model complexity boundaries.
+

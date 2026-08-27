@@ -4,6 +4,8 @@
  * @module plugins/admin-panel
  */
 
+const path = require('path');
+const fs = require('fs');
 const { createAdminUserModel } = require('./admin-user-model');
 const { generateAdminUsersMigration } = require('./migration-template');
 const { createApiHandlers } = require('./api');
@@ -75,22 +77,26 @@ function adminPanelPlugin(options = {}) {
     version: '2.0.0',
     description: 'Modular admin panel for Webspresso with extensions support',
     
-    // CSP requirements for admin panel scripts, styles, and custom page iframe sources
-    // Note: cdn.quilljs.com 301-redirects to cdn.jsdelivr.net; CSP is enforced on the final URL.
+    // CSP requirements for admin panel scripts, styles, and custom page iframe sources (Offline Zero-CDN)
     csp: {
       styleSrc: [
+        "'self'",
+        "'unsafe-inline'",
         'https://cdn.quilljs.com',
         'https://cdn.jsdelivr.net',
         'https://unpkg.com',
         'https://cdn.tailwindcss.com',
       ],
       scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "'unsafe-eval'",
         'https://cdn.quilljs.com',
         'https://cdn.jsdelivr.net',
         'https://unpkg.com',
         'https://cdn.tailwindcss.com',
       ],
-      connectSrc: ['https://unpkg.com', 'https://cdn.tailwindcss.com', 'https://cdn.jsdelivr.net'],
+      connectSrc: ["'self'", 'https://unpkg.com', 'https://cdn.tailwindcss.com', 'https://cdn.jsdelivr.net'],
       frameSrc: ["'self'", 'data:', 'blob:', 'https:'],
     },
     enabled,
@@ -198,22 +204,24 @@ function adminPanelPlugin(options = {}) {
       const { app } = ctx;
 
       const uploadUrlResolved =
-        uploadUrlOption || app.get('webspresso.uploadPath') || null;
+        uploadUrlOption || (app && typeof app.get === 'function' ? app.get('webspresso.uploadPath') : null);
       if (uploadUrlResolved) {
         registry.configure({ uploadUrl: uploadUrlResolved });
       }
 
       // Check if admin_users table exists (migration run)
-      db.knex.schema.hasTable('admin_users').then((hasAdminTable) => {
-        if (!hasAdminTable) {
-          console.warn(
-            '\n⚠️  [admin-panel] admin_users table not found. Run: webspresso admin:setup\n' +
-            '   Or create the table manually via migration. See: AdminUser model / getMigrationTemplate()\n'
-          );
-        }
-      }).catch((err) => {
-        console.warn('[admin-panel] Could not check admin_users table:', err.message);
-      });
+      if (db?.knex?.schema?.hasTable) {
+        db.knex.schema.hasTable('admin_users').then((hasAdminTable) => {
+          if (!hasAdminTable) {
+            console.warn(
+              '\n⚠️  [admin-panel] admin_users table not found. Run: webspresso admin:setup\n' +
+              '   Or create the table manually via migration. See: AdminUser model / getMigrationTemplate()\n'
+            );
+          }
+        }).catch((err) => {
+          console.warn('[admin-panel] Could not check admin_users table:', err.message);
+        });
+      }
 
       // Create and register AdminUser model
       const { hasModel: hasGlobalModel, getModel: getGlobalModel } = require('../../core/orm/model');
@@ -372,6 +380,30 @@ function adminPanelPlugin(options = {}) {
       ctx.addRoute('get', `${adminPath}/api/models/:model/queries/:query`, requireAuth, apiHandlers.queryHandler);
 
       // ==========================================
+      // Static Vendor Assets (Offline Zero-CDN)
+      // ==========================================
+      const vendorDir = path.join(__dirname, 'vendor');
+      ctx.addRoute('get', `${adminPath}/vendor/:file`, (req, res) => {
+        const fileName = path.basename(req.params.file);
+        const filePath = path.join(vendorDir, fileName);
+
+        if (!fs.existsSync(filePath)) {
+          return res.status(404).send('Vendor asset not found');
+        }
+
+        if (fileName.endsWith('.js')) {
+          res.type('application/javascript');
+        } else if (fileName.endsWith('.css')) {
+          res.type('text/css');
+        } else {
+          res.type('application/octet-stream');
+        }
+
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.sendFile(filePath);
+      });
+
+      // ==========================================
       // HTML Endpoints
       // ==========================================
 
@@ -476,9 +508,9 @@ function generateAdminPanelHtml(adminPath, registry) {
       });
     } catch (e) {}
   })();
-  </script>
-  <script src="https://unpkg.com/mithril/mithril.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script>window.__ADMIN_PATH__ = ${JSON.stringify(adminPath)};</script>
+  <script src="${adminPath}/vendor/mithril.min.js"></script>
+  <script src="${adminPath}/vendor/tailwind.min.js"></script>
   <script>tailwind.config = { darkMode: 'class' };</script>
   <style>
     body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }

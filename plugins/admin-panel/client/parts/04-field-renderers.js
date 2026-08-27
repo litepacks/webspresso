@@ -23,7 +23,7 @@ const BelongsToField = {
       });
   },
   view: (vnode) => {
-    const { col, value, onChange, readonly } = vnode.attrs;
+    const { col, value, onChange, readonly, error } = vnode.attrs;
     const customField = col.customField || {};
     const label = col.ui?.label || formatColumnLabel(col.name);
     const hint = col.ui?.hint || '';
@@ -38,18 +38,22 @@ const BelongsToField = {
         m('.text-xs.text-gray-500.dark:text-slate-400', 'Loading options...')
       ]);
     }
+
+    const borderClass = error
+      ? 'border-red-500 dark:border-red-500 focus:ring-red-500'
+      : 'border-gray-300 dark:border-slate-600 focus:ring-blue-500 dark:focus:ring-blue-400';
     
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', { for: col.name }, [
         label,
         !col.nullable && !readonly ? m('span.text-red-500', ' *') : null
       ]),
-      m('select.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
+      m('select.w-full.px-3.py-2.border.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.focus:outline-none.focus:ring-2', {
         id: col.name,
         name: col.name,
         value: value !== null && value !== undefined ? String(value) : '',
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
+        class: (readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed ' : '') + borderClass,
         onchange: (e) => {
           const selectedValue = e.target.value === '' ? null : e.target.value;
           const typedValue = (col.type === 'integer' || col.type === 'bigint' || col.type === 'float' || col.type === 'decimal') && selectedValue !== null
@@ -68,7 +72,7 @@ const BelongsToField = {
           }, itemDisplay);
         }),
       ]),
-      hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null,
+      error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
     ]);
   }
 };
@@ -96,7 +100,7 @@ const HasManyField = {
       });
   },
   view: (vnode) => {
-    const { col, value = [], onChange, readonly } = vnode.attrs;
+    const { col, value = [], onChange, readonly, error } = vnode.attrs;
     const customField = col.customField || {};
     const label = col.ui?.label || formatColumnLabel(col.name);
     const hint = col.ui?.hint || '';
@@ -112,13 +116,17 @@ const HasManyField = {
         m('.text-xs.text-gray-500.dark:text-slate-400', 'Loading options...')
       ]);
     }
+
+    const borderClass = error
+      ? 'border-red-500 dark:border-red-500'
+      : 'border-gray-300 dark:border-slate-600';
     
     return m('.mb-4', [
       m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', [
         label,
         !col.nullable && !readonly ? m('span.text-red-500', ' *') : null
       ]),
-      m('.border.border-gray-300.dark:border-slate-600.rounded-md.p-3.max-h-48.overflow-y-auto.bg-white.dark:bg-slate-900/70', [
+      m('.border.rounded-md.p-3.max-h-48.overflow-y-auto.bg-white.dark:bg-slate-900/70', { class: borderClass }, [
         vnode.state.options.map(item => {
           const itemValue = String(item[valueKey]);
           const itemDisplay = item[displayKey] || itemValue;
@@ -150,24 +158,28 @@ const HasManyField = {
           ]);
         }),
       ]),
-      hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null,
+      error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
     ]);
   }
 };
 
 const FieldRenderers = {
   // Text input (string)
-  string: (col, value, onChange, readonly) => {
+  string: (col, value, onChange, readonly, error) => {
     const validations = col.validations || {};
     const ui = col.ui || {};
     const label = ui.label || formatColumnLabel(col.name);
     const inputType = ui.inputType || (validations.email ? 'email' : validations.url ? 'url' : 'text');
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
+    const borderClass = error ? 'border-red-500 dark:border-red-500 focus:ring-red-500' : 'border-gray-300 dark:border-slate-600 focus:ring-blue-500 dark:focus:ring-blue-400';
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
+      m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', { for: col.name }, [
+        label,
+        !col.nullable && !readonly ? m('span.text-red-500', ' *') : null,
+      ]),
+      m('input.w-full.px-3.py-2.border.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2', {
         id: col.name,
         name: col.name,
         type: inputType,
@@ -179,25 +191,29 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
+        class: (readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed ' : '') + borderClass,
         oninput: (e) => onChange(e.target.value),
       }),
-      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
+      error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
     ]);
   },
 
   // Textarea (text)
-  text: (col, value, onChange, readonly) => {
+  text: (col, value, onChange, readonly, error) => {
     const validations = col.validations || {};
     const ui = col.ui || {};
     const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
     const rows = ui.rows || 4;
+    const borderClass = error ? 'border-red-500 dark:border-red-500 focus:ring-red-500' : 'border-gray-300 dark:border-slate-600 focus:ring-blue-500 dark:focus:ring-blue-400';
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('textarea.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
+      m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', { for: col.name }, [
+        label,
+        !col.nullable && !readonly ? m('span.text-red-500', ' *') : null,
+      ]),
+      m('textarea.w-full.px-3.py-2.border.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2', {
         id: col.name,
         name: col.name,
         rows: rows,
@@ -207,24 +223,28 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
+        class: (readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed ' : '') + borderClass,
         oninput: (e) => onChange(e.target.value),
       }, value || ''),
-      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
+      error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
     ]);
   },
 
   // Number input (integer, bigint)
-  integer: (col, value, onChange, readonly) => {
+  integer: (col, value, onChange, readonly, error) => {
     const validations = col.validations || {};
     const ui = col.ui || {};
     const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
+    const borderClass = error ? 'border-red-500 dark:border-red-500 focus:ring-red-500' : 'border-gray-300 dark:border-slate-600 focus:ring-blue-500 dark:focus:ring-blue-400';
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
+      m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', { for: col.name }, [
+        label,
+        !col.nullable && !readonly ? m('span.text-red-500', ' *') : null,
+      ]),
+      m('input.w-full.px-3.py-2.border.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2', {
         id: col.name,
         name: col.name,
         type: 'number',
@@ -236,24 +256,28 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
+        class: (readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed ' : '') + borderClass,
         oninput: (e) => onChange(e.target.value === '' ? null : parseInt(e.target.value, 10)),
       }),
-      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
+      error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
     ]);
   },
 
   // Float/Decimal input
-  float: (col, value, onChange, readonly) => {
+  float: (col, value, onChange, readonly, error) => {
     const validations = col.validations || {};
     const ui = col.ui || {};
     const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
+    const borderClass = error ? 'border-red-500 dark:border-red-500 focus:ring-red-500' : 'border-gray-300 dark:border-slate-600 focus:ring-blue-500 dark:focus:ring-blue-400';
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
+      m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', { for: col.name }, [
+        label,
+        !col.nullable && !readonly ? m('span.text-red-500', ' *') : null,
+      ]),
+      m('input.w-full.px-3.py-2.border.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2', {
         id: col.name,
         name: col.name,
         type: 'number',
@@ -265,15 +289,15 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
+        class: (readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed ' : '') + borderClass,
         oninput: (e) => onChange(e.target.value === '' ? null : parseFloat(e.target.value)),
       }),
-      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
+      error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
     ]);
   },
 
   // Boolean checkbox
-  boolean: (col, value, onChange, readonly) => {
+  boolean: (col, value, onChange, readonly, error) => {
     const ui = col.ui || {};
     const label = ui.label || formatColumnLabel(col.name);
     const hint = ui.hint || '';
@@ -289,17 +313,18 @@ const FieldRenderers = {
         }),
         m('span.text-sm.font-medium.text-gray-700.dark:text-slate-300', label),
       ]),
-      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
+      error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
     ]);
   },
 
   // Date input
-  date: (col, value, onChange, readonly) => {
+  date: (col, value, onChange, readonly, error) => {
     const validations = col.validations || {};
     const ui = col.ui || {};
     const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
+    const borderClass = error ? 'border-red-500 dark:border-red-500 focus:ring-red-500' : 'border-gray-300 dark:border-slate-600 focus:ring-blue-500 dark:focus:ring-blue-400';
     let dateValue = '';
     if (value) {
       try {
@@ -311,8 +336,11 @@ const FieldRenderers = {
     }
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
+      m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', { for: col.name }, [
+        label,
+        !col.nullable && !readonly ? m('span.text-red-500', ' *') : null,
+      ]),
+      m('input.w-full.px-3.py-2.border.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2', {
         id: col.name,
         name: col.name,
         type: 'date',
@@ -323,20 +351,21 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
+        class: (readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed ' : '') + borderClass,
         oninput: (e) => onChange(e.target.value),
       }),
-      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
+      error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
     ]);
   },
 
   // DateTime input (datetime, timestamp)
-  datetime: (col, value, onChange, readonly) => {
+  datetime: (col, value, onChange, readonly, error) => {
     const validations = col.validations || {};
     const ui = col.ui || {};
     const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
+    const borderClass = error ? 'border-red-500 dark:border-red-500 focus:ring-red-500' : 'border-gray-300 dark:border-slate-600 focus:ring-blue-500 dark:focus:ring-blue-400';
     let dateTimeValue = '';
     if (value) {
       try {
@@ -348,8 +377,11 @@ const FieldRenderers = {
     }
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
+      m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', { for: col.name }, [
+        label,
+        !col.nullable && !readonly ? m('span.text-red-500', ' *') : null,
+      ]),
+      m('input.w-full.px-3.py-2.border.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2', {
         id: col.name,
         name: col.name,
         type: 'datetime-local',
@@ -360,50 +392,58 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
+        class: (readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed ' : '') + borderClass,
         oninput: (e) => onChange(e.target.value),
       }),
-      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
+      error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
     ]);
   },
 
   // Enum select
-  enum: (col, value, onChange, readonly) => {
+  enum: (col, value, onChange, readonly, error) => {
     const ui = col.ui || {};
     const label = ui.label || formatColumnLabel(col.name);
     const hint = ui.hint || '';
     const options = col.enumValues || [];
+    const borderClass = error ? 'border-red-500 dark:border-red-500 focus:ring-red-500' : 'border-gray-300 dark:border-slate-600 focus:ring-blue-500 dark:focus:ring-blue-400';
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('select.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
+      m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', { for: col.name }, [
+        label,
+        !col.nullable && !readonly ? m('span.text-red-500', ' *') : null,
+      ]),
+      m('select.w-full.px-3.py-2.border.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.focus:outline-none.focus:ring-2', {
         id: col.name,
         name: col.name,
         value: value || '',
         required: !col.nullable && !readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
+        class: (readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed ' : '') + borderClass,
         onchange: (e) => onChange(e.target.value),
       }, [
         col.nullable ? m('option', { value: '' }, '-- Select --') : null,
         ...options.map(opt => m('option', { value: opt, selected: value === opt }, opt)),
       ]),
-      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
+      error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
     ]);
   },
 
   // JSON textarea
-  json: (col, value, onChange, readonly) => {
+  json: (col, value, onChange, readonly, error) => {
     const ui = col.ui || {};
     const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || '';
     const hint = ui.hint || '';
     const rows = ui.rows || 6;
     const jsonString = value ? (typeof value === 'string' ? value : JSON.stringify(value, null, 2)) : '';
+    const borderClass = error ? 'border-red-500 dark:border-red-500 focus:ring-red-500' : 'border-gray-300 dark:border-slate-600 focus:ring-blue-500 dark:focus:ring-blue-400';
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('textarea.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.font-mono.text-sm.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
+      m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', { for: col.name }, [
+        label,
+        !col.nullable && !readonly ? m('span.text-red-500', ' *') : null,
+      ]),
+      m('textarea.w-full.px-3.py-2.border.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.font-mono.text-sm.focus:outline-none.focus:ring-2', {
         id: col.name,
         name: col.name,
         rows: rows,
@@ -411,7 +451,7 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
+        class: (readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed ' : '') + borderClass,
         oninput: (e) => {
           try {
             const parsed = JSON.parse(e.target.value);
@@ -421,22 +461,26 @@ const FieldRenderers = {
           }
         },
       }, jsonString),
-      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
+      error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
     ]);
   },
 
   // Array (as JSON or tags)
-  array: (col, value, onChange, readonly) => {
+  array: (col, value, onChange, readonly, error) => {
     const validations = col.validations || {};
     const ui = col.ui || {};
     const label = ui.label || formatColumnLabel(col.name);
     const placeholder = ui.placeholder || 'Comma-separated values';
     const hint = ui.hint || 'Enter comma-separated values';
     const arrayValue = Array.isArray(value) ? value.join(', ') : (value || '');
+    const borderClass = error ? 'border-red-500 dark:border-red-500 focus:ring-red-500' : 'border-gray-300 dark:border-slate-600 focus:ring-blue-500 dark:focus:ring-blue-400';
     
     return m('.mb-4', [
-      m('label.block.text-sm.font-medium.text-gray-700 dark:text-slate-300.mb-1', { for: col.name }, label),
-      m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2.focus:ring-blue-500.dark:focus:ring-blue-400', {
+      m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', { for: col.name }, [
+        label,
+        !col.nullable && !readonly ? m('span.text-red-500', ' *') : null,
+      ]),
+      m('input.w-full.px-3.py-2.border.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500.focus:outline-none.focus:ring-2', {
         id: col.name,
         name: col.name,
         type: 'text',
@@ -447,23 +491,23 @@ const FieldRenderers = {
         required: !col.nullable && !readonly,
         readonly: readonly,
         disabled: readonly,
-        class: readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : '',
+        class: (readonly ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed ' : '') + borderClass,
         oninput: (e) => {
           const arr = e.target.value.split(',').map(s => s.trim()).filter(s => s);
           onChange(arr);
         },
       }),
-      hint ? m('p.text-xs.text-gray-500 dark:text-slate-400.mt-1', hint) : null,
+      error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
     ]);
   },
 
   // belongsTo relation dropdown
-  belongsTo: (col, value, onChange, readonly) => {
-    return m(BelongsToField, { col, value, onChange, readonly });
+  belongsTo: (col, value, onChange, readonly, error) => {
+    return m(BelongsToField, { col, value, onChange, readonly, error });
   },
 
   // hasMany relation checklist
-  hasMany: (col, value, onChange, readonly) => {
-    return m(HasManyField, { col, value, onChange, readonly });
+  hasMany: (col, value, onChange, readonly, error) => {
+    return m(HasManyField, { col, value, onChange, readonly, error });
   },
 };

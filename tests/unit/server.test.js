@@ -42,7 +42,7 @@ describe('server.js', () => {
 
     it('should have JSON body parser', () => {
       // Check if body parser middleware is configured
-      const stack = app._router.stack;
+      const stack = (app.router || app._router).stack;
       const hasJsonParser = stack.some(layer => 
         layer.name === 'jsonParser' || 
         (layer.handle && layer.handle.name === 'jsonParser')
@@ -62,7 +62,7 @@ describe('server.js', () => {
         pagesDir: PAGES_DIR,
         publicDir: path.join(FIXTURES_PATH, 'public')
       });
-      const stack = result.app._router.stack;
+      const stack = (result.app.router || result.app._router).stack;
       const hasStatic = stack.some(layer =>
         layer.name === 'serveStatic' ||
         (layer.handle && layer.handle.name === 'serveStatic')
@@ -95,13 +95,13 @@ describe('server.js', () => {
 
   describe('Error handling', () => {
     it('should have 404 handler', () => {
-      const stack = app._router.stack;
+      const stack = (app.router || app._router).stack;
       // 404 handler is added at the end
       expect(stack.length).toBeGreaterThan(0);
     });
 
     it('should have error handler', () => {
-      const stack = app._router.stack;
+      const stack = (app.router || app._router).stack;
       // Error handlers have 4 arguments (err, req, res, next)
       const hasErrorHandler = stack.some(layer => 
         layer.handle && layer.handle.length === 4

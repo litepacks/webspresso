@@ -10,13 +10,14 @@ module.exports = {
       
       // Load Quill if not already loaded
       if (typeof window.Quill === 'undefined') {
+        const adminPath = (window.__ADMIN_PATH__) || '/_admin';
         const link = document.createElement('link');
         link.rel = 'stylesheet';
-        link.href = 'https://cdn.quilljs.com/1.3.6/quill.snow.css';
+        link.href = adminPath + '/vendor/quill.snow.min.css';
         document.head.appendChild(link);
         
         const script = document.createElement('script');
-        script.src = 'https://cdn.quilljs.com/1.3.6/quill.js';
+        script.src = adminPath + '/vendor/quill.min.js';
         script.onload = () => {
           initEditor(vnode);
         };

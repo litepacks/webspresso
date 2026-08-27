@@ -131,12 +131,13 @@ module.exports = {
 - `auth: (user, ctx) => boolean` — Custom predicate function for dynamic authorization rules.
 - `skipAuth: true` — Option passed in `ctx.service('service.name', input, { skipAuth: true })` to allow internal background crons or system tasks to bypass auth checks.
 
-### 4.2 ACID Transactions (`transaction: true`)
-- Wraps the service execution inside Knex transaction `db.knex.transaction()`.
-- Exposes `ctx.trx` to the handler and repositories.
+### 4.2 ACID Transactions (`transaction: true`) & Ambient Propagation
+- Wraps the service execution inside a Knex transaction `db.knex.transaction()` and registers it with `AsyncLocalStorage` ambient transaction storage.
+- Automatically binds all ORM repository calls (`db.getRepository(...)`, `ctx.db.getRepository(...)`, query builders) executed in the async tree to the active transaction without manual `trx` argument passing.
+- Exposes `ctx.trx` to the handler and repositories for explicit operations.
 - Automatically commits when handler returns.
 - Automatically rolls back on thrown errors or rejection.
-- Child service calls automatically reuse the parent `ctx.trx` without spawning nested transactions.
+- Child service calls (`ctx.service(...)`) automatically reuse the parent ambient `trx` without spawning duplicate root transactions or suffering deadlocks.
 
 ### 4.3 Execution Timeout (`timeout: ms`)
 - Protects against hanging database queries, unresponsive 3rd-party APIs, or deadlocks.

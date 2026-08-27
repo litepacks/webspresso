@@ -76,6 +76,7 @@ module.exports = {
   createSocketIoAdapter,
   redis,
   createRedisAdapter,
+  queuePlugin: require('./queue'),
 };
 
 

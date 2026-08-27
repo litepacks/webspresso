@@ -31,6 +31,7 @@ function defineModel(options) {
     rest = {},
     hooks = {},
     hidden = [],
+    queryLimits = {},
     cache: cacheOption,
   } = options;
 
@@ -105,6 +106,7 @@ function defineModel(options) {
       allowInclude: Array.isArray(rest.allowInclude) ? rest.allowInclude.filter((x) => typeof x === 'string') : null,
     },
     hidden: Array.isArray(hidden) ? hidden : [],
+    queryLimits: typeof queryLimits === 'object' && queryLimits !== null ? queryLimits : {},
     hooks: {},
     cache: cacheOption,
   };

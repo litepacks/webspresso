@@ -262,16 +262,24 @@ Zero-boilerplate RESTful CRUD endpoint generator directly from Knex ORM models, 
 - **Query Parameters**:
   - `page`: Page number (1-indexed, default `1`).
   - `perPage`: Items per page (default `15`, clamped between `1` and `100`).
-  - `sort`: Column name to sort by (validates column exists in model, defaults to primary key).
+  - `sort`: Multi-column sort supported via comma-separated list (`?sort=-price,created_at:asc`), array (`?sort[]=price:desc&sort[]=name:asc`), or single column (`?sort=price&order=desc`). Prepending `-` indicates descending, `+` indicates ascending.
   - `order`: `'asc'` or `'desc'` (default `'desc'`).
   - `include`: Comma-separated allowed relation names (e.g. `?include=company,profile`). Eager loads without N+1 query overhead. Disallowed or nested relations are safely ignored.
   - `trashed`: For soft-delete models, `'include'` queries active + deleted records; `'only'` queries exclusively soft-deleted records.
-  - **Column Filters**: Any query param matching a table column (e.g. `?status=active&company_id=2`) filters the query (`WHERE column = value`).
+  - **Rich Column Filtering**: Direct query parameters or dedicated `filter` object with comprehensive SQL operators:
+    - **Equality & Inequality**: `?status=active`, `?status[eq]=active`, `?status[ne]=banned`
+    - **Comparison Ranges**: `?price[gte]=100&price[lte]=500`, `?age[gt]=18`, `?age[lt]=65`
+    - **Set Membership**: `?status[in]=active,pending` (or `?status[in][]=active`), `?status[nin]=banned,deleted`
+    - **String Pattern Matching**: `?name[contains]=phone`, `?sku[startsWith]=APL-`, `?email[endsWith]=@gmail.com`, `?name[like]=app%`
+    - **Null Checks**: `?deleted_at[isNull]=true`, `?avatar[isNotNull]=true`
+    - **Between Range**: `?price[between]=100,500`
+    - **Dedicated Filter Object**: `?filter[name][contains]=phone&filter[price][gte]=100`
 
 - **Security & Data Sanitization**:
   - **Hidden Fields**: Columns in `model.hidden` are stripped recursively across the primary record and all eager-loaded relations.
   - **Writable Columns**: `POST` and `PATCH` payloads are stripped of primary auto-increment keys, non-existent columns, and hidden fields before hitting the repository.
   - **Include Protection**: Only relations declared in `model.rest.allowInclude` (or all relations if omitted) can be eager-loaded. Dotted nested includes (`posts.comments`) are ignored to prevent denial-of-service / memory leaks.
+  - **Parameterized Queries**: All filters and search operators are parameterized through Knex to prevent SQL injection. Non-existent model columns are safely ignored.
 
 - **Example Usage**:
   ```js

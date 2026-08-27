@@ -474,6 +474,18 @@ function createApp(options = {}) {
     next();
   });
 
+  // SSR Streaming Response Helper
+  const { renderStream } = require('../core/ssr/stream');
+  app.use((req, res, next) => {
+    res.renderStream = (templatePath, context = {}, renderOptions = {}) => {
+      return renderStream(res, templatePath, context, {
+        env: nunjucksEnv,
+        ...renderOptions,
+      });
+    };
+    next();
+  });
+
   // Async handler wrapper helper for automatic promise rejection handling
   function wrapAsync(fn) {
     if (typeof fn !== 'function') return fn;
@@ -605,10 +617,21 @@ function createApp(options = {}) {
   } else {
     app.set('trust proxy', false);
   }
+
+  // Ensure extended query parser for nested filter/sort query parameters (?filter[field]=val)
+  app.set('query parser', 'extended');
   
   // JSON body parser for API routes
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  
+  // Ensure default empty object for body on mutating requests if not populated
+  app.use((req, res, next) => {
+    if (req.body === undefined && (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH')) {
+      req.body = {};
+    }
+    next();
+  });
   
   // Halt processing if request has timed out (after body parsers)
   if (timeoutConfig !== false) {

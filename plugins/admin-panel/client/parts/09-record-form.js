@@ -1,9 +1,141 @@
-// Record Form Component - renders fields based on model schema
+// Record Form Component - renders fields based on model schema with dynamic validation
+
+/**
+ * Validate a single column value against schema and metadata rules
+ */
+function validateField(col, value, formData) {
+  const validations = col.validations || {};
+  const isRequired = !col.nullable;
+  const label = col.ui?.label || formatColumnLabel(col.name);
+
+  // 1. Required / Nullable check
+  if (isRequired) {
+    if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
+      return label + ' is required';
+    }
+    if (col.customField && col.customField.type === 'rich-text' && isRichTextEmpty(value)) {
+      return label + ' is required';
+    }
+  }
+
+  // If value is empty and column is nullable, it's valid
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  // 2. Type validation
+  if (col.type === 'integer' || col.type === 'bigint') {
+    const num = Number(value);
+    if (isNaN(num) || !Number.isInteger(num)) {
+      return label + ' must be an integer';
+    }
+  } else if (col.type === 'float' || col.type === 'decimal') {
+    const num = Number(value);
+    if (isNaN(num)) {
+      return label + ' must be a valid number';
+    }
+  } else if (col.type === 'json') {
+    if (typeof value === 'string') {
+      try {
+        JSON.parse(value);
+      } catch {
+        return label + ' must be valid JSON';
+      }
+    }
+  }
+
+  // 3. String Length & Format Validations
+  if (typeof value === 'string') {
+    const minLen = validations.minLength !== undefined ? validations.minLength : validations.min;
+    if (minLen !== undefined && value.length < minLen) {
+      return label + ' must be at least ' + minLen + ' characters';
+    }
+    const maxLen = validations.maxLength !== undefined ? validations.maxLength : (validations.max || col.maxLength);
+    if (maxLen !== undefined && value.length > maxLen) {
+      return label + ' must be at most ' + maxLen + ' characters';
+    }
+    if (validations.email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(value.trim())) {
+        return label + ' must be a valid email address';
+      }
+    }
+    if (validations.url) {
+      try {
+        new URL(value.trim());
+      } catch {
+        return label + ' must be a valid URL';
+      }
+    }
+    if (validations.pattern) {
+      try {
+        const regex = new RegExp(validations.pattern);
+        if (!regex.test(value)) {
+          return label + ' format is invalid';
+        }
+      } catch {}
+    }
+  }
+
+  // 4. Numeric Bounds
+  if (typeof value === 'number') {
+    if (validations.min !== undefined && value < validations.min) {
+      return label + ' must be at least ' + validations.min;
+    }
+    if (validations.max !== undefined && value > validations.max) {
+      return label + ' must be at most ' + validations.max;
+    }
+  }
+
+  // 5. Enum validation
+  if (col.enumValues && Array.isArray(col.enumValues) && col.enumValues.length > 0) {
+    if (!col.enumValues.includes(value)) {
+      return label + ' must be one of: ' + col.enumValues.join(', ');
+    }
+  }
+
+  // 6. Custom Field Validator
+  if (col.customField && typeof col.customField.validate === 'function') {
+    const customErr = col.customField.validate(value, formData);
+    if (customErr) return customErr;
+  }
+
+  return null;
+}
+
+/**
+ * Validate all columns in a form
+ */
+function validateForm(columns, formData) {
+  const errors = {};
+  if (!columns || !Array.isArray(columns)) return errors;
+
+  for (const col of columns) {
+    const autoType = isAutoColumn(col);
+    if (autoType === 'primary' || autoType === 'auto') continue;
+    if (col.ui && col.ui.hidden) continue;
+
+    let val = formData[col.name];
+    if (col.customField && col.customField.type === 'rich-text') {
+      const hiddenInput = document.getElementById(col.name + '-value');
+      if (hiddenInput) val = hiddenInput.value;
+    }
+
+    const err = validateField(col, val, formData);
+    if (err) {
+      errors[col.name] = err;
+    }
+  }
+
+  return errors;
+}
+
 const RecordForm = {
   oninit: () => {
     const modelName = m.route.param('model');
     const id = m.route.param('id');
     state.error = null;
+    state.fieldErrors = {};
     state.loading = true;
     state.formData = {};
     state.currentModelMeta = null;
@@ -66,24 +198,32 @@ const RecordForm = {
         style: 'min-height: calc(100vh - 280px);',
         onsubmit: async (e) => {
           e.preventDefault();
-          state.loading = true;
           state.error = null;
-          try {
-            // Validate rich-text fields first
-            if (modelMeta && modelMeta.columns) {
-              for (const col of modelMeta.columns) {
-                if (col.customField && col.customField.type === 'rich-text' && !col.nullable) {
-                  const hiddenInput = document.getElementById(col.name + '-value');
-                  const value = hiddenInput ? hiddenInput.value : state.formData[col.name];
-                  if (isRichTextEmpty(value)) {
-                    state.error = (col.ui?.label || col.name) + ' is required';
-                    state.loading = false;
-                    return;
-                  }
+          state.fieldErrors = {};
+
+          // 1. Run client-side validation
+          if (modelMeta && modelMeta.columns) {
+            const validationErrors = validateForm(modelMeta.columns, state.formData);
+            if (Object.keys(validationErrors).length > 0) {
+              state.fieldErrors = validationErrors;
+              state.error = 'Please fix the errors indicated below.';
+              m.redraw();
+              setTimeout(() => {
+                const firstInvalidKey = Object.keys(validationErrors)[0];
+                const targetEl = document.getElementById(firstInvalidKey) ||
+                  document.getElementById('file-input-' + firstInvalidKey) ||
+                  document.getElementById('quill-editor-' + firstInvalidKey);
+                if (targetEl && targetEl.scrollIntoView) {
+                  targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  if (typeof targetEl.focus === 'function') targetEl.focus();
                 }
-              }
+              }, 50);
+              return;
             }
-            
+          }
+
+          state.loading = true;
+          try {
             // Build payload, excluding auto-generated fields
             const payload = {};
             if (modelMeta && modelMeta.columns) {
@@ -123,9 +263,13 @@ const RecordForm = {
             }
             m.route.set('/models/' + modelName);
           } catch (err) {
-            state.error = err.message;
+            state.error = err.message || 'Failed to save record';
+            if (err.fields && typeof err.fields === 'object') {
+              state.fieldErrors = err.fields;
+            }
           } finally {
             state.loading = false;
+            m.redraw();
           }
         }
       }, [
@@ -146,11 +290,16 @@ const RecordForm = {
             const isReadonly = !!autoType || (col.ui && col.ui.readonly);
             const renderer = getFieldRenderer(col, modelMeta);
             const value = state.formData[col.name];
+            const fieldError = state.fieldErrors ? state.fieldErrors[col.name] : null;
+            
             const onChange = (newValue) => {
               state.formData[col.name] = newValue;
+              if (state.fieldErrors && state.fieldErrors[col.name]) {
+                delete state.fieldErrors[col.name];
+              }
             };
             
-            return renderer(col, value, onChange, isReadonly);
+            return renderer(col, value, onChange, isReadonly, fieldError);
           }) : m('p.text-gray-600 dark:text-slate-400.mb-4', 'Loading form fields...'),
         ]),
         
@@ -160,7 +309,7 @@ const RecordForm = {
             type: 'submit',
             disabled: state.loading,
           }, state.loading ? 'Saving...' : 'Save'),
-          m('button.bg-gray-200 dark:bg-slate-700.text-gray-800 dark:text-slate-200.px-6.py-2.rounded.hover:bg-gray-300 dark:hover:bg-slate-600 dark:hover:bg-slate-600[type=button]', {
+          m('button.bg-gray-200.dark:bg-slate-700.text-gray-800.dark:text-slate-200.px-6.py-2.rounded.hover:bg-gray-300.dark:hover:bg-slate-600[type=button]', {
             onclick: () => m.route.set('/models/' + modelName),
           }, 'Cancel'),
         ]),

@@ -24,7 +24,7 @@ Webspresso is a lightweight, zero-dependency-sprawl Express SSR framework featur
 ### 1.3 ORM & Database Layer (`core/orm`, `models/`)
 - **Model Definition**: Defined in `models/*.js` using `defineModel({ name, table, schema, relations, scopes, hidden, admin, cache })`.
 - **Schema & Types**: Built with `zdb` schema builder (`zdb.string()`, `zdb.integer()`, `zdb.boolean()`, `zdb.file()`, `zdb.json()`).
-- **Repositories**: Accessed via `db.getRepository(modelName)` or `ctx.db`. Supports `find`, `findById`, `findOne`, `create`, `update`, `delete`, and `query()`.
+- **Repositories & Ambient Transactions**: Accessed via `db.getRepository(modelName)` or `ctx.db`. Repositories and query builders automatically bind to ambient transactions (`AsyncLocalStorage`) inside `db.transaction()` and services (`transaction: true`) without manual `trx` passing. Supports `find`, `findById`, `findOne`, `create`, `update`, `delete`, and `query()`.
 - **Query Caching**: Memory/provider query cache configured per database instance or model (`cache: 'auto'|'smart'|true`).
 - **Migrations**: Database schema changes managed via Knex migrations in `migrations/` (`webspresso db:migrate`).
 

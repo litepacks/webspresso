@@ -22,6 +22,8 @@ This `.agents/` customization root is organized into modular topic guides:
 12. **[CLI Tooling & Commands](.agents/CLI.md)** — `webspresso dev`, `build`, `doctor`, `db:migrate`, `db:seed`, `favicon:generate`, `add:tailwind`, `skill`.
 13. **[Development & Testing Workflow](.agents/WORKFLOW.md)** — CLI commands, Vitest unit/integration testing, Playwright E2E tests, TypeScript type checking, and zero regression policy.
 14. **[Coding Standards & Conventions](.agents/CONVENTIONS.md)** — Zero external dependencies policy, strict function signature & schema verification, clean component separation, and log traceback inspection rules.
+15. **[Background Job Queue](.agents/QUEUE.md)** — In-Memory, Knex Database, and Distributed Redis queue adapters, job auto-discovery (`jobs/`), retries, and graceful draining.
+16. **[SSR Streaming & Chunked Transfer](.agents/STREAMING.md)** — Native HTTP chunked streaming (`res.renderStream()`), deferred data loader slots (`defer: { key: promise }`), and TTFB optimization.
 
 ---
 
