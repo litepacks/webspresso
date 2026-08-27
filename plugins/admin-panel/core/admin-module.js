@@ -8,7 +8,7 @@ function formatClientComponent(pageId, rawCode) {
   let code = (rawCode || '').trim();
   if (!code) return '';
   if (code.includes('window.__customPages')) {
-    return code;
+    return `try {\n${code}\n} catch (err) {\n  console.error('[Admin Panel] Failed to load custom page component "${pageId}":', err);\n}`;
   }
   if (code.startsWith('module.exports =')) {
     code = code.replace(/^module\.exports\s*=\s*/, '');
@@ -16,7 +16,7 @@ function formatClientComponent(pageId, rawCode) {
   if (code.endsWith(';')) {
     code = code.slice(0, -1);
   }
-  return `window.__customPages = window.__customPages || {};\nwindow.__customPages[${JSON.stringify(pageId)}] = ${code};`;
+  return `try {\n  window.__customPages = window.__customPages || {};\n  window.__customPages[${JSON.stringify(pageId)}] = ${code};\n} catch (err) {\n  console.error('[Admin Panel] Failed to load custom page component "${pageId}":', err);\n}`;
 }
 
 /**

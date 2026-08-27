@@ -35,23 +35,28 @@ describe('admin-module file and folder custom pages', () => {
   });
 
   describe('formatClientComponent', () => {
-    it('should wrap plain Mithril component object code into window.__customPages assignment', () => {
+    it('should wrap plain Mithril component object code into window.__customPages assignment and try-catch', () => {
       const input = `({ oninit() {}, view() { return m('div', 'Hello'); } })`;
       const output = formatClientComponent('test-page', input);
+      expect(output).toContain('try {');
       expect(output).toContain('window.__customPages');
       expect(output).toContain('window.__customPages["test-page"] = ({ oninit() {}, view() { return m(\'div\', \'Hello\'); } })');
+      expect(output).toContain('catch (err)');
     });
 
     it('should strip module.exports = ', () => {
       const input = `module.exports = { view: () => 'hi' };`;
       const output = formatClientComponent('test-page', input);
       expect(output).toContain('window.__customPages["test-page"] = { view: () => \'hi\' }');
+      expect(output).toContain('catch (err)');
     });
 
-    it('should pass through code if window.__customPages is already used', () => {
+    it('should wrap in try-catch even if window.__customPages is already used', () => {
       const input = `window.__customPages['test-page'] = { view: () => 'hi' };`;
       const output = formatClientComponent('test-page', input);
-      expect(output).toEqual(input);
+      expect(output).toContain('try {');
+      expect(output).toContain(input);
+      expect(output).toContain('catch (err)');
     });
   });
 

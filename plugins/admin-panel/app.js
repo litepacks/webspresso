@@ -247,36 +247,76 @@ function wrapCustomPageWithLayout(page, rawComp) {
 
   return {
     oninit: function(vnode) {
-      vnode.state.instance = typeof rawComp === 'function' ? rawComp.call(this, vnode) : rawComp;
-      if (vnode.state.instance && typeof vnode.state.instance.oninit === 'function') {
-        return vnode.state.instance.oninit.call(this, vnode);
+      try {
+        vnode.state.instance = typeof rawComp === 'function' ? rawComp.call(this, vnode) : rawComp;
+        if (vnode.state.instance && typeof vnode.state.instance.oninit === 'function') {
+          return vnode.state.instance.oninit.call(this, vnode);
+        }
+      } catch (err) {
+        console.error('[Admin Panel] Error in oninit for custom page "' + page.id + '":', err);
+        vnode.state.renderError = err;
       }
     },
     oncreate: function(vnode) {
-      const comp = vnode.state.instance || rawComp;
-      if (comp && typeof comp.oncreate === 'function') return comp.oncreate.call(this, vnode);
+      try {
+        const comp = vnode.state.instance || rawComp;
+        if (comp && typeof comp.oncreate === 'function') return comp.oncreate.call(this, vnode);
+      } catch (err) {
+        console.error('[Admin Panel] Error in oncreate for custom page "' + page.id + '":', err);
+      }
     },
     onupdate: function(vnode) {
-      const comp = vnode.state.instance || rawComp;
-      if (comp && typeof comp.onupdate === 'function') return comp.onupdate.call(this, vnode);
+      try {
+        const comp = vnode.state.instance || rawComp;
+        if (comp && typeof comp.onupdate === 'function') return comp.onupdate.call(this, vnode);
+      } catch (err) {
+        console.error('[Admin Panel] Error in onupdate for custom page "' + page.id + '":', err);
+      }
     },
     onbeforeremove: function(vnode) {
-      const comp = vnode.state.instance || rawComp;
-      if (comp && typeof comp.onbeforeremove === 'function') return comp.onbeforeremove.call(this, vnode);
+      try {
+        const comp = vnode.state.instance || rawComp;
+        if (comp && typeof comp.onbeforeremove === 'function') return comp.onbeforeremove.call(this, vnode);
+      } catch (err) {
+        console.error('[Admin Panel] Error in onbeforeremove for custom page "' + page.id + '":', err);
+      }
     },
     onremove: function(vnode) {
-      const comp = vnode.state.instance || rawComp;
-      if (comp && typeof comp.onremove === 'function') return comp.onremove.call(this, vnode);
+      try {
+        const comp = vnode.state.instance || rawComp;
+        if (comp && typeof comp.onremove === 'function') return comp.onremove.call(this, vnode);
+      } catch (err) {
+        console.error('[Admin Panel] Error in onremove for custom page "' + page.id + '":', err);
+      }
     },
     view: function(vnode) {
+      if (vnode.state.renderError) {
+        var err = vnode.state.renderError;
+        var breadcrumbs = [{ label: page.title, href: page.path }];
+        return m(Layout, [
+          m(Breadcrumb, { items: breadcrumbs }),
+          m('.p-6.bg-red-50.border.border-red-200.rounded-xl', [
+            m('h3.text-lg.font-semibold.text-red-800', 'Sayfa Yüklenirken Hata Oluştu'),
+            m('p.text-sm.text-red-600.mt-1', err.message || String(err)),
+          ])
+        ]);
+      }
       const comp = vnode.state.instance || rawComp;
       var content;
-      if (comp && typeof comp.view === 'function') {
-        content = comp.view.call(this, vnode);
-      } else if (typeof comp === 'function') {
-        content = comp.call(this, vnode);
-      } else {
-        content = comp;
+      try {
+        if (comp && typeof comp.view === 'function') {
+          content = comp.view.call(this, vnode);
+        } else if (typeof comp === 'function') {
+          content = comp.call(this, vnode);
+        } else {
+          content = comp;
+        }
+      } catch (err) {
+        console.error('[Admin Panel] Error rendering custom page "' + page.id + '":', err);
+        content = m('.p-6.bg-red-50.border.border-red-200.rounded-xl', [
+          m('h3.text-lg.font-semibold.text-red-800', 'Sayfa Çizilirken Hata Oluştu'),
+          m('p.text-sm.text-red-600.mt-1', err.message || String(err)),
+        ]);
       }
       if (content && (content.tag === Layout || (content.tag && content.tag.name === 'Layout'))) {
         return content;
