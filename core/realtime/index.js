@@ -14,12 +14,13 @@ const { EventEmitter } = require('./emitter');
 const { createWebSocketAdapter, websocket, WebSocketAdapter, resolveWebSocketUrl } = require('./adapters/websocket');
 const { createSseAdapter, sse, SseAdapter, resolveSseUrl } = require('./adapters/sse');
 const { createSocketIoAdapter, socketIo, SocketIoAdapter } = require('./adapters/socket-io');
+const { createRedisAdapter, redis, RedisAdapter, InMemoryDistributedBus } = require('./adapters/redis');
 
 /**
  * Factory to create a RealtimeClient instance
  * 
  * @param {Object} options
- * @param {Object} options.adapter - Transport adapter (e.g. websocket, sse, socketIo)
+ * @param {Object} options.adapter - Transport adapter (e.g. websocket, sse, socketIo, redis)
  * @param {Object|boolean} [options.auth=false] - Auth strategy configuration
  * @param {boolean} [options.autoConnect=true] - Auto-connect when browser is ready
  * @param {Object} [options.reconnect] - Reconnection options
@@ -69,4 +70,10 @@ module.exports = {
   socketIo,
   createSocketIoAdapter,
   SocketIoAdapter,
+
+  redis,
+  createRedisAdapter,
+  RedisAdapter,
+  InMemoryDistributedBus,
 };
+

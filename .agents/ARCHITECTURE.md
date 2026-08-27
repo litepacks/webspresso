@@ -89,7 +89,7 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 | Plugin | Feature set | One-line purpose |
 |--------|-------------|------------------|
 | `basicAuthPlugin` | Security / HTTP | Zero-dependency RFC 7617 HTTP Basic Authentication with timing-safe comparison |
-| `realtimePlugin` | Realtime | Framework-agnostic realtime layer (`core/realtime`) with WebSocket, SSE, and Socket.IO adapters |
+| `realtimePlugin` | Realtime | Framework-agnostic realtime layer (`core/realtime`) with WebSocket, SSE, Socket.IO, and Redis adapters |
 | `adminPanelPlugin` | Admin / SPA | ORM-backed CRUD SPA with user management & custom pages |
 | `contentPlugin` | Admin / CMS | Schema-driven CMS with inline editing and public REST API |
 | `uploadPlugin` | HTTP / Admin | Multipart upload endpoint + pluggable storage providers |

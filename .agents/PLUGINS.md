@@ -131,11 +131,11 @@ Interactive JSON schema & OpenAPI route specification generator.
 Interactive OpenAPI 3.0 Swagger UI documentation.
 
 ### 2.15 `realtimePlugin` (`plugins/realtime`, `core/realtime`)
-Framework-agnostic, plugin-based, and adapter-driven Realtime layer supporting WebSocket, SSE, and Socket.IO transports with zero SSR execution hazards.
+Framework-agnostic, plugin-based, and adapter-driven Realtime layer supporting WebSocket, SSE, Socket.IO, and distributed Redis Pub/Sub transports with zero SSR execution hazards.
 
 - **Architecture**:
   - `core/realtime`: Connection lifecycle, subscription registry (`identifier::params` composite keys), auth strategies, exponential backoff reconnect with jitter, and capability assertions.
-  - `core/realtime/adapters`: `websocket`, `sse`, `socketIo`.
+  - `core/realtime/adapters`: `websocket`, `sse`, `socketIo`, `redis`.
   - `plugins/realtime`: Webspresso app integration and shutdown lifecycle management.
 
 - **Examples**:

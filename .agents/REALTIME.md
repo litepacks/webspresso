@@ -19,7 +19,8 @@ Webspresso App / Client
            │
            ├── Generic WebSocket Adapter (`core/realtime/adapters/websocket`)
            ├── SSE Adapter (`core/realtime/adapters/sse`)
-           └── Socket.IO Adapter (`core/realtime/adapters/socket-io`)
+           ├── Socket.IO Adapter (`core/realtime/adapters/socket-io`)
+           └── Redis Pub/Sub Adapter (`core/realtime/adapters/redis`)
 ```
 
 ### Core Tenets:
@@ -27,6 +28,7 @@ Webspresso App / Client
 2. **Unified Subscription Model**: All realtime technologies share identical public subscription interfaces (`subscribe`, `send`, `perform`, `unsubscribe`).
 3. **Deterministic Subscription Registry**: Subscriptions with identical identifiers and query parameters share channel instances without duplication.
 4. **Secret Sanitization**: Auth tokens and credentials are automatically stripped from error logs (`token=***`).
+5. **Distributed Cluster Sync**: Redis adapter allows multi-process / multi-container instances (PM2 cluster, K8s, Docker) to broadcast across all connected clients.
 
 ---
 
@@ -34,9 +36,9 @@ Webspresso App / Client
 
 ### 2.1 Factory Functions (`core/realtime`, `plugins/realtime`)
 ```js
-const { createRealtime, realtime, realtimePlugin } = require('webspresso');
+const { createRealtime, realtime, realtimePlugin, redis, websocket, sse, socketIo } = require('webspresso');
 // Or via plugins
-const { realtimePlugin, websocket, sse, socketIo } = require('webspresso/plugins');
+const { realtimePlugin, redis, websocket, sse, socketIo } = require('webspresso/plugins');
 ```
 
 - `createRealtime(options)`: Creates a standalone `RealtimeClient`.
@@ -46,7 +48,7 @@ const { realtimePlugin, websocket, sse, socketIo } = require('webspresso/plugins
 ### 2.2 Options Configuration
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `adapter` | `RealtimeAdapter` | **Required** | Transport adapter (`websocket()`, `sse()`, `socketIo()`). |
+| `adapter` | `RealtimeAdapter` | **Required** | Transport adapter (`websocket()`, `sse()`, `socketIo()`, `redis()`). |
 | `auth` | `Object` \| `false` | `false` | Strategy config: `{ strategy: 'token'|'cookie'|'custom' }`. |
 | `autoConnect` | `boolean` | `true` | Automatically connect when browser environment is ready. |
 | `reconnect` | `Object` | `{ enabled: true }` | Backoff settings (`baseDelay`, `maxDelay`, `factor`, `jitter`). |
@@ -93,6 +95,46 @@ const adapter = socketIo({
   socketOptions: { transports: ['websocket'] },
 });
 ```
+
+### 3.4 Redis Pub/Sub Distributed Adapter (`redis`)
+Enables cross-process distributed event synchronization across PM2 clusters, Docker containers, and Kubernetes pods:
+
+```js
+const { createApp, realtimePlugin, redis } = require('webspresso');
+const Redis = require('ioredis');
+
+// Option A: Single client instance (adapter will duplicate for subClient)
+const pubsub = new Redis(process.env.REDIS_URL);
+const adapter = redis({
+  redis: pubsub,
+  channelPrefix: 'myapp:rt:',
+});
+
+// Option B: Explicit dual clients
+const pubClient = new Redis(process.env.REDIS_URL);
+const subClient = new Redis(process.env.REDIS_URL);
+const adapter = redis({
+  pubClient,
+  subClient,
+  channelPrefix: 'myapp:rt:',
+});
+
+// Option C: In-memory fallback (useful for local development & unit tests)
+const localAdapter = redis({ inMemory: true });
+
+const { app } = createApp({
+  plugins: [
+    realtimePlugin({
+      adapter,
+      autoConnect: true,
+    }),
+  ],
+});
+
+// Server-side broadcasting to all cluster nodes:
+await app.realtime.adapter.publish('room:general', { message: 'Cluster-wide notification' });
+```
+
 
 ---
 

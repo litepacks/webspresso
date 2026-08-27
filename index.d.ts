@@ -1206,6 +1206,28 @@ export interface SocketIoAdapterOptions {
 export function socketIo(options: SocketIoAdapterOptions): RealtimeAdapter;
 export function createSocketIoAdapter(options: SocketIoAdapterOptions): RealtimeAdapter;
 
+export interface RedisAdapterOptions {
+  pubClient?: any;
+  subClient?: any;
+  redis?: any;
+  channelPrefix?: string;
+  nodeId?: string;
+  serialize?: (envelope: unknown) => string;
+  deserialize?: (raw: string) => unknown;
+  inMemory?: boolean;
+  capabilities?: Record<string, boolean>;
+}
+
+export interface RedisRealtimeAdapter extends RealtimeAdapter {
+  publish(identifier: string, data: unknown): Promise<void>;
+  perform(identifier: string, action: string, data?: unknown): Promise<void>;
+  readonly isInMemory: boolean;
+  readonly nodeId: string;
+}
+
+export function redis(options?: RedisAdapterOptions): RedisRealtimeAdapter;
+export function createRedisAdapter(options?: RedisAdapterOptions): RedisRealtimeAdapter;
+
 // --- Application kernel (use `kernel.createApp`; not the SSR `createApp`) ---
 
 export type KernelEventSource = 'orm' | 'auth' | 'route' | 'plugin' | 'system';

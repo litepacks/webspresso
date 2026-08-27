@@ -85,6 +85,8 @@ const {
   websocket,
   sse,
   socketIo,
+  redis,
+  createRedisAdapter,
 } = require('./plugins');
 
 const content = require('./core/content');
@@ -224,7 +226,10 @@ module.exports = {
   websocket,
   sse,
   socketIo,
+  redis,
+  createRedisAdapter,
 
   // Schema-driven CMS core (framework-agnostic)
   content,
 };
+

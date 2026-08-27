@@ -32,6 +32,10 @@ const {
   socketIo,
   createSocketIoAdapter,
   SocketIoAdapter,
+
+  redis,
+  createRedisAdapter,
+  RedisAdapter,
 } = require('../../core/realtime');
 
 /**
@@ -138,4 +142,9 @@ module.exports = {
   socketIo,
   createSocketIoAdapter,
   SocketIoAdapter,
+
+  redis,
+  createRedisAdapter,
+  RedisAdapter,
 };
+
