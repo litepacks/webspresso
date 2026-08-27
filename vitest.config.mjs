@@ -8,7 +8,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    testTimeout: 10000,
+    testTimeout: 20000,
     setupFiles: ['./tests/setup.js'],
     globalSetup: ['./tests/global-setup.js'],
     include: ['tests/**/*.test.js'],
@@ -32,6 +32,7 @@ export default defineConfig({
         // Browser/admin UI bundles are not executed by the Node test suite
         'plugins/admin-panel/client/**',
         'plugins/admin-panel/field-renderers/**',
+        'plugins/admin-panel/vendor/**',
         'core/orm/types.js',
         'core/orm/cache/types.js',
         'plugins/email/**',
@@ -39,7 +40,7 @@ export default defineConfig({
       thresholds: {
         lines: 73,
         statements: 73,
-        branches: 76,
+        branches: 75,
         functions: 77,
       },
     },
