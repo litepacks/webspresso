@@ -155,4 +155,132 @@ describe('REST resources plugin', () => {
     const gone = await request(app).get(`/api/rest/users/${id}`).expect(404);
     expect(gone.body.error).toBeDefined();
   });
+
+  it('filters records by table columns in query parameters', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      db,
+      plugins: [restResourcePlugin({ path: '/api/rest' })],
+    });
+
+    const res = await request(app).get('/api/rest/users?status=inactive').expect(200);
+    expect(res.body.data.length).toBe(1);
+    expect(res.body.data[0].status).toBe('inactive');
+    expect(res.body.data[0].email).toBe('bob@tech.com');
+  });
+
+  it('supports pagination with page and perPage limits', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      db,
+      plugins: [restResourcePlugin({ path: '/api/rest' })],
+    });
+
+    const res = await request(app).get('/api/rest/users?page=1&perPage=2').expect(200);
+    expect(res.body.data.length).toBe(2);
+    expect(res.body.pagination.page).toBe(1);
+    expect(res.body.pagination.perPage).toBe(2);
+    expect(res.body.pagination.total).toBeGreaterThanOrEqual(3);
+    expect(res.body.pagination.totalPages).toBeGreaterThanOrEqual(2);
+  });
+
+  it('supports sorting by column name and order direction', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      db,
+      plugins: [restResourcePlugin({ path: '/api/rest' })],
+    });
+
+    const ascRes = await request(app).get('/api/rest/users?sort=name&order=asc').expect(200);
+    const namesAsc = ascRes.body.data.map((u) => u.name);
+    const sortedAsc = [...namesAsc].sort((a, b) => a.localeCompare(b));
+    expect(namesAsc).toEqual(sortedAsc);
+
+    const descRes = await request(app).get('/api/rest/users?sort=name&order=desc').expect(200);
+    const namesDesc = descRes.body.data.map((u) => u.name);
+    const sortedDesc = [...namesAsc].reverse();
+    expect(namesDesc).toEqual(sortedDesc);
+  });
+
+  it('handles soft-delete scopes with trashed=only and trashed=include', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      db,
+      plugins: [restResourcePlugin({ path: '/api/rest' })],
+    });
+
+    const onlyTrashed = await request(app).get('/api/rest/users?trashed=only').expect(200);
+    expect(onlyTrashed.body.data.length).toBeGreaterThanOrEqual(1);
+    expect(onlyTrashed.body.data.some((u) => u.email === 'deleted@test.com')).toBe(true);
+
+    const withTrashed = await request(app).get('/api/rest/users?trashed=include').expect(200);
+    expect(withTrashed.body.data.some((u) => u.email === 'deleted@test.com')).toBe(true);
+    expect(withTrashed.body.data.some((u) => u.email === 'john@acme.com')).toBe(true);
+  });
+
+  it('executes custom plugin middleware chain', async () => {
+    const authGuard = (req, res, next) => {
+      if (req.headers['x-api-key'] === 'secret-token') {
+        return next();
+      }
+      res.status(401).json({ error: 'Unauthorized request' });
+    };
+
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      db,
+      plugins: [
+        restResourcePlugin({
+          path: '/api/rest',
+          middleware: [authGuard],
+        }),
+      ],
+    });
+
+    await request(app).get('/api/rest/users').expect(401);
+
+    const res = await request(app)
+      .get('/api/rest/users')
+      .set('x-api-key', 'secret-token')
+      .expect(200);
+    expect(res.body.data.length).toBeGreaterThan(0);
+  });
+
+  it('returns 404 for non-existent records on get, patch, delete', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      db,
+      plugins: [restResourcePlugin({ path: '/api/rest' })],
+    });
+
+    await request(app).get('/api/rest/users/999999').expect(404);
+    await request(app).patch('/api/rest/users/999999').send({ name: 'Ghost' }).expect(404);
+    await request(app).delete('/api/rest/users/999999').expect(404);
+  });
+
+  it('respects excludeModels and filter options', async () => {
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      db,
+      plugins: [
+        restResourcePlugin({
+          path: '/api/rest',
+          excludeModels: ['Post'],
+          filter: (model) => model.name !== 'Company',
+        }),
+      ],
+    });
+
+    await request(app).get('/api/rest/posts').expect(404);
+    await request(app).get('/api/rest/companies').expect(404);
+    await request(app).get('/api/rest/users').expect(200);
+  });
 });
+

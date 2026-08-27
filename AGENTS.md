@@ -56,6 +56,7 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 - `corsPlugin`: Zero-dependency Cross-Origin Resource Sharing handler.
 - `csrfPlugin`: CSRF token validation and Nunjucks form helpers.
 - `realtimePlugin`: Framework-agnostic, plugin-based realtime layer (`core/realtime`) with WebSocket, SSE, and Socket.IO adapters.
+- `restResourcePlugin`: Zero-boilerplate RESTful CRUD API generator directly from ORM models with eager loading, sanitization, filtering, pagination, and soft-delete scoping.
 
 ---
 

@@ -47,6 +47,17 @@ describe('REST Resources Plugin (plugins/rest-resources)', () => {
       expect(parseIncludeParam(model, 'posts, profile, secret, invalid')).toEqual(['posts', 'profile']);
       expect(parseIncludeParam(model, 'posts.comments')).toEqual([]); // nested not allowed
     });
+
+    it('should allow all defined relations if allowInclude is not specified', () => {
+      const model = {
+        relations: {
+          comments: { type: 'hasMany' },
+          author: { type: 'belongsTo' },
+        },
+      };
+
+      expect(parseIncludeParam(model, 'comments, author, non_existent')).toEqual(['comments', 'author']);
+    });
   });
 
   describe('sanitizeRecordTree', () => {
@@ -93,7 +104,9 @@ describe('REST Resources Plugin (plugins/rest-resources)', () => {
 
     it('should handle arrays, primitives, and null gracefully', () => {
       expect(sanitizeRecordTree(null, {})).toBeNull();
+      expect(sanitizeRecordTree(undefined, {})).toBeUndefined();
       expect(sanitizeRecordTree('text', {})).toBe('text');
+      expect(sanitizeRecordTree(123, {})).toBe(123);
       expect(sanitizeRecordTree([{ id: 1 }], { hidden: [], relations: {} })).toEqual([{ id: 1 }]);
     });
   });
@@ -119,6 +132,7 @@ describe('REST Resources Plugin (plugins/rest-resources)', () => {
       const writable = pickWritableColumns(payload, model);
       expect(writable).toEqual({ title: 'New Article' });
       expect(pickWritableColumns(null, model)).toEqual({});
+      expect(pickWritableColumns('string', model)).toEqual({});
     });
   });
 
@@ -127,12 +141,19 @@ describe('REST Resources Plugin (plugins/rest-resources)', () => {
       const schema = z.object({ id: z.number(), name: z.string() });
       const user = defineModel({ name: 'User', table: 'users', schema, rest: { enabled: true } });
       const post = defineModel({ name: 'Post', table: 'posts', schema, rest: { enabled: false } });
+      const comment = defineModel({ name: 'Comment', table: 'comments', schema, rest: { enabled: true } });
 
       const exposed = resolveExposedModels(null, {});
-      expect(exposed.map(m => m.name)).toEqual(['User']);
+      expect(exposed.map(m => m.name).sort()).toEqual(['Comment', 'User']);
 
       const whitelisted = resolveExposedModels(null, { models: ['Post'] });
       expect(whitelisted.map(m => m.name)).toEqual(['Post']);
+
+      const excluded = resolveExposedModels(null, { excludeModels: ['Comment'] });
+      expect(excluded.map(m => m.name)).toEqual(['User']);
+
+      const filtered = resolveExposedModels(null, { filter: (m) => m.name === 'Comment' });
+      expect(filtered.map(m => m.name)).toEqual(['Comment']);
     });
 
     it('should warn and skip route mounting when ctx.db is absent', () => {
@@ -149,9 +170,14 @@ describe('REST Resources Plugin (plugins/rest-resources)', () => {
       }
     });
 
-    it('should register CRUD routes on ctx.addRoute', () => {
+    it('should register CRUD routes on ctx.addRoute and honor custom rest.path', () => {
       const schema = z.object({ id: z.number(), title: z.string() });
-      const article = defineModel({ name: 'Article', table: 'articles', schema, rest: { enabled: true } });
+      const article = defineModel({
+        name: 'Article',
+        table: 'articles',
+        schema,
+        rest: { enabled: true, path: 'custom-articles' },
+      });
 
       const addedRoutes = [];
       const mockCtx = {
@@ -168,11 +194,12 @@ describe('REST Resources Plugin (plugins/rest-resources)', () => {
       plugin.onRoutesReady(mockCtx);
 
       expect(addedRoutes.length).toBe(5); // GET list, GET :id, POST, PATCH :id, DELETE :id
-      expect(addedRoutes.some(r => r.method === 'get' && r.path === '/api/v1/articles')).toBe(true);
-      expect(addedRoutes.some(r => r.method === 'get' && r.path === '/api/v1/articles/:id')).toBe(true);
-      expect(addedRoutes.some(r => r.method === 'post' && r.path === '/api/v1/articles')).toBe(true);
-      expect(addedRoutes.some(r => r.method === 'patch' && r.path === '/api/v1/articles/:id')).toBe(true);
-      expect(addedRoutes.some(r => r.method === 'delete' && r.path === '/api/v1/articles/:id')).toBe(true);
+      expect(addedRoutes.some(r => r.method === 'get' && r.path === '/api/v1/custom-articles')).toBe(true);
+      expect(addedRoutes.some(r => r.method === 'get' && r.path === '/api/v1/custom-articles/:id')).toBe(true);
+      expect(addedRoutes.some(r => r.method === 'post' && r.path === '/api/v1/custom-articles')).toBe(true);
+      expect(addedRoutes.some(r => r.method === 'patch' && r.path === '/api/v1/custom-articles/:id')).toBe(true);
+      expect(addedRoutes.some(r => r.method === 'delete' && r.path === '/api/v1/custom-articles/:id')).toBe(true);
     });
   });
 });
+

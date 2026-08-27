@@ -117,3 +117,25 @@ npx webspresso db:migrate
 # Seed database
 npx webspresso db:seed
 ```
+
+---
+
+## 6. REST API Exposure (`restResourcePlugin`)
+
+Models can be exposed as RESTful CRUD endpoints automatically via `restResourcePlugin`:
+
+```js
+defineModel({
+  name: 'Product',
+  table: 'products',
+  schema: zdb.schema({ /* ... */ }),
+  hidden: ['secret_token'],
+  rest: {
+    enabled: true,                // Expose REST routes /api/rest/products
+    path: 'items',                // Custom path segment (default: pluralized model name)
+    allowInclude: ['category'],   // Whitelist relations for ?include=
+  },
+});
+```
+
+See [Plugin Ecosystem Guide](.agents/PLUGINS.md#216-restresourceplugin-pluginsrest-resources) for full details on querying, filtering, pagination, and soft-delete scoping.

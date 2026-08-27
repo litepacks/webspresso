@@ -220,26 +220,72 @@ app.realtime.destroy();
 await app.realtime.reauthenticate();
 ```
 
-#### 7. Custom Adapter Implementation
-```js
-const myCustomAdapter = {
-  capabilities: { send: true, perform: true, multiplexing: true },
-  async connect({ auth, client }) {
-    // initialize connection with auth
-  },
-  disconnect() {
-    // teardown
-  },
-  isConnected() {
-    return true;
-  },
-  subscribe(identifier, params, callbacks) {
-    // subscribe to remote channel and invoke callbacks.received(data)
-    return {
-      send: (data) => { /* ... */ },
-      perform: (action, data) => { /* ... */ },
-      unsubscribe: () => { /* ... */ },
-    };
-  },
-};
-```
+### 2.16 `restResourcePlugin` (`plugins/rest-resources`)
+Zero-boilerplate RESTful CRUD endpoint generator directly from Knex ORM models, complete with relationship eager-loading (`?include=...`), pagination, sorting, column filtering, soft-delete scopes, and recursive hidden field sanitization.
+
+- **Options**:
+  - `path`: Base path prefix for REST routes (default: `'/api/rest'`).
+  - `middleware`: Array of Express middleware executed prior to database resolution and endpoint handlers (e.g. `[authMiddleware]`).
+  - `models`: Whitelist of model names to expose (bypasses `rest.enabled: true` requirement).
+  - `excludeModels`: Array of model names to exclude.
+  - `filter`: Custom predicate function `(modelDefinition) => boolean`.
+
+- **Model Configuration (`defineModel`)**:
+  ```js
+  defineModel({
+    name: 'User',
+    table: 'users',
+    schema: UserSchema,
+    hidden: ['password_hash', 'internal_notes'],
+    scopes: { softDelete: true, timestamps: true },
+    relations: {
+      company: { type: 'belongsTo', model: () => Company, foreignKey: 'company_id' },
+      posts: { type: 'hasMany', model: () => Post, foreignKey: 'user_id' }
+    },
+    rest: {
+      enabled: true,               // Opt-in flag (or use plugin models whitelist)
+      path: 'users',               // Optional custom URL segment (default: pluralized name)
+      allowInclude: ['company'],   // Allowed relations for ?include=
+    }
+  });
+  ```
+
+- **Generated RESTful Endpoints**:
+  | Method | Path | Description | Query Parameters / Body |
+  |---|---|---|---|
+  | `GET` | `/api/rest/:resource` | Paginated list of records | `page`, `perPage`, `sort`, `order`, `include`, `trashed`, column filters |
+  | `GET` | `/api/rest/:resource/:id` | Single record by primary key | `include` |
+  | `POST` | `/api/rest/:resource` | Create new record (201 Created) | JSON body (writable columns only) |
+  | `PATCH` | `/api/rest/:resource/:id` | Update record by ID | JSON body (writable columns only) |
+  | `DELETE` | `/api/rest/:resource/:id` | Delete / Soft-delete by ID | N/A (Returns `{ success: true }`) |
+
+- **Query Parameters**:
+  - `page`: Page number (1-indexed, default `1`).
+  - `perPage`: Items per page (default `15`, clamped between `1` and `100`).
+  - `sort`: Column name to sort by (validates column exists in model, defaults to primary key).
+  - `order`: `'asc'` or `'desc'` (default `'desc'`).
+  - `include`: Comma-separated allowed relation names (e.g. `?include=company,profile`). Eager loads without N+1 query overhead. Disallowed or nested relations are safely ignored.
+  - `trashed`: For soft-delete models, `'include'` queries active + deleted records; `'only'` queries exclusively soft-deleted records.
+  - **Column Filters**: Any query param matching a table column (e.g. `?status=active&company_id=2`) filters the query (`WHERE column = value`).
+
+- **Security & Data Sanitization**:
+  - **Hidden Fields**: Columns in `model.hidden` are stripped recursively across the primary record and all eager-loaded relations.
+  - **Writable Columns**: `POST` and `PATCH` payloads are stripped of primary auto-increment keys, non-existent columns, and hidden fields before hitting the repository.
+  - **Include Protection**: Only relations declared in `model.rest.allowInclude` (or all relations if omitted) can be eager-loaded. Dotted nested includes (`posts.comments`) are ignored to prevent denial-of-service / memory leaks.
+
+- **Example Usage**:
+  ```js
+  const { createApp, restResourcePlugin } = require('webspresso');
+  const db = require('./models');
+
+  const { app } = createApp({
+    db,
+    plugins: [
+      restResourcePlugin({
+        path: '/api/v1',
+        middleware: [authenticateApiToken],
+      }),
+    ],
+  });
+  ```
+

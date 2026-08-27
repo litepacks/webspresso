@@ -100,3 +100,5 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 | `csrfPlugin` | Security | Session & cookie double-submit CSRF protection + helpers |
 | `auditLogPlugin` | Security | Admin mutation audit logging |
 | `ormCacheAdminPlugin` | Admin / ORM | Cache inspection and invalidation dashboard |
+| `restResourcePlugin` | ORM / REST API | Auto RESTful CRUD endpoints from models with eager loading & sanitization |
+
