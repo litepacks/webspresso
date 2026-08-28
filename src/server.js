@@ -467,10 +467,21 @@ function createApp(options = {}) {
   const app = express();
   app.serviceRegistry = serviceRegistry;
 
-  // Services caller middleware
+  // Request context & services caller middleware
   app.use((req, res, next) => {
+    if (options.db) {
+      req.db = options.db;
+    }
+    req.context = {
+      req,
+      res,
+      db: options.db ?? null,
+      app,
+      serviceRegistry,
+      ...(req.context || {}),
+    };
     req.service = (name, input, opts) =>
-      serviceRegistry.call(name, input, { req, res, db: options.db ?? null, ...(req.context || {}) }, opts);
+      serviceRegistry.call(name, input, req.context, opts);
     next();
   });
 

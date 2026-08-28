@@ -55,7 +55,7 @@ const {
 // ORM exports (lazy loaded)
 const orm = require('./core/orm');
 
-/** Application kernel (event bus, plugin shell, view resolver, flows). Use `kernel.createApp`; not the framework SSR `createApp`. */
+/** Standalone experimental application kernel (event bus, plugin shell, view resolver, flows). Distinct from framework SSR `createApp`. */
 const kernel = require('./core/kernel');
 
 // Built-in plugins

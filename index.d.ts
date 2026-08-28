@@ -34,7 +34,21 @@ export interface CreateAppOptions {
     version?: string;
     manifestPath?: string;
     prefix?: string;
-  };  /**
+    publicDir?: string;
+  };
+  /**
+   * If truthy, route load() return values for stylesheets and scripts are promoted to pageHead
+   */
+  pageAssets?:
+    | boolean
+    | {
+        enabled?: boolean;
+        stylesheets?: boolean;
+        scripts?: boolean;
+      };
+  /** Trust proxy configuration (default: 1) */
+  trustProxy?: boolean | number | string;
+  /**
    * Custom 404 / 500 / 503 handlers. File-based route errors are forwarded with `next(err)` and hit `serverError` / `timeout`.
    * When `serverError` / `timeout` is a template path, it is not used for paths under `/api` (default JSON instead).
    */
@@ -56,6 +70,7 @@ export interface CreateAppOptions {
     port?: number;
     shutdown?: ShutdownOptions;
     compression?: boolean | CompressionOptions;
+    trustProxy?: boolean | number | string;
     [key: string]: unknown;
   };
   /** Opt-in Alpine / swup assets under `/__webspresso/client-runtime/*`. Env: WEBSPRESSO_ALPINE, WEBSPRESSO_SWUP. */
@@ -76,7 +91,14 @@ export interface ServiceContext {
   req?: Request;
   res?: Response;
   db?: DatabaseInstance | null;
-  service?: <T = unknown>(name: string, input?: unknown, options?: unknown) => Promise<T>;
+  fsy?: Record<string, unknown>;
+  locale?: string;
+  t?: unknown;
+  service?: {
+    <T = unknown>(name: string, input?: unknown, options?: unknown): Promise<T>;
+    invalidate?: (name: string, input?: unknown, ctx?: unknown) => boolean;
+    clearCache?: (name?: string) => boolean;
+  };
   [key: string]: unknown;
 }
 
@@ -89,9 +111,16 @@ export interface ServiceDefinition<TInput = unknown, TOutput = unknown> {
   schema?: import('zod').ZodType<any> | Record<string, unknown> | ((input: unknown) => unknown) | null;
   handler: ServiceHandler<TInput, TOutput>;
   metadata?: Record<string, unknown>;
-  auth?: boolean | string | string[];
-  cache?: boolean | string | number;
-  timeout?: number;
+  auth?: boolean | string | string[] | ((user: unknown, ctx: ServiceContext) => boolean | Promise<boolean>);
+  cache?:
+    | boolean
+    | string
+    | number
+    | {
+        ttl?: string | number;
+        key?: string | ((input: unknown, ctx: ServiceContext) => string);
+      };
+  timeout?: number | string;
   transaction?: boolean;
   [key: string]: unknown;
 }
@@ -274,6 +303,7 @@ export interface WebspressoApplication extends Application {
   server?: unknown;
   readonly isShuttingDown: boolean;
   shutdownManager: ShutdownManager;
+  serviceRegistry: ServiceRegistry;
   onShutdown(fn: () => Promise<void> | void): this;
   close(reason?: string): Promise<void>;
   enableShutdownHooks(): this;

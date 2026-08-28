@@ -1,5 +1,6 @@
 /**
- * Minimal extensible application kernel (event bus, views, flows, plugins).
+ * Minimal extensible standalone application kernel (event bus, views, flows, plugins).
+ * Isolated experimental subsystem — not the primary Express SSR createApp.
  * @module core/kernel/app
  */
 

@@ -1,5 +1,9 @@
 /**
- * Application kernel: event bus, simulated repository hooks, plugins, views, flows.
+ * Standalone Experimental Application Kernel
+ * In-process event bus, simulated repository hooks, plugin shell, and minimal view resolver.
+ * 
+ * NOTE: This is an isolated, experimental standalone subsystem. It does NOT integrate with
+ * or replace Webspresso's Express-based SSR createApp(), Knex ORM, or PluginManager.
  * @module core/kernel
  */
 

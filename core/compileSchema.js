@@ -3,12 +3,8 @@
  * Compiles schema definitions from API files
  */
 
-const z = require('zod');
-const { extendZ } = require('./orm/utils/nanoid');
+const { z: zForApi } = require('./validation');
 const schemaCache = require('../utils/schemaCache');
-
-/** Zod plus `z.nanoid()` for API schemas (does not mutate the global `z`). */
-const zForApi = extendZ(z);
 
 /**
  * Compile schema from an API module

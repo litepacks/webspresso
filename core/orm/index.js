@@ -74,10 +74,16 @@ function createDatabase(config) {
     }
   }
 
-  // Create Knex instance
+  // Create Knex instance (default useNullAsDefault: true for SQLite to prevent unneeded warnings)
+  const isSqlite = client === 'better-sqlite3' || client === 'sqlite3';
+  const knexConfig = {
+    ...(isSqlite && config.useNullAsDefault === undefined ? { useNullAsDefault: true } : {}),
+    ...config,
+  };
+
   let knexInstance;
   try {
-    knexInstance = knex(config);
+    knexInstance = knex(knexConfig);
   } catch (e) {
     // Provide helpful error message
     if (e.message && (e.message.includes('Cannot find module') || e.message.includes('npm install'))) {

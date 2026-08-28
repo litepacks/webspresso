@@ -1134,6 +1134,8 @@ function mountPages(app, options) {
           clientRuntime,
         };
         
+        req.context = ctx;
+        
         // Execute hooks: onRequest
         await executeHook(globalHooks, 'onRequest', ctx);
         await executeHook(routeHooks, 'onRequest', ctx);

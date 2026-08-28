@@ -18,12 +18,15 @@ import {
   type InferServiceOutput,
   type Repository,
   type PaginatedResult,
+  type WebspressoApplication,
 } from '../..';
 import { z } from 'zod';
 
-const { app }: { app: Application } = createApp({
+const { app }: { app: WebspressoApplication } = createApp({
   pagesDir: 'tests/fixtures/pages',
   viewsDir: 'tests/fixtures/views',
+  pageAssets: { enabled: true, stylesheets: true, scripts: true },
+  trustProxy: 1,
   plugins: [
     restResourcePlugin({ path: '/api/rest' }),
     corsPlugin({ origin: ['https://example.com'], credentials: true }),
@@ -31,6 +34,7 @@ const { app }: { app: Application } = createApp({
 });
 
 void app;
+void app.serviceRegistry;
 
 const userSchema = zdb.schema({
   id: zdb.id(),
@@ -102,7 +106,10 @@ const createUserDto = z.object({
 
 const createUserService = defineService({
   schema: createUserDto,
-  auth: true,
+  auth: (user, ctx) => Boolean(user || ctx.req),
+  cache: { ttl: '5m', key: (input) => `user-${(input as { email: string }).email}` },
+  timeout: '10s',
+  transaction: true,
   handler: async (input: { email: string; name: string }) => {
     return { success: true, userId: 123, email: input.email };
   },

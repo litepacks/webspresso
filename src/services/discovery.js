@@ -6,6 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { trimUrlPathSlashes } = require('../../core/url-path-normalize');
 
 const VALID_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 
@@ -50,7 +51,7 @@ function filePathToServiceName(relativePath) {
   }
 
   // Cross-platform slash normalization (Windows \ to Unix /)
-  const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  const normalized = trimUrlPathSlashes(relativePath.replace(/\\/g, '/'));
   const ext = path.extname(normalized);
   const withoutExt = ext ? normalized.slice(0, -ext.length) : normalized;
   const segments = withoutExt.split('/').filter(Boolean);
