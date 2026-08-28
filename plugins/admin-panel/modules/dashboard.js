@@ -384,7 +384,14 @@ const Widget = {
           ? m('div.flex.justify-center.py-8', m(Spinner))
           : error 
             ? m('div.text-red-500.text-sm', error)
-            : (WidgetRenderers[widget.id] || WidgetRenderers.default).render(data),
+            : (() => {
+                try {
+                  return (WidgetRenderers[widget.id] || WidgetRenderers.default).render(data);
+                } catch (err) {
+                  console.error('[Admin Panel] Error rendering widget "' + widget.id + '":', err);
+                  return m('div.text-red-500.text-xs', 'Widget render error: ' + (err.message || String(err)));
+                }
+              })(),
       ]),
     ]);
   },

@@ -396,10 +396,15 @@ function getFieldRenderer(col, modelMeta) {
     const custom = window.__customFieldRenderers && window.__customFieldRenderers[col.customField.type];
     if (custom) {
       return (col, value, onChange, readonly, error) => {
-        if (custom.edit && typeof custom.edit === 'object' && custom.edit.view) {
-          return m(custom.edit, { col, value, onChange, readonly, error });
-        } else if (typeof custom.edit === 'function') {
-          return custom.edit(value, onChange, col, readonly, error);
+        try {
+          if (custom.edit && typeof custom.edit === 'object' && custom.edit.view) {
+            return m(custom.edit, { col, value, onChange, readonly, error });
+          } else if (typeof custom.edit === 'function') {
+            return custom.edit(value, onChange, col, readonly, error);
+          }
+        } catch (err) {
+          console.error('[Admin Panel] Error rendering custom field edit for "' + col.customField.type + '":', err);
+          return m('div.text-red-500.text-xs', 'Edit render error: ' + (err.message || String(err)));
         }
       };
     }
@@ -409,10 +414,15 @@ function getFieldRenderer(col, modelMeta) {
   if (col.type && window.__customFieldRenderers && window.__customFieldRenderers[col.type]) {
     const custom = window.__customFieldRenderers[col.type];
     return (col, value, onChange, readonly, error) => {
-      if (custom.edit && typeof custom.edit === 'object' && custom.edit.view) {
-        return m(custom.edit, { col, value, onChange, readonly, error });
-      } else if (typeof custom.edit === 'function') {
-        return custom.edit(value, onChange, col, readonly, error);
+      try {
+        if (custom.edit && typeof custom.edit === 'object' && custom.edit.view) {
+          return m(custom.edit, { col, value, onChange, readonly, error });
+        } else if (typeof custom.edit === 'function') {
+          return custom.edit(value, onChange, col, readonly, error);
+        }
+      } catch (err) {
+        console.error('[Admin Panel] Error rendering custom field edit for "' + col.type + '":', err);
+        return m('div.text-red-500.text-xs', 'Edit render error: ' + (err.message || String(err)));
       }
     };
   }

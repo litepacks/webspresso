@@ -476,10 +476,14 @@ function generateAdminPanelHtml(adminPath, registry) {
 
   const settings = registry.settings;
   const fieldRenderersCode = Array.from(registry.fieldRenderers.entries()).map(([type, r]) => {
-    return `window.__customFieldRenderers['${type}'] = {
-      display: ${r.display ? serializeJs(r.display) : 'null'},
-      edit: ${r.edit ? serializeJs(r.edit) : 'null'}
-    };`;
+    return `try {
+      window.__customFieldRenderers['${type}'] = {
+        display: ${r.display ? serializeJs(r.display) : 'null'},
+        edit: ${r.edit ? serializeJs(r.edit) : 'null'}
+      };
+    } catch (err) {
+      console.error('[Admin Panel] Failed to register custom field renderer "${type}":', err);
+    }`;
   }).join('\n');
 
   return `<!DOCTYPE html>

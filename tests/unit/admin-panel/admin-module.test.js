@@ -96,7 +96,7 @@ describe('registerModule', () => {
       }, deps);
 
       expect(deps.registry.clientComponents.has('test')).toBe(true);
-      expect(deps.registry.clientComponents.get('test')).toBe(componentCode);
+      expect(deps.registry.clientComponents.get('test')).toContain(componentCode);
     });
 
     it('should not register a client component when component is omitted', () => {

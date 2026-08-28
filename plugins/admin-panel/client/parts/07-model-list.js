@@ -73,10 +73,15 @@ function formatCellValue(value, col, record = null) {
   const customRendererType = (col && col.customField && col.customField.type) || (col && col.type);
   const custom = window.__customFieldRenderers && window.__customFieldRenderers[customRendererType];
   if (custom && custom.display) {
-    if (typeof custom.display === 'object' && custom.display.view) {
-      return m(custom.display, { value, col, record });
-    } else if (typeof custom.display === 'function') {
-      return custom.display(value, record);
+    try {
+      if (typeof custom.display === 'object' && custom.display.view) {
+        return m(custom.display, { value, col, record });
+      } else if (typeof custom.display === 'function') {
+        return custom.display(value, record);
+      }
+    } catch (err) {
+      console.error('[Admin Panel] Error rendering custom field display for "' + customRendererType + '":', err);
+      return String(value);
     }
   }
   
