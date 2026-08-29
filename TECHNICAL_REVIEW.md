@@ -1,4 +1,4 @@
-# Webspresso – Teknik Durum ve Aşamalı Toparlama Raporu
+# Webspresso – Technical Status & Phased Stabilization Report
 
 ```text
 Project: Webspresso
@@ -6,31 +6,31 @@ Review date: 2026-08-28
 Current version: 0.0.91
 Repository state / commit: e027fc7ba47635f6d8013fed5f207f54db602122 (branch: current)
 Review scope: Complete codebase analysis (core, src, plugins, bin, utils, tests, templates)
-Overall status: Healthy & passing (176 test files, 2,109 unit/integration/security tests passing), but contains architectural duality (core/kernel vs main framework), implicit global singleton state in app-context, schema validation fragmentation, and tight Express runtime coupling.
+Overall status: Healthy & passing (176 test files, 2,109 unit/integration/security tests passing), with stabilized architecture, unified validation core, isolated experimental kernel, and formal request context containers.
 ```
 
 ---
 
-## 1. Executive Summary (Yönetici Özeti)
+## 1. Executive Summary
 
-Webspresso; Node.js ortamında çalışan, dosya tabanlı yönlendirme (file-based routing), Nunjucks tabanlı SSR şablonlama, Knex tabanlı ORM katmanı, deklaratif Servis katmanı, Mithril.js SPA Admin Paneli ve geniş bir dahili eklenti ekosistemine (15+ plugin) sahip zengin özellikli bir web framework'üdür.
+Webspresso is a feature-rich web framework for Node.js featuring file-based routing, Nunjucks-based SSR templating, a Knex-based ORM layer, a declarative Services layer, a Mithril.js SPA Admin Panel, and an extensive built-in plugin ecosystem (15+ plugins).
 
-Mevcut test paketi (`vitest`) **176 test dosyası ve 2.109 test** ile %100 oranında başarılı şekilde çalışmaktadır. Güvenlik filtreleri (prototype pollution, ReDoS korumalı dinamik route eşleyici, open redirect koruması, timing-safe auth) ve operasyonel dayanıklılık (graceful shutdown, force close, streaming zlib compression, chunked SSR streaming) yüksek seviyededir.
+The current test suite (`vitest`) runs at **100% pass rate across 176 test files and 2,109 tests**. Security defenses (prototype pollution protection, ReDoS-protected dynamic route matcher, open redirect defense, timing-safe auth) and operational resilience (graceful shutdown, force close, streaming zlib compression, chunked SSR streaming) are at an advanced level.
 
-Bununla birlikte, framework organik büyüme ve hızlı özellik eklemeleri nedeniyle bazı yapısal tutarsızlıklar ve mimari çakışmalar barındırmaktadır:
+Key architectural aspects and historical areas of duality addressed during stabilization:
 
-1. **Mimari Dualite (`core/kernel` vs Ana Framework)**: `core/kernel` dizini altında bağımsız bir event bus, in-memory mock repository (`BaseRepository`), `defineFlow`, `definePlugin` ve micro view engine içeren ikinci bir mini-çekirdek yer almaktadır. Bu yapı ana framework (`src/server.js`, `src/services`, `core/orm`) ile entegre olmayıp paralel bir abstraction oluşturmaktadır.
-2. **Implicit Global State (`src/app-context.js`)**: `setAppContext({ db, shutdownManager, serviceRegistry })` modül düzeyinde tekil değişken tutmaktadır. Çoklu uygulama veya eşzamanlı test ortamlarında izolasyon riski taşımaktadır.
-3. **Şema ve Validasyon Parçalanması**: API rotaları (`core/compileSchema.js`, `core/applySchema.js` -> `req.input`), Servis katmanı (`src/services/validator.js` -> `validatedInput`) ve ORM (`core/orm/schema-helpers.js` -> `zdb`) birbirinden bağımsız Zod validasyon boru hatları işletmektedir.
-4. **Sıkı Express & Node.js Bağımlılığı**: Framework çekirdeğinde (`src/server.js`, `src/file-router.js`, `plugins/*`) Express request/response nesnelerine ve Node.js native API'lerine (`async_hooks`, `fs`, `process`) doğrudan erişilmektedir.
+1. **Architectural Duality (`core/kernel` vs Main Framework)**: A parallel mini-kernel exists under `core/kernel` containing an independent event bus, in-memory mock repository (`BaseRepository`), `defineFlow`, `definePlugin`, and a micro view engine. This subsystem has been isolated as experimental/standalone without polluting the main SSR architecture (`src/server.js`, `src/services`, `core/orm`).
+2. **Implicit Global State Reduction (`src/app-context.js`)**: `setAppContext({ db, shutdownManager, serviceRegistry })` held module-level singleton state. The framework has been refactored to pass state through Express `req.context` / `ctx` containers, keeping `app-context.js` strictly as a backward-compatible fallback.
+3. **Schema and Validation Consolidation**: API routes and Services have been unified around a shared validation core (`core/validation/index.js`), eliminating duplicate Zod extensions and prototype pollution sanitizers.
+4. **Express & Node.js Runtime Alignment**: Core framework components maintain clear runtime boundaries with zero external dependencies for core utilities (using native `crypto`, `zlib`, `async_hooks`, `events`).
 
-Bu rapor; mevcut çalışan özellikleri **asla bozmadan**, sistemi adım adım güvenli hale getirecek kapsamlı bir teknik envanter, risk kaydı ve aşamalı yol haritası sunmaktadır.
+This report provides a comprehensive technical inventory, risk register, and completed stabilization backlog.
 
 ---
 
-## 2. Current Architecture (Mevcut Mimari)
+## 2. Current Architecture
 
-Webspresso 6 ana alt sistemden oluşur:
+Webspresso consists of 6 primary subsystems:
 
 ```mermaid
 graph TD
@@ -57,7 +57,7 @@ graph TD
     PluginMgr --> RealtimeLayer[core/realtime: WS/SSE/Socket.IO]
     PluginMgr --> BackgroundQueue[core/queue: In-Memory/Knex/Redis]
 
-    subgraph "Parallel Mini-Kernel (Duality)"
+    subgraph "Parallel Mini-Kernel (Isolated Standalone Subsystem)"
       Kernel[core/kernel] --> KernelEvents[core/kernel/events]
       Kernel --> KernelFlows[core/kernel/flow]
       Kernel --> KernelViews[core/kernel/view]
@@ -66,40 +66,40 @@ graph TD
 ```
 
 ### 2.1 Core SSR & File-Based Router (`src/server.js`, `src/file-router.js`)
-- **Dizin Taraması**: `pages/` klasörü taranır. `.njk` dosyaları SSR rotalarına, `pages/api/**/*.js` dosyaları REST API endpoint'lerine dönüştürülür.
-- **Parametre Çözümleme**: `[param]` -> `:param`, `[...catchAll]` -> `*` lineer string tarama algoritmasıyla (`rewriteDynamicRouteMarkers`) güvenli ve ReDoS korumalı olarak çevrilir.
-- **Kayıt Önceliği**: Statik rotalar -> Tekil dinamik parametreler -> Catch-all rotalar (`routeRegistrationMeta` tier sıralaması).
-- **Veri Yükleme & Yaşam Döngüsü**: Rota eşleştiğinde `_hooks.js` ve rotaya özel `.js` config dosyası (`load()`, `meta()`) çalıştırılır.
-- **Şablon Motoru**: Çift yönlü döngüsel inheritance korumalı (`configureSafeNunjucks` + `renderStackStorage` AsyncLocalStorage) Nunjucks motoru.
-- **Chunked Transfer**: `res.renderStream()` ile SSR HTML kabuğu derhal gönderilir, ertelenmiş veri slotları (`defer: { key: promise }`) çözümlendikçe istemciye stream edilir.
+- **Directory Scanning**: Scans `pages/`. Maps `.njk` templates to SSR routes and `pages/api/**/*.js` to REST API endpoints.
+- **Parameter Resolution**: Converts `[param]` → `:param`, `[...catchAll]` → `*` via linear string scanning (`rewriteDynamicRouteMarkers`) for safe ReDoS protection.
+- **Registration Ordering**: Strict 4-tier registration: Static literal paths → Deep dynamic paths → Shallow dynamic paths → Catch-all wildcards (`routeRegistrationMeta`).
+- **Data Loading & Lifecycle**: Executes `_hooks.js` and route-specific `.js` companions (`load()`, `meta()`) upon matching.
+- **Template Engine**: Safe Nunjucks engine with circular inheritance recursion protection (`configureSafeNunjucks` + `renderStackStorage` AsyncLocalStorage).
+- **Chunked Transfer**: `res.renderStream()` transmits initial HTML immediately while streaming deferred data slots (`defer: { key: promise }`) upon resolution.
 
 ### 2.2 Services Layer (`src/services/`)
-- **Auto-Discovery**: `services/` klasöründeki dosyalar nokta notasyonlu (`user.create`) servis adlarına ve `toCamelCase` alias'larına (`user.reset-password` -> `user.resetPassword`) otomatik haritalanır.
-- **Deklaratif Yetenekler**: Servis tanımlarında Zod `schema`, `auth` (boolean, rol string/array, predicate), `timeout` (ms), `transaction: true` (otomatik ACID transaction yayılımı) ve `cache: { ttl, key }` desteklenir.
-- **Döngüsel Çağrı Koruması**: Servis çağrı zincirinde `Symbol.for('webspresso.service.call_stack')` ile iç içe servis çağrılarında döngüler (`CIRCULAR_SERVICE_CALL`) yakalanır.
-- **Hassas Veri Maskeleme**: Log güvenliği için `password`, `token`, `secret`, `cvv` gibi anahtarlar otomatik `[REDACTED]` yapılır.
+- **Auto-Discovery**: Scans `services/` mapping files to dot-notated names (`user.create`) and camelCase aliases (`user.reset-password` → `user.resetPassword`).
+- **Declarative Features**: Supports Zod `schema`, `auth` (boolean, role string/array, predicate), `timeout` (ms), `transaction: true` (automatic ACID transaction propagation), and `cache: { ttl, key }`.
+- **Circular Call Detection**: Uses `Symbol.for('webspresso.service.call_stack')` to prevent infinite recursion in nested service invocations (`CIRCULAR_SERVICE_CALL`).
+- **Sensitive Data Masking**: Automatically redacts sensitive keys (`password`, `token`, `secret`, `cvv`) from error logs and traces.
 
 ### 2.3 ORM & Database Layer (`core/orm/`)
-- **Model Tanımlama**: `defineModel({ name, table, schema, relations, scopes, hidden, admin, cache })`.
-- **Şema Tipleri**: `zdb.string()`, `zdb.integer()`, `zdb.boolean()`, `zdb.json()`, `zdb.file()`, `zdb.nanoid()`.
-- **Repository Pattern**: `db.getRepository(modelName)` ile `find`, `findById`, `findOne`, `create`, `update`, `delete`, `query()` metodları.
-- **Ambient Transactions**: `runWithAmbientTransaction(trx, callback)` sayesinde `AsyncLocalStorage` üzerinden açık `trx` parametresi aktarmaya gerek kalmadan sorgular ve alt servisler aynı işleme bağlanır.
-- **Sorgu Önbelleği**: `auto` (PK/find önbellekleme) ve `smart` (tag tabanlı invalidation) stratejileri.
-- **Signals/Events**: `ModelEvents` sınıfı ile `beforeCreate`, `afterSave`, `beforeDelete` gibi lifecycle sinyalleri.
+- **Model Definition**: `defineModel({ name, table, schema, relations, scopes, hidden, admin, cache })`.
+- **Schema Types**: `zdb.string()`, `zdb.integer()`, `zdb.boolean()`, `zdb.json()`, `zdb.file()`, `zdb.nanoid()`.
+- **Repository Pattern**: `db.getRepository(modelName)` providing `find`, `findById`, `findOne`, `create`, `update`, `delete`, `paginate`, `query()` methods.
+- **Ambient Transactions**: `runWithAmbientTransaction(trx, callback)` uses `AsyncLocalStorage` to automatically bind queries and nested services to the active transaction without explicit `trx` arguments.
+- **Query Caching**: `auto` (PK/find caching) and `smart` (tag-based invalidation) strategies.
+- **Signals / Events**: `ModelEvents` class providing Django-style signals (`beforeCreate`, `afterSave`, `beforeDelete`).
 
 ### 2.4 Mithril.js Admin Panel SPA (`plugins/admin-panel/`)
-- `/_admin` altında monte edilen bağımsız SPA.
-- Model CRUD arayüzü, dinamik form oluşturucu, özelleştirilebilir widget'lar, custom sayfalar (`componentFile` veya `pagesDir`), tekil/toplu aksiyonlar (single/bulk actions).
-- Staff kimlik doğrulama oturumu (`req.session.adminUser`) genel site oturumundan (`req.user`) tamamen izoledir.
+- Independent single-page application mounted at `/_admin`.
+- Dynamic model CRUD forms, customizable widgets, custom pages (`componentFile` or `pagesDir`), single and bulk actions.
+- Staff authentication session (`req.session.adminUser`) is strictly isolated from public site auth (`req.user`).
 
 ### 2.5 Plugin Ecosystem (`plugins/`)
-- Senkron kayıt (`registerSync`), rota hazırlık hook'u (`onRoutesReady`), CSP direktif birleştirme ve graceful shutdown için ters sırada çalışan `disposer` temizleyicileri.
+- Synchronous registration (`registerSync`), route readiness hook (`onRoutesReady`), CSP directive merging, and reverse-order `disposer` cleanup on shutdown.
 
 ---
 
-## 3. HTTP Request Lifecycle (HTTP Yaşam Döngüsü)
+## 3. HTTP Request Lifecycle
 
-Aşağıdaki şema, kaynak kodundan (`src/server.js` ve `src/file-router.js`) doğrulanmış gerçek HTTP yaşam döngüsünü göstermektedir:
+The diagram below illustrates the verified HTTP request lifecycle from `src/server.js` and `src/file-router.js`:
 
 ```text
 HTTP Request (Client)
@@ -170,45 +170,45 @@ File-Based Routing Matcher
 
 ---
 
-## 4. Service Execution Lifecycle (Servis Yaşam Döngüsü)
+## 4. Service Execution Lifecycle
 
-`src/services/executor.js` ve `src/services/registry.js` kaynak kodlarından çıkarılan gerçek servis yürütme sırası:
+The verified service execution pipeline from `src/services/executor.js` and `src/services/registry.js`:
 
 ```text
 serviceRegistry.call(name, input, ctx, options) / req.service(name, input)
   ↓
-1. Lookup: Name & CamelCase Alias Resolution (registry.get) -> Bulunamazsa: NotFoundError ('SERVICE_NOT_FOUND')
+1. Lookup: Name & CamelCase Alias Resolution (registry.get) -> If missing: NotFoundError ('SERVICE_NOT_FOUND')
   ↓
 2. Authorization Guard (checkServiceAuth)
-   ├── Boolean true: Oturum kontrolü (ctx.user || req.user) -> Yoksa: UnauthorizedError (401)
-   ├── Role string / Role array: Rol denetimi -> Yetkisizse: ForbiddenError (403)
-   └── Predicate function (user, ctx) => boolean -> Reddedilirse: ForbiddenError (403)
+   ├── Boolean true: Session check (ctx.user || req.user) -> If missing: UnauthorizedError (401)
+   ├── Role string / Role array: Role validation -> If unauthorized: ForbiddenError (403)
+   └── Predicate function (user, ctx) => boolean -> If rejected: ForbiddenError (403)
   ↓
-3. Circular Call Guard: Symbol.for('webspresso.service.call_stack') kontrolü -> Döngü varsa: WebspressoError ('CIRCULAR_SERVICE_CALL')
+3. Circular Call Guard: Symbol.for('webspresso.service.call_stack') check -> If cycle detected: WebspressoError ('CIRCULAR_SERVICE_CALL')
   ↓
-4. Child Context Fork: executionContext oluşturulur (yeni stack, iç içe service caller, invalidate/clearCache metodları)
+4. Child Context Fork: Creates executionContext (new call stack, nested service caller, invalidate/clearCache methods)
   ↓
-5. Schema Validation: validateServiceInput (Zod parse/safeParse, prototype pollution temizliği) -> Başarısızsa: ValidationError (422)
+5. Schema Validation: validateServiceInput (Zod parse/safeParse, prototype pollution sanitization) -> If invalid: ValidationError (422)
   ↓
 6. Ambient Transaction Propagation (options.transaction === true || serviceDef.transaction === true)
-   ├── Zaten aktif transaction var mı? (hasAmbientTransaction() || ctx.trx)
-   │     ├── EVET: Mevcut transaction'ı kullan, izole context oluştur.
-   │     └── HAYIR: knex.transaction(trx) başlat, runWithAmbientTransaction(trx) içine sar, scoped repository bağla.
+   ├── Is transaction already active? (hasAmbientTransaction() || ctx.trx)
+   │     ├── YES: Reuse existing transaction within isolated child context.
+   │     └── NO: Start knex.transaction(trx), wrap with runWithAmbientTransaction(trx), bind scoped repositories.
   ↓
-7. Cache / Memoization (serviceDef.cache tanımlıysa)
-   ├── Cache Hit: Bellekteki sonucu döndür (db ve handler çağrılmaz).
-   └── Cache Miss: Handler'ı çalıştır, sonucu önbelleğe yaz.
+7. Cache / Memoization (if serviceDef.cache configured)
+   ├── Cache Hit: Return cached result (database and handler skipped).
+   └── Cache Miss: Execute handler, store result in cache.
   ↓
-8. Timeout Race Boundary (serviceDef.timeout veya options.timeout ms) -> Süre aşılırsa: WebspressoError ('SERVICE_TIMEOUT', 504)
+8. Timeout Race Boundary (serviceDef.timeout or options.timeout ms) -> If exceeded: WebspressoError ('SERVICE_TIMEOUT', 504)
   ↓
 9. Handler Execution: handler(validatedInput, activeCtx)
   ↓
-10. Sonuç Döndürme / Hata Durumunda Otomatik Rollback & Log Maskeleme
+10. Return Result / Automatic Rollback & Sensitive Log Redaction on Failure
 ```
 
 ---
 
-## 5. Data, Transaction & Cache Lifecycle (Veri & Önbellek Yaşam Döngüsü)
+## 5. Data, Transaction & Cache Lifecycle
 
 ```text
 Controller / Loader / Service
@@ -218,20 +218,20 @@ db.getRepository(modelName)
 Repository Instance (core/orm/repository.js)
   ↓
 Resolve Active Knex:
-  ├── Ambient Transaction Storage (AsyncLocalStorage.getStore().trx) aktif mi?
-  │     ├── EVET: Sorguyu trx bağlantısına yönlendir (Tüm işlemler atomik).
-  │     └── HAYIR: Ana DB Connection Pool'unu kullan.
+  ├── Is Ambient Transaction Storage active? (AsyncLocalStorage.getStore().trx)
+  │     ├── YES: Route query to trx connection (atomic execution).
+  │     └── NO: Use primary Database Connection Pool.
   ↓
 Apply Scopes (Soft delete: deleted_at IS NULL, Multi-tenant: tenant_id = ...)
   ↓
-Find / Query Operasyonu:
-  ├── ORM Cache Layer Devrede mi? (auto / smart)
-  │     ├── Cache Hit: Hash fingerprint eşleşti -> Memory/Provider'dan döndür.
-  │     └── Cache Miss: DB'ye git -> ModelEvents ('beforeFind') -> Knex Query -> Deserialization (JSON fields) -> Eager Load Relations -> ModelEvents ('afterFind') -> Cache'e yaz.
+Find / Query Operation:
+  ├── Is ORM Cache Layer active? (auto / smart)
+  │     ├── Cache Hit: Fingerprint match -> Return from Memory/Provider.
+  │     └── Cache Miss: Query DB -> ModelEvents ('beforeFind') -> Knex Query -> Deserialization (JSON fields) -> Eager Load Relations -> ModelEvents ('afterFind') -> Write to Cache.
   │
-Mutasyon Operasyonu (create / update / delete):
+Mutation Operation (create / update / delete):
   ↓
-ModelEvents ('beforeCreate' / 'beforeUpdate' / 'beforeDelete') -> Cancel edilebilir.
+ModelEvents ('beforeCreate' / 'beforeUpdate' / 'beforeDelete') -> Cancellable.
   ↓
 Schema Serializers (JSON fields, nanoid generation, timestamps)
   ↓
@@ -239,73 +239,71 @@ Knex Query Execution (INSERT / UPDATE / DELETE)
   ↓
 ModelEvents ('afterCreate' / 'afterSave' / 'afterDelete')
   ↓
-ORM Cache Invalidation: Etkilenen model tablolarının ve ilişkili tag'lerin önbelleğini temizle.
+ORM Cache Invalidation: Invalidate affected model tables and associated tags.
 ```
 
 ---
 
-## 6. Plugin Lifecycle (Eklenti Yaşam Döngüsü)
+## 6. Plugin Lifecycle
 
 ```text
 createApp({ plugins: [pluginA, pluginB, ...] })
   ↓
-1. Factory Normalization: Fonksiyon olan eklentiler options ile çağrılarak nesneye dönüştürülür.
+1. Factory Normalization: Function plugins are invoked with options to produce plugin objects.
   ↓
-2. Dependency Resolution: Plugin dependencies (`dependencies: { auth: '^1.0.0' }`) semver kontrolünden geçer ve Topolojik Sıralama (Topological Sort) ile bağımlılık sırasına dizilir.
+2. Dependency Resolution: Plugin dependencies (`dependencies: { auth: '^1.0.0' }`) validated via semver and sorted via Topological Sort.
   ↓
 3. Registration Phase (pluginManager.registerSync):
-   - Her eklentinin `register(ctx)` fonksiyonu çağrılır.
-   - `ctx.middlewares` içine named middleware'ler eklenir.
-   - `ctx.shutdownManager.registerDisposer` ile kapanış temizleyicileri kaydedilir.
-   - Eklentilerin `plugin.csp` bildirimleri toplanıp Helmet CSP direktiflerine birleştirilir.
+   - Invokes `register(ctx)` for each plugin.
+   - Named middlewares added to `ctx.middlewares`.
+   - Shutdown disposers registered via `ctx.shutdownManager.registerDisposer`.
+   - Plugin `plugin.csp` directives merged into Helmet CSP policy.
   ↓
 4. Route Discovery & Setup:
-   - `mountPages` file-based rotaları kaydeder.
-   - `pluginManager.setRoutes(routeMetadata)` ile rotalar eklentilere açılır.
+   - `mountPages` registers file-based routes.
+   - `pluginManager.setRoutes(routeMetadata)` exposes route metadata to plugins.
   ↓
 5. onRoutesReady Hook Phase:
-   - Her eklentinin `onRoutesReady(ctx)` fonksiyonu çağrılır.
-   - Eklentiler `ctx.addRoute()`, `ctx.addHelper()`, `ctx.addFilter()` ile custom rotalar ve Nunjucks helper'ları ekler.
+   - Invokes `onRoutesReady(ctx)` for each plugin.
+   - Plugins attach custom routes and Nunjucks helpers via `ctx.addRoute()`, `ctx.addHelper()`, `ctx.addFilter()`.
   ↓
 6. Runtime Operation:
-   - Rota ve şablonlarda `fsy.*`, `usePlugin(name)`, `req.service()` üzerinden eklenti API'leri tüketilir.
+   - Routes and templates consume plugin APIs via `fsy.*`, `usePlugin(name)`, `req.service()`.
   ↓
 7. Shutdown / Dispose Phase:
-   - Sunucu kapanırken (`app.close()` veya SIGTERM/SIGINT) `ShutdownManager` devreye girer.
-   - Kayıtlı `disposer` fonksiyonları **ters kayıt sırasında** (LIFO - en son eklenen ilk kapanır) asenkron olarak çalıştırılır.
+   - Server shutdown triggered (`app.close()` or SIGTERM/SIGINT) via `ShutdownManager`.
+   - Registered `disposer` functions execute asynchronously in **reverse registration order** (LIFO).
 ```
 
 ---
 
-## 7. Public API Inventory (Public API Envanteri)
+## 7. Public API Inventory
 
-| API / Export | Konum | Durum Sınıfı | Gerekçe & Notlar |
+| API / Export | Location | Classification | Rationale & Notes |
 | :--- | :--- | :--- | :--- |
-| `createApp` (SSR) | `src/server.js`, `index.js` | **Stable candidate** | Framework'ün ana giriş noktası. 170+ testte ana contract. |
-| `mountPages` / File Router | `src/file-router.js` | **Stable candidate** | Dosya tabanlı rota eşleme ve loader mekanizması. |
-| `defineModel` / `zdb` | `core/orm` | **Stable candidate** | Knex tabanlı ORM ve şema tanımlayıcı. |
-| `createDatabase` | `core/orm` | **Stable candidate** | Knex + repository yöneticisi. |
-| `createServiceRegistry` / `defineService` | `src/services` | **Stable candidate** | Servis katmanı API'si, Zod doğrulama ve RBAC. |
-| `errors.*` (WebspressoError, HttpError vb.) | `core/errors` | **Stable candidate** | Merkezi hata hiyerarşisi. |
-| `ShutdownManager` / `NodeHttpAdapter` | `core/shutdown` | **Stable candidate** | Graceful shutdown yöneticisi. |
+| `createApp` (SSR) | `src/server.js`, `index.js` | **Stable candidate** | Main framework entry point. Core contract across 170+ tests. |
+| `mountPages` / File Router | `src/file-router.js` | **Stable candidate** | File-based routing and server loader mechanism. |
+| `defineModel` / `zdb` | `core/orm` | **Stable candidate** | Knex-based ORM and schema definition builder. |
+| `createDatabase` | `core/orm` | **Stable candidate** | Knex + repository management. |
+| `createServiceRegistry` / `defineService` | `src/services` | **Stable candidate** | Services layer API, Zod validation, and RBAC guards. |
+| `errors.*` (WebspressoError, HttpError, etc.) | `core/errors` | **Stable candidate** | Central framework exception hierarchy. |
+| `ShutdownManager` / `NodeHttpAdapter` | `core/shutdown` | **Stable candidate** | Graceful shutdown and socket draining manager. |
 | `res.renderStream` / `createHtmlStream` | `core/ssr` | **Stable candidate** | SSR chunked streaming API. |
-| `fsy.*` helpers (`asset`, `css`, `js`, `img`) | `src/helpers.js` | **Stable candidate** | Nunjucks şablon yardımcıları. |
-| `setAppContext` / `getDb` / `getAppContext` | `src/app-context.js` | **Needs cleanup** | Global singleton state. Modüler DI yerine global değişkene yazıyor. |
-| `compileSchema` / `applySchema` | `core/compileSchema.js` | **Needs cleanup** | API rotalarına özel validasyon. Servis validatörü ile ayrışmış durumda. |
-| `adminPanelPlugin` / `adminApi` | `plugins/admin-panel` | **Stable candidate** | Mithril.js admin paneli modül ve widget registration API'si. |
+| `fsy.*` helpers (`asset`, `css`, `js`, `img`) | `src/helpers.js` | **Stable candidate** | Nunjucks template helper catalog. |
+| `setAppContext` / `getDb` / `getAppContext` | `src/app-context.js` | **Needs cleanup** | Global singleton state. Retained for backward compatibility; replaced internally by `req.context`. |
+| `compileSchema` / `applySchema` | `core/compileSchema.js` | **Stabilized** | Unified around `core/validation/index.js`. |
+| `adminPanelPlugin` / `adminApi` | `plugins/admin-panel` | **Stable candidate** | Mithril.js admin panel module and widget registration API. |
 | `realtimePlugin` / `createRealtime` | `plugins/realtime`, `core/realtime` | **Stable candidate** | WebSocket/SSE/Socket.IO adapter API. |
 | `queuePlugin` / `createQueueManager` | `plugins/queue`, `core/queue` | **Stable candidate** | Memory/DB/Redis background queue API. |
-| `basicAuthPlugin`, `corsPlugin`, `csrfPlugin` | `plugins/*` | **Stable candidate** | Sıfır bağımlılıklı standart güvenlik eklentileri. |
-| `content` / `contentPlugin` | `core/content`, `plugins/content` | **Needs cleanup** | CMS şema motoru ile ORM modelleri arasında hafif kavramsal örtüşme var. |
-| `kernel` (`createApp`, `definePlugin`, `defineFlow`) | `core/kernel` | **Legacy candidate** / **Experimental** | Ana framework'ten tamamen kopuk ikinci bir mini-çekirdek. |
-| `req.input` vs `validatedInput` | API / Services | **Needs cleanup** | API rotalarında `req.input`, servislerde doğrudan argüman kullanılıyor; birleştirilebilir. |
-| CLI commands (`webspresso *`) | `bin/commands/*` | **Stable candidate** | `dev`, `migrate`, `doctor`, `favicon:generate` CLI kontratı. |
+| `basicAuthPlugin`, `corsPlugin`, `csrfPlugin` | `plugins/*` | **Stable candidate** | Zero-dependency security plugins. |
+| `content` / `contentPlugin` | `core/content`, `plugins/content` | **Needs cleanup** | Headless CMS schema engine with slight overlap with ORM models. |
+| `kernel` (`createApp`, `definePlugin`, `defineFlow`) | `core/kernel` | **Experimental / Standalone** | Isolated standalone mini-kernel. |
+| `req.input` vs `validatedInput` | API / Services | **Stabilized** | API routes use `req.input`, services use validated handler argument via shared Zod core. |
+| CLI commands (`webspresso *`) | `bin/commands/*` | **Stable candidate** | `dev`, `migrate`, `doctor`, `favicon:generate`, `seed` CLI contracts. |
 
 ---
 
-## 8. Runtime Dependencies Analysis (Runtime Bağımlılıkları)
-
-Framework'ün Express ve Node.js ekosistemine olan bağımlılık matrisi:
+## 8. Runtime Dependencies Analysis
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -339,104 +337,62 @@ Framework'ün Express ve Node.js ekosistemine olan bağımlılık matrisi:
 └──────────────────────────┴─────────────────────────────────────────────┘
 ```
 
-### Doğrudan Express Nesnesi Kullanan Kritik Noktalar:
-1. `src/server.js`: `app.use()`, `app.get()`, `res.status()`, `res.send()`, `res.renderStream()`.
-2. `src/file-router.js`: `app[method](route.routePath, async (req, res, next) => ...)`.
-3. `core/auth/middleware.js`: `req.session`, `res.cookie()`, `res.clearCookie()`, `req.headers.authorization`.
-4. `core/compression/index.js`: `res.write`, `res.end`, `res.setHeader`.
-5. `core/ssr/stream.js`: `res.setHeader('Content-Type', 'text/html; charset=utf-8')`, `res.write()`, `res.end()`.
+---
 
-> **Analiz Notu**: Framework şu aşamada Express 5 üzerine sıkı bağlıdır. Gelecekte Cloudflare Workers / Fastify / Node HTTP adapter mimarisine geçiş hedeflenirse, en büyük soyutlama ihtiyacı `src/file-router.js` handler wrapper'ı ve `core/ssr/stream.js` üzerinde olacaktır. Şu an için Express değiştirilmemelidir.
+## 9. Architectural Conflict Resolutions
+
+### Conflict 1: `core/kernel` vs Main Framework (`src/server.js`, `src/services`, `core/orm`)
+- **Resolution**: The main SSR framework (`src/server.js`, `src/plugin-manager.js`, `core/orm`) is the canonical framework architecture. `core/kernel` has been annotated as an experimental standalone module, maintaining backward compatibility while clarifying framework identity.
+
+### Conflict 2: API Validation (`compileSchema`) vs Service Validation (`services/validator`)
+- **Resolution**: Extracted a unified validation utility (`core/validation/index.js`) providing extended Zod instances (`z.nanoid()`), prototype pollution defenses, and consistent error normalization across both API routes and Services.
+
+### Conflict 3: Three Distinct Event / Hook Mechanisms
+- **Canonical Scopes**:
+  - `pages/_hooks.js`: Dedicated exclusively to HTTP & SSR render lifecycles (`onRequest`, `beforeLoad`, `afterRender`).
+  - `ModelEvents`: Dedicated exclusively to database / model mutations (`User.beforeCreate`, `User.afterSave`).
+  - `core/kernel/events.js`: Isolated alongside the standalone kernel.
+
+### Conflict 4: Implicit Global Context vs Instance Request Context
+- **Resolution**: Formalized Express `req.context` / `ctx` as the primary carrier for `db`, `shutdownManager`, and `serviceRegistry`. `src/app-context.js` is preserved as a fallback for external caller compatibility.
 
 ---
 
-## 9. Architecture Conflicts (Mimari Çakışmalar)
+## 10. Technical Debt & Stabilization Summary
 
-### Çakışma 1: `core/kernel` vs Ana Framework (`src/server.js`, `src/services`, `core/orm`)
-- **Problem**: `core/kernel` adında paralel bir çekirdek (`createApp`, `definePlugin`, `defineFlow`, `BaseRepository`, `createViewEngine`) mevcuttur.
-- **Neden problem?**: `index.js` üzerinden `kernel` olarak export edilmektedir. Ancak Webspresso'nun gerçek SSR motoru, Nunjucks entegrasyonu, Knex ORM'i, Mithril Admin Paneli ve Plugin Manager'ı bu kernel'ı **kullanmamaktadır**. İki farklı `createApp` ve iki farklı `plugin` konsepti geliştiriciler ve AI agent'lar için ciddi kafa karışıklığı yaratmaktadır.
-- **Önerilen Canonical Yaklaşım**: Ana framework (`src/server.js`, `src/plugin-manager.js`, `core/orm`) canonical kabul edilmelidir. `core/kernel` modülü gelecekte bağımsız bir pakete taşınmalı veya legacy/experimental olarak izole edilmelidir; ana dökümantasyon ve skill'lerden kaldırılmalıdır.
-
-### Çakışma 2: API Validasyonu (`compileSchema`/`applySchema`) vs Servis Validasyonu (`src/services/validator`)
-- **Problem**: API rotaları (`pages/api/*`) `core/compileSchema.js` üzerinden Zod şemalarını derleyip `req.input`'a atarken, Servis katmanı (`services/*`) `src/services/validator.js` üzerinden validasyon yapıp doğrudan argüman olarak fonksiyona geçmektedir.
-- **Neden problem?**: Validasyon mantığı iki ayrı dosyada duplicate edilmiştir (`compileSchema` içine `z.nanoid()` eklenmişken `services/validator` standart Zod kullanmaktadır). Hata formatları (`issues` dizisi vs `ValidationError.details`) hafif farklılık göstermektedir.
-- **Önerilen Canonical Yaklaşım**: Tek bir merkezi Zod validasyon çekirdeği (`core/validation`) oluşturulmalı; hem API şemaları hem de Servis şemaları bu tekil boru hattını tüketmelidir.
-
-### Çakışma 3: Üç Farklı Event / Hook Mekanizması
-- **Problem**:
-  1. `core/orm/events.js` (`ModelEvents` - Django tarzı ORM sinyalleri)
-  2. `src/file-router.js` (`pages/_hooks.js` - SSR istek ve render kancaları)
-  3. `core/kernel/events.js` (`createEventBus` - Kernel event bus)
-- **Neden problem?**: Geliştirici "bir event dinlemek istiyorum" dediğinde hangi sistemi kullanacağını kestirememektedir.
-- **Önerilen Canonical Yaklaşım**:
-  - `pages/_hooks.js`: Sadece HTTP & SSR Render yaşam döngüsü için kullanılmalıdır (`onRequest`, `beforeLoad`, `afterRender`).
-  - `ModelEvents`: Sadece veritabanı / model mutasyonları için kullanılmalıdır (`User.beforeCreate`, `User.afterSave`).
-  - `core/kernel/events.js`: Kernel ile birlikte izole edilmelidir.
-
-### Çakışma 4: Implicit Global Context (`src/app-context.js`) vs Instance Context
-- **Problem**: `setAppContext({ db, shutdownManager, serviceRegistry })` process genelinde tekil bir nesne tutar.
-- **Neden problem?**: Eşzamanlı testlerde (`vitest` parallel execution) veya aynı process'te birden fazla `createApp` çalıştırıldığında state kirlenmesi riski doğurur.
-- **Önerilen Canonical Yaklaşım**: `app.locals` ve Express `req.context` / `req.db` / `req.service` canonical context taşıyıcısı olmalıdır. `app-context.js` geriye dönük uyumluluk için korunmalı ancak yeni kodlarda doğrudan `req.service` veya `createApp` dönüş değerleri kullanılmalıdır.
+| Priority | Area | Files | Status | Action Taken |
+| :---: | :--- | :--- | :---: | :--- |
+| **MEDIUM** | SQLite Default Value Warnings | `core/orm/index.js`, `tests/` | **RESOLVED** | Defaulted `useNullAsDefault: true` in `createDatabase` for SQLite. |
+| **LOW** | Linear URL Path Trimming | `src/services/discovery.js` | **RESOLVED** | Consolidated `trimUrlPathSlashes` from `core/url-path-normalize.js`. |
+| **HIGH** | TypeScript Definition Sync | `index.d.ts`, `tests/ts-smoke/` | **RESOLVED** | Updated `CreateAppOptions`, `ServiceDefinition`, `ServiceContext`, `WebspressoApplication`. |
+| **MEDIUM** | Shared Zod Validation Core | `core/validation/index.js` | **RESOLVED** | Unified schema compiler and service validator under shared core. |
+| **MEDIUM** | Standalone Kernel Isolation | `core/kernel/`, `index.js` | **RESOLVED** | Annotated `core/kernel` as an experimental standalone module. |
+| **MEDIUM** | Formal Request Context | `src/server.js`, `src/file-router.js` | **RESOLVED** | Bound `req.context` container across all request flows. |
 
 ---
 
-## 10. Technical Debt Inventory (Teknik Borç Envanteri)
+## 11. Test Coverage & Verification
 
-| Seviye | Konu | Dosya(lar) | Açıklama |
-| :---: | :--- | :--- | :--- |
-| **HIGH** | Paralel Kernel Kod Yükü | `core/kernel/*`, `tests/unit/kernel.test.js` | Ana SSR mimarisiyle ilişkisiz ~15 KB bağımsız kod ve testler. |
-| **HIGH** | Implicit Global Context | `src/app-context.js` | Modül seviyesinde mutable değişken (`let context = ...`). Çoklu app testlerinde izolasyon zaafı. |
-| **MEDIUM** | Duplicate Zod Validation Logic | `core/compileSchema.js`, `core/applySchema.js`, `src/services/validator.js` | İki farklı şema derleme ve çalıştırma mantığı. |
-| **MEDIUM** | Tekrarlayan SQLite Uyarıları | `tests/integration/*` | `useNullAsDefault: true` tanımlanmadığı için test loglarında Knex SQLite default value uyarıları çıkması. |
-| **LOW** | Hardcoded Locale Fallbacks | `src/file-router.js`, `src/server.js` | `process.env.DEFAULT_LOCALE` doğrudan okunuyor; merkezi config nesnesinden geçmeli. |
-| **LOW** | Dağınık Template Cache Temizleyicileri | `src/njk-frontmatter.js`, `src/file-router.js` | Dev modunda require cache ve mtime cache birden fazla haritada (`Map`) tutuluyor. |
+### Verified Test Metrics:
+- **Test Files**: 176 test suites (including unit, integration, and security suites)
+- **Total Tests**: 2,109 tests
+- **Status**: 100% Passed (0 failed, 0 skipped)
+- **Execution Time**: ~60–75 seconds
 
 ---
 
-## 11. Contract & Test Coverage Analysis (Sözleşme & Test Kapsamı)
+## 12. Risk Register
 
-### Doğrulanmış Test İstatistiği:
-- **Test Dosyaları**: 176 adet
-- **Toplam Test**: 2.109 adet
-- **Durum**: %100 Passed (0 failed, 0 skipped)
-- **Çalışma Süresi**: ~73 saniye
-
-### Kritik Sözleşme Kapsam Matrisi:
-
-| Framework Davranışı / Sözleşmesi | Test Durumu | İlgili Test Dosyaları |
-| :--- | :---: | :--- |
-| **Request / HTTP Lifecycle** | **TAM KAPSAM** | `tests/unit/server.test.js`, `tests/integration/server-http-extras.test.js` |
-| **File-based Dynamic Routing & ReDoS** | **TAM KAPSAM** | `tests/unit/file-router.test.js`, `tests/unit/router-edge-cases.test.js` |
-| **API Schema Validation (Zod)** | **TAM KAPSAM** | `tests/unit/compile-schema.test.js`, `tests/unit/apply-schema.test.js` |
-| **Service Execution & RBAC** | **TAM KAPSAM** | `tests/unit/services.test.js`, `tests/unit/services-auth-rbac.test.js` |
-| **Nested Services & Circular Guard** | **TAM KAPSAM** | `tests/unit/services-execution-edge.test.js` |
-| **Ambient Transaction Propagation** | **TAM KAPSAM** | `tests/unit/orm-transaction.test.js`, `tests/integration/orm-transactions.test.js` |
-| **Transaction Rollback on Error** | **TAM KAPSAM** | `tests/unit/services-execution-edge.test.js`, `tests/unit/orm-transaction.test.js` |
-| **Dual Authentication (Session + JWT)** | **TAM KAPSAM** | `tests/unit/auth.test.js`, `tests/unit/auth/jwt.test.js`, `tests/security/jwt-security.test.js` |
-| **Query Cache Hit/Miss & Tag Invalidation**| **TAM KAPSAM** | `tests/unit/orm/cache-memory.test.js`, `tests/unit/orm/cache-fingerprint.test.js` |
-| **Framework Exceptions & Normalization** | **TAM KAPSAM** | `tests/unit/errors.test.js`, `tests/unit/error-middleware.test.js` |
-| **Plugin Topo-Sort & Lifecycle** | **TAM KAPSAM** | `tests/unit/plugins.test.js`, `tests/unit/plugin-edge-cases.test.js` |
-| **Graceful Shutdown & Force Close** | **TAM KAPSAM** | `tests/unit/shutdown.test.js` |
-| **SSR Streaming & Deferred Slots** | **TAM KAPSAM** | `tests/unit/ssr/streaming.test.js` |
-| **Admin Panel Modules, Actions & CRUD** | **TAM KAPSAM** | `tests/unit/admin-panel/*`, `tests/integration/admin-panel.test.js` |
-| **Knex SQLite Defaults Warning** | *Eksik/Uyarılı* | Test loglarında `useNullAsDefault` uyarısı veren sorgular var. |
+| Risk ID | Risk Description | Probability | Impact | Mitigation Strategy | Status |
+| :---: | :--- | :---: | :---: | :--- | :---: |
+| **R-01** | Global state collisions in multi-app tests | Low | High | Use `req.context` and pass database/service instances via container. | **MITIGATED** |
+| **R-02** | Confusion between SSR and Kernel `createApp` | Low | Medium | Annotate `core/kernel` as standalone experimental module. | **MITIGATED** |
+| **R-03** | Native binary version mismatch (`better-sqlite3`) | Low | High | Enforce Node.js 20 LTS target via `.nvmrc` and CI scripts. | **ACTIVE** |
+| **R-04** | Zod validation divergence between API and Services | Low | Medium | Standardize on unified `core/validation/index.js`. | **MITIGATED** |
 
 ---
 
-## 12. Risk Register (Risk Kaydı)
-
-| Risk ID | Risk Tanımı | Olasılık | Etki | Önlem / Mitigasyon Stratejisi |
-| :---: | :--- | :---: | :---: | :--- |
-| **R-01** | `app-context.js` tekil durumunun çoklu app testlerinde çakışması | Orta | Yüksek | Testlerde `resetAppContext()` kullanımını zorunlu tutmak; aşamalı olarak `req.context` modeline geçmek. |
-| **R-02** | `core/kernel`'in dökümantasyonda ana framework ile karıştırılması | Yüksek | Orta | Dokümantasyon ve skill dosyalarında kernel referanslarını netleştirmek veya kaldırmak. |
-| **R-03** | Node.js sürüm uyumsuzluğu nedeniyle `better-sqlite3` derleme hatası | Düşük | Yüksek | `.nvmrc` (Node 20 LTS) kuralına sadık kalmak, CI ve dev komutlarına Node kontrolü eklemek. |
-| **R-04** | Zod şemalarının API ve Servislerde farklı davranması | Orta | Orta | Zod extend yardımcılarını tek bir modülde standartlaştırmak. |
-
----
-
-## 13. Cleanup Roadmap (Aşamalı Toparlama Yol Haritası)
-
-Toparlama süreci **measure → understand → stabilize → simplify → consolidate → harden** prensibine göre 7 aşamaya bölünmüştür:
+## 13. Stabilization Backlog
 
 ```mermaid
 graph TD
@@ -444,204 +400,29 @@ graph TD
     P1 --> P2[Phase 2: Contract Stabilization]
     P2 --> P3[Phase 3: Architecture Consolidation]
     P3 --> P4[Phase 4: Runtime Boundaries]
-    P4 --> P5[Phase 5: Hardening & Edge Cases]
-    P5 --> P6[Phase 6: Documentation Alignment]
+    P4 --> P5[Phase 5: Documentation Restructuring]
 ```
 
-- **Phase 0 – Baseline**: 2.109 testin tamamının yeşil olduğunun teyit edilmesi, baseline benchmark ve test altyapısının dondurulması.
-- **Phase 1 – Dead & Duplicate Cleanup**: Kullanılmayan helper'lar, geçici dosya kalıntıları ve test loglarındaki Knex SQLite default uyarılarının giderilmesi.
-- **Phase 2 – Contract Stabilization**: Public API envanterinin TypeScript tanımları (`index.d.ts`) ile %100 eşitlenmesi, `createApp` parametrelerinin netleştirilmesi.
-- **Phase 3 – Architecture Consolidation**: `core/kernel`'in ana framework'ten net şekilde ayrıştırılması, Zod şema extend helper'larının (`core/validation`) birleştirilmesi.
-- **Phase 4 – Runtime Boundaries**: Express ve Node.js bağımlılıklarının net arayüzler arkasında sınırlandırılması (ilerideki adapter desteği için zemin hazırlığı).
-- **Phase 5 – Hardening**: Ekstrem timeout senaryoları, büyük dosya stream kesintileri ve asenkron context izolasyonu testlerinin pekiştirilmesi.
-- **Phase 6 – Documentation Alignment**: README, `.agents/*` dökümantasyonu ve CLI şablonlarının güncel kod tabanıyla tam senkronizasyonu.
+### Backlog Status:
+- [x] **`P0-01`**: Verify baseline test suite and native binary compatibility (Node 20 LTS).
+- [x] **`P1-01`**: Fix SQLite `useNullAsDefault` warnings in Knex configurations.
+- [x] **`P1-02`**: Consolidate internal URL path trimming utilities.
+- [x] **`P2-01`**: Synchronize `index.d.ts` with `createApp` and plugin options.
+- [x] **`P3-01`**: Unify Zod validation extensions across API and Services (`core/validation`).
+- [x] **`P3-02`**: Isolate `core/kernel` and annotate as experimental/standalone.
+- [x] **`P4-01`**: Formalize Request Context container (`req.context`) to reduce global state reliance.
+- [x] **`DOC-P1..P8`**: Complete documentation audit and restructuring (`docs/`, `llms.txt`, slimmed `README.md`).
 
 ---
 
-## 14. Task Backlog (Görev Listesi)
+## 14. "Do Not Touch" Core Invariants
 
-### Phase 0: Baseline
-```text
-ID: P0-01
-Title: Verify baseline test suite and native binary compatibility
-Priority: HIGH
-Risk: LOW
-Affected areas: package.json, tests/
-Problem: Native binaries (better-sqlite3) must match the Node 20 LTS target specified in .nvmrc.
-Proposed change: Ensure test run script explicitly documents Node 20 requirement.
-Why: Prevents binary version mismatch during test execution.
-Dependencies: None
-Tests required: npm test (all 2,109 tests passing)
-Public API impact: None
-Definition of done: npm test passes cleanly on Node 20 without build errors.
-```
+The following components are highly stable, thoroughly tested, and performant in production. They must **not** be modified solely for aesthetic refactoring:
 
-### Phase 1: Dead / Duplicate Cleanup
-```text
-ID: P1-01 [COMPLETED]
-Title: Fix SQLite useNullAsDefault warnings in test knex configs
-Priority: MEDIUM
-Status: COMPLETED (Defaulted in core/orm/index.js createDatabase)
-Risk: LOW
-Affected areas: core/orm/index.js, tests/
-Problem: Knex SQLite instances log "sqlite does not support inserting default values" during integration tests.
-Proposed change: Automatically default `useNullAsDefault: true` in `createDatabase` for SQLite instances if not explicitly defined.
-Why: Cleans test output noise and prevents false alarm logs.
-Dependencies: P0-01
-Tests required: tests/integration/data-exchange.test.js, tests/integration/admin-user-stats-widget.test.js
-Public API impact: None
-Definition of done: Test runs produce zero Knex default value warnings in stdout. (Verified: 100% clean)
-```
-
-```text
-ID: P1-02 [COMPLETED]
-Title: Consolidate internal URL path trimming utilities
-Priority: LOW
-Status: COMPLETED (Standardized trimUrlPathSlashes in discovery.js)
-Risk: LOW
-Affected areas: core/url-path-normalize.js, src/services/discovery.js, src/file-router.js
-Problem: Path slash trimming was performed with ad-hoc regex across router and discovery.
-Proposed change: Use `core/url-path-normalize.js: trimUrlPathSlashes` consistently.
-Why: Reduces duplicate string slicing logic and ensures linear-time processing.
-Dependencies: P0-01
-Tests required: tests/unit/services-discovery-edge.test.js, tests/unit/services.test.js, tests/unit/file-router.test.js
-Public API impact: None (internal change)
-Definition of done: All internal slash trimming routes through the linear-time helper. (Verified: 27 discovery tests passed)
-```
-
-### Phase 2: Contract Stabilization
-```text
-ID: P2-01 [COMPLETED]
-Title: Synchronize index.d.ts with createApp and plugin options
-Priority: HIGH
-Status: COMPLETED (Enriched CreateAppOptions, ServiceDefinition, ServiceContext, WebspressoApplication)
-Risk: LOW
-Affected areas: index.d.ts, src/server.js, tests/ts-smoke/
-Problem: Some recently added createApp options (pageAssets, clientRuntime sub-options) and Service options (auth predicates, cache object) lacked strict TypeScript definitions.
-Proposed change: Audit and complete index.d.ts types for createApp, ServiceDefinition, ServiceContext, and ModelDefinition.
-Why: Guarantees IDE autocompletion accuracy and passes check:types without any implicit any warnings.
-Dependencies: P0-01
-Tests required: npm run check:types
-Public API impact: Positive (enhanced type safety, zero runtime breaking changes).
-Definition of done: TypeScript smoke test passes without errors. (Verified: tsc --project tests/ts-smoke/tsconfig.json passes with 0 errors)
-```
-
-### Phase 3: Architecture Consolidation
-```text
-ID: P3-01 [COMPLETED]
-Title: Unify Zod validation extensions across API and Services
-Priority: MEDIUM
-Status: COMPLETED (Extracted core/validation/index.js; unified compileSchema and services/validator)
-Risk: LOW
-Affected areas: core/validation/, core/compileSchema.js, src/services/validator.js
-Problem: `compileSchema.js` used `extendZ(z)` locally while `services/validator.js` duplicated prototype pollution and Zod extension setup.
-Proposed change: Extract a unified validation utility `core/validation/index.js` providing standard extended Zod instance and sanitizers.
-Why: Eliminates duplication and ensures uniform validation behavior across API routes and Services.
-Dependencies: P0-01, P2-01
-Tests required: tests/unit/compile-schema.test.js, tests/unit/services-validation-security.test.js, tests/unit/apply-schema.test.js
-Public API impact: None (backward-compatible).
-Definition of done: Both API compiler and Service validator import from the shared validation core. (Verified: 46 validation tests passed)
-```
-
-```text
-ID: P3-02 [COMPLETED]
-Title: Isolate core/kernel and mark as experimental/standalone
-Priority: MEDIUM
-Status: COMPLETED (Annotated core/kernel, app.js, index.js as standalone experimental subsystem)
-Risk: LOW
-Affected areas: core/kernel/, index.js, README.md
-Problem: `core/kernel` provides a duplicate event-driven micro-kernel that is disconnected from the main SSR framework.
-Proposed change: Clearly annotate `kernel` in `index.js` as an experimental standalone module and remove confusing cross-references in SSR documentation.
-Why: Clarifies framework identity and prevents developer confusion between SSR `createApp` and Kernel `createApp`.
-Dependencies: P0-01
-Tests required: tests/unit/kernel.test.js
-Public API impact: None (export preserved for backward compatibility).
-Definition of done: Clear separation documented without breaking existing exports. (Verified: tests/unit/kernel.test.js passing)
-```
-
-### Phase 4: Runtime Boundaries
-```text
-ID: P4-01 [COMPLETED]
-Title: Formalize Request Context container to reduce global app-context reliance
-Priority: MEDIUM
-Status: COMPLETED (Standardized req.context container across server.js and file-router.js)
-Risk: LOW
-Affected areas: src/app-context.js, src/server.js, src/file-router.js
-Problem: `src/app-context.js` relied on a module-scoped variable for `db`, `shutdownManager`, and `serviceRegistry`.
-Proposed change: Ensure all route handlers, middlewares, and services consistently receive context via Express `req.context` / `ctx` and app locals, keeping `app-context.js` purely as a fallback.
-Why: Improves multi-app test isolation and prepares the architecture for future adapter flexibility.
-Dependencies: P0-01, P2-01
-Tests required: tests/unit/app-context.test.js, tests/unit/services.test.js, tests/unit/server.test.js
-Public API impact: Backward compatible (getAppContext / getDb remain intact).
-Definition of done: Framework internals no longer depend on global context for normal request flow. (Verified: all tests passing)
-```
-
----
-
-## 15. Dependency Graph (Bağımlılık Grafiği)
-
-```text
-[P0-01 Baseline Verification] (Node 20 LTS + 2,109 Tests)
-  │
-  ├──► [P1-01 Fix SQLite Warnings] (Independent / Fast cleanup)
-  │
-  ├──► [P1-02 Consolidate Path Trimming] (Internal helper unification)
-  │
-  └──► [P2-01 Sync index.d.ts Contracts] (Type safety)
-        │
-        ├──► [P3-01 Unify Zod Validation Core] (Validation consolidation)
-        │
-        ├──► [P3-02 Isolate core/kernel Annotations] (Architectural clarity)
-        │
-        └──► [P4-01 Formalize Request Context Container] (Decouple global state)
-```
-
-### Paralel Yapılabilecek İşler:
-- `P1-01` ve `P1-02` doğrudan `P0-01` sonrasında bağımsız olarak paralel uygulanabilir.
-- `P2-01` ve `P3-02` paralel olarak yürütülebilir.
-
----
-
-## 16. "Do Not Touch Yet" List (Şimdilik Dokunma Listesi)
-
-Aşağıdaki bileşenler şu an stabil, yüksek test kapsamına sahip ve üretimde sorunsuz çalışmaktadır. Sadece "daha modern/şık yazılabilir" gerekçesiyle **dokunulmamalıdır**:
-
-1. **`src/file-router.js` Route Matching Core**: ReDoS korumalı dinamik route dönüştürücü ve statik/dinamik öncelik sıralaması 100% test edilmiş ve hatasız çalışmaktadır.
-2. **`core/auth/` Dual Auth Sistemi**: HS256 JWT, refresh token rotasyonu ve session cookie yönetimi sıfır dış bağımlılıkla kusursuz çalışmaktadır.
-3. **`core/shutdown/` ShutdownManager**: Socket connection tracking, draining ve disposer mekanizması testlerle sıkı şekilde güvenceye alınmıştır.
-4. **`core/compression/` Streaming zlib Middleware**: Brotli/Gzip/Deflate eşikleme ve streaming buffer mekanizması kararlıdır.
-5. **`plugins/admin-panel/` Mithril SPA Engine**: Admin panel frontend ve backend CRUD API'leri oturmuştur; frontend framework değişikliği yapılmamalıdır.
-6. **`core/orm/transaction.js` Ambient Transaction Storage**: `AsyncLocalStorage` tabanlı transaction propagation mekanizması istikrarlıdır.
-7. **Express 5 Framework Core**: Express yerine Fastify/Hono gibi alternatif bir motora geçiş kesinlikle yapılmamalıdır.
-
----
-
-## 17. Recommended Next Task (Önerilen Sonraki Görev)
-
-### Görev: `P5-01: Document Event Buses and Realtime Subsystems Differentiation`
-
-### Durum & Başarılanlar:
-- ✅ **Phase 0**: Test tabanı ve ortam doğrulandı (Node 20 LTS, 2.109 test).
-- ✅ **Phase 1**: `P1-01` (SQLite Knex default uyarıları kaldırıldı), `P1-02` (Lineer URL path trimming konsolide edildi).
-- ✅ **Phase 2**: `P2-01` (`index.d.ts` TypeScript sözleşmeleri %100 senkronize edildi).
-- ✅ **Phase 3**: `P3-01` (Zod şema ve prototype pollution validasyon çekirdeği `core/validation` altında birleştirildi), `P3-02` (`core/kernel` izole ve standalone olarak belgelendi).
-- ✅ **Phase 4**: `P4-01` (`req.context` / `ctx` istek konteyneri standartlaştırıldı, global `app-context` bağımlılığı azaltıldı).
-
-### Sıradaki Aşama (Phase 5):
-Framework içindeki 3 farklı olay sistemini (`core/realtime`, `core/orm/events.js`, `core/kernel/events.js`) dokümantasyon ve skill rehberlerinde net şekilde ayırarak geliştirici rehberini zenginleştirmek.
-
----
-
-## 18. Decisions & Assumptions (Kararlar ve Varsayımlar)
-
-- **Karar 1**: Express 5 framework'ün birincil HTTP motoru olarak korunacaktır; runtime migration yapılmayacaktır.
-- **Karar 2**: `core/kernel` silinmeyecek, ancak ana SSR dökümantasyonundan izole edilerek experimental/standalone statüsünde tutulacaktır.
-- **Karar 3**: Mevcut public API'ler (`createApp`, `defineModel`, `serviceRegistry.call`, `errors.*`) breaking change olmadan korunacaktır.
-- **Varsayım**: Geliştirme ortamında Node.js 20 LTS (`.nvmrc`) kullanılmaktadır.
-
----
-
-## 19. Open Questions (Açık Sorular)
-
-1. `core/kernel` gelecekte tamamen `@webspresso/kernel` gibi ayrı bir npm paketine ayrılmalı mı, yoksa framework içerisinde hafif bir event-bus adapter olarak ana mimariye mi entegre edilmeli?
-2. `src/app-context.js` üzerindeki `getDb()` ve `getServiceRegistry()` global fonksiyonları sonraki majör sürümde `@deprecated` olarak işaretlensin mi?
+1. **`src/file-router.js` Route Matching Core**: ReDoS-protected dynamic route converter and static/dynamic priority ordering.
+2. **`core/auth/` Dual Auth System**: Zero-dependency HS256 JWT, refresh token rotation, and session cookie management.
+3. **`core/shutdown/` ShutdownManager**: Socket connection tracking, draining, and reverse-order plugin disposer cleanup.
+4. **`core/compression/` Streaming zlib Middleware**: Brotli/Gzip/Deflate threshold buffering and streaming compression.
+5. **`plugins/admin-panel/` Mithril SPA Engine**: Admin panel frontend and backend CRUD APIs.
+6. **`core/orm/transaction.js` Ambient Transaction Storage**: `AsyncLocalStorage`-based transaction propagation.
+7. **Express 5 Framework Core**: Primary HTTP engine foundation.

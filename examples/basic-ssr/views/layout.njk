@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ meta.title or "Webspresso Example" }}</title>
+  <link rel="stylesheet" href="{{ fsy.asset('/css/style.css') }}">
+</head>
+<body>
+  <header style="padding: 1rem 2rem; background: #1e293b; color: white; display: flex; justify-content: space-between; align-items: center;">
+    <strong>Webspresso Starter</strong>
+    <nav>
+      <a href="/" style="color: #38bdf8; text-decoration: none; margin-right: 1rem;">Home</a>
+      <a href="/api/health" style="color: #94a3b8; text-decoration: none;">API Health</a>
+    </nav>
+  </header>
+  
+  <main style="max-width: 800px; margin: 2rem auto; padding: 0 1rem;">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "webspresso-example-basic-ssr",
+  "version": "1.0.0",
+  "description": "Minimal server-side rendered starter example using Webspresso",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "NODE_ENV=production node server.js"
+  },
+  "dependencies": {
+    "webspresso": "^0.0.91"
+  }
+}

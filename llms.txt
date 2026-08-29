@@ -1,0 +1,72 @@
+# Webspresso
+
+> Minimal, Zero-Dependency-Sprawl Express 5 SSR Framework for Node.js.
+
+Webspresso combines file-based routing, server-side Nunjucks rendering, an intuitive Knex-based ORM with ambient `AsyncLocalStorage` transaction propagation, dual authentication (Session + JWT), zero-dependency streaming compression, graceful shutdown, and a customizable Mithril.js SPA Admin Panel.
+
+---
+
+## Core Guidelines & Architectural Rules
+
+- **Target Runtime**: Node.js 20 LTS (`.nvmrc`). Native addons (`better-sqlite3`, `sharp`, `bcrypt`) target Node 20 ABI.
+- **Zero External Dependencies Policy**: Core framework capabilities (Auth, JWT signing, Error handling, Compression, Shutdown, CORS) rely strictly on native Node.js standard modules (`crypto`, `path`, `fs`, `events`, `zlib`, `async_hooks`).
+- **File-Based Routing**: `.njk` templates in `pages/` map to URL routes. Server data loading uses `async function load({ req, res, db, ctx })`.
+- **Services Layer**: File-based auto-discovery in `services/`. Declarative Zod validation, auth role guards, and automatic ACID transaction propagation (`transaction: true`).
+- **Ambient Transactions**: Knex transactions bind to `AsyncLocalStorage` (`core/orm/transaction.js`). Scoped repositories automatically detect active transactions without manual `trx` parameter passing.
+
+---
+
+## Documentation Sitemap
+
+### Getting Started
+- [Installation](docs/getting-started/installation.md): Prerequisites, npx project scaffolding, CLI installation, and TypeScript support.
+- [First Application](docs/getting-started/first-app.md): Building your first SSR page, data loader, JSON API endpoint, and service.
+- [Project Structure](docs/getting-started/project-structure.md): Detailed anatomy of `pages/`, `views/`, `services/`, `models/`, `config/`, and `public/`.
+- [Deployment](docs/getting-started/deployment.md): Production builds, graceful shutdown, PM2 clustering, Docker containerization, and Nginx reverse proxy.
+
+### Architecture & Concepts
+- [System Architecture](docs/concepts/architecture.md): Layered architecture, subsystem boundaries, zero-dependency philosophy, and Mermaid diagrams.
+- [Request Lifecycle](docs/concepts/request-lifecycle.md): End-to-end request trace from TCP socket to Nunjucks template rendering and streaming compression.
+- [Service Execution Pipeline](docs/concepts/service-execution-pipeline.md): Input sanitization, Zod validation, auth guards, ambient transactions, memoization, and timeouts.
+- [Ambient Transaction Propagation](docs/concepts/transaction-propagation.md): How `AsyncLocalStorage` manages ACID database transactions across nested services and repositories.
+
+### Agent Deep Dives (.agents/)
+- [Agent Guidelines & Master Index](AGENTS.md): Core coding rules, zero regression policy, and verification workflows.
+- [Architecture & Boundaries](.agents/ARCHITECTURE.md): Structural overview and public contracts.
+- [Services Layer](.agents/SERVICES.md): Service registry, schema validation, and RBAC guards.
+- [ORM & Database Layer](.agents/ORM.md): `defineModel`, `zdb` schemas, repositories, scopes, and migrations.
+- [Dual Authentication System](.agents/AUTH.md): Session cookies, stateless JWT rotation, and policy guards.
+- [Admin Panel Customization](.agents/ADMIN.md): Custom Mithril.js SPA pages, field renderers, and dashboard widgets.
+- [Plugin Ecosystem](.agents/PLUGINS.md): Reference guide for all 15 official built-in plugins.
+- [Realtime Layer](.agents/REALTIME.md): Framework-agnostic WebSocket, SSE, and Socket.IO adapters.
+- [Background Queue](.agents/QUEUE.md): In-memory, Knex DB, and Redis queue adapters.
+- [Exceptions & Central Error Boundary](.agents/ERRORS.md): Framework exception classes and error boundary.
+- [Graceful Shutdown](.agents/SHUTDOWN.md): Socket draining and reverse plugin disposers.
+- [HTTP Response Compression](.agents/COMPRESSION.md): Streaming zlib Brotli/Gzip negotiation.
+- [SSR Streaming](.agents/STREAMING.md): Chunked HTTP transfer and deferred loader slots.
+
+---
+
+## Canonical Public API Exports
+
+```typescript
+import {
+  createApp,
+  createDatabase,
+  defineModel,
+  defineService,
+  zdb,
+  errors,
+  adminPanelPlugin,
+  restResourcePlugin,
+  corsPlugin,
+  csrfPlugin,
+  realtimePlugin,
+  basicAuthPlugin,
+  type WebspressoApplication,
+  type Repository,
+  type InferModel,
+  type InferServiceInput,
+  type InferServiceOutput,
+} from 'webspresso';
+```
