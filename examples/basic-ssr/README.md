@@ -10,8 +10,11 @@ A minimal server-side rendered application demonstrating:
 ## Running Locally
 
 ```bash
-# Start server
-node server.js
+# Start development server with live reload
+npm run dev
+
+# Or start directly with Webspresso CLI
+npx webspresso dev
 ```
 
 Open **`http://localhost:3000`** in your browser.

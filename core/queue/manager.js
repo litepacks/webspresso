@@ -26,6 +26,8 @@ class QueueManager extends EventEmitter {
     this.adapter = options.adapter || new MemoryQueueAdapter();
     this.concurrency = Math.max(1, options.concurrency || 2);
     this.pollInterval = Math.max(50, options.pollInterval || 500);
+    this.maxPollInterval = Math.max(this.pollInterval, options.maxPollInterval || (this.pollInterval * 5));
+    this._currentPollInterval = this.pollInterval;
     this.jobsDir = options.jobsDir || null;
 
     /** @type {Map<string, { handler: Function, options: Object }>} */
@@ -125,7 +127,8 @@ class QueueManager extends EventEmitter {
     const enqueued = await this.adapter.enqueue(job);
     this.emit('job:queued', enqueued);
 
-    // Trigger immediate poll if capacity is available
+    // Reset polling backoff and trigger immediate poll if capacity is available
+    this._currentPollInterval = this.pollInterval;
     if (this.isRunning && !this.isPaused && this.runningCount < this.concurrency) {
       setImmediate(() => this._tick());
     }
@@ -140,6 +143,7 @@ class QueueManager extends EventEmitter {
     if (this.isRunning) return this;
     this.isRunning = true;
     this.isPaused = false;
+    this._currentPollInterval = this.pollInterval;
     this._scheduleNextTick(0);
     this.emit('start');
     return this;
@@ -164,6 +168,7 @@ class QueueManager extends EventEmitter {
   resume() {
     if (!this.isRunning) return this.start();
     this.isPaused = false;
+    this._currentPollInterval = this.pollInterval;
     this._scheduleNextTick(0);
     this.emit('resume');
     return this;
@@ -268,7 +273,7 @@ class QueueManager extends EventEmitter {
    * Schedule next tick
    * @private
    */
-  _scheduleNextTick(delay = this.pollInterval) {
+  _scheduleNextTick(delay = this._currentPollInterval) {
     if (!this.isRunning || this.isPaused || this.isDraining) return;
     if (this._timer) clearTimeout(this._timer);
     this._timer = setTimeout(() => this._tick(), delay);
@@ -281,28 +286,45 @@ class QueueManager extends EventEmitter {
   async _tick() {
     if (!this.isRunning || this.isPaused || this.isDraining) return;
 
-    while (this.runningCount < this.concurrency) {
+    const availableSlots = this.concurrency - this.runningCount;
+    if (availableSlots <= 0) return;
+
+    const registeredNames = Array.from(this.handlers.keys());
+    if (registeredNames.length === 0) {
+      this._scheduleNextTick(this._currentPollInterval);
+      return;
+    }
+
+    let jobs = [];
+    try {
+      if (typeof this.adapter.dequeueMany === 'function' && availableSlots > 1) {
+        jobs = await this.adapter.dequeueMany(registeredNames, availableSlots);
+      } else {
+        const single = await this.adapter.dequeue(registeredNames);
+        if (single) jobs = [single];
+      }
+    } catch (err) {
+      this.emit('error', err);
+      this._scheduleNextTick(this._currentPollInterval);
+      return;
+    }
+
+    if (!jobs || jobs.length === 0) {
+      // No jobs ready -> back off polling interval
+      this._currentPollInterval = Math.min(
+        this.maxPollInterval,
+        Math.round(this._currentPollInterval * 1.5)
+      );
+      this._scheduleNextTick(this._currentPollInterval);
+      return;
+    }
+
+    // Found job(s) -> reset polling interval
+    this._currentPollInterval = this.pollInterval;
+
+    for (const job of jobs) {
       if (this.isPaused || this.isDraining) break;
 
-      const registeredNames = Array.from(this.handlers.keys());
-      if (registeredNames.length === 0) {
-        break;
-      }
-
-      let job = null;
-      try {
-        job = await this.adapter.dequeue(registeredNames);
-      } catch (err) {
-        this.emit('error', err);
-        break;
-      }
-
-      if (!job) {
-        // No jobs ready
-        break;
-      }
-
-      // Found a job -> process it
       this.runningCount++;
       this.activeJobs.set(job.id, job);
 
@@ -320,7 +342,11 @@ class QueueManager extends EventEmitter {
       });
     }
 
-    this._scheduleNextTick(this.pollInterval);
+    if (this.runningCount < this.concurrency) {
+      this._scheduleNextTick(0);
+    } else {
+      this._scheduleNextTick(this.pollInterval);
+    }
   }
 
   /**

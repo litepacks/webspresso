@@ -262,6 +262,15 @@ function createCompressionMiddleware(options = {}) {
         // Check if total length satisfies threshold and compressibility
         if (shouldCompress(bufferedLength)) {
           startCompression();
+          if (bufferedChunks.length === 1) {
+            if (typeof callback === 'function') {
+              compressStream.once('end', callback);
+            }
+            const singleBuf = bufferedChunks[0];
+            bufferedChunks = [];
+            compressStream.end(singleBuf);
+            return res;
+          }
           for (const b of bufferedChunks) {
             compressStream.write(b);
           }

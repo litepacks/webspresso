@@ -123,6 +123,23 @@ describe('Queue Adapters', () => {
       expect(failed.status).toBe('failed');
       expect(failed.error).toBe('Permanent Failure');
     });
+
+    it('dequeues multiple jobs at once with dequeueMany', async () => {
+      await adapter.enqueue(new Job({ name: 'batch.1', priority: 10 }));
+      await adapter.enqueue(new Job({ name: 'batch.2', priority: 20 }));
+      await adapter.enqueue(new Job({ name: 'batch.3', priority: 30 }));
+
+      const dequeued = await adapter.dequeueMany(['batch.1', 'batch.2', 'batch.3'], 2);
+      expect(dequeued.length).toBe(2);
+      expect(dequeued[0].name).toBe('batch.3');
+      expect(dequeued[1].name).toBe('batch.2');
+      expect(dequeued[0].status).toBe('running');
+      expect(dequeued[1].status).toBe('running');
+
+      const remaining = await adapter.dequeueMany([], 5);
+      expect(remaining.length).toBe(1);
+      expect(remaining[0].name).toBe('batch.1');
+    });
   });
 
   describe('RedisQueueAdapter', () => {

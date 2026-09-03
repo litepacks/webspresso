@@ -34,7 +34,7 @@ function createCompressionStream(encoding, options = {}) {
         // Brotli quality 4 is standard for dynamic HTTP compression (fast & high ratio)
         brotliOpts.params[zlib.constants.BROTLI_PARAM_QUALITY] = typeof options.brotli?.quality === 'number'
           ? options.brotli.quality
-          : (options.level !== undefined ? options.level : 4);
+          : (typeof options.brotliQuality === 'number' ? options.brotliQuality : 4);
       }
       return zlib.createBrotliCompress(brotliOpts);
     }

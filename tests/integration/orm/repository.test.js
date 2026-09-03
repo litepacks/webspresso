@@ -412,5 +412,15 @@ describe('Repository Integration', () => {
       expect(fetched.metadata).toEqual(specialChars);
     });
   });
+
+  describe('SQLite PRAGMA Configuration', () => {
+    it('should configure busy_timeout and foreign_keys on SQLite connection pool', async () => {
+      const busyRes = await db.knex.raw('PRAGMA busy_timeout;');
+      expect(busyRes[0].timeout).toBe(5000);
+
+      const fkRes = await db.knex.raw('PRAGMA foreign_keys;');
+      expect(fkRes[0].foreign_keys).toBe(1);
+    });
+  });
 });
 

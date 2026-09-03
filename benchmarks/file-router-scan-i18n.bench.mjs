@@ -27,11 +27,16 @@ describe('scanDirectory', () => {
 
 describe('loadI18n', () => {
   beforeAll(() => {
-    loadI18n(PAGES_DIR, TOOLS_ROUTE_DIR, 'en');
+    loadI18n(PAGES_DIR, TOOLS_ROUTE_DIR, 'en', true);
+    loadI18n(PAGES_DIR, TOOLS_ROUTE_DIR, 'en', false);
   });
 
-  bench('tools + en (warm cache)', () => {
-    loadI18n(PAGES_DIR, TOOLS_ROUTE_DIR, 'en');
+  bench('tools + en (dev warm cache with mtime check)', () => {
+    loadI18n(PAGES_DIR, TOOLS_ROUTE_DIR, 'en', true);
+  });
+
+  bench('tools + en (production warm cache - zero I/O)', () => {
+    loadI18n(PAGES_DIR, TOOLS_ROUTE_DIR, 'en', false);
   });
 });
 

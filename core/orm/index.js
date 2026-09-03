@@ -81,6 +81,36 @@ function createDatabase(config) {
     ...config,
   };
 
+  if (isSqlite) {
+    const userAfterCreate = knexConfig.pool?.afterCreate;
+    knexConfig.pool = {
+      ...(knexConfig.pool || {}),
+      afterCreate: (conn, cb) => {
+        try {
+          if (typeof conn.pragma === 'function') {
+            const isMemory =
+              knexConfig.connection === ':memory:' ||
+              knexConfig.connection?.filename === ':memory:' ||
+              knexConfig.connection?.database === ':memory:';
+
+            if (!isMemory) {
+              try { conn.pragma('journal_mode = WAL'); } catch (e) {}
+            }
+            try { conn.pragma('synchronous = NORMAL'); } catch (e) {}
+            try { conn.pragma('busy_timeout = 5000'); } catch (e) {}
+            try { conn.pragma('foreign_keys = ON'); } catch (e) {}
+          }
+        } catch (e) {}
+
+        if (typeof userAfterCreate === 'function') {
+          userAfterCreate(conn, cb);
+        } else {
+          cb(null, conn);
+        }
+      },
+    };
+  }
+
   let knexInstance;
   try {
     knexInstance = knex(knexConfig);

@@ -165,4 +165,19 @@ describe('QueueManager Core Engine', () => {
     });
     expect(executed).toBe(true);
   });
+
+  it('backs off polling interval when idle and resets immediately on dispatch', async () => {
+    queue = createQueueManager({ concurrency: 2, pollInterval: 50, maxPollInterval: 250 });
+    queue.define('test.backoff', async () => 'ok');
+
+    expect(queue._currentPollInterval).toBe(50);
+
+    // Allow multiple idle ticks to back off
+    await new Promise((r) => setTimeout(r, 160));
+    expect(queue._currentPollInterval).toBeGreaterThan(50);
+
+    // Dispatching a job should immediately reset to base pollInterval
+    await queue.dispatch('test.backoff', {});
+    expect(queue._currentPollInterval).toBe(50);
+  });
 });

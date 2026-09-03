@@ -12,10 +12,28 @@ const crypto = require('crypto');
 function stableValue(v) {
   if (v === null || v === undefined) return v;
   if (typeof v !== 'object') return v;
-  if (Array.isArray(v)) return v.map(stableValue);
-  const keys = Object.keys(v).sort();
+  if (Array.isArray(v)) {
+    const len = v.length;
+    if (len === 0) return v;
+    const out = new Array(len);
+    for (let i = 0; i < len; i++) {
+      out[i] = stableValue(v[i]);
+    }
+    return out;
+  }
+  const keys = Object.keys(v);
+  const keyLen = keys.length;
+  if (keyLen === 0) return v;
+  if (keyLen === 1) {
+    const k = keys[0];
+    return { [k]: stableValue(v[k]) };
+  }
+  keys.sort();
   const out = {};
-  for (const k of keys) out[k] = stableValue(v[k]);
+  for (let i = 0; i < keyLen; i++) {
+    const k = keys[i];
+    out[k] = stableValue(v[k]);
+  }
   return out;
 }
 
@@ -24,9 +42,9 @@ function stableValue(v) {
  */
 function scopeFingerprint(scopeContext) {
   return {
-    tenantId: scopeContext.tenantId,
-    withTrashed: !!scopeContext.withTrashed,
     onlyTrashed: !!scopeContext.onlyTrashed,
+    tenantId: scopeContext.tenantId ?? null,
+    withTrashed: !!scopeContext.withTrashed,
   };
 }
 

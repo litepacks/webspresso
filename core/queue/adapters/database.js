@@ -46,6 +46,7 @@ class DatabaseQueueAdapter {
         table.dateTime('run_at').notNullable().index();
         table.dateTime('created_at').notNullable();
         table.dateTime('updated_at').notNullable();
+        table.index(['status', 'run_at', 'priority']);
       });
     }
 
@@ -88,8 +89,20 @@ class DatabaseQueueAdapter {
    * @returns {Promise<Job|null>}
    */
   async dequeue(jobNames = []) {
+    const jobs = await this.dequeueMany(jobNames, 1);
+    return jobs.length > 0 ? jobs[0] : null;
+  }
+
+  /**
+   * Dequeue multiple pending jobs up to limit in a single transaction
+   * @param {string[]} [jobNames]
+   * @param {number} [limit=1]
+   * @returns {Promise<Job[]>}
+   */
+  async dequeueMany(jobNames = [], limit = 1) {
     await this.ensureTable();
     const now = new Date();
+    const take = Math.max(1, limit || 1);
 
     return this.knex.transaction(async (trx) => {
       let query = trx(this.tableName)
@@ -97,14 +110,14 @@ class DatabaseQueueAdapter {
         .where('run_at', '<=', now)
         .orderBy('priority', 'desc')
         .orderBy('run_at', 'asc')
-        .limit(1);
+        .limit(take);
 
       if (jobNames && jobNames.length > 0) {
         query = query.whereIn('name', jobNames);
       }
 
       // If Postgres or MySQL support forUpdate / skipLocked
-      const client = this.knex.client.config.client;
+      const client = this.knex.client?.config?.client;
       if (client === 'pg' || client === 'postgres' || client === 'mysql' || client === 'mysql2') {
         try {
           query = query.forUpdate().skipLocked();
@@ -112,26 +125,46 @@ class DatabaseQueueAdapter {
       }
 
       const rows = await query;
-      if (!rows || rows.length === 0) return null;
+      if (!rows || rows.length === 0) return [];
 
-      const row = rows[0];
-      const nextAttempts = Number(row.attempts) + 1;
+      const ids = rows.map((r) => r.id);
       const updatedAt = new Date();
 
-      await trx(this.tableName)
-        .where('id', row.id)
-        .update({
+      if (take === 1) {
+        const row = rows[0];
+        const nextAttempts = Number(row.attempts) + 1;
+        await trx(this.tableName)
+          .where('id', row.id)
+          .update({
+            status: 'running',
+            attempts: nextAttempts,
+            updated_at: updatedAt,
+          });
+
+        return [this._rowToJob({
+          ...row,
           status: 'running',
           attempts: nextAttempts,
           updated_at: updatedAt,
+        })];
+      }
+
+      await trx(this.tableName)
+        .whereIn('id', ids)
+        .update({
+          status: 'running',
+          attempts: trx.raw('attempts + 1'),
+          updated_at: updatedAt,
         });
 
-      return this._rowToJob({
-        ...row,
-        status: 'running',
-        attempts: nextAttempts,
-        updated_at: updatedAt,
-      });
+      return rows.map((row) =>
+        this._rowToJob({
+          ...row,
+          status: 'running',
+          attempts: Number(row.attempts) + 1,
+          updated_at: updatedAt,
+        })
+      );
     });
   }
 

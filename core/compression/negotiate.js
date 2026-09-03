@@ -69,6 +69,9 @@ function parseAcceptEncoding(header) {
   return results;
 }
 
+const selectEncodingCache = new Map();
+const MAX_ENCODING_CACHE_SIZE = 128;
+
 /**
  * Select the best compression encoding given client header and server supported list
  * @param {string|undefined|null} acceptEncoding - The Accept-Encoding header value
@@ -76,16 +79,25 @@ function parseAcceptEncoding(header) {
  * @returns {string|null} The selected encoding ('br', 'gzip', 'deflate', 'identity', or null)
  */
 function selectEncoding(acceptEncoding, supportedEncodings) {
-  const supported = Array.isArray(supportedEncodings) && supportedEncodings.length > 0
-    ? supportedEncodings.map(e => e.toLowerCase()).filter(e => e !== 'br' || supportsBrotli())
-    : getDefaultSupportedEncodings();
-
   if (!acceptEncoding) {
     return 'identity';
   }
 
+  const supported = Array.isArray(supportedEncodings) && supportedEncodings.length > 0
+    ? supportedEncodings.map(e => e.toLowerCase()).filter(e => e !== 'br' || supportsBrotli())
+    : getDefaultSupportedEncodings();
+
+  const cacheKey = `${acceptEncoding}|${supported.join(',')}`;
+  const cached = selectEncodingCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   const clientPreferences = parseAcceptEncoding(acceptEncoding);
   if (clientPreferences.length === 0) {
+    if (selectEncodingCache.size < MAX_ENCODING_CACHE_SIZE) {
+      selectEncodingCache.set(cacheKey, 'identity');
+    }
     return 'identity';
   }
 
@@ -129,20 +141,20 @@ function selectEncoding(acceptEncoding, supportedEncodings) {
     }
   }
 
+  let result = null;
   if (bestEncoding && bestQ > 0) {
-    return bestEncoding;
+    result = bestEncoding;
+  } else if (prefMap.has('identity')) {
+    result = prefMap.get('identity') > 0 ? 'identity' : null;
+  } else if (wildcardQ !== null) {
+    result = wildcardQ > 0 ? 'identity' : null;
   }
 
-  // If no compressed encoding was chosen:
-  // If identity or wildcard was explicitly specified, check their q values
-  if (prefMap.has('identity')) {
-    return prefMap.get('identity') > 0 ? 'identity' : null;
-  }
-  if (wildcardQ !== null) {
-    return wildcardQ > 0 ? 'identity' : null;
+  if (selectEncodingCache.size < MAX_ENCODING_CACHE_SIZE) {
+    selectEncodingCache.set(cacheKey, result);
   }
 
-  return null;
+  return result;
 }
 
 module.exports = {

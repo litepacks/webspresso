@@ -50,6 +50,35 @@ async function loadRelations(records, relationNames, model, knex, scopeContext) 
 }
 
 /**
+ * Execute whereIn query in chunks to prevent parameter limits and query planner degradation
+ * @param {import('knex').Knex} knex
+ * @param {string} table
+ * @param {string} column
+ * @param {Array<string|number>} values
+ * @param {import('./types').ScopeContext} scopeContext
+ * @param {import('./types').ModelDefinition} model
+ * @param {number} [chunkSize=500]
+ * @returns {Promise<Object[]>}
+ */
+async function queryInChunks(knex, table, column, values, scopeContext, model, chunkSize = 500) {
+  if (values.length <= chunkSize) {
+    let qb = knex(table).whereIn(column, values);
+    qb = applyScopes(qb, scopeContext, model);
+    return await qb;
+  }
+
+  const results = [];
+  for (let i = 0; i < values.length; i += chunkSize) {
+    const slice = values.slice(i, i + chunkSize);
+    let qb = knex(table).whereIn(column, slice);
+    qb = applyScopes(qb, scopeContext, model);
+    const chunkResults = await qb;
+    results.push(...chunkResults);
+  }
+  return results;
+}
+
+/**
  * Load belongsTo relation
  * Parent record has foreign key pointing to related record's primary key
  * Example: User belongsTo Company (user.company_id -> company.id)
@@ -78,9 +107,14 @@ async function loadBelongsTo(records, relationName, localKey, foreignKey, relate
   }
 
   const foreignKeyValues = Array.from(fkSet);
-  let qb = knex(relatedModel.table).whereIn(relatedModel.primaryKey, foreignKeyValues);
-  qb = applyScopes(qb, scopeContext, relatedModel);
-  const relatedRecords = await qb;
+  const relatedRecords = await queryInChunks(
+    knex,
+    relatedModel.table,
+    relatedModel.primaryKey,
+    foreignKeyValues,
+    scopeContext,
+    relatedModel
+  );
 
   const relatedMap = new Map();
   const rLen = relatedRecords.length;
@@ -128,9 +162,14 @@ async function loadHasMany(records, relationName, localKey, foreignKey, relatedM
   }
 
   const primaryKeyValues = Array.from(pkSet);
-  let qb = knex(relatedModel.table).whereIn(foreignKey, primaryKeyValues);
-  qb = applyScopes(qb, scopeContext, relatedModel);
-  const relatedRecords = await qb;
+  const relatedRecords = await queryInChunks(
+    knex,
+    relatedModel.table,
+    foreignKey,
+    primaryKeyValues,
+    scopeContext,
+    relatedModel
+  );
 
   const relatedGroups = new Map();
   const rLen = relatedRecords.length;
@@ -181,9 +220,14 @@ async function loadHasOne(records, relationName, localKey, foreignKey, relatedMo
   }
 
   const primaryKeyValues = Array.from(pkSet);
-  let qb = knex(relatedModel.table).whereIn(foreignKey, primaryKeyValues);
-  qb = applyScopes(qb, scopeContext, relatedModel);
-  const relatedRecords = await qb;
+  const relatedRecords = await queryInChunks(
+    knex,
+    relatedModel.table,
+    foreignKey,
+    primaryKeyValues,
+    scopeContext,
+    relatedModel
+  );
 
   const relatedMap = new Map();
   const rLen = relatedRecords.length;
@@ -222,5 +266,6 @@ module.exports = {
   loadBelongsTo,
   loadHasMany,
   loadHasOne,
+  queryInChunks,
 };
 

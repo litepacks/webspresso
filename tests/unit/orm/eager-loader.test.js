@@ -152,5 +152,47 @@ describe('Eager Loader', () => {
       expect(records[1].profile.id).toBe(103);
     });
   });
+
+  describe('queryInChunks', () => {
+    const { queryInChunks } = require('../../../core/orm/eager-loader');
+
+    it('should query small arrays directly in a single query', async () => {
+      const queries = [];
+      const fakeKnex = (table) => ({
+        whereIn: (column, values) => {
+          queries.push({ table, column, values });
+          return Promise.resolve(values.map(v => ({ id: v, table })));
+        }
+      });
+
+      const model = { scopes: {} };
+      const values = [1, 2, 3];
+      const results = await queryInChunks(fakeKnex, 'posts', 'id', values, {}, model, 500);
+
+      expect(queries.length).toBe(1);
+      expect(queries[0].values).toEqual([1, 2, 3]);
+      expect(results.length).toBe(3);
+    });
+
+    it('should split values exceeding chunkSize into multiple chunks', async () => {
+      const queries = [];
+      const fakeKnex = (table) => ({
+        whereIn: (column, values) => {
+          queries.push({ table, column, values });
+          return Promise.resolve(values.map(v => ({ id: v, table })));
+        }
+      });
+
+      const model = { scopes: {} };
+      const values = Array.from({ length: 1250 }, (_, i) => i + 1);
+      const results = await queryInChunks(fakeKnex, 'posts', 'id', values, {}, model, 500);
+
+      expect(queries.length).toBe(3);
+      expect(queries[0].values.length).toBe(500);
+      expect(queries[1].values.length).toBe(500);
+      expect(queries[2].values.length).toBe(250);
+      expect(results.length).toBe(1250);
+    });
+  });
 });
 

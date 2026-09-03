@@ -367,9 +367,31 @@ function scanDirectory(dir, baseDir = dir) {
 /**
  * Load i18n JSON file with caching
  * @param {string} filePath - Path to JSON file
+ * @param {boolean} [isDev=false] - Whether in development mode
  * @returns {Object} Parsed JSON or empty object
  */
-function loadI18nFile(filePath) {
+function loadI18nFile(filePath, isDev = (process.env.NODE_ENV !== 'production')) {
+  if (!isDev) {
+    const cached = i18nCache.get(filePath);
+    if (cached) {
+      return cached.data;
+    }
+    if (!fs.existsSync(filePath)) {
+      i18nCache.set(filePath, { mtime: 0, data: EMPTY_OBJECT });
+      return EMPTY_OBJECT;
+    }
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const data = JSON.parse(content);
+      i18nCache.set(filePath, { mtime: 0, data });
+      return data;
+    } catch (err) {
+      console.error('Error loading i18n file:', filePath, err.message);
+      i18nCache.set(filePath, { mtime: 0, data: EMPTY_OBJECT });
+      return EMPTY_OBJECT;
+    }
+  }
+
   if (!fs.existsSync(filePath)) {
     return EMPTY_OBJECT;
   }
@@ -398,25 +420,43 @@ function loadI18nFile(filePath) {
  * @param {string} pagesDir - Pages directory path
  * @param {string} routeDir - Route directory path
  * @param {string} locale - Locale code
+ * @param {boolean} [isDev=false] - Whether in development mode
  * @returns {Object} Merged translations
  */
-function loadI18n(pagesDir, routeDir, locale) {
+function loadI18n(pagesDir, routeDir, locale, isDev = (process.env.NODE_ENV !== 'production')) {
+  const cacheKey = `${pagesDir}::${routeDir}::${locale}`;
+
+  if (!isDev) {
+    const mergedCached = mergedI18nCache.get(cacheKey);
+    if (mergedCached) {
+      return mergedCached.data;
+    }
+  }
+
   // Load global translations
   const globalPath = path.join(pagesDir, 'locales', `${locale}.json`);
-  const globalTranslations = loadI18nFile(globalPath);
+  const globalTranslations = loadI18nFile(globalPath, isDev);
   
   // Load route-specific translations
   const routePath = path.join(routeDir, 'locales', `${locale}.json`);
-  const routeTranslations = loadI18nFile(routePath);
+  const routeTranslations = loadI18nFile(routePath, isDev);
   
   const gEmpty = globalTranslations === EMPTY_OBJECT || !globalTranslations || Object.keys(globalTranslations).length === 0;
   const rEmpty = routeTranslations === EMPTY_OBJECT || !routeTranslations || Object.keys(routeTranslations).length === 0;
 
-  if (gEmpty && rEmpty) return EMPTY_OBJECT;
-  if (gEmpty) return routeTranslations;
-  if (rEmpty) return globalTranslations;
+  if (gEmpty && rEmpty) {
+    if (!isDev) mergedI18nCache.set(cacheKey, { gm: 0, rm: 0, data: EMPTY_OBJECT });
+    return EMPTY_OBJECT;
+  }
+  if (gEmpty) {
+    if (!isDev) mergedI18nCache.set(cacheKey, { gm: 0, rm: 0, data: routeTranslations });
+    return routeTranslations;
+  }
+  if (rEmpty) {
+    if (!isDev) mergedI18nCache.set(cacheKey, { gm: 0, rm: 0, data: globalTranslations });
+    return globalTranslations;
+  }
 
-  const cacheKey = `${pagesDir}::${routeDir}::${locale}`;
   const gCached = i18nCache.get(globalPath);
   const rCached = i18nCache.get(routePath);
   const gm = gCached?.mtime ?? 0;
@@ -626,32 +666,41 @@ function createTranslator(translations = {}, options = EMPTY_OBJECT) {
  * @returns {Object|null} Route config or null
  */
 function loadRouteConfig(configPath, isDev) {
+  if (!isDev) {
+    if (configCache.has(configPath)) {
+      return configCache.get(configPath);
+    }
+    if (!fs.existsSync(configPath)) {
+      configCache.set(configPath, null);
+      return null;
+    }
+    try {
+      const config = require(configPath);
+      configCache.set(configPath, config);
+      return config;
+    } catch (err) {
+      console.error('Error loading route config:', configPath, err.message);
+      configCache.set(configPath, null);
+      return null;
+    }
+  }
+
   if (!fs.existsSync(configPath)) {
     routeConfigDevCache.delete(configPath);
     return null;
   }
 
   try {
-    if (isDev) {
-      const stats = fs.statSync(configPath);
-      const devCached = routeConfigDevCache.get(configPath);
-      if (devCached && devCached.mtime >= stats.mtimeMs) {
-        return devCached.config;
-      }
-      if (require.cache[require.resolve(configPath)]) {
-        delete require.cache[require.resolve(configPath)];
-      }
-      const config = require(configPath);
-      routeConfigDevCache.set(configPath, { mtime: stats.mtimeMs, config });
-      return config;
+    const stats = fs.statSync(configPath);
+    const devCached = routeConfigDevCache.get(configPath);
+    if (devCached && devCached.mtime >= stats.mtimeMs) {
+      return devCached.config;
     }
-
-    if (configCache.has(configPath)) {
-      return configCache.get(configPath);
+    if (require.cache[require.resolve(configPath)]) {
+      delete require.cache[require.resolve(configPath)];
     }
-
     const config = require(configPath);
-    configCache.set(configPath, config);
+    routeConfigDevCache.set(configPath, { mtime: stats.mtimeMs, config });
     return config;
   } catch (err) {
     console.error('Error loading route config:', configPath, err.message);
@@ -976,123 +1025,133 @@ function mountPages(app, options) {
   /** Register API routes (shared by static phase and dynamic phase). */
   const registerApiRoutes = (routes) => {
     for (const route of routes) {
-    const handler = require(route.fullPath);
-    const handlerFn = typeof handler === 'function' ? handler : handler.default || handler.handler;
-    const routeMiddleware = handler.middleware;
+      const handler = require(route.fullPath);
+      const handlerFn = typeof handler === 'function' ? handler : handler.default || handler.handler;
+      const routeMiddleware = handler.middleware;
 
-    const preResolvedMw = routeMiddleware
-      ? resolveMiddlewares(routeMiddleware, middlewares)
-      : EMPTY_ARRAY;
+      const preResolvedMw = routeMiddleware
+        ? resolveMiddlewares(routeMiddleware, middlewares)
+        : EMPTY_ARRAY;
     
-    if (typeof handlerFn !== 'function') {
-      console.warn(`API route ${route.file} does not export a function`);
-      continue;
-    }
-    
-    app[route.method](route.routePath, async (req, res, next) => {
-      try {
-        // Same instance as createApp({ db }) / getAppContext().db — available to handler & route middleware
-        if (db != null) {
-          req.db = db;
-        }
-        if (serviceRegistry != null) {
-          req.service = (name, input, opts) =>
-            serviceRegistry.call(name, input, { req, res, db }, opts);
-        }
+      if (typeof handlerFn !== 'function') {
+        console.warn(`API route ${route.file} does not export a function`);
+        continue;
+      }
 
-        // Reload handler in dev mode
-        if (isDev && require.cache[require.resolve(route.fullPath)]) {
-          delete require.cache[require.resolve(route.fullPath)];
-        }
-        const currentHandler = isDev 
-          ? require(route.fullPath) 
-          : handler;
-        const fn = typeof currentHandler === 'function' 
-          ? currentHandler 
-          : currentHandler.default || currentHandler.handler;
-
-        if (isDev) {
-          invalidateSchema(route.fullPath);
-        }
-        let compiledSchema;
+      let preCompiledSchema = null;
+      if (!isDev) {
         try {
-          compiledSchema = compileSchema(route.fullPath, currentHandler);
+          preCompiledSchema = compileSchema(route.fullPath, handler);
         } catch (schemaErr) {
           console.error(`API schema compile error ${route.routePath}:`, schemaErr);
-          res.status(500).json({ error: 'Internal Server Error', message: schemaErr.message });
-          return;
         }
-
-        try {
-          applySchema(req, compiledSchema);
-        } catch (err) {
-          if (err instanceof ZodError) {
-            return res.status(400).json({
-              error: 'Validation Error',
-              issues: err.issues,
-            });
-          }
-          throw err;
-        }
-        
-        // Run middleware if defined (resolved at route registration — required for stateful middleware like express-rate-limit)
-        if (preResolvedMw.length) {
-          for (const mw of preResolvedMw) {
-            await new Promise((resolve, reject) => {
-              mw(req, res, (err) => {
-                if (err) reject(err);
-                else resolve();
-              });
-            });
-          }
-        }
-        
-        await fn(req, res, next);
-      } catch (err) {
-        console.error(`API error ${route.routePath}:`, err);
-        const hookCtx = { req, res, error: err };
-        try {
-          await executeHook(globalHooks, 'onError', hookCtx, err);
-        } catch (hookErr) {
-          console.error('Error in onError hook:', hookErr);
-        }
-        return next(err);
       }
-    });
-    
-    log(`  ${route.method.toUpperCase()} ${route.routePath} -> ${route.file}`);
+      
+      app[route.method](route.routePath, async (req, res, next) => {
+        try {
+          // Same instance as createApp({ db }) / getAppContext().db — available to handler & route middleware
+          if (db != null) {
+            req.db = db;
+          }
+          if (serviceRegistry != null) {
+            req.service = (name, input, opts) =>
+              serviceRegistry.call(name, input, { req, res, db }, opts);
+          }
+
+          let fn = handlerFn;
+          let compiledSchema = preCompiledSchema;
+
+          // Reload handler and schema in dev mode
+          if (isDev) {
+            if (require.cache[require.resolve(route.fullPath)]) {
+              delete require.cache[require.resolve(route.fullPath)];
+            }
+            const currentHandler = require(route.fullPath);
+            fn = typeof currentHandler === 'function' 
+              ? currentHandler 
+              : currentHandler.default || currentHandler.handler;
+
+            invalidateSchema(route.fullPath);
+            try {
+              compiledSchema = compileSchema(route.fullPath, currentHandler);
+            } catch (schemaErr) {
+              console.error(`API schema compile error ${route.routePath}:`, schemaErr);
+              res.status(500).json({ error: 'Internal Server Error', message: schemaErr.message });
+              return;
+            }
+          }
+
+          try {
+            applySchema(req, compiledSchema);
+          } catch (err) {
+            if (err instanceof ZodError) {
+              return res.status(400).json({
+                error: 'Validation Error',
+                issues: err.issues,
+              });
+            }
+            throw err;
+          }
+          
+          // Run middleware if defined (resolved at route registration — required for stateful middleware like express-rate-limit)
+          if (preResolvedMw.length) {
+            for (const mw of preResolvedMw) {
+              await new Promise((resolve, reject) => {
+                mw(req, res, (err) => {
+                  if (err) reject(err);
+                  else resolve();
+                });
+              });
+            }
+          }
+          
+          await fn(req, res, next);
+        } catch (err) {
+          console.error(`API error ${route.routePath}:`, err);
+          const hookCtx = { req, res, error: err };
+          try {
+            await executeHook(globalHooks, 'onError', hookCtx, err);
+          } catch (hookErr) {
+            console.error('Error in onError hook:', hookErr);
+          }
+          return next(err);
+        }
+      });
+      
+      log(`  ${route.method.toUpperCase()} ${route.routePath} -> ${route.file}`);
     }
   };
 
   /** Register SSR GET routes (shared by static phase and dynamic phase). */
   const registerSsrRoutes = (routes) => {
     for (const route of routes) {
-    const mountConfig = loadRouteConfig(route.configPath, isDev);
-    const preResolvedPageMw = mountConfig?.middleware
-      ? resolveMiddlewares(mountConfig.middleware, middlewares)
-      : EMPTY_ARRAY;
+      const mountConfig = loadRouteConfig(route.configPath, isDev);
+      const preResolvedPageMw = mountConfig?.middleware
+        ? resolveMiddlewares(mountConfig.middleware, middlewares)
+        : EMPTY_ARRAY;
+      const staticRouteHooks = mountConfig?.hooks || EMPTY_OBJECT;
 
-    app.get(route.routePath, async (req, res, next) => {
-      try {
-        // Detect locale
-        const locale = detectLocale(req);
-        const defaultLocale = process.env.DEFAULT_LOCALE || 'en';
-        
-        // Load translations (primary + fallback)
-        const translations = loadI18n(absolutePagesDir, route.routeDir, locale);
-        const fallbackTranslations = (locale !== defaultLocale)
-          ? loadI18n(absolutePagesDir, route.routeDir, defaultLocale)
-          : EMPTY_OBJECT;
+      app.get(route.routePath, async (req, res, next) => {
+        try {
+          // Detect locale
+          const locale = detectLocale(req);
+          const defaultLocale = process.env.DEFAULT_LOCALE || 'en';
+          
+          // Load translations (primary + fallback)
+          const translations = loadI18n(absolutePagesDir, route.routeDir, locale, isDev);
+          const fallbackTranslations = (locale !== defaultLocale)
+            ? loadI18n(absolutePagesDir, route.routeDir, defaultLocale, isDev)
+            : EMPTY_OBJECT;
 
-        const t = createTranslator(translations, {
-          locale,
-          fallbackTranslations,
-          fallbackLocale: defaultLocale,
-        });
-        
-        // Load route config
-        const config = loadRouteConfig(route.configPath, isDev);
-        const routeHooks = config?.hooks || EMPTY_OBJECT;
+          const t = createTranslator(translations, {
+            locale,
+            fallbackTranslations,
+            fallbackLocale: defaultLocale,
+          });
+          
+          // Load route config
+          const config = isDev ? loadRouteConfig(route.configPath, true) : mountConfig;
+          const routeHooks = isDev ? (config?.hooks || EMPTY_OBJECT) : staticRouteHooks;
         
         // Create context with plugin helpers merged
         const baseHelpers = createHelpers({ req, res, locale, t });

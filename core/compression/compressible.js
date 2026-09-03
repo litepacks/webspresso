@@ -10,6 +10,9 @@ const COMPRESSIBLE_TYPE_REGEX = /^(?:text\/[a-z0-9.+_-]+|application\/(?:javascr
 // Regex patterns for already-compressed or non-compressible types
 const INCOMPRESSIBLE_TYPE_REGEX = /^(?:image\/(?:jpeg|png|gif|webp|avif|heic|heif)|video\/[a-z0-9.+_-]+|audio\/[a-z0-9.+_-]+|application\/(?:zip|gzip|x-gzip|x-bzip2|x-compress|x-7z-compressed|x-rar-compressed|pdf|wasm|octet-stream))$/i;
 
+const compressibleCache = new Map();
+const MAX_MIME_CACHE_SIZE = 256;
+
 /**
  * Determine if a Content-Type is compressible
  * @param {string|undefined|null} contentType - Raw Content-Type header (e.g. 'text/html; charset=utf-8')
@@ -20,30 +23,39 @@ function isCompressible(contentType) {
     return false;
   }
 
+  const cached = compressibleCache.get(contentType);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   // Extract base MIME type (strip parameters like ; charset=utf-8)
   const semiIndex = contentType.indexOf(';');
   const mime = (semiIndex !== -1 ? contentType.slice(0, semiIndex) : contentType).trim().toLowerCase();
 
   if (!mime) {
+    if (compressibleCache.size < MAX_MIME_CACHE_SIZE) compressibleCache.set(contentType, false);
     return false;
   }
 
   // Fast negative check
   if (INCOMPRESSIBLE_TYPE_REGEX.test(mime)) {
+    if (compressibleCache.size < MAX_MIME_CACHE_SIZE) compressibleCache.set(contentType, false);
     return false;
   }
 
   // Check compressible match
+  let result = false;
   if (COMPRESSIBLE_TYPE_REGEX.test(mime)) {
-    return true;
+    result = true;
+  } else if (mime.startsWith('text/') || mime.endsWith('+json') || mime.endsWith('+xml') || mime.endsWith('+yaml')) {
+    result = true;
   }
 
-  // General text or suffix match (+json, +xml, +yaml)
-  if (mime.startsWith('text/') || mime.endsWith('+json') || mime.endsWith('+xml') || mime.endsWith('+yaml')) {
-    return true;
+  if (compressibleCache.size < MAX_MIME_CACHE_SIZE) {
+    compressibleCache.set(contentType, result);
   }
 
-  return false;
+  return result;
 }
 
 module.exports = {

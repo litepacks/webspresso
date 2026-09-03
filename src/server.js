@@ -47,7 +47,7 @@ function configureSafeNunjucks(templateDirs, options = {}) {
   const origRender = env.render.bind(env);
   const origRenderString = env.renderString.bind(env);
 
-  function wrapTemplateRoot(tmpl, name, store) {
+  function wrapTemplateRoot(tmpl, name) {
     if (!tmpl || tmpl._safeWrapped) return;
     tmpl._safeWrapped = true;
     const origRoot = tmpl.rootRenderFunc;
@@ -55,21 +55,28 @@ function configureSafeNunjucks(templateDirs, options = {}) {
 
     tmpl.rootRenderFunc = function(e, context, frame, runtime, renderCb) {
       const normalizedName = String(name || tmpl.path || 'anonymous');
-      store.stack.push(normalizedName);
+      const store = renderStackStorage.getStore();
+      if (store) {
+        store.stack.push(normalizedName);
+      }
       let finished = false;
       const done = (err, out) => {
         if (!finished) {
           finished = true;
-          const idx = store.stack.lastIndexOf(normalizedName);
-          if (idx !== -1) store.stack.splice(idx, 1);
+          if (store) {
+            const idx = store.stack.lastIndexOf(normalizedName);
+            if (idx !== -1) store.stack.splice(idx, 1);
+          }
         }
         renderCb(err, out);
       };
       try {
         return origRoot.call(this, e, context, frame, runtime, done);
       } catch (ex) {
-        const idx = store.stack.lastIndexOf(normalizedName);
-        if (idx !== -1) store.stack.splice(idx, 1);
+        if (store) {
+          const idx = store.stack.lastIndexOf(normalizedName);
+          if (idx !== -1) store.stack.splice(idx, 1);
+        }
         throw ex;
       }
     };
@@ -97,15 +104,15 @@ function configureSafeNunjucks(templateDirs, options = {}) {
     }
 
     const wrappedCb = typeof cb === 'function' ? function(err, tmpl) {
-      if (tmpl && store) {
-        wrapTemplateRoot(tmpl, name, store);
+      if (tmpl) {
+        wrapTemplateRoot(tmpl, name);
       }
       cb(err, tmpl);
     } : undefined;
 
     const res = origGetTemplate(name, eagerCompile, parentName, ignoreMissing, wrappedCb);
-    if (res && store) {
-      wrapTemplateRoot(res, name, store);
+    if (res) {
+      wrapTemplateRoot(res, name);
     }
     return res;
   };

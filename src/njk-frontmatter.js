@@ -115,6 +115,24 @@ function readAndParse(absPath, isDevLike = false) {
  * @param {boolean} isDev NODE_ENV !== 'production' style
  */
 function loadNjkRouteTemplate(absPath, isDev) {
+  if (!isDev) {
+    const cached = prodRouteCache.get(absPath);
+    if (cached) {
+      return cached;
+    }
+    if (!fs.existsSync(absPath)) {
+      const empty = {
+        useStringRender: false,
+        templateBody: null,
+        metaPatch: {},
+        dataPatch: {},
+      };
+      prodRouteCache.set(absPath, empty);
+      return empty;
+    }
+    return readAndParse(absPath, false);
+  }
+
   if (!fs.existsSync(absPath)) {
     return {
       useStringRender: false,
@@ -125,21 +143,13 @@ function loadNjkRouteTemplate(absPath, isDev) {
   }
 
   const stat = fs.statSync(absPath);
-
-  if (isDev) {
-    const prev = devRouteCache.get(absPath);
-    if (prev && prev.mtimeMs >= stat.mtimeMs) {
-      return prev.cached;
-    }
-    const fresh = readAndParse(absPath, true);
-    devRouteCache.set(absPath, { mtimeMs: stat.mtimeMs, cached: fresh });
-    return fresh;
+  const prev = devRouteCache.get(absPath);
+  if (prev && prev.mtimeMs >= stat.mtimeMs) {
+    return prev.cached;
   }
-
-  if (prodRouteCache.has(absPath)) {
-    return prodRouteCache.get(absPath);
-  }
-  return readAndParse(absPath, false);
+  const fresh = readAndParse(absPath, true);
+  devRouteCache.set(absPath, { mtimeMs: stat.mtimeMs, cached: fresh });
+  return fresh;
 }
 
 function clearNjkFrontmatterCaches() {

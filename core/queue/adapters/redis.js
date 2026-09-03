@@ -158,6 +158,27 @@ class RedisQueueAdapter {
   }
 
   /**
+   * Dequeue multiple pending jobs up to limit
+   * @param {string[]} [jobNames]
+   * @param {number} [limit=1]
+   * @returns {Promise<Job[]>}
+   */
+  async dequeueMany(jobNames = [], limit = 1) {
+    if (limit <= 1) {
+      const single = await this.dequeue(jobNames);
+      return single ? [single] : [];
+    }
+
+    const jobs = [];
+    for (let i = 0; i < limit; i++) {
+      const job = await this.dequeue(jobNames);
+      if (!job) break;
+      jobs.push(job);
+    }
+    return jobs;
+  }
+
+  /**
    * Mark job as completed
    * @param {string|number} jobId
    * @param {any} [result]
