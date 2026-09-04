@@ -1,6 +1,6 @@
 # Webspresso Project Guidelines & Rules
 
-Webspresso is a lightweight, zero-dependency-sprawl Express SSR framework featuring file-based routing, an intuitive Knex-based ORM, a modular plugin ecosystem, zero-dependency Dual Authentication (Session + JWT), Graceful Shutdown & Force Close, HTTP Response Compression, Centralized Framework Exceptions, and a customizable Mithril.js SPA Admin Panel.
+Webspresso is a modern, lightweight, zero-dependency-sprawl full-stack Node.js SSR & API framework featuring Next.js/Nuxt-style file-based routing, an intuitive Knex-based ORM, a modular plugin ecosystem, zero-dependency Dual Authentication (Session + JWT), Graceful Shutdown & Force Close, HTTP Response Compression, Centralized Framework Exceptions, and a customizable Mithril.js SPA Admin Panel.
 
 ---
 
@@ -8,27 +8,35 @@ Webspresso is a lightweight, zero-dependency-sprawl Express SSR framework featur
 
 This `.agents/` customization root is organized into modular topic guides:
 
-1. **[Architecture & Structure](.agents/ARCHITECTURE.md)** — File-based routing (`pages/`), Asset Management & Versioning (`AssetManager`, `fsy.asset`), ORM models & `zdb` schemas (`core/orm`), Mithril.js Admin Panel SPA (`plugins/admin-panel`), and Plugin Ecosystem.
-2. **[Services Layer](.agents/SERVICES.md)** — File-based auto-discovery (`services/`), Zod validation, declarative `auth` & RBAC guards, automatic ACID transaction propagation (`transaction: true`), timeouts, and memoization.
-3. **[Exceptions & Error Handling](.agents/ERRORS.md)** — Django-inspired framework exception hierarchy (`WebspressoError`, `HttpError`, `ValidationError`, `SecurityError`, `RequestAbortedError`), central error boundary, `app.setErrorHandler()`, and production error masking.
-4. **[Graceful Shutdown & Lifecycle](.agents/SHUTDOWN.md)** — `ShutdownManager`, `NodeHttpAdapter`, connection draining, force close mode, and reverse-order plugin disposer cleanup.
-5. **[HTTP Response Compression](.agents/COMPRESSION.md)** — Native streaming zlib compression (`server.compression`), Brotli/Gzip/Deflate negotiation, threshold handling, and `res.compress(false)` route opt-out.
-6. **[Dual Authentication System](.agents/AUTH.md)** — Stateful Session + Cookie & Stateless HS256 JWT + Refresh Token Rotation, `req.auth` helpers, and `middleware: ['jwt']` guard integrations.
-7. **[ORM & Database Layer](.agents/ORM.md)** — Model definitions with `defineModel`, `zdb` schemas, Repositories API, Query Caching, Relations, Soft Delete, Scopes & Migrations.
-8. **[Plugin Ecosystem Guide](.agents/PLUGINS.md)** — Lifecycle hooks (`register`, `onRoutesReady`), CSP headers, and detailed reference for all 15 built-in official plugins (including `realtimePlugin` and `basicAuthPlugin`).
-9. **[Realtime Layer & Adapters](.agents/REALTIME.md)** — Framework-agnostic realtime layer (`core/realtime`), generic WebSocket, SSE, and Socket.IO adapters, subscription identity, backoff reconnect, and auth lifecycle.
-10. **[Email Plugin Guide](.agents/EMAIL.md)** — MJML template compilation, Nodemailer transport, DB delivery logs, Auth Email bridge, and Admin UI.
-11. **[Admin Panel Customization](.agents/ADMIN.md)** — Extending Mithril.js Admin Panel SPA (Custom pages `component.js`, custom field renderers, widgets, single & bulk actions).
-12. **[CLI Tooling & Commands](.agents/CLI.md)** — `webspresso dev`, `build`, `doctor`, `db:migrate`, `db:seed`, `favicon:generate`, `add:tailwind`, `skill`.
-13. **[Development & Testing Workflow](.agents/WORKFLOW.md)** — CLI commands, Vitest unit/integration testing, Playwright E2E tests, TypeScript type checking, and zero regression policy.
-14. **[Coding Standards & Conventions](.agents/CONVENTIONS.md)** — Zero external dependencies policy, strict function signature & schema verification, clean component separation, and log traceback inspection rules.
-15. **[Background Job Queue](.agents/QUEUE.md)** — In-Memory, Knex Database, and Distributed Redis queue adapters, job auto-discovery (`jobs/`), retries, and graceful draining.
-16. **[SSR Streaming & Chunked Transfer](.agents/STREAMING.md)** — Native HTTP chunked streaming (`res.renderStream()`), deferred data loader slots (`defer: { key: promise }`), and TTFB optimization.
+1. **[File-Based Routing & API Routes](.agents/ROUTING.md)** — File-based page routes (`pages/`), method-suffixed API routes (`pages/api/*.get.js`, `*.post.js`), parameter brackets (`[id]`), Zod request schemas, and the strict prohibition of manual `routes/` directories or `app.get()`.
+2. **[Architecture & Structure](.agents/ARCHITECTURE.md)** — File-based routing (`pages/`), Asset Management & Versioning (`AssetManager`, `fsy.asset`), ORM models & `zdb` schemas (`core/orm`), Mithril.js Admin Panel SPA (`plugins/admin-panel`), and Plugin Ecosystem.
+3. **[Services Layer](.agents/SERVICES.md)** — File-based auto-discovery (`services/`), Zod validation, declarative `auth` & RBAC guards, automatic ACID transaction propagation (`transaction: true`), timeouts, and memoization.
+4. **[Exceptions & Error Handling](.agents/ERRORS.md)** — Django-inspired framework exception hierarchy (`WebspressoError`, `HttpError`, `ValidationError`, `SecurityError`, `RequestAbortedError`), central error boundary, `app.setErrorHandler()`, and production error masking.
+5. **[Graceful Shutdown & Lifecycle](.agents/SHUTDOWN.md)** — `ShutdownManager`, `NodeHttpAdapter`, connection draining, force close mode, and reverse-order plugin disposer cleanup.
+6. **[HTTP Response Compression](.agents/COMPRESSION.md)** — Native streaming zlib compression (`server.compression`), Brotli/Gzip/Deflate negotiation, threshold handling, and `res.compress(false)` route opt-out.
+7. **[Dual Authentication System](.agents/AUTH.md)** — Stateful Session + Cookie & Stateless HS256 JWT + Refresh Token Rotation, `req.auth` helpers, and `middleware: ['jwt']` guard integrations.
+8. **[ORM & Database Layer](.agents/ORM.md)** — Model definitions with `defineModel`, `zdb` schemas, Repositories API, Query Caching, Relations, Soft Delete, Scopes & Migrations.
+9. **[Plugin Ecosystem Guide](.agents/PLUGINS.md)** — Lifecycle hooks (`register`, `onRoutesReady`), CSP headers, and detailed reference for all 15 built-in official plugins (including `realtimePlugin` and `basicAuthPlugin`).
+10. **[Realtime Layer & Adapters](.agents/REALTIME.md)** — Framework-agnostic realtime layer (`core/realtime`), generic WebSocket, SSE, and Socket.IO adapters, subscription identity, backoff reconnect, and auth lifecycle.
+11. **[Email Plugin Guide](.agents/EMAIL.md)** — MJML template compilation, Nodemailer transport, DB delivery logs, Auth Email bridge, and Admin UI.
+12. **[Admin Panel Customization](.agents/ADMIN.md)** — Extending Mithril.js Admin Panel SPA (Custom pages `component.js`, custom field renderers, widgets, single & bulk actions).
+13. **[CLI Tooling & Commands](.agents/CLI.md)** — `webspresso dev`, `build`, `doctor`, `db:migrate`, `db:seed`, `favicon:generate`, `add:tailwind`, `skill`.
+14. **[Development & Testing Workflow](.agents/WORKFLOW.md)** — CLI commands, Vitest unit/integration testing, Playwright E2E tests, TypeScript type checking, and zero regression policy.
+15. **[Coding Standards & Conventions](.agents/CONVENTIONS.md)** — Zero external dependencies policy, strict function signature & schema verification, clean component separation, and log traceback inspection rules.
+16. **[Background Job Queue](.agents/QUEUE.md)** — In-Memory, Knex Database, and Distributed Redis queue adapters, job auto-discovery (`jobs/`), retries, and graceful draining.
+17. **[SSR Streaming & Chunked Transfer](.agents/STREAMING.md)** — Native HTTP chunked streaming (`res.renderStream()`), deferred data loader slots (`defer: { key: promise }`), and TTFB optimization.
 
 ---
 
 ## Essential Rules Summary
 
+- **Strict File-Based Routing (NO `routes/` or `app.get()`)**: NEVER create a `routes/` or `src/routes/` directory. NEVER call `app.get()`, `app.post()`, or `express.Router()`. ALL application endpoints MUST be defined inside `pages/` and `pages/api/...` with HTTP method extensions (`.get.js`, `.post.js`, `.delete.js`, `.patch.js`, `.put.js`).
+- **Strict Repository Pattern (NO Raw `db('table')`)**: NEVER write raw Knex table queries in application code. ALWAYS access database models through repositories via `db.getRepository('ModelName')` or `req.db.getRepository('ModelName')` to ensure schema validation, hooks, scopes, and query caching are applied.
+- **Strict Services Layer (NO `controllers/`)**: NEVER create a `controllers/` folder or controller classes. Encapsulate multi-step business logic in `services/domain/action.js` and invoke via `ctx.service('domain.action', input)` to leverage automatic transaction propagation (`transaction: true`) and Zod validation.
+- **Native Dual Auth (NO External JWT/Passport Packages)**: NEVER install `jsonwebtoken`, `passport`, or `express-session`. ALWAYS use native `req.auth` and `webspresso/core/auth` (`middleware: ['jwt']` / `middleware: ['auth']`).
+- **Page Data Loaders (NO Manual `res.render()`)**: NEVER call `res.render()` inside custom handlers for SSR pages. Use companion loaders `pages/*.js` exporting `async function load({ req, res, db, ctx })`.
+- **Semantic Exceptions (NO Generic Errors / Manual Responses)**: NEVER return manual `res.status(404).json(...)` inside services or loaders. ALWAYS throw semantic errors: `NotFoundError`, `ValidationError`, `UnauthorizedError`, `ForbiddenError`.
+- **Background Jobs (NO BullMQ / `setTimeout`)**: NEVER use unmanaged `setTimeout` or external queues. Place job workers in `jobs/` and dispatch via `req.queue.dispatch()`.
 - **Zero External Dependencies**: Core framework functions (Auth, JWT, CORS, Routing, Errors, Compression, Shutdown, Nunjucks helpers) must rely strictly on native Node.js modules (`crypto`, `path`, `fs`, `events`, `zlib`, `async_hooks`).
 - **Zero Regression Policy**: Always run Vitest tests (`npm test` or `npx vitest run`) before declaring any task complete.
 - **Strict Verification**: Inspect authoritative source files for function signatures and schema definitions before writing consuming code.

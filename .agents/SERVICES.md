@@ -1,6 +1,15 @@
 # Webspresso Services Layer (`services/`, `src/services/`)
 
-The **Services Layer** is a lightweight, framework-agnostic architectural abstraction designed to encapsulate business logic, multi-step domain mutations, and data queries away from HTTP controllers and page loaders into isolated, reusable, testable functions.
+The **Services Layer** is a lightweight, framework-agnostic architectural abstraction designed to encapsulate business logic, multi-step domain mutations, and data queries into isolated, reusable, testable functions.
+
+---
+
+## ⚠️ STRICT RULE: Encapsulate in `services/` (NO `controllers/`)
+
+- **NEVER** create a `controllers/` or `src/controllers/` directory, and never write class-based controller singletons.
+- **ALWAYS** place business logic, domain mutations, and reusable workflows in `services/domain/action.js`.
+- Services automatically provide Zod input validation (`schema`), role-based authorization (`auth`), automatic ACID transaction propagation (`transaction: true`), and caching (`cache`).
+- Invoke services from API routes (`req.service('name', input)`), SSR loaders (`ctx.service('name', input)`), or other services (`ctx.service(...)`).
 
 ---
 

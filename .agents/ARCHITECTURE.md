@@ -10,8 +10,9 @@
   - `pages/index.njk` → `/`
   - `pages/products/[id].njk` → `/products/:id`
   - `pages/api/posts.post.js` → `POST /api/posts`
+  - ⚠️ **CRITICAL ANTI-PATTERN: NEVER create a `routes/` or `src/routes/` directory. NEVER use `express.Router()`, `app.get()`, or `app.post()`. All application endpoints must live under `pages/` and `pages/api/`. See [ROUTING.md](ROUTING.md).**
 - **Data Loaders (`load()`)**: Page routes export `async function load({ req, res, db, ctx })` to fetch data server-side before Nunjucks template rendering.
-- **API Endpoints**: Defined as file route modules exporting `{ schema, middleware, handler }`. Input validation via Zod (`schema: ({ z }) => ({ body, query, params })`) assigns validated data to `req.input.body` / `req.input.query`.
+- **API Endpoints**: Defined as file route modules in `pages/api/...` exporting `{ schema, middleware, handler }`. Input validation via Zod (`schema: ({ z }) => ({ body, query, params })`) assigns validated data to `req.input.body` / `req.input.query`.
 - **Templating & Helpers**: Nunjucks (`.njk`) templates rendered with layouts (e.g. `views/layout.njk`). Access helpers via `fsy` object in templates.
 - **Asset Management & Cache-Busting (`assets`, `AssetManager`, `fsy`)**:
   - Configured via `createApp({ assets: { version, manifestPath, prefix, publicDir } })` or `configureAssets()`.

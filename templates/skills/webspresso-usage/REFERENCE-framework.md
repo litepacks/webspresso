@@ -4,8 +4,10 @@ Sections follow the source repo layout (`index.js`, `src/`, `core/orm`, `doc/ind
 
 ## 1. What this framework is
 
-- **SSR**: Express + **Nunjucks**; URLs map to files under `pages/`.
-- **API**: File-based handlers under `pages/api/` with method suffixes and optional **Zod** validation (`req.input`).
+- **Architecture**: Modern full-stack Node.js framework with Next.js/Nuxt-style file-based routing.
+- **SSR**: Native server-side rendering with **Nunjucks**; URLs map directly to files under `pages/`.
+- **API**: 100% file-based handlers under `pages/api/` with HTTP method suffixes (`.get.js`, `.post.js`, `[id].delete.js`) and declarative **Zod** validation (`req.input`).
+- ⚠️ **CRITICAL ANTI-PATTERN**: **NEVER** create a `routes/` or `src/routes/` directory. **NEVER** use `app.get()`, `app.post()`, or `express.Router()`. All application routes must live under `pages/` and `pages/api/`.
 - **i18n**: JSON locales; `t('key')` in templates.
 - **ORM**: Knex-backed layer in `core/orm` — `defineModel`, `zdb` schema helpers, repositories, query builder, migrations.
 - **Plugins**: Register in `createApp({ plugins })`; optional `db` passed as `ctx.db`.
@@ -60,7 +62,7 @@ project/
 | `pageAssets` | Opt-in **`true`** or **`{ enabled?, stylesheets?, scripts? }`**. When on, route **`load()`** may return reserved keys **`stylesheets`** (string or list; also `{ href, media? }` objects) and **`scripts`** (string, `{ src, defer?, async?, type? }`, or list). They are removed from the root Nunjucks context and passed as **`pageHead`** with **`pageAssets: true`**. The app layout must print them (see [`views/layout.njk`](../../../views/layout.njk) in the package). Default **off** — `stylesheets` / `scripts` in **`load()`** behave as normal data keys. |
 | `clientRuntime` | Opt-in **`{ alpine?: boolean \| object, swup?: boolean \| object }`**. Serves **`/__webspresso/client-runtime/*`** (Alpine 3, swup 4 + Head + Scripts plugins + bootstrap). Template context **`clientRuntime`**; include [`views/partials/webspresso-client-runtime.njk`](../../../views/partials/webspresso-client-runtime.njk) and set **`<main id="swup">`** when swup is on. Env overrides: **`WEBSPRESSO_ALPINE`**, **`WEBSPRESSO_SWUP`** (`1` or `true`). Admin / dev dashboard HTML is unchanged (Mithril). Use **`data-no-swup`** on links for full page loads. HTMX is not used. |
 | `auth` | `AuthManager` from **`createAuth()`** / **`quickAuth()`** (`webspresso/core/auth`). Mounts cookie parser + **`express-session`** + per-request **`authenticate`**; sets **`req.user`**, **`req.auth`**. Injects named route middleware **`auth`** and **`guest`** (overwrites same keys in `middlewares` if you passed both — avoid reusing those names for custom handlers). |
-| `setupRoutes(app, ctx)` | **Register custom Express routes here** — runs **after** file routes and plugins’ `onRoutesReady`, **before** 404. **`ctx.clientRuntime`** is the resolved flags. **`ctx.authMiddleware`** is set when `auth` was passed (guards: `requireAuth`, `requireGuest`, `requireCan`, `requireVerified`, …). Do not rely on `app.get` *after* `createApp` returns unless routes are appended before the 404 middleware (see [`src/server.js`](../../../src/server.js)). |
+| `setupRoutes(app, ctx)` | Low-level server extension hook (e.g. mounting third-party sub-apps or raw middleware). ⚠️ **NEVER** use `setupRoutes` to define application domain or API routes. All application endpoints **MUST** live under `pages/` and `pages/api/`. |
 
 **Returns:** `{ app, nunjucksEnv, pluginManager, authMiddleware }` — `authMiddleware` is **`null`** when `auth` was not configured.
 
@@ -267,7 +269,7 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 
 ## 14. Pitfalls (for agents)
 
-1. **Custom Express routes** — use **`setupRoutes`**, not only `app.use` after `createApp` returns.
+1. **NEVER use Express routes (`app.get` / `routes/`)** — Webspresso is 100% file-based. Never create `routes/` or call `app.get()`. All routes must live in `pages/` and `pages/api/`.
 2. **File-router order** — understand precedence vs manual routes.
 3. **`ctx.db`** — only when `createApp({ db })` is set.
 4. **ORM hidden fields** — never expose to clients unintentionally.

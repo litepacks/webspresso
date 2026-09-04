@@ -1,6 +1,30 @@
 # Webspresso ORM & Database Layer Guide
 
-Webspresso features an intuitive, Knex-based zero-sprawl ORM (`core/orm`) supporting schema definitions with `zdb`, repository pattern, query caching, soft deletes, multi-tenant scopes, and relation eager loading.
+Webspresso features an intuitive, zero-sprawl ORM (`core/orm`) supporting schema definitions with `zdb`, repository pattern, query caching, soft deletes, multi-tenant scopes, and relation eager loading.
+
+---
+
+## ⚠️ STRICT RULE: ALWAYS Use Repositories (NO Raw Knex `db('table')`)
+
+In application code (API handlers, SSR loaders, services, plugins), **NEVER** write raw Knex table queries like `db('table').where(...)` or `req.db('table').insert(...)`.
+Raw Knex queries **completely bypass** schema validation, lifecycle hooks, soft-delete scopes, multi-tenant filters, hidden field stripping, query caching, and ambient transactions.
+
+### Comparison: Raw Knex vs Webspresso Repository
+
+| Operation | ❌ NEVER Use Raw Knex | ✅ ALWAYS Use Repository (`db.getRepository`) |
+| :--- | :--- | :--- |
+| **Get by ID** | `await db('notes').where({ id }).first()` | `await noteRepo.findById(id)` |
+| **Find List** | `await db('notes').where({ active: true })` | `await noteRepo.find({ active: true })` |
+| **Find One** | `await db('notes').where({ slug }).first()` | `await noteRepo.findOne({ slug })` |
+| **Create Record** | `await db('notes').insert(data)` | `await noteRepo.create(data)` *(validates schema & runs hooks)* |
+| **Update Record** | `await db('notes').where({ id }).update(data)`| `await noteRepo.update(id, data)` |
+| **Delete Record** | `await db('notes').where({ id }).del()` | `await noteRepo.delete(id)` *(respects soft-delete)* |
+| **Custom Query** | `db('notes').where('price', '>', 100)` | `noteRepo.query().where('price', '>', 100)` |
+| **Eager Load** | *Manual SQL joins and manual mapping* | `noteRepo.query().include('user', 'tags').find()` |
+| **Pagination** | *Manual count + offset/limit calculation* | `noteRepo.query().paginate({ page, limit })` |
+
+> [!NOTE]
+> `noteRepo.query()` returns a fully-featured, model-aware query builder that supports all Knex chaining (`where`, `whereIn`, `orderBy`, etc.) while preserving model scopes, hooks, and transactions!
 
 ---
 

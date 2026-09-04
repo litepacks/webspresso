@@ -12,6 +12,17 @@ Webspresso provides a zero-dependency **Dual Authentication** system (`webspress
 
 ---
 
+## ⚠️ STRICT RULE: Use Native Dual Auth (NO External JWT/Passport Packages)
+
+- **NEVER** install `jsonwebtoken`, `bcryptjs`, `passport`, or `express-session`.
+- **ALWAYS** use Webspresso's native `req.auth` and `webspresso/core/auth`:
+  - Session login: `await req.auth.attempt(email, password, { remember: true })`
+  - Stateless JWT generation: `req.auth.generateUserToken(user)`
+  - Refresh Tokens: `req.auth.generateRefreshToken(user)` / `req.auth.refreshAccessToken(token)`
+  - Route Guards: `middleware: ['auth']` (web session) or `middleware: ['jwt']` (API Bearer token)
+
+---
+
 ## 2. Token Generation & Rotation
 
 - **Access Token**: Short-lived HS256 JWT token generated via `req.auth.generateUserToken(user, options)`. Default duration is `15m` (configurable).

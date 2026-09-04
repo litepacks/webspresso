@@ -4,6 +4,19 @@
 
 ---
 
+## ⚠️ STRICT RULE: Throw Semantic Errors (NO Generic `new Error()` or Manual `res.status`)
+
+- **NEVER** return manual error payloads like `return res.status(404).json(...)` inside services or loaders.
+- **NEVER** throw a generic `throw new Error('Not found')` for business or client-facing issues. In production, unmapped `Error` instances are automatically masked as `500 Internal Server Error` with stack traces hidden!
+- **ALWAYS** throw semantic framework exceptions:
+  - `throw new NotFoundError('Item not found')` → returns HTTP 404
+  - `throw new ValidationError('Invalid data', { fields: { ... } })` → returns HTTP 422
+  - `throw new UnauthorizedError('Please log in')` → returns HTTP 401
+  - `throw new ForbiddenError('Access denied')` → returns HTTP 403
+  - `throw new BadRequestError('Invalid query')` → returns HTTP 400
+
+---
+
 ## 1. Overview & Exception Hierarchy
 
 Webspresso features a centralized, lightweight, zero-dependency exception hierarchy inspired by Django's failure domain separation. Thrown synchronous and asynchronous exceptions are automatically caught by the global error boundary, normalized, and formatted as standardized JSON responses for API routes or styled HTML pages for web clients.
