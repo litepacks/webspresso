@@ -238,11 +238,18 @@ async function executeBulkAction(action, selectedIds, modelName) {
     if (result.result?.download) {
       // Trigger download
       const link = document.createElement('a');
-      link.href = window.__ADMIN_PATH__ + result.result.url;
+      link.style.display = 'none';
+      const rawUrl = result.result.url || '';
+      const adminPath = window.__ADMIN_PATH__ || '/_admin';
+      link.href = (rawUrl.startsWith('/') && !rawUrl.startsWith(adminPath))
+        ? adminPath + rawUrl
+        : rawUrl;
       link.download = result.result.filename || 'export';
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
+      setTimeout(function () {
+        if (link.parentNode) link.parentNode.removeChild(link);
+      }, 1000);
       return { success: true, message: 'Download started' };
     }
 

@@ -49,6 +49,7 @@ function dataExchangePlugin(options = {}) {
 
     onRoutesReady(ctx) {
       if (!enabled) return;
+      if (ctx.app && ctx.app._dataExchangeRoutesRegistered) return;
 
       const db = dbOption ?? ctx.db;
       if (!db) {
@@ -86,6 +87,10 @@ function dataExchangePlugin(options = {}) {
             };
           },
         });
+      }
+
+      if (ctx.app) {
+        ctx.app._dataExchangeRoutesRegistered = true;
       }
     },
   };

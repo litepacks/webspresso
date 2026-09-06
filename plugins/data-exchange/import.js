@@ -10,13 +10,18 @@ const { buildHeaderMapping, dataRowsToObjects } = require('./parse-table');
 
 function allowedImportColumns(model) {
   const hidden = new Set(model.hidden || []);
-  if (model.columns && model.columns.size > 0) {
-    return Array.from(model.columns.keys()).filter((c) => !hidden.has(c));
+  const cols = new Set();
+  if (model.columns && typeof model.columns.keys === 'function') {
+    for (const c of model.columns.keys()) {
+      if (!hidden.has(c)) cols.add(c);
+    }
   }
   if (model.schema && model.schema.shape) {
-    return Object.keys(model.schema.shape).filter((c) => !hidden.has(c));
+    for (const c of Object.keys(model.schema.shape)) {
+      if (!hidden.has(c)) cols.add(c);
+    }
   }
-  return [];
+  return Array.from(cols);
 }
 
 /**
@@ -35,12 +40,12 @@ function coerceCell(raw, meta, column) {
   }
 
   if (!meta || !meta.type) {
-    if (raw === 'true' || raw === '1' || raw === 'yes') return true;
-    if (raw === 'false' || raw === '0' || raw === 'no') return false;
     if (typeof raw === 'string' && /^-?\d+(\.\d+)?$/.test(raw)) {
       const num = Number(raw);
       if (!Number.isNaN(num)) return num;
     }
+    if (raw === 'true' || raw === 'yes') return true;
+    if (raw === 'false' || raw === 'no') return false;
     return raw;
   }
 
@@ -66,6 +71,14 @@ function coerceCell(raw, meta, column) {
       if (s === 'false' || s === '0' || s === 'no') return false;
       throw new Error(`Invalid boolean for ${column}`);
     }
+    case 'date':
+    case 'datetime':
+    case 'timestamp': {
+      if (raw instanceof Date) return raw;
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) throw new Error(`Invalid date for ${column}`);
+      return raw;
+    }
     case 'json': {
       if (typeof raw === 'object') return raw;
       try {
@@ -84,7 +97,7 @@ function buildPayloadForRow(model, data, mode) {
   const payload = {};
   for (const [col, raw] of Object.entries(data)) {
     if (!allowed.has(col)) continue;
-    const meta = model.columns.get(col);
+    const meta = model.columns?.get ? model.columns.get(col) : undefined;
     let v;
     try {
       v = coerceCell(raw, meta, col);
@@ -95,14 +108,14 @@ function buildPayloadForRow(model, data, mode) {
     payload[col] = v;
   }
 
-  const pk = model.primaryKey;
-  const pkMeta = model.columns.get(pk);
-  if (
-    mode === 'insert' &&
-    pkMeta?.autoIncrement &&
-    (payload[pk] === undefined || payload[pk] === null || payload[pk] === '')
-  ) {
-    delete payload[pk];
+  const pk = model.primaryKey || 'id';
+  const pkMeta = model.columns?.get ? model.columns.get(pk) : undefined;
+  if (mode === 'insert') {
+    // In insert mode, remove auto-increment / auto-generated primary key
+    // so new records are created without unique constraint collision
+    if (pkMeta?.autoIncrement || pkMeta?.auto === 'create' || payload[pk] === undefined || payload[pk] === null || payload[pk] === '') {
+      delete payload[pk];
+    }
   }
 
   return payload;
@@ -139,15 +152,26 @@ async function parseXlsxToRows(buffer) {
 }
 
 function cellValueToPlain(cell) {
+  if (!cell) return '';
   const v = cell.value;
   if (v === null || v === undefined) return '';
   if (v instanceof Date) return v.toISOString();
-  if (typeof v === 'object' && v !== null) {
+  if (typeof v === 'object') {
+    if (v.error) return '';
     if ('text' in v && typeof v.text === 'string') return v.text;
     if ('richText' in v && Array.isArray(v.richText)) {
-      return v.richText.map((t) => t.text || '').join('');
+      return v.richText.map((t) => (t && t.text) ? t.text : '').join('');
     }
-    if ('result' in v && v.result !== undefined) return v.result;
+    if ('result' in v && v.result !== undefined) {
+      return cellValueToPlain({ value: v.result });
+    }
+    if ('hyperlink' in v) {
+      return v.text || v.hyperlink || '';
+    }
+    if (typeof v.toString === 'function' && v.toString !== Object.prototype.toString) {
+      return v.toString();
+    }
+    return '';
   }
   return v;
 }
@@ -191,7 +215,8 @@ function createImportHandler(opts) {
         let upsertKey = req.query.upsertKey || req.body?.upsertKey || model.primaryKey;
         upsertKey = String(upsertKey);
 
-        if (!model.columns.has(upsertKey)) {
+        const allowedCols = allowedImportColumns(model);
+        if (!allowedCols.includes(upsertKey)) {
           return res.status(400).json({ error: `upsertKey "${upsertKey}" is not a column` });
         }
         if (model.hidden?.includes(upsertKey)) {
@@ -250,7 +275,7 @@ function createImportHandler(opts) {
               continue;
             }
 
-            const keyMeta = model.columns.get(upsertKey);
+            const keyMeta = model.columns?.get ? model.columns.get(upsertKey) : undefined;
             let keyVal;
             try {
               keyVal = coerceCell(data[upsertKey], keyMeta, upsertKey);

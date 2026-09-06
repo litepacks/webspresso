@@ -12,14 +12,35 @@ const { resolveExportRecords } = require('./record-selection');
  * @param {object[]} records
  * @returns {Promise<Buffer>}
  */
+function getModelExportColumns(model, cleanRecords = []) {
+  const hiddenSet = new Set(model.hidden || []);
+  const colSet = new Set();
+  if (model.columns && typeof model.columns.keys === 'function') {
+    for (const c of model.columns.keys()) {
+      if (!hiddenSet.has(c)) colSet.add(c);
+    }
+  }
+  if (model.schema?.shape) {
+    for (const c of Object.keys(model.schema.shape)) {
+      if (!hiddenSet.has(c)) colSet.add(c);
+    }
+  }
+  if (colSet.size === 0 && cleanRecords.length > 0) {
+    for (const c of Object.keys(cleanRecords[0])) {
+      if (!hiddenSet.has(c)) colSet.add(c);
+    }
+  }
+  return Array.from(colSet);
+}
+
+/**
+ * @param {import('../../core/orm/types').ModelDefinition} model
+ * @param {object[]} records
+ * @returns {Promise<Buffer>}
+ */
 async function buildXlsxBuffer(model, records) {
   const clean = sanitizeForOutput(records, model);
-  const hiddenSet = new Set(model.hidden || []);
-  const columns = (model.columns && model.columns.size > 0)
-    ? Array.from(model.columns.keys()).filter((c) => !hiddenSet.has(c))
-    : (model.schema?.shape
-        ? Object.keys(model.schema.shape).filter((c) => !hiddenSet.has(c))
-        : Object.keys(clean[0] || {}));
+  const columns = getModelExportColumns(model, clean);
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Export', {
@@ -87,4 +108,5 @@ function createExportXlsxHandler(opts) {
 module.exports = {
   buildXlsxBuffer,
   createExportXlsxHandler,
+  getModelExportColumns,
 };

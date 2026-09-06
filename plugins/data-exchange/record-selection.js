@@ -70,6 +70,8 @@ async function resolveExportRecords(db, modelName, req) {
         if (record) records.push(record);
       }
     }
+  } else if (Array.isArray(idList) && idList.length === 0) {
+    records = [];
   } else {
     records = await repo.findAll();
   }

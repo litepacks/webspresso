@@ -10,6 +10,7 @@ import { createDatabase, defineModel, zdb, hasModel } from '../../index.js';
 import { adminPanelPlugin, dataExchangePlugin } from '../../plugins/index.js';
 import { clearRegistry } from '../../core/orm/model.js';
 import ExcelJS from 'exceljs';
+import { z } from 'zod';
 
 describe('Data exchange plugin', () => {
   let app;
@@ -286,5 +287,160 @@ describe('Data exchange export with soft delete', () => {
     await wbT.xlsx.load(resTrashed.body);
     expect(wbT.worksheets[0].rowCount).toBe(2);
     expect(wbT.worksheets[0].getRow(2).getCell(2).value).toBe('GoneRow');
+  });
+});
+
+describe('Admin panel built-in data exchange', () => {
+  let app;
+  let db;
+
+  beforeEach(async () => {
+    clearRegistry();
+
+    db = createDatabase({
+      client: 'better-sqlite3',
+      connection: ':memory:',
+      models: './tests/fixtures/models-empty',
+    });
+
+    const Product = defineModel({
+      name: 'Product',
+      table: 'products',
+      schema: z.object({
+        id: zdb.id(),
+        firstName: z.string(),
+        stockCount: z.number(),
+        active: z.boolean().default(true),
+      }),
+      admin: {
+        enabled: true,
+        label: 'Products',
+      },
+    });
+    db.registerModel(Product);
+
+    await db.knex.schema.createTable('products', (table) => {
+      table.bigIncrements('id');
+      table.string('firstName');
+      table.integer('stockCount');
+      table.boolean('active').defaultTo(true);
+    });
+
+    await db.knex.schema.createTable('admin_users', (table) => {
+      table.bigIncrements('id');
+      table.string('email').unique();
+      table.string('password');
+      table.string('name');
+      table.string('role').defaultTo('admin');
+      table.boolean('active').defaultTo(true);
+      table.timestamp('created_at');
+      table.timestamp('updated_at');
+    });
+
+    // NOTE: only adminPanelPlugin, NO dataExchangePlugin!
+    const result = createApp({
+      pagesDir: './tests/fixtures/pages',
+      viewsDir: './tests/fixtures/views',
+      publicDir: './public',
+      db,
+      plugins: [
+        adminPanelPlugin({ path: '/_admin', db }),
+      ],
+    });
+
+    app = result.app;
+  });
+
+  afterEach(async () => {
+    if (db) await db.destroy();
+    clearRegistry();
+  });
+
+  async function loginCookie() {
+    await request(app).post('/_admin/api/auth/setup').send({
+      email: 'admin@example.com',
+      password: 'password123',
+      name: 'Admin',
+    });
+    const loginRes = await request(app).post('/_admin/api/auth/login').send({
+      email: 'admin@example.com',
+      password: 'password123',
+    });
+    return loginRes.headers['set-cookie'];
+  }
+
+  it('works out of the box with only adminPanelPlugin registered', async () => {
+    const cookie = await loginCookie();
+    const repo = db.getRepository('Product');
+    const existing = await repo.create({ firstName: 'Alex', stockCount: 0, active: true });
+
+    // 1. Export as Excel
+    const resExport = await request(app)
+      .post('/_admin/api/data-exchange/export/Product')
+      .set('Cookie', cookie)
+      .send({ selectAll: true, filters: {} })
+      .buffer(true)
+      .parse((res, cb) => {
+        const data = [];
+        res.on('data', (c) => data.push(c));
+        res.on('end', () => cb(null, Buffer.concat(data)));
+      })
+      .expect(200);
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(resExport.body);
+    const ws = wb.worksheets[0];
+    const headers = ws.getRow(1).values.filter(Boolean);
+    expect(headers).toContain('id');
+    expect(headers).toContain('firstName');
+    expect(headers).toContain('stockCount');
+
+    // 2. Import CSV in insert mode containing id column (should strip autoIncrement id and create new row)
+    const csv = `id,First Name,stockCount,active\n${existing.id},Sam,1,true\n`;
+    const resImport = await request(app)
+      .post('/_admin/api/data-exchange/import/Product?mode=insert')
+      .set('Cookie', cookie)
+      .attach('file', Buffer.from(csv), 'items.csv')
+      .expect(200);
+
+    expect(resImport.body.created).toBe(1);
+    expect(resImport.body.failed).toBe(0);
+
+    const allProducts = await repo.findAll();
+    expect(allProducts.length).toBe(2);
+    const sam = allProducts.find((p) => p.firstName === 'Sam');
+    expect(sam).toBeTruthy();
+    expect(sam.id).not.toBe(existing.id);
+    expect(sam.stockCount).toBe(1); // not converted to boolean true!
+
+    // 3. Import CSV with numeric "0" in stockCount
+    const csvZero = `First Name,stockCount,active\nBob,0,false\n`;
+    const resZero = await request(app)
+      .post('/_admin/api/data-exchange/import/Product?mode=insert')
+      .set('Cookie', cookie)
+      .attach('file', Buffer.from(csvZero), 'zero.csv')
+      .expect(200);
+
+    expect(resZero.body.created).toBe(1);
+    const bob = await repo.findOne({ firstName: 'Bob' });
+    expect(bob.stockCount).toBe(0); // not converted to boolean false!
+    expect(Boolean(bob.active)).toBe(false);
+
+    // 4. Empty ids selection returns 0 data rows
+    const resEmpty = await request(app)
+      .post('/_admin/api/data-exchange/export/Product')
+      .set('Cookie', cookie)
+      .send({ ids: [] })
+      .buffer(true)
+      .parse((res, cb) => {
+        const data = [];
+        res.on('data', (c) => data.push(c));
+        res.on('end', () => cb(null, Buffer.concat(data)));
+      })
+      .expect(200);
+
+    const wbEmpty = new ExcelJS.Workbook();
+    await wbEmpty.xlsx.load(resEmpty.body);
+    expect(wbEmpty.worksheets[0].rowCount).toBe(1); // header only
   });
 });

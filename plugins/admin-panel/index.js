@@ -51,6 +51,7 @@ function adminPanelPlugin(options = {}) {
     configure,
     uploadUrl: uploadUrlOption,
     richTextSanitize = true,
+    dataExchange: dataExchangeOption = true,
   } = options;
 
   const adminUsersConfig = typeof adminUsersOption === 'object' ? adminUsersOption : { enabled: adminUsersOption !== false };
@@ -189,6 +190,17 @@ function adminPanelPlugin(options = {}) {
           },
         }));
         ctx.app._webspressoSessionInitialized = true;
+      }
+
+      // Auto-register built-in exchange services if enabled and serviceRegistry exists
+      if (enabled && dataExchangeOption !== false && ctx.app && ctx.app.serviceRegistry) {
+        const { createExchangeServices } = require('../../src/services/builtins/exchange');
+        const exchangeServices = createExchangeServices({ db });
+        for (const [name, def] of Object.entries(exchangeServices)) {
+          if (!ctx.app.serviceRegistry.has(name)) {
+            ctx.app.serviceRegistry.register(name, def);
+          }
+        }
       }
     },
 
@@ -378,6 +390,49 @@ function adminPanelPlugin(options = {}) {
 
       // Query API routes (auth required)
       ctx.addRoute('get', `${adminPath}/api/models/:model/queries/:query`, requireAuth, apiHandlers.queryHandler);
+
+      // Data exchange (Excel export & CSV/XLSX import) routes
+      const dataExchangeConfig = typeof dataExchangeOption === 'object' ? dataExchangeOption : { enabled: dataExchangeOption !== false };
+      if (dataExchangeConfig.enabled !== false && !ctx.app?._dataExchangeRoutesRegistered) {
+        const { createExportXlsxHandler } = require('../data-exchange/export-xlsx');
+        const { createImportHandler } = require('../data-exchange/import');
+        const exportHandler = createExportXlsxHandler({ db, maxRows: dataExchangeConfig.maxRows || 10000 });
+        const importHandler = createImportHandler({
+          db,
+          maxRows: dataExchangeConfig.maxRows || 10000,
+          maxFileBytes: dataExchangeConfig.maxFileBytes || 10 * 1024 * 1024,
+        });
+
+        const base = `${adminPath}/api/data-exchange`;
+        ctx.addRoute('get', `${base}/export/:model`, requireAuth, exportHandler);
+        ctx.addRoute('post', `${base}/export/:model`, requireAuth, exportHandler);
+        ctx.addRoute('post', `${base}/import/:model`, requireAuth, importHandler);
+
+        if (!registry.bulkActions.has('export-xlsx')) {
+          registry.registerBulkAction('export-xlsx', {
+            label: 'Export as Excel',
+            icon: 'download',
+            color: 'blue',
+            models: '*',
+            confirm: false,
+            handler: async (records, modelName, { db: d }) => {
+              const { getModel } = require('../../core/orm/model');
+              const model = d.getModel ? d.getModel(modelName) : getModel(modelName);
+              const pk = model?.primaryKey || 'id';
+              const ids = records.map((r) => r[pk]).join(',');
+              return {
+                download: true,
+                url: `${adminPath}/api/data-exchange/export/${modelName}?ids=${encodeURIComponent(ids)}`,
+                filename: `${modelName}_export.xlsx`,
+              };
+            },
+          });
+        }
+
+        if (ctx.app) {
+          ctx.app._dataExchangeRoutesRegistered = true;
+        }
+      }
 
       // ==========================================
       // Static Vendor Assets (Offline Zero-CDN)

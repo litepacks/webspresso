@@ -59,10 +59,15 @@ async function downloadDataExchangeXlsx(modelName, payload) {
   const blob = await res.blob();
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
+  a.style.display = 'none';
   a.href = url;
   a.download = modelName + '-export.xlsx';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(function () {
+    if (a.parentNode) a.parentNode.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 1000);
 }
 
 // Helper: Capitalize first letter of each word

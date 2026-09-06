@@ -325,10 +325,15 @@ const RecordList = {
                       const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
+                      a.style.display = 'none';
                       a.href = url;
                       a.download = modelName + '-export.json';
+                      document.body.appendChild(a);
                       a.click();
-                      URL.revokeObjectURL(url);
+                      setTimeout(function () {
+                        if (a.parentNode) a.parentNode.removeChild(a);
+                        URL.revokeObjectURL(url);
+                      }, 1000);
                     } catch (err) {
                       alert('Error: ' + err.message);
                     } finally {
@@ -351,15 +356,24 @@ const RecordList = {
                       const payload = state.selectAllMode 
                         ? { selectAll: true, filters: state.filters }
                         : { ids: Array.from(state.selectedRecords) };
+                      if (!state.selectAllMode && (!payload.ids || payload.ids.length === 0)) {
+                        alert('Please select at least one record to export');
+                        return;
+                      }
                       const response = await api.post('/extensions/export?model=' + modelName + '&format=csv', payload);
                       // Download as file
                       const blob = new Blob([response.data], { type: 'text/csv' });
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
+                      a.style.display = 'none';
                       a.href = url;
                       a.download = modelName + '-export.csv';
+                      document.body.appendChild(a);
                       a.click();
-                      URL.revokeObjectURL(url);
+                      setTimeout(function () {
+                        if (a.parentNode) a.parentNode.removeChild(a);
+                        URL.revokeObjectURL(url);
+                      }, 1000);
                     } catch (err) {
                       alert('Error: ' + err.message);
                     } finally {
@@ -382,6 +396,10 @@ const RecordList = {
                       const payload = state.selectAllMode 
                         ? { selectAll: true, filters: state.filters }
                         : { ids: Array.from(state.selectedRecords) };
+                      if (!state.selectAllMode && (!payload.ids || payload.ids.length === 0)) {
+                        alert('Please select at least one record to export');
+                        return;
+                      }
                       if (state.trashedView) payload.trashed = 'only';
                       await downloadDataExchangeXlsx(modelName, payload);
                     } catch (err) {

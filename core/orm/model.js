@@ -46,13 +46,32 @@ function defineModel(options) {
     throw new Error('Model schema is required and must be a Zod schema');
   }
 
+  let normalizedSchema = schema;
+  if (schema && schema.shape) {
+    let hasBuilder = false;
+    for (const val of Object.values(schema.shape)) {
+      if (val && typeof val._finalize === 'function') {
+        hasBuilder = true;
+        break;
+      }
+    }
+    if (hasBuilder) {
+      const { z } = require('zod');
+      const finalizedShape = {};
+      for (const [key, val] of Object.entries(schema.shape)) {
+        finalizedShape[key] = (val && typeof val._finalize === 'function') ? val._finalize() : val;
+      }
+      normalizedSchema = z.object(finalizedShape);
+    }
+  }
+
   // Check for duplicate registration
   if (modelRegistry.has(name)) {
     throw new Error(`Model "${name}" is already defined`);
   }
 
   // Extract column metadata from schema
-  const columns = extractColumnsFromSchema(schema);
+  const columns = extractColumnsFromSchema(normalizedSchema);
 
   // Validate relations
   const normalizedRelations = {};
@@ -80,7 +99,7 @@ function defineModel(options) {
   const model = {
     name,
     table,
-    schema,
+    schema: normalizedSchema,
     primaryKey,
     relations: normalizedRelations,
     scopes: {

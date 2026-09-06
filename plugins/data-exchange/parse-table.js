@@ -15,18 +15,27 @@ function normalizeHeaderCell(h) {
  * @returns {(string|null)[]} index → model column or null if unknown
  */
 function buildHeaderMapping(headerRow, allowedKeys) {
-  const lowerToKey = new Map();
+  const exactLowerToKey = new Map();
+  const strippedToKey = new Map();
   for (const k of allowedKeys) {
-    lowerToKey.set(String(k).toLowerCase().replace(/\s+/g, '_'), k);
+    const kStr = String(k);
+    exactLowerToKey.set(kStr.toLowerCase().replace(/\s+/g, '_'), k);
+    strippedToKey.set(kStr.toLowerCase().replace(/[_\s-]+/g, ''), k);
   }
   const mapping = [];
   for (let i = 0; i < headerRow.length; i++) {
-    const norm = normalizeHeaderCell(headerRow[i]).toLowerCase().replace(/\s+/g, '_');
-    if (!norm) {
+    const raw = normalizeHeaderCell(headerRow[i]);
+    if (!raw) {
       mapping.push(null);
       continue;
     }
-    mapping.push(lowerToKey.get(norm) ?? null);
+    const norm = raw.toLowerCase().replace(/\s+/g, '_');
+    let matched = exactLowerToKey.get(norm);
+    if (!matched) {
+      const stripped = raw.toLowerCase().replace(/[_\s-]+/g, '');
+      matched = strippedToKey.get(stripped);
+    }
+    mapping.push(matched ?? null);
   }
   return mapping;
 }
