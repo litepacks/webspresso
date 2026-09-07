@@ -48,20 +48,10 @@ function defineModel(options) {
 
   let normalizedSchema = schema;
   if (schema && schema.shape) {
-    let hasBuilder = false;
-    for (const val of Object.values(schema.shape)) {
+    for (const [key, val] of Object.entries(schema.shape)) {
       if (val && typeof val._finalize === 'function') {
-        hasBuilder = true;
-        break;
+        schema.shape[key] = val._finalize();
       }
-    }
-    if (hasBuilder) {
-      const { z } = require('zod');
-      const finalizedShape = {};
-      for (const [key, val] of Object.entries(schema.shape)) {
-        finalizedShape[key] = (val && typeof val._finalize === 'function') ? val._finalize() : val;
-      }
-      normalizedSchema = z.object(finalizedShape);
     }
   }
 

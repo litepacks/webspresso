@@ -3,8 +3,13 @@
  * Reset admin user password via CLI
  */
 
-const inquirer = require('inquirer');
-const { hash } = require('../../core/auth/hash');
+let _inquirer;
+const inquirer = {
+  prompt: (...args) => {
+    if (!_inquirer) _inquirer = require('inquirer');
+    return _inquirer.prompt(...args);
+  },
+};
 const { loadDbConfig, createDbInstance } = require('../utils/db');
 
 function registerCommand(program) {
@@ -86,6 +91,7 @@ function registerCommand(program) {
         }
         
         // Hash the password (same rounds as admin panel setup)
+        const { hash } = require('../../core/auth/hash');
         const hashedPassword = await hash(password, 10);
         
         // Update the password

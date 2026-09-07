@@ -3,7 +3,13 @@
  * Add a new API endpoint to the current project
  */
 
-const inquirer = require('inquirer');
+let _inquirer;
+const inquirer = {
+  prompt: (...args) => {
+    if (!_inquirer) _inquirer = require('inquirer');
+    return _inquirer.prompt(...args);
+  },
+};
 const fs = require('fs');
 const path = require('path');
 

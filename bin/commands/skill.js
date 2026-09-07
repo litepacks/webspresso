@@ -5,7 +5,13 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const inquirer = require('inquirer');
+let _inquirer;
+const inquirer = {
+  prompt: (...args) => {
+    if (!_inquirer) _inquirer = require('inquirer');
+    return _inquirer.prompt(...args);
+  },
+};
 
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$|^[a-z0-9]$/;
 

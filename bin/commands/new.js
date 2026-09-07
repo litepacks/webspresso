@@ -3,7 +3,13 @@
  * Creates a new Webspresso project
  */
 
-const inquirer = require('inquirer');
+let _inquirer;
+const inquirer = {
+  prompt: (...args) => {
+    if (!_inquirer) _inquirer = require('inquirer');
+    return _inquirer.prompt(...args);
+  },
+};
 const fs = require('fs');
 const path = require('path');
 const { runInstallation, startDevServer } = require('../utils/project');

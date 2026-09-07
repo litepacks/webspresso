@@ -6,20 +6,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const {
-  McpServer,
-  createServiceTools,
-  createOrmTools,
-  createOrmResources,
-  createSystemResources,
-  createBuiltinPrompts,
-  startStdioTransport,
-  discoverMcpDirectory,
-} = require('../../plugins/mcp');
 
-const { createServiceRegistry } = require('../../src/services');
-const { resolveDbConfigIfExists, createDbInstance } = require('../utils/db');
-const { getAllModels } = require('../../core/orm/model');
 
 /**
  * Register MCP command in Commander CLI
@@ -53,6 +40,20 @@ function registerCommand(program) {
 
       const rootDir = path.resolve(process.cwd(), options.dir || '.');
       const isReadOnly = Boolean(options.readOnly);
+
+      const {
+        McpServer,
+        createServiceTools,
+        createOrmTools,
+        createOrmResources,
+        createSystemResources,
+        createBuiltinPrompts,
+        startStdioTransport,
+        discoverMcpDirectory,
+      } = require('../../plugins/mcp');
+      const { createServiceRegistry } = require('../../src/services');
+      const { resolveDbConfigIfExists, createDbInstance } = require('../utils/db');
+      const { getAllModels } = require('../../core/orm/model');
 
       // Create Server instance
       const server = new McpServer({

@@ -5,9 +5,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const sharp = process.env.NODE_ENV === 'test'
-  ? require('../../tests/mocks/sharp')
-  : require('sharp');
+function getSharp() {
+  return process.env.NODE_ENV === 'test'
+    ? require('../../tests/mocks/sharp')
+    : require('sharp');
+}
 
 const APPLE_SIZES = [57, 60, 72, 76, 114, 120, 144, 152, 180];
 const ANDROID_SIZE = 192;
@@ -54,7 +56,7 @@ function registerCommand(program) {
         const allSizes = [...new Set([...APPLE_SIZES, ANDROID_SIZE, ...FAVICON_SIZES, MS_TILE_SIZE])].sort((a, b) => a - b);
 
         for (const size of allSizes) {
-          const buffer = await sharp(sourcePath).resize(size, size).png().toBuffer();
+          const buffer = await getSharp()(sourcePath).resize(size, size).png().toBuffer();
 
           if (APPLE_SIZES.includes(size)) {
             const filename = `apple-icon-${size}x${size}.png`;

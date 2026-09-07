@@ -35,12 +35,9 @@ describe('Zero-Dependency JWT Core Module', () => {
       expect(() => verifyJwt(tamperedToken, secret)).toThrow('Invalid JWT signature');
     });
 
-    it('should throw error when token is expired', async () => {
-      // 0 second expiration
-      const token = signJwt({ id: 1 }, secret, { expiresIn: 0 });
-      // Small sleep to ensure exp < nowSec
-      await new Promise((r) => setTimeout(r, 1100));
-
+    it('should throw error when token is expired', () => {
+      // Expired token (in the past)
+      const token = signJwt({ id: 1 }, secret, { expiresIn: -1 });
       expect(() => verifyJwt(token, secret)).toThrow('JWT token has expired');
     });
 

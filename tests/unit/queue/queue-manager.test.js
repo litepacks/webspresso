@@ -82,7 +82,7 @@ describe('QueueManager Core Engine', () => {
     queue.define('test.retry', async () => {
       attemptCount++;
       throw new Error(`Failure on attempt ${attemptCount}`);
-    }, { attempts: 3, backoff: { type: 'fixed', delay: 30 } });
+    }, { attempts: 3, backoff: { type: 'fixed', delay: 5 } });
 
     const retryingPromise = new Promise((resolve) => {
       const delays = [];
@@ -100,7 +100,7 @@ describe('QueueManager Core Engine', () => {
       });
     });
 
-    await queue.dispatch('test.retry', {}, { attempts: 3, backoff: { type: 'fixed', delay: 30 } });
+    await queue.dispatch('test.retry', {}, { attempts: 3, backoff: { type: 'fixed', delay: 5 } });
 
     const delays = await retryingPromise;
     expect(delays.length).toBeGreaterThanOrEqual(1);
@@ -112,14 +112,14 @@ describe('QueueManager Core Engine', () => {
   });
 
   it('tracks job progress updates', async () => {
-    queue = createQueueManager({ concurrency: 1, pollInterval: 20 });
+    queue = createQueueManager({ concurrency: 1, pollInterval: 5 });
     const progressEvents = [];
 
     queue.define('test.progress', async (job) => {
       job.progress(25, 'Step 1');
-      await new Promise((r) => setTimeout(r, 20));
+      await new Promise((r) => setTimeout(r, 2));
       job.progress(75, 'Step 2');
-      await new Promise((r) => setTimeout(r, 20));
+      await new Promise((r) => setTimeout(r, 2));
       return 'done';
     });
 
@@ -141,7 +141,7 @@ describe('QueueManager Core Engine', () => {
   });
 
   it('pauses and resumes processing cleanly', async () => {
-    queue = createQueueManager({ concurrency: 1, pollInterval: 20, autoStart: false });
+    queue = createQueueManager({ concurrency: 1, pollInterval: 5, autoStart: false });
     let executed = false;
 
     queue.define('test.pause', async () => {
@@ -154,7 +154,7 @@ describe('QueueManager Core Engine', () => {
     queue.pause();
     expect(queue.isPaused).toBe(true);
 
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 15));
     expect(executed).toBe(false);
 
     queue.resume();
@@ -173,7 +173,7 @@ describe('QueueManager Core Engine', () => {
     expect(queue._currentPollInterval).toBe(50);
 
     // Allow multiple idle ticks to back off
-    await new Promise((r) => setTimeout(r, 160));
+    await new Promise((r) => setTimeout(r, 80));
     expect(queue._currentPollInterval).toBeGreaterThan(50);
 
     // Dispatching a job should immediately reset to base pollInterval

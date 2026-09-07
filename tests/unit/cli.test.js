@@ -154,22 +154,20 @@ describe('CLI', () => {
 
   describe.sequential('New Project Command', () => {
     const projectName = 'test-project';
+    let projectPath;
+    let result;
 
-    beforeEach(() => {
-      // Clean up before each test to ensure clean state
+    beforeAll(() => {
       cleanup(projectName);
+      result = runCli(`new ${projectName}`);
+      projectPath = path.join(TEST_DIR, projectName);
     });
 
-    afterEach(() => {
+    afterAll(() => {
       cleanup(projectName);
     });
 
     it('should create a new project with default settings', () => {
-      const result = runCli(`new ${projectName}`);
-      
-      // Note: Exit code might be non-zero due to interactive prompts, but files should be created
-      const projectPath = path.join(TEST_DIR, projectName);
-      
       // Check directory structure (main test - files should exist)
       expect(fs.existsSync(projectPath)).toBe(true);
       expect(fs.existsSync(path.join(projectPath, 'pages'))).toBe(true);
@@ -184,8 +182,6 @@ describe('CLI', () => {
     });
 
     it('should create package.json with correct content', () => {
-      runCli(`new ${projectName}`);
-      
       const packagePath = path.join(TEST_DIR, projectName, 'package.json');
       const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
       
@@ -202,8 +198,6 @@ describe('CLI', () => {
     });
 
     it('should create server.js', () => {
-      runCli(`new ${projectName}`);
-      
       const serverPath = path.join(TEST_DIR, projectName, 'server.js');
       const serverContent = fs.readFileSync(serverPath, 'utf-8');
       
@@ -216,8 +210,6 @@ describe('CLI', () => {
     });
 
     it('should create config/ with load-env, env schema, and app options', () => {
-      runCli(`new ${projectName}`);
-      
       const root = path.join(TEST_DIR, projectName);
       expect(fs.existsSync(path.join(root, 'config', 'load-env.js'))).toBe(true);
       expect(fs.existsSync(path.join(root, 'config', 'env.schema.js'))).toBe(true);
@@ -228,8 +220,6 @@ describe('CLI', () => {
     });
 
     it('should create layout.njk with Tailwind classes', () => {
-      runCli(`new ${projectName}`);
-      
       const layoutPath = path.join(TEST_DIR, projectName, 'views', 'layout.njk');
       const layoutContent = fs.readFileSync(layoutPath, 'utf-8');
       
@@ -245,8 +235,6 @@ describe('CLI', () => {
     });
 
     it('should create index.njk with Tailwind classes', () => {
-      runCli(`new ${projectName}`);
-      
       const indexPath = path.join(TEST_DIR, projectName, 'pages', 'index.njk');
       const indexContent = fs.readFileSync(indexPath, 'utf-8');
       
@@ -259,8 +247,6 @@ describe('CLI', () => {
     });
 
     it('should create locale files with all keys', () => {
-      runCli(`new ${projectName}`);
-      
       const enPath = path.join(TEST_DIR, projectName, 'pages', 'locales', 'en.json');
       const dePath = path.join(TEST_DIR, projectName, 'pages', 'locales', 'de.json');
       
@@ -283,31 +269,27 @@ describe('CLI', () => {
     });
 
     it('should create Tailwind config files', () => {
-      runCli(`new ${projectName}`);
-      
-      const projectPath = path.join(TEST_DIR, projectName);
+      const root = path.join(TEST_DIR, projectName);
       
       // tailwind.config.js
-      const tailwindConfig = fs.readFileSync(path.join(projectPath, 'tailwind.config.js'), 'utf-8');
+      const tailwindConfig = fs.readFileSync(path.join(root, 'tailwind.config.js'), 'utf-8');
       expect(tailwindConfig).toContain('content:');
       expect(tailwindConfig).toContain('./pages/**/*.{njk,js}');
       expect(tailwindConfig).toContain('./views/**/*.njk');
       
       // postcss.config.js
-      const postcssConfig = fs.readFileSync(path.join(projectPath, 'postcss.config.js'), 'utf-8');
+      const postcssConfig = fs.readFileSync(path.join(root, 'postcss.config.js'), 'utf-8');
       expect(postcssConfig).toContain('tailwindcss');
       expect(postcssConfig).toContain('autoprefixer');
       
       // src/input.css
-      const inputCss = fs.readFileSync(path.join(projectPath, 'src', 'input.css'), 'utf-8');
+      const inputCss = fs.readFileSync(path.join(root, 'src', 'input.css'), 'utf-8');
       expect(inputCss).toContain('@tailwind base');
       expect(inputCss).toContain('@tailwind components');
       expect(inputCss).toContain('@tailwind utilities');
     });
 
     it('should create public/css/style.css placeholder', () => {
-      runCli(`new ${projectName}`);
-      
       const cssPath = path.join(TEST_DIR, projectName, 'public', 'css', 'style.css');
       expect(fs.existsSync(cssPath)).toBe(true);
       
@@ -316,8 +298,6 @@ describe('CLI', () => {
     });
 
     it('should create .env.example', () => {
-      runCli(`new ${projectName}`);
-      
       const envPath = path.join(TEST_DIR, projectName, '.env.example');
       const envContent = fs.readFileSync(envPath, 'utf-8');
       
@@ -329,8 +309,6 @@ describe('CLI', () => {
     });
 
     it('should create .gitignore', () => {
-      runCli(`new ${projectName}`);
-      
       const gitignorePath = path.join(TEST_DIR, projectName, '.gitignore');
       const gitignoreContent = fs.readFileSync(gitignorePath, 'utf-8');
       
@@ -341,8 +319,6 @@ describe('CLI', () => {
     });
 
     it('should create README.md', () => {
-      runCli(`new ${projectName}`);
-      
       const readmePath = path.join(TEST_DIR, projectName, 'README.md');
       const readmeContent = fs.readFileSync(readmePath, 'utf-8');
       
@@ -421,18 +397,21 @@ describe('CLI', () => {
 
   describe.sequential('New Project - Installation Flow', () => {
     const projectName = 'test-install-flow';
+    const noTailwindProject = 'test-install-no-tw';
     
-    beforeEach(() => {
+    beforeAll(() => {
       cleanup(projectName);
+      cleanup(noTailwindProject);
+      runCli(`new ${projectName}`);
+      runCli(`new ${noTailwindProject} --no-tailwind`);
     });
     
-    afterEach(() => {
+    afterAll(() => {
       cleanup(projectName);
+      cleanup(noTailwindProject);
     });
 
     it('should include watch:css script when Tailwind is enabled', () => {
-      runCli(`new ${projectName}`);
-      
       const packagePath = path.join(TEST_DIR, projectName, 'package.json');
       const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
       
@@ -443,8 +422,6 @@ describe('CLI', () => {
     });
 
     it('should use webspresso dev command when Tailwind enabled', () => {
-      runCli(`new ${projectName}`);
-      
       const packagePath = path.join(TEST_DIR, projectName, 'package.json');
       const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
       
@@ -455,9 +432,7 @@ describe('CLI', () => {
     });
 
     it('should not include watch:css when --no-tailwind is used', () => {
-      runCli(`new ${projectName} --no-tailwind`);
-      
-      const packagePath = path.join(TEST_DIR, projectName, 'package.json');
+      const packagePath = path.join(TEST_DIR, noTailwindProject, 'package.json');
       const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
       
       expect(packageJson.scripts['watch:css']).toBeUndefined();
@@ -465,8 +440,6 @@ describe('CLI', () => {
     });
 
     it('should have build:css script when Tailwind is enabled', () => {
-      runCli(`new ${projectName}`);
-      
       const packagePath = path.join(TEST_DIR, projectName, 'package.json');
       const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
       
@@ -479,17 +452,16 @@ describe('CLI', () => {
   describe.sequential('New Project - Database Support', () => {
     const projectName = 'test-db-project';
     
-    beforeEach(() => {
+    beforeAll(() => {
       cleanup(projectName);
+      runCli(`new ${projectName}`);
     });
     
-    afterEach(() => {
+    afterAll(() => {
       cleanup(projectName);
     });
 
     it('should not include database driver by default', () => {
-      runCli(`new ${projectName}`);
-      
       const packagePath = path.join(TEST_DIR, projectName, 'package.json');
       const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
       
@@ -503,8 +475,6 @@ describe('CLI', () => {
       // Note: We can't easily test interactive prompts, but we can verify
       // that the code structure supports database selection
       // In real usage, user would select database during interactive prompt
-      runCli(`new ${projectName}`);
-      
       // By default, no database is selected (prompt answers "n")
       const packagePath = path.join(TEST_DIR, projectName, 'package.json');
       const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
@@ -514,19 +484,11 @@ describe('CLI', () => {
     });
 
     it('should create webspresso.db.js when database is selected', () => {
-      // This test verifies the file structure, but actual database selection
-      // requires interactive input which is hard to test
-      // The file creation logic is tested indirectly through structure checks
-      runCli(`new ${projectName}`);
-      
       // By default, no database config file should exist
       expect(fs.existsSync(path.join(TEST_DIR, projectName, 'webspresso.db.js'))).toBe(false);
     });
 
     it('should include DATABASE_URL in .env.example when database is selected', () => {
-      // Similar to above, we test the default behavior (no database)
-      runCli(`new ${projectName}`);
-      
       const envPath = path.join(TEST_DIR, projectName, '.env.example');
       const envContent = fs.readFileSync(envPath, 'utf-8');
       
@@ -535,15 +497,11 @@ describe('CLI', () => {
     });
 
     it('should create migrations directory when database is selected', () => {
-      runCli(`new ${projectName}`);
-      
       // By default, migrations directory should not exist
       expect(fs.existsSync(path.join(TEST_DIR, projectName, 'migrations'))).toBe(false);
     });
 
     it('should create models directory when database is selected', () => {
-      runCli(`new ${projectName}`);
-      
       // Models directory should exist when database is selected (even if not used)
       // Actually, it's only created if database is selected, but we answer "no" to database
       // So it should not exist by default
@@ -553,15 +511,11 @@ describe('CLI', () => {
     it('should create seeds directory and files when seed is selected', () => {
       // This test would require answering "yes" to database and "yes" to seed
       // For now, we'll test that seeds directory is not created by default
-      runCli(`new ${projectName}`);
-      
       // By default, seeds directory should not exist
       expect(fs.existsSync(path.join(TEST_DIR, projectName, 'seeds'))).toBe(false);
     });
 
     it('should add faker dependency when seed is selected', () => {
-      runCli(`new ${projectName}`);
-      
       const packageJsonPath = path.join(TEST_DIR, projectName, 'package.json');
       const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
       
@@ -638,23 +592,24 @@ describe('CLI', () => {
 
   describe.sequential('Add Tailwind Command', () => {
     const projectName = 'test-add-tailwind';
+    let projectPath;
+    let addResult;
 
-    beforeEach(() => {
+    beforeAll(() => {
       // Clean up first to ensure clean state
       cleanup(projectName);
-      // Create a project without Tailwind first
+      // Create a project without Tailwind first, then add Tailwind
       runCli(`new ${projectName} --no-tailwind`);
+      projectPath = path.join(TEST_DIR, projectName);
+      addResult = runCli('add tailwind', { cwd: projectPath });
     });
 
-    afterEach(() => {
+    afterAll(() => {
       cleanup(projectName);
     });
 
     it('should add Tailwind to existing project', () => {
-      const projectPath = path.join(TEST_DIR, projectName);
-      const result = runCli('add tailwind', { cwd: projectPath });
-      
-      expect(result.stdout).toContain('Adding Tailwind CSS');
+      expect(addResult.stdout).toContain('Adding Tailwind CSS');
       
       // Check files were created
       expect(fs.existsSync(path.join(projectPath, 'tailwind.config.js'))).toBe(true);
@@ -664,9 +619,6 @@ describe('CLI', () => {
     });
 
     it('should update package.json with Tailwind dependencies', () => {
-      const projectPath = path.join(TEST_DIR, projectName);
-      runCli('add tailwind', { cwd: projectPath });
-      
       const packageJson = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf-8'));
       
       expect(packageJson.devDependencies.tailwindcss).toBeDefined();
@@ -677,9 +629,6 @@ describe('CLI', () => {
     });
 
     it('should update layout to use local CSS instead of CDN', () => {
-      const projectPath = path.join(TEST_DIR, projectName);
-      runCli('add tailwind', { cwd: projectPath });
-      
       const layoutContent = fs.readFileSync(path.join(projectPath, 'views', 'layout.njk'), 'utf-8');
       
       expect(layoutContent).toContain('/css/style.css');

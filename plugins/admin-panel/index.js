@@ -280,7 +280,7 @@ function adminPanelPlugin(options = {}) {
         path: adminPath,
         db,
         AdminUser,
-        hashPassword: (password, rounds) => bcrypt.hash(password, rounds),
+        hashPassword: (password, rounds) => bcrypt.hash(password, process.env.NODE_ENV === 'test' ? 4 : (rounds || 10)),
         comparePassword: (password, hash) => bcrypt.compare(password, hash),
         richTextSanitize,
       });
@@ -299,7 +299,7 @@ function adminPanelPlugin(options = {}) {
         adminUsersHandlers = createAdminUsersApiHandlers({
           db,
           AdminUser,
-          hashPassword: (password, rounds) => bcrypt.hash(password, rounds),
+          hashPassword: (password, rounds) => bcrypt.hash(password, process.env.NODE_ENV === 'test' ? 4 : (rounds || 10)),
         });
       }
 

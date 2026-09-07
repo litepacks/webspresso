@@ -5,8 +5,13 @@
  */
 
 const path = require('path');
-const inquirer = require('inquirer');
-const { createServiceRegistry } = require('../../src/services');
+let _inquirer;
+const inquirer = {
+  prompt: (...args) => {
+    if (!_inquirer) _inquirer = require('inquirer');
+    return _inquirer.prompt(...args);
+  },
+};
 const { resolveDbConfigIfExists, createDbInstance } = require('../utils/db');
 
 /**
@@ -69,6 +74,7 @@ function registerCommand(program) {
           ? path.resolve(process.cwd(), options.dir)
           : path.resolve(process.cwd(), 'services');
 
+        const { createServiceRegistry } = require('../../src/services');
         const registry = createServiceRegistry({
           servicesDir,
           isDev: true,
