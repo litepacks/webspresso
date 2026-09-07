@@ -297,3 +297,14 @@ Zero-boilerplate RESTful CRUD endpoint generator directly from Knex ORM models, 
   });
   ```
 
+### 2.16 `mcpPlugin` (`plugins/mcp`)
+Model Context Protocol (MCP) server for connecting Webspresso applications directly to AI agents (Antigravity, Claude Desktop, Cursor, Zed, Windsurf).
+- **Options**:
+  - `path`: URL mount path (default: `'/_mcp'`).
+  - `auth`: `{ token, localhostOnly, verify }`.
+  - `services`: Boolean or `{ include, exclude, readOnly, role }` auto-bridging `services/` to MCP Tools.
+  - `orm`: Boolean or `{ readOnly, models }` exposing models as Tools (`orm_find`, `orm_create`, etc.) and Resources (`webspresso://models`).
+  - `system`: Boolean, exposes `webspresso://routes`, `webspresso://services`, and `webspresso://health`.
+  - `discovery`: Boolean (default: `true`), scans project `mcp/` directory for custom tools, resources, and prompts.
+- **Dual Transport**: Supports HTTP/SSE inside Webspresso server and Stdio via `webspresso mcp` CLI.
+

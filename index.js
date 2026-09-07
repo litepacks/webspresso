@@ -87,6 +87,9 @@ const {
   socketIo,
   redis,
   createRedisAdapter,
+  mcpPlugin,
+  createMcpServer,
+  McpServer,
 } = require('./plugins');
 
 const content = require('./core/content');
@@ -237,6 +240,9 @@ module.exports = {
   queue: require('./core/queue'),
   createQueueManager: require('./core/queue').createQueueManager,
   QueueManager: require('./core/queue').QueueManager,
+  mcpPlugin,
+  createMcpServer,
+  McpServer,
 
   // Schema-driven CMS core (framework-agnostic)
   content,

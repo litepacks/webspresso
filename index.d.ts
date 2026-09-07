@@ -1613,4 +1613,68 @@ export const ssr: {
   renderStream: typeof renderStream;
 };
 
+// --- Model Context Protocol (MCP) Plugin ---
+
+export interface McpPluginOptions {
+  path?: string;
+  enabled?: boolean;
+  auth?: {
+    token?: string;
+    localhostOnly?: boolean;
+    verify?: (req: import('express').Request) => boolean | Promise<boolean>;
+  };
+  services?: boolean | {
+    include?: string[];
+    exclude?: string[];
+    readOnly?: boolean;
+    role?: string | string[];
+  };
+  orm?: boolean | {
+    readOnly?: boolean;
+    models?: string[];
+  };
+  system?: boolean;
+  tools?: Array<{
+    name: string;
+    description?: string;
+    inputSchema?: Record<string, unknown>;
+    handler: (args: any, ctx: any) => Promise<any> | any;
+  }>;
+  resources?: Array<{
+    uri?: string;
+    uriTemplate?: string;
+    name?: string;
+    description?: string;
+    mimeType?: string;
+    handler: (uri: string, paramsOrCtx: any, ctx?: any) => Promise<any> | any;
+  }>;
+  prompts?: Array<{
+    name: string;
+    description?: string;
+    arguments?: Array<{ name: string; description?: string; required?: boolean }>;
+    handler: (args: any, ctx: any) => Promise<any> | any;
+  }>;
+  discovery?: boolean;
+  name?: string;
+  version?: string;
+  instructions?: string;
+}
+
+export class McpServer {
+  name: string;
+  version: string;
+  instructions: string;
+  constructor(options?: { name?: string; version?: string; instructions?: string; context?: Record<string, unknown> });
+  registerTool(toolDef: any): this;
+  registerTools(toolDefs: any[]): this;
+  unregisterTool(name: string): boolean;
+  registerResource(resourceDef: any): this;
+  registerResourceTemplate(templateDef: any): this;
+  registerPrompt(promptDef: any): this;
+  handleMessage(message: any, callContext?: any): Promise<any>;
+}
+
+export function mcpPlugin(options?: McpPluginOptions): WebspressoPlugin;
+export function createMcpServer(options?: McpPluginOptions): McpServer;
+
 

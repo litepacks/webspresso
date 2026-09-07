@@ -39,6 +39,7 @@ const {
   redis,
   createRedisAdapter,
 } = require('./realtime');
+const { mcpPlugin, createMcpServer, McpServer } = require('./mcp');
 
 module.exports = {
   sitemapPlugin,
@@ -77,6 +78,9 @@ module.exports = {
   redis,
   createRedisAdapter,
   queuePlugin: require('./queue'),
+  mcpPlugin,
+  createMcpServer,
+  McpServer,
 };
 
 
