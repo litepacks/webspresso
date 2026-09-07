@@ -2,7 +2,7 @@
 
 > **Module:** `webspresso`  
 > **Signature:** `defineService(definition: ServiceDefinition): ServiceDefinition`  
-> **TypeScript Definition:** [`index.d.ts`](../../index.d.ts#L45)
+> **TypeScript Definition:** [`index.d.ts`](https://github.com/litepacks/webspresso/blob/current/index.d.ts#L45)
 
 ---
 

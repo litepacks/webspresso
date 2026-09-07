@@ -2,7 +2,7 @@
 
 > **Module:** `webspresso`  
 > **Signature:** `defineModel(definition: ModelDefinition): ModelDefinition`  
-> **TypeScript Definition:** [`index.d.ts`](../../index.d.ts#L80)
+> **TypeScript Definition:** [`index.d.ts`](https://github.com/litepacks/webspresso/blob/current/index.d.ts#L80)
 
 ---
 

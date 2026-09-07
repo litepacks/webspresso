@@ -2,7 +2,7 @@
 
 > **Module:** `webspresso`  
 > **Signature:** `createApp(options: CreateAppOptions): CreateAppResult`  
-> **TypeScript Definition:** [`index.d.ts`](../../index.d.ts#L25)
+> **TypeScript Definition:** [`index.d.ts`](https://github.com/litepacks/webspresso/blob/current/index.d.ts#L25)
 
 ---
 

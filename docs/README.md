@@ -37,12 +37,12 @@ Task-focused guides for solving specific engineering problems:
 - **[Services Layer](guides/services.md)** — Defining services, Zod validation, declarative auth guards, and ambient ACID transactions.
 - **[Database & ORM](guides/database-and-orm.md)** — Defining models (`defineModel`), `zdb` schema builder, repositories API, and Knex migrations.
 - **[Dual Authentication](guides/authentication.md)** — Session-based auth cookies for SSR, stateless JWT & refresh token rotation for APIs.
-- **[API Endpoints](guides/api-routes.md)** — HTTP method files (`.get.js`, `.post.js`), `req.input` validation, and JSON responses.
+- **API Endpoints** — HTTP method files (`.get.js`, `.post.js`), `req.input` validation, and JSON responses (see [File-Based Routing](guides/routing.md)).
 - **[Admin Panel SPA](guides/admin-panel.md)** — Registering admin modules, custom Mithril.js components (`component.js`), field renderers, and widgets.
-- **[Plugin Ecosystem](guides/plugins.md)** — Using official plugins, custom plugin lifecycle hooks (`register`, `onRoutesReady`), and inter-plugin APIs.
-- **[Realtime Layer](guides/realtime.md)** — WebSocket, SSE, and Socket.IO adapters, subscriptions, and Redis Pub/Sub.
-- **[File Uploads](guides/file-uploads.md)** — Multipart upload handling, storage providers, and file validation.
-- **[Email System](guides/email.md)** — MJML template compilation, Nodemailer transport, and delivery tracking.
+- **Plugin Ecosystem** — Using official plugins, custom plugin lifecycle hooks (`register`, `onRoutesReady`), and inter-plugin APIs.
+- **Realtime Layer** — WebSocket, SSE, and Socket.IO adapters, subscriptions, and Redis Pub/Sub.
+- **File Uploads** — Multipart upload handling, storage providers, and file validation.
+- **Email System** — MJML template compilation, Nodemailer transport, and delivery tracking.
 
 ---
 
@@ -54,10 +54,10 @@ Deep dives into the mental models, runtime pipeline, and architectural decisions
 - **[Request Lifecycle](concepts/request-lifecycle.md)** — End-to-end flow from incoming HTTP socket to template render and response stream.
 - **[Service Execution Pipeline](concepts/service-execution-pipeline.md)** — Sanitization, Zod compilation, auth guards, transaction propagation, caching, and execution.
 - **[Ambient Transaction Propagation](concepts/transaction-propagation.md)** — How `AsyncLocalStorage` binds Knex transactions across nested services and repositories.
-- **[Plugin Lifecycle](concepts/plugin-system.md)** — Registration order, route readiness, dependency resolution, and graceful teardown.
-- **[Error Boundary & Exceptions](concepts/error-boundary.md)** — Django-inspired exception hierarchy, error masking in production, and custom error boundaries.
-- **[Graceful Shutdown & Draining](concepts/shutdown-and-lifecycle.md)** — Connection tracking, keep-alive draining, HTTP 503 handling, and reverse-order plugin disposers.
-- **[Asset Pipeline & Versioning](concepts/asset-pipeline.md)** — Cache-busting, manifest resolution, per-page bundles, and CDN prefixing.
+- **Plugin Lifecycle** — Registration order, route readiness, dependency resolution, and graceful teardown.
+- **Error Boundary & Exceptions** — Django-inspired exception hierarchy, error masking in production, and custom error boundaries (see [Exceptions Catalog](reference/exceptions.md)).
+- **Graceful Shutdown & Draining** — Connection tracking, keep-alive draining, HTTP 503 handling, and reverse-order plugin disposers.
+- **Asset Pipeline & Versioning** — Cache-busting, manifest resolution, per-page bundles, and CDN prefixing.
 
 ---
 
@@ -67,11 +67,11 @@ Unbiased, complete specification of public APIs verified against TypeScript decl
 
 - **[`createApp()` Configuration](reference/create-app.md)** — Complete `CreateAppOptions` parameter reference.
 - **[CLI Reference](reference/cli.md)** — All `webspresso` CLI commands, flags, and interactive workflows.
-- **[Request & Response](reference/request-response.md)** — Properties and helpers attached to `req` and `res` (`req.context`, `req.service`, `req.auth`, `res.renderStream`).
+- **Request & Response** — Properties and helpers attached to `req` and `res` (`req.context`, `req.service`, `req.auth`, `res.renderStream`).
 - **[Service Definition Spec](reference/service-definition.md)** — `defineService` options, `ServiceDefinition` schema, and `ServiceContext`.
 - **[Model & Repository Spec](reference/model-definition.md)** — `defineModel` options, `zdb` column builder types, and `Repository` query methods.
-- **[Built-in Plugins Reference](reference/plugins-api.md)** — Configuration options for all 15 official plugins.
-- **[Template Helpers Reference](reference/template-helpers.md)** — Complete catalog of `fsy.*` Nunjucks helper functions.
+- **Built-in Plugins Reference** — Configuration options for all 15 official plugins.
+- **Template Helpers Reference** — Complete catalog of `fsy.*` Nunjucks helper functions.
 - **[Exceptions Catalog](reference/exceptions.md)** — Error classes, status codes, and payload formats.
 
 ---
@@ -90,5 +90,6 @@ Runnable, tested example projects demonstrating real-world patterns:
 ## 🤖 For AI Coding Agents
 
 If you are an autonomous coding assistant or LLM working on a Webspresso project:
-- Read **[`AGENTS.md`](../AGENTS.md)** for project-level architectural rules and zero regression policies.
-- Check **[`llms.txt`](../llms.txt)** for a machine-readable sitemap of this documentation.
+- Read [AGENTS.md](https://github.com/litepacks/webspresso/blob/current/AGENTS.md) for project-level architectural rules and zero regression policies.
+- Check [llms.txt](https://github.com/litepacks/webspresso/blob/current/llms.txt) for a machine-readable sitemap of this documentation.
+

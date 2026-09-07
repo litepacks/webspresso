@@ -99,7 +99,7 @@ npm install express-session connect-sqlite3
 
 ## 5. TypeScript Support
 
-Webspresso ships with first-class TypeScript definitions bundled directly in the package via [`index.d.ts`](../../index.d.ts). No external `@types/webspresso` package is required.
+Webspresso ships with first-class TypeScript definitions bundled directly in the package via `index.d.ts`. No external `@types/webspresso` package is required.
 
 To use TypeScript in your application:
 
