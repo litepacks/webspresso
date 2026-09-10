@@ -126,6 +126,7 @@ describe('Polar plugin integration', () => {
           userModel: 'User',
           plans: { pro_monthly: 'prod_test' },
           tierMapping: { pro: ['pro_monthly'], free: [] },
+          rateLimit: false,
         }),
       ],
     }));
