@@ -20,11 +20,12 @@ This `.agents/` customization root is organized into modular topic guides:
 10. **[Realtime Layer & Adapters](.agents/REALTIME.md)** — Framework-agnostic realtime layer (`core/realtime`), generic WebSocket, SSE, and Socket.IO adapters, subscription identity, backoff reconnect, and auth lifecycle.
 11. **[Email Plugin Guide](.agents/EMAIL.md)** — MJML template compilation, Nodemailer transport, DB delivery logs, Auth Email bridge, and Admin UI.
 12. **[Admin Panel Customization](.agents/ADMIN.md)** — Extending Mithril.js Admin Panel SPA (Custom pages `component.js`, custom field renderers, widgets, single & bulk actions).
-13. **[CLI Tooling & Commands](.agents/CLI.md)** — `webspresso dev`, `build`, `doctor`, `db:migrate`, `db:seed`, `favicon:generate`, `add:tailwind`, `skill`.
+13. **[CLI Tooling & Commands](.agents/CLI.md)** — `webspresso dev`, `build`, `doctor`, `db:migrate`, `db:seed`, `polar:migrate`, `favicon:generate`, `add:tailwind`, `skill`.
 14. **[Development & Testing Workflow](.agents/WORKFLOW.md)** — CLI commands, Vitest unit/integration testing, Playwright E2E tests, TypeScript type checking, and zero regression policy.
 15. **[Coding Standards & Conventions](.agents/CONVENTIONS.md)** — Zero external dependencies policy, strict function signature & schema verification, clean component separation, and log traceback inspection rules.
 16. **[Background Job Queue](.agents/QUEUE.md)** — In-Memory, Knex Database, and Distributed Redis queue adapters, job auto-discovery (`jobs/`), retries, and graceful draining.
 17. **[SSR Streaming & Chunked Transfer](.agents/STREAMING.md)** — Native HTTP chunked streaming (`res.renderStream()`), deferred data loader slots (`defer: { key: promise }`), and TTFB optimization.
+18. **Polar billing production checklist** — [docs/guides/polar-production-checklist.md](../docs/guides/polar-production-checklist.md) (env, webhooks, rate limits, external tier hooks, CSP). Plugin reference: [PLUGINS.md § polarPlugin](PLUGINS.md).
 
 ---
 

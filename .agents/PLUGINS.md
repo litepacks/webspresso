@@ -119,12 +119,51 @@ Transactional email compiler (MJML) & Nodemailer transport integration.
 
 ### 2.11 `polarPlugin` (`plugins/polar`)
 Polar.sh subscription billing — checkout, customer portal, webhooks, Customer State sync, tier columns. Zero extra deps (`crypto` + `fetch`).
-- **Options**: `{ db, userModel, plans, tierMapping, routes, urls, fields, hooks, syncMiddleware, rateLimit }`
-- **Rate limit**: Per-route limiters when `rateLimitPlugin` is loaded first (`rateLimit: true` default; checkout 5/min, webhook 120/min by IP)
+
+- **Import paths** (via `package.json` exports — no `/index.js` suffix):
+  ```js
+  const { polarPlugin, rateLimitPlugin } = require('webspresso/plugins');
+  const { quickAuth } = require('webspresso/core/auth');
+  const { createWebhookRawBodyMiddleware } = require('webspresso/plugins/polar/src/webhooks');
+  const { mergePolarCspDirectives } = require('webspresso/plugins/polar/src/urls');
+  ```
+- **Wiring** (rate limit **before** polar):
+  ```js
+  plugins: [
+    rateLimitPlugin(),
+    polarPlugin({ db, plans, tierMapping, rateLimit: true }),
+  ]
+  ```
+- **Options**: `{ db, userModel, userTable, plans, tierMapping, routes, urls, fields, hooks, syncMiddleware, syncBeforeCheckout, rateLimit, requireAuth }`
+- **Rate limit**: Per-route limiters when `rateLimitPlugin` is loaded first. Uses `express-rate-limit` v8 `ipKeyGenerator` (never raw `req.ip`). Defaults: webhook 120/min (IP), checkout 5/min, portal 10/min, status 60/min (user id or IP).
 - **Auto routes**: webhook (`POST`), checkout (`GET`/`POST`), portal (`GET`), status (`GET`)
+  - **POST checkout**: HTML `<form method="post">` — needs CSP `form-action 'self'` (included in `polarCspDirectives()`)
+  - **GET checkout**: simple `<a href="…">` link — fewer CSP constraints
+- **External tier tables** (when paid status is not on `users.tier`):
+  ```js
+  polarPlugin({
+    db,
+    syncBeforeCheckout: false,
+    hooks: {
+      async isPaidUser({ user, knex }) {
+        const sub = await knex('subscriptions').where('user_id', user.id).first();
+        return sub?.plan_tier === 'pro';
+      },
+      async onSubscriptionChange({ user, tier, knex, update }) {
+        await knex('subscriptions').where('user_id', user.id).update({ plan_tier: tier });
+        return knex('users').where('id', user.id).update(update);
+      },
+    },
+  })
+  ```
+  Legacy hook signature `(user, knex, config)` still supported when declared with 2+ parameters.
+- **Webhook user lookup**: `metadata.user_id` is sent as a **string** (nanoid/UUID safe; numeric ids also work).
+- **CSP**: Plugin `csp` export is **union-merged** by plugin manager (does not replace Helmet). `polarCspDirectives()` includes `'self'` + Polar domains. Use `mergePolarCspDirectives(existing)` for manual Helmet config.
 - **CLI**: `webspresso polar:migrate` — idempotent billing columns migration
-- **SDK** (`plugin.api`): `verifyPolarWebhook`, `syncPolarBillingForUser`, `getPolarCheckoutUrl`, `handlePolarWebhookEvent`, `generateMigration`, `parseEnv`
-- **Guide**: [docs/guides/polar-billing.md](../docs/guides/polar-billing.md)
+- **SDK** (`plugin.api`): `verifyPolarWebhook`, `syncPolarBillingForUser`, `syncBillingForAppUser`, `getPolarCheckoutUrl`, `getPolarPortalUrl`, `handlePolarWebhookEvent`, `resolveUserFromPolarData`, `generateMigration`, `parseEnv`, `polarCspDirectives`, `mergePolarCspDirectives`, `createWebhookRawBodyMiddleware`
+- **Guides**:
+  - [docs/guides/polar-billing.md](../docs/guides/polar-billing.md)
+  - [docs/guides/polar-production-checklist.md](../docs/guides/polar-production-checklist.md)
 
 ### 2.12 `auditLogPlugin` (`plugins/audit-log`)
 Admin mutation tracking and audit log audit history.

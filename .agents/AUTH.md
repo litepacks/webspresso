@@ -6,7 +6,7 @@
 
 ## 1. Overview
 
-Webspresso provides a zero-dependency **Dual Authentication** system (`webspresso/core/auth`):
+Webspresso provides a zero-dependency **Dual Authentication** system (`webspresso/core/auth` — resolved via package exports, no `/index.js` suffix required):
 - **Stateful Session + Cookie**: Used for browser SSR routes and Admin Panel (`/`, `/_admin`).
 - **Stateless HS256 JWT + Refresh Tokens**: Used for REST APIs, Mobile Apps, and SPAs (`/api/*`).
 

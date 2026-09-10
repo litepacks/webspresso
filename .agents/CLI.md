@@ -67,7 +67,24 @@ npx webspresso favicon:generate logo.png
 
 ---
 
-## 5. Agent Skill Scaffolding (`skill`)
+## 5. Polar Billing Migration (`polar:migrate`)
+
+Generates an idempotent Knex migration adding Polar billing columns to the user table:
+
+```bash
+npx webspresso polar:migrate
+
+# Flags:
+#   -c, --config <path>   Database config file
+#   -t, --table <name>    User table (default: users)
+#   -o, --output <path>   Custom migration output path
+```
+
+Then run `npx webspresso db:migrate`. See [docs/guides/polar-production-checklist.md](../docs/guides/polar-production-checklist.md).
+
+---
+
+## 6. Agent Skill Scaffolding (`skill`)
 
 Scaffolds a localized `.agents/skills` entry:
 
@@ -77,7 +94,7 @@ npx webspresso skill --preset webspresso
 
 ---
 
-## 6. Interactive Service Runner (`service`, `service:run`)
+## 7. Interactive Service Runner (`service`, `service:run`)
 
 Test and run services interactively without starting the HTTP server:
 

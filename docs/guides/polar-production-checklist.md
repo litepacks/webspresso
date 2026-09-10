@@ -109,4 +109,5 @@ npm test -- tests/unit/package-exports.test.js tests/integration/polar-productio
 ## Related
 
 - [Polar billing guide](./polar-billing.md)
-- [Plugin README](../../plugins/polar/README.md)
+- [Plugin ecosystem reference](../reference/plugins.md)
+- [Plugin README (source)](https://github.com/litepacks/webspresso/blob/current/plugins/polar/README.md)

@@ -83,7 +83,7 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 - `rateLimitPlugin`: Named rate limiters (`express-rate-limit`).
 - `siteAnalyticsPlugin`: Self-hosted page view analytics and client JS error tracking.
 - `emailPlugin`: MJML template compilation & Nodemailer integration.
-- `polarPlugin`: Polar.sh subscription billing (checkout, portal, webhooks, Customer State sync).
+- `polarPlugin`: Polar.sh subscription billing (checkout, portal, webhooks, Customer State sync). Requires `rateLimitPlugin` before polar for rate limiters. Supports `hooks.isPaidUser`, `syncBeforeCheckout`, `syncBillingForAppUser`. See `docs/guides/polar-production-checklist.md`.
 - `auditLogPlugin`: Admin mutation audit logging.
 - `ormCacheAdminPlugin`: Cache inspection and invalidation dashboard.
 - `corsPlugin`: Zero-dependency Cross-Origin Resource Sharing handler.

@@ -40,3 +40,7 @@
 12. **Background Queue Engine Over External BullMQ or `setTimeout`**:
    - **NEVER** install `bullmq` / `agenda` or use unmanaged `setTimeout()` / `setInterval()` for background or deferred tasks.
    - **ALWAYS** place background job handlers in `jobs/` (e.g. `jobs/email/send.js`) and dispatch them reliably using `req.queue.dispatch('email.send', payload)` or `ctx.queue.dispatch()`. See [.agents/QUEUE.md](QUEUE.md).
+13. **Package Subpath Imports (NO manual `/index.js` suffix)**:
+   - **ALWAYS** use published `package.json` export paths: `require('webspresso/core/auth')`, `require('webspresso/core/orm')`, `require('webspresso/plugins/polar/src/webhooks')`.
+   - **NEVER** rely on deep relative paths from `node_modules/webspresso/...` or append `/index.js` unless documenting a pre-0.0.95 workaround.
+   - Smoke test: `tests/unit/package-exports.test.js`.
