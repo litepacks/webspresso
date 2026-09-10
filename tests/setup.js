@@ -48,6 +48,7 @@ function createMockResponse() {
   const res = {
     statusCode: 200,
     headers: {},
+    locals: {},
     body: null,
     _ended: false,
     

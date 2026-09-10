@@ -623,6 +623,8 @@ function createHelpers(ctx) {
       return (
         req?.res?.locals?.cspNonce ||
         req?.res?.locals?.nonce ||
+        res?.locals?.cspNonce ||
+        res?.locals?.nonce ||
         req?.cspNonce ||
         req?.nonce ||
         ''
