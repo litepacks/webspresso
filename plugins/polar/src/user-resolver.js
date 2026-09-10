@@ -113,7 +113,11 @@ async function resolveUserFromPolarData(data, knex, config) {
   const table = config.userTable;
 
   if (metadata.user_id) {
-    const user = await knex(table).where(f.id, Number(metadata.user_id)).first();
+    const uid = String(metadata.user_id).trim();
+    let user = await knex(table).where(f.id, uid).first();
+    if (!user && /^\d+$/.test(uid)) {
+      user = await knex(table).where(f.id, Number(uid)).first();
+    }
     if (user) return user;
   }
 

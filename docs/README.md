@@ -49,6 +49,7 @@ Task-focused guides for solving specific engineering problems:
 - **File Uploads** — Multipart upload handling, storage providers, and file validation.
 - **Email System** — MJML template compilation, Nodemailer transport, and delivery tracking.
 - **[Polar.sh Billing](guides/polar-billing.md)** — Subscription checkout, customer portal, webhooks, tier sync, and migration via `polarPlugin`.
+- **[Polar Production Checklist](guides/polar-production-checklist.md)** — Pre-launch env, webhook, rate limit, external tier hooks, and CSP checklist.
 
 ---
 

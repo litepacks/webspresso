@@ -5,6 +5,7 @@ const { getPolarCheckoutUrl } = require('./checkout');
 const { getPolarPortalUrl } = require('./portal');
 const { syncPolarBillingForUser } = require('./sync');
 const { userHasProTier } = require('./user-resolver');
+const { userIsPaid } = require('./billing-hooks');
 
 function resolveKnex(db) {
   return db?.knex || (typeof db?.raw === 'function' ? db : null);
@@ -81,12 +82,12 @@ function createCheckoutHandler(config) {
       if (knex) {
         const dbUser = await knex(config.userTable).where(f.id, req.user[f.id] || req.user.id).first();
         if (dbUser) user = dbUser;
-        if (config.accessToken) {
+        if (config.accessToken && config.syncBeforeCheckout) {
           user = await syncPolarBillingForUser(user, knex, config);
         }
       }
 
-      if (userHasProTier(user, config)) {
+      if (await userIsPaid(user, knex, config)) {
         const alreadyUrl = config.urls.alreadySubscribed.startsWith('http')
           ? config.urls.alreadySubscribed
           : config.urls.alreadySubscribed;

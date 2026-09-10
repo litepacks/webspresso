@@ -12,6 +12,7 @@ const { verifyPolarWebhook, handlePolarWebhookEvent, createWebhookRawBodyMiddlew
 const { getPolarCheckoutUrl } = require('./src/checkout');
 const { getPolarPortalUrl } = require('./src/portal');
 const { syncPolarBillingForUser } = require('./src/sync');
+const { syncBillingForAppUser } = require('./src/billing-hooks');
 const {
   resolveUserFromPolarData,
   buildCheckoutMetadata,
@@ -24,6 +25,7 @@ const {
   isValidPortalRedirectUrl,
   extractCheckoutUrlFromResponse,
   polarCspDirectives,
+  mergePolarCspDirectives,
 } = require('./src/urls');
 const { generatePolarMigration } = require('./src/migration');
 const { polarSyncMiddleware } = require('./src/middleware');
@@ -66,6 +68,8 @@ function polarPlugin(options = {}) {
     getPolarCheckoutUrl: (params) => getPolarCheckoutUrl({ ...params, config: runtimeConfig }),
     getPolarPortalUrl: (user, baseUrl) => getPolarPortalUrl(user, baseUrl, runtimeConfig),
     syncPolarBillingForUser: (user, knex) => syncPolarBillingForUser(user, knex, runtimeConfig),
+    /** Dashboard/page-load sync — optional per-call hooks override */
+    syncBillingForAppUser: (user, knex, opts) => syncBillingForAppUser(user, knex, runtimeConfig, opts),
     handlePolarWebhookEvent: (event, knex, hooks) => handlePolarWebhookEvent(event, knex, runtimeConfig, hooks),
     resolveUserFromPolarData: (data, knex) => resolveUserFromPolarData(data, knex, runtimeConfig),
     extractCheckoutUrlFromResponse: (data) => extractCheckoutUrlFromResponse(data, runtimeConfig.sandbox),
@@ -78,6 +82,7 @@ function polarPlugin(options = {}) {
     generateMigration: (opts) => generatePolarMigration({ ...opts, fields: runtimeConfig.fields }),
     polarSyncMiddleware: (opts) => polarSyncMiddleware(runtimeConfig, opts),
     polarCspDirectives,
+    mergePolarCspDirectives,
     createWebhookRawBodyMiddleware,
     registerNunjucksFilters,
     dateLabel,
@@ -89,7 +94,7 @@ function polarPlugin(options = {}) {
 
   return {
     name: 'polar',
-    version: '1.0.0',
+    version: '1.0.1',
     description: 'Polar.sh subscription billing — checkout, portal, webhooks, and tier sync',
 
     csp: polarCspDirectives(),

@@ -175,4 +175,8 @@ function rateLimitPlugin(options = {}) {
   return plugin;
 }
 
-module.exports = { rateLimitPlugin };
+module.exports = {
+  rateLimitPlugin,
+  loadPeer,
+  resolveLimiterConfig,
+};

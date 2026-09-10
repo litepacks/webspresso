@@ -67,6 +67,8 @@ function resolvePolarConfig(options = {}) {
     hooks: options.hooks || {},
     requireAuth: options.requireAuth || null,
     syncMiddleware: options.syncMiddleware || null,
+    /** Sync from Polar API before checkout redirect (default true). Set false to skip. */
+    syncBeforeCheckout: options.syncBeforeCheckout !== false,
     rateLimit: options.rateLimit !== undefined ? options.rateLimit : true,
     env,
     accessToken: options.accessToken || env.POLAR_ACCESS_TOKEN || null,

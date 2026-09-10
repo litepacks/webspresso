@@ -1,36 +1,86 @@
 'use strict';
 
-const DEFAULT_RATE_LIMITS = {
-  webhook: {
-    limit: 120,
-    windowMs: 60_000,
-    message: { error: 'Too many webhook requests' },
-  },
-  checkout: {
-    limit: 5,
-    windowMs: 60_000,
-    message: { error: 'Too many checkout attempts. Please try again later.' },
-    keyGenerator: (req) => `polar:checkout:${req.user?.id ?? req.ip}`,
-  },
-  portal: {
-    limit: 10,
-    windowMs: 60_000,
-    message: { error: 'Too many portal requests. Please try again later.' },
-    keyGenerator: (req) => `polar:portal:${req.user?.id ?? req.ip}`,
-  },
-  status: {
-    limit: 60,
-    windowMs: 60_000,
-    message: { error: 'Too many billing status requests' },
-    keyGenerator: (req) => `polar:status:${req.user?.id ?? req.ip}`,
-  },
-};
+const { loadPeer } = require('../../rate-limit/index.js');
+
+const DEFAULT_IPV6_SUBNET = 56;
+
+/**
+ * @param {Function} ipKeyGenerator
+ * @param {string} prefix
+ */
+function polarIpKey(ipKeyGenerator, prefix) {
+  return (req) => `${prefix}:${ipKeyGenerator(req.ip, DEFAULT_IPV6_SUBNET)}`;
+}
+
+/**
+ * Prefer authenticated user id; fall back to IPv6-safe IP key (express-rate-limit v8).
+ * @param {Function} ipKeyGenerator
+ * @param {string} prefix
+ */
+function polarUserOrIpKey(ipKeyGenerator, prefix) {
+  const ipKey = polarIpKey(ipKeyGenerator, prefix);
+  return (req) => (req.user?.id != null ? `${prefix}:${req.user.id}` : ipKey(req));
+}
+
+/**
+ * @param {Function} ipKeyGenerator
+ */
+function buildDefaultRateLimits(ipKeyGenerator) {
+  return {
+    webhook: {
+      limit: 120,
+      windowMs: 60_000,
+      message: { error: 'Too many webhook requests' },
+      keyGenerator: polarIpKey(ipKeyGenerator, 'polar:webhook'),
+    },
+    checkout: {
+      limit: 5,
+      windowMs: 60_000,
+      message: { error: 'Too many checkout attempts. Please try again later.' },
+      keyGenerator: polarUserOrIpKey(ipKeyGenerator, 'polar:checkout'),
+    },
+    portal: {
+      limit: 10,
+      windowMs: 60_000,
+      message: { error: 'Too many portal requests. Please try again later.' },
+      keyGenerator: polarUserOrIpKey(ipKeyGenerator, 'polar:portal'),
+    },
+    status: {
+      limit: 60,
+      windowMs: 60_000,
+      message: { error: 'Too many billing status requests' },
+      keyGenerator: polarUserOrIpKey(ipKeyGenerator, 'polar:status'),
+    },
+  };
+}
+
+/** @type {ReturnType<typeof buildDefaultRateLimits>|null} */
+let cachedDefaults = null;
+
+function loadIpKeyGenerator() {
+  try {
+    const { ipKeyGenerator } = loadPeer();
+    return ipKeyGenerator;
+  } catch {
+    return null;
+  }
+}
+
+function getDefaultRateLimits() {
+  const ipKeyGenerator = loadIpKeyGenerator();
+  if (!ipKeyGenerator) {
+    return null;
+  }
+  if (!cachedDefaults) {
+    cachedDefaults = buildDefaultRateLimits(ipKeyGenerator);
+  }
+  return cachedDefaults;
+}
 
 /**
  * Build per-route limiter middleware from rateLimitPlugin factory.
  * @param {Object} ctx - plugin onRoutesReady context
  * @param {import('./config').PolarConfig} config
- * @returns {{ webhook?: Function, checkout?: Function, portal?: Function, status?: Function }}
  */
 function resolvePolarRateLimiters(ctx, config) {
   const rlOpt = config.rateLimit;
@@ -48,6 +98,14 @@ function resolvePolarRateLimiters(ctx, config) {
     return {};
   }
 
+  const defaults = getDefaultRateLimits();
+  if (!defaults) {
+    console.warn(
+      '[polar] rateLimit is enabled but express-rate-limit >= 8 is not installed — skipping polar rate limiters'
+    );
+    return {};
+  }
+
   const overrides = rlOpt === true ? {} : (rlOpt || {});
   const routes = ['webhook', 'checkout', 'portal', 'status'];
   const out = {};
@@ -55,7 +113,7 @@ function resolvePolarRateLimiters(ctx, config) {
   for (const route of routes) {
     if (overrides[route] === false) continue;
     const opts = {
-      ...DEFAULT_RATE_LIMITS[route],
+      ...defaults[route],
       ...(typeof overrides[route] === 'object' ? overrides[route] : {}),
     };
     out[route] = factory(opts);
@@ -65,6 +123,16 @@ function resolvePolarRateLimiters(ctx, config) {
 }
 
 module.exports = {
-  DEFAULT_RATE_LIMITS,
+  loadIpKeyGenerator,
+  polarIpKey,
+  polarUserOrIpKey,
+  buildDefaultRateLimits,
+  getDefaultRateLimits,
   resolvePolarRateLimiters,
+  /** @deprecated use getDefaultRateLimits() */
+  get DEFAULT_RATE_LIMITS() {
+    return getDefaultRateLimits() || buildDefaultRateLimits(
+      loadIpKeyGenerator() || ((ip) => String(ip))
+    );
+  },
 };

@@ -92,6 +92,7 @@ function extractCheckoutUrlFromResponse(data, sandbox = false) {
 }
 
 function polarCspDirectives(opts = {}) {
+  const self = "'self'";
   const domains = opts.domains || [
     'https://buy.polar.sh',
     'https://sandbox-buy.polar.sh',
@@ -101,8 +102,30 @@ function polarCspDirectives(opts = {}) {
     'https://sandbox-api.polar.sh',
   ];
   return {
-    formAction: domains,
-    connectSrc: domains,
+    formAction: [self, ...domains],
+    connectSrc: [self, ...domains],
+  };
+}
+
+/**
+ * Union Polar CSP sources into an existing Helmet/plugin CSP config (does not replace).
+ * @param {Object} [existing]
+ * @param {Object} [opts] - passed to polarCspDirectives
+ */
+function mergePolarCspDirectives(existing = {}, opts = {}) {
+  const polar = polarCspDirectives(opts);
+  const mergeList = (key) => {
+    const base = existing[key];
+    const items = [
+      ...(Array.isArray(base) ? base : base ? [base] : []),
+      ...polar[key],
+    ];
+    return [...new Set(items)];
+  };
+  return {
+    ...existing,
+    formAction: mergeList('formAction'),
+    connectSrc: mergeList('connectSrc'),
   };
 }
 
@@ -114,4 +137,5 @@ module.exports = {
   isValidPortalRedirectUrl,
   extractCheckoutUrlFromResponse,
   polarCspDirectives,
+  mergePolarCspDirectives,
 };

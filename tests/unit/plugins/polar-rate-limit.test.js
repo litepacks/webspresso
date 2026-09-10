@@ -2,8 +2,14 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-const { resolvePolarRateLimiters, DEFAULT_RATE_LIMITS } = require('../../../plugins/polar/src/rate-limit');
+const {
+  resolvePolarRateLimiters,
+  getDefaultRateLimits,
+  polarIpKey,
+  loadIpKeyGenerator,
+} = require('../../../plugins/polar/src/rate-limit');
 const { resolvePolarConfig } = require('../../../plugins/polar/src/config');
+const { rateLimit } = require('express-rate-limit');
 
 describe('polar rate limit integration', () => {
   it('returns empty limiters when rateLimit is disabled', () => {
@@ -42,7 +48,23 @@ describe('polar rate limit integration', () => {
     expect(typeof out.portal).toBe('function');
     expect(out.status).toBeUndefined();
 
-    expect(created.find((o) => o.limit === DEFAULT_RATE_LIMITS.webhook.limit)).toBeTruthy();
+    const defaults = getDefaultRateLimits();
+    expect(defaults).toBeTruthy();
+    expect(created.find((o) => o.limit === defaults.webhook.limit)).toBeTruthy();
     expect(created.find((o) => o.limit === 2)).toBeTruthy();
+  });
+
+  it('polar key generators use ipKeyGenerator (express-rate-limit v8 safe)', () => {
+    const ipKeyGenerator = loadIpKeyGenerator();
+    expect(ipKeyGenerator).toBeTypeOf('function');
+
+    const keyGen = polarIpKey(ipKeyGenerator, 'polar:webhook');
+    expect(keyGen({ ip: '203.0.113.1' })).toMatch(/^polar:webhook:/);
+
+    expect(() => rateLimit({
+      windowMs: 60_000,
+      limit: 5,
+      keyGenerator: keyGen,
+    })).not.toThrow();
   });
 });

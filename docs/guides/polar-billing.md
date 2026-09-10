@@ -186,7 +186,14 @@ polarPlugin({
     id: 'id',
   },
 
+  syncBeforeCheckout: true,     // Polar API sync before checkout redirect (default true)
+
   hooks: {
+    /** External tier tables: override checkout "already subscribed" check */
+    async isPaidUser(user, knex, config) {
+      const sub = await knex('subscriptions').where('user_id', user.id).first();
+      return sub?.plan_tier === 'pro';
+    },
     onSubscriptionChange({ user, tier, polarStatus, subscription, knex, update }) {
       // Custom side effects; default updates user row
       return knex('users').where('id', user.id).update(update);
@@ -240,6 +247,7 @@ const polar = polarPlugin({ db });
 
 polar.api.verifyPolarWebhook(rawPayload, headers, secret);
 polar.api.syncPolarBillingForUser(user, knex);
+polar.api.syncBillingForAppUser(user, knex, { hooks }); // dashboard loaders
 polar.api.getPolarCheckoutUrl({ user, plan: 'pro_monthly', baseUrl });
 polar.api.getPolarPortalUrl(user, baseUrl);
 polar.api.handlePolarWebhookEvent(event, knex);
@@ -270,21 +278,24 @@ Without this, the handler falls back to `JSON.stringify(req.body)` after Express
 
 ## 9. CSP (Helmet)
 
-The plugin exports CSP directives for checkout form redirects:
+`polarCspDirectives()` includes `'self'` plus Polar checkout domains so local forms (login, register, billing POST) are not blocked.
 
 ```javascript
+const { mergePolarCspDirectives } = require('webspresso/plugins/polar/src/urls');
+
 createApp({
   helmet: {
     contentSecurityPolicy: {
-      directives: {
-        ...polarPlugin({ db }).api.polarCspDirectives(),
-      },
+      directives: mergePolarCspDirectives({
+        formAction: ["'self'"],
+        scriptSrc: ["'self'"],
+      }),
     },
   },
 });
 ```
 
-The plugin object also includes a `csp` property merged automatically by the plugin manager.
+The plugin object also includes a `csp` property — the plugin manager **unions** sources per directive (does not replace your Helmet config).
 
 ---
 

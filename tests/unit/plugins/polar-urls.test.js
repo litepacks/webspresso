@@ -6,11 +6,14 @@ const {
   isValidCheckoutRedirectUrl,
   isValidPortalRedirectUrl,
   extractCheckoutUrlFromResponse,
+  polarCspDirectives,
+  mergePolarCspDirectives,
 } = require('../../../plugins/polar/src/urls');
 const {
   buildCheckoutMetadata,
   isProSubscriptionStatus,
   pickBestActiveSubscription,
+  resolveUserFromPolarData,
 } = require('../../../plugins/polar/src/user-resolver');
 const { resolvePolarConfig } = require('../../../plugins/polar/src/config');
 
@@ -68,6 +71,34 @@ describe('Polar metadata and subscription helpers', () => {
     expect(isProSubscriptionStatus('trialing')).toBe(true);
     expect(isProSubscriptionStatus('incomplete')).toBe(false);
     expect(isProSubscriptionStatus('canceled')).toBe(false);
+  });
+
+  it('polarCspDirectives always includes self for local forms', () => {
+    const csp = polarCspDirectives();
+    expect(csp.formAction).toContain("'self'");
+    expect(csp.connectSrc).toContain("'self'");
+  });
+
+  it('mergePolarCspDirectives unions with existing helmet config', () => {
+    const merged = mergePolarCspDirectives({ formAction: ["'self'"], scriptSrc: ["'self'"] });
+    expect(merged.formAction).toContain("'self'");
+    expect(merged.formAction.some((s) => s.includes('polar.sh'))).toBe(true);
+    expect(merged.scriptSrc).toEqual(["'self'"]);
+  });
+
+  it('resolveUserFromPolarData finds nanoid string user_id', async () => {
+    const nanoid = 'V1StGXR8_Z5jdHi6B-myT';
+    const knex = (table) => ({
+      where: (_col, val) => ({
+        first: async () => (val === nanoid ? { id: nanoid, tier: 'free' } : null),
+      }),
+    });
+    const user = await resolveUserFromPolarData(
+      { metadata: { user_id: nanoid } },
+      knex,
+      config,
+    );
+    expect(user?.id).toBe(nanoid);
   });
 
   it('omits empty username/public_id from checkout metadata', () => {

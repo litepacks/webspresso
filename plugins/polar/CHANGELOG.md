@@ -1,5 +1,23 @@
 # Changelog — `webspresso/plugins/polar`
 
+## 1.0.1 — Unreleased
+
+### Fixed
+
+- **package exports**: `webspresso/core/auth`, `webspresso/plugins/polar`, and `webspresso/plugins/polar/src/*` resolve without manual `/index.js` suffix
+- **Rate limiting**: Polar limiters use `express-rate-limit` v8 `ipKeyGenerator` (fixes production startup `ValidationError`)
+- **Webhook user lookup**: `metadata.user_id` supports nanoid/UUID string primary keys
+- **CSP**: `polarCspDirectives()` includes `'self'` in `formAction` and `connectSrc`
+
+### Added
+
+- `hooks.isPaidUser({ user, knex, config })` for external tier tables (legacy `(user, knex, config)` still supported)
+- `syncBeforeCheckout` option (default `true`)
+- `polar.api.syncBillingForAppUser(user, knex, { hooks })` for dashboard page-load sync
+- `mergePolarCspDirectives(existing)` for Helmet CSP union merge
+- Production checklist: `docs/guides/polar-production-checklist.md`
+- Integration tests: rate-limit startup, IPv6 key validation, `isPaidUser` hook
+
 ## 1.0.0 — 2026-09-10
 
 First production-ready release.

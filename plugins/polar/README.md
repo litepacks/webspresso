@@ -58,9 +58,18 @@ That's it — routes, webhooks, checkout, portal, and status API are auto-mounte
 | Method | Path | Auth | Behavior |
 |--------|------|------|----------|
 | POST | `/api/v1/polar/webhook` | HMAC signature | Process Polar events |
-| GET/POST | `/settings/billing/checkout` | session/JWT | Sync → Polar checkout redirect |
+| GET/POST | `/settings/billing/checkout` | session/JWT | Sync → Polar checkout redirect (see POST vs GET below) |
 | GET | `/settings/billing/portal` | session/JWT | Customer portal redirect |
 | GET | `/api/v1/billing/status` | session/JWT | Sync + JSON billing status |
+
+## Checkout: POST vs GET
+
+Both `/settings/billing/checkout` methods run the same handler:
+
+| Method | Typical use | CSP note |
+|--------|-------------|----------|
+| **POST** | `<form method="post" action="…">` | Requires `form-action 'self'` (included in `polarCspDirectives()`) |
+| **GET** | `<a href="…">Upgrade</a>` | No form submission — simpler when CSP is strict |
 
 ## Template usage
 
@@ -81,6 +90,7 @@ That's it — routes, webhooks, checkout, portal, and status API are auto-mounte
 const polar = polarPlugin({ db });
 polar.api.verifyPolarWebhook(raw, headers, secret);
 polar.api.syncPolarBillingForUser(user, knex);
+polar.api.syncBillingForAppUser(user, knex, { hooks }); // dashboard page-load sync
 polar.api.getPolarCheckoutUrl({ user, plan: 'pro_monthly', baseUrl });
 polar.api.handlePolarWebhookEvent(event, knex);
 polar.api.generateMigration();
@@ -118,12 +128,20 @@ polarPlugin({ db, rateLimit: { checkout: { limit: 3 } } }); // override
 
 ## Optional hooks
 
+Billing columns on `users` work out of the box. If your paid tier lives elsewhere (e.g. `subscriptions.plan_tier`), use hooks:
+
 ```js
 polarPlugin({
   db,
+  syncBeforeCheckout: false, // skip Polar API sync before redirect (default: true)
   hooks: {
+    /** Override paid check at checkout (default: users.tier vs tierMapping) */
+    async isPaidUser({ user, knex }) {
+      const sub = await knex('subscriptions').where('user_id', user.id).first();
+      return sub?.plan_tier === 'pro';
+    },
     onSubscriptionChange({ user, tier, polarStatus, subscription, knex, update }) {
-      // Custom tier logic (default: updates users.* polar columns)
+      // Sync external tables when webhooks fire
       return knex('users').where('id', user.id).update(update);
     },
   },
@@ -133,23 +151,28 @@ polarPlugin({
 });
 ```
 
+Checkout metadata sends `user_id` as a string (supports nanoid/UUID primary keys, not only integers).
+
 ## CSP (Helmet)
 
+`polarCspDirectives()` always includes `'self'` so local login/register/checkout forms keep working. Polar domains are added for hosted checkout redirects.
+
 ```js
-const { polarCspDirectives } = require('webspresso/plugins/polar/src/urls');
+const { mergePolarCspDirectives } = require('webspresso/plugins/polar/src/urls');
 
 createApp({
   helmet: {
     contentSecurityPolicy: {
-      directives: {
-        ...polarCspDirectives(),
-      },
+      directives: mergePolarCspDirectives({
+        formAction: ["'self'"],
+        scriptSrc: ["'self'"],
+      }),
     },
   },
 });
 ```
 
-Or rely on the plugin's built-in `csp` export (auto-merged by plugin manager).
+Or rely on the plugin's built-in `csp` export — the plugin manager **unions** sources per directive (does not replace your Helmet config).
 
 ## Non-goals (v1)
 
