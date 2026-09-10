@@ -1,3 +1,8 @@
+---
+title: Ambient Transaction Propagation
+description: AsyncLocalStorage-based ACID transaction binding across nested services and repositories.
+---
+
 # Ambient Transaction Propagation
 
 > **Purpose:** Understanding how Webspresso uses Node.js `AsyncLocalStorage` to automatically propagate ACID database transactions across services and ORM repositories without manual `trx` passing.

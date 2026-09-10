@@ -117,20 +117,29 @@ Self-hosted privacy-focused page view analytics and client error tracking.
 Transactional email compiler (MJML) & Nodemailer transport integration.
 - **Options**: `{ transport, from: 'noreply@example.com', templatesDir }`
 
-### 2.11 `auditLogPlugin` (`plugins/audit-log`)
+### 2.11 `polarPlugin` (`plugins/polar`)
+Polar.sh subscription billing — checkout, customer portal, webhooks, Customer State sync, tier columns. Zero extra deps (`crypto` + `fetch`).
+- **Options**: `{ db, userModel, plans, tierMapping, routes, urls, fields, hooks, syncMiddleware, rateLimit }`
+- **Rate limit**: Per-route limiters when `rateLimitPlugin` is loaded first (`rateLimit: true` default; checkout 5/min, webhook 120/min by IP)
+- **Auto routes**: webhook (`POST`), checkout (`GET`/`POST`), portal (`GET`), status (`GET`)
+- **CLI**: `webspresso polar:migrate` — idempotent billing columns migration
+- **SDK** (`plugin.api`): `verifyPolarWebhook`, `syncPolarBillingForUser`, `getPolarCheckoutUrl`, `handlePolarWebhookEvent`, `generateMigration`, `parseEnv`
+- **Guide**: [docs/guides/polar-billing.md](../docs/guides/polar-billing.md)
+
+### 2.12 `auditLogPlugin` (`plugins/audit-log`)
 Admin mutation tracking and audit log audit history.
 - **Options**: `{ db, retainDays: 90 }`
 
-### 2.12 `ormCacheAdminPlugin` (`plugins/orm-cache-admin`)
+### 2.13 `ormCacheAdminPlugin` (`plugins/orm-cache-admin`)
 ORM Cache inspection and invalidation dashboard.
 
-### 2.13 `schemaExplorerPlugin` (`plugins/schema-explorer`)
+### 2.14 `schemaExplorerPlugin` (`plugins/schema-explorer`)
 Interactive JSON schema & OpenAPI route specification generator.
 
-### 2.14 `swaggerPlugin` (`plugins/swagger`)
+### 2.15 `swaggerPlugin` (`plugins/swagger`)
 Interactive OpenAPI 3.0 Swagger UI documentation.
 
-### 2.15 `realtimePlugin` (`plugins/realtime`, `core/realtime`)
+### 2.16 `realtimePlugin` (`plugins/realtime`, `core/realtime`)
 Framework-agnostic, plugin-based, and adapter-driven Realtime layer supporting WebSocket, SSE, Socket.IO, and distributed Redis Pub/Sub transports with zero SSR execution hazards.
 
 - **Architecture**:
@@ -220,7 +229,7 @@ app.realtime.destroy();
 await app.realtime.reauthenticate();
 ```
 
-### 2.16 `restResourcePlugin` (`plugins/rest-resources`)
+### 2.17 `restResourcePlugin` (`plugins/rest-resources`)
 Zero-boilerplate RESTful CRUD endpoint generator directly from Knex ORM models, complete with relationship eager-loading (`?include=...`), pagination, sorting, column filtering, soft-delete scopes, and recursive hidden field sanitization.
 
 - **Options**:

@@ -160,4 +160,87 @@ describe('MCP Transports & Security', () => {
       expect(status).toBe(403);
     });
   });
+
+  describe('SSE Transport Session Lifecycle', () => {
+    it('should register session and clean it up when request closes', () => {
+      const { EventEmitter } = require('events');
+      const { mountSseTransport } = require('../../../plugins/mcp/transports/sse');
+      const server = new McpServer();
+      const routes = {};
+      const app = {
+        get: (path, handler) => { routes[path] = handler; },
+        post: (path, handler) => { routes[path] = handler; },
+      };
+
+      const { sessions } = mountSseTransport({ app, server, path: '/_mcp' });
+      expect(routes['/_mcp/sse']).toBeDefined();
+
+      const req = new EventEmitter();
+      const res = new EventEmitter();
+      res.writeHead = () => {};
+      res.write = () => true;
+
+      routes['/_mcp/sse'](req, res);
+      expect(sessions.size).toBe(1);
+      const sessionId = Array.from(sessions.keys())[0];
+
+      // Client disconnect
+      req.emit('close');
+      expect(sessions.size).toBe(0);
+      expect(sessions.has(sessionId)).toBe(false);
+    });
+
+    it('should clean up session when response closes or finishes', () => {
+      const { EventEmitter } = require('events');
+      const { mountSseTransport } = require('../../../plugins/mcp/transports/sse');
+      const server = new McpServer();
+      const routes = {};
+      const app = {
+        get: (path, handler) => { routes[path] = handler; },
+        post: (path, handler) => { routes[path] = handler; },
+      };
+
+      const { sessions } = mountSseTransport({ app, server, path: '/_mcp' });
+
+      const req = new EventEmitter();
+      const res = new EventEmitter();
+      res.writeHead = () => {};
+      res.write = () => true;
+
+      routes['/_mcp/sse'](req, res);
+      expect(sessions.size).toBe(1);
+
+      // Response close
+      res.emit('close');
+      expect(sessions.size).toBe(0);
+    });
+
+    it('should clean up session if send fails due to broken connection', () => {
+      const { EventEmitter } = require('events');
+      const { mountSseTransport } = require('../../../plugins/mcp/transports/sse');
+      const server = new McpServer();
+      const routes = {};
+      const app = {
+        get: (path, handler) => { routes[path] = handler; },
+        post: (path, handler) => { routes[path] = handler; },
+      };
+
+      const { sessions } = mountSseTransport({ app, server, path: '/_mcp' });
+
+      const req = new EventEmitter();
+      const res = new EventEmitter();
+      res.writeHead = () => {};
+      res.write = () => true;
+
+      routes['/_mcp/sse'](req, res);
+      expect(sessions.size).toBe(1);
+      const session = Array.from(sessions.values())[0];
+
+      // Make res.write throw on write (broken pipe)
+      res.write = () => { throw new Error('EPIPE: Broken pipe'); };
+      session.send({ jsonrpc: '2.0', id: 1, result: {} });
+
+      expect(sessions.size).toBe(0);
+    });
+  });
 });

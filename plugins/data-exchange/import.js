@@ -251,6 +251,13 @@ function createImportHandler(opts) {
           return res.status(400).json({ error: `Too many data rows (${objects.length}). Limit is ${maxRows}.` });
         }
 
+        const isAtomic =
+          req.query.atomic === 'true' ||
+          req.query.atomic === '1' ||
+          req.body?.atomic === 'true' ||
+          req.body?.atomic === true ||
+          opts?.atomic === true;
+
         const repo = db.getRepository(model.name);
         const summary = {
           success: true,
@@ -260,52 +267,82 @@ function createImportHandler(opts) {
           errors: [],
         };
 
-        for (const { rowNumber, data } of objects) {
-          try {
-            const payload = buildPayloadForRow(model, data, mode);
-            if (Object.keys(payload).length === 0) {
-              summary.failed++;
-              summary.errors.push({ row: rowNumber, message: 'No mappable columns' });
-              continue;
-            }
-
-            if (mode === 'insert') {
-              await repo.create(payload);
-              summary.created++;
-              continue;
-            }
-
-            const keyMeta = model.columns?.get ? model.columns.get(upsertKey) : undefined;
-            let keyVal;
+        const runRowProcessing = async (targetRepo) => {
+          for (const { rowNumber, data } of objects) {
             try {
-              keyVal = coerceCell(data[upsertKey], keyMeta, upsertKey);
+              const payload = buildPayloadForRow(model, data, mode);
+              if (Object.keys(payload).length === 0) {
+                summary.failed++;
+                const errMsg = 'No mappable columns';
+                summary.errors.push({ row: rowNumber, message: errMsg });
+                if (isAtomic) {
+                  throw new Error(`Row ${rowNumber}: ${errMsg}`);
+                }
+                continue;
+              }
+
+              if (mode === 'insert') {
+                await targetRepo.create(payload);
+                summary.created++;
+                continue;
+              }
+
+              const keyMeta = model.columns?.get ? model.columns.get(upsertKey) : undefined;
+              let keyVal;
+              try {
+                keyVal = coerceCell(data[upsertKey], keyMeta, upsertKey);
+              } catch (e) {
+                summary.failed++;
+                summary.errors.push({ row: rowNumber, message: e.message || 'Bad upsert key' });
+                if (isAtomic) throw e;
+                continue;
+              }
+
+              if (keyVal === undefined || keyVal === null) {
+                const insertPayload = { ...payload };
+                delete insertPayload[upsertKey];
+                await targetRepo.create(insertPayload);
+                summary.created++;
+                continue;
+              }
+
+              const existing = await targetRepo.findOne({ [upsertKey]: keyVal });
+              if (existing) {
+                const id = existing[model.primaryKey];
+                await targetRepo.update(id, payload);
+                summary.updated++;
+              } else {
+                await targetRepo.create({ ...payload, [upsertKey]: keyVal });
+                summary.created++;
+              }
             } catch (e) {
               summary.failed++;
-              summary.errors.push({ row: rowNumber, message: e.message || 'Bad upsert key' });
-              continue;
+              summary.errors.push({ row: rowNumber, message: e.message || String(e) });
+              if (isAtomic) {
+                throw e;
+              }
             }
-
-            if (keyVal === undefined || keyVal === null) {
-              const insertPayload = { ...payload };
-              delete insertPayload[upsertKey];
-              await repo.create(insertPayload);
-              summary.created++;
-              continue;
-            }
-
-            const existing = await repo.findOne({ [upsertKey]: keyVal });
-            if (existing) {
-              const id = existing[model.primaryKey];
-              await repo.update(id, payload);
-              summary.updated++;
-            } else {
-              await repo.create({ ...payload, [upsertKey]: keyVal });
-              summary.created++;
-            }
-          } catch (e) {
-            summary.failed++;
-            summary.errors.push({ row: rowNumber, message: e.message || String(e) });
           }
+        };
+
+        if (isAtomic && typeof db.transaction === 'function') {
+          try {
+            await db.transaction(async (trxContext) => {
+              const trxRepo = trxContext.getRepository ? trxContext.getRepository(model.name) : repo;
+              await runRowProcessing(trxRepo);
+            });
+          } catch (txErr) {
+            return res.status(400).json({
+              success: false,
+              created: 0,
+              updated: 0,
+              failed: objects.length,
+              error: `Atomic import rolled back: ${txErr.message}`,
+              errors: summary.errors,
+            });
+          }
+        } else {
+          await runRowProcessing(repo);
         }
 
         summary.success = summary.failed === 0;

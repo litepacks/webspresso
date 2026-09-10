@@ -169,6 +169,27 @@ describe('Data exchange plugin', () => {
     expect(again.name).toBe('New');
     expect(Boolean(again.active)).toBe(false);
   });
+
+  it('rolls back completely when atomic import encounters an error', async () => {
+    const cookie = await loginCookie();
+    const repo = db.getRepository('TestModel');
+
+    // Row 1 is valid, Row 2 has an invalid boolean for active column
+    const invalidCsv = 'name,email,active\nValid1,valid1@ex.com,1\nValid2,valid2@ex.com,not-a-bool\n';
+
+    const res = await request(app)
+      .post('/_admin/api/data-exchange/import/TestModel?mode=insert&atomic=true')
+      .set('Cookie', cookie)
+      .attach('file', Buffer.from(invalidCsv), 'rows.csv')
+      .expect(400);
+
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toContain('Atomic import rolled back');
+
+    // Verify Valid1 was NOT committed due to atomic rollback
+    const row = await repo.query().where('email', 'valid1@ex.com').first();
+    expect(row).toBeFalsy();
+  });
 });
 
 describe('Data exchange export with soft delete', () => {

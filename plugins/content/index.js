@@ -59,12 +59,14 @@ function contentPlugin(options = {}) {
     if (!inlineEdit || !isAdminSession(req, adminPath)) {
       return html;
     }
+    const nonce = req.res?.locals?.cspNonce || req.res?.locals?.nonce || req.cspNonce || '';
+    const nonceAttr = nonce ? ` nonce="${nonce}"` : '';
     const configScript =
-      '<script>window.__WS_CONTENT__=' +
+      `<script${nonceAttr}>window.__WS_CONTENT__=` +
       JSON.stringify({ enabled: true, adminPath }) +
       ';</script>';
-    const styleTag = '<style id="ws-content-inline-css">' + INLINE_EDIT_CSS + '</style>';
-    const scriptTag = '<script id="ws-content-inline-edit">' + INLINE_EDIT_JS + '</script>';
+    const styleTag = `<style id="ws-content-inline-css"${nonceAttr}>` + INLINE_EDIT_CSS + '</style>';
+    const scriptTag = `<script id="ws-content-inline-edit"${nonceAttr}>` + INLINE_EDIT_JS + '</script>';
     const bundle = configScript + styleTag + scriptTag;
     if (html.includes('</body>')) {
       return html.replace('</body>', bundle + '</body>');

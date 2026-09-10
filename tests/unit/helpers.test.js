@@ -282,6 +282,38 @@ describe('helpers.js', () => {
         expect(content).toContain('.test { color: red; }');
         expect(content).toContain('webspresso-injected-styles');
       });
+
+      it('should inject nonce attribute when provided or available on context', () => {
+        const injector = getScriptInjector();
+        injector.addStyle('.test { color: blue; }');
+        injector.addHead('<script>console.log("head")</script>');
+
+        mockCtx.res.locals.cspNonce = 'test-csp-nonce-123';
+        const content = helpers.injectHead();
+        expect(content).toContain('<style id="webspresso-injected-styles" nonce="test-csp-nonce-123">');
+        expect(content).toContain('<script nonce="test-csp-nonce-123">console.log("head")</script>');
+      });
+    });
+
+    describe('nonce', () => {
+      it('should return empty string when no nonce is set', () => {
+        expect(helpers.nonce()).toBe('');
+      });
+
+      it('should return nonce from res.locals.cspNonce', () => {
+        mockCtx.res.locals.cspNonce = 'nonce-from-cspNonce';
+        expect(helpers.nonce()).toBe('nonce-from-cspNonce');
+      });
+
+      it('should return nonce from res.locals.nonce', () => {
+        mockCtx.res.locals.nonce = 'nonce-from-nonce';
+        expect(helpers.nonce()).toBe('nonce-from-nonce');
+      });
+
+      it('should return nonce from req.cspNonce', () => {
+        mockCtx.req.cspNonce = 'nonce-from-req';
+        expect(helpers.nonce()).toBe('nonce-from-req');
+      });
     });
 
     describe('injectBody', () => {
@@ -295,6 +327,23 @@ describe('helpers.js', () => {
         
         const content = helpers.injectBody();
         expect(content).toContain('<div id="modal"></div>');
+      });
+
+      it('should inject nonce attribute into scripts when available', () => {
+        const injector = getScriptInjector();
+        injector.addBody('<script>console.log("body")</script>');
+
+        mockCtx.res.locals.cspNonce = 'body-csp-nonce';
+        const content = helpers.injectBody();
+        expect(content).toContain('<script nonce="body-csp-nonce">console.log("body")</script>');
+      });
+
+      it('should accept explicit nonce option', () => {
+        const injector = getScriptInjector();
+        injector.addBody('<script>console.log("body")</script>');
+
+        const content = helpers.injectBody({ nonce: 'explicit-nonce' });
+        expect(content).toContain('<script nonce="explicit-nonce">console.log("body")</script>');
       });
     });
 
@@ -366,6 +415,11 @@ describe('helpers.js', () => {
         expect(content.indexOf('high')).toBeLessThan(content.indexOf('medium'));
         expect(content.indexOf('medium')).toBeLessThan(content.indexOf('low'));
       });
+      it('should inject nonce attribute when requested', () => {
+        injector.addHead('<script src="/app.js"></script>');
+        const content = injector.getHeadContent({ nonce: 'head-nonce' });
+        expect(content).toContain('<script nonce="head-nonce" src="/app.js"></script>');
+      });
     });
 
     describe('addBody', () => {
@@ -375,6 +429,12 @@ describe('helpers.js', () => {
         const content = injector.getBodyContent();
         expect(content).toContain('<script src="/app.js"></script>');
       });
+
+      it('should inject nonce attribute when requested', () => {
+        injector.addBody('<script>initApp();</script>');
+        const content = injector.getBodyContent({ nonce: 'body-nonce' });
+        expect(content).toBe('<script nonce="body-nonce">initApp();</script>');
+      });
     });
 
     describe('addStyle', () => {
@@ -383,6 +443,12 @@ describe('helpers.js', () => {
         
         const content = injector.getStylesContent();
         expect(content).toContain('body { margin: 0; }');
+      });
+
+      it('should inject nonce attribute when requested', () => {
+        injector.addStyle('<style>.theme { background: black; }</style>');
+        const content = injector.getStylesContent({ nonce: 'style-nonce' });
+        expect(content).toContain('<style nonce="style-nonce">.theme { background: black; }</style>');
       });
     });
 

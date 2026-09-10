@@ -17,7 +17,9 @@ const { Readable } = require('stream');
  * @returns {Readable}
  */
 function createHtmlStream(options = {}) {
-  const { env, templatePath, context = {}, defer = {} } = options;
+  const { env, templatePath, context = {}, defer = {}, nonce: optionNonce } = options;
+  const nonce = optionNonce || context.nonce || context.cspNonce || '';
+  const scriptTag = nonce ? `<script nonce="${nonce}">` : '<script>';
 
   if (!env) {
     throw new Error('createHtmlStream requires a valid Nunjucks environment in options.env');
@@ -63,6 +65,9 @@ function createHtmlStream(options = {}) {
 
         try {
           const resolvedData = await promise;
+          if (stream.destroyed) {
+            return;
+          }
           let slotHtml = '';
           if (slotTemplate) {
             slotHtml = env.render(slotTemplate, { ...context, [key]: resolvedData });
@@ -73,7 +78,7 @@ function createHtmlStream(options = {}) {
           // Push an out-of-order streaming chunk with inline replacement script or comment
           const slotChunk = `
 <template data-stream-slot="${key}">${slotHtml}</template>
-<script>
+${scriptTag}
 (function(){
   var t = document.querySelector('template[data-stream-slot="${key}"]');
   var target = document.querySelector('[data-stream-target="${key}"]') || document.getElementById('stream-target-${key}');
@@ -83,18 +88,27 @@ function createHtmlStream(options = {}) {
   }
 })();
 </script>`;
-          stream.push(slotChunk);
+          if (!stream.destroyed) {
+            stream.push(slotChunk);
+          }
         } catch (slotErr) {
+          if (stream.destroyed) {
+            return;
+          }
           const errorChunk = `
 <template data-stream-slot="${key}">
   <!-- Slot Error (${key}): ${slotErr.message} -->
 </template>`;
-          stream.push(errorChunk);
+          if (!stream.destroyed) {
+            stream.push(errorChunk);
+          }
         }
       });
 
       await Promise.all(resolutionPromises);
-      stream.push(null); // End of stream
+      if (!stream.destroyed) {
+        stream.push(null); // End of stream
+      }
     } catch (err) {
       stream.destroy(err);
     }
@@ -122,7 +136,16 @@ function renderStream(res, templatePath, context = {}, options = {}) {
       defer = {},
       status = 200,
       flushImmediately = true,
+      nonce: optionNonce,
     } = options;
+
+    const nonce =
+      optionNonce ||
+      res?.locals?.cspNonce ||
+      res?.locals?.nonce ||
+      context?.cspNonce ||
+      context?.nonce ||
+      '';
 
     if (!env) {
       return reject(new Error('renderStream requires a valid Nunjucks environment in options.env'));
@@ -145,25 +168,46 @@ function renderStream(res, templatePath, context = {}, options = {}) {
       templatePath,
       context,
       defer,
+      nonce,
     });
 
+    let finished = false;
+    const cleanup = () => {
+      if (finished) return;
+      finished = true;
+      if (!stream.destroyed) {
+        stream.destroy();
+      }
+      resolve();
+    };
+
+    res.on('close', cleanup);
+
     stream.on('data', (chunk) => {
-      res.write(chunk);
+      if (!finished && !res.writableEnded) {
+        res.write(chunk);
+      }
     });
 
     stream.on('end', () => {
-      res.end();
-      resolve();
+      if (!finished) {
+        finished = true;
+        res.end();
+        resolve();
+      }
     });
 
     stream.on('error', (err) => {
-      if (!res.headersSent) {
-        res.status(500).send('Streaming Render Error');
-      } else {
-        res.write(`<!-- Streaming Error: ${err.message} -->`);
-        res.end();
+      if (!finished) {
+        finished = true;
+        if (!res.headersSent) {
+          res.status(500).send('Streaming Render Error');
+        } else if (!res.writableEnded) {
+          res.write(`<!-- Streaming Error: ${err.message} -->`);
+          res.end();
+        }
+        reject(err);
       }
-      reject(err);
     });
   });
 }

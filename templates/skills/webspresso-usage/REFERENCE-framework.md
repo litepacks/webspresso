@@ -213,6 +213,7 @@ Pass **`db`** into **`createApp({ db })`** so **`ctx.db`** works in pages and pl
 | `auditLogPlugin` | Admin mutation audit trail |
 | `recaptchaPlugin` | v2/v3 + middleware |
 | `emailPlugin` | MJML + Nodemailer sending with optional admin UI and auth bridge |
+| `polarPlugin` | Polar.sh billing: checkout, portal, webhooks, tier sync (`webspresso polar:migrate`) |
 | `seoCheckerPlugin` | Dev SEO panel |
 | `restResourcePlugin` | Opt-in REST CRUD from models; `?include=` uses ORM eager load (single-level relations only) |
 | `ormCacheAdminPlugin` | Admin page for ORM cache metrics / purge / invalidate (`db.cache` required) |

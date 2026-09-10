@@ -1,3 +1,8 @@
+---
+title: System Architecture
+description: Layered architecture, design principles, and component boundaries in Webspresso.
+---
+
 # System Architecture
 
 > **Purpose:** Comprehensive mental model of the Webspresso runtime, layers, subsystem boundaries, and architectural principles.

@@ -113,8 +113,9 @@ function rewriteDynamicRouteMarkers(route) {
     }
     const inner = route.slice(open + 1, close);
     let repl;
-    if (inner.startsWith('...') && inner.length > 3) {
-      repl = '*';
+    if (inner.startsWith('...')) {
+      const paramName = inner.length > 3 ? inner.slice(3) : 'splat';
+      repl = '*' + paramName;
     } else if (inner.length > 0 && inner.indexOf('[') === -1) {
       repl = ':' + inner;
     } else {
@@ -1049,6 +1050,14 @@ function mountPages(app, options) {
       
       app[route.method](route.routePath, async (req, res, next) => {
         try {
+          if (route.routePath.includes('*') && req.params) {
+            for (const val of Object.values(req.params)) {
+              if (Array.isArray(val) && req.params[0] === undefined) {
+                req.params[0] = val.join('/');
+                break;
+              }
+            }
+          }
           // Same instance as createApp({ db }) / getAppContext().db — available to handler & route middleware
           if (db != null) {
             req.db = db;
@@ -1133,6 +1142,14 @@ function mountPages(app, options) {
 
       app.get(route.routePath, async (req, res, next) => {
         try {
+          if (route.routePath.includes('*') && req.params) {
+            for (const val of Object.values(req.params)) {
+              if (Array.isArray(val) && req.params[0] === undefined) {
+                req.params[0] = val.join('/');
+                break;
+              }
+            }
+          }
           // Detect locale
           const locale = detectLocale(req);
           const defaultLocale = process.env.DEFAULT_LOCALE || 'en';

@@ -124,4 +124,55 @@ describe('SSR Streaming & Chunked Transfer', () => {
     expect(result).toContain('<title>Streaming</title>');
     expect(result).toContain('Slot Error (products): Database query timed out');
   });
+
+  it('destroys stream when client connection is closed prematurely', async () => {
+    const { EventEmitter } = require('events');
+    const mockRes = new EventEmitter();
+    mockRes.headersSent = false;
+    mockRes.status = () => mockRes;
+    mockRes.setHeader = () => mockRes;
+    mockRes.write = () => true;
+    mockRes.end = () => {};
+
+    let resolveSlow;
+    const slowPromise = new Promise((resolve) => {
+      resolveSlow = resolve;
+    });
+
+    const renderPromise = renderStream(mockRes, 'deferred.njk', {}, {
+      env,
+      defer: {
+        products: slowPromise,
+      },
+    });
+
+    // Client aborts prematurely
+    mockRes.emit('close');
+
+    // Resolve deferred data after abort
+    if (resolveSlow) resolveSlow([{ name: 'Late' }]);
+
+    // Should complete cleanly without uncaught exception
+    await expect(renderPromise).resolves.toBeUndefined();
+  });
+
+  it('injects CSP nonce into deferred slot inline script tags', async () => {
+    const stream = createHtmlStream({
+      env,
+      templatePath: 'deferred.njk',
+      context: {},
+      nonce: 'secret-csp-nonce-xyz',
+      defer: {
+        products: Promise.resolve([{ name: 'Widget' }]),
+      },
+    });
+
+    let result = '';
+    for await (const chunk of stream) {
+      result += chunk.toString();
+    }
+
+    expect(result).toContain('<script nonce="secret-csp-nonce-xyz">');
+    expect(result).toContain('data-stream-slot="products"');
+  });
 });

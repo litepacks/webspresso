@@ -616,31 +616,52 @@ function createHelpers(ctx) {
     // ============================================
 
     /**
-     * Get injected head content
+     * Get CSP nonce if available from request context
+     * @returns {string} Nonce string or empty string
+     */
+    nonce() {
+      return (
+        req?.res?.locals?.cspNonce ||
+        req?.res?.locals?.nonce ||
+        req?.cspNonce ||
+        req?.nonce ||
+        ''
+      );
+    },
+
+    /**
+     * Get injected head content (CSS, scripts)
+     * @param {Object|string} [options] - Optional { nonce: string } or nonce string
      * @returns {string} HTML content for head section
      */
-    injectHead() {
+    injectHead(options) {
+      const explicitNonce = typeof options === 'string' ? options : options?.nonce;
+      const nonce = explicitNonce || this.nonce();
       const injector = getScriptInjector();
       let content = '';
       
       // Add styles
-      const styles = injector.getStylesContent();
+      const styles = injector.getStylesContent(nonce ? { nonce } : options);
       if (styles) {
-        content += `<style id="webspresso-injected-styles">\n${styles}\n</style>\n`;
+        const nonceAttr = nonce ? ` nonce="${nonce}"` : '';
+        content += `<style id="webspresso-injected-styles"${nonceAttr}>\n${styles}\n</style>\n`;
       }
       
       // Add head scripts
-      content += injector.getHeadContent();
+      content += injector.getHeadContent(nonce ? { nonce } : options);
       
       return content;
     },
 
     /**
      * Get injected body content (for end of body)
+     * @param {Object|string} [options] - Optional { nonce: string } or nonce string
      * @returns {string} HTML content for body end
      */
-    injectBody() {
-      return getScriptInjector().getBodyContent();
+    injectBody(options) {
+      const explicitNonce = typeof options === 'string' ? options : options?.nonce;
+      const nonce = explicitNonce || this.nonce();
+      return getScriptInjector().getBodyContent(nonce ? { nonce } : options);
     },
 
     /**
@@ -726,25 +747,49 @@ class ScriptInjector {
 
   /**
    * Get head content sorted by priority
+   * @param {Object|string} [options] - Optional { nonce: string } or nonce string
    */
-  getHeadContent() {
+  getHeadContent(options = {}) {
+    const nonce = typeof options === 'string' ? options : (options?.nonce || '');
     const sorted = [...this.headScripts].sort((a, b) => b.priority - a.priority);
-    return sorted.map(s => s.content).join('\n');
+    return sorted.map(s => {
+      let content = typeof s.content === 'function' ? s.content(options) : s.content;
+      if (nonce && typeof content === 'string') {
+        content = content.replace(/<script(?![^>]*\bnonce=)/gi, `<script nonce="${nonce}"`);
+      }
+      return content;
+    }).join('\n');
   }
 
   /**
    * Get body content sorted by priority
+   * @param {Object|string} [options] - Optional { nonce: string } or nonce string
    */
-  getBodyContent() {
+  getBodyContent(options = {}) {
+    const nonce = typeof options === 'string' ? options : (options?.nonce || '');
     const sorted = [...this.bodyScripts].sort((a, b) => b.priority - a.priority);
-    return sorted.map(s => s.content).join('\n');
+    return sorted.map(s => {
+      let content = typeof s.content === 'function' ? s.content(options) : s.content;
+      if (nonce && typeof content === 'string') {
+        content = content.replace(/<script(?![^>]*\bnonce=)/gi, `<script nonce="${nonce}"`);
+      }
+      return content;
+    }).join('\n');
   }
 
   /**
    * Get styles content
+   * @param {Object|string} [options] - Optional { nonce: string } or nonce string
    */
-  getStylesContent() {
-    return this.styles.map(s => s.content).join('\n');
+  getStylesContent(options = {}) {
+    const nonce = typeof options === 'string' ? options : (options?.nonce || '');
+    return this.styles.map(s => {
+      let content = typeof s.content === 'function' ? s.content(options) : s.content;
+      if (nonce && typeof content === 'string') {
+        content = content.replace(/<style(?![^>]*\bnonce=)/gi, `<style nonce="${nonce}"`);
+      }
+      return content;
+    }).join('\n');
   }
 
   /**

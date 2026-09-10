@@ -35,6 +35,7 @@ const { registerCommand: registerUpgrade } = require('./commands/upgrade');
 const { registerCommand: registerOrmMap } = require('./commands/orm-map');
 const { registerCommand: registerService } = require('./commands/service');
 const { registerCommand: registerMcp } = require('./commands/mcp');
+const { registerCommand: registerPolarMigrate } = require('./commands/polar-migrate');
 
 registerNew(program);
 registerPage(program);
@@ -58,6 +59,7 @@ registerUpgrade(program);
 registerOrmMap(program);
 registerService(program);
 registerMcp(program);
+registerPolarMigrate(program);
 
 // Parse arguments
 program.parse();

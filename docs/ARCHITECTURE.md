@@ -1,3 +1,8 @@
+---
+title: Architecture Overview
+description: C4-style architecture reference for Webspresso subsystems, built-in plugins, CLI commands, and composition rules.
+---
+
 # Webspresso — Architecture (C4-style)
 
 > **Purpose:** Language- and platform-neutral map of the system, organized by **feature sets**.  
@@ -203,6 +208,7 @@ Plugins declare `name`, `version`, optional `dependencies`, and lifecycle hooks 
 | `schemaExplorerPlugin` | API / docs | JSON ORM schema endpoint |
 | `recaptchaPlugin` | Security | reCAPTCHA verify middleware + helpers |
 | `emailPlugin` | HTTP / Admin | MJML + Nodemailer email sending with optional admin UI and auth integration |
+| `polarPlugin` | HTTP / Billing | Polar.sh subscription billing: checkout, portal, webhooks, Customer State sync, tier columns |
 | `adminPanelPlugin` | Admin | ORM-backed CRUD SPA |
 | `contentPlugin` | Admin / CMS | Schema-driven content types, entries, public API, inline edit |
 | `dataExchangePlugin` | Admin | Excel export + CSV/XLSX import |
@@ -222,7 +228,7 @@ Plugins declare `name`, `version`, optional `dependencies`, and lifecycle hooks 
 |-------|----------|
 | **Scaffold** | `new`, `page`, `api`, `add tailwind` |
 | **Server** | `dev`, `start` |
-| **Database** | `db:migrate`, `db:rollback`, `db:status`, `db:make`, `db:scaffold`, `seed` |
+| **Database** | `db:migrate`, `db:rollback`, `db:status`, `db:make`, `db:scaffold`, `seed`, `polar:migrate` |
 | **Admin** | `admin:setup`, `admin:password`, `admin:list` |
 | **Ops** | `doctor`, `upgrade`, `audit:prune`, `orm:map`, `favicon:generate` |
 | **Agent tooling** | `skill` (Cursor skill bundle) |

@@ -1,3 +1,8 @@
+---
+title: Exceptions
+description: Webspresso error hierarchy — HttpError, ValidationError, NotFoundError, and custom error handlers.
+---
+
 # Exceptions & Error Handling API Reference
 
 > **Module:** `webspresso/core/errors` (also exported at package root as `errors`)  

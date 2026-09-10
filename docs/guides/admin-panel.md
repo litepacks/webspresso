@@ -1,3 +1,8 @@
+---
+title: Admin Panel
+description: Customize the Mithril.js admin SPA with modules, field renderers, widgets, and custom pages.
+---
+
 # Admin Panel Customization Guide
 
 > **Goal:** Extend Webspresso's Mithril.js Admin Panel SPA with custom pages, widgets, custom field renderers, and actions.

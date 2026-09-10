@@ -1,3 +1,8 @@
+---
+title: createApp Reference
+description: Complete createApp() options — pagesDir, db, auth, plugins, compression, shutdown, and assets.
+---
+
 # `createApp(options)` API Reference
 
 > **Module:** `webspresso`  

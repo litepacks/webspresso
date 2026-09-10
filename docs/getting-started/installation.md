@@ -1,3 +1,8 @@
+---
+title: Installation
+description: Node.js requirements, CLI setup, package installation, and optional database drivers.
+---
+
 # Installation & Setup
 
 > **Target Audience:** New developers setting up Webspresso for the first time.  

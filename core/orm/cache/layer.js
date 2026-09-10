@@ -9,7 +9,7 @@ const { hashKey, serializeWheres } = require('./fingerprint');
  * @param {*} knex
  */
 function isTransactionKnex(knex) {
-  return !!(knex && knex.isTransaction);
+  return !!(knex && (knex.isTransaction || typeof knex.commit === 'function'));
 }
 
 /**

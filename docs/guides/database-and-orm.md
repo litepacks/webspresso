@@ -1,3 +1,8 @@
+---
+title: Database & ORM
+description: defineModel, zdb schemas, repositories, migrations, relations, and query caching.
+---
+
 # Database & ORM Guide
 
 > **Goal:** Define models, run Knex migrations, execute queries with scoped repositories, and manage relations.

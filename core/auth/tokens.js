@@ -69,6 +69,9 @@ function createKnexAuthTokensAdapter(db) {
       if (type) q.where({ type });
       await q.delete();
     },
+    purgeExpired: async () => {
+      return knex('auth_tokens').where('expires_at', '<', new Date()).delete();
+    },
   };
 }
 
@@ -123,6 +126,18 @@ async function consumeAuthToken(authTokensAdapter, tokenHash) {
   await authTokensAdapter.delete(tokenHash);
 }
 
+/**
+ * Purge expired auth tokens
+ * @param {Object} authTokensAdapter
+ * @returns {Promise<number>} Number of deleted rows
+ */
+async function purgeExpiredAuthTokens(authTokensAdapter) {
+  if (authTokensAdapter && typeof authTokensAdapter.purgeExpired === 'function') {
+    return authTokensAdapter.purgeExpired();
+  }
+  return 0;
+}
+
 module.exports = {
   TOKEN_TYPES,
   createAuthTokensTable,
@@ -131,5 +146,6 @@ module.exports = {
   createAuthToken,
   verifyAuthToken,
   consumeAuthToken,
+  purgeExpiredAuthTokens,
   hash,
 };

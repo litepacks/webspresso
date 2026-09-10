@@ -1,3 +1,8 @@
+---
+title: Deployment
+description: Production configuration, environment variables, process management, and graceful shutdown.
+---
+
 # Deployment & Production Configuration
 
 > **Goal:** Configure, build, and deploy a production-ready Webspresso application with zero downtime, graceful shutdown, and optimal performance.

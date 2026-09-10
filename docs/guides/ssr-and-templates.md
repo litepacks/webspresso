@@ -1,3 +1,8 @@
+---
+title: SSR & Templates
+description: Nunjucks layouts, load() data fetchers, fsy helpers, streaming, and page assets.
+---
+
 # SSR & Templating Guide
 
 > **Goal:** Master server-side rendering, data prefetching via `load()`, Nunjucks template layouts, `fsy` helper catalog, and chunked streaming responses.

@@ -1,3 +1,8 @@
+---
+title: Services Layer
+description: File-based services, Zod validation, auth guards, transactions, and route invocation.
+---
+
 # Services Layer Guide
 
 > **Goal:** Structure and execute reusable business logic with declarative Zod validation, role-based authorization, ambient transactions, and caching.

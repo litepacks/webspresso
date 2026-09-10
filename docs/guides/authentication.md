@@ -1,3 +1,8 @@
+---
+title: Authentication
+description: Session cookies for SSR and JWT refresh tokens for API routes with quickAuth and createAuth.
+---
+
 # Dual Authentication Guide
 
 > **Goal:** Secure your Webspresso application with stateful Session Cookies for SSR pages and stateless HS256 JWT tokens with refresh rotation for REST APIs.

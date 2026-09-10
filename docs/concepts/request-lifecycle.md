@@ -1,3 +1,8 @@
+---
+title: Request Lifecycle
+description: End-to-end HTTP request flow from middleware through routing to SSR render and response.
+---
+
 # Request Lifecycle
 
 > **Purpose:** Detailed step-by-step trace of an incoming HTTP request through Webspresso's middleware pipeline, router, data loaders, template engine, and response stream.

@@ -275,7 +275,10 @@ function createDatabase(config) {
    * @returns {Promise<*>} Result of callback
    */
   async function transaction(callback, scopeContext) {
-    return knexInstance.transaction(async (trx) => {
+    const ambientTrx = getAmbientTransaction();
+    const runner = (ambientTrx && typeof ambientTrx.transaction === 'function') ? ambientTrx : knexInstance;
+
+    return runner.transaction(async (trx) => {
       const trxContext = {
         trx,
         getRepository(modelName, sContext) {

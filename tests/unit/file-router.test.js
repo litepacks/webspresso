@@ -42,7 +42,7 @@ describe('file-router.js', () => {
     });
 
     it('should convert [...rest] to catch-all *', () => {
-      expect(filePathToRoute('docs/[...rest].njk', '.njk')).toBe('/docs/*');
+      expect(filePathToRoute('docs/[...rest].njk', '.njk')).toBe('/docs/*rest');
     });
 
     it('should handle multiple dynamic params', () => {

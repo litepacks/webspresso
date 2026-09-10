@@ -1,3 +1,8 @@
+---
+title: Project Structure
+description: Anatomy of a Webspresso app — pages, views, services, models, migrations, and config.
+---
+
 # Project Structure
 
 A standard Webspresso project generated with `webspresso new` follows a modular, predictable anatomy.

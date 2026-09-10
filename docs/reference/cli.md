@@ -1,3 +1,8 @@
+---
+title: CLI Reference
+description: All webspresso CLI commands — dev, db migrations, polar:migrate, doctor, admin setup, and tooling.
+---
+
 # Webspresso CLI Reference
 
 > **Command:** `webspresso [command] [options]`  
@@ -43,6 +48,17 @@ Generates a new timestamped Knex migration file in `migrations/`.
 
 ### `webspresso db:seed`
 Executes database seed files located in `seeds/`.
+
+### `webspresso polar:migrate`
+Generates an idempotent Knex migration adding Polar billing columns (`tier`, `polar_customer_id`, `polar_subscription_id`, `polar_status`, `polar_current_period_end`, `polar_cancel_at_period_end`) to the users table.
+
+| Option / Flag | Description |
+| :--- | :--- |
+| `-c, --config <path>` | Path to database config file. |
+| `-t, --table <name>` | User table name (default `users`). |
+| `-o, --output <path>` | Custom output migration file path. |
+
+Run `webspresso db:migrate` after generating the file. See [Polar Billing Guide](../guides/polar-billing.md).
 
 ---
 

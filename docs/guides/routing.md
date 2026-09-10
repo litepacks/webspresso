@@ -1,3 +1,8 @@
+---
+title: File-Based Routing
+description: Static routes, dynamic parameters, catch-all patterns, API method files, and route middleware.
+---
+
 # File-Based Routing Guide
 
 > **Goal:** Learn how Webspresso maps templates and files in `pages/` to clean HTTP URLs with dynamic parameters, catch-all wildcards, middleware, and per-page asset bundles.

@@ -64,6 +64,10 @@ describe('isTransactionKnex', () => {
     expect(isTransactionKnex({})).toBe(false);
     expect(isTransactionKnex(null)).toBe(false);
   });
+
+  it('detects commit function (mock or wrapper transaction)', () => {
+    expect(isTransactionKnex({ commit: () => {} })).toBe(true);
+  });
 });
 
 describe('OrmCacheLayer', () => {

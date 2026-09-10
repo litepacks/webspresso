@@ -1,3 +1,8 @@
+---
+title: Service Definition
+description: defineService contract — schema, auth, transaction, cache, timeout, and ServiceContext.
+---
+
 # `defineService(definition)` API Reference
 
 > **Module:** `webspresso`  

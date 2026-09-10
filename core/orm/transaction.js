@@ -87,7 +87,9 @@ function createTransactionContext(trx, scopeContext) {
  * @returns {Promise<*>} Result of callback
  */
 async function runTransaction(knex, callback, scopeContext) {
-  return knex.transaction(async (trx) => {
+  const ambientTrx = getAmbientTransaction();
+  const runner = (ambientTrx && typeof ambientTrx.transaction === 'function') ? ambientTrx : knex;
+  return runner.transaction(async (trx) => {
     const ctx = createTransactionContext(trx, scopeContext);
     return runWithAmbientTransaction(trx, () => callback(ctx));
   });

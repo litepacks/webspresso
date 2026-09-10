@@ -1,3 +1,8 @@
+---
+title: Webspresso Documentation
+description: Official documentation for the Webspresso Node.js SSR framework — routing, ORM, services, plugins, and admin panel.
+---
+
 # Webspresso Documentation
 
 Welcome to the official Webspresso documentation. Webspresso is a lightweight, zero-dependency-sprawl Express SSR framework featuring file-based routing, Nunjucks templating, an intuitive Knex-based ORM with ambient transactions, a modular plugin ecosystem, and a customizable Mithril.js SPA Admin Panel.
@@ -39,10 +44,11 @@ Task-focused guides for solving specific engineering problems:
 - **[Dual Authentication](guides/authentication.md)** — Session-based auth cookies for SSR, stateless JWT & refresh token rotation for APIs.
 - **API Endpoints** — HTTP method files (`.get.js`, `.post.js`), `req.input` validation, and JSON responses (see [File-Based Routing](guides/routing.md)).
 - **[Admin Panel SPA](guides/admin-panel.md)** — Registering admin modules, custom Mithril.js components (`component.js`), field renderers, and widgets.
-- **Plugin Ecosystem** — Using official plugins, custom plugin lifecycle hooks (`register`, `onRoutesReady`), and inter-plugin APIs.
+- **[Plugin Ecosystem](reference/plugins.md)** — Official plugins, lifecycle hooks (`register`, `onRoutesReady`), and inter-plugin APIs.
 - **Realtime Layer** — WebSocket, SSE, and Socket.IO adapters, subscriptions, and Redis Pub/Sub.
 - **File Uploads** — Multipart upload handling, storage providers, and file validation.
 - **Email System** — MJML template compilation, Nodemailer transport, and delivery tracking.
+- **[Polar.sh Billing](guides/polar-billing.md)** — Subscription checkout, customer portal, webhooks, tier sync, and migration via `polarPlugin`.
 
 ---
 
@@ -70,7 +76,7 @@ Unbiased, complete specification of public APIs verified against TypeScript decl
 - **Request & Response** — Properties and helpers attached to `req` and `res` (`req.context`, `req.service`, `req.auth`, `res.renderStream`).
 - **[Service Definition Spec](reference/service-definition.md)** — `defineService` options, `ServiceDefinition` schema, and `ServiceContext`.
 - **[Model & Repository Spec](reference/model-definition.md)** — `defineModel` options, `zdb` column builder types, and `Repository` query methods.
-- **Built-in Plugins Reference** — Configuration options for all 15 official plugins.
+- **[Plugin Ecosystem](reference/plugins.md)** — Official built-in plugins, lifecycle hooks, and configuration overview.
 - **Template Helpers Reference** — Complete catalog of `fsy.*` Nunjucks helper functions.
 - **[Exceptions Catalog](reference/exceptions.md)** — Error classes, status codes, and payload formats.
 

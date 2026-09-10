@@ -68,6 +68,9 @@ async function verifyPassword(password, hash, compare) {
   return await compare(password, hash);
 }
 
+// Precomputed dummy bcrypt hash (cost factor 10) to mitigate timing attacks / user enumeration
+const DUMMY_HASH = '$2b$10$wKzS8Vp0qXn8mY2bQv5eUu6R.kZbN8vA8Y7o7u4d1w2x3y4z5a6b7';
+
 /**
  * Login user and set session
  * @param {Object} adminUserRepo - AdminUser repository
@@ -81,6 +84,13 @@ async function login(adminUserRepo, email, password, compare) {
   const user = await adminUserRepo.query().where('email', email).first();
   
   if (!user || !user.active) {
+    if (typeof compare === 'function') {
+      try {
+        await Promise.resolve(compare(password, DUMMY_HASH));
+      } catch {
+        // Ignore timing dummy comparison errors
+      }
+    }
     return null;
   }
 

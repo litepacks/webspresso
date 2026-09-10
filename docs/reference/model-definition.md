@@ -1,3 +1,8 @@
+---
+title: Model Definition
+description: defineModel and zdb column builder API, relations, scopes, soft deletes, and admin config.
+---
+
 # `defineModel(definition)` API Reference
 
 > **Module:** `webspresso`  

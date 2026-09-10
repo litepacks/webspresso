@@ -40,6 +40,7 @@ const {
   createRedisAdapter,
 } = require('./realtime');
 const { mcpPlugin, createMcpServer, McpServer } = require('./mcp');
+const polarPlugin = require('./polar');
 
 module.exports = {
   sitemapPlugin,
@@ -81,6 +82,7 @@ module.exports = {
   mcpPlugin,
   createMcpServer,
   McpServer,
+  polarPlugin,
 };
 
 

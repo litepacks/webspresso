@@ -1,3 +1,8 @@
+---
+title: Service Execution Pipeline
+description: How services run validation, auth guards, transactions, caching, and timeouts.
+---
+
 # Service Execution Pipeline
 
 > **Purpose:** Deep dive into how Webspresso services validate input, enforce security guards, propagate database transactions, and execute business logic.

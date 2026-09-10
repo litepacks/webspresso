@@ -44,6 +44,19 @@ function mountSseTransport(options) {
     const sessionId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
     const endpointUri = `${normalizedBase}/messages?sessionId=${sessionId}`;
 
+    let isCleanedUp = false;
+    let keepAlive = null;
+
+    const cleanup = () => {
+      if (isCleanedUp) return;
+      isCleanedUp = true;
+      if (keepAlive) {
+        clearInterval(keepAlive);
+        keepAlive = null;
+      }
+      sessions.delete(sessionId);
+    };
+
     const sessionObj = {
       id: sessionId,
       req,
@@ -54,6 +67,7 @@ function mountSseTransport(options) {
           if (typeof res.flush === 'function') res.flush();
         } catch (err) {
           console.warn(`[mcp-sse] Failed to write to session ${sessionId}:`, err.message);
+          cleanup();
         }
       },
     };
@@ -67,18 +81,21 @@ function mountSseTransport(options) {
     }
 
     // Ping interval to keep connection alive through proxies
-    const keepAlive = setInterval(() => {
+    keepAlive = setInterval(() => {
       try {
         res.write(': ping\n\n');
       } catch (e) {
-        clearInterval(keepAlive);
+        cleanup();
       }
     }, 15000);
+    if (typeof keepAlive.unref === 'function') {
+      keepAlive.unref();
+    }
 
-    req.on('close', () => {
-      clearInterval(keepAlive);
-      sessions.delete(sessionId);
-    });
+    req.on('close', cleanup);
+    res.on('close', cleanup);
+    res.on('finish', cleanup);
+    res.on('error', cleanup);
   });
 
   // 2. POST /_mcp/messages - MCP message ingestion for an active SSE session
