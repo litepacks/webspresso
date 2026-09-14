@@ -82,7 +82,10 @@
     "src/",
     "core/",
     "plugins/",
-    "templates/",
+    ".agents/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".cursorrules",
     "views/partials/webspresso-client-runtime.njk"
   ],
   "dependencies": {

@@ -8,6 +8,34 @@ Webspresso is a full-stack Node.js framework powered by **100% File-Based Routin
 
 ## ⚠️ STRICT ANTI-PATTERNS (DO NOT DO THIS)
 
+### ❌ BAD vs ✅ GOOD Code Comparison
+
+```javascript
+// ❌ WRONG (Express / Legacy reflex — NEVER DO THIS)
+// File: src/routes/users.js
+const express = require('express');
+const router = express.Router();
+router.get('/users', async (req, res) => {
+  const users = await db('users').select('*'); // Raw query bypasses ORM!
+  res.json(users);
+});
+module.exports = router;
+
+// ✅ CORRECT (Webspresso 100% File-Based Routing)
+// File: pages/api/users.get.js
+'use strict';
+module.exports = {
+  schema: ({ z }) => ({
+    query: z.object({ limit: z.coerce.number().optional().default(20) }),
+  }),
+  middleware: ['auth'], // optional
+  handler: async (req, res) => {
+    const users = await req.db.getRepository('User').find(req.input.query);
+    return res.json({ success: true, data: users });
+  },
+};
+```
+
 1. **NEVER create a `routes/` or `src/routes/` folder.**
 2. **NEVER use `express.Router()` or `require('express').Router()`.**
 3. **NEVER call `app.get()`, `app.post()`, `app.put()`, or `app.delete()` for application endpoints.**

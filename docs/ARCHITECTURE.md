@@ -231,7 +231,6 @@ Plugins declare `name`, `version`, optional `dependencies`, and lifecycle hooks 
 | **Database** | `db:migrate`, `db:rollback`, `db:status`, `db:make`, `db:scaffold`, `seed`, `polar:migrate` |
 | **Admin** | `admin:setup`, `admin:password`, `admin:list` |
 | **Ops** | `doctor`, `upgrade`, `audit:prune`, `orm:map`, `favicon:generate` |
-| **Agent tooling** | `skill` (Cursor skill bundle) |
 
 ### Client runtime & assets
 
@@ -350,10 +349,7 @@ Incoming HTTP request
 |----------|------|
 | **`docs/ARCHITECTURE.md`** (this file) | C4-style structure; feature-set index; update on structural changes |
 | `README.md` | Narrative reference, examples, pitfalls |
-| `doc/index.html` | Single-page HTML docs with anchors |
-| `.agents/skills/webspresso-usage/REFERENCE-framework.md` | Condensed SSR/API/ORM/plugins/CLI |
-| `.agents/skills/webspresso-usage/REFERENCE-kernel.md` | Kernel-only reference |
-
+| `.agents/` | Modular AI agent guidebook and rules |
 | `docs/getting-started.md` | Onboarding |
 | `docs/production-checklist.md` | Production hardening |
 | `plugins/admin-panel/client/README.md` | Admin SPA parts layout |

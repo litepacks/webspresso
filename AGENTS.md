@@ -1,8 +1,52 @@
 # Webspresso Project Guidelines & Rules
 
-## 1. Codebase Architecture
-
 Webspresso is a lightweight, zero-dependency-sprawl full-stack Node.js SSR & API framework featuring Next.js/Nuxt-style file-based routing, an intuitive Knex-based ORM, a modular plugin ecosystem, and a customizable Mithril.js SPA Admin Panel.
+
+---
+
+## 🎯 Agent Intent Triage Matrix (Quick Guide Selection)
+
+When tasked with a feature or bugfix, **immediately consult the corresponding topic guide** before writing code:
+
+| Intent / Task | Canonical Topic Guide | Primary Directory / Ground Truth |
+| :--- | :--- | :--- |
+| **New API Route / Endpoint** | [`.agents/ROUTING.md`](.agents/ROUTING.md) | `pages/api/...` |
+| **SSR HTML Page / Layout / Loader** | [`.agents/ROUTING.md`](.agents/ROUTING.md) & [`.agents/STREAMING.md`](.agents/STREAMING.md) | `pages/*.njk`, `pages/*.js`, `views/` |
+| **Database Model / Migration / Query** | [`.agents/ORM.md`](.agents/ORM.md) | `models/*.js`, `core/orm`, `migrations/` |
+| **Business Logic / Transaction / Service** | [`.agents/SERVICES.md`](.agents/SERVICES.md) | `services/` |
+| **Admin Panel (Page, Widget, Action, UI)** | [`.agents/ADMIN.md`](.agents/ADMIN.md) | `plugins/admin-panel/` |
+| **Authentication (Session / JWT / Guard)** | [`.agents/AUTH.md`](.agents/AUTH.md) | `core/auth/` |
+| **Background Jobs & Worker Queue** | [`.agents/QUEUE.md`](.agents/QUEUE.md) | `jobs/` |
+| **API Signatures & Types Verification** | [`index.d.ts`](index.d.ts) | **Canonical Ground Truth** |
+
+---
+
+## 🛡️ 4-Step Mandatory Agent Workflow Protocol
+
+Every coding agent working on Webspresso **MUST** follow this 4-step execution discipline:
+
+1. **Discover & Triage**: Identify the relevant topic guide above and inspect existing similar files in the workspace (e.g. `pages/api/`, `models/`, `services/`).
+2. **Contract Adherence**: Follow the exact module contract exported by the framework (`{ schema, middleware, handler }` for routes, `defineModel` for ORM, `defineService` for services).
+3. **Zero External Dependencies**: Use native Node.js standard modules (`crypto`, `path`, `fs`, `zlib`, `events`) and built-in framework utilities. NEVER install ad-hoc npm packages for auth, jwt, routing, or templating.
+4. **Targeted Verification**: Run the specific Vitest test file (`npx vitest run tests/...`) to confirm zero regressions before marking the task complete.
+
+---
+
+## ⚖️ ❌ BAD vs ✅ GOOD Summary Matrix
+
+| Category | ❌ NEVER DO THIS (Anti-Pattern) | ✅ ALWAYS DO THIS (Webspresso Way) |
+| :--- | :--- | :--- |
+| **Routing** | `routes/index.js`, `express.Router()`, `app.get('/api/users')` | `pages/api/users.get.js` exporting `{ schema, handler }` |
+| **Database** | `db('users').where({ id }).select()` (Raw Knex queries) | `db.getRepository('User').findById(id)` |
+| **Business Logic** | `controllers/UserController.js` | `services/user/get.js` → `ctx.service('user.get', input)` |
+| **Auth** | `npm i jsonwebtoken passport express-session` | Built-in `req.auth`, `core/auth`, `middleware: ['jwt']` |
+| **SSR Rendering**| `res.render('profile.njk', data)` inside custom handlers | Companion loader `pages/profile.js` exporting `async function load()` |
+| **Exceptions** | `res.status(404).json({ error: 'Not found' })` | `throw new NotFoundError('User not found')` |
+| **Background** | `setTimeout(...)`, `npm i bullmq` | `jobs/user/welcome.js` → `req.queue.dispatch('user.welcome', data)` |
+
+---
+
+## 1. Codebase Architecture
 
 ### 1.1 Core SSR & Routing (`pages/`, `views/`)
 - **File-based Routing**: Pages located in `pages/` automatically map to URL routes (e.g. `pages/index.njk` → `/`, `pages/products/[id].njk` → `/products/:id`).
@@ -100,7 +144,7 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 - **Run Vitest Unit Tests**: `npm test` or `npx vitest run tests/unit/admin-panel/`
 - **Run Migrations**: `npx webspresso db:migrate`
 - **Project Sanity Check**: `npx webspresso doctor`
-- **Scaffold Agent Skill**: `npx webspresso skill --preset webspresso`
+- **Scaffold AI Agent Rules**: `npx webspresso agents:init`
 
 ### 2.2 Testing & Quality Assurance
 - **Zero Regression Policy**: Always run unit tests before declaring any task complete.

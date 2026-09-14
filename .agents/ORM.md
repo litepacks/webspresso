@@ -9,6 +9,19 @@ Webspresso features an intuitive, zero-sprawl ORM (`core/orm`) supporting schema
 In application code (API handlers, SSR loaders, services, plugins), **NEVER** write raw Knex table queries like `db('table').where(...)` or `req.db('table').insert(...)`.
 Raw Knex queries **completely bypass** schema validation, lifecycle hooks, soft-delete scopes, multi-tenant filters, hidden field stripping, query caching, and ambient transactions.
 
+### ❌ BAD vs ✅ GOOD Code Comparison
+
+```javascript
+// ❌ WRONG (Raw Knex — bypasses hooks, schemas, hidden fields, caching)
+const user = await req.db('users').where({ id: req.params.id }).first();
+await req.db('users').where({ id }).update({ balance: 100 });
+
+// ✅ CORRECT (Webspresso Repository Pattern)
+const userRepo = req.db.getRepository('User');
+const user = await userRepo.findById(req.params.id);
+await userRepo.update(id, { balance: 100 });
+```
+
 ### Comparison: Raw Knex vs Webspresso Repository
 
 | Operation | ❌ NEVER Use Raw Knex | ✅ ALWAYS Use Repository (`db.getRepository`) |

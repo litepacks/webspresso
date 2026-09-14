@@ -4,6 +4,34 @@ Webspresso is a modern, lightweight, zero-dependency-sprawl full-stack Node.js S
 
 ---
 
+## 🎯 Agent Intent Triage Matrix (Quick Guide Selection)
+
+When tasked with a feature or bugfix, **immediately consult the corresponding topic guide** before writing code:
+
+| Intent / Task | Canonical Topic Guide | Primary Directory / Ground Truth |
+| :--- | :--- | :--- |
+| **New API Route / Endpoint** | [`.agents/ROUTING.md`](ROUTING.md) | `pages/api/...` |
+| **SSR HTML Page / Layout / Loader** | [`.agents/ROUTING.md`](ROUTING.md) & [`.agents/STREAMING.md`](STREAMING.md) | `pages/*.njk`, `pages/*.js`, `views/` |
+| **Database Model / Migration / Query** | [`.agents/ORM.md`](ORM.md) | `models/*.js`, `core/orm`, `migrations/` |
+| **Business Logic / Transaction / Service** | [`.agents/SERVICES.md`](SERVICES.md) | `services/` |
+| **Admin Panel (Page, Widget, Action, UI)** | [`.agents/ADMIN.md`](ADMIN.md) | `plugins/admin-panel/` |
+| **Authentication (Session / JWT / Guard)** | [`.agents/AUTH.md`](AUTH.md) | `core/auth/` |
+| **Background Jobs & Worker Queue** | [`.agents/QUEUE.md`](QUEUE.md) | `jobs/` |
+| **API Signatures & Types Verification** | [`index.d.ts`](../index.d.ts) | **Canonical Ground Truth** |
+
+---
+
+## 🛡️ 4-Step Mandatory Agent Workflow Protocol
+
+Every coding agent working on Webspresso **MUST** follow this 4-step execution discipline:
+
+1. **Discover & Triage**: Identify the relevant topic guide above and inspect existing similar files in the workspace (e.g. `pages/api/`, `models/`, `services/`).
+2. **Contract Adherence**: Follow the exact module contract exported by the framework (`{ schema, middleware, handler }` for routes, `defineModel` for ORM, `defineService` for services).
+3. **Zero External Dependencies**: Use native Node.js standard modules (`crypto`, `path`, `fs`, `zlib`, `events`) and built-in framework utilities. NEVER install ad-hoc npm packages for auth, jwt, routing, or templating.
+4. **Targeted Verification**: Run the specific Vitest test file (`npx vitest run tests/...`) to confirm zero regressions before marking the task complete.
+
+---
+
 ## Agent Guidebook Index
 
 This `.agents/` customization root is organized into modular topic guides:
@@ -20,7 +48,7 @@ This `.agents/` customization root is organized into modular topic guides:
 10. **[Realtime Layer & Adapters](.agents/REALTIME.md)** — Framework-agnostic realtime layer (`core/realtime`), generic WebSocket, SSE, and Socket.IO adapters, subscription identity, backoff reconnect, and auth lifecycle.
 11. **[Email Plugin Guide](.agents/EMAIL.md)** — MJML template compilation, Nodemailer transport, DB delivery logs, Auth Email bridge, and Admin UI.
 12. **[Admin Panel Customization](.agents/ADMIN.md)** — Extending Mithril.js Admin Panel SPA (Custom pages `component.js`, custom field renderers, widgets, single & bulk actions).
-13. **[CLI Tooling & Commands](.agents/CLI.md)** — `webspresso dev`, `build`, `doctor`, `db:migrate`, `db:seed`, `polar:migrate`, `favicon:generate`, `add:tailwind`, `skill`.
+13. **[CLI Tooling & Commands](.agents/CLI.md)** — `webspresso dev`, `build`, `doctor`, `db:migrate`, `db:seed`, `polar:migrate`, `favicon:generate`, `add:tailwind`, `agents:init`.
 14. **[Development & Testing Workflow](.agents/WORKFLOW.md)** — CLI commands, Vitest unit/integration testing, Playwright E2E tests, TypeScript type checking, and zero regression policy.
 15. **[Coding Standards & Conventions](.agents/CONVENTIONS.md)** — Zero external dependencies policy, strict function signature & schema verification, clean component separation, and log traceback inspection rules.
 16. **[Background Job Queue](.agents/QUEUE.md)** — In-Memory, Knex Database, and Distributed Redis queue adapters, job auto-discovery (`jobs/`), retries, and graceful draining.

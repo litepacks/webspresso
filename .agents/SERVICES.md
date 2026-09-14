@@ -6,6 +6,43 @@ The **Services Layer** is a lightweight, framework-agnostic architectural abstra
 
 ## ⚠️ STRICT RULE: Encapsulate in `services/` (NO `controllers/`)
 
+### ❌ BAD vs ✅ GOOD Code Comparison
+
+```javascript
+// ❌ WRONG (Controller pattern / manual transactions — NEVER DO THIS)
+// File: controllers/UserController.js
+class UserController {
+  async register(req, res) {
+    const trx = await knex.transaction(); // manual trx prone to leak
+    try {
+      const user = await trx('users').insert(...);
+      await trx.commit();
+      res.json(user);
+    } catch (e) {
+      await trx.rollback();
+      res.status(500).json({ error: e.message });
+    }
+  }
+}
+
+// ✅ CORRECT (Webspresso Service with declarative validation & automatic transaction)
+// File: services/user/register.js
+'use strict';
+const { z } = require('zod');
+
+module.exports = {
+  schema: z.object({
+    email: z.string().email(),
+    password: z.string().min(8),
+  }),
+  transaction: true, // Automatically wraps in ACID transaction
+  handler: async (input, { db, service }) => {
+    const user = await db.getRepository('User').create(input);
+    return { success: true, user };
+  },
+};
+```
+
 - **NEVER** create a `controllers/` or `src/controllers/` directory, and never write class-based controller singletons.
 - **ALWAYS** place business logic, domain mutations, and reusable workflows in `services/domain/action.js`.
 - Services automatically provide Zod input validation (`schema`), role-based authorization (`auth`), automatic ACID transaction propagation (`transaction: true`), and caching (`cache`).

@@ -191,6 +191,83 @@ function registerCommand(program) {
         }
       }
     });
+
+  // Generator command: service:make <name>
+  program
+    .command('service:make [name]')
+    .alias('make:service')
+    .description('Scaffold a new service in services/<domain>/<action>.js')
+    .option('-t, --transaction', 'Enable ACID transaction wrapper (transaction: true)')
+    .option('-a, --auth <role>', 'Require authentication or specific role')
+    .action(async (nameArg, options) => {
+      const fs = require('fs');
+      let serviceName = nameArg ? String(nameArg).trim() : '';
+
+      if (!serviceName) {
+        const answer = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'serviceName',
+            message: 'Service name (e.g., user.create or payment.process):',
+            validate: (input) => {
+              if (!input || !input.trim()) return 'Service name is required';
+              if (!input.includes('.')) return 'Use dot notation, e.g. domain.action (e.g. user.get)';
+              return true;
+            },
+          },
+        ]);
+        serviceName = answer.serviceName.trim();
+      }
+
+      const parts = serviceName.split('.');
+      const actionName = parts.pop();
+      const domainPath = parts.join(path.sep);
+
+      const servicesDir = path.resolve(process.cwd(), 'services');
+      const targetDir = path.join(servicesDir, domainPath);
+      fs.mkdirSync(targetDir, { recursive: true });
+
+      const serviceFile = path.join(targetDir, `${actionName}.js`);
+      if (fs.existsSync(serviceFile)) {
+        console.error(`\n❌ Error: Service file already exists at ${path.relative(process.cwd(), serviceFile)}\n`);
+        process.exitCode = 1;
+        return;
+      }
+
+      const authLine = options.auth
+        ? `\n  auth: ${options.auth === true || options.auth === 'true' ? 'true' : `'${options.auth}'`}, // Required role or boolean`
+        : '';
+      const trxLine = options.transaction ? '\n  transaction: true, // Automatic ACID transaction propagation' : '';
+
+      const content = `'use strict';
+
+const { z } = require('zod');
+
+/**
+ * Service: ${serviceName}
+ * @type {import('webspresso').ServiceDefinition}
+ */
+module.exports = {
+  // Input validation schema (Zod)
+  schema: z.object({
+    // Define input properties here
+  }),${authLine}${trxLine}
+
+  // Business Logic Handler
+  handler: async (input, { db, service, user }) => {
+    // db.getRepository('ModelName') -> Access repositories
+    // service('other.service', payload) -> Call nested services
+    return {
+      success: true,
+      data: input,
+    };
+  },
+};
+`;
+
+      fs.writeFileSync(serviceFile, content, 'utf8');
+      console.log(`\n✅ Created service "${serviceName}":\n   ${path.relative(process.cwd(), serviceFile)}\n`);
+    });
 }
 
 module.exports = {

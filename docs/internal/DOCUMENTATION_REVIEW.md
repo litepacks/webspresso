@@ -36,7 +36,6 @@ The repository documentation landscape is categorized below:
 | **`CHANGELOG.md`** | 37.4 KB | Reference / Release | Chronological release history and version logs. **KEEP**. |
 | **`AGENTS.md` (Root)** | 8.2 KB (84 lines) | Agent Documentation | Core architectural rules, zero regression policy, and guide index for AI agents. **KEEP**. |
 | **`.agents/*.md` (17 Files)** | ~82 KB (17 topics) | Agent Documentation | In-depth topic guides for admin, ORM, auth, services, streaming, shutdown, and plugins. **KEEP**. |
-| **`templates/skills/...`** | 28.5 KB (3 files) | Agent Documentation | Bundled agent skill reference templates installed via `webspresso skill --preset webspresso`. **KEEP**. |
 | **`index.d.ts`** | 53.8 KB (1,445 lines) | Reference / Types | TypeScript definitions and inline JSDoc comments. Canonical API contract. **KEEP**. |
 | **CLI Help (`bin/`)** | Inline code | Reference / CLI | Commander command-line help strings (`webspresso --help`). **KEEP (Source of Truth)**. |
 
@@ -203,7 +202,7 @@ In-depth explanations of framework mechanics and architectural decisions:
 Exhaustive, unbiased API reference verified against `index.d.ts`:
 
 - **`create-app.md`**: All `CreateAppOptions` parameters (`pagesDir`, `viewsDir`, `db`, `auth`, `server`, `pageAssets`, `trustProxy`, `clientRuntime`, `plugins`, `errorPages`).
-- **`cli.md`**: Complete CLI manual (`webspresso new`, `dev`, `start`, `doctor`, `skill`, `db:migrate`, `db:seed`, `favicon:generate`, `add tailwind`, `admin:password`).
+- **`cli.md`**: Complete CLI manual (`webspresso new`, `dev`, `start`, `doctor`, `db:migrate`, `db:seed`, `favicon:generate`, `add tailwind`, `admin:password`).
 - **`service-definition.md`**: `defineService` parameters (`schema`, `auth`, `timeout`, `transaction`, `cache`, `handler`) and `ServiceContext` properties.
 - **`model-definition.md`**: `defineModel` options, `zdb` column types, and `Repository` methods (`find`, `findById`, `findOne`, `create`, `update`, `delete`, `query`, `paginate`).
 - **`plugins-api.md`**: Options matrix for all 15 built-in plugins and `PluginContext` API.

@@ -30,12 +30,12 @@ const { registerCommand: registerAdminPassword } = require('./commands/admin-pas
 const { registerCommand: registerFaviconGenerate } = require('./commands/favicon-generate');
 const { registerCommand: registerAuditPrune } = require('./commands/audit-prune');
 const { registerCommand: registerDoctor } = require('./commands/doctor');
-const { registerCommand: registerSkill } = require('./commands/skill');
 const { registerCommand: registerUpgrade } = require('./commands/upgrade');
 const { registerCommand: registerOrmMap } = require('./commands/orm-map');
 const { registerCommand: registerService } = require('./commands/service');
 const { registerCommand: registerMcp } = require('./commands/mcp');
 const { registerCommand: registerPolarMigrate } = require('./commands/polar-migrate');
+const { registerCommand: registerAgentsInit } = require('./commands/agents-init');
 
 registerNew(program);
 registerPage(program);
@@ -54,12 +54,12 @@ registerAdminPassword(program);
 registerFaviconGenerate(program);
 registerAuditPrune(program);
 registerDoctor(program);
-registerSkill(program);
 registerUpgrade(program);
 registerOrmMap(program);
 registerService(program);
 registerMcp(program);
 registerPolarMigrate(program);
+registerAgentsInit(program);
 
 // Parse arguments
 program.parse();

@@ -99,6 +99,23 @@ function registerCommand(program) {
         warnings += 1;
       }
 
+      // Check anti-pattern directories
+      const forbiddenRoutes = [path.join(cwd, 'routes'), path.join(cwd, 'src', 'routes')];
+      for (const p of forbiddenRoutes) {
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+          line('⚠', `Anti-pattern detected: "${path.relative(cwd, p)}" folder found. Webspresso uses 100% file-based routing; move endpoints to "pages/api/".`);
+          warnings += 1;
+        }
+      }
+
+      const forbiddenControllers = [path.join(cwd, 'controllers'), path.join(cwd, 'src', 'controllers')];
+      for (const p of forbiddenControllers) {
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+          line('⚠', `Anti-pattern detected: "${path.relative(cwd, p)}" folder found. Encapsulate business logic in "services/<domain>/<action>.js" instead of controllers.`);
+          warnings += 1;
+        }
+      }
+
       const pagesPath = path.join(cwd, 'pages');
       if (fs.existsSync(pagesPath) && fs.statSync(pagesPath).isDirectory()) {
         line('✓', 'pages/ directory present');
@@ -118,6 +135,8 @@ function registerCommand(program) {
           }
           return name;
         }
+
+        const VALID_API_METHODS = ['.get.js', '.post.js', '.put.js', '.patch.js', '.delete.js'];
 
         function scanRoutes(dirPath, relativeDir = '', isApi = false) {
           const children = fs.readdirSync(dirPath);
@@ -148,6 +167,12 @@ function registerCommand(program) {
               const ext = path.extname(child);
               if (isApi) {
                 if (ext === '.js') {
+                  const hasMethod = VALID_API_METHODS.some((m) => child.endsWith(m));
+                  if (!hasMethod && !child.startsWith('_')) {
+                    line('⚠', `API route "pages/${relPath}" is missing an HTTP method suffix (e.g. .get.js, .post.js).`);
+                    warnings += 1;
+                    routingChecksPassed = false;
+                  }
                   const base = path.basename(child, ext);
                   kept.push({ name: base, isDir: false, original: child });
                 }
@@ -188,6 +213,16 @@ function registerCommand(program) {
       } else {
         line('⚠', 'pages/ not found (file-based routes may be missing)');
         warnings += 1;
+      }
+
+      console.log('\nAI Agent Guidelines');
+      console.log('-------------------');
+      const agentsMdPath = path.join(cwd, 'AGENTS.md');
+      const agentsDirPath = path.join(cwd, '.agents');
+      if (fs.existsSync(agentsMdPath) && fs.existsSync(agentsDirPath)) {
+        line('✓', 'AGENTS.md and .agents/ topic guides present');
+      } else {
+        line('○', 'No AGENTS.md / .agents/ found. Tip: run "npx webspresso agents:init" to scaffold AI agent guidelines.');
       }
 
       console.log('\nEnvironment files');

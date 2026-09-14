@@ -31,13 +31,13 @@ Webspresso combines file-based routing, server-side Nunjucks rendering, an intui
 - [Ambient Transaction Propagation](docs/concepts/transaction-propagation.md): How `AsyncLocalStorage` manages ACID database transactions across nested services and repositories.
 
 ### Agent Deep Dives (.agents/)
-- [Agent Guidelines & Master Index](AGENTS.md): Core coding rules, zero regression policy, and verification workflows.
+- [Agent Guidelines & Master Index](AGENTS.md): Core coding rules, intent triage matrix, zero regression policy, and verification workflows.
 - [Architecture & Boundaries](.agents/ARCHITECTURE.md): Structural overview and public contracts.
 - [Services Layer](.agents/SERVICES.md): Service registry, schema validation, and RBAC guards.
 - [ORM & Database Layer](.agents/ORM.md): `defineModel`, `zdb` schemas, repositories, scopes, and migrations.
 - [Dual Authentication System](.agents/AUTH.md): Session cookies, stateless JWT rotation, and policy guards.
 - [Admin Panel Customization](.agents/ADMIN.md): Custom Mithril.js SPA pages, field renderers, and dashboard widgets.
-- [Plugin Ecosystem](.agents/PLUGINS.md): Reference guide for all official built-in plugins.
+- [Plugin Ecosystem](.agents/PLUGINS.md): Reference guide for all 16 official built-in plugins (including `fileManagerPlugin`, `realtimePlugin`, `basicAuthPlugin`).
 - [Polar.sh Billing](docs/guides/polar-billing.md): Subscription checkout, portal, webhooks, and tier sync via `polarPlugin`.
 - [Realtime Layer](.agents/REALTIME.md): Framework-agnostic WebSocket, SSE, and Socket.IO adapters.
 - [Background Queue](.agents/QUEUE.md): In-memory, Knex DB, and Redis queue adapters.
@@ -45,6 +45,7 @@ Webspresso combines file-based routing, server-side Nunjucks rendering, an intui
 - [Graceful Shutdown](.agents/SHUTDOWN.md): Socket draining and reverse plugin disposers.
 - [HTTP Response Compression](.agents/COMPRESSION.md): Streaming zlib Brotli/Gzip negotiation.
 - [SSR Streaming](.agents/STREAMING.md): Chunked HTTP transfer and deferred loader slots.
+- [CLI Tooling & Scaffolding](.agents/CLI.md): `webspresso dev`, `doctor`, `api`, `page`, `service:make`, `agents:init`.
 
 ---
 
@@ -59,6 +60,7 @@ import {
   zdb,
   errors,
   adminPanelPlugin,
+  fileManagerPlugin,
   restResourcePlugin,
   corsPlugin,
   csrfPlugin,

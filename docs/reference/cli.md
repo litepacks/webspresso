@@ -67,8 +67,8 @@ Run `webspresso db:migrate` after generating the file. See [Polar Billing Guide]
 ### `webspresso doctor`
 Audits the application for configuration errors, uppercase page collisions, and routing issues.
 
-### `webspresso skill [--preset webspresso]`
-Installs the Webspresso agent skill reference files into `.agents/skills/webspresso-usage/`.
+### `webspresso agents:init [--force]`
+Scaffolds AI coding agent guidelines (`.agents/` topic guides, `AGENTS.md`, `CLAUDE.md`, `.cursorrules`) into the current project.
 
 ### `webspresso favicon:generate <source.png>`
 Generates all required favicon sizes, PWA `manifest.json`, and Nunjucks `<head>` partials from a single high-resolution PNG image.

@@ -1,0 +1,14 @@
+# Cursor Rules for Webspresso
+
+Webspresso is a full-stack Node.js framework with 100% file-based routing, Knex ORM repositories, and zero external dependencies for core utilities.
+
+## Critical Guidelines
+- Complete reference & guidebook: Read `AGENTS.md` and `.agents/AGENTS.md`.
+- Canonical API definitions: Check `index.d.ts`.
+
+## Strict Anti-Patterns & Requirements
+1. **NO `routes/` or `app.get()`**: All API routes belong in `pages/api/...` with method extensions (`.get.js`, `.post.js`, `.delete.js`, `.patch.js`, `.put.js`).
+2. **NO Raw `db('table')`**: Always use `req.db.getRepository('ModelName')` or `db.getRepository('ModelName')`.
+3. **NO `controllers/`**: Encapsulate multi-step business logic in `services/domain/action.js` and call via `ctx.service('domain.action', input)`.
+4. **NO external auth libraries**: Use built-in `req.auth` and `webspresso/core/auth`. Do not install `jsonwebtoken` or `passport`.
+5. **Zero regressions**: Run unit/integration tests with `npx vitest run tests/...` before completing tasks.

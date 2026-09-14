@@ -1,6 +1,6 @@
 # Webspresso CLI Tooling & Commands Reference
 
-The `webspresso` CLI utility (`bin/cli.js`) provides development commands for running local SSR servers, executing database migrations, analyzing project health, generating favicons, and scaffolding agent skills.
+The `webspresso` CLI utility (`bin/cli.js`) provides development commands for running local SSR servers, executing database migrations, analyzing project health, and generating favicons.
 
 ---
 
@@ -84,17 +84,7 @@ Then run `npx webspresso db:migrate`. See [docs/guides/polar-production-checklis
 
 ---
 
-## 6. Agent Skill Scaffolding (`skill`)
-
-Scaffolds a localized `.agents/skills` entry:
-
-```bash
-npx webspresso skill --preset webspresso
-```
-
----
-
-## 7. Interactive Service Runner (`service`, `service:run`)
+## 6. Interactive Service Runner (`service`, `service:run`)
 
 Test and run services interactively without starting the HTTP server:
 
@@ -108,3 +98,18 @@ npx webspresso service user.get -i '{"id": 42}'
 # Run with key=value query string
 npx webspresso service payment.refund -i 'transactionId=tx_123 amount=49.99'
 ```
+
+---
+
+## 7. AI Agent Guidelines Scaffolder (`agents:init`)
+
+Scaffolds and synchronizes AI coding agent rules into any Webspresso project:
+
+```bash
+# Scaffold full guidelines bundle (.agents/, AGENTS.md, CLAUDE.md, .cursorrules)
+npx webspresso agents:init
+
+# Overwrite existing guidelines
+npx webspresso agents:init --force
+```
+

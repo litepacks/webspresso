@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { runInstallation, startDevServer } = require('../utils/project');
 const { getSeedFileTemplate } = require('../utils/seed');
+const { scaffoldAgentsFiles } = require('./agents-init');
 
 /** `.` / `./` mean scaffold into the current working directory */
 function isCurrentDirAlias(name) {
@@ -45,6 +46,7 @@ function registerCommand(program) {
     .description('Create a new Webspresso project')
     .option('-t, --template <template>', 'Template to use (minimal, full)', 'minimal')
     .option('--no-tailwind', 'Skip Tailwind CSS setup')
+    .option('--no-agents', 'Skip AI Agent guidelines setup (.agents/, AGENTS.md, CLAUDE.md, .cursorrules)')
     .option('-i, --install', 'Auto install dependencies and build CSS')
     .option('-y, --yes', 'Non-interactive: no database, skip install unless -i/--install, skip dev server')
     .action(async (projectNameArg, options) => {
@@ -718,8 +720,17 @@ module.exports = {
         
         console.log('✅ Tailwind CSS setup complete!');
       }
-      
-      
+
+      // Scaffold AI Agent guidelines unless --no-agents is specified
+      if (options.agents !== false) {
+        try {
+          console.log('\n🤖 Setting up AI Agent guidelines (.agents/, AGENTS.md, CLAUDE.md, .cursorrules)...\n');
+          scaffoldAgentsFiles(projectPath, { force: true, claude: true, cursor: true, guides: true });
+        } catch (e) {
+          // Non-fatal
+        }
+      }
+
       // Auto install if requested or ask interactively
       if (autoInstall) {
         await runInstallation(projectPath, useTailwind);
