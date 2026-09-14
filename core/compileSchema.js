@@ -4,7 +4,7 @@
  */
 
 const { z: zForApi } = require('./validation');
-const schemaCache = require('../utils/schemaCache');
+const schemaCache = require('./schema-cache');
 
 /**
  * Compile schema from an API module

@@ -3,7 +3,7 @@
  */
 
 const { compileSchema, invalidateSchema, clearAllSchemas } = require('../../core/compileSchema');
-const schemaCache = require('../../utils/schemaCache');
+const schemaCache = require('../../core/schema-cache');
 const z = require('zod');
 
 describe('compileSchema.js', () => {

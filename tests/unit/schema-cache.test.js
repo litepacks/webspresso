@@ -1,8 +1,8 @@
 /**
- * Unit Tests for utils/schemaCache.js
+ * Unit Tests for core/schema-cache.js
  */
 
-const schemaCache = require('../../utils/schemaCache');
+const schemaCache = require('../../core/schema-cache');
 
 describe('schemaCache.js', () => {
   beforeEach(() => {

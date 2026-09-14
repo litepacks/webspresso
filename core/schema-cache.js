@@ -1,6 +1,7 @@
 /**
  * Schema Cache
  * Caches compiled Zod schemas per file path
+ * @module core/schema-cache
  */
 
 const cache = new Map();
@@ -54,7 +55,5 @@ module.exports = {
   set,
   has,
   clear,
-  del
+  del,
 };
-
-

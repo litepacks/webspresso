@@ -80,7 +80,6 @@
     "index.d.ts",
     "bin/",
     "src/",
-    "utils/",
     "core/",
     "plugins/",
     "templates/",
