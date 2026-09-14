@@ -305,7 +305,28 @@ const FileUploadField = {
         }),
         m('div', [
           m('p.text-gray-600.dark:text-slate-400.mb-2', displayUrl ? 'Drag and drop to replace, or' : 'Drag and drop a file here, or'),
-          m('label.text-blue-600.hover:text-blue-800.dark:text-blue-400.cursor-pointer', { for: 'file-input-' + col.name }, displayUrl ? 'choose another file' : 'browse'),
+          m('div.flex.items-center.justify-center.gap-3.flex-wrap', [
+            m('label.text-blue-600.hover:text-blue-800.dark:text-blue-400.cursor-pointer.font-medium', { for: 'file-input-' + col.name }, displayUrl ? 'choose another file' : 'browse'),
+            typeof window !== 'undefined' && window.__openFileManagerPicker
+              ? m('button.text-indigo-600.hover:text-indigo-800.dark:text-indigo-400.cursor-pointer.font-medium.flex.items-center.gap-1', {
+                  type: 'button',
+                  onclick: function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.__openFileManagerPicker({
+                      accept: accept,
+                      title: '📁 Ortam Kütüphanesinden Seç',
+                      onSelect: function(pickedUrl) {
+                        if (onChange) onChange(pickedUrl);
+                      }
+                    });
+                  }
+                }, [
+                  m('span', '•'),
+                  m('span', 'Kütüphaneden Seç')
+                ])
+              : null
+          ])
         ]),
       ]),
       m('input[type=hidden]', { name: col.name, value: typeof value === 'string' ? value : '' }),

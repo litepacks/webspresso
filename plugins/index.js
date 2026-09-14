@@ -41,6 +41,7 @@ const {
 } = require('./realtime');
 const { mcpPlugin, createMcpServer, McpServer } = require('./mcp');
 const polarPlugin = require('./polar');
+const fileManagerPlugin = require('./file-manager');
 
 module.exports = {
   sitemapPlugin,
@@ -83,6 +84,7 @@ module.exports = {
   createMcpServer,
   McpServer,
   polarPlugin,
+  fileManagerPlugin,
 };
 
 

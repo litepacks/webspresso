@@ -90,6 +90,7 @@ const {
   mcpPlugin,
   createMcpServer,
   McpServer,
+  fileManagerPlugin,
 } = require('./plugins');
 
 const content = require('./core/content');
@@ -127,6 +128,7 @@ module.exports = {
   createAuthServices: require('./src/services').createAuthServices,
   createMailServices: require('./src/services').createMailServices,
   createMediaServices: require('./src/services').createMediaServices,
+  createFileManagerServices: require('./src/services').createFileManagerServices,
   createSystemServices: require('./src/services').createSystemServices,
   createExchangeServices: require('./src/services').createExchangeServices,
   validateServiceInput: require('./src/services').validateServiceInput,
@@ -243,6 +245,7 @@ module.exports = {
   mcpPlugin,
   createMcpServer,
   McpServer,
+  fileManagerPlugin,
 
   // Schema-driven CMS core (framework-agnostic)
   content,

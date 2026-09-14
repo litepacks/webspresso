@@ -51,6 +51,7 @@ module.exports = {
 | `rateLimitPlugin` | Named + global rate limiters | — |
 | `emailPlugin` | MJML + Nodemailer | — |
 | `uploadPlugin` | Multipart file uploads | — |
+| `fileManagerPlugin` | Filesystem media library & asset picker | — |
 | `contentPlugin` | Headless CMS | — |
 | `restResourcePlugin` | Auto REST CRUD from models | — |
 | `corsPlugin` | CORS handler | — |

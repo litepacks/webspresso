@@ -43,6 +43,7 @@ function createServiceRegistry(options = {}) {
 const { createAuthServices } = require('./builtins/auth');
 const { createMailServices } = require('./builtins/mail');
 const { createMediaServices } = require('./builtins/media');
+const { createFileManagerServices } = require('./builtins/file-manager');
 const { createSystemServices } = require('./builtins/system');
 const { createExchangeServices } = require('./builtins/exchange');
 
@@ -54,6 +55,7 @@ module.exports = {
   createAuthServices,
   createMailServices,
   createMediaServices,
+  createFileManagerServices,
   createSystemServices,
   createExchangeServices,
   memoize,

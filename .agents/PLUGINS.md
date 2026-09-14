@@ -92,7 +92,19 @@ Multipart file upload manager with local / cloud storage providers.
 - **Options**: `{ path: '/api/upload', local: { destDir, publicBasePath }, maxBytes: 10000000, mimeAllowlist: ['image/png', 'image/jpeg'] }`
 - **Features**: Single & multi-file uploads, file size & extension validation, storage drivers.
 
-### 2.5 `corsPlugin` (`plugins/cors`)
+### 2.5 `fileManagerPlugin` (`plugins/file-manager`)
+Filesystem-first media library, directory explorer, and modal asset picker for Admin Panel.
+- **Options**: `{ baseDir: './public/uploads', publicBasePath: '/uploads', apiPrefix: '/files', pageTitle: 'Dosya Yöneticisi', maxUploadBytes: 10485760, allowedExtensions, allowedMimeTypes, includePage: true }`
+- **Features**:
+  - Directory tree navigation (breadcrumbs), safe subfolder creation (`mkdir`), item rename, delete, and move.
+  - Path traversal attack protection (`resolveSafePath`).
+  - Grid (thumbnail gallery) & List (table) view modes.
+  - Search by filename and type filter (Images, Documents, Videos, Audio, Archives, Code).
+  - Media preview modal with copy URL and direct playback/preview.
+  - "Kütüphaneden Seç" modal picker integrated with `FileUploadField` and `zdb.file()` form fields.
+  - Built-in services: `fileManager.list`, `fileManager.mkdir`, `fileManager.rename`, `fileManager.delete`, `fileManager.move`, `fileManager.upload`.
+
+### 2.6 `corsPlugin` (`plugins/cors`)
 Zero-dependency Cross-Origin Resource Sharing (CORS) handler.
 - **Options**: `{ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE'], credentials: true, maxAge: 86400 }`
 - **Features**: Native header management, preflight OPTIONS handling.

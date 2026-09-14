@@ -222,6 +222,11 @@ export function createMediaServices(options?: {
   publicBasePath?: string;
 }): Record<string, ServiceDefinition>;
 
+export function createFileManagerServices(options?: {
+  baseDir?: string;
+  publicBasePath?: string;
+}): Record<string, ServiceDefinition>;
+
 export function createSystemServices(options?: {
   db?: unknown;
   serviceRegistry?: unknown;
@@ -1676,5 +1681,22 @@ export class McpServer {
 
 export function mcpPlugin(options?: McpPluginOptions): WebspressoPlugin;
 export function createMcpServer(options?: McpPluginOptions): McpServer;
+
+// --- File Manager Plugin ---
+
+export interface FileManagerPluginOptions {
+  baseDir?: string;
+  publicBasePath?: string;
+  apiPrefix?: string;
+  pageTitle?: string;
+  menuLabel?: string;
+  menuOrder?: number;
+  maxUploadBytes?: number;
+  allowedExtensions?: string[] | null;
+  allowedMimeTypes?: string[] | null;
+  includePage?: boolean;
+}
+
+export function fileManagerPlugin(options?: FileManagerPluginOptions): WebspressoPlugin;
 
 
