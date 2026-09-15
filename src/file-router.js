@@ -1026,6 +1026,9 @@ function mountPages(app, options) {
   /** Register API routes (shared by static phase and dynamic phase). */
   const registerApiRoutes = (routes) => {
     for (const route of routes) {
+      if (options.skipExistingRoutes && options.skipExistingRoutes.has(route.method || 'GET', route.routePath)) {
+        continue;
+      }
       const handler = require(route.fullPath);
       const handlerFn = typeof handler === 'function' ? handler : handler.default || handler.handler;
       const routeMiddleware = handler.middleware;
@@ -1134,6 +1137,9 @@ function mountPages(app, options) {
   /** Register SSR GET routes (shared by static phase and dynamic phase). */
   const registerSsrRoutes = (routes) => {
     for (const route of routes) {
+      if (options.skipExistingRoutes && options.skipExistingRoutes.has('GET', route.routePath)) {
+        continue;
+      }
       const mountConfig = loadRouteConfig(route.configPath, isDev);
       const preResolvedPageMw = mountConfig?.middleware
         ? resolveMiddlewares(mountConfig.middleware, middlewares)

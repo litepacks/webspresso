@@ -44,7 +44,7 @@ This `.agents/` customization root is organized into modular topic guides:
 6. **[HTTP Response Compression](.agents/COMPRESSION.md)** — Native streaming zlib compression (`server.compression`), Brotli/Gzip/Deflate negotiation, threshold handling, and `res.compress(false)` route opt-out.
 7. **[Dual Authentication System](.agents/AUTH.md)** — Stateful Session + Cookie & Stateless HS256 JWT + Refresh Token Rotation, `req.auth` helpers, and `middleware: ['jwt']` guard integrations.
 8. **[ORM & Database Layer](.agents/ORM.md)** — Model definitions with `defineModel`, `zdb` schemas, Repositories API, Query Caching, Relations, Soft Delete, Scopes & Migrations.
-9. **[Plugin Ecosystem Guide](.agents/PLUGINS.md)** — Lifecycle hooks (`register`, `onRoutesReady`), CSP headers, and detailed reference for all 15 built-in official plugins (including `realtimePlugin` and `basicAuthPlugin`).
+9. **[Plugin Ecosystem Guide](.agents/PLUGINS.md)** — Lifecycle hooks (`register`, `onRoutesReady`), CSP headers, and detailed reference for all 18 built-in official plugins (including `xlsxPlugin`, `csvPlugin`, `fileManagerPlugin`, `realtimePlugin`, and `basicAuthPlugin`).
 10. **[Realtime Layer & Adapters](.agents/REALTIME.md)** — Framework-agnostic realtime layer (`core/realtime`), generic WebSocket, SSE, and Socket.IO adapters, subscription identity, backoff reconnect, and auth lifecycle.
 11. **[Email Plugin Guide](.agents/EMAIL.md)** — MJML template compilation, Nodemailer transport, DB delivery logs, Auth Email bridge, and Admin UI.
 12. **[Admin Panel Customization](.agents/ADMIN.md)** — Extending Mithril.js Admin Panel SPA (Custom pages `component.js`, custom field renderers, widgets, single & bulk actions).

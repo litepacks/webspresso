@@ -75,69 +75,75 @@ Create `pages/index.njk`:
 {% endblock %}
 ```
 
-### Adding Server-Side Data (`load()`)
+### Adding Server-Side Data (`definePage()` or `load()`)
 
-To fetch data on the server before rendering the template, export an `async function load()`:
+To fetch data on the server before rendering the template or to build pure JavaScript pages, export with `definePage()`:
 
-Create or edit `pages/index.js` (or export directly alongside the template):
+Create or edit `pages/index.js` (or companion loader for `pages/index.njk`):
 
 ```javascript
-module.exports = {
+const { definePage } = require('webspresso');
+
+module.exports = definePage({
   async load({ req, res, ctx }) {
     return {
       message: 'Hello from Webspresso!',
       timestamp: new Date().toISOString(),
     };
   },
-};
+});
 ```
 
 ---
 
 ## 4. Creating a JSON API Endpoint
 
-API routes are defined under `pages/api/` using HTTP method suffixes in the filename.
+API routes are defined under `pages/api/` (or `src/api/`) using HTTP method suffixes in the filename wrapped with `defineApi()`.
 
 Create `pages/api/health.get.js`:
 
 ```javascript
-module.exports = async function healthHandler(req, res) {
-  res.json({
-    status: 'ok',
-    uptime: process.uptime(),
-    timestamp: Date.now(),
-  });
-};
+const { defineApi } = require('webspresso');
+
+module.exports = defineApi({
+  handler: async (req, res) => {
+    return {
+      status: 'ok',
+      uptime: process.uptime(),
+      timestamp: Date.now(),
+    };
+  },
+});
 ```
 
-This automatically mounts `GET /api/health`.
+This automatically mounts `GET /api/health` with automatic JSON serialization.
 
 ### Adding Zod Schema Validation
 
-To validate request query parameters or request body, export a `schema` function:
+To validate request query parameters, body, or params, export a `schema` with `defineApi()`:
 
 Create `pages/api/greet.post.js`:
 
 ```javascript
-module.exports = {
-  schema({ z }) {
-    return {
-      body: z.object({
-        name: z.string().min(2),
-        email: z.string().email().optional(),
-      }),
-    };
+const { defineApi, z } = require('webspresso');
+
+module.exports = defineApi({
+  schema: {
+    body: z.object({
+      name: z.string().min(2),
+      email: z.string().email().optional(),
+    }),
   },
 
-  async handler(req, res) {
-    // req.input is typed and validated by Zod
+  handler: async (req, res) => {
+    // req.input.body is strictly validated by Zod
     const { name, email } = req.input.body;
-    res.json({
+    return {
       greeting: `Hello, ${name}!`,
       sentTo: email || 'not provided',
-    });
+    };
   },
-};
+});
 ```
 
 ---

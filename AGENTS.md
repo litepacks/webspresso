@@ -67,20 +67,25 @@ Every coding agent working on Webspresso **MUST** follow this 4-step execution d
     - `pages/api/notes/[id].delete.js` → `DELETE /api/notes/:id`
   - **Standard API Route Module Contract**:
     ```javascript
-    module.exports = {
+    const { defineApi } = require('webspresso');
+
+    module.exports = defineApi({
       schema: ({ z }) => ({
         body: z.object({ title: z.string().min(1) }),
         params: z.object({ id: z.string().optional() }),
       }),
-      middleware: ['auth'], // optional named middleware
-      handler: async (req, res) => {
+      middleware: ['auth'], // optional named or functional middleware
+      handler: async (req, res, ctx) => {
         // req.db and req.service are automatically injected
         // req.input.body contains the validated payload
         const item = await req.db.getRepository('Note').create(req.input.body);
         return res.status(201).json(item);
       },
-    };
+    });
     ```
+  - **Modular Architecture (`src/modules/` or `modules/`)**:
+    - Encapsulate domain features using `defineModule({ name, pages, api, services, middlewares })`.
+    - Auto-registers routes (`/auth/login`, `/api/auth/login`), services (`'auth.login'`), and scoped middlewares without manual router glue.
 
 ### 1.2 Services Layer (`services/`, `src/services/`)
 - **File-based Auto-Discovery**: Services located in `services/` map directly to dot-separated service names (e.g. `services/user/create.js` → `'user.create'`) and camelCase aliases (`'user.reset-password'` & `'user.resetPassword'`).
@@ -117,9 +122,10 @@ Every coding agent working on Webspresso **MUST** follow this 4-step execution d
   - Actions & Bulk Actions: Single record buttons (`registerAction`) and multi-select table actions (`registerBulkAction`).
 - **Session Isolation**: Admin staff authentication uses a separate session (`req.session.adminUser` / `/_admin/api/auth/*`), isolated from public site auth (`req.user`).
 
-### 1.4 Plugin Ecosystem (`plugins/`)
+### 1.5 Plugin Ecosystem (`plugins/`)
 Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register(ctx)`, `onRoutesReady(ctx)`):
 - `adminPanelPlugin`: Model CRUD, custom pages, widgets, user management.
+- `fileManagerPlugin`: Media library, directory tree, file preview, and drag-and-drop uploads.
 - `basicAuthPlugin`: Zero-dependency HTTP Basic Authentication (RFC 7617) with named route middleware (`ctx.middlewares.basicAuth`) and global protection.
 - `contentPlugin`: Schema-driven CMS with inline editing and headless API.
 - `uploadPlugin`: Multipart file uploads with local/cloud storage providers.
@@ -134,6 +140,8 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 - `csrfPlugin`: CSRF token validation and Nunjucks form helpers.
 - `realtimePlugin`: Framework-agnostic, plugin-based realtime layer (`core/realtime`) with WebSocket, SSE, Socket.IO, and distributed Redis Pub/Sub adapters.
 - `restResourcePlugin`: Zero-boilerplate RESTful CRUD API generator directly from ORM models with eager loading, sanitization, filtering, pagination, and soft-delete scoping.
+- `xlsxPlugin`: Excel spreadsheet generation, parsing, ORM streaming export (`res.xlsx`), and built-in services (`xlsx.generate`, `xlsx.parse`, `xlsx.exportModel`).
+- `csvPlugin`: RFC 4180 CSV generator, parser, Excel UTF-8 BOM compatibility, formula sanitization, streaming writer (`res.csv`), and built-in services (`csv.generate`, `csv.parse`, `csv.exportModel`).
 
 ---
 

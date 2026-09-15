@@ -60,6 +60,7 @@ interface CreateAppResult {
 
 | Property / Method | Type | Description |
 | :--- | :--- | :--- |
+| **`app.routes`** | `RouteTable` | Immutable route registry with `.list()`, `.match(method, path)`, and `.tree()`. |
 | **`app.serviceRegistry`** | `ServiceRegistry` | In-process business services registry. |
 | **`app.close()`** | `() => Promise<void>` | Idempotent method to gracefully shut down the server and dispose all plugins. |
 | **`app.setErrorHandler()`** | `(handler) => void` | Register a custom central error boundary handler. |

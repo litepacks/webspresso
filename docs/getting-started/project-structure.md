@@ -21,14 +21,22 @@ my-app/
 ├── pages/                   # File-based routing (SSR & API)
 │   ├── _hooks.js            # Global lifecycle hooks (onRequest, onError)
 │   ├── index.njk            # Home page template (GET /)
-│   ├── index.js             # Home page data loader (load())
+│   ├── index.js             # Home page data loader (load() or definePage())
 │   ├── about.njk            # Static page (GET /about)
 │   ├── users/
 │   │   ├── [id].njk         # Dynamic route (GET /users/:id)
 │   │   └── [id].js          # Dynamic route loader
 │   └── api/
-│       ├── health.get.js    # JSON API endpoint (GET /api/health)
-│       └── users.post.js    # JSON API endpoint (POST /api/users)
+│       ├── health.get.js    # JSON API endpoint (GET /api/health via defineApi())
+│       └── users.post.js    # JSON API endpoint (POST /api/users via defineApi())
+│
+├── modules/                 # Modular domain features (or src/modules/)
+│   └── auth/
+│       ├── auth.module.js   # defineModule({ name: 'auth', ... })
+│       ├── pages/           # Module SSR/JS pages (GET /auth/login, GET /auth/register)
+│       ├── api/             # Module JSON APIs (POST /api/auth/login, GET /api/auth/me)
+│       ├── services/        # Auto-registered domain services ('auth.login', 'auth.me')
+│       └── middleware/      # Module-scoped middleware ('authGuard')
 │
 ├── views/                   # Nunjucks layouts and shared partials
 │   ├── layout.njk           # Primary application layout shell
@@ -73,9 +81,15 @@ my-app/
 
 ### `pages/`
 - All `.njk` and `.js` files here automatically turn into URL routes.
+- Supports `definePage({ load, head, render })` for modern programmatic page definitions alongside Nunjucks templates.
 - Subdirectories map directly to URL paths (e.g., `pages/blog/post.njk` → `/blog/post`).
 - Dynamic segments use square brackets: `[id].njk` maps to `:id`. Catch-all segments use `[...slug].njk` mapping to `*`.
-- The `api/` subdirectory handles JSON request and response payloads, using HTTP method suffixes in filenames (`.get.js`, `.post.js`, `.delete.js`).
+- The `api/` subdirectory handles JSON request and response payloads, using HTTP method suffixes in filenames (`.get.js`, `.post.js`, `.delete.js`, `.patch.js`, `.put.js`) wrapped with `defineApi()`.
+
+### `modules/` (or `src/modules/`)
+- Encapsulates domain features with isolated `pages/`, `api/`, `services/`, and `middleware/` folders.
+- Export `defineModule({ name, pages, api, services, middlewares })` in `[name].module.js`.
+- Automatically mounts pages at `/<module-name>/...`, APIs at `/api/<module-name>/...`, and registers services as `<module-name>.<service-file>`.
 
 ### `views/`
 - Contains layout wrappers and partial templates for Nunjucks rendering.

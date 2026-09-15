@@ -154,5 +154,48 @@ app.setErrorHandler(async (err, req, res, next) => {
 ```
 
 ### Development vs Production:
-- **Production (`NODE_ENV === 'production'`)**: 500 errors are masked to `"Internal Server Error"`. `stack` and `cause` are never exposed to clients.
-- **Development**: Returns `stack`, `cause`, and original error messages for immediate debugging.
+- **Production (`NODE_ENV === 'production'`)**: 500 errors are masked to `"Internal Server Error"`. `stack`, `cause`, and internal file paths are never exposed to clients.
+- **Development**: Returns `stack`, `cause`, and a structured `trace` object identifying the exact route, module, source file, and execution phase.
+
+---
+
+## 5. Route Tracing & Request ID Observability
+
+Webspresso automatically correlates every request and enriches thrown errors with route-level execution metadata:
+
+### 5.1 Request Correlation ID (`req.id` / `X-Request-Id`)
+Every incoming request is assigned a unique UUID (`req.id`) available on `req.id` and returned in the `X-Request-Id` response header:
+```javascript
+// Access in services, loaders, or logs:
+const reqId = req.id; // e.g. "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+```
+
+### 5.2 Context-Enriched Trace Object (Development Mode)
+When an exception occurs during request execution in `definePage`, `defineApi`, or a feature module, the development JSON payload contains an explicit `trace` object:
+
+```json
+{
+  "status": 500,
+  "error": "Internal Server Error",
+  "message": "Database query failed",
+  "trace": {
+    "route": "/api/auth/me",
+    "method": "GET",
+    "source": "src/modules/auth/api/me.get.js",
+    "module": "auth",
+    "phase": "handler",
+    "requestId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+  },
+  "stack": "Error: Database query failed\n    at ...",
+  "cause": null
+}
+```
+
+### 5.3 Visual Console Error Banners
+In server logs, 500 errors are automatically highlighted with visual banners pinpointing the root cause:
+```txt
+[webspresso] 🚨 Error at GET /api/auth/me [module: auth] (reqId: 9b1deb4d-3b7d-...)
+  Source: src/modules/auth/api/me.get.js
+  Phase:  handler
+```
+

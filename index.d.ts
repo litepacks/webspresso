@@ -711,6 +711,7 @@ export type Zdb = Record<string, any> & {
 };
 
 export const zdb: Zdb;
+export const z: typeof import('zod').z;
 
 export function createSchemaHelpers(z: typeof import('zod').z): Zdb;
 
@@ -1854,6 +1855,131 @@ export interface CsvToolkit {
 
 export const csv: CsvToolkit;
 export function csvPlugin(options?: CsvPluginOptions): WebspressoPlugin;
+
+// --- Discovery, Pages, API & Modules ---
+
+export interface PageContext<TParams = Record<string, string>, TQuery = Record<string, string>> {
+  req: import('express').Request;
+  res: import('express').Response;
+  params: TParams;
+  query: TQuery;
+  service: <TInput = unknown, TOutput = unknown>(name: string, input?: TInput, opts?: unknown) => Promise<TOutput>;
+  module: string | null;
+  config: Record<string, unknown>;
+  logger: Console;
+  redirect: (url: string, status?: number) => { __redirected: boolean };
+  error: (status?: number, message?: string) => never;
+  fsy: Record<string, unknown>;
+  locale: string;
+  t: (key: string, params?: Record<string, unknown>) => string;
+  db: unknown;
+}
+
+export interface DefinePageOptions<TData = any, TParams = Record<string, string>, TQuery = Record<string, string>> {
+  middleware?: (string | import('express').RequestHandler | [string, Record<string, unknown>])[];
+  load?: (ctx: PageContext<TParams, TQuery>) => Promise<TData> | TData;
+  head?: (data: TData, ctx: PageContext<TParams, TQuery>) => Record<string, unknown>;
+  render?: (data: TData, ctx: PageContext<TParams, TQuery>) => string | Promise<string>;
+  layout?: string | boolean;
+  hooks?: Record<string, unknown>;
+  meta?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export function definePage<TData = any, TParams = Record<string, string>, TQuery = Record<string, string>>(
+  config: DefinePageOptions<TData, TParams, TQuery> | ((ctx: PageContext<TParams, TQuery>) => Promise<TData> | TData)
+): DefinePageOptions<TData, TParams, TQuery>;
+
+export interface ApiContext<TBody = any, TParams = Record<string, string>, TQuery = Record<string, string>> {
+  req: import('express').Request;
+  res: import('express').Response;
+  params: TParams;
+  query: TQuery;
+  body: TBody;
+  input: { body?: TBody; params?: TParams; query?: TQuery; headers?: Record<string, string> };
+  service: <TInput = unknown, TOutput = unknown>(name: string, input?: TInput, opts?: unknown) => Promise<TOutput>;
+  module: string | null;
+  config: Record<string, unknown>;
+  logger: Console;
+  db: unknown;
+}
+
+export interface DefineApiOptions<TResult = any, TBody = any, TParams = Record<string, string>, TQuery = Record<string, string>> {
+  description?: string;
+  tags?: string[];
+  middleware?: (string | import('express').RequestHandler | [string, Record<string, unknown>])[];
+  schema?: {
+    params?: unknown;
+    query?: unknown;
+    body?: unknown;
+    headers?: unknown;
+  } | ((helpers: { z: typeof import('zod').z }) => Record<string, unknown>);
+  response?: Record<number | string, unknown>;
+  handler: (req: import('express').Request, ctx: ApiContext<TBody, TParams, TQuery>) => Promise<TResult> | TResult;
+  [key: string]: unknown;
+}
+
+export function defineApi<TResult = any, TBody = any, TParams = Record<string, string>, TQuery = Record<string, string>>(
+  config: DefineApiOptions<TResult, TBody, TParams, TQuery> | ((req: import('express').Request, ctx: ApiContext<TBody, TParams, TQuery>) => Promise<TResult> | TResult)
+): DefineApiOptions<TResult, TBody, TParams, TQuery>;
+
+export interface DefineModuleOptions {
+  name: string;
+  version?: string;
+  description?: string;
+  imports?: string[];
+  dependencies?: string[];
+  pages?: boolean | { dir?: string; prefix?: string };
+  api?: boolean | { dir?: string; prefix?: string };
+  services?: Record<string, unknown> | boolean | { dir?: string };
+  middlewares?: Record<string, import('express').RequestHandler> | boolean | { dir?: string };
+  exports?: Record<string, unknown>;
+  apiExports?: Record<string, unknown>;
+  onInit?: (ctx: unknown) => void | Promise<void>;
+  onDestroy?: (ctx: unknown) => void | Promise<void>;
+  [key: string]: unknown;
+}
+
+export function defineModule(config: DefineModuleOptions): (userOptions?: Record<string, unknown>) => WebspressoPlugin;
+
+export interface RouteDescriptor {
+  type: 'page' | 'api';
+  method: string;
+  path: string;
+  file: string;
+  source?: string;
+  module?: string | null;
+  description?: string;
+  tags?: string[];
+  moduleConfig?: unknown;
+}
+
+export class RouteTable {
+  routes: ReadonlyArray<RouteDescriptor>;
+  constructor(routes?: RouteDescriptor[]);
+  list(): Array<{ method: string; path: string; type: string; module: string | null; source: string; description?: string; tags?: string[] }>;
+  get(method: string, path: string): RouteDescriptor | undefined;
+  has(method: string, path: string): boolean;
+  get size(): number;
+}
+
+export function scanRoutes(options?: {
+  rootDir?: string;
+  pages?: boolean | { dir?: string; prefix?: string };
+  api?: boolean | { dir?: string; prefix?: string };
+  modules?: boolean | { dir?: string };
+}): RouteDescriptor[];
+
+export function parseFileRoute(
+  relativePath: string,
+  options?: { type?: 'page' | 'api'; prefix?: string }
+): { path: string; method: string; isValid: boolean; isPrivate: boolean; originalMethodPart?: string };
+
+export function compileRouteTable(
+  descriptors?: RouteDescriptor[],
+  options?: { explicitRoutes?: Array<{ method?: string; path: string }>; isDev?: boolean }
+): RouteTable;
+
 
 
 

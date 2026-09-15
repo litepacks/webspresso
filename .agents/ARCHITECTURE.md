@@ -13,6 +13,16 @@
   - ⚠️ **CRITICAL ANTI-PATTERN: NEVER create a `routes/` or `src/routes/` directory. NEVER use `express.Router()`, `app.get()`, or `app.post()`. All application endpoints must live under `pages/` and `pages/api/`. See [ROUTING.md](ROUTING.md).**
 - **Data Loaders (`load()`)**: Page routes export `async function load({ req, res, db, ctx })` to fetch data server-side before Nunjucks template rendering.
 - **API Endpoints**: Defined as file route modules in `pages/api/...` exporting `{ schema, middleware, handler }`. Input validation via Zod (`schema: ({ z }) => ({ body, query, params })`) assigns validated data to `req.input.body` / `req.input.query`.
+- **Modern Page & API Helpers (`definePage`, `defineApi`)**:
+  - `definePage({ middleware, load, head, render, layout })`: Pure JS or Nunjucks-backed page routes with unified execution context (`ctx: { req, res, params, query, service, db, redirect, error, fsy, locale, t }`).
+  - `defineApi({ description, tags, schema, middleware, handler })`: REST API endpoints with declarative Zod validation (`req.input`), middleware chain, and automatic JSON response formatting.
+- **Feature Modules (`src/modules/` or `modules/`, `defineModule`)**:
+  - Domain-oriented modular architecture bundling pages, APIs, services, and scoped middlewares into standalone units (`defineModule({ name, pages, api, services, middlewares, onInit, onDestroy })`).
+  - Automatic service prefixing (`'auth.login'`) and scoped route prefixing (`/auth/*`, `/api/auth/*`).
+- **Deterministic Route Compilation & Introspection (`RouteTable`, `app.routes.list()`)**:
+  - Discovered routes are compiled and sorted in deterministic priority order: Static $\to$ Deep Dynamic $\to$ Shallow Dynamic $\to$ Catch-All (`*`).
+  - Detects `METHOD + PATH` collision conflicts at startup and throws descriptive errors.
+  - Inspectable via `app.routes.list()` for CLI tools, documentation generation, and debugging.
 - **Templating & Helpers**: Nunjucks (`.njk`) templates rendered with layouts (e.g. `views/layout.njk`). Access helpers via `fsy` object in templates.
 - **Asset Management & Cache-Busting (`assets`, `AssetManager`, `fsy`)**:
   - Configured via `createApp({ assets: { version, manifestPath, prefix, publicDir } })` or `configureAssets()`.
@@ -92,6 +102,7 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 | `basicAuthPlugin` | Security / HTTP | Zero-dependency RFC 7617 HTTP Basic Authentication with timing-safe comparison |
 | `realtimePlugin` | Realtime | Framework-agnostic realtime layer (`core/realtime`) with WebSocket, SSE, Socket.IO, and Redis adapters |
 | `adminPanelPlugin` | Admin / SPA | ORM-backed CRUD SPA with user management & custom pages |
+| `fileManagerPlugin` | Admin / Media | Media library, directory tree, file preview, and drag-and-drop uploads |
 | `contentPlugin` | Admin / CMS | Schema-driven CMS with inline editing and public REST API |
 | `uploadPlugin` | HTTP / Admin | Multipart upload endpoint + pluggable storage providers |
 | `redirectPlugin` | HTTP | Configurable HTTP 301–308 redirects before file routes |
@@ -102,4 +113,7 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 | `auditLogPlugin` | Security | Admin mutation audit logging |
 | `ormCacheAdminPlugin` | Admin / ORM | Cache inspection and invalidation dashboard |
 | `restResourcePlugin` | ORM / REST API | Auto RESTful CRUD endpoints from models with eager loading & sanitization |
+| `xlsxPlugin` | Excel / Export | Excel spreadsheet generation, parsing, ORM streaming export (`res.xlsx`), and services |
+| `csvPlugin` | CSV / Export | RFC 4180 CSV generator, parser, Excel UTF-8 BOM, streaming writer (`res.csv`), and services |
+
 

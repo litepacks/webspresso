@@ -52,6 +52,15 @@ const {
   resetPluginManager
 } = require('./src/plugin-manager');
 
+// Discovery, Pages, API, Modules & Routing primitives
+const { definePage } = require('./src/pages/define-page');
+const { defineApi } = require('./src/api/define-api');
+const { defineModule } = require('./src/modules/define-module');
+const { scanRoutes } = require('./src/discovery/scan-routes');
+const { parseFileRoute } = require('./src/discovery/file-route-parser');
+const { compileRouteTable, RouteTable } = require('./src/routing/route-table');
+const { mountDiscoveredRoutes } = require('./src/routing/mount-discovered-routes');
+
 // ORM exports (lazy loaded)
 const orm = require('./core/orm');
 
@@ -211,8 +220,9 @@ module.exports = {
   /** Event bus / plugin shell / view resolver / flows (`kernel.createApp` is distinct from SSR `createApp`) */
   kernel,
 
-  // Direct zdb export (for convenience)
+  // Direct zdb & z export (for convenience)
   zdb: orm.zdb,
+  z: require('./core/validation').z,
 
   // Plugins
   schemaExplorerPlugin,
@@ -254,6 +264,19 @@ module.exports = {
   xlsx,
   csvPlugin,
   csv,
+
+  // Discovery, Pages, API, Modules & Routing primitives
+  definePage,
+  page: definePage,
+  defineApi,
+  api: defineApi,
+  defineModule,
+  module: defineModule,
+  scanRoutes,
+  parseFileRoute,
+  compileRouteTable,
+  RouteTable,
+  mountDiscoveredRoutes,
 
   // Schema-driven CMS core (framework-agnostic)
   content,

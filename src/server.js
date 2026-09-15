@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { AsyncLocalStorage } = require('async_hooks');
 const express = require('express');
 const helmet = require('helmet');
@@ -18,6 +19,10 @@ const { mountPages, detectLocale, loadI18n, createTranslator } = require('./file
 const { configureAssets, createHelpers, getScriptInjector } = require('./helpers');
 const { createPluginManager } = require('./plugin-manager');
 const { createServiceRegistry } = require('./services');
+const { scanRoutes } = require('./discovery/scan-routes');
+const { compileRouteTable } = require('./routing/route-table');
+const { mountDiscoveredRoutes } = require('./routing/mount-discovered-routes');
+const { discoverModuleDetails } = require('./modules/module-discovery');
 const { ShutdownManager, NodeHttpAdapter } = require('../core/shutdown');
 const { createCompressionMiddleware } = require('../core/compression');
 const {
@@ -390,7 +395,7 @@ function createApp(options = {}) {
   const isTest = NODE_ENV === 'test';
   
   const {
-    pagesDir,
+    pagesDir: initialPagesDir,
     viewsDir,
     publicDir,
     logging = isDev && !isTest,
@@ -404,6 +409,26 @@ function createApp(options = {}) {
     setupRoutes,
   } = options;
   
+  if (!initialPagesDir && !options.pages && !options.api && !options.modules && !options.routes && !options.rootDir) {
+    throw new Error('pagesDir is required');
+  }
+
+  const rootDir = options.rootDir || process.cwd();
+  let pagesDir = initialPagesDir;
+  if (!pagesDir) {
+    if (typeof options.pages === 'string') {
+      pagesDir = path.isAbsolute(options.pages) ? options.pages : path.join(rootDir, options.pages);
+    } else if (typeof options.pages === 'object' && options.pages?.dir) {
+      pagesDir = path.isAbsolute(options.pages.dir) ? options.pages.dir : path.join(rootDir, options.pages.dir);
+    } else if (fs.existsSync(path.join(rootDir, 'src/pages'))) {
+      pagesDir = path.join(rootDir, 'src/pages');
+    } else if (fs.existsSync(path.join(rootDir, 'pages'))) {
+      pagesDir = path.join(rootDir, 'pages');
+    } else {
+      pagesDir = path.join(rootDir, 'pages');
+    }
+  }
+
   // Create plugin manager
   const pluginManager = createPluginManager();
   
@@ -413,10 +438,6 @@ function createApp(options = {}) {
     ...assetsConfig
   });
   
-  if (!pagesDir) {
-    throw new Error('pagesDir is required');
-  }
-
   const clientRuntime = resolveClientRuntime(options);
 
   const shutdownConfig = {
@@ -473,6 +494,14 @@ function createApp(options = {}) {
   
   const app = express();
   app.serviceRegistry = serviceRegistry;
+
+  // Correlation Request ID middleware
+  app.use((req, res, next) => {
+    const reqId = (req.headers && req.headers['x-request-id']) ? req.headers['x-request-id'] : crypto.randomUUID();
+    req.id = reqId;
+    res.setHeader('X-Request-Id', reqId);
+    next();
+  });
 
   // Request context & services caller middleware
   app.use((req, res, next) => {
@@ -685,7 +714,10 @@ function createApp(options = {}) {
   mountClientRuntime(app, clientRuntime);
 
   // Configure Nunjucks with viewsDir priority and circular extension guard
-  const templateDirs = viewsDir ? [viewsDir, pagesDir] : [pagesDir];
+  const templateDirs = [viewsDir, pagesDir].filter(Boolean);
+  if (templateDirs.length === 0) {
+    templateDirs.push(path.join(rootDir, 'pages'));
+  }
   
   const nunjucksEnv = configureSafeNunjucks(templateDirs, {
     autoescape: true,
@@ -731,7 +763,33 @@ function createApp(options = {}) {
     }
     return d.toString();
   });
-  
+
+  // Auto-discover module services and middlewares if modules directory exists
+  const modulesDirCandidate = options.modules?.dir
+    ? (path.isAbsolute(options.modules.dir) ? options.modules.dir : path.join(rootDir, options.modules.dir))
+    : (fs.existsSync(path.join(rootDir, 'src/modules')) ? path.join(rootDir, 'src/modules') : (fs.existsSync(path.join(rootDir, 'modules')) ? path.join(rootDir, 'modules') : null));
+
+  if (modulesDirCandidate && fs.existsSync(modulesDirCandidate) && options.modules !== false) {
+    try {
+      const entries = fs.readdirSync(modulesDirCandidate, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory() && !entry.name.startsWith('_') && !entry.name.startsWith('.')) {
+          const details = discoverModuleDetails(path.join(modulesDirCandidate, entry.name), entry.name);
+          for (const [sName, sDef] of Object.entries(details.services)) {
+            if (!serviceRegistry.has(sName)) {
+              serviceRegistry.register(sName, sDef);
+            }
+          }
+          for (const [mName, mFn] of Object.entries(details.middlewares)) {
+            middlewares[`${entry.name}.${mName}`] = mFn;
+          }
+        }
+      }
+    } catch (mErr) {
+      console.warn('[webspresso] Warning discovering modules:', mErr.message);
+    }
+  }
+
   // Register plugins (sync) — middlewares is the same object later passed to mountPages
   const pluginContext = { app, nunjucksEnv, options, middlewares, shutdownManager };
   pluginManager.registerSync(plugins, pluginContext);
@@ -748,12 +806,29 @@ function createApp(options = {}) {
     });
   }
   
-  // Mount file-based routes
-  if (!isTest) {
+  // 1. Scan and compile discovered routes (src/pages, src/api, modules/*)
+  const discoveredDescriptors = scanRoutes({
+    rootDir,
+    pages: options.pages !== undefined ? options.pages : (options.pagesDir ? { dir: options.pagesDir } : true),
+    api: options.api,
+    modules: options.modules,
+  });
+
+  const routeTable = compileRouteTable(discoveredDescriptors, {
+    explicitRoutes: options.routes || [],
+    isDev,
+  });
+
+  // Expose RouteTable on app instance
+  app.routes = routeTable;
+  app.routeTable = routeTable;
+
+  if (!isTest && routeTable.size > 0) {
     console.log('\nMounting routes:');
   }
-  const { routeMetadata, registerDynamicFileRoutes } = mountPages(app, {
-    pagesDir,
+
+  // Mount discovered routes
+  const { routeMetadata: discoveredMeta, registerDynamicDiscoveredRoutes } = mountDiscoveredRoutes(app, routeTable, {
     nunjucks: nunjucksEnv,
     middlewares,
     pluginManager,
@@ -762,10 +837,32 @@ function createApp(options = {}) {
     clientRuntime,
     pageAssets: options.pageAssets,
     serviceRegistry,
+    options,
   });
 
-  // Set route metadata in plugin manager
-  pluginManager.setRoutes(routeMetadata);
+  // 2. Mount classic file-based routes for backwards compatibility
+  let classicRouteMeta = [];
+  let registerDynamicFileRoutes = () => {};
+  if (pagesDir && fs.existsSync(path.resolve(pagesDir))) {
+    const classicMount = mountPages(app, {
+      pagesDir,
+      nunjucks: nunjucksEnv,
+      middlewares,
+      pluginManager,
+      silent: isTest,
+      db: options.db ?? null,
+      clientRuntime,
+      pageAssets: options.pageAssets,
+      serviceRegistry,
+      skipExistingRoutes: routeTable,
+    });
+    classicRouteMeta = classicMount.routeMetadata || [];
+    registerDynamicFileRoutes = classicMount.registerDynamicFileRoutes || (() => {});
+  }
+
+  // Combine route metadata for plugin manager
+  const allRouteMeta = [...discoveredMeta, ...classicRouteMeta];
+  pluginManager.setRoutes(allRouteMeta);
   
   // Call onRoutesReady hook synchronously (plugins should not be async in this phase)
   // and mount any custom routes added by plugins
@@ -808,9 +905,9 @@ function createApp(options = {}) {
     });
   }
 
-  // Dynamic / catch-all file routes after plugins and setupRoutes so paths like /_admin
-  // or custom /login are not shadowed by pages/[slug].njk (/:slug).
+  // Dynamic / catch-all file routes after plugins and setupRoutes
   registerDynamicFileRoutes();
+  registerDynamicDiscoveredRoutes();
 
   // Helper to create error page context with fsy
   function createErrorContext(req, extraData = {}) {

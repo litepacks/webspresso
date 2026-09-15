@@ -181,5 +181,34 @@ describe('Central Error Handler Middleware (core/errors/middleware)', () => {
       expect(res.statusCode).toBe(404);
       expect(res.body).toContain('Error 404');
     });
+
+    it('should include trace metadata in JSON responses in development mode', async () => {
+      const handler = createCentralErrorHandler({ isDev: true });
+      const res = createMockRes();
+      const req = { path: '/api/auth/me', headers: {} };
+
+      const err = new Error('Database disconnected');
+      err.status = 500;
+      err.route = '/api/auth/me';
+      err.method = 'GET';
+      err.source = 'src/modules/auth/api/me.get.js';
+      err.module = 'auth';
+      err.phase = 'handler';
+      err.requestId = 'req_trace_999';
+
+      await handler(err, req, res, () => {});
+
+      expect(res.statusCode).toBe(500);
+      expect(res.body.trace).toBeDefined();
+      expect(res.body.trace).toEqual({
+        route: '/api/auth/me',
+        method: 'GET',
+        source: 'src/modules/auth/api/me.get.js',
+        module: 'auth',
+        phase: 'handler',
+        requestId: 'req_trace_999',
+      });
+      expect(res.body.stack).toBeDefined();
+    });
   });
 });

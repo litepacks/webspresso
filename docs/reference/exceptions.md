@@ -67,3 +67,58 @@ app.setErrorHandler((err, req, res, next) => {
   });
 });
 ```
+
+---
+
+## 4. Error Tracing & Observability
+
+Webspresso features rich error tracing designed to pinpoint the exact failure point in loaders, route handlers, or schema validation pipelines without exposing internal implementation details in production.
+
+### 4.1 Request Correlation ID (`req.id`)
+
+Every incoming HTTP request receives a unique correlation identifier:
+- Reuses client-provided `X-Request-Id` (or `X-Correlation-Id`) if present.
+- Otherwise generates a standard UUID v4 via native `crypto.randomUUID()`.
+- Automatically sets the outgoing `X-Request-Id` HTTP header.
+
+### 4.2 Development Trace Object (`err.trace`)
+
+In non-production environments (`NODE_ENV !== 'production'`), errors caught by page/API loaders and the central error boundary contain structured diagnostic context:
+
+```json
+{
+  "success": false,
+  "error": "TypeError",
+  "message": "Cannot read properties of undefined (reading 'title')",
+  "trace": {
+    "route": "/api/notes/42",
+    "method": "GET",
+    "source": "pages/api/notes/[id].get.js",
+    "module": "notes",
+    "phase": "handler",
+    "requestId": "550e8400-e29b-41d4-a716-446655440000"
+  },
+  "stack": "TypeError: Cannot read properties of undefined...\n    at handler (/src/api/notes/[id].get.js:12:35)..."
+}
+```
+
+### 4.3 Loader Phase Tracking
+
+The `phase` property isolates where the exception was triggered:
+- `'schema'`: Zod schema compilation or payload validation.
+- `'load'`: SSR page data loader execution (`load()`).
+- `'handler'`: API endpoint or route handler execution.
+- `'render'`: Template rendering and HTML compilation.
+
+### 4.4 Visual Console Error Banners
+
+In development mode, server errors print high-visibility boxed console banners with route, method, phase, and source file metadata for rapid terminal debugging:
+
+```text
+┌────────────────────────────────────────────────────────────┐
+│ 💥 [ERROR] GET /api/notes/42 [Phase: handler]
+│ 📁 Source: pages/api/notes/[id].get.js
+│ 🆔 Request: 550e8400-e29b-41d4-a716-446655440000
+│ ⚠️  TypeError: Cannot read properties of undefined (reading 'title')
+└────────────────────────────────────────────────────────────┘
+```

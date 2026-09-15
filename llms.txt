@@ -57,6 +57,12 @@ import {
   createDatabase,
   defineModel,
   defineService,
+  definePage,
+  defineApi,
+  defineModule,
+  scanRoutes,
+  compileRouteTable,
+  RouteTable,
   zdb,
   errors,
   adminPanelPlugin,
@@ -75,5 +81,10 @@ import {
   type InferModel,
   type InferServiceInput,
   type InferServiceOutput,
+  type PageContext,
+  type ApiContext,
+  type DefinePageOptions,
+  type DefineApiOptions,
+  type DefineModuleOptions,
 } from 'webspresso';
 ```

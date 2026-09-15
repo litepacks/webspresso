@@ -127,8 +127,12 @@ C4Container
 
 | Component | Responsibility |
 |-----------|----------------|
-| `createApp` | Assemble Express app, plugins, routes, error pages |
-| File router | `pages/**/*.njk` → SSR; `pages/api/*.{method}.js` → API |
+| `createApp` | Assemble Express app, plugins, routes, error pages, and graceful shutdown |
+| File router | `pages/**/*.njk` / `pages/**/*.js` → SSR; `pages/api/*.{method}.js` / `src/api/*.{method}.js` → API |
+| `definePage` | Pure JS and companion page route definitions (`load`, `head`, `render`, `middleware`) |
+| `defineApi` | Declarative JSON API endpoint definitions with Zod `schema`, `middleware`, and auto JSON serialization |
+| `defineModule` | Feature domain encapsulation (`modules/<name>/` with isolated `pages/`, `api/`, `services/`, and `middleware/`) |
+| `RouteTable` | Immutable route registry with deterministic priority tiers and `.list()`, `.match()`, `.tree()` inspection |
 | Route config | Sibling `.js`: `load`, `meta`, `middleware`, `hooks` |
 | API validation | Zod `schema` → `req.input`; 400 on failure |
 | Global hooks | `pages/_hooks.js` lifecycle |
@@ -136,6 +140,15 @@ C4Container
 | Client runtime | Optional Alpine + swup at `/__webspresso/client-runtime/*` |
 | Security headers | Helmet; CSP stricter in production |
 | Static assets | `publicDir`; optional hashed manifest via `assets` config |
+
+### Observability & Error Tracing
+
+| Component | Responsibility |
+|-----------|----------------|
+| Request Correlation | Native `req.id` from `X-Request-Id` header or `crypto.randomUUID()`; auto-attached to responses |
+| Error Trace Object | Development payload enriched with `{ route, method, source, module, phase, requestId }` |
+| Console Banners | High-visibility boxed terminal error formatting for rapid local debugging |
+| Central Error Boundary | Normalized HTTP/framework error handling with production diagnostic masking |
 
 ### ORM & database
 
@@ -218,6 +231,10 @@ Plugins declare `name`, `version`, optional `dependencies`, and lifecycle hooks 
 | `sitemapPlugin` | SEO | `sitemap.xml`, `robots.txt` |
 | `analyticsPlugin` | SEO / marketing | Third-party tracker injection |
 | `seoCheckerPlugin` | Dev / SEO | Client-side SEO audit toolbar |
+| `realtimePlugin` | Realtime | Framework-agnostic realtime layer (WebSocket, SSE, Socket.IO, Redis pub/sub) |
+| `fileManagerPlugin` | Admin / Media | Filesystem media library, directory tree & asset picker |
+| `xlsxPlugin` | Data / Export | Excel XLSX generation, streaming export (`res.xlsx`), and parsing |
+| `csvPlugin` | Data / Export | RFC 4180 CSV generation, formula sanitization, streaming writer (`res.csv`), and parsing |
 | `dashboardPlugin` | Dev | Route browser at `/_webspresso` |
 
 **Package root re-exports** a subset; full list: `require('webspresso/plugins')`.
@@ -269,6 +286,7 @@ Order matters for correct behavior and security.
 ```
 Incoming HTTP request
   → Security / timeout middleware
+  → Request ID & Correlation assignment (req.id / X-Request-Id)
   → Body parsers
   → [Site auth session middleware] (if configured)
   → Static files
@@ -279,7 +297,7 @@ Incoming HTTP request
   → setupRoutes() (application custom routes)
   → Dynamic / catch-all file routes (must be last)
   → 404
-  → Central error handler
+  → Central error handler (with trace enrichment & visual console banner)
 ```
 
 ---
@@ -335,8 +353,8 @@ Incoming HTTP request
 
 | Import | Exports (high level) |
 |--------|----------------------|
-| `webspresso` | `createApp`, router utils, ORM, kernel, selected plugins |
-| `webspresso/plugins` | All built-in plugins |
+| `webspresso` | `createApp`, `definePage`, `defineApi`, `defineModule`, `scanRoutes`, `compileRouteTable`, `RouteTable`, router utils, ORM, kernel, selected plugins |
+| `webspresso/plugins` | All built-in plugins (`xlsxPlugin`, `csvPlugin`, `realtimePlugin`, `fileManagerPlugin`, `adminPanelPlugin`, etc.) |
 | `webspresso/core/auth` | Site auth (`createAuth`, `quickAuth`, hash, middleware) |
 | `webspresso/core/orm` | ORM submodules |
 | `webspresso/build/*` | Build/runtime manifests (when present in distribution) |
@@ -360,6 +378,7 @@ Incoming HTTP request
 
 | Date | Change |
 |------|--------|
+| 2026-09-15 | Module file discovery (`defineModule`), modern Page & API loaders (`definePage`, `defineApi`), `RouteTable` deterministic compilation & introspection, request correlation IDs (`req.id`, `X-Request-Id`), and enhanced error tracing |
 | 2026-06-25 | `contentPlugin` — schema-driven CMS (content types, entries, public API, admin inline edit) |
 | 2026-06-17 | `db:scaffold` CLI — generate create-table migrations from all `models/*.js` |
 | 2026-06-17 | Initial C4-style architecture doc; admin intended-route after login; file upload image preview |

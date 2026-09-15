@@ -28,7 +28,9 @@ Open **`http://localhost:3000`** in your browser.
 ## ✨ Why Webspresso?
 
 - **Zero-Dependency Sprawl**: Core framework features (Dual Auth, JWT signing, Error handling, Streaming Compression, Graceful Shutdown, Template Helpers) rely strictly on native Node.js standard modules (`crypto`, `path`, `fs`, `events`, `zlib`, `async_hooks`) without bloated dependency trees.
-- **File-Based Routing**: Templates in `pages/` automatically become public URL routes with support for dynamic params (`[id]`) and catch-all wildcards (`[...slug]`).
+- **File-Based Routing & API Suffixes**: Pages and APIs automatically map to clean URLs with dynamic params (`[id]`), wildcards (`[...slug]`), and method suffixes (`.get.js`, `.post.js`, `.delete.js`, `.patch.js`, `.put.js`).
+- **Feature Modules (`defineModule`)**: Domain-driven modular organization for large projects (`modules/{name}/pages`, `api`, `services`, `middleware`).
+- **Modern Page & API Helpers (`definePage`, `defineApi`)**: Declarative Zod request schemas, unified execution context, and automatic JSON response serialization.
 - **Server Data Prefetching (`load()`)**: Page routes export `async function load({ req, res, db, ctx })` to fetch data server-side before template compilation.
 - **Services Layer**: File-based auto-discovery in `services/` with declarative Zod validation, role/predicate authorization guards, and memoization.
 - **Ambient Transactions**: Knex database transactions automatically bind to `AsyncLocalStorage` (`core/orm/transaction.js`). Scoped repositories seamlessly participate in active transactions without manual `trx` passing.
@@ -78,33 +80,35 @@ app.listen(PORT, () => {
 
 ```javascript
 // pages/index.js
-module.exports = {
+const { definePage } = require('webspresso');
+
+module.exports = definePage({
   async load({ req, ctx }) {
     return {
       title: 'Home Page',
       user: req.user || null,
     };
   },
-};
+});
 ```
 
 ### 3. Validated JSON API Endpoint (`pages/api/greet.post.js`)
 ```javascript
-module.exports = {
-  schema({ z }) {
-    return {
-      body: z.object({
-        name: z.string().min(2),
-      }),
-    };
+const { defineApi, z } = require('webspresso');
+
+module.exports = defineApi({
+  schema: {
+    body: z.object({
+      name: z.string().min(2),
+    }),
   },
 
-  async handler(req, res) {
+  async handler(req, res, ctx) {
     // req.input is typed and validated by Zod
-    const result = await req.service('user.greet', req.input.body);
-    res.json(result);
+    const result = await ctx.service('user.greet', req.input.body);
+    return result; // Automatically serialized as JSON (HTTP 200)
   },
-};
+});
 ```
 
 ---

@@ -79,6 +79,14 @@ function normalizeError(err, isDev = false) {
       httpErr.stack = err.stack;
     }
 
+    // Retain route trace metadata
+    if (err.route) httpErr.route = err.route;
+    if (err.method) httpErr.method = err.method;
+    if (err.source) httpErr.source = err.source;
+    if (err.module) httpErr.module = err.module;
+    if (err.phase) httpErr.phase = err.phase;
+    if (err.requestId) httpErr.requestId = err.requestId;
+
     return httpErr;
   }
 
@@ -99,12 +107,21 @@ function normalizeError(err, isDev = false) {
 
     const msg = typeof err.message === 'string' ? err.message : getStatusTitle(status);
 
-    return new HttpError(status, (status < 500 || isDev) ? msg : getStatusTitle(status), {
+    const httpErr = new HttpError(status, (status < 500 || isDev) ? msg : getStatusTitle(status), {
       code: err.code,
       details: err.details,
       headers: err.headers,
       expose: typeof err.expose === 'boolean' ? err.expose : status < 500,
     });
+
+    if (err.route) httpErr.route = err.route;
+    if (err.method) httpErr.method = err.method;
+    if (err.source) httpErr.source = err.source;
+    if (err.module) httpErr.module = err.module;
+    if (err.phase) httpErr.phase = err.phase;
+    if (err.requestId) httpErr.requestId = err.requestId;
+
+    return httpErr;
   }
 
   return new HttpError(500, 'Internal Server Error', { expose: false });
@@ -151,8 +168,18 @@ function toErrorResponseObject(error, isDev = false) {
     payload.details = error.details;
   }
 
-  // Include stack and cause strictly in development mode
+  // Include stack, cause, and trace strictly in development mode
   if (isDev) {
+    if (error.route || error.source || error.module || error.requestId || error.phase) {
+      payload.trace = {
+        route: error.route || undefined,
+        method: error.method || undefined,
+        source: error.source || undefined,
+        module: error.module || undefined,
+        phase: error.phase || undefined,
+        requestId: error.requestId || undefined,
+      };
+    }
     if (error.stack) {
       payload.stack = error.stack;
     }

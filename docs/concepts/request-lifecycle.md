@@ -16,7 +16,7 @@ sequenceDiagram
     autonumber
     actor Client as Browser / Client
     participant Express as Express / HTTP Server
-    participant Context as Request Context MW
+    participant ReqId as Request ID & Context MW
     participant Auth as Dual Auth MW
     participant Router as File Router
     participant Hooks as Lifecycle Hooks
@@ -26,7 +26,7 @@ sequenceDiagram
 
     Client->>Express: HTTP Request (GET /products/123)
     Express->>Compress: Initialize zlib streaming buffer (1KB threshold)
-    Express->>Context: Populate req.context & req.service
+    Express->>ReqId: Assign req.id (X-Request-Id) & populate req.context
     Express->>Auth: Authenticate Session Cookie / JWT Bearer
     
     Express->>Hooks: executeHook('onRequest', ctx)
@@ -43,15 +43,15 @@ sequenceDiagram
         Engine-->>Router: Compiled HTML string / stream
         Router->>Hooks: executeHook('afterRender', ctx)
         Router->>Compress: Stream HTML chunks
-        Compress-->>Client: 200 OK (Brotli/Gzip Compressed HTML)
+        Compress-->>Client: 200 OK (Brotli/Gzip Compressed HTML + X-Request-Id)
     else JSON API Route
         Router->>Router: applySchema(req, compiledSchema)
-        Router->>Router: Execute API handler(req, res, next)
-        Router-->>Client: 200 OK (application/json)
+        Router->>Router: Execute API handler(req, res, ctx)
+        Router-->>Client: 200 OK (application/json + X-Request-Id)
     else Route Error / 404
         Router->>Hooks: executeHook('onError', ctx)
-        Router->>Express: Fallback to Central Error Boundary
-        Express-->>Client: 404 / 500 Error Page or JSON
+        Router->>Express: Enrich error with trace metadata & propagate to Central Error Boundary
+        Express-->>Client: 404 / 500 Error Page or JSON (with trace in dev)
     end
 ```
 
@@ -64,11 +64,12 @@ sequenceDiagram
 2. **Streaming Compression (`server.compression`)**: The zero-dependency streaming zlib interceptor inspects the `Accept-Encoding` header (`br`, `gzip`, `deflate`). Payloads below the 1 KB threshold bypass compression; larger payloads stream through zlib transform streams.
 
 ### Phase 2: Context & Auth Initialization
-3. **Request Context Container**:
+3. **Request Correlation & Context Container**:
+   - `req.id` is extracted from `X-Request-Id` (or `X-Correlation-Id`) or generated via `crypto.randomUUID()`, and mirrored in response header `X-Request-Id`.
    - `req.context` is initialized containing `{ req, res, db, app, serviceRegistry }`.
    - `req.service(name, input, opts)` is attached to allow calling business services directly from route handlers.
 4. **Dual Authentication**:
-   - For stateful web requests: `express-session` populates `req.session` and `req.user`.
+   - For stateful web requests: Built-in native cookie session populates `req.session` and `req.user`.
    - For stateless API requests: The JWT middleware extracts `Authorization: Bearer <token>`, verifies the HMAC-SHA256 signature, and populates `req.auth`.
 
 ### Phase 3: Lifecycle Hooks & Route Resolution
@@ -77,18 +78,20 @@ sequenceDiagram
    - `onRoute(ctx)`: Invoked once the target route path is identified.
    - `beforeMiddleware(ctx)`: Invoked before executing page-specific middleware.
 6. **Route Matching**:
-   - Linear-time lookup matches the request URL against pre-sorted route tiers (static paths take precedence over dynamic `:id` segments, followed by catch-all `*`).
+   - Linear-time lookup matches the request URL against pre-sorted `RouteTable` tiers (static paths take precedence over dynamic `:id` segments, followed by catch-all `*`).
 
 ### Phase 4: Execution & Rendering
 7. **SSR Data Prefetching (`load()`)**:
-   - If the page exports an `async function load({ req, res, db, ctx })`, it executes server-side.
-   - The returned data object is merged into the Nunjucks template context.
-8. **Nunjucks Rendering**:
+   - If the page exports an `async function load({ req, res, db, ctx })` or `definePage()`, it executes server-side.
+   - The returned data object is merged into the template context.
+8. **Nunjucks Rendering / JS Page Output**:
    - `beforeRender(ctx)` hook fires.
    - The template compiles with access to layout blocks, page assets (`pageAssets`), localized translator `t()`, and the `fsy` helper catalog (`fsy.asset`, `fsy.csrfToken`, `fsy.route`).
    - `afterRender(ctx)` hook fires.
 
-### Phase 5: Error Boundary & Propagation
-9. **Async Error Propagation**:
-   - All async route methods and loaders are wrapped in auto-catch handlers. Rejections propagate to the central error boundary without requiring `try/catch` in every route.
-   - In production (`NODE_ENV=production`), 500 error stack traces and internal diagnostics are masked for security.
+### Phase 5: Error Boundary & Tracing
+9. **Async Error Propagation & Trace Enrichment**:
+   - All async route methods and loaders are wrapped in auto-catch handlers.
+   - Unhandled rejections are annotated with execution context (`route`, `method`, `source`, `module`, `phase`, `requestId`).
+   - In development mode (`NODE_ENV !== 'production'`), errors render high-visibility terminal banners and output a structured `trace` object.
+   - In production (`NODE_ENV=production`), 500 error stack traces and internal diagnostics are safely masked for security.

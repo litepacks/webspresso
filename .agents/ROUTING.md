@@ -174,11 +174,119 @@ module.exports = {
 
 ---
 
-## 5. Summary Checklist for Agents
+## 5. Module & File-Based Discovery (`src/pages`, `src/api`, `modules/{name}`)
+
+Webspresso supports clean, domain-driven module discovery alongside root-level pages and APIs:
+
+```txt
+src/
+  pages/                -> Global UI pages (definePage or Nunjucks)
+    index.js            -> GET /
+    about.js            -> GET /about
+    docs/[...path].js   -> GET /docs/*path
+
+  api/                  -> Global API endpoints (defineApi)
+    health.get.js       -> GET /api/health
+    users/[id].patch.js -> PATCH /api/users/:id
+
+  modules/              -> Feature-driven modules
+    auth/
+      auth.module.js    -> defineModule({ name: 'auth', ... })
+      pages/
+        login.js        -> GET /auth/login
+        register.js     -> GET /auth/register
+      api/
+        login.post.js   -> POST /api/auth/login
+        me.get.js       -> GET /api/auth/me
+      services/
+        login.js        -> ctx.service('auth.login', input)
+      middleware/
+        auth-guard.js   -> module-local named middleware 'authGuard'
+```
+
+### 5.1 `definePage()` Contract
+```javascript
+const { definePage } = require('webspresso');
+
+module.exports = definePage({
+  middleware: ['authGuard'], // module or global middleware
+  load: async (ctx) => {
+    // ctx: { req, res, params, query, service, db, redirect, fsy, locale, t }
+    if (!ctx.req.user) {
+      return ctx.redirect('/auth/login', 302);
+    }
+    const profile = await ctx.service('user.profile', { id: ctx.req.user.id });
+    return { profile };
+  },
+  head: (data) => ({
+    title: `${data.profile.name}'s Profile`,
+  }),
+  render: (data, ctx) => `
+    <main>
+      <h1>${data.profile.name}</h1>
+      <p>Email: ${data.profile.email}</p>
+    </main>
+  `,
+});
+```
+
+### 5.2 `defineApi()` Contract
+```javascript
+const { defineApi, z } = require('webspresso');
+
+module.exports = defineApi({
+  description: 'Authenticate user and return session',
+  tags: ['Auth'],
+  middleware: ['rateLimit'],
+  schema: {
+    body: z.object({
+      email: z.string().email(),
+      password: z.string().min(8),
+    }),
+  },
+  handler: async (req, res, ctx) => {
+    // req.input.body contains validated payload
+    const result = await ctx.service('auth.login', req.input.body);
+    return res.json(result);
+  },
+});
+```
+
+### 5.3 `defineModule()` Contract
+```javascript
+const { defineModule } = require('webspresso');
+
+module.exports = defineModule({
+  name: 'auth',
+  version: '1.0.0',
+  pages: { prefix: '/auth' },       // default: /auth
+  api: { prefix: '/api/auth' },     // default: /api/auth
+  middlewares: {
+    authGuard: (req, res, next) => {
+      if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+      next();
+    },
+  },
+});
+```
+
+### 5.4 Route Introspection (`app.routes.list()`)
+Compiled routes are accessible at runtime for tooling, CLI inspection, and documentation:
+```javascript
+const routeList = app.routes.list();
+// [
+//   { method: 'GET', path: '/', type: 'page', source: 'src/pages/index.js' },
+//   { method: 'POST', path: '/api/auth/login', type: 'api', module: 'auth', description: 'Authenticate user' }
+// ]
+```
+
+---
+
+## 6. Summary Checklist for Agents
 
 When a user asks to add or modify endpoints:
-1. Identify the URL and method (e.g. `POST /api/auth/register`).
-2. Create `pages/api/auth/register.post.js`.
-3. Export `{ schema, middleware, handler }`.
-4. Use `req.db.getRepository(...)` or `req.service(...)`.
-5. **NEVER touch `routes/` or create Express router files.**
+1. Identify the URL and method (e.g. `POST /api/auth/register` or `POST /auth/login`).
+2. Create in `pages/api/...`, `src/api/...`, or `modules/{module}/api/...` with HTTP method extension (`.post.js`).
+3. Use `defineApi()` or `{ schema, middleware, handler }`.
+4. Use `req.db.getRepository(...)` or `ctx.service(...)`.
+5. **NEVER touch `routes/` or create manual Express router files.**

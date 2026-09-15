@@ -123,11 +123,31 @@ function createCentralErrorHandler(options = {}) {
     // Log errors based on severity
     if (status >= 500) {
       if (typeof console !== 'undefined' && console.error) {
-        console.error('[webspresso] Server Error:', err);
+        if (normalized.route || normalized.source) {
+          console.error(
+            `[webspresso] 🚨 Error at ${normalized.method || req.method} ${normalized.route || req.path}` +
+              (normalized.module ? ` [module: ${normalized.module}]` : '') +
+              (normalized.requestId ? ` (reqId: ${normalized.requestId})` : '') +
+              `\n  Source: ${normalized.source || 'unknown'}` +
+              (normalized.phase ? `\n  Phase:  ${normalized.phase}` : '') +
+              `\n`,
+            err
+          );
+        } else {
+          console.error('[webspresso] Server Error:', err);
+        }
       }
     } else if (isDev && status >= 400) {
       if (typeof console !== 'undefined' && console.warn) {
-        console.warn(`[webspresso] HTTP ${status}:`, normalized.message);
+        if (normalized.route || normalized.source) {
+          console.warn(
+            `[webspresso] ⚠️  HTTP ${status} at ${normalized.method || req.method} ${normalized.route || req.path}` +
+              (normalized.module ? ` [module: ${normalized.module}]` : '') +
+              `: ${normalized.message}`
+          );
+        } else {
+          console.warn(`[webspresso] HTTP ${status}:`, normalized.message);
+        }
       }
     }
 
