@@ -53,7 +53,7 @@ function createPageHandler(descriptor, context) {
   return async (req, res, next) => {
     try {
       // 1. Load page definition (with hot reload in dev)
-      if (isDev) {
+      if (isDev && descriptor.file.endsWith('.js')) {
         try {
           const resolvedPath = require.resolve(descriptor.file);
           if (require.cache[resolvedPath]) {
@@ -67,10 +67,12 @@ function createPageHandler(descriptor, context) {
       let pageDef = cachedPageDef;
       if (!pageDef) {
         let pageModule = {};
-        try {
-          pageModule = require(descriptor.file);
-        } catch (loadErr) {
-          return next(loadErr);
+        if (descriptor.file.endsWith('.js')) {
+          try {
+            pageModule = require(descriptor.file);
+          } catch (loadErr) {
+            return next(loadErr);
+          }
         }
 
         pageDef = typeof pageModule === 'function' ? { load: pageModule } : pageModule.default || pageModule;

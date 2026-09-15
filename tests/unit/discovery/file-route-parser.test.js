@@ -167,5 +167,19 @@ describe('File Route Parser', () => {
       expect(normalizePrefix(null)).toBe('');
       expect(normalizePrefix('/api///')).toBe('/api');
     });
+
+    it('should safely scan directories with scanDirSafely', () => {
+      const path = require('path');
+      const { scanDirSafely } = require('../../../src/discovery/file-route-parser');
+
+      // Non-existent directory
+      expect(scanDirSafely('/non/existent/path')).toEqual([]);
+
+      // Existing fixtures directory
+      const fixtureDir = path.resolve(__dirname, '../../fixtures/fullstack/src/pages');
+      const results = scanDirSafely(fixtureDir);
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0].relativePath).toBeDefined();
+    });
   });
 });

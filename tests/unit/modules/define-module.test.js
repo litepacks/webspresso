@@ -71,4 +71,40 @@ describe('defineModule Helper', () => {
     expect(registeredDisposers.length).toBe(1);
     expect(registeredDisposers[0].meta.name).toBe('module:billing');
   });
+
+  it('should register module middlewares with prefix', () => {
+    const mwGuard = (req, res, next) => next();
+    const testModule = defineModule({
+      name: 'orders',
+      middlewares: {
+        guard: mwGuard,
+      },
+    });
+
+    const plugin = testModule();
+    const mockCtx = {
+      middlewares: {},
+    };
+
+    plugin.register(mockCtx);
+    expect(mockCtx.middlewares['orders.guard']).toBe(mwGuard);
+  });
+
+  it('should discover module details with discoverModuleDetails', () => {
+    const path = require('path');
+    const { discoverModuleDetails } = require('../../../src/modules/module-discovery');
+
+    // 1. Non-existent path
+    const emptyRes = discoverModuleDetails('/non/existent/path', 'fake');
+    expect(emptyRes.services).toEqual({});
+    expect(emptyRes.middlewares).toEqual({});
+
+    // 2. Fullstack fixture auth module
+    const authModulePath = path.resolve(__dirname, '../../fixtures/fullstack/src/modules/auth');
+    const details = discoverModuleDetails(authModulePath, 'auth');
+
+    expect(details.config).toBeDefined();
+    expect(details.services['auth.login']).toBeDefined();
+    expect(details.middlewares.authGuard).toBeDefined();
+  });
 });

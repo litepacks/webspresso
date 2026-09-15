@@ -147,6 +147,43 @@ describe('RouteTable & Compiler', () => {
       const tableWithNulls = compileRouteTable([null, undefined, {}, { method: 'GET', path: '/valid' }]);
       expect(tableWithNulls.size).toBe(1);
       expect(tableWithNulls.has('GET', '/valid')).toBe(true);
+
+      const defaultTable = new RouteTable();
+      expect(defaultTable.size).toBe(0);
+      expect(defaultTable.list()).toEqual([]);
+    });
+
+    it('should calculate route sorting metadata with getRouteSortMeta', () => {
+      const staticMeta = getRouteSortMeta('/users/profile');
+      expect(staticMeta.tier).toBe(0);
+      expect(staticMeta.depth).toBe(2);
+
+      const paramMeta = getRouteSortMeta('/users/:id');
+      expect(paramMeta.tier).toBe(1);
+      expect(paramMeta.paramSegCount).toBe(1);
+
+      const catchAllMeta = getRouteSortMeta('/docs/*path');
+      expect(catchAllMeta.tier).toBe(2);
+    });
+
+    it('should mount discovered routes with mountDiscoveredRoutes', () => {
+      const express = require('express');
+      const { mountDiscoveredRoutes } = require('../../../src/routing/mount-discovered-routes');
+
+      const app = express();
+      const descriptors = [
+        { type: 'page', method: 'GET', path: '/static-page', file: 'static.js' },
+        { type: 'api', method: 'GET', path: '/users/:id', file: 'user.get.js' },
+      ];
+
+      const table = compileRouteTable(descriptors);
+      const { routeMetadata, registerDynamicDiscoveredRoutes } = mountDiscoveredRoutes(app, table, { silent: true });
+
+      expect(routeMetadata.length).toBe(2);
+      expect(typeof registerDynamicDiscoveredRoutes).toBe('function');
+
+      // Call deferred dynamic registration
+      expect(() => registerDynamicDiscoveredRoutes()).not.toThrow();
     });
   });
 });

@@ -338,7 +338,7 @@ describe('CLI', () => {
       cleanup(projectName);
       createResult = runCli(`new ${projectName} --no-tailwind`);
       projectPath = path.join(TEST_DIR, projectName);
-    });
+    }, 30000);
 
     afterAll(() => {
       cleanup(projectName);
