@@ -66,6 +66,8 @@ module.exports = {
 | `swaggerPlugin` | OpenAPI + Swagger UI | — |
 | `recaptchaPlugin` | reCAPTCHA verification | — |
 | `sitemapPlugin` | sitemap.xml / robots.txt | — |
+| `xlsxPlugin` | Excel XLSX generation, parsing & ORM export | — |
+| `csvPlugin` | RFC 4180 CSV generation, parsing & ORM export | — |
 
 Import from `require('webspresso/plugins')`. Full source lives under `plugins/` in the repository.
 

@@ -91,6 +91,10 @@ const {
   createMcpServer,
   McpServer,
   fileManagerPlugin,
+  xlsxPlugin,
+  xlsx,
+  csvPlugin,
+  csv,
 } = require('./plugins');
 
 const content = require('./core/content');
@@ -246,6 +250,10 @@ module.exports = {
   createMcpServer,
   McpServer,
   fileManagerPlugin,
+  xlsxPlugin,
+  xlsx,
+  csvPlugin,
+  csv,
 
   // Schema-driven CMS core (framework-agnostic)
   content,

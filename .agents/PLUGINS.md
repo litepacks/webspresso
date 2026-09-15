@@ -368,3 +368,52 @@ Model Context Protocol (MCP) server for connecting Webspresso applications direc
   - `discovery`: Boolean (default: `true`), scans project `mcp/` directory for custom tools, resources, and prompts.
 - **Dual Transport**: Supports HTTP/SSE inside Webspresso server and Stdio via `webspresso mcp` CLI.
 
+### 2.17 `xlsxPlugin` (`plugins/xlsx`)
+High-performance Excel spreadsheet generation, parsing, ORM model export, streaming writer, formula injection security, and Express `res.xlsx()` decorator.
+- **Options**:
+  - `sanitizeFormulas`: Boolean (default `true`), escapes formula injection prefixes (`=`, `+`, `-`, `@`, `\t`, `\r`) to prevent spreadsheet macro exploits.
+  - `headerStyle`: Custom styling `{ fill: '4F46E5', color: 'FFFFFF', bold: true }`.
+  - `db`: Database instance for ORM model export service.
+- **Response Helper (`res.xlsx`)**:
+  ```javascript
+  // pages/api/export-users.get.js
+  module.exports = {
+    handler: async (req, res) => {
+      const users = await req.db.getRepository('User').find({ active: true });
+      return res.xlsx(users, 'active_users.xlsx');
+    },
+  };
+  ```
+- **Toolkit API (`xlsx`)**:
+  - `xlsx.generate({ sheets: [...], title })` → `Promise<Buffer>`
+  - `xlsx.parse(bufferOrStream, { sheet, transformRow })` → `Promise<Array|Object>`
+  - `xlsx.fromModel(repository, filterOrQuery, options)` → `Promise<Buffer>`
+  - `xlsx.createStreamWriter(stream, options)` → `ExcelJS.stream.xlsx.WorkbookWriter`
+- **Built-in Services**: `xlsx.generate`, `xlsx.parse`, `xlsx.exportModel` accessible via `ctx.service()` or `req.service()`.
+
+### 2.18 `csvPlugin` (`plugins/csv`)
+RFC 4180 compliant CSV generator, parser, ORM model export, streaming chunk writer, Excel UTF-8 BOM compatibility, and Express `res.csv()` decorator.
+- **Options**:
+  - `delimiter`: String (default `','`), supports `;`, `\t`, `|`.
+  - `bom`: Boolean (default `true`), adds UTF-8 Byte Order Mark (`\uFEFF`) ensuring Microsoft Excel opens Turkish and international characters properly.
+  - `sanitizeFormulas`: Boolean (default `true`), escapes formula injection prefixes (`=`, `+`, `-`, `@`, `\t`, `\r`).
+  - `db`: Database instance for ORM model export service.
+- **Response Helper (`res.csv`)**:
+  ```javascript
+  // pages/api/export-orders.get.js
+  module.exports = {
+    handler: async (req, res) => {
+      const orders = await req.db.getRepository('Order').find({ status: 'completed' });
+      return res.csv(orders, 'orders_export.csv');
+    },
+  };
+  ```
+- **Toolkit API (`csv`)**:
+  - `csv.generate({ rows, columns, delimiter, bom, asBuffer })` → `Buffer|string`
+  - `csv.parse(bufferOrStreamOrString, { delimiter, transformRow })` → `Promise<Array<Object>>`
+  - `csv.fromModel(repository, filterOrQuery, options)` → `Promise<Buffer>`
+  - `csv.createStreamWriter(stream, options)` → `{ writeHeader, writeRow, writeRows, end }`
+- **Built-in Services**: `csv.generate`, `csv.parse`, `csv.exportModel` accessible via `ctx.service()` or `req.service()`.
+
+
+

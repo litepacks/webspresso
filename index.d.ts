@@ -1699,4 +1699,162 @@ export interface FileManagerPluginOptions {
 
 export function fileManagerPlugin(options?: FileManagerPluginOptions): WebspressoPlugin;
 
+// --- XLSX Plugin & Toolkit ---
+
+export interface XlsxColumn {
+  header?: string;
+  key: string;
+  width?: number;
+  style?: Record<string, unknown>;
+}
+
+export interface XlsxHeaderStyle {
+  fill?: string;
+  bg?: string;
+  color?: string;
+  textColor?: string;
+  fontName?: string;
+  fontSize?: number;
+  bold?: boolean;
+  align?: 'left' | 'center' | 'right';
+  height?: number;
+}
+
+export interface XlsxSheetConfig {
+  name?: string;
+  columns?: XlsxColumn[];
+  rows?: Record<string, unknown>[];
+  data?: Record<string, unknown>[];
+  autoWidth?: boolean;
+  striped?: boolean;
+  headerStyle?: XlsxHeaderStyle;
+  views?: Array<Record<string, unknown>>;
+}
+
+export interface XlsxGenerateOptions {
+  creator?: string;
+  title?: string;
+  created?: Date;
+  sanitizeFormulas?: boolean;
+  headerStyle?: XlsxHeaderStyle;
+  sheets?: XlsxSheetConfig[] | XlsxSheetConfig;
+  name?: string;
+  columns?: XlsxColumn[];
+  rows?: Record<string, unknown>[];
+  data?: Record<string, unknown>[];
+}
+
+export interface XlsxParseOptions {
+  sheet?: string | number;
+  headerRow?: number;
+  dataStartRow?: number;
+  raw?: boolean;
+  transformRow?: (row: Record<string, unknown>, index: number) => Record<string, unknown>;
+}
+
+export interface XlsxModelExportOptions {
+  sheetName?: string;
+  name?: string;
+  creator?: string;
+  title?: string;
+  columns?: XlsxColumn[];
+  headerStyle?: XlsxHeaderStyle;
+}
+
+export interface XlsxPluginOptions {
+  enabled?: boolean;
+  sanitizeFormulas?: boolean;
+  headerStyle?: XlsxHeaderStyle;
+  db?: unknown;
+}
+
+export interface XlsxToolkit {
+  MIME_TYPE: string;
+  generate(options: XlsxGenerateOptions): Promise<Buffer>;
+  parse(input: Buffer | import('stream').Readable, options?: XlsxParseOptions): Promise<Record<string, unknown>[] | Record<string, Record<string, unknown>[]>>;
+  fromModel(repository: unknown, filterOrQuery?: unknown, options?: XlsxModelExportOptions): Promise<Buffer>;
+  createStreamWriter(outputStream: import('stream').Writable, options?: Record<string, unknown>): unknown;
+  sanitizeFormula(value: unknown): unknown;
+  applyHeaderStyle(worksheet: unknown, style?: XlsxHeaderStyle): void;
+  applyAutoWidths(worksheet: unknown, columns: XlsxColumn[], rows: Record<string, unknown>[]): void;
+  hexToArgb(hex: string): string;
+  createMiddleware(globalOptions?: XlsxPluginOptions): import('express').RequestHandler;
+  createServices(options?: Record<string, unknown>): Record<string, unknown>;
+}
+
+export const xlsx: XlsxToolkit;
+export function xlsxPlugin(options?: XlsxPluginOptions): WebspressoPlugin;
+
+// --- CSV Plugin & Toolkit ---
+
+export interface CsvColumn {
+  header?: string;
+  key: string;
+}
+
+export interface CsvGenerateOptions {
+  rows?: Record<string, unknown>[];
+  data?: Record<string, unknown>[];
+  columns?: (CsvColumn | string)[];
+  delimiter?: string;
+  eol?: string;
+  header?: boolean;
+  bom?: boolean;
+  sanitizeFormulas?: boolean;
+  asBuffer?: boolean;
+}
+
+export interface CsvParseOptions {
+  delimiter?: string;
+  columns?: boolean | string[];
+  skip_empty_lines?: boolean;
+  trim?: boolean;
+  relax_column_count?: boolean;
+  transformRow?: (row: Record<string, unknown>, index: number) => Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface CsvModelExportOptions {
+  columns?: (CsvColumn | string)[];
+  delimiter?: string;
+  eol?: string;
+  bom?: boolean;
+  sanitizeFormulas?: boolean;
+  asBuffer?: boolean;
+}
+
+export interface CsvPluginOptions {
+  enabled?: boolean;
+  delimiter?: string;
+  bom?: boolean;
+  sanitizeFormulas?: boolean;
+  db?: unknown;
+}
+
+export interface CsvStreamWriter {
+  writeHeader(columns?: (CsvColumn | string)[]): void;
+  writeRow(row: Record<string, unknown>): void;
+  writeRows(rows: Record<string, unknown>[]): void;
+  end(): void;
+  stream: import('stream').Writable;
+}
+
+export interface CsvToolkit {
+  MIME_TYPE: string;
+  UTF8_BOM: string;
+  generate(options?: CsvGenerateOptions): Buffer | string;
+  parse(input: Buffer | string | import('stream').Readable, options?: CsvParseOptions): Promise<Record<string, unknown>[]>;
+  fromModel(repository: unknown, filterOrQuery?: unknown, options?: CsvModelExportOptions): Promise<Buffer>;
+  createStreamWriter(outputStream: import('stream').Writable, options?: Record<string, unknown>): CsvStreamWriter;
+  sanitizeFormula(value: unknown): unknown;
+  escapeCsvField(value: unknown, options?: Record<string, unknown>): string;
+  createMiddleware(globalOptions?: CsvPluginOptions): import('express').RequestHandler;
+  createServices(options?: Record<string, unknown>): Record<string, unknown>;
+}
+
+export const csv: CsvToolkit;
+export function csvPlugin(options?: CsvPluginOptions): WebspressoPlugin;
+
+
+
 

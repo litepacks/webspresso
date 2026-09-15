@@ -37,7 +37,7 @@ Webspresso combines file-based routing, server-side Nunjucks rendering, an intui
 - [ORM & Database Layer](.agents/ORM.md): `defineModel`, `zdb` schemas, repositories, scopes, and migrations.
 - [Dual Authentication System](.agents/AUTH.md): Session cookies, stateless JWT rotation, and policy guards.
 - [Admin Panel Customization](.agents/ADMIN.md): Custom Mithril.js SPA pages, field renderers, and dashboard widgets.
-- [Plugin Ecosystem](.agents/PLUGINS.md): Reference guide for all 16 official built-in plugins (including `fileManagerPlugin`, `realtimePlugin`, `basicAuthPlugin`).
+- [Plugin Ecosystem](.agents/PLUGINS.md): Reference guide for all 18 official built-in plugins (including `fileManagerPlugin`, `xlsxPlugin`, `csvPlugin`, `realtimePlugin`, `basicAuthPlugin`).
 - [Polar.sh Billing](docs/guides/polar-billing.md): Subscription checkout, portal, webhooks, and tier sync via `polarPlugin`.
 - [Realtime Layer](.agents/REALTIME.md): Framework-agnostic WebSocket, SSE, and Socket.IO adapters.
 - [Background Queue](.agents/QUEUE.md): In-memory, Knex DB, and Redis queue adapters.
@@ -61,6 +61,10 @@ import {
   errors,
   adminPanelPlugin,
   fileManagerPlugin,
+  xlsxPlugin,
+  xlsx,
+  csvPlugin,
+  csv,
   restResourcePlugin,
   corsPlugin,
   csrfPlugin,

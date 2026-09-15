@@ -42,6 +42,8 @@ const {
 const { mcpPlugin, createMcpServer, McpServer } = require('./mcp');
 const polarPlugin = require('./polar');
 const fileManagerPlugin = require('./file-manager');
+const { xlsxPlugin, xlsx } = require('./xlsx');
+const { csvPlugin, csv } = require('./csv');
 
 module.exports = {
   sitemapPlugin,
@@ -85,6 +87,10 @@ module.exports = {
   McpServer,
   polarPlugin,
   fileManagerPlugin,
+  xlsxPlugin,
+  xlsx,
+  csvPlugin,
+  csv,
 };
 
 
