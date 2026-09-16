@@ -4,6 +4,7 @@
  * @module plugins/file-manager/security
  */
 
+const sanitizeHtml = require('sanitize-html');
 const { SecurityError, ValidationError } = require('../../core/errors');
 
 /**
@@ -164,6 +165,37 @@ function validateMagicBytes(buffer, ext) {
   return true;
 }
 
+const SVG_SANITIZE_OPTIONS = {
+  allowedTags: [
+    'svg', 'g', 'path', 'circle', 'rect', 'line', 'polyline', 'polygon',
+    'ellipse', 'text', 'tspan', 'defs', 'clipPath', 'mask', 'pattern',
+    'image', 'linearGradient', 'radialGradient', 'stop', 'use', 'symbol',
+    'title', 'desc', 'a',
+  ],
+  allowedAttributes: {
+    '*': [
+      'id', 'class', 'style', 'xml:space', 'xmlns', 'xmlns:xlink', 'xmlns:svg',
+      'version', 'viewbox', 'viewBox', 'width', 'height', 'x', 'y', 'dx', 'dy',
+      'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'd', 'points',
+      'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin',
+      'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset', 'opacity',
+      'fill-opacity', 'stroke-opacity', 'fill-rule', 'clip-rule',
+      'transform', 'font-family', 'font-size', 'font-weight', 'text-anchor',
+      'clip-path', 'mask', 'gradientUnits', 'gradientTransform', 'offset',
+      'stop-color', 'stop-opacity', 'href', 'xlink:href', 'preserveAspectRatio',
+    ],
+  },
+  allowedSchemes: ['http', 'https'],
+  allowedSchemesByTag: {
+    a: ['http', 'https', 'mailto'],
+    image: ['http', 'https', 'data'],
+    use: ['#'],
+  },
+  allowProtocolRelative: false,
+  selfClosing: ['rect', 'circle', 'line', 'polyline', 'polygon', 'path', 'stop', 'use', 'image', 'ellipse'],
+  disallowedTagsMode: 'discard',
+};
+
 /**
  * Sanitize SVG content against Stored XSS attacks.
  * Strips <script>, <foreignObject>, <iframe>, <embed>, <object> and on* event handlers.
@@ -172,29 +204,7 @@ function validateMagicBytes(buffer, ext) {
  */
 function sanitizeSvgContent(content) {
   const str = Buffer.isBuffer(content) ? content.toString('utf8') : String(content);
-
-  // Quick check: if no dangerous keywords, return original buffer directly for maximum speed
-  if (!/<(script|foreignobject|iframe|embed|object|meta|link|style)/i.test(str) &&
-      !/\s+on[a-z]+\s*=/i.test(str) &&
-      !/javascript:/i.test(str) &&
-      !/data:text\/html/i.test(str)) {
-    return Buffer.isBuffer(content) ? content : Buffer.from(str, 'utf8');
-  }
-
-  let sanitized = str
-    // Remove script tags and content
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script\s*>/gi, '')
-    // Remove dangerous containers
-    .replace(/<foreignObject\b[^<]*(?:(?!<\/foreignObject>)<[^<]*)*<\/foreignObject\s*>/gi, '')
-    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe\s*>/gi, '')
-    .replace(/<embed\b[^>]*>/gi, '')
-    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object\s*>/gi, '')
-    // Remove inline event handlers (onload, onclick, onerror, onmouseover, etc.)
-    .replace(/\s+on[a-zA-Z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    // Remove javascript: and data:text/html URIs in href and xlink:href
-    .replace(/(?:href|xlink:href)\s*=\s*(?:"\s*javascript:[^"]*"|'\s*javascript:[^']*')/gi, 'href=""')
-    .replace(/(?:href|xlink:href)\s*=\s*(?:"\s*data:text\/html[^"]*"|'\s*data:text\/html[^']*')/gi, 'href=""');
-
+  const sanitized = sanitizeHtml(str, SVG_SANITIZE_OPTIONS);
   return Buffer.from(sanitized, 'utf8');
 }
 

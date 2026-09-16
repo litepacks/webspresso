@@ -40,6 +40,40 @@ function copyFileSafe(src, dest, force = false) {
 }
 
 /**
+ * Recursively copies a directory safely.
+ * @param {string} srcDir
+ * @param {string} destDir
+ * @param {boolean} force
+ * @param {string[]} installed
+ * @param {string[]} skipped
+ * @param {string} baseRel
+ */
+function copyDirSafe(srcDir, destDir, force = false, installed = [], skipped = [], baseRel = '') {
+  if (!fs.existsSync(srcDir)) return;
+  if (!fs.existsSync(destDir)) {
+    fs.mkdirSync(destDir, { recursive: true });
+  }
+
+  const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(srcDir, entry.name);
+    const destPath = path.join(destDir, entry.name);
+    const relPath = path.join(baseRel, entry.name);
+
+    if (entry.isDirectory()) {
+      copyDirSafe(srcPath, destPath, force, installed, skipped, relPath);
+    } else {
+      const status = copyFileSafe(srcPath, destPath, force);
+      if (status === 'created' || status === 'overwritten') {
+        installed.push(relPath);
+      } else {
+        skipped.push(relPath);
+      }
+    }
+  }
+}
+
+/**
  * Scaffolds AI Agent rules and guidebook files into target project directory.
  * @param {string} targetDir
  * @param {Object} [options]
@@ -98,23 +132,29 @@ function scaffoldAgentsFiles(targetDir, options = {}) {
     }
   }
 
-  // 4. .agents/*.md Guidebook directory
+  // 4. .agents/*.md Guidebook and skills/ directory
   if (includeGuides && fs.existsSync(SOURCE_AGENTS_DIR)) {
     const destAgentsDir = path.join(targetDir, '.agents');
     if (!fs.existsSync(destAgentsDir)) {
       fs.mkdirSync(destAgentsDir, { recursive: true });
     }
 
-    const files = fs.readdirSync(SOURCE_AGENTS_DIR).filter((f) => f.endsWith('.md'));
-    for (const file of files) {
-      const srcFile = path.join(SOURCE_AGENTS_DIR, file);
-      const destFile = path.join(destAgentsDir, file);
-      const relPath = path.join('.agents', file);
-      const status = copyFileSafe(srcFile, destFile, force);
-      if (status === 'created' || status === 'overwritten') {
-        result.installed.push(relPath);
-      } else {
-        result.skipped.push(relPath);
+    const entries = fs.readdirSync(SOURCE_AGENTS_DIR, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === 'internal') continue; // exclude internal reviews from user projects
+      const srcPath = path.join(SOURCE_AGENTS_DIR, entry.name);
+      const destPath = path.join(destAgentsDir, entry.name);
+      const relPath = path.join('.agents', entry.name);
+
+      if (entry.isDirectory()) {
+        copyDirSafe(srcPath, destPath, force, result.installed, result.skipped, relPath);
+      } else if (entry.name.endsWith('.md')) {
+        const status = copyFileSafe(srcPath, destPath, force);
+        if (status === 'created' || status === 'overwritten') {
+          result.installed.push(relPath);
+        } else {
+          result.skipped.push(relPath);
+        }
       }
     }
   }

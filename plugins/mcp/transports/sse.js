@@ -18,8 +18,10 @@ const { createJsonRpcError, ERROR_CODES } = require('../server');
  */
 function mountSseTransport(options) {
   const { app, server, path: basePath = '/_mcp', authMiddleware } = options;
-
-  const normalizedBase = basePath.replace(/\/+$/, '');
+  let normalizedBase = String(basePath || '/_mcp');
+  while (normalizedBase.length > 1 && normalizedBase.endsWith('/')) {
+    normalizedBase = normalizedBase.slice(0, -1);
+  }
   const sessions = new Map();
 
   const middlewareChain = authMiddleware ? [authMiddleware] : [];

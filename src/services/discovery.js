@@ -16,7 +16,12 @@ const VALID_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
  * @returns {string}
  */
 function toCamelCase(str) {
-  return str.replace(/[-_]+([a-zA-Z0-9])/g, (_, char) => char.toUpperCase());
+  if (!str) return '';
+  const parts = str.split(/[-_]+/);
+  return parts.map((part, index) => {
+    if (!part) return '';
+    return index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1);
+  }).join('');
 }
 
 /**

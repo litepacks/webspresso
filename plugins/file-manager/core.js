@@ -217,7 +217,7 @@ function buildBreadcrumbs(relPath) {
   const breadcrumbs = [{ name: 'Root', path: '' }];
   if (!relPath) return breadcrumbs;
 
-  const segments = relPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+  const segments = relPath.replace(/\\/g, '/').split('/').filter(Boolean);
   let current = '';
 
   for (const seg of segments) {

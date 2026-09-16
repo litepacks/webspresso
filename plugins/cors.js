@@ -101,15 +101,14 @@ function createCorsMiddleware(options = {}) {
         return next(err);
       }
 
-      if (allowedOrigin) {
+      if (allowedOrigin && allowedOrigin !== '*') {
         res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-        if (allowedOrigin !== '*') {
-          res.setHeader('Vary', 'Origin');
+        res.setHeader('Vary', 'Origin');
+        if (config.credentials) {
+          res.setHeader('Access-Control-Allow-Credentials', 'true');
         }
-      }
-
-      if (config.credentials && allowedOrigin && allowedOrigin !== '*') {
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      } else if (allowedOrigin === '*' && !config.credentials) {
+        res.setHeader('Access-Control-Allow-Origin', '*');
       }
 
       if (exposedHeadersStr) {

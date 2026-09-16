@@ -3,11 +3,21 @@ const express = require('express');
 const session = require('express-session');
 const csrfPlugin = require('../../plugins/csrf');
 
+function createTestApp() {
+  const app = express();
+  app.use(session({
+    secret: 'sec-secret',
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: 'auto' },
+  }));
+  app.use(express.json());
+  return app;
+}
+
 describe('Security: CSRF Plugin Security', () => {
   it('should block mutating requests (POST, PUT, DELETE, PATCH) when token is missing', async () => {
-    const app = express();
-    app.use(session({ secret: 'sec-secret', resave: false, saveUninitialized: true }));
-    app.use(express.json());
+    const app = createTestApp();
 
     const plugin = csrfPlugin({ global: true });
     plugin.register({ app, addHelper: () => {}, middlewares: {} });
@@ -24,9 +34,7 @@ describe('Security: CSRF Plugin Security', () => {
   });
 
   it('should reject invalid / forged tokens', async () => {
-    const app = express();
-    app.use(session({ secret: 'sec-secret', resave: false, saveUninitialized: true }));
-    app.use(express.json());
+    const app = createTestApp();
 
     const plugin = csrfPlugin({ global: true });
     plugin.register({ app, addHelper: () => {}, middlewares: {} });
@@ -40,9 +48,7 @@ describe('Security: CSRF Plugin Security', () => {
   });
 
   it('should accept valid tokens in header or body and allow state-changing operations', async () => {
-    const app = express();
-    app.use(session({ secret: 'sec-secret', resave: false, saveUninitialized: true }));
-    app.use(express.json());
+    const app = createTestApp();
 
     const plugin = csrfPlugin({ global: true });
     plugin.register({ app, addHelper: () => {}, middlewares: {} });

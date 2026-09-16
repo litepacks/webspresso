@@ -1,9 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import request from 'supertest';
 import path from 'path';
 import { definePage } from '../../../src/pages/define-page';
 import { createPageHandler } from '../../../src/pages/page-loader';
+
+function createTestApp() {
+  const app = express();
+  app.use(rateLimit({ windowMs: 60000, max: 1000, validate: false }));
+  return app;
+}
 
 describe('definePage & Page Loader', () => {
   let prevEnv;
@@ -29,7 +36,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should execute definePage lifecycle with load -> head -> render', async () => {
-    const app = express();
+    const app = createTestApp();
 
     // Create a mock page descriptor
     const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
@@ -67,7 +74,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should handle ctx.redirect() inside load', async () => {
-    const app = express();
+    const app = createTestApp();
     const mockFile = path.resolve(__dirname, '../../fixtures/mock-redirect-page.js');
     const descriptor = {
       type: 'page',
@@ -99,7 +106,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should propagate ctx.error() and load exceptions to next()', async () => {
-    const app = express();
+    const app = createTestApp();
     const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
     const descriptor = {
       type: 'page',
@@ -135,7 +142,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should propagate middleware errors in definePage to next()', async () => {
-    const app = express();
+    const app = createTestApp();
     const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
     const descriptor = {
       type: 'page',
@@ -190,7 +197,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should render with companion Nunjucks template when available', async () => {
-    const app = express();
+    const app = createTestApp();
     const existingNjk = path.resolve(__dirname, '../../fixtures/pages/index.njk');
     const descriptor = {
       type: 'page',
@@ -215,7 +222,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should handle Nunjucks render errors by forwarding to next()', async () => {
-    const app = express();
+    const app = createTestApp();
     const existingNjk = path.resolve(__dirname, '../../fixtures/pages/index.njk');
     const descriptor = {
       type: 'page',
@@ -244,7 +251,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should fallback to returning json or string when no template and no render function exist', async () => {
-    const app = express();
+    const app = createTestApp();
     const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
     const descriptor = {
       type: 'page',
@@ -274,7 +281,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should execute service calls via ctx.service in definePage load', async () => {
-    const app = express();
+    const app = createTestApp();
     const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
     const descriptor = {
       type: 'page',
@@ -314,7 +321,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should handle load exceptions and annotate trace metadata', async () => {
-    const app = express();
+    const app = createTestApp();
     const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
     const descriptor = {
       type: 'page',
@@ -362,7 +369,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should support ESM default export and non-function items in middleware list', async () => {
-    const app = express();
+    const app = createTestApp();
     const mockFile = path.resolve(__dirname, '../../fixtures/mock-esm-page.js');
     const descriptor = {
       type: 'page',
@@ -381,7 +388,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should stop processing if middleware sends response early', async () => {
-    const app = express();
+    const app = createTestApp();
     const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
     const descriptor = {
       type: 'page',
@@ -418,7 +425,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should return null from ctx.service when serviceRegistry is not provided', async () => {
-    const app = express();
+    const app = createTestApp();
     const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
     const descriptor = {
       type: 'page',
@@ -451,7 +458,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should handle non-object error thrown in page loader', async () => {
-    const app = express();
+    const app = createTestApp();
     const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
     const descriptor = {
       type: 'page',
@@ -487,7 +494,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should handle primitive return types from load (number, boolean, undefined)', async () => {
-    const app = express();
+    const app = createTestApp();
     const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
     const descriptor = {
       type: 'page',
@@ -518,7 +525,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should preserve existing error metadata and capture x-request-id in page handler', async () => {
-    const app = express();
+    const app = createTestApp();
     const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
     const descriptor = {
       type: 'page',
@@ -567,7 +574,7 @@ describe('definePage & Page Loader', () => {
   });
 
   it('should render standalone .njk template descriptor when file ends with .njk', async () => {
-    const app = express();
+    const app = createTestApp();
     const njkFile = path.resolve(__dirname, '../../fixtures/views/layout.njk');
     const descriptor = {
       type: 'page',

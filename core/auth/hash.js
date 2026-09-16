@@ -92,14 +92,19 @@ function generateToken(length = 32) {
 }
 
 /**
- * Hash a token for storage (SHA-256)
- * Used for remember me tokens - stored hashed, compared hashed
- * @param {string} token - Plain token
- * @returns {string} Hashed token
+ * Hash a high-entropy random lookup token for database storage (SHA-256).
+ * Note: Used exclusively for 256-bit cryptographically secure random lookup tokens
+ * (remember-me tokens, email verification tokens, password reset tokens), NOT user passwords.
+ * User passwords must always be hashed using `hash()` (bcrypt).
+ *
+ * // CodeQL [js/insufficient-password-hash] SHA-256 is intentionally used for 256-bit high-entropy random lookup token hashing, not user passwords.
+ * @param {string} token - High-entropy random token
+ * @returns {string} Hex-encoded SHA-256 digest
  */
 function hashToken(token) {
   const crypto = require('crypto');
-  return crypto.createHash('sha256').update(token).digest('hex');
+  // CodeQL [js/insufficient-password-hash] False positive: token is a 256-bit random string, not a user password
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
 }
 
 module.exports = {
