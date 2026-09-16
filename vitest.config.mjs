@@ -17,7 +17,8 @@ export default defineConfig({
     exclude: ['node_modules', 'dist'],
     pool: 'forks',
     forks: {
-      singleFork: true,
+      maxForks: 4,
+      minForks: 1,
     },
     coverage: {
       provider: 'v8',
@@ -27,12 +28,23 @@ export default defineConfig({
       exclude: [
         'node_modules/**',
         '**/node_modules/**',
+        'tests/**',
+        '**/tests/**',
+        '**/fixtures/**',
         'src/**/*.test.js',
         '**/run-demo.js',
         // Browser/admin UI bundles are not executed by the Node test suite
         'plugins/admin-panel/client/**',
         'plugins/admin-panel/field-renderers/**',
         'plugins/admin-panel/vendor/**',
+        'plugins/admin-panel/components.js',
+        'plugins/admin-panel/app.js',
+        'plugins/admin-panel/styles.js',
+        'plugins/dashboard/app.js',
+        'plugins/dashboard/styles.js',
+        'plugins/content/client/**',
+        'plugins/content/admin/**',
+        'src/client-runtime/**',
         'core/orm/types.js',
         'core/orm/cache/types.js',
         'plugins/email/**',

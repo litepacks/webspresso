@@ -32,7 +32,10 @@ describe('REST resources plugin', () => {
     db.registerModel(Company);
     db.registerModel(User);
     db.registerModel(Post);
+  });
 
+  beforeEach(async () => {
+    await dropTestSchema(db.knex);
     await createTestSchema(db.knex);
     await seedTestData(db.knex);
   });

@@ -20,20 +20,23 @@ describe.sequential('Admin rich-text sanitization API', () => {
 
   async function loginCookie(application) {
     const a = application || app;
-    await request(a)
+    const setupRes = await request(a)
       .post('/_admin/api/auth/setup')
       .send({
         email: 'admin@example.com',
         password: 'password123',
         name: 'Admin User',
       });
+    if (setupRes.headers['set-cookie']) {
+      return setupRes.headers['set-cookie'];
+    }
     const loginRes = await request(a)
       .post('/_admin/api/auth/login')
       .send({
         email: 'admin@example.com',
         password: 'password123',
       });
-    return loginRes.headers['set-cookie'];
+    return loginRes.headers['set-cookie'] || [];
   }
 
   async function bootstrapApp({ sanitizeRichText }) {

@@ -248,9 +248,10 @@ function wrapCustomPageWithLayout(page, rawComp) {
   return {
     oninit: function(vnode) {
       try {
-        vnode.state.instance = typeof rawComp === 'function' ? rawComp.call(this, vnode) : rawComp;
-        if (vnode.state.instance && typeof vnode.state.instance.oninit === 'function') {
-          return vnode.state.instance.oninit.call(this, vnode);
+        const instance = typeof rawComp === 'function' ? rawComp.call(rawComp, vnode) : rawComp;
+        vnode.state.instance = instance;
+        if (instance && typeof instance.oninit === 'function') {
+          return instance.oninit.call(instance, vnode);
         }
       } catch (err) {
         console.error('[Admin Panel] Error in oninit for custom page "' + page.id + '":', err);
@@ -260,7 +261,7 @@ function wrapCustomPageWithLayout(page, rawComp) {
     oncreate: function(vnode) {
       try {
         const comp = vnode.state.instance || rawComp;
-        if (comp && typeof comp.oncreate === 'function') return comp.oncreate.call(this, vnode);
+        if (comp && typeof comp.oncreate === 'function') return comp.oncreate.call(comp, vnode);
       } catch (err) {
         console.error('[Admin Panel] Error in oncreate for custom page "' + page.id + '":', err);
       }
@@ -268,7 +269,7 @@ function wrapCustomPageWithLayout(page, rawComp) {
     onupdate: function(vnode) {
       try {
         const comp = vnode.state.instance || rawComp;
-        if (comp && typeof comp.onupdate === 'function') return comp.onupdate.call(this, vnode);
+        if (comp && typeof comp.onupdate === 'function') return comp.onupdate.call(comp, vnode);
       } catch (err) {
         console.error('[Admin Panel] Error in onupdate for custom page "' + page.id + '":', err);
       }
@@ -276,7 +277,7 @@ function wrapCustomPageWithLayout(page, rawComp) {
     onbeforeremove: function(vnode) {
       try {
         const comp = vnode.state.instance || rawComp;
-        if (comp && typeof comp.onbeforeremove === 'function') return comp.onbeforeremove.call(this, vnode);
+        if (comp && typeof comp.onbeforeremove === 'function') return comp.onbeforeremove.call(comp, vnode);
       } catch (err) {
         console.error('[Admin Panel] Error in onbeforeremove for custom page "' + page.id + '":', err);
       }
@@ -284,7 +285,7 @@ function wrapCustomPageWithLayout(page, rawComp) {
     onremove: function(vnode) {
       try {
         const comp = vnode.state.instance || rawComp;
-        if (comp && typeof comp.onremove === 'function') return comp.onremove.call(this, vnode);
+        if (comp && typeof comp.onremove === 'function') return comp.onremove.call(comp, vnode);
       } catch (err) {
         console.error('[Admin Panel] Error in onremove for custom page "' + page.id + '":', err);
       }
@@ -305,9 +306,9 @@ function wrapCustomPageWithLayout(page, rawComp) {
       var content;
       try {
         if (comp && typeof comp.view === 'function') {
-          content = comp.view.call(this, vnode);
+          content = comp.view.call(comp, vnode);
         } else if (typeof comp === 'function') {
-          content = comp.call(this, vnode);
+          content = comp.call(comp, vnode);
         } else {
           content = comp;
         }

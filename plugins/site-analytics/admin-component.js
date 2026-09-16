@@ -203,12 +203,12 @@ var AnalyticsPage = {
     vnode.state.chartLoaded = false;
     vnode.state._stopPoll = null;
     vnode.state.chartDataVersion = 0;
-    this.loadData(vnode);
-    this.loadChartJs(vnode);
+    AnalyticsPage.loadData(vnode);
+    AnalyticsPage.loadChartJs(vnode);
     if (typeof runAdminAutoRefresh === 'function') {
       vnode.state._stopPoll = runAdminAutoRefresh(function() {
-        this.loadData(vnode);
-      }.bind(this));
+        AnalyticsPage.loadData(vnode);
+      });
     }
   },
 
@@ -270,12 +270,11 @@ var AnalyticsPage = {
   setDays: function(vnode, d) {
     vnode.state.days = d;
     if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
-    this.loadData(vnode);
+    AnalyticsPage.loadData(vnode);
   },
 
   view: function(vnode) {
     var s = vnode.state;
-    var self = this;
 
     return m(Layout, [
       m(Breadcrumb, { items: [{ label: 'Analytics', href: '/analytics' }] }),
@@ -294,7 +293,7 @@ var AnalyticsPage = {
             ? m(RefreshIconButton, {
                 title: 'Refresh analytics',
                 spinning: s.loading,
-                onclick: function() { self.loadData(vnode); },
+                onclick: function() { AnalyticsPage.loadData(vnode); },
               })
             : null,
           // Day filter
@@ -303,7 +302,7 @@ var AnalyticsPage = {
               class: s.days === d
                 ? 'bg-white text-gray-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
                 : 'text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200',
-              onclick: function() { self.setDays(vnode, d); },
+              onclick: function() { AnalyticsPage.setDays(vnode, d); },
             }, 'Last ' + d + ' days');
           })),
         ]),

@@ -41,7 +41,7 @@ const {
   deepClone,
 } = require('../../core/orm/utils.js');
 
-describe('Coverage Boost Branches', () => {
+describe('Core Architecture Branch Coverage', () => {
   describe('plugins/csrf/index.js branch coverage', () => {
     it('exercises isIgnored with glob matching, regex, and function', () => {
       const plugin = csrfPlugin({
@@ -1437,10 +1437,1165 @@ describe('Coverage Boost Branches', () => {
       await res.xlsx({ sheets: [{ rows: [{ x: 10 }] }] }, 'export3.xlsx');
       expect(res.end).toHaveBeenCalled();
 
-      // req.parseXlsx missing target throws
+        // req.parseXlsx missing target throws
       await expect(req.parseXlsx()).rejects.toThrow(/requires a file Buffer/);
     });
   });
+
+  describe('plugins/site-analytics/client-error-handler.js branch coverage', () => {
+    const { createErrorReportHandler, ensureErrorsTable } = require('../../plugins/site-analytics/client-error-handler.js');
+
+    it('handles various error report payloads and edge cases', async () => {
+      const mockKnex = vi.fn().mockReturnValue({
+        insert: vi.fn().mockResolvedValue([1]),
+      });
+      mockKnex.schema = {
+        hasTable: vi.fn().mockResolvedValue(false),
+        createTable: vi.fn().mockImplementation((table, cb) => {
+          const t = {
+            bigIncrements: vi.fn().mockReturnValue({ primary: vi.fn() }),
+            string: vi.fn().mockReturnValue({ index: vi.fn() }),
+            text: vi.fn(),
+            integer: vi.fn(),
+            timestamp: vi.fn().mockReturnValue({ defaultTo: vi.fn().mockReturnValue({ index: vi.fn() }) }),
+          };
+          cb(t);
+          return Promise.resolve();
+        }),
+      };
+      mockKnex.fn = { now: vi.fn().mockReturnValue('NOW()') };
+
+      const handler = createErrorReportHandler({ knex: mockKnex });
+
+      // Non-POST method
+      const resGet = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handler({ method: 'GET' }, resGet);
+      expect(resGet.status).toHaveBeenCalledWith(405);
+
+      // Missing message and stack
+      const resMissing = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handler({ method: 'POST', body: {} }, resMissing);
+      expect(resMissing.status).toHaveBeenCalledWith(400);
+
+      // Valid message and stack with all fields
+      const resOk = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handler({
+        method: 'POST',
+        body: {
+          type: 'unhandledrejection',
+          message: 'Error msg',
+          stack: 'Error stack trace',
+          path: '/page',
+          referrer: 'https://google.com',
+          userAgent: 'Mozilla/5.0',
+          source: 'https://app.com/app.js',
+          line: '12',
+          column: '34',
+        },
+      }, resOk);
+      expect(resOk.status).toHaveBeenCalledWith(202);
+
+      // Error during insert
+      mockKnex.mockReturnValueOnce({
+        insert: vi.fn().mockRejectedValue(new Error('DB Error')),
+      });
+      const resErr = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handler({
+        method: 'POST',
+        body: { message: 'Something broke' },
+      }, resErr);
+      expect(resErr.status).toHaveBeenCalledWith(500);
+    });
+  });
+
+  describe('plugins/rate-limit/index.js branch coverage', () => {
+    const { rateLimitPlugin, resolveLimiterConfig } = require('../../plugins/rate-limit/index.js');
+
+    it('exercises limiter config with custom keyGenerator and ipv6Subnet', () => {
+      const ipKeyGen = vi.fn().mockReturnValue('ip-key');
+      const customKey = vi.fn().mockReturnValue('custom-key');
+
+      const config1 = resolveLimiterConfig(ipKeyGen, { keyGenerator: customKey });
+      expect(config1.keyGenerator()).toBe('custom-key');
+
+      const config2 = resolveLimiterConfig(ipKeyGen, { ipv6Subnet: 64 });
+      expect(typeof config2.keyGenerator).toBe('function');
+      config2.keyGenerator({ ip: '::1' });
+      expect(ipKeyGen).toHaveBeenCalledWith('::1', 64);
+    });
+
+    it('exercises rateLimitPlugin with global and skip path prefixes', () => {
+      const plugin = rateLimitPlugin({
+        global: true,
+        globalSkipPaths: ['/custom-skip'],
+        globalOverrides: { limit: 50 },
+      });
+
+      const app = { use: vi.fn() };
+      const ctx = {
+        app,
+        middlewares: {},
+      };
+
+      plugin.register(ctx);
+      expect(typeof ctx.middlewares.rateLimit).toBe('function');
+      expect(app.use).toHaveBeenCalled();
+
+      const limiterOpts = plugin.api.createLimiterOptions({ limit: 10 });
+      expect(limiterOpts.limit).toBe(10);
+    });
+  });
+
+  describe('plugins/queue/index.js branch coverage', () => {
+    const queuePlugin = require('../../plugins/queue/index.js');
+
+    it('handles database adapter creation and missing knex error', () => {
+      expect(() => {
+        const p = queuePlugin({ adapter: 'database' });
+        p.register({ app: null, db: null });
+      }).toThrow(/requires a valid database\/knex instance/);
+
+      expect(() => {
+        const p = queuePlugin({ adapter: 'redis' });
+        p.register({ app: null, db: null });
+      }).toThrow(/requires a valid redisClient in options/);
+    });
+
+    it('registers memory adapter into app and context and disposes', async () => {
+      const p = queuePlugin({ adapter: 'memory', autoStart: false });
+      const app = {
+        set: vi.fn(),
+        use: vi.fn((mw) => {
+          const req = {};
+          mw(req, {}, () => {});
+          expect(req.queue).toBeDefined();
+        }),
+      };
+      const ctx = { app, db: null };
+
+      p.register(ctx);
+      expect(ctx.queue).toBeDefined();
+      expect(app.queue).toBeDefined();
+
+      p.onRoutesReady(ctx);
+      await p.dispose();
+    });
+  });
+
+  describe('plugins/realtime/index.js branch coverage', () => {
+    const { realtimePlugin, websocket } = require('../../plugins/realtime/index.js');
+
+    it('exercises setup, register, browserReady, and destroy', () => {
+      const p = realtimePlugin({ adapter: websocket({ url: 'ws://localhost:1234' }) });
+      const app = {};
+      const teardown = p.setup(app);
+      expect(app.realtime).toBeDefined();
+      expect(p.api.getClient()).toBeDefined();
+
+      p.browserReady(app);
+
+      const ctx = {
+        app: {},
+        onDispose: vi.fn((cb) => cb()),
+      };
+      p.register(ctx);
+      expect(ctx.app.realtime).toBeDefined();
+
+      teardown();
+      p.destroy(app);
+      expect(p.api.getClient()).toBeNull();
+    });
+  });
+
+  describe('src/modules/define-module.js branch coverage', () => {
+    const { defineModule } = require('../../src/modules/define-module.js');
+
+    it('throws when name is missing or invalid', () => {
+      expect(() => defineModule({})).toThrow(/requires a valid non-empty "name" string/);
+      expect(() => defineModule({ name: '   ' })).toThrow(/requires a valid non-empty "name" string/);
+    });
+
+    it('creates module factory with services, middlewares, and lifecycle hooks', () => {
+      const onInit = vi.fn();
+      const onDestroy = vi.fn();
+
+      const factory = defineModule({
+        name: 'testmod',
+        version: '2.0.0',
+        imports: ['dep1'],
+        dependencies: ['dep2'],
+        services: {
+          'action': async () => ({ ok: true }),
+          'other.action': async () => ({ ok: true }),
+        },
+        middlewares: {
+          'guard': (req, res, next) => next(),
+        },
+        exports: { ping: () => 'pong' },
+        onInit,
+        onDestroy,
+      });
+
+      const mod = factory({ customOpt: true });
+      expect(mod.name).toBe('testmod');
+      expect(mod.version).toBe('2.0.0');
+      expect(mod.dependencies).toEqual(['dep1', 'dep2']);
+      expect(mod.api.ping()).toBe('pong');
+
+      const mockServiceRegistry = {
+        has: vi.fn().mockReturnValue(false),
+        register: vi.fn(),
+      };
+      const mockShutdownManager = {
+        registerDisposer: vi.fn(),
+      };
+      const ctx = {
+        app: { serviceRegistry: mockServiceRegistry },
+        middlewares: {},
+        shutdownManager: mockShutdownManager,
+      };
+
+      mod.register(ctx);
+      expect(mockServiceRegistry.register).toHaveBeenCalledWith('testmod.action', expect.any(Function));
+      expect(mockServiceRegistry.register).toHaveBeenCalledWith('other.action', expect.any(Function));
+      expect(ctx.middlewares['testmod.guard']).toBeDefined();
+      expect(onInit).toHaveBeenCalledWith(ctx);
+      expect(mockShutdownManager.registerDisposer).toHaveBeenCalledWith(onDestroy, { name: 'module:testmod' });
+    });
+  });
+
+  describe('plugins/admin-panel/modules/dashboard.js branch coverage', () => {
+    const { registerDashboardWidgets, generateDashboardComponent } = require('../../plugins/admin-panel/modules/dashboard.js');
+
+    it('generates dashboard component script', () => {
+      const code = generateDashboardComponent();
+      expect(typeof code).toBe('string');
+      expect(code).toContain('Dashboard Page Component');
+    });
+
+    it('exercises model-stats, recent-activity, and quick-actions widget loaders', async () => {
+      const registeredWidgets = new Map();
+      const mockRegistry = {
+        registerWidget: (id, config) => {
+          registeredWidgets.set(id, config);
+        },
+      };
+
+      const mockDb = {
+        getAllModels: () => [
+          {
+            name: 'Post',
+            table: 'posts',
+            admin: { enabled: true, label: 'Blog Posts', icon: 'file' },
+            columns: new Map([
+              ['id', {}],
+              ['title', {}],
+              ['created_at', {}],
+              ['updated_at', {}],
+            ]),
+          },
+          {
+            name: 'Comment',
+            table: 'comments',
+            admin: { enabled: true },
+            columns: new Map([
+              ['id', {}],
+              ['createdAt', {}],
+              ['updatedAt', {}],
+            ]),
+          },
+          {
+            name: 'Secret',
+            table: 'secrets',
+            admin: { enabled: false },
+          },
+          {
+            name: 'Broken',
+            table: 'broken',
+            admin: { enabled: true },
+          },
+        ],
+        getRepository: (name) => {
+          if (name === 'Broken') {
+            throw new Error('Table error');
+          }
+          return {
+            count: vi.fn().mockResolvedValue(10),
+            query: () => ({
+              orderBy: (col, dir) => ({
+                first: async () => ({
+                  created_at: new Date('2026-01-01'),
+                  createdAt: new Date('2026-01-01'),
+                  updated_at: new Date('2026-01-02'),
+                  updatedAt: new Date('2026-01-02'),
+                }),
+              }),
+            }),
+          };
+        },
+        knex: {
+          schema: {
+            hasTable: vi.fn().mockResolvedValue(true),
+          },
+          fn: vi.fn(),
+        },
+      };
+
+      // Mock knex table query
+      const knexFn = vi.fn().mockReturnValue({
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockResolvedValue([{ id: 1, action: 'create', model: 'Post' }]),
+      });
+      mockDb.knex = Object.assign(knexFn, {
+        schema: { hasTable: vi.fn().mockResolvedValue(true) },
+      });
+
+      registerDashboardWidgets({ registry: mockRegistry, db: mockDb });
+      expect(registeredWidgets.has('model-stats')).toBe(true);
+      expect(registeredWidgets.has('recent-activity')).toBe(true);
+      expect(registeredWidgets.has('quick-actions')).toBe(true);
+
+      // Execute model-stats loader
+      const stats = await registeredWidgets.get('model-stats').dataLoader({ db: mockDb });
+      expect(stats.length).toBe(3); // Post, Comment, Broken
+      expect(stats[0].name).toBe('Post');
+      expect(stats[2].count).toBe(0);
+
+      // Execute recent-activity loader with table present
+      const act1 = await registeredWidgets.get('recent-activity').dataLoader({ db: mockDb });
+      expect(act1.enabled).toBe(true);
+      expect(act1.activities.length).toBe(1);
+
+      // Execute recent-activity loader without table
+      mockDb.knex.schema.hasTable.mockResolvedValueOnce(false);
+      const act2 = await registeredWidgets.get('recent-activity').dataLoader({ db: mockDb });
+      expect(act2.enabled).toBe(false);
+
+      // Execute quick-actions loader
+      const quick = await registeredWidgets.get('quick-actions').dataLoader({ db: mockDb });
+      expect(quick.length).toBe(3);
+      expect(quick[0].path).toBe('/models/Post/new');
+    });
+  });
+
+  describe('plugins/admin-panel/modules/bulk-actions.js branch coverage', () => {
+    const {
+      registerDefaultBulkActions,
+      createFieldUpdateBulkAction,
+      generateBulkActionsComponent,
+    } = require('../../plugins/admin-panel/modules/bulk-actions.js');
+
+    it('generates bulk actions component code', () => {
+      const code = generateBulkActionsComponent();
+      expect(typeof code).toBe('string');
+      expect(code).toContain('Bulk Actions Bar Component');
+    });
+
+    it('exercises bulk-restore, bulk-delete, export-json, and export-csv handlers', async () => {
+      const bulkActions = new Map();
+      const mockRegistry = {
+        registerBulkAction: (id, config) => {
+          bulkActions.set(id, config);
+        },
+      };
+
+      const mockRepo = {
+        restore: vi.fn().mockImplementation((id) => (id === 1 ? true : Promise.reject(new Error('Fail')))),
+        delete: vi.fn().mockImplementation((id) => (id === 1 ? true : Promise.reject(new Error('Fail')))),
+        update: vi.fn().mockImplementation((id, data) => (id === 1 ? true : Promise.reject(new Error('Fail')))),
+      };
+
+      const mockDb = {
+        getModel: (name) => {
+          if (name === 'SoftModel') return { scopes: { softDelete: true } };
+          return { scopes: {} };
+        },
+        getRepository: () => mockRepo,
+      };
+
+      registerDefaultBulkActions({ registry: mockRegistry, db: mockDb });
+      expect(bulkActions.has('bulk-restore')).toBe(true);
+      expect(bulkActions.has('bulk-delete')).toBe(true);
+      expect(bulkActions.has('export-json')).toBe(true);
+      expect(bulkActions.has('export-csv')).toBe(true);
+
+      // Test bulk-restore on non-soft-delete model
+      const restoreFail = await bulkActions.get('bulk-restore').handler([{ id: 1 }], 'HardModel', { db: mockDb });
+      expect(restoreFail.error).toBe(true);
+
+      // Test bulk-restore on soft-delete model
+      const restoreSuccess = await bulkActions.get('bulk-restore').handler([{ id: 1 }, { id: 2 }], 'SoftModel', { db: mockDb });
+      expect(restoreSuccess.restored).toBe(1);
+
+      // Test bulk-delete
+      const deleteRes = await bulkActions.get('bulk-delete').handler([{ id: 1 }, { id: 2 }], 'SoftModel', { db: mockDb });
+      expect(deleteRes.deleted).toBe(1);
+
+      // Test export-json
+      const jsonRes = await bulkActions.get('export-json').handler([{ id: 1 }, { id: 2 }], 'Post', { req: {}, db: mockDb });
+      expect(jsonRes.download).toBe(true);
+      expect(jsonRes.url).toContain('ids=1,2');
+
+      // Test export-csv
+      const csvRes = await bulkActions.get('export-csv').handler([{ id: 1 }, { id: 2 }], 'Post', { req: {}, db: mockDb });
+      expect(csvRes.download).toBe(true);
+      expect(csvRes.filename).toBe('Post_export.csv');
+
+      // Test createFieldUpdateBulkAction
+      const customAction = createFieldUpdateBulkAction('Post', 'status', 'published');
+      const updateRes = await customAction.handler([{ id: 1 }, { id: 2 }], 'Post', { db: mockDb });
+      expect(updateRes.updated).toBe(1);
+    });
+  });
+
+  describe('plugins/admin-panel/api.js CRUD and filter operations', () => {
+    const { createApiHandlers } = require('../../plugins/admin-panel/api.js');
+
+    it('exercises rich-text mutations and admin model listings', async () => {
+      const mockPostModel = {
+        name: 'Post',
+        table: 'posts',
+        primaryKey: 'id',
+        admin: {
+          enabled: true,
+          label: 'Posts',
+          customFields: {
+            content: { type: 'rich-text' },
+          },
+          sortableColumns: ['id', 'title'],
+        },
+        columns: new Map([
+          ['id', { type: 'integer', primary: true }],
+          ['title', { type: 'string' }],
+          ['content', { type: 'string', nullable: true }],
+          ['payload', { type: 'json' }],
+        ]),
+        relations: {},
+        scopes: { softDelete: true },
+        hidden: ['internal_notes'],
+      };
+
+      const mockDb = {
+        getAllModels: () => [mockPostModel],
+        getModel: (name) => (name === 'Post' ? mockPostModel : null),
+        getRepository: (name) => ({
+          count: vi.fn().mockResolvedValue(100),
+          query: () => ({
+            where: vi.fn().mockReturnThis(),
+            whereNot: vi.fn().mockReturnThis(),
+            whereNull: vi.fn().mockReturnThis(),
+            whereNotNull: vi.fn().mockReturnThis(),
+            whereBetween: vi.fn().mockReturnThis(),
+            whereIn: vi.fn().mockReturnThis(),
+            whereLike: vi.fn().mockReturnThis(),
+            whereILike: vi.fn().mockReturnThis(),
+            onlyTrashed: vi.fn().mockReturnThis(),
+            withTrashed: vi.fn().mockReturnThis(),
+            orderBy: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockReturnThis(),
+            offset: vi.fn().mockReturnThis(),
+            find: vi.fn().mockResolvedValue([{ id: 1, title: 'Post 1', content: '<p>Hi</p>' }]),
+            count: vi.fn().mockResolvedValue(1),
+          }),
+        }),
+      };
+
+      const handlers = createApiHandlers({
+        path: '/_admin',
+        db: mockDb,
+        richTextSanitize: true,
+      });
+
+      // Test checkHandler when AdminUserRepo is null
+      const resCheck = { json: vi.fn() };
+      await handlers.checkHandler(null, resCheck);
+      expect(resCheck.json).toHaveBeenCalledWith({ exists: false });
+
+      // Test meHandler
+      const resMe = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      handlers.meHandler({ session: { adminUser: { id: 1, name: 'Admin' } } }, resMe);
+      expect(resMe.json).toHaveBeenCalledWith({ user: { id: 1, name: 'Admin' } });
+
+      handlers.meHandler({ session: null }, resMe);
+      expect(resMe.status).toHaveBeenCalledWith(401);
+
+      // Test models listing
+      const resModels = { json: vi.fn() };
+      handlers.modelsHandler({}, resModels);
+      expect(resModels.json).toHaveBeenCalledWith({
+        models: [
+          expect.objectContaining({ name: 'Post', label: 'Posts' }),
+        ],
+      });
+
+      // Test model metadata
+      const resModelMeta = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      handlers.modelHandler({ params: { model: 'Post' } }, resModelMeta);
+      expect(resModelMeta.json).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Post', softDelete: true })
+      );
+
+      // Test recordsListHandler with filters and trashed
+      const resList = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const reqList = {
+        params: { model: 'Post' },
+        query: {
+          page: '2',
+          perPage: '10',
+          trashed: 'only',
+          sort: 'title',
+          order: 'desc',
+          filter: {
+            title: { op: 'contains', value: 'Hello' },
+            content: { op: 'is_null' },
+            id: { op: 'between', from: '1', to: '10' },
+          },
+        },
+      };
+      await handlers.recordsListHandler(reqList, resList);
+      expect(resList.json).toHaveBeenCalled();
+    });
+  });
+
+  describe('plugins/mcp components branch coverage', () => {
+    const { createBuiltinPrompts } = require('../../plugins/mcp/prompts.js');
+    const { createSystemResources } = require('../../plugins/mcp/providers/system.js');
+    const { scanModuleDir, discoverMcpDirectory } = require('../../plugins/mcp/discovery.js');
+
+    it('exercises createBuiltinPrompts handlers', async () => {
+      const prompts = createBuiltinPrompts();
+      expect(prompts.length).toBe(3);
+
+      const servicePrompt = prompts.find((p) => p.name === 'scaffold_service');
+      const sRes = await servicePrompt.handler({ serviceName: 'user.invite', description: 'Invites user' });
+      expect(sRes.messages[0].content.text).toContain('services/user/invite.js');
+
+      const modelPrompt = prompts.find((p) => p.name === 'scaffold_model');
+      const mRes = await modelPrompt.handler({ modelName: 'Invoice', tableName: 'invoices' });
+      expect(mRes.messages[0].content.text).toContain('models/invoice.js');
+
+      const apiPrompt = prompts.find((p) => p.name === 'scaffold_api');
+      const aRes = await apiPrompt.handler({ endpoint: '/api/users', method: 'POST' });
+      expect(aRes.messages[0].content.text).toContain('pages/api/users.post.js');
+    });
+
+    it('exercises createSystemResources handlers', async () => {
+      const mockServiceRegistry = {
+        list: () => ['user.create'],
+        get: () => ({ description: 'Creates user', schema: true, auth: true, timeout: 5000, transaction: true }),
+      };
+
+      const resources = createSystemResources({
+        routes: [{ path: '/api/test', method: 'POST', filePath: 'test.js' }],
+        serviceRegistry: mockServiceRegistry,
+        db: {},
+      });
+
+      const routesRes = resources.find((r) => r.uri === 'webspresso://routes');
+      const routeData = await routesRes.handler();
+      expect(routeData[0].isApi).toBe(true);
+      expect(routeData[0].method).toBe('POST');
+
+      const servicesRes = resources.find((r) => r.uri === 'webspresso://services');
+      const serviceData = await servicesRes.handler();
+      expect(serviceData[0].name).toBe('user.create');
+      expect(serviceData[0].hasSchema).toBe(true);
+
+      const healthRes = resources.find((r) => r.uri === 'webspresso://health');
+      const healthData = await healthRes.handler();
+      expect(healthData.status).toBe('ok');
+      expect(healthData.databaseConnected).toBe(true);
+    });
+
+    it('exercises scanModuleDir and discoverMcpDirectory edge cases', () => {
+      expect(scanModuleDir('/non/existent/dir')).toEqual([]);
+
+      const mockServer = {
+        registerTool: vi.fn(),
+        registerResource: vi.fn(),
+        registerResourceTemplate: vi.fn(),
+        registerPrompt: vi.fn(),
+      };
+      discoverMcpDirectory(mockServer, '/non/existent/project');
+      expect(mockServer.registerTool).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('plugins/file-manager/api-handlers.js branch coverage', () => {
+    const { createFileManagerApiHandlers } = require('../../plugins/file-manager/api-handlers.js');
+
+    it('exercises RBAC permission denial and storage handlers', async () => {
+      const handlers = createFileManagerApiHandlers({
+        baseDir: './tmp/uploads',
+        publicBasePath: '/uploads',
+        permissions: {
+          list: ['admin'],
+          delete: ['superadmin'],
+        },
+      });
+
+      // RBAC Denied
+      const reqDenied = { session: { adminUser: { role: 'editor' } }, query: {} };
+      const resDenied = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handlers.list(reqDenied, resDenied);
+      expect(resDenied.status).toHaveBeenCalledWith(403);
+      expect(resDenied.json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.stringContaining('Permission denied') }));
+
+      // Missing path on create directory (mkdir)
+      const reqCreateEmpty = { session: { adminUser: { role: 'admin' } }, body: {} };
+      const resCreateEmpty = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handlers.mkdir(reqCreateEmpty, resCreateEmpty);
+      expect(resCreateEmpty.status).toHaveBeenCalledWith(400);
+
+      // Missing names on rename
+      const reqRenameEmpty = { session: { adminUser: { role: 'admin' } }, body: {} };
+      const resRenameEmpty = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handlers.rename(reqRenameEmpty, resRenameEmpty);
+      expect(resRenameEmpty.status).toHaveBeenCalledWith(400);
+
+      // Missing target on move
+      const reqMoveEmpty = { session: { adminUser: { role: 'admin' } }, body: {} };
+      const resMoveEmpty = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handlers.move(reqMoveEmpty, resMoveEmpty);
+      expect(resMoveEmpty.status).toHaveBeenCalledWith(400);
+
+      // Missing item on delete
+      const reqDeleteEmpty = { session: { adminUser: { role: 'superadmin' } }, body: {} };
+      const resDeleteEmpty = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handlers.delete(reqDeleteEmpty, resDeleteEmpty);
+      expect(resDeleteEmpty.status).toHaveBeenCalledWith(400);
+    });
+  });
+
+  describe('core/auth/manager.js branch coverage', () => {
+    const { AuthManager } = require('../../core/auth/manager.js');
+
+    it('exercises validation, token operations, and credentials login', async () => {
+      expect(() => new AuthManager({})).toThrow(/findUserById/);
+      expect(() => new AuthManager({ findUserById: () => null })).toThrow(/findUserByCredentials/);
+
+      const mockUsers = [
+        { id: 1, email: 'user@example.com', password: 'hashed_password', role: 'admin' },
+      ];
+
+      const rememberTokenStore = new Map();
+      const auth = new AuthManager({
+        findUserById: async (id) => mockUsers.find((u) => u.id === id) || null,
+        findUserByCredentials: async (email, pass) => {
+          if (email === 'user@example.com' && pass === 'correct') {
+            return mockUsers[0];
+          }
+          return null;
+        },
+        rememberTokens: {
+          create: async (userId, token, expiresAt) => {
+            rememberTokenStore.set(token, { user_id: userId, token, expires_at: expiresAt });
+          },
+          find: async (token) => rememberTokenStore.get(token) || null,
+          delete: async (token) => {
+            rememberTokenStore.delete(token);
+          },
+          deleteAllForUser: async (userId) => {
+            for (const [k, v] of rememberTokenStore.entries()) {
+              if (v.user_id === userId) rememberTokenStore.delete(k);
+            }
+          },
+        },
+        session: { secret: 'test-session-secret' },
+        jwt: { enabled: true, secret: 'jwt-secret', refreshSecret: 'refresh-secret' },
+      });
+
+      // Login success with remember me via request-bound auth
+      const loginReq = {
+        session: {
+          destroy: vi.fn((cb) => {
+            delete loginReq.session.userId;
+            cb();
+          }),
+        },
+        headers: {},
+        cookies: {},
+      };
+      const loginRes = { cookie: vi.fn(), clearCookie: vi.fn() };
+      const reqAuth = auth.createRequestAuth(loginReq, loginRes);
+
+      const loggedIn = await reqAuth.attempt('user@example.com', 'correct', { remember: true });
+      expect(loggedIn.id).toBe(1);
+      expect(loginReq.session.userId).toBe(1);
+      expect(loginRes.cookie).toHaveBeenCalled();
+
+      // Login failed credentials
+      const failedUser = await reqAuth.attempt('user@example.com', 'wrong');
+      expect(failedUser).toBeNull();
+
+      // Destroy session and logout
+      await reqAuth.logout();
+      expect(loginReq.session.userId).toBeUndefined();
+      expect(loginReq.user).toBeNull();
+      expect(loginRes.clearCookie).toHaveBeenCalled();
+
+      // Remember token lifecycle
+      const cookieRes = { cookie: vi.fn(), clearCookie: vi.fn() };
+      await auth.createRememberToken(1, cookieRes);
+      expect(cookieRes.cookie).toHaveBeenCalled();
+
+      const rememberCookieCall = cookieRes.cookie.mock.calls.find((c) => c[0] === 'remember_token');
+      expect(rememberCookieCall).toBeDefined();
+      const rawToken = rememberCookieCall[1];
+
+      const verifyReq = { signedCookies: { remember_token: rawToken } };
+      const verifyRes = { cookie: vi.fn(), clearCookie: vi.fn() };
+      const userFromToken = await auth.verifyRememberToken(verifyReq, verifyRes);
+      expect(userFromToken.id).toBe(1);
+    });
+  });
+
+  describe('plugins/admin-panel/core/api-extensions.js branch coverage', () => {
+    const {
+      compareSemver,
+      formatUptime,
+      formatBytes,
+      buildFilteredQuery,
+      getAllMatchingIds,
+      coerceBulkTemporalValue,
+      createExtensionApiHandlers,
+    } = require('../../plugins/admin-panel/core/api-extensions.js');
+
+    it('exercises semver comparison, uptime and bytes formatters', () => {
+      expect(compareSemver('1.2.0', '1.1.9')).toBe(1);
+      expect(compareSemver('1.0.0', '1.0.0')).toBe(0);
+      expect(compareSemver('1.0.0', '2.0.0')).toBe(-1);
+      expect(compareSemver(null, '1.0.0')).toBe(0);
+      expect(compareSemver('1.0.0', null)).toBe(0);
+
+      expect(formatUptime(0)).toBe('0s');
+      expect(formatUptime(50)).toBe('50s');
+      expect(formatUptime(3665)).toBe('1h 1m 5s');
+      expect(formatUptime(90061)).toBe('1d 1h 1m 1s');
+
+      expect(formatBytes(0)).toBe('0 MB');
+      expect(formatBytes(10485760)).toBe('10.0 MB');
+    });
+
+    it('exercises coerceBulkTemporalValue with dates, datetimes, and errors', () => {
+      // Nullable empty
+      expect(coerceBulkTemporalValue({ type: 'date', nullable: true }, '', 'dateField')).toEqual({ value: null });
+      // Non-nullable empty
+      expect(coerceBulkTemporalValue({ type: 'date', nullable: false }, '', 'dateField')).toHaveProperty('error');
+
+      // Valid date YYYY-MM-DD
+      const dateRes = coerceBulkTemporalValue({ type: 'date' }, '2026-05-15', 'dateField');
+      expect(dateRes.value).toBeInstanceOf(Date);
+
+      // Invalid date formats
+      expect(coerceBulkTemporalValue({ type: 'date' }, 'invalid', 'dateField')).toHaveProperty('error');
+      expect(coerceBulkTemporalValue({ type: 'date' }, 12345, 'dateField')).toHaveProperty('error');
+
+      // Valid datetime
+      const dt1 = coerceBulkTemporalValue({ type: 'datetime' }, '2026-05-15T14:30', 'dtField');
+      expect(dt1.value).toBeInstanceOf(Date);
+      const dt2 = coerceBulkTemporalValue({ type: 'timestamp' }, '2026-05-15', 'dtField');
+      expect(dt2.value).toBeInstanceOf(Date);
+    });
+
+    it('exercises buildFilteredQuery and getAllMatchingIds with diverse filter ops', async () => {
+      const mockQueryBuilder = {
+        where: vi.fn().mockReturnThis(),
+        whereNull: vi.fn().mockReturnThis(),
+        whereNotNull: vi.fn().mockReturnThis(),
+        whereIn: vi.fn().mockReturnThis(),
+        onlyTrashed: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        list: vi.fn().mockResolvedValue([{ id: 10 }, { id: 20 }]),
+      };
+
+      const mockRepo = {
+        query: vi.fn().mockReturnValue(mockQueryBuilder),
+      };
+
+      const filters = {
+        name: { op: 'is_not_null' },
+        email: { op: 'ends_with', value: '@example.com' },
+        age: { op: 'gte', value: 18 },
+        status: { op: 'in', value: ['active', 'pending'] },
+        score: { op: 'between', from: 10, to: 100 },
+        tag: { op: 'starts_with', value: 'tech' },
+        desc: { op: 'contains', value: 'hello' },
+        exact: { op: 'equals', value: 'match' },
+        less: { op: 'lt', value: 50 },
+        lessEq: { op: 'lte', value: 60 },
+        greater: { op: 'gt', value: 5 },
+      };
+
+      const q = buildFilteredQuery(mockRepo, filters, { onlyTrashed: true });
+      expect(mockQueryBuilder.onlyTrashed).toHaveBeenCalled();
+      expect(mockQueryBuilder.whereNotNull).toHaveBeenCalledWith('name');
+
+      const ids = await getAllMatchingIds(mockRepo, filters, 'id');
+      expect(ids).toEqual([10, 20]);
+    });
+
+    it('exercises createExtensionApiHandlers methods', async () => {
+      const mockRegistry = {
+        toClientConfig: () => ({ widgets: [{ id: 'w1', title: 'Widget 1' }], actions: [{ id: 'a1' }], bulkActions: [{ id: 'b1' }] }),
+        widgets: new Map([['w1', { dataLoader: async () => ({ value: 42 }) }]]),
+        actions: new Map([['a1', { models: '*', handler: async (rec) => ({ success: true, rec }) }]]),
+        bulkActions: new Map([['b1', { models: '*', handler: async (recs) => ({ success: true, count: recs.length }) }]]),
+        getCustomPages: () => [{ id: 'custom-p1', title: 'Custom 1' }],
+        getCustomPage: (id) => (id === 'custom-p1' ? { id: 'custom-p1', title: 'Custom 1' } : null),
+      };
+
+      const mockDb = {
+        getModel: (name) => ({ name, primaryKey: 'id', scopes: {} }),
+        getRepository: () => ({
+          findById: async (id) => ({ id, name: 'Record ' + id }),
+          query: () => ({
+            whereIn: vi.fn().mockReturnThis(),
+            list: async () => [{ id: 1 }, { id: 2 }],
+          }),
+        }),
+      };
+
+      const handlers = createExtensionApiHandlers({
+        registry: mockRegistry,
+        db: mockDb,
+        path: '/_admin',
+      });
+
+      // configHandler
+      const resConfig = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      handlers.configHandler({}, resConfig);
+      expect(resConfig.json).toHaveBeenCalled();
+
+      // widgetDataHandler success & 404
+      const resWidget = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handlers.widgetDataHandler({ params: { widgetId: 'w1' } }, resWidget);
+      expect(resWidget.json).toHaveBeenCalledWith({ data: { value: 42 } });
+
+      await handlers.widgetDataHandler({ params: { widgetId: 'unknown' } }, resWidget);
+      expect(resWidget.status).toHaveBeenCalledWith(404);
+
+      // actionHandler
+      const resAction = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handlers.actionHandler({ params: { actionId: 'a1', model: 'Post', id: '1' } }, resAction);
+      expect(resAction.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+
+      // bulkActionHandler
+      const resBulk = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handlers.bulkActionHandler({ params: { actionId: 'b1', model: 'Post' }, body: { ids: [1, 2] } }, resBulk);
+      expect(resBulk.json).toHaveBeenCalled();
+
+      // systemInfoHandler
+      const resSys = { json: vi.fn() };
+      await handlers.systemInfoHandler({}, resSys);
+      expect(resSys.json).toHaveBeenCalledWith(expect.objectContaining({ nodeVersion: process.version }));
+
+      // bulkFieldsHandler
+      const resBulkFields = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      handlers.bulkFieldsHandler({ params: { model: 'Post' } }, resBulkFields);
+      expect(resBulkFields.json).toHaveBeenCalled();
+    });
+  });
+
+  describe('plugins/admin-panel/modules/admin-users.js branch coverage', () => {
+    const {
+      sanitizeAdminUser,
+      registerAdminUsersManagement,
+      createAdminUsersApiHandlers,
+      generateAdminUsersComponent,
+    } = require('../../plugins/admin-panel/modules/admin-users.js');
+
+    it('exercises helpers and component generator', () => {
+      expect(sanitizeAdminUser(null)).toBeNull();
+      const sanitized = sanitizeAdminUser({ id: 1, email: 'admin@test.com', password: 'secret', active: 1 });
+      expect(sanitized.password).toBeUndefined();
+      expect(sanitized.active).toBe(true);
+
+      const compCode = generateAdminUsersComponent();
+      expect(typeof compCode).toBe('string');
+      expect(compCode).toContain('AdminUsersPage');
+
+      // register menu
+      const mockReg = { registerMenuItem: vi.fn() };
+      registerAdminUsersManagement({ registry: mockReg, config: { enabled: true, label: 'Staff' } });
+      expect(mockReg.registerMenuItem).toHaveBeenCalledWith(expect.objectContaining({ label: 'Staff' }));
+
+      registerAdminUsersManagement({ registry: mockReg, config: { enabled: false } });
+    });
+
+    it('exercises createAdminUsersApiHandlers CRUD endpoints', async () => {
+      const adminUsersList = [
+        { id: 1, name: 'Admin 1', email: 'a1@test.com', password: 'hash', role: 'admin', active: true },
+        { id: 2, name: 'Admin 2', email: 'a2@test.com', password: 'hash', role: 'staff', active: false },
+      ];
+
+      const mockRepo = {
+        find: vi.fn().mockResolvedValue(adminUsersList),
+        findById: vi.fn().mockImplementation((id) => Promise.resolve(adminUsersList.find((u) => u.id === Number(id)) || null)),
+        findOne: vi.fn().mockImplementation((cond) => Promise.resolve(adminUsersList.find((u) => u.email === cond.email) || null)),
+        create: vi.fn().mockImplementation((data) => Promise.resolve({ id: 3, ...data })),
+        update: vi.fn().mockResolvedValue(true),
+        delete: vi.fn().mockResolvedValue(true),
+        query: () => ({
+          whereNot: vi.fn().mockReturnThis(),
+          where: vi.fn().mockReturnThis(),
+          count: vi.fn().mockResolvedValue([{ count: 2 }]),
+          first: vi.fn().mockResolvedValue(null),
+        }),
+      };
+
+      const mockDb = {
+        getRepository: () => mockRepo,
+        knex: { client: { config: { client: 'sqlite3' } } },
+      };
+
+      const handlers = createAdminUsersApiHandlers({
+        db: mockDb,
+        AdminUser: { name: 'AdminUser' },
+        hashPassword: async (pwd) => `hashed_${pwd}`,
+      });
+
+      // listAdmins
+      const resList = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handlers.listAdmins({}, resList);
+      expect(resList.json).toHaveBeenCalled();
+
+      // getAdmin success & 404
+      const resGet = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handlers.getAdmin({ params: { id: '1' } }, resGet);
+      expect(resGet.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+
+      await handlers.getAdmin({ params: { id: '99' } }, resGet);
+      expect(resGet.status).toHaveBeenCalledWith(404);
+
+      // createAdmin missing fields & duplicate
+      const resCreate = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handlers.createAdmin({ body: { name: 'New' } }, resCreate);
+      expect(resCreate.status).toHaveBeenCalledWith(400);
+
+      await handlers.createAdmin({ body: { name: 'Dup', email: 'a1@test.com', password: 'password123' } }, resCreate);
+      expect(resCreate.status).toHaveBeenCalledWith(400);
+
+      await handlers.createAdmin({ body: { name: 'New Staff', email: 'new@test.com', password: 'password123' } }, resCreate);
+      expect(resCreate.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+
+      // updateAdmin
+      const resUpdate = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handlers.updateAdmin({ params: { id: '1' }, body: { name: 'Updated 1', newPassword: 'newpassword123', active: true } }, resUpdate);
+      expect(resUpdate.json).toHaveBeenCalled();
+
+      // deleteAdmin
+      const resDelete = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await handlers.deleteAdmin({ params: { id: '2' }, session: { adminUser: { id: 1 } } }, resDelete);
+      expect(resDelete.json).toHaveBeenCalled();
+    });
+  });
+
+  describe('plugins/file-manager/core.js and security.js branch coverage', () => {
+    const {
+      resolveSafePath,
+      buildBreadcrumbs,
+      getFileType,
+      getMimeType,
+    } = require('../../plugins/file-manager/core.js');
+
+    const {
+      validateSafeExtension,
+      validateMagicBytes,
+      sanitizeSvgContent,
+    } = require('../../plugins/file-manager/security.js');
+
+    it('exercises core path helpers and formatters', () => {
+      expect(getFileType('jpg')).toBe('image');
+      expect(getFileType('pdf')).toBe('document');
+      expect(getFileType('js')).toBe('code');
+      expect(getFileType('mp3')).toBe('audio');
+      expect(getFileType('mp4')).toBe('video');
+      expect(getFileType('zip')).toBe('archive');
+      expect(getFileType('unknownext')).toBe('other');
+
+      expect(getMimeType('jpg')).toBe('image/jpeg');
+      expect(getMimeType('unknown')).toBe('application/octet-stream');
+
+      expect(buildBreadcrumbs('')).toEqual([{ name: 'Root', path: '' }]);
+      expect(buildBreadcrumbs('photos/2026')).toEqual([
+        { name: 'Root', path: '' },
+        { name: 'photos', path: 'photos' },
+        { name: '2026', path: 'photos/2026' },
+      ]);
+
+      const resolved = resolveSafePath('/tmp/base', 'subdir/file.txt');
+      expect(resolved).toBe(path.resolve('/tmp/base/subdir/file.txt'));
+      expect(() => resolveSafePath('/tmp/base', '../../etc/passwd')).toThrow();
+    });
+
+    it('exercises security validation for extensions, magic bytes, and SVG sanitization', () => {
+      expect(() => validateSafeExtension('sh')).toThrow();
+      expect(() => validateSafeExtension('exe')).toThrow();
+      expect(() => validateSafeExtension('php')).toThrow();
+      expect(validateSafeExtension('png')).toBe('png');
+
+      // Magic bytes
+      const pngBuf = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      expect(validateMagicBytes(pngBuf, 'png')).toBe(true);
+
+      const fakeBuf = Buffer.from([0x00, 0x00, 0x00, 0x00]);
+      expect(() => validateMagicBytes(fakeBuf, 'png')).toThrow();
+
+      // SVG Sanitization
+      const dirtySvg = '<svg><script>alert("xss")</script><circle cx="50" cy="50" r="40"/></svg>';
+      const cleanSvg = sanitizeSvgContent(dirtySvg).toString('utf8');
+      expect(cleanSvg).not.toContain('<script>');
+      expect(cleanSvg).toContain('<circle');
+    });
+  });
+
+  describe('core/content/field-types.js branch coverage', () => {
+    const {
+      FIELD_TYPES,
+      isValidFieldType,
+      normalizeFieldValue,
+    } = require('../../core/content/field-types.js');
+
+    it('exercises all field types validations and coercions', () => {
+      expect(isValidFieldType('text')).toBe(true);
+      expect(isValidFieldType('non-existent')).toBe(false);
+
+      // Boolean
+      expect(normalizeFieldValue(true, { name: 'flag', type: 'boolean' })).toBe(true);
+      expect(normalizeFieldValue(false, { name: 'flag', type: 'boolean' })).toBe(false);
+
+      // Number
+      expect(normalizeFieldValue(42.5, { name: 'score', type: 'number' })).toBe(42.5);
+      expect(() => normalizeFieldValue('invalid', { name: 'score', type: 'number' })).toThrow();
+
+      // Text / TextArea
+      expect(normalizeFieldValue('hello', { name: 'title', type: 'text' })).toBe('hello');
+      expect(() => normalizeFieldValue(123, { name: 'title', type: 'text' })).toThrow();
+
+      // Rich-Text
+      expect(normalizeFieldValue('<p>hi</p>', { name: 'body', type: 'rich-text' })).toBe('<p>hi</p>');
+
+      // Required check
+      expect(() => normalizeFieldValue(null, { name: 'req', type: 'text', required: true })).toThrow();
+    });
+  });
+
+  describe('core/auth/middleware.js branch coverage', () => {
+    const { createAuthMiddleware } = require('../../core/auth/middleware.js');
+
+    it('exercises requireGuest, requireAuth, requireCan, and parseMiddlewareString', () => {
+      const mockAuthManager = {
+        config: { session: { secret: 'test-secret' }, routes: { login: '/login' } },
+        getSessionConfig: () => ({ secret: 'test-secret', cookie: {} }),
+        createRequestAuth: () => ({}),
+        verifyJwt: (token) => {
+          if (token === 'valid') return { id: 1, role: 'admin' };
+          throw new Error('Invalid token');
+        },
+        findUserById: async (id) => ({ id, name: 'User' }),
+      };
+
+      const mwStack = createAuthMiddleware(mockAuthManager);
+
+      // requireGuest
+      const guestMw = mwStack.requireGuest({ redirectTo: '/dashboard' });
+      const reqAuthUser = { user: { id: 1 } };
+      const resRedirect = { redirect: vi.fn(), status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const nextFn = vi.fn();
+
+      guestMw(reqAuthUser, resRedirect, nextFn);
+      expect(resRedirect.redirect).toHaveBeenCalledWith('/dashboard');
+
+      const reqGuest = { user: null };
+      guestMw(reqGuest, resRedirect, nextFn);
+      expect(nextFn).toHaveBeenCalled();
+
+      // requireAuth
+      const authApiMw = mwStack.requireAuth({ api: true });
+      const resUnauthorized = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      authApiMw({ user: null }, resUnauthorized, nextFn);
+      expect(resUnauthorized.status).toHaveBeenCalledWith(401);
+
+      // parseMiddlewareString
+      expect(typeof mwStack.parseMiddlewareString('auth')).toBe('function');
+      expect(typeof mwStack.parseMiddlewareString('jwt')).toBe('function');
+      expect(typeof mwStack.parseMiddlewareString('guest')).toBe('function');
+      expect(() => mwStack.parseMiddlewareString('invalid-guard')).toThrow();
+    });
+  });
+
+  describe('src/file-router.js i18n, locale resolution, and route rewriting branches', () => {
+    const {
+      filePathToRoute,
+      detectLocale,
+      loadI18n,
+      createTranslator,
+      clearNjkFrontmatterCaches,
+      resolvePageAssets,
+      applyPageAssetsToTemplateData,
+    } = require('../../src/file-router.js');
+
+    it('exercises detectLocale with query param, accept-language header, and fallbacks', () => {
+      const origLocales = process.env.SUPPORTED_LOCALES;
+      process.env.SUPPORTED_LOCALES = 'en,tr,fr-ca';
+
+      expect(detectLocale({ query: { lang: 'tr' }, headers: {} })).toBe('tr');
+      expect(detectLocale({ query: { lang: 'fr-ca' }, headers: {} })).toBe('fr-ca');
+      expect(detectLocale({ query: {}, headers: { 'accept-language': 'tr-TR,tr;q=0.9' } })).toBe('tr');
+      expect(detectLocale({ query: {}, headers: {} })).toBe('en');
+
+      if (origLocales !== undefined) process.env.SUPPORTED_LOCALES = origLocales;
+      else delete process.env.SUPPORTED_LOCALES;
+    });
+
+    it('exercises filePathToRoute with dynamic brackets, catch-alls, and extensions', () => {
+      expect(filePathToRoute('users/index.njk', '.njk')).toBe('/users');
+      expect(filePathToRoute('users/[id].njk', '.njk')).toBe('/users/:id');
+      expect(filePathToRoute('docs/[...slug].njk', '.njk')).toBe('/docs/*slug');
+      expect(filePathToRoute('files/[...].njk', '.njk')).toBe('/files/*splat');
+      expect(filePathToRoute('index.njk', '.njk')).toBe('/');
+    });
+
+    it('exercises resolvePageAssets and applyPageAssetsToTemplateData', () => {
+      const assets = resolvePageAssets({
+        scripts: ['/app.js'],
+        styles: ['/style.css'],
+      });
+      expect(assets).toBeDefined();
+
+      const bundled = applyPageAssetsToTemplateData(assets, { existing: true });
+      expect(bundled.data.existing).toBe(true);
+
+      clearNjkFrontmatterCaches();
+    });
+
+    it('exercises loadI18n and createTranslator with fallback translations and interpolation', () => {
+      const translations = {
+        greeting: 'Hello {{ name }}',
+        farewell: 'Goodbye',
+        nested: { count: 'Items: {{ count }}' },
+      };
+      const fallback = {
+        missing: 'Fallback text',
+        greeting: 'Default Hello',
+      };
+
+      const t = createTranslator(translations, {
+        locale: 'en',
+        fallbackTranslations: fallback,
+        fallbackLocale: 'en',
+      });
+
+      expect(t('greeting', { name: 'Alice' })).toBe('Hello Alice');
+      expect(t('farewell')).toBe('Goodbye');
+      expect(t('nested.count', { count: 5 })).toBe('Items: 5');
+      expect(t('missing')).toBe('Fallback text');
+      expect(t('nonexistent', null, 'Default val')).toBe('Default val');
+      expect(t('nonexistent')).toBe('nonexistent');
+    });
+  });
 });
+
 
 

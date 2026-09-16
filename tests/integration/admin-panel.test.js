@@ -238,7 +238,7 @@ describe('Admin Panel Integration', () => {
 
     beforeEach(async () => {
       // Setup and login
-      await request(app)
+      const setupRes = await request(app)
         .post('/_admin/api/auth/setup')
         .send({
           email: 'admin@example.com',
@@ -253,7 +253,7 @@ describe('Admin Panel Integration', () => {
           password: 'password123',
         });
 
-      adminCookie = loginRes.headers['set-cookie'] || [];
+      adminCookie = loginRes.headers['set-cookie'] || setupRes.headers['set-cookie'] || [];
     });
 
     it('should list enabled models', async () => {
@@ -294,7 +294,7 @@ describe('Admin Panel Integration', () => {
 
     beforeEach(async () => {
       // Setup and login
-      await request(app)
+      const setupRes = await request(app)
         .post('/_admin/api/auth/setup')
         .send({
           email: 'admin@example.com',
@@ -309,7 +309,7 @@ describe('Admin Panel Integration', () => {
           password: 'password123',
         });
 
-      adminCookie = loginRes.headers['set-cookie'] || [];
+      adminCookie = loginRes.headers['set-cookie'] || setupRes.headers['set-cookie'] || [];
 
       // Get test model repository
       testRepo = db.getRepository('TestModel');
@@ -417,14 +417,17 @@ describe('Admin Panel Integration', () => {
           name: 'Filter Admin',
         });
 
-      const loginRes = await request(app)
-        .post('/_admin/api/auth/login')
-        .send({
-          email: 'filteradmin@test.com',
-          password: 'password123',
-        });
-
-      adminCookie = loginRes.headers['set-cookie'];
+      if (setupRes.headers['set-cookie']) {
+        adminCookie = setupRes.headers['set-cookie'];
+      } else {
+        const loginRes = await request(app)
+          .post('/_admin/api/auth/login')
+          .send({
+            email: 'filteradmin@test.com',
+            password: 'password123',
+          });
+        adminCookie = loginRes.headers['set-cookie'] || setupRes.headers['set-cookie'];
+      }
       testRepo = db.getRepository('TestModel');
 
       // Create test records with different values

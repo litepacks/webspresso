@@ -753,7 +753,9 @@ function detectLocale(req) {
     }
   }
 
-  const acceptLanguage = req.get('Accept-Language');
+  const acceptLanguage = typeof req.get === 'function'
+    ? req.get('Accept-Language')
+    : (req.headers && (req.headers['accept-language'] || req.headers['Accept-Language']));
   if (acceptLanguage) {
     const langPart = acceptLanguage.split(',')[0];
     const a = normalizeLocaleCandidate(langPart);

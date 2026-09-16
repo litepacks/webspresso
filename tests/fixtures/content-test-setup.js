@@ -107,7 +107,7 @@ export async function createContentTestApp(options = {}) {
  * @param {import('express').Application} app
  */
 export async function loginAdmin(request, app) {
-  await request(app).post('/_admin/api/auth/setup').send({
+  const setupRes = await request(app).post('/_admin/api/auth/setup').send({
     email: 'admin@example.com',
     password: 'password123',
     name: 'Admin',
@@ -116,7 +116,7 @@ export async function loginAdmin(request, app) {
     email: 'admin@example.com',
     password: 'password123',
   });
-  return loginRes.headers['set-cookie'];
+  return loginRes.headers['set-cookie'] || setupRes.headers['set-cookie'];
 }
 
 /**
