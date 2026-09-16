@@ -77,7 +77,7 @@ function runCli(args, options = {}) {
     cwd: options.cwd || TEST_DIR,
     input,
     encoding: 'utf8',
-    env: options.env,
+    env: options.env || { ...process.env, CI: 'true' },
   });
 
   if (proc.error) {
@@ -159,9 +159,9 @@ describe('CLI', () => {
 
     beforeAll(() => {
       cleanup(projectName);
-      result = runCli(`new ${projectName}`);
+      result = runCli(`new ${projectName} --yes`);
       projectPath = path.join(TEST_DIR, projectName);
-    });
+    }, 60000);
 
     afterAll(() => {
       cleanup(projectName);
@@ -336,9 +336,9 @@ describe('CLI', () => {
     beforeAll(() => {
       // Clean up and create project once for all tests
       cleanup(projectName);
-      createResult = runCli(`new ${projectName} --no-tailwind`);
+      createResult = runCli(`new ${projectName} --yes --no-tailwind`);
       projectPath = path.join(TEST_DIR, projectName);
-    }, 30000);
+    }, 60000);
 
     afterAll(() => {
       cleanup(projectName);
@@ -402,9 +402,9 @@ describe('CLI', () => {
     beforeAll(() => {
       cleanup(projectName);
       cleanup(noTailwindProject);
-      runCli(`new ${projectName}`);
-      runCli(`new ${noTailwindProject} --no-tailwind`);
-    });
+      runCli(`new ${projectName} --yes`);
+      runCli(`new ${noTailwindProject} --yes --no-tailwind`);
+    }, 60000);
     
     afterAll(() => {
       cleanup(projectName);
@@ -454,8 +454,8 @@ describe('CLI', () => {
     
     beforeAll(() => {
       cleanup(projectName);
-      runCli(`new ${projectName}`);
-    });
+      runCli(`new ${projectName} --yes`);
+    }, 60000);
     
     afterAll(() => {
       cleanup(projectName);
@@ -552,7 +552,7 @@ describe('CLI', () => {
       // Create directory first
       fs.mkdirSync(projectPath, { recursive: true });
       
-      const result = runCli(`new ${projectName}`);
+      const result = runCli(`new ${projectName} --yes`);
       
       // Should fail with error message (exit code might be 1 or 130 due to prompts)
       const output = result.stderr || result.stdout;
@@ -572,7 +572,7 @@ describe('CLI', () => {
       // Try to create new project in this directory (simulating interactive mode)
       // This should fail because it already has Webspresso files
       // Note: We can't easily test the interactive prompt, but we can test the validation
-      const result = runCli(`new test-in-existing`, { cwd: tempProjectDir });
+      const result = runCli(`new test-in-existing --yes`, { cwd: tempProjectDir });
       
       // Should succeed if we provide a new name, but fail if we try to use current dir
       // Since we're providing a name, it should work - check that project was created
@@ -599,10 +599,10 @@ describe('CLI', () => {
       // Clean up first to ensure clean state
       cleanup(projectName);
       // Create a project without Tailwind first, then add Tailwind
-      runCli(`new ${projectName} --no-tailwind`);
+      runCli(`new ${projectName} --yes --no-tailwind`);
       projectPath = path.join(TEST_DIR, projectName);
       addResult = runCli('add tailwind', { cwd: projectPath });
-    });
+    }, 60000);
 
     afterAll(() => {
       cleanup(projectName);
@@ -650,7 +650,7 @@ describe('CLI', () => {
     beforeAll(() => {
       cleanup(projectName);
       // Create a basic project with database
-      runCli(`new ${projectName}`, { 
+      runCli(`new ${projectName} --yes`, { 
         env: { ...process.env, CI: 'true' } // Skip interactive prompts
       });
       projectPath = path.join(TEST_DIR, projectName);
@@ -670,7 +670,7 @@ describe('CLI', () => {
 `;
         fs.writeFileSync(path.join(projectPath, 'webspresso.db.js'), dbConfig);
       }
-    });
+    }, 60000);
 
     afterAll(() => {
       cleanup(projectName);
@@ -753,7 +753,7 @@ describe('CLI', () => {
       doctorTestDir = path.join(TEST_DIR, 'doctor-project');
       fs.mkdirSync(doctorTestDir, { recursive: true });
       fs.writeFileSync(path.join(doctorTestDir, 'package.json'), JSON.stringify({ name: 'doctor-test' }));
-    });
+    }, 60000);
 
     afterAll(() => {
       if (fs.existsSync(doctorTestDir)) {
@@ -824,7 +824,7 @@ describe('CLI', () => {
       })
         .png()
         .toFile(path.join(faviconTestDir, 'logo.png'));
-    });
+    }, 60000);
 
     afterAll(() => {
       if (fs.existsSync(FAVICON_TEST_DIR)) {

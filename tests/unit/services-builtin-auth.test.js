@@ -244,4 +244,51 @@ describe('Built-in Auth Services (auth.*)', () => {
       expect(updated.email_verified_at).not.toBeNull();
     });
   });
+
+  describe('auth.* edge cases & missing db branches', () => {
+    it('should cover missing db in all auth service handlers', async () => {
+      const noDbRegistry = createServiceRegistry();
+      const noDbMap = createAuthServices({});
+      for (const [n, d] of Object.entries(noDbMap)) noDbRegistry.register(n, d);
+
+      await expect(noDbRegistry.call('auth.login', { email: 'a@b.com', password: '123' })).rejects.toThrow('Database instance is required');
+      await expect(noDbRegistry.call('auth.register', { email: 'a@b.com', password: 'password123' })).rejects.toThrow('Database instance is required');
+      await expect(noDbRegistry.call('auth.request-password-reset', { email: 'a@b.com' })).rejects.toThrow('Database instance is required');
+      await expect(noDbRegistry.call('auth.reset-password', { token: 'tok', password: 'password123' })).rejects.toThrow('Database instance is required');
+      await expect(noDbRegistry.call('auth.verify-email', { token: 'tok' })).rejects.toThrow('Database instance is required');
+    });
+
+    it('should cover deactivated user login and unknown password reset', async () => {
+      // 1. Deactivated user
+      await knex('users').insert({
+        email: 'inactive@example.com',
+        password: 'hashedpassword',
+        active: false,
+      });
+
+      await expect(
+        services.call('auth.login', { email: 'inactive@example.com', password: 'password123' }, { db })
+      ).rejects.toThrow('Account is deactivated');
+
+      // 2. Unknown user password reset
+      const resetRes = await services.call(
+        'auth.request-password-reset',
+        { email: 'unknown@example.com' },
+        { db }
+      );
+      expect(resetRes.sent).toBe(true);
+      expect(resetRes.userId).toBeNull();
+      expect(resetRes.rawToken).toBeNull();
+
+      // 3. Invalid verify token
+      await expect(
+        services.call('auth.verify-email', { token: 'nonexistent-token' }, { db })
+      ).rejects.toThrow('Invalid or expired verification token');
+
+      // 4. Invalid reset token
+      await expect(
+        services.call('auth.reset-password', { token: 'invalid-token', password: 'newPassword123' }, { db })
+      ).rejects.toThrow('Invalid or expired password reset token');
+    });
+  });
 });

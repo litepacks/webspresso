@@ -13,8 +13,6 @@ describe('Built-in System Services (system.*)', () => {
   let services;
 
   beforeAll(async () => {
-    clearRegistry();
-
     db = createDatabase({
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
@@ -43,7 +41,6 @@ describe('Built-in System Services (system.*)', () => {
   });
 
   afterAll(async () => {
-    clearRegistry();
     await dropAuthTokensTable(knex);
     await knex.schema.dropTableIfExists('audit_logs');
     await knex.destroy();
@@ -137,6 +134,123 @@ describe('Built-in System Services (system.*)', () => {
 
       const health = await app.serviceRegistry.call('system.health', {}, { db });
       expect(health.status).toBe('ok');
+    });
+  });
+
+  describe('system.* edge cases & branch coverage', () => {
+    it('should cover system.health disconnected, error, and cache stats', async () => {
+      // 1. No db service instance
+      const noDbRegistry = createServiceRegistry();
+      const noDbMap = createSystemServices({});
+      for (const [n, d] of Object.entries(noDbMap)) noDbRegistry.register(n, d);
+
+      const emptyHealth = await noDbRegistry.call('system.health', {});
+      expect(emptyHealth.status).toBe('ok');
+      expect(emptyHealth.database.status).toBe('disconnected');
+
+      // 2. Broken db
+      const brokenDb = {
+        knex: {
+          raw: async () => {
+            throw new Error('Connection refused');
+          },
+        },
+      };
+      const brokenHealth = await services.call('system.health', {}, { db: brokenDb });
+      expect(brokenHealth.status).toBe('degraded');
+      expect(brokenHealth.database.status).toBe('error');
+
+      // 3. Db with cache stats
+      const cachedDb = {
+        knex: { raw: async () => [1] },
+        cache: { stats: () => ({ hits: 10, misses: 2 }) },
+      };
+      const cacheHealth = await services.call('system.health', {}, { db: cachedDb });
+      expect(cacheHealth.cache).toEqual({ hits: 10, misses: 2 });
+    });
+
+    it('should cover system.cleanup missing db, missing tables, and opt-outs', async () => {
+      // Missing db
+      const noDbRegistry = createServiceRegistry();
+      const noDbMap = createSystemServices({});
+      for (const [n, d] of Object.entries(noDbMap)) noDbRegistry.register(n, d);
+
+      await expect(
+        noDbRegistry.call('system.cleanup', {}, { auth: { user: { role: 'admin' } } })
+      ).rejects.toThrow('Database instance is required for system.cleanup');
+
+      // Opt out of purges
+      const noPurge = await services.call(
+        'system.cleanup',
+        { purgeAuthTokens: false, purgeAuditLogs: false },
+        { db, auth: { user: { role: 'admin' } } }
+      );
+      expect(noPurge.success).toBe(true);
+      expect(noPurge.purged.authTokens).toBeUndefined();
+      expect(noPurge.purged.auditLogs).toBeUndefined();
+
+      // Db with missing tables or errors
+      const fakeDb = {
+        schema: {
+          hasTable: async () => false,
+        },
+      };
+      const fakeCleanup = await services.call(
+        'system.cleanup',
+        {},
+        { db: fakeDb, auth: { user: { role: 'admin' } } }
+      );
+      expect(fakeCleanup.purged.authTokens).toBe(0);
+      expect(fakeCleanup.purged.auditLogs).toBe(0);
+    });
+
+    it('should cover system.cache-flush scopes and models', async () => {
+      // 1. scope: 'orm' with model
+      const purgeMock = vi.fn();
+      const ormDb = { cache: { purge: purgeMock } };
+      const ormRes = await services.call(
+        'system.cache-flush',
+        { scope: 'orm', model: 'User' },
+        { db: ormDb, auth: { user: { role: 'admin' } } }
+      );
+      expect(ormRes.ormCachePurged).toBe(true);
+      expect(purgeMock).toHaveBeenCalledWith('User');
+
+      // 2. scope: 'orm' with clear() fallback
+      const clearMock = vi.fn();
+      const clearDb = { cache: { clear: clearMock } };
+      await services.call(
+        'system.cache-flush',
+        { scope: 'orm' },
+        { db: clearDb, auth: { user: { role: 'admin' } } }
+      );
+      expect(clearMock).toHaveBeenCalled();
+
+      // 3. scope: 'services'
+      const svcRes = await services.call(
+        'system.cache-flush',
+        { scope: 'services' },
+        { db: null, auth: { user: { role: 'admin' } } }
+      );
+      expect(svcRes.serviceCacheCleared).toBe(true);
+    });
+
+    it('should cover system.info with models, plugins, and custom registries', async () => {
+      const mockPm = {
+        plugins: new Map([['authPlugin', {}], ['adminPlugin', {}]]),
+      };
+      const mockDb = {
+        getAllModelInstances: () => [{ name: 'User' }, { name: 'Post' }],
+      };
+
+      const info = await services.call(
+        'system.info',
+        {},
+        { db: mockDb, pluginManager: mockPm, auth: { user: { role: 'admin' } } }
+      );
+
+      expect(info.models).toEqual(['User', 'Post']);
+      expect(info.plugins).toEqual(['authPlugin', 'adminPlugin']);
     });
   });
 });

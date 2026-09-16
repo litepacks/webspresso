@@ -19,7 +19,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES_PAGES = path.join(__dirname, '..', 'fixtures', 'pages');
 const FIXTURES_VIEWS = path.join(__dirname, '..', 'fixtures', 'views');
 
-describe('Polar plugin integration', () => {
+describe.sequential('Polar plugin integration', () => {
   const webhookSecret = `whsec_${Buffer.from('my-super-secret-key-1234567890').toString('base64')}`;
 
   let db;

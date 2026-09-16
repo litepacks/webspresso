@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import path from 'path';
@@ -7,6 +7,15 @@ import { defineApi } from '../../../src/api/define-api';
 import { createApiHandler } from '../../../src/api/api-loader';
 
 describe('defineApi & API Loader', () => {
+  let prevEnv;
+  beforeEach(() => {
+    prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'test';
+  });
+  afterEach(() => {
+    process.env.NODE_ENV = prevEnv;
+  });
+
   it('should define an API contract and mark it', () => {
     const api = defineApi({
       description: 'Test API',
@@ -306,6 +315,228 @@ describe('defineApi & API Loader', () => {
     expect(res.status).toBe(200);
     expect(res.body.dbName).toBe('mock-database');
     expect(res.body.serviceRes).toEqual({ called: 'test.run', input: { x: 1 } });
+
+    delete require.cache[require.resolve(mockFile)];
+  });
+
+  it('should support ESM default export and non-function items in middleware list', async () => {
+    const app = express();
+    const mockFile = path.resolve(__dirname, '../../fixtures/mock-esm-api.js');
+    const descriptor = {
+      type: 'api',
+      method: 'GET',
+      path: '/api/esm-api',
+      file: mockFile,
+      source: 'src/api/esm-api.get.js',
+    };
+
+    const handler = createApiHandler(descriptor, {});
+    app.get('/api/esm-api', handler);
+
+    const res = await request(app).get('/api/esm-api');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ esm: true });
+  });
+
+  it('should handle middleware early response and handler returning undefined', async () => {
+    const app = express();
+    const mockFile = path.resolve(__dirname, '../../fixtures/mock-api.js');
+    const descriptor = {
+      type: 'api',
+      method: 'GET',
+      path: '/api/void-handler',
+      file: mockFile,
+      source: 'src/api/void-handler.get.js',
+    };
+
+    require.cache[require.resolve(mockFile)] = {
+      id: mockFile,
+      filename: mockFile,
+      loaded: true,
+      exports: defineApi({
+        handler: async (req, res) => {
+          res.status(204).end();
+          return undefined;
+        },
+      }),
+    };
+
+    const handler = createApiHandler(descriptor, {});
+    app.get('/api/void-handler', handler);
+
+    const res = await request(app).get('/api/void-handler');
+    expect(res.status).toBe(204);
+
+    delete require.cache[require.resolve(mockFile)];
+  });
+
+  it('should handle non-object error thrown in API handler', async () => {
+    const app = express();
+    const mockFile = path.resolve(__dirname, '../../fixtures/mock-api.js');
+    const descriptor = {
+      type: 'api',
+      method: 'GET',
+      path: '/api/string-err',
+      file: mockFile,
+      source: 'src/api/string-err.get.js',
+    };
+
+    require.cache[require.resolve(mockFile)] = {
+      id: mockFile,
+      filename: mockFile,
+      loaded: true,
+      exports: defineApi({
+        handler: async () => {
+          throw 'Custom string API error';
+        },
+      }),
+    };
+
+    const handler = createApiHandler(descriptor, {});
+    app.get('/api/string-err', handler);
+
+    app.use((err, req, res, next) => {
+      res.status(500).json({ error: String(err) });
+    });
+
+    const res = await request(app).get('/api/string-err');
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('Custom string API error');
+
+    delete require.cache[require.resolve(mockFile)];
+  });
+
+  it('should propagate non-Zod error thrown inside schema parsing', async () => {
+    const app = express();
+    const mockFile = path.resolve(__dirname, '../../fixtures/mock-api.js');
+    const descriptor = {
+      type: 'api',
+      method: 'POST',
+      path: '/api/custom-schema-err',
+      file: mockFile,
+      source: 'src/api/custom-schema-err.post.js',
+    };
+
+    require.cache[require.resolve(mockFile)] = {
+      id: mockFile,
+      filename: mockFile,
+      loaded: true,
+      exports: defineApi({
+        schema: {
+          body: {
+            parse: () => {
+              throw new Error('Custom parsing failure');
+            },
+          },
+        },
+        handler: async () => ({ ok: true }),
+      }),
+    };
+
+    const handler = createApiHandler(descriptor, {});
+    app.post('/api/custom-schema-err', handler);
+
+    app.use((err, req, res, next) => {
+      res.status(500).json({ error: err.message });
+    });
+
+    const res = await request(app).post('/api/custom-schema-err').send({});
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('Custom parsing failure');
+
+    delete require.cache[require.resolve(mockFile)];
+  });
+
+  it('should annotate error metadata and preserve existing route/method/source in API handler', async () => {
+    const app = express();
+    const mockFile = path.resolve(__dirname, '../../fixtures/mock-api.js');
+    const descriptor = {
+      type: 'api',
+      method: 'GET',
+      path: '/api/annotated-api-err',
+      file: mockFile,
+      source: 'src/api/annotated-api-err.get.js',
+      module: 'auth-module',
+    };
+
+    require.cache[require.resolve(mockFile)] = {
+      id: mockFile,
+      filename: mockFile,
+      loaded: true,
+      exports: defineApi({
+        handler: async () => {
+          const err = new Error('Annotated API error');
+          err.route = '/predefined-api-route';
+          err.method = 'DELETE';
+          err.source = 'predefined-api-source';
+          throw err;
+        },
+      }),
+    };
+
+    let caughtErr;
+    const handler = createApiHandler(descriptor, {});
+    app.use((req, res, next) => {
+      req.id = 'api-req-789';
+      next();
+    });
+    app.get('/api/annotated-api-err', handler);
+    app.use((err, req, res, next) => {
+      caughtErr = err;
+      res.status(500).json({ error: err.message });
+    });
+
+    await request(app).get('/api/annotated-api-err');
+    expect(caughtErr.route).toBe('/predefined-api-route');
+    expect(caughtErr.method).toBe('DELETE');
+    expect(caughtErr.source).toBe('predefined-api-source');
+    expect(caughtErr.requestId).toBe('api-req-789');
+    expect(caughtErr.module).toBe('auth-module');
+
+    delete require.cache[require.resolve(mockFile)];
+  });
+
+  it('should bind req.ctx, res.service, res.input, res.module and return null for missing serviceRegistry', async () => {
+    const app = express();
+    const mockFile = path.resolve(__dirname, '../../fixtures/mock-api.js');
+    const descriptor = {
+      type: 'api',
+      method: 'GET',
+      path: '/api/ctx-bindings',
+      file: mockFile,
+      source: 'src/api/ctx-bindings.get.js',
+      module: 'sales',
+    };
+
+    require.cache[require.resolve(mockFile)] = {
+      id: mockFile,
+      filename: mockFile,
+      loaded: true,
+      exports: defineApi({
+        handler: async (req, res, ctx) => {
+          return {
+            ctxExists: !!req.ctx,
+            hasResService: typeof res.service === 'function',
+            resInput: !!res.input,
+            resModule: res.module,
+            serviceResult: ctx.service('any.service'),
+          };
+        },
+      }),
+    };
+
+    const handler = createApiHandler(descriptor, { serviceRegistry: null });
+    app.get('/api/ctx-bindings', handler);
+
+    const res = await request(app).get('/api/ctx-bindings');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      ctxExists: true,
+      hasResService: true,
+      resInput: true,
+      resModule: 'sales',
+      serviceResult: null,
+    });
 
     delete require.cache[require.resolve(mockFile)];
   });

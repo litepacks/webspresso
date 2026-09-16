@@ -181,5 +181,27 @@ describe('File Route Parser', () => {
       expect(results.length).toBeGreaterThan(0);
       expect(results[0].relativePath).toBeDefined();
     });
+
+    it('should parse .njk files and handle root/empty routes', () => {
+      expect(parseFileRoute('index.njk')).toEqual({
+        path: '/',
+        method: 'GET',
+        isValid: true,
+        isPrivate: false,
+        originalMethodPart: null,
+      });
+
+      expect(parseFileRoute('about.njk')).toEqual({
+        path: '/about',
+        method: 'GET',
+        isValid: true,
+        isPrivate: false,
+        originalMethodPart: null,
+      });
+
+      expect(isPrivateOrIgnored(null)).toBe(true);
+      expect(isPrivateOrIgnored('')).toBe(true);
+      expect(isPrivateOrIgnored(123)).toBe(true);
+    });
   });
 });

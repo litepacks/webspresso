@@ -57,7 +57,7 @@ function defineModule(config = {}) {
         ...config,
         ...userOptions,
       },
-      api: typeof publicExports === 'object' ? publicExports : {},
+      api: typeof publicExports === 'object' && publicExports !== null ? publicExports : {},
 
       register(ctx) {
         // 1. Register module services into serviceRegistry

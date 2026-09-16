@@ -11,7 +11,7 @@ const { createApp, ShutdownManager, NodeHttpAdapter, getAppContext, resetAppCont
 
 const FIXTURES_PAGES = path.join(__dirname, 'fixtures/pages');
 
-describe('Webspresso Shutdown & Lifecycle Management', () => {
+describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
   let createdServers = [];
 
   afterEach(async () => {
@@ -33,19 +33,32 @@ describe('Webspresso Shutdown & Lifecycle Management', () => {
         const addr = server.address();
         resolve({ server, port: addr.port });
       });
-      server.once('error', reject);
+      server.on('error', reject);
     });
   }
 
-  // Helper to make simple HTTP request
-  function makeRequest(port, path = '/') {
+  // Helper to make an HTTP request to local server
+  function makeRequest(port, path, options = {}) {
     return new Promise((resolve, reject) => {
-      const req = http.get(`http://127.0.0.1:${port}${path}`, (res) => {
-        let data = '';
-        res.on('data', (chunk) => (data += chunk));
-        res.on('end', () => resolve({ statusCode: res.statusCode, body: data, headers: res.headers }));
-      });
-      req.once('error', reject);
+      const req = http.request(
+        {
+          host: '127.0.0.1',
+          port,
+          path,
+          method: options.method || 'GET',
+          headers: options.headers || {},
+        },
+        (res) => {
+          let data = '';
+          res.on('data', (chunk) => (data += chunk));
+          res.on('end', () => {
+            resolve({ statusCode: res.statusCode, headers: res.headers, body: data });
+          });
+        }
+      );
+      req.on('error', reject);
+      if (options.body) req.write(options.body);
+      req.end();
     });
   }
 
@@ -140,12 +153,15 @@ describe('Webspresso Shutdown & Lifecycle Management', () => {
   // 5. graceful shutdown
   it('5. graceful shutdown allows in-flight requests to complete', async () => {
     let requestFinished = false;
+    let resolveStarted;
+    const requestStarted = new Promise((r) => { resolveStarted = r; });
 
     const { app } = createApp({
       pagesDir: FIXTURES_PAGES,
       shutdown: { mode: 'graceful', timeout: 5000 },
       setupRoutes(expressApp) {
         expressApp.get('/slow-work', async (req, res) => {
+          if (resolveStarted) resolveStarted();
           await new Promise((r) => setTimeout(r, 100));
           requestFinished = true;
           res.json({ ok: true });
@@ -156,7 +172,7 @@ describe('Webspresso Shutdown & Lifecycle Management', () => {
     const { port } = await startServer(app);
     const requestPromise = makeRequest(port, '/slow-work');
 
-    await new Promise((r) => setTimeout(r, 20));
+    await requestStarted;
 
     const closePromise = app.close();
     const response = await requestPromise;
@@ -168,11 +184,15 @@ describe('Webspresso Shutdown & Lifecycle Management', () => {
 
   // 6. force shutdown
   it('6. force shutdown mode terminates active connections immediately', async () => {
+    let resolveStarted;
+    const requestStarted = new Promise((r) => { resolveStarted = r; });
+
     const { app } = createApp({
       pagesDir: FIXTURES_PAGES,
       shutdown: { mode: 'force', timeout: 1000 },
       setupRoutes(expressApp) {
         expressApp.get('/hanging', (req, res) => {
+          if (resolveStarted) resolveStarted();
           // Never respond
         });
       },
@@ -182,24 +202,31 @@ describe('Webspresso Shutdown & Lifecycle Management', () => {
 
     let errorThrown = false;
     const req = http.get(`http://127.0.0.1:${port}/hanging`, () => {});
-    req.on('error', () => {
-      errorThrown = true;
+    const clientErrorPromise = new Promise((resolve) => {
+      req.on('error', (err) => {
+        errorThrown = true;
+        resolve(err);
+      });
     });
 
-    await new Promise((r) => setTimeout(r, 50));
+    await requestStarted;
     await app.close();
-    await new Promise((r) => setTimeout(r, 50));
+    await clientErrorPromise;
 
     expect(errorThrown).toBe(true);
   });
 
   // 7. timeout sonrası force close
   it('7. forces connection termination if graceful timeout expires', async () => {
+    let resolveStarted;
+    const requestStarted = new Promise((r) => { resolveStarted = r; });
+
     const { app } = createApp({
       pagesDir: FIXTURES_PAGES,
       shutdown: { mode: 'graceful', timeout: 150 },
       setupRoutes(expressApp) {
         expressApp.get('/stuck', (req, res) => {
+          if (resolveStarted) resolveStarted();
           // never ends
         });
       },
@@ -209,17 +236,20 @@ describe('Webspresso Shutdown & Lifecycle Management', () => {
 
     let clientError = false;
     const req = http.get(`http://127.0.0.1:${port}/stuck`, () => {});
-    req.on('error', () => {
-      clientError = true;
+    const clientErrorPromise = new Promise((resolve) => {
+      req.on('error', (err) => {
+        clientError = true;
+        resolve(err);
+      });
     });
 
-    await new Promise((r) => setTimeout(r, 40));
+    await requestStarted;
 
     const start = Date.now();
     await app.close();
     const duration = Date.now() - start;
 
-    await new Promise((r) => setTimeout(r, 50));
+    await clientErrorPromise;
 
     expect(duration).toBeGreaterThanOrEqual(130);
     expect(clientError).toBe(true);

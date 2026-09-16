@@ -185,5 +185,39 @@ describe('RouteTable & Compiler', () => {
       // Call deferred dynamic registration
       expect(() => registerDynamicDiscoveredRoutes()).not.toThrow();
     });
+
+    it('should cover all branches in compareRouteOrder and RouteTable methods', () => {
+      const { compareRouteOrder } = require('../../../src/routing/route-table');
+
+      // 1. Same tier, different literalSegCount
+      const r1 = { path: '/api/v1/users', method: 'GET' };
+      const r2 = { path: '/users', method: 'GET' };
+      expect(compareRouteOrder(r1, r2)).toBeLessThan(0);
+
+      // 2. Same tier & literal, different depth
+      const r3 = { path: '/a/b', method: 'GET' };
+      const r4 = { path: '/ab', method: 'GET' };
+      expect(compareRouteOrder(r3, r4)).toBeLessThan(0);
+
+      // 3. Different param counts
+      const r5 = { path: '/users/:id/posts/:pid', method: 'GET' };
+      const r6 = { path: '/users/:id', method: 'GET' };
+      expect(compareRouteOrder(r5, r6)).toBeLessThan(0);
+
+      // 4. Fallback alphabetical
+      const r7 = { path: '/beta', method: 'GET' };
+      const r8 = { path: '/alpha', method: 'GET' };
+      expect(compareRouteOrder(r7, r8)).toBeGreaterThan(0);
+
+      // 5. Explicit route with default method (undefined r.method)
+      const table = compileRouteTable(
+        [{ method: 'GET', path: '/test-explicit', file: 'test.js' }],
+        { explicitRoutes: [{ path: '/test-explicit' }] }
+      );
+      expect(table.size).toBe(0);
+
+      // 6. routeTable.get non-existent
+      expect(table.get('GET', '/not-found')).toBeUndefined();
+    });
   });
 });

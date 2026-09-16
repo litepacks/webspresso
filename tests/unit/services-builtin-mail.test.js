@@ -136,4 +136,56 @@ describe('Built-in Mail Services (mail.*)', () => {
       expect(res.to).toBe('auto@example.com');
     });
   });
+
+  describe('mail.* edge cases & branch coverage', () => {
+    it('should throw when emailService is missing in createMailServices', () => {
+      expect(() => createMailServices({})).toThrow('emailService instance is required');
+    });
+
+    it('should handle mail.send and mail.send-templated failure', async () => {
+      const failingEmailService = {
+        send: async () => {
+          throw new Error('SMTP connection timed out');
+        },
+      };
+      const failingRegistry = createServiceRegistry();
+      const map = createMailServices({ emailService: failingEmailService });
+      for (const [n, d] of Object.entries(map)) failingRegistry.register(n, d);
+
+      await expect(
+        failingRegistry.call('mail.send', { to: 'a@b.com', subject: 'fail', text: 'hi' })
+      ).rejects.toThrow('Failed to send email: SMTP connection timed out');
+
+      await expect(
+        failingRegistry.call('mail.send-templated', { to: 'a@b.com', subject: 'fail', template: 'welcome' })
+      ).rejects.toThrow('Failed to send templated email: SMTP connection timed out');
+    });
+
+    it('should preview raw MJML strings without registered template', async () => {
+      const preview = await services.call('mail.preview', {
+        mjml: '<mjml><mj-body><mj-section><mj-column><mj-text>Hello {{ place }}</mj-text></mj-column></mj-section></mj-body></mjml>',
+        data: { place: 'World' },
+      });
+      expect(preview.html).toContain('Hello World');
+    });
+
+    it('should handle mail.query-logs with and without queryLogs method', async () => {
+      // 1. Without queryLogs
+      const res = await services.call('mail.query-logs', {}, { auth: { user: { role: 'admin' } } });
+      expect(res).toEqual({ logs: [], total: 0 });
+
+      // 2. With queryLogs
+      const customEmailService = {
+        send: async () => ({ messageId: '1' }),
+        queryLogs: async (query) => [{ id: 1, to: 'user@example.com', status: 'sent' }],
+      };
+      const customRegistry = createServiceRegistry();
+      const map = createMailServices({ emailService: customEmailService });
+      for (const [n, d] of Object.entries(map)) customRegistry.register(n, d);
+
+      const logsRes = await customRegistry.call('mail.query-logs', { to: 'user@example.com' }, { auth: { user: { role: 'admin' } } });
+      expect(logsRes.total).toBe(1);
+      expect(logsRes.logs[0].id).toBe(1);
+    });
+  });
 });

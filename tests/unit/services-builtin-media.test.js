@@ -141,4 +141,40 @@ describe('Built-in Media Services (media.*)', () => {
       expect(res.size).toBe(11);
     });
   });
+
+  describe('media.* edge cases & branch coverage', () => {
+    it('should cover string buffer, invalid buffer, missing filePath, and non-existent delete', async () => {
+      // 1. String buffer
+      const strRes = await services.call('media.upload', {
+        buffer: 'raw text content',
+        originalName: 'raw.txt',
+      });
+      expect(strRes.size).toBe(16);
+
+      // 2. Invalid buffer type
+      await expect(
+        services.call('media.upload', { buffer: 12345 })
+      ).rejects.toThrow('Invalid buffer provided');
+
+      // 3. Missing filePath
+      await expect(
+        services.call('media.upload', { filePath: '/non/existent/image.png' })
+      ).rejects.toThrow('Source file not found');
+
+      // 4. Delete non-existent file
+      const delMissing = await services.call('media.delete', { key: 'non-existent-file.txt' });
+      expect(delMissing.success).toBe(false);
+      expect(delMissing.message).toBe('File not found');
+
+      // 5. Upload with custom destDir and publicBasePath
+      const customSub = path.join(tmpDir, 'custom-sub');
+      const customRes = await services.call('media.upload', {
+        buffer: Buffer.from('custom'),
+        destDir: customSub,
+        publicBasePath: '/custom-base',
+        originalName: 'custom.txt',
+      });
+      expect(customRes.publicUrl.startsWith('/custom-base/')).toBe(true);
+    });
+  });
 });

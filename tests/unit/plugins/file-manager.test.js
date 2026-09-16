@@ -155,5 +155,69 @@ describe('File Manager Core & Security', () => {
       expect(searched.items.length).toBe(1);
       expect(searched.items[0].type).toBe('image');
     });
+
+    it('covers upload buffer conversions, base64, filePath, and validation errors', async () => {
+      const services = createFileManagerServices({
+        baseDir: tmpDir,
+        publicBasePath: '/files',
+      });
+
+      // 1. String buffer
+      const strRes = await services['fileManager.upload'].handler({
+        buffer: 'some string data',
+        originalName: 'text.txt',
+      });
+      expect(strRes.name).toMatch(/^text.*\.txt$/);
+
+      // 2. Base64 input
+      const b64Data = 'data:text/plain;base64,' + Buffer.from('base64 content').toString('base64');
+      const b64Res = await services['fileManager.upload'].handler({
+        base64: b64Data,
+        originalName: 'b64.txt',
+      });
+      expect(b64Res.name).toMatch(/^b64.*\.txt$/);
+
+      // 3. FilePath input
+      const srcFile = path.join(tmpDir, 'source.txt');
+      await fs.writeFile(srcFile, 'source file content');
+      const fileRes = await services['fileManager.upload'].handler({
+        filePath: srcFile,
+      });
+      expect(fileRes.name).toMatch(/^source.*\.txt$/);
+
+      // 4. Missing filePath
+      await expect(
+        services['fileManager.upload'].handler({ filePath: '/non/existent/file.bin' })
+      ).rejects.toThrow('Source file not found');
+
+      // 5. Invalid buffer type (number)
+      await expect(
+        services['fileManager.upload'].handler({ buffer: 12345 })
+      ).rejects.toThrow('Invalid buffer provided');
+
+      // 6. Missing buffer entirely
+      await expect(
+        services['fileManager.upload'].handler({})
+      ).rejects.toThrow('No file content provided');
+
+      // 7. rename, move, delete via services
+      const renameRes = await services['fileManager.rename'].handler({
+        path: 'text.txt',
+        newName: 'text-renamed.txt',
+      });
+      expect(renameRes.success).toBe(true);
+
+      await services['fileManager.mkdir'].handler({ name: 'sub' });
+      const moveRes = await services['fileManager.move'].handler({
+        source: 'text-renamed.txt',
+        destination: 'sub',
+      });
+      expect(moveRes.success).toBe(true);
+
+      const delRes = await services['fileManager.delete'].handler({
+        path: 'sub/text-renamed.txt',
+      });
+      expect(delRes.success).toBe(true);
+    });
   });
 });

@@ -152,4 +152,89 @@ describe('Built-in Exchange Services (exchange.*)', () => {
       expect(res.rowCount).toBeGreaterThanOrEqual(3);
     });
   });
+
+  describe('exchange.* edge cases & branch coverage', () => {
+    it('should cover export with where clause, missing db, and missing model', async () => {
+      // 1. Where clause
+      const filtered = await services.call(
+        'exchange.export',
+        { model: 'Product', where: { in_stock: true } },
+        { db, auth: { user: { role: 'admin' } } }
+      );
+      expect(filtered.rowCount).toBeGreaterThanOrEqual(2);
+
+      // 2. Missing db
+      const noDbRegistry = createServiceRegistry();
+      const noDbMap = createExchangeServices({});
+      for (const [n, d] of Object.entries(noDbMap)) noDbRegistry.register(n, d);
+
+      await expect(
+        noDbRegistry.call('exchange.export', { model: 'Product' }, { auth: { user: { role: 'admin' } } })
+      ).rejects.toThrow('Database instance is required in context for exchange.export');
+
+      // 3. Missing model
+      await expect(
+        services.call('exchange.export', { model: 'NonExistentModel' }, { db, auth: { user: { role: 'admin' } } })
+      ).rejects.toThrow(/not (found|defined)/i);
+    });
+
+    it('should cover import error branches: invalid upsertKey, empty content, base64, missing db, missing model', async () => {
+      // 1. Missing db
+      const noDbRegistry = createServiceRegistry();
+      const noDbMap = createExchangeServices({});
+      for (const [n, d] of Object.entries(noDbMap)) noDbRegistry.register(n, d);
+
+      await expect(
+        noDbRegistry.call('exchange.import', { model: 'Product', csvText: 'a,b\n1,2' }, { auth: { user: { role: 'admin' } } })
+      ).rejects.toThrow('Database instance is required in context for exchange.import');
+
+      // 2. Missing model
+      await expect(
+        services.call('exchange.import', { model: 'NonExistent', csvText: 'a,b\n1,2' }, { db, auth: { user: { role: 'admin' } } })
+      ).rejects.toThrow(/not (found|defined)/i);
+
+      // 3. Missing content
+      await expect(
+        services.call('exchange.import', { model: 'Product' }, { db, auth: { user: { role: 'admin' } } })
+      ).rejects.toThrow('Missing spreadsheet file content');
+
+      // 4. Base64 format import
+      const csvData = 'sku,title,price\nPROD-B64,Base64 Item,55.00';
+      const b64 = Buffer.from(csvData).toString('base64');
+      const b64Res = await services.call(
+        'exchange.import',
+        { model: 'Product', base64: `data:text/csv;base64,${b64}`, mode: 'insert' },
+        { db, auth: { user: { role: 'admin' } } }
+      );
+      expect(b64Res.success).toBe(true);
+      expect(b64Res.created).toBe(1);
+
+      // 5. Invalid upsert key
+      await expect(
+        services.call(
+          'exchange.import',
+          { model: 'Product', csvText: 'sku,title\n1,2', mode: 'upsert', upsertKey: 'invalid_col' },
+          { db, auth: { user: { role: 'admin' } } }
+        )
+      ).rejects.toThrow('upsertKey "invalid_col" is not a column');
+
+      // 6. Insufficient rows
+      await expect(
+        services.call(
+          'exchange.import',
+          { model: 'Product', csvText: 'sku,title' },
+          { db, auth: { user: { role: 'admin' } } }
+        )
+      ).rejects.toThrow('File must include a header row and at least one data row');
+
+      // 7. Upsert inserting new record
+      const upsertNew = `sku,title,price\nPROD-UPSERT-NEW,New Upserted Item,10.00`;
+      const resEmptyKey = await services.call(
+        'exchange.import',
+        { model: 'Product', csvText: upsertNew, mode: 'upsert', upsertKey: 'sku' },
+        { db, auth: { user: { role: 'admin' } } }
+      );
+      expect(resEmptyKey.created).toBe(1);
+    });
+  });
 });

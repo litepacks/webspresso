@@ -6,7 +6,7 @@ const { createApp } = require('../../src/server');
 const path = require('path');
 const request = require('supertest');
 
-describe('Helmet Configuration', () => {
+describe.sequential('Helmet Configuration', () => {
   const pagesDir = path.join(__dirname, '../fixtures/pages');
   const viewsDir = path.join(__dirname, '../fixtures/views');
 

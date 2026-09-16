@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import path from 'path';
@@ -6,6 +6,15 @@ import { definePage } from '../../../src/pages/define-page';
 import { createPageHandler } from '../../../src/pages/page-loader';
 
 describe('definePage & Page Loader', () => {
+  let prevEnv;
+  beforeEach(() => {
+    prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'test';
+  });
+  afterEach(() => {
+    process.env.NODE_ENV = prevEnv;
+  });
+
   it('should define a page contract and mark it', () => {
     const page = definePage({
       load: async () => ({ title: 'Home' }),
@@ -350,5 +359,233 @@ describe('definePage & Page Loader', () => {
     expect(res.body.phase).toBe('page');
 
     delete require.cache[require.resolve(mockFile)];
+  });
+
+  it('should support ESM default export and non-function items in middleware list', async () => {
+    const app = express();
+    const mockFile = path.resolve(__dirname, '../../fixtures/mock-esm-page.js');
+    const descriptor = {
+      type: 'page',
+      method: 'GET',
+      path: '/esm-page',
+      file: mockFile,
+      source: 'src/pages/esm-page.js',
+    };
+
+    const handler = createPageHandler(descriptor, {});
+    app.get('/esm-page', handler);
+
+    const res = await request(app).get('/esm-page');
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('Primitive string response');
+  });
+
+  it('should stop processing if middleware sends response early', async () => {
+    const app = express();
+    const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
+    const descriptor = {
+      type: 'page',
+      method: 'GET',
+      path: '/early-resp-page',
+      file: mockFile,
+      source: 'src/pages/early-resp-page.js',
+    };
+
+    require.cache[require.resolve(mockFile)] = {
+      id: mockFile,
+      filename: mockFile,
+      loaded: true,
+      exports: definePage({
+        middleware: [
+          (req, res) => {
+            res.status(200).send('Responded in middleware');
+          },
+        ],
+        load: async () => {
+          throw new Error('Should not reach here');
+        },
+      }),
+    };
+
+    const handler = createPageHandler(descriptor, {});
+    app.get('/early-resp-page', handler);
+
+    const res = await request(app).get('/early-resp-page');
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('Responded in middleware');
+
+    delete require.cache[require.resolve(mockFile)];
+  });
+
+  it('should return null from ctx.service when serviceRegistry is not provided', async () => {
+    const app = express();
+    const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
+    const descriptor = {
+      type: 'page',
+      method: 'GET',
+      path: '/no-svc',
+      file: mockFile,
+      source: 'src/pages/no-svc.js',
+    };
+
+    require.cache[require.resolve(mockFile)] = {
+      id: mockFile,
+      filename: mockFile,
+      loaded: true,
+      exports: definePage({
+        load: async (ctx) => {
+          const res = ctx.service('missing.service', {});
+          return { serviceResult: res };
+        },
+      }),
+    };
+
+    const handler = createPageHandler(descriptor, {});
+    app.get('/no-svc', handler);
+
+    const res = await request(app).get('/no-svc');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ serviceResult: null });
+
+    delete require.cache[require.resolve(mockFile)];
+  });
+
+  it('should handle non-object error thrown in page loader', async () => {
+    const app = express();
+    const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
+    const descriptor = {
+      type: 'page',
+      method: 'GET',
+      path: '/primitive-err',
+      file: mockFile,
+      source: 'src/pages/primitive-err.js',
+    };
+
+    require.cache[require.resolve(mockFile)] = {
+      id: mockFile,
+      filename: mockFile,
+      loaded: true,
+      exports: definePage({
+        load: async () => {
+          throw 'String error thrown';
+        },
+      }),
+    };
+
+    const handler = createPageHandler(descriptor, {});
+    app.get('/primitive-err', handler);
+
+    app.use((err, req, res, next) => {
+      res.status(500).json({ error: String(err) });
+    });
+
+    const res = await request(app).get('/primitive-err');
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('String error thrown');
+
+    delete require.cache[require.resolve(mockFile)];
+  });
+
+  it('should handle primitive return types from load (number, boolean, undefined)', async () => {
+    const app = express();
+    const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
+    const descriptor = {
+      type: 'page',
+      method: 'GET',
+      path: '/num-page',
+      file: mockFile,
+      source: 'src/pages/num-page.js',
+    };
+
+    require.cache[require.resolve(mockFile)] = {
+      id: mockFile,
+      filename: mockFile,
+      loaded: true,
+      exports: definePage({
+        load: async () => 12345,
+        head: () => null,
+      }),
+    };
+
+    const handler = createPageHandler(descriptor, {});
+    app.get('/num-page', handler);
+
+    const res = await request(app).get('/num-page');
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('12345');
+
+    delete require.cache[require.resolve(mockFile)];
+  });
+
+  it('should preserve existing error metadata and capture x-request-id in page handler', async () => {
+    const app = express();
+    const mockFile = path.resolve(__dirname, '../../fixtures/mock-page.js');
+    const descriptor = {
+      type: 'page',
+      method: 'GET',
+      path: '/annotated-err',
+      file: mockFile,
+      source: 'src/pages/annotated-err.js',
+      module: 'custom-module',
+    };
+
+    require.cache[require.resolve(mockFile)] = {
+      id: mockFile,
+      filename: mockFile,
+      loaded: true,
+      exports: definePage({
+        load: async () => {
+          const err = new Error('Custom annotated error');
+          err.route = '/custom-route';
+          err.method = 'POST';
+          err.source = 'custom-source';
+          throw err;
+        },
+      }),
+    };
+
+    let caughtErr;
+    const handler = createPageHandler(descriptor, {});
+    app.use((req, res, next) => {
+      req.id = 'req-123';
+      next();
+    });
+    app.get('/annotated-err', handler);
+    app.use((err, req, res, next) => {
+      caughtErr = err;
+      res.status(500).json({ err: err.message });
+    });
+
+    await request(app).get('/annotated-err').set('x-request-id', 'hdr-456');
+    expect(caughtErr.route).toBe('/custom-route');
+    expect(caughtErr.method).toBe('POST');
+    expect(caughtErr.source).toBe('custom-source');
+    expect(caughtErr.requestId).toBe('req-123');
+    expect(caughtErr.module).toBe('custom-module');
+
+    delete require.cache[require.resolve(mockFile)];
+  });
+
+  it('should render standalone .njk template descriptor when file ends with .njk', async () => {
+    const app = express();
+    const njkFile = path.resolve(__dirname, '../../fixtures/views/layout.njk');
+    const descriptor = {
+      type: 'page',
+      method: 'GET',
+      path: '/standalone-njk',
+      file: njkFile,
+      source: 'src/pages/layout.njk',
+    };
+
+    const mockNunjucks = {
+      render: (file, data, cb) => cb(null, '<p>Rendered NJK</p>'),
+    };
+
+    const handler = createPageHandler(descriptor, { nunjucks: mockNunjucks });
+    app.get('/standalone-njk', handler);
+
+    const res = await request(app).get('/standalone-njk');
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('<p>Rendered NJK</p>');
   });
 });
