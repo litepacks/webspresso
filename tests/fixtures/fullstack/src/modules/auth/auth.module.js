@@ -1,4 +1,4 @@
-const { defineModule } = require('../../../../../../index');
+const { defineModule } = require('../../../../../../src/modules/define-module');
 
 module.exports = defineModule({
   name: 'auth',

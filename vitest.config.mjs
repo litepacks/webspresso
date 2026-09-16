@@ -1,10 +1,11 @@
+import os from 'os';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   benchmark: {
     include: ['benchmarks/**/*.bench.mjs'],
     exclude: ['node_modules', 'dist'],
-    reporters: ['verbose'],
+    reporters: ['default'],
   },
   test: {
     environment: 'node',
@@ -16,13 +17,11 @@ export default defineConfig({
     include: ['tests/**/*.test.js'],
     exclude: ['node_modules', 'dist'],
     pool: 'forks',
-    forks: {
-      maxForks: 4,
-      minForks: 1,
-    },
+    maxForks: Math.max(1, (os.cpus()?.length || 4) - 1),
+    minForks: 1,
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'json-summary', 'html', 'lcov'],
+      reporter: ['text-summary', 'json-summary', 'html', 'lcov'],
       reportsDirectory: './coverage',
       include: ['src/**/*.js', 'core/**/*.js', 'plugins/**/*.js'],
       exclude: [
@@ -58,7 +57,7 @@ export default defineConfig({
     },
     watch: true,
     watchExclude: ['node_modules', 'coverage'],
-    reporters: ['verbose'],
+    reporters: ['default'],
     globals: true,
   },
 });

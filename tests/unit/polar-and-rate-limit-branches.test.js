@@ -471,6 +471,56 @@ describe('Polar Billing & Rate Limiting Branch Coverage', () => {
       expect(filters.truncate('Very Long Text Goes Here', 5)).toBe('Very …');
       expect(filters.truncate(new Date('2026-09-16T12:00:00Z'), 10)).toBe('2026-09-16');
     });
+
+    it('exercises polar rate-limit.js and polar plugin route registration branches', () => {
+      const {
+        DEFAULT_RATE_LIMITS,
+        getDefaultRateLimits,
+        resolvePolarRateLimiters,
+      } = require('../../plugins/polar/src/rate-limit.js');
+      const polarPlugin = require('../../plugins/polar/index.js');
+      const { rateLimitPlugin } = require('../../plugins/rate-limit/index.js');
+
+      // 1. DEFAULT_RATE_LIMITS getter & cached defaults
+      expect(DEFAULT_RATE_LIMITS).toBeDefined();
+      expect(getDefaultRateLimits()).toBeDefined();
+
+      // 2. resolvePolarRateLimiters with disabled and route overrides
+      expect(resolvePolarRateLimiters({}, { rateLimit: false })).toEqual({});
+      expect(resolvePolarRateLimiters({}, { rateLimit: { enabled: false } })).toEqual({});
+
+      const mockFactory = vi.fn((opts) => opts);
+      const limiters = resolvePolarRateLimiters(
+        { middlewares: { rateLimit: mockFactory } },
+        {
+          rateLimit: {
+            checkout: false,
+            portal: { limit: 25 },
+          },
+        }
+      );
+      expect(limiters.checkout).toBeUndefined();
+      expect(limiters.portal).toBeDefined();
+      expect(limiters.portal.limit).toBe(25);
+
+      // 3. rateLimitPlugin api.createLimiterOptions
+      const rlPlugin = rateLimitPlugin();
+      const opts = rlPlugin.api.createLimiterOptions({ limit: 50, windowMs: 10000 });
+      expect(opts.limit).toBe(50);
+      expect(opts.windowMs).toBe(10000);
+
+      // 4. polarPlugin onRoutesReady with db: null warning
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const pInstance = polarPlugin({ enabled: true, db: null });
+      pInstance.onRoutesReady({ db: null, addRoute: vi.fn() });
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[polar] Skipping routes: no database'));
+      warnSpy.mockRestore();
+
+      // 5. polarPlugin register when disabled
+      const pDisabled = polarPlugin({ enabled: false });
+      pDisabled.register({ app: { use: vi.fn() } });
+      pDisabled.onRoutesReady({ addRoute: vi.fn() });
+    });
   });
 });
 

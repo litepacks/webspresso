@@ -1,4 +1,4 @@
-const { definePage } = require('../../../../../index');
+const { definePage } = require('../../../../../src/pages/define-page');
 
 module.exports = definePage({
   load: async () => ({ title: 'About Us' }),

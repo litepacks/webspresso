@@ -1,4 +1,4 @@
-const { defineApi } = require('../../../../../../../index');
+const { defineApi } = require('../../../../../../../src/api/define-api');
 
 module.exports = defineApi({
   middleware: ['authGuard'],

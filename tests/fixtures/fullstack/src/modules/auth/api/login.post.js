@@ -1,4 +1,5 @@
-const { defineApi, z } = require('../../../../../../../index');
+const { defineApi } = require('../../../../../../../src/api/define-api');
+const { z } = require('zod');
 
 module.exports = defineApi({
   schema: {

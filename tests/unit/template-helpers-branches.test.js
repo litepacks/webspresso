@@ -462,6 +462,90 @@ describe('Template Helpers & Injector Branch Coverage', () => {
       expect(activePlugin.api.isProSubscriptionStatus('active')).toBe(true);
       expect(activePlugin.api.isProSubscriptionStatus('canceled')).toBe(false);
     });
+
+    it('exercises all fsy formatting, breadcrumbs, TOC, reading time, and ScriptInjector methods', () => {
+      const { createHelpers, resetScriptInjector, getScriptInjector } = require('../../src/helpers.js');
+
+      resetScriptInjector();
+      const injector = getScriptInjector();
+
+      // Test injector with priorities and IDs
+      injector.addHead('<script id="h1">1</script>', { priority: 10, id: 'h1' });
+      injector.addHead('<script id="h2">2</script>', { priority: 5, id: 'h2' });
+      injector.addBody('<script id="b1">b1</script>', { priority: 20 });
+      injector.addStyle('.c1 { color: red; }', { id: 's1' });
+      injector.registerPlugin({ name: 'custom-plugin', path: '/_custom', icon: '⚡' });
+
+      expect(injector.getPlugins().length).toBeGreaterThan(0);
+      expect(injector.getStylesContent()).toContain('.c1');
+      expect(injector.getHeadContent()).toContain('h1');
+      expect(injector.getBodyContent()).toContain('b1');
+
+      const mockReq = { path: '/blog/tech/post-1', originalUrl: '/blog/tech/post-1?sort=asc', query: { page: '2' }, params: { id: '10' }, headers: { 'x-custom': 'val' } };
+      const mockRes = { locals: { csrfToken: 'tok123', nonce: 'nonce123' } };
+      const fsy = createHelpers({ req: mockReq, res: mockRes, baseUrl: 'https://example.com', locale: 'en' });
+
+      // 1. url, route, fullUrl
+      expect(fsy.url('about', { tab: 'team' })).toBe('/about?tab=team');
+      expect(fsy.route('/users/:id/[sub]', { id: '12', sub: 'settings' })).toBe('/users/12/settings');
+      expect(fsy.fullUrl('about', { tab: 'team' })).toBe('https://example.com/about?tab=team');
+
+      // 2. q, param, hdr
+      expect(fsy.q('page')).toBe('2');
+      expect(fsy.q('missing', 'default')).toBe('default');
+      expect(fsy.param('id')).toBe('10');
+      expect(fsy.param('missing', 'def')).toBe('def');
+      expect(fsy.hdr('X-Custom')).toBe('val');
+      expect(fsy.hdr('missing', 'def')).toBe('def');
+
+      // 3. isDev, isProd, canonical, jsonld, asset
+      expect(typeof fsy.isDev()).toBe('boolean');
+      expect(typeof fsy.isProd()).toBe('boolean');
+      expect(fsy.canonical()).toBe('https://example.com/blog/tech/post-1');
+      expect(fsy.jsonld({ '@type': 'Article', name: '<Title>' })).toContain('application/ld+json');
+      expect(fsy.asset('app.js')).toBe('/app.js');
+
+      // 4. prettyBytes, prettyMs
+      expect(fsy.prettyBytes(0)).toBe('0 B');
+      expect(fsy.prettyBytes(1024 * 1024 * 5)).toContain('5');
+      expect(fsy.prettyMs(500)).toBe('500ms');
+      expect(fsy.prettyMs(5000)).toBe('5.0s');
+      expect(fsy.prettyMs(120000)).toBe('2.0m');
+      expect(fsy.prettyMs(7200000)).toBe('2.0h');
+
+      // 5. slugify, truncate
+      expect(fsy.slugify('Hello World & Friends!')).toBe('hello-world-friends');
+      expect(fsy.slugify(null)).toBe('');
+      expect(fsy.truncate('Short', 10)).toBe('Short');
+      expect(fsy.truncate('A very long description that needs trimming', 10, '...')).toBe('A very ...');
+      expect(fsy.truncate(null)).toBe('');
+
+      // 6. date helpers & nonce
+      expect(fsy.date(null)).toBeDefined();
+      expect(fsy.dateFormat(null)).toBe('');
+      expect(fsy.dateFormat('2026-09-16T12:00:00Z', 'YYYY-MM-DD')).toBe('2026-09-16');
+      expect(fsy.date('2026-09-16T12:00:00Z', 'YYYY-MM-DD')).toBeDefined();
+      expect(fsy.dateFromNow('2026-01-01')).toBeDefined();
+      expect(fsy.dateIsBefore('2025-01-01', '2026-01-01')).toBe(true);
+      expect(fsy.dateIsAfter('2026-01-01', '2025-01-01')).toBe(true);
+      expect(fsy.dateIsSame('2026-01-01', '2026-01-01')).toBe(true);
+      expect(fsy.dateDiff('2026-01-02', '2026-01-01', 'day')).toBe(1);
+      expect(fsy.dateAdd('2026-01-01', 1, 'day')).toBeDefined();
+      expect(fsy.dateSubtract('2026-01-02', 1, 'day')).toBeDefined();
+      expect(fsy.dateStartOf('2026-01-01', 'month')).toBeDefined();
+      expect(fsy.dateEndOf('2026-01-01', 'month')).toBeDefined();
+      expect(fsy.nonce()).toBe('nonce123');
+
+      // 7. devToolbar in development and production
+      const origEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'development';
+      const tbHtml = fsy.devToolbar({ customLinks: [{ name: 'Custom', path: '/custom' }] });
+      expect(tbHtml).toContain('webspresso-dev-toolbar');
+
+      process.env.NODE_ENV = 'production';
+      expect(fsy.devToolbar()).toBe('');
+      process.env.NODE_ENV = origEnv;
+    });
   });
 });
 

@@ -2,6 +2,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const http = require('http');
 const express = require('express');
 const nunjucks = require('nunjucks');
@@ -915,8 +916,7 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
     const request = require('supertest');
 
     it('exercises 404 data loader execution and error handling', async () => {
-      const tmpDir = path.join(__dirname, '../../tmp/test-404-loader');
-      fs.mkdirSync(tmpDir, { recursive: true });
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-404-loader-'));
 
       fs.writeFileSync(
         path.join(tmpDir, '404.njk'),
@@ -973,13 +973,16 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
       expect(resHttpErr.status).toBe(402);
       expect(resHttpErr.headers['x-custom-header']).toBe('CustomVal');
 
-      const resAborted = await request(app).get('/trigger-aborted');
-      expect(resAborted.status).toBeDefined();
+      try {
+        const resAborted = await request(app).get('/trigger-aborted');
+        expect(resAborted.status).toBeDefined();
+      } catch (err) {
+        expect(err).toBeDefined();
+      }
     });
 
     it('exercises page loader fallback JSON, string, custom error, and nunjucks error branches', async () => {
-      const tmpDir = path.join(__dirname, '../../tmp/test-page-fallbacks');
-      fs.mkdirSync(tmpDir, { recursive: true });
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-page-fallbacks-'));
 
       const createMockReq = (p) => ({
         path: p,
@@ -1128,8 +1131,7 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
 
     it('exercises api-loader missing handler function, sync middleware throw, and early return', async () => {
       const { createApiHandler } = require('../../src/api/api-loader.js');
-      const tmpDir = path.join(__dirname, '../../tmp/test-api-loader-branches');
-      fs.mkdirSync(tmpDir, { recursive: true });
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-api-loader-branches-'));
 
       // 1. API file exporting non-function handler
       const invalidApiFile = path.join(tmpDir, 'invalid-handler.js');

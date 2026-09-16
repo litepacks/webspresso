@@ -1,4 +1,5 @@
-const { defineService, z } = require('../../../../../../../index');
+const { defineService } = require('../../../../../../../src/services');
+const { z } = require('zod');
 
 module.exports = defineService({
   schema: z.object({
