@@ -51,8 +51,9 @@ function isIgnored(req, ignorePaths) {
         if (regex === undefined) {
           const regexPattern = pattern
             .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-            .replace(/\*\*/g, '.*')
-            .replace(/\*/g, '[^/]*');
+            .replace(/\*\*/g, '___GLOB_STAR_STAR___')
+            .replace(/\*/g, '[^/]*')
+            .replace(/___GLOB_STAR_STAR___/g, '.*');
           regex = new RegExp(`^${regexPattern}$`);
           if (ignoreRegexCache.size < 500) {
             ignoreRegexCache.set(pattern, regex);
