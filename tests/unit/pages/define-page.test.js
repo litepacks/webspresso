@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express from 'express';
-import rateLimit from 'express-rate-limit';
 import request from 'supertest';
 import path from 'path';
 import { definePage } from '../../../src/pages/define-page';
@@ -8,7 +7,6 @@ import { createPageHandler } from '../../../src/pages/page-loader';
 
 function createTestApp() {
   const app = express();
-  app.use(rateLimit({ windowMs: 60000, max: 1000, validate: false }));
   return app;
 }
 

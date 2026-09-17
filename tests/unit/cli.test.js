@@ -110,12 +110,18 @@ beforeAll(() => {
   if (!fs.existsSync(TEST_DIR)) {
     fs.mkdirSync(TEST_DIR, { recursive: true });
   }
+  if (!fs.existsSync(FAVICON_TEST_DIR)) {
+    fs.mkdirSync(FAVICON_TEST_DIR, { recursive: true });
+  }
 });
 
 // Clean up after all tests
 afterAll(() => {
   if (fs.existsSync(TEST_DIR)) {
     fs.rmSync(TEST_DIR, { recursive: true, force: true });
+  }
+  if (fs.existsSync(FAVICON_TEST_DIR)) {
+    fs.rmSync(FAVICON_TEST_DIR, { recursive: true, force: true });
   }
 });
 

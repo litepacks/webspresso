@@ -7,7 +7,6 @@
 const fs = require('fs');
 const path = require('path');
 const { loadDbConfig } = require('../utils/db');
-const { generatePolarMigration } = require('../../plugins/polar/src/migration');
 
 function registerCommand(program) {
   program
@@ -40,6 +39,7 @@ function registerCommand(program) {
         filepath = path.join(migrationDir, `${timestamp}_polar_billing.js`);
       }
 
+      const { generatePolarMigration } = require('../../plugins/polar/src/migration');
       const content = generatePolarMigration({ tableName: options.table });
       fs.writeFileSync(filepath, content, 'utf8');
       console.log(`✅ Polar migration written: ${filepath}`);

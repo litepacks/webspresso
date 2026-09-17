@@ -63,8 +63,14 @@ describe('Polar Billing & Rate Limiting Branch Coverage', () => {
         plans: { pro: 'plan_123' },
       });
 
-      // polarApiRequest error / mock
-      await expect(p.api.polarApiRequest('/v1/customer-portal/subscriptions')).rejects.toThrow();
+      // polarApiRequest with fetch mock (zero network delay)
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        text: async () => JSON.stringify({ detail: 'Invalid token' }),
+      });
+      await expect(p.api.polarApiRequest('/v1/customer-portal/subscriptions')).rejects.toThrow(/Polar API 401/);
+      fetchSpy.mockRestore();
 
       // polarSyncMiddleware
       const mw = p.api.polarSyncMiddleware({ strict: false });

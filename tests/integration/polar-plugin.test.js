@@ -11,7 +11,7 @@ import crypto from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createApp } from '../../src/server.js';
-import { createDatabase, defineModel, clearRegistry, zdb } from '../../index.js';
+import { createDatabase, defineModel, clearRegistry, zdb } from '../../core/orm/index.js';
 import { quickAuth, hash } from '../../core/auth/index.js';
 import polarPlugin from '../../plugins/polar/index.js';
 

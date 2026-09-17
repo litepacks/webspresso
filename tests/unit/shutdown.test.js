@@ -7,7 +7,9 @@ const http = require('http');
 const net = require('net');
 const path = require('path');
 
-const { createApp, ShutdownManager, NodeHttpAdapter, getAppContext, resetAppContext } = require('../../index');
+const { createApp } = require('../../src/server');
+const { ShutdownManager, NodeHttpAdapter } = require('../../core/shutdown');
+const { getAppContext, resetAppContext } = require('../../src/app-context');
 
 const FIXTURES_PAGES = path.join(__dirname, 'fixtures/pages');
 
@@ -46,7 +48,8 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
           port,
           path,
           method: options.method || 'GET',
-          headers: options.headers || {},
+          headers: { connection: 'close', ...(options.headers || {}) },
+          agent: false,
         },
         (res) => {
           let data = '';
@@ -158,11 +161,11 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
 
     const { app } = createApp({
       pagesDir: FIXTURES_PAGES,
-      shutdown: { mode: 'graceful', timeout: 5000 },
+      shutdown: { mode: 'graceful', timeout: 500 },
       setupRoutes(expressApp) {
         expressApp.get('/slow-work', async (req, res) => {
           if (resolveStarted) resolveStarted();
-          await new Promise((r) => setTimeout(r, 100));
+          await new Promise((r) => setTimeout(r, 20));
           requestFinished = true;
           res.json({ ok: true });
         });

@@ -24,6 +24,10 @@ let npmVersionCache = {
 };
 
 function fetchLatestNpmVersion(force = false) {
+  if ((process.env.NODE_ENV === 'test' || process.env.VITEST) && !force) {
+    return Promise.resolve(npmVersionCache.latestVersion || getWebspressoVersion());
+  }
+
   const now = Date.now();
   if (!force && npmVersionCache.latestVersion && (now - npmVersionCache.checkedAt < 30 * 60 * 1000)) {
     return Promise.resolve(npmVersionCache.latestVersion);

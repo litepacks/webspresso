@@ -1,3 +1,4 @@
+// import { vitestDoctorPlugin } from 'vitest-doctor';
 import os from 'os';
 import { defineConfig } from 'vitest/config';
 
@@ -57,7 +58,21 @@ export default defineConfig({
     },
     watch: true,
     watchExclude: ['node_modules', 'coverage'],
-    reporters: ['default'],
+    reporters: [],
     globals: true,
   },
+  plugins: [
+    // vitestDoctorPlugin({
+    //   output: 'doctor.html',
+    //   slow: 500,           // Flag tests >= 500ms
+    //   verySlow: 1500,      // Flag tests >= 1500ms
+    //   relative: true,      // Detect relative statistical outliers (>5x median)
+    //   medianMultiplier: 5,
+    //   budgets: {
+    //     maxSuiteDuration: 30000,
+    //     maxTestDuration: 2000,
+    //     maxRegressions: 0
+    //   }
+    // })
+  ]
 });

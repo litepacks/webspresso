@@ -3,11 +3,11 @@
  * @vitest-environment node
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../src/server.js';
-import { createDatabase, defineModel, zdb } from '../../index.js';
-import { adminPanelPlugin } from '../../plugins/index.js';
+import { createDatabase, defineModel, zdb } from '../../core/orm/index.js';
+import { adminPanelPlugin } from '../../plugins/admin-panel/index.js';
 import { clearRegistry } from '../../core/orm/model.js';
 
 describe.sequential('Admin rich-text sanitization API', () => {
@@ -115,11 +115,20 @@ describe.sequential('Admin rich-text sanitization API', () => {
     app = result.app;
   }
 
-  beforeEach(async () => {
+  let cachedCookie;
+
+  beforeAll(async () => {
     await bootstrapApp({ sanitizeRichText: true });
+    cachedCookie = await loginCookie();
   });
 
-  afterEach(async () => {
+  beforeEach(async () => {
+    if (db && tableName) {
+      await db.knex(tableName).truncate().catch(() => {});
+    }
+  });
+
+  afterAll(async () => {
     if (db) {
       await db.destroy();
       db = null;
@@ -128,7 +137,7 @@ describe.sequential('Admin rich-text sanitization API', () => {
   });
 
   it('strips XSS from rich-text fields on create', async () => {
-    const cookie = await loginCookie();
+    const cookie = cachedCookie;
     const payload = {
       title: 'doc1',
       body: '<p>Hello</p><script>document.cookie=1</script>',
@@ -148,7 +157,7 @@ describe.sequential('Admin rich-text sanitization API', () => {
   });
 
   it('returns 400 when required rich-text is empty after sanitization', async () => {
-    const cookie = await loginCookie();
+    const cookie = cachedCookie;
     const res = await request(app)
       .post(`/_admin/api/models/${modelName}/records`)
       .set('Cookie', cookie)
@@ -162,7 +171,7 @@ describe.sequential('Admin rich-text sanitization API', () => {
   });
 
   it('normalizes nullable rich-text to null when empty after sanitization', async () => {
-    const cookie = await loginCookie();
+    const cookie = cachedCookie;
     const res = await request(app)
       .post(`/_admin/api/models/${modelName}/records`)
       .set('Cookie', cookie)
@@ -177,7 +186,7 @@ describe.sequential('Admin rich-text sanitization API', () => {
   });
 
   it('sanitizes rich-text on update', async () => {
-    const cookie = await loginCookie();
+    const cookie = cachedCookie;
     const created = await request(app)
       .post(`/_admin/api/models/${modelName}/records`)
       .set('Cookie', cookie)

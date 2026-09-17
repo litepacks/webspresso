@@ -14,7 +14,6 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const { loadDbConfig } = require('../utils/db');
-const { getSeedFileTemplate } = require('../utils/seed');
 
 function registerCommand(program) {
   program
@@ -136,6 +135,7 @@ function registerCommand(program) {
           }
           
           // Create seed index file
+          const { getSeedFileTemplate } = require('../utils/seed');
           const seedIndex = getSeedFileTemplate();
           
           fs.writeFileSync(seedIndexPath, seedIndex);

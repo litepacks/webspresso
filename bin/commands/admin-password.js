@@ -92,7 +92,8 @@ function registerCommand(program) {
         
         // Hash the password (same rounds as admin panel setup)
         const { hash } = require('../../core/auth/hash');
-        const hashedPassword = await hash(password, 10);
+        const rounds = process.env.NODE_ENV === 'test' ? 4 : 10;
+        const hashedPassword = await hash(password, rounds);
         
         // Update the password
         await db('admin_users')

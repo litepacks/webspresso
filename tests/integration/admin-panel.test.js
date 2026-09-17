@@ -3,12 +3,14 @@
  * @vitest-environment node
  */
 
+import path from 'path';
+import fs from 'fs';
 import { createRequire } from 'node:module';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../src/server.js';
-import { createDatabase, defineModel, zdb, hasModel } from '../../index.js';
-import { adminPanelPlugin } from '../../plugins/index.js';
+import { createDatabase, defineModel, zdb, hasModel } from '../../core/orm/index.js';
+import { adminPanelPlugin } from '../../plugins/admin-panel/index.js';
 import { clearRegistry } from '../../core/orm/model.js';
 
 const require = createRequire(import.meta.url);
@@ -75,8 +77,13 @@ describe('Admin Panel Integration', () => {
     });
 
     // Create app with admin panel
+    const emptyPagesDir = path.join(__dirname, '../fixtures/empty-pages');
+    if (!fs.existsSync(emptyPagesDir)) {
+      fs.mkdirSync(emptyPagesDir, { recursive: true });
+    }
+
     const result = createApp({
-      pagesDir: './tests/fixtures/pages',
+      pagesDir: emptyPagesDir,
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
       plugins: [

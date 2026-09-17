@@ -40,24 +40,17 @@ function createServiceRegistry(options = {}) {
   return registry;
 }
 
-const { createAuthServices } = require('./builtins/auth');
-const { createMailServices } = require('./builtins/mail');
-const { createMediaServices } = require('./builtins/media');
-const { createFileManagerServices } = require('./builtins/file-manager');
-const { createSystemServices } = require('./builtins/system');
-const { createExchangeServices } = require('./builtins/exchange');
-
 module.exports = {
   ServiceRegistry,
   createServiceRegistry,
   defineService,
   service: defineService, // alias
-  createAuthServices,
-  createMailServices,
-  createMediaServices,
-  createFileManagerServices,
-  createSystemServices,
-  createExchangeServices,
+  get createAuthServices() { return require('./builtins/auth').createAuthServices; },
+  get createMailServices() { return require('./builtins/mail').createMailServices; },
+  get createMediaServices() { return require('./builtins/media').createMediaServices; },
+  get createFileManagerServices() { return require('./builtins/file-manager').createFileManagerServices; },
+  get createSystemServices() { return require('./builtins/system').createSystemServices; },
+  get createExchangeServices() { return require('./builtins/exchange').createExchangeServices; },
   memoize,
   parseTtlMs,
   stableCacheKey,

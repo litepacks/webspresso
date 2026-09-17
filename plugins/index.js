@@ -3,94 +3,52 @@
  * Export all built-in plugins
  */
 
-const sitemapPlugin = require('./sitemap');
-const analyticsPlugin = require('./analytics');
-const dashboardPlugin = require('./dashboard/index');
-const schemaExplorerPlugin = require('./schema-explorer');
-const adminPanelPlugin = require('./admin-panel');
-const seoCheckerPlugin = require('./seo-checker');
-const siteAnalyticsPlugin = require('./site-analytics');
-const auditLogPlugin = require('./audit-log');
-const recaptchaPlugin = require('./recaptcha');
-const swaggerPlugin = require('./swagger');
-const healthCheckPlugin = require('./health-check');
-const restResourcePlugin = require('./rest-resources');
-const ormCacheAdminPlugin = require('./orm-cache-admin');
-const { uploadPlugin, createLocalFileProvider } = require('./upload');
-/** Register after adminPanelPlugin (same db + adminPath) for session and routes. */
-const { dataExchangePlugin } = require('./data-exchange');
-const { redirectPlugin } = require('./redirect');
-const { rateLimitPlugin } = require('./rate-limit');
-const emailPlugin = require('./email');
-const contentPlugin = require('./content');
-const csrfPlugin = require('./csrf');
-const corsPlugin = require('./cors');
-const { basicAuthPlugin, createBasicAuthMiddleware } = require('./basic-auth');
-const {
-  realtimePlugin,
-  realtime,
-  createRealtime,
-  websocket,
-  createWebSocketAdapter,
-  sse,
-  createSseAdapter,
-  socketIo,
-  createSocketIoAdapter,
-  redis,
-  createRedisAdapter,
-} = require('./realtime');
-const { mcpPlugin, createMcpServer, McpServer } = require('./mcp');
-const polarPlugin = require('./polar');
-const fileManagerPlugin = require('./file-manager');
-const { xlsxPlugin, xlsx } = require('./xlsx');
-const { csvPlugin, csv } = require('./csv');
-
 module.exports = {
-  sitemapPlugin,
-  analyticsPlugin,
-  dashboardPlugin,
-  schemaExplorerPlugin,
-  adminPanelPlugin,
-  seoCheckerPlugin,
-  siteAnalyticsPlugin,
-  auditLogPlugin,
-  recaptchaPlugin,
-  swaggerPlugin,
-  healthCheckPlugin,
-  restResourcePlugin,
-  ormCacheAdminPlugin,
-  uploadPlugin,
-  createLocalFileProvider,
-  dataExchangePlugin,
-  redirectPlugin,
-  rateLimitPlugin,
-  emailPlugin,
-  contentPlugin,
-  csrfPlugin,
-  corsPlugin,
-  basicAuthPlugin,
-  createBasicAuthMiddleware,
-  realtimePlugin,
-  realtime,
-  createRealtime,
-  websocket,
-  createWebSocketAdapter,
-  sse,
-  createSseAdapter,
-  socketIo,
-  createSocketIoAdapter,
-  redis,
-  createRedisAdapter,
-  queuePlugin: require('./queue'),
-  mcpPlugin,
-  createMcpServer,
-  McpServer,
-  polarPlugin,
-  fileManagerPlugin,
-  xlsxPlugin,
-  xlsx,
-  csvPlugin,
-  csv,
+  get sitemapPlugin() { return require('./sitemap'); },
+  get analyticsPlugin() { return require('./analytics'); },
+  get dashboardPlugin() { return require('./dashboard/index'); },
+  get schemaExplorerPlugin() { return require('./schema-explorer'); },
+  get adminPanelPlugin() { return require('./admin-panel'); },
+  get seoCheckerPlugin() { return require('./seo-checker'); },
+  get siteAnalyticsPlugin() { return require('./site-analytics'); },
+  get auditLogPlugin() { return require('./audit-log'); },
+  get recaptchaPlugin() { return require('./recaptcha'); },
+  get swaggerPlugin() { return require('./swagger'); },
+  get healthCheckPlugin() { return require('./health-check'); },
+  get restResourcePlugin() { return require('./rest-resources'); },
+  get ormCacheAdminPlugin() { return require('./orm-cache-admin'); },
+  get uploadPlugin() { return require('./upload').uploadPlugin; },
+  get createLocalFileProvider() { return require('./upload').createLocalFileProvider; },
+  get dataExchangePlugin() { return require('./data-exchange').dataExchangePlugin; },
+  get redirectPlugin() { return require('./redirect').redirectPlugin; },
+  get rateLimitPlugin() { return require('./rate-limit').rateLimitPlugin; },
+  get emailPlugin() { return require('./email'); },
+  get contentPlugin() { return require('./content'); },
+  get csrfPlugin() { return require('./csrf'); },
+  get corsPlugin() { return require('./cors'); },
+  get basicAuthPlugin() { return require('./basic-auth').basicAuthPlugin; },
+  get createBasicAuthMiddleware() { return require('./basic-auth').createBasicAuthMiddleware; },
+  get realtimePlugin() { return require('./realtime').realtimePlugin; },
+  get realtime() { return require('./realtime').realtime; },
+  get createRealtime() { return require('./realtime').createRealtime; },
+  get websocket() { return require('./realtime').websocket; },
+  get createWebSocketAdapter() { return require('./realtime').createWebSocketAdapter; },
+  get sse() { return require('./realtime').sse; },
+  get createSseAdapter() { return require('./realtime').createSseAdapter; },
+  get socketIo() { return require('./realtime').socketIo; },
+  get createSocketIoAdapter() { return require('./realtime').createSocketIoAdapter; },
+  get redis() { return require('./realtime').redis; },
+  get createRedisAdapter() { return require('./realtime').createRedisAdapter; },
+  get queuePlugin() { return require('./queue'); },
+  get mcpPlugin() { return require('./mcp').mcpPlugin; },
+  get createMcpServer() { return require('./mcp').createMcpServer; },
+  get McpServer() { return require('./mcp').McpServer; },
+  get polarPlugin() { return require('./polar'); },
+  get fileManagerPlugin() { return require('./file-manager'); },
+  get xlsxPlugin() { return require('./xlsx').xlsxPlugin; },
+  get xlsx() { return require('./xlsx').xlsx; },
+  get csvPlugin() { return require('./csv').csvPlugin; },
+  get csv() { return require('./csv').csv; },
 };
 
 

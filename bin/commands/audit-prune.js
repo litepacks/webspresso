@@ -3,7 +3,6 @@
  */
 
 const { loadDbConfig, createDbInstance } = require('../utils/db');
-const { purgeAuditLogs } = require('../../plugins/audit-log/purge');
 
 function registerCommand(program) {
   program
@@ -28,6 +27,7 @@ function registerCommand(program) {
       const olderThan = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
       try {
+        const { purgeAuditLogs } = require('../../plugins/audit-log/purge');
         const deleted = await purgeAuditLogs(knex, {
           tableName: options.table,
           olderThan,

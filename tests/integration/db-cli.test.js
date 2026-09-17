@@ -5,9 +5,10 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 describe('Database CLI Commands', () => {
-  const testDir = path.join(__dirname, '../fixtures/cli-test-project');
+  const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-test-project-'));
   const migrationsDir = path.join(testDir, 'migrations');
   const modelsDir = path.join(testDir, 'models');
   const configFile = path.join(testDir, 'webspresso.db.js');
@@ -77,19 +78,8 @@ exports.down = function(knex) {
   });
 
   afterAll(() => {
-    // Cleanup
-    const dbFile = path.join(testDir, 'test.db');
-    if (fs.existsSync(dbFile)) {
-      fs.unlinkSync(dbFile);
-    }
-    // Remove migration files (but keep directory for other tests)
-    const files = fs.readdirSync(migrationsDir);
-    for (const file of files) {
-      fs.unlinkSync(path.join(migrationsDir, file));
-    }
-    const modelFiles = fs.existsSync(modelsDir) ? fs.readdirSync(modelsDir) : [];
-    for (const file of modelFiles) {
-      fs.unlinkSync(path.join(modelsDir, file));
+    if (fs.existsSync(testDir)) {
+      fs.rmSync(testDir, { recursive: true, force: true });
     }
   });
 

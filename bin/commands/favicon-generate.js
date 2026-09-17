@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 function getSharp() {
-  return process.env.NODE_ENV === 'test'
+  return (process.env.NODE_ENV === 'test' || process.env.VITEST)
     ? require('../../tests/mocks/sharp')
     : require('sharp');
 }

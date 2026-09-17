@@ -61,7 +61,7 @@ describe('admin:password CLI', () => {
       table.timestamp('updated_at');
     });
 
-    const hashedPassword = await hash('oldpass123', 10);
+    const hashedPassword = await hash('oldpass123', 4);
     await db('admin_users').insert({
       email: 'admin@example.com',
       password: hashedPassword,
@@ -181,71 +181,9 @@ describe('admin:password CLI', () => {
 
     fs.rmSync(noTableDir, { recursive: true, force: true });
   });
-});
-
-describe('admin:list CLI', () => {
-  const listDir = path.join(TEST_DIR, 'list');
-  const listDb = path.join(listDir, 'list.db');
-  const listConfig = path.join(listDir, 'webspresso.db.js');
-
-  beforeAll(async () => {
-    fs.mkdirSync(listDir, { recursive: true });
-    if (fs.existsSync(listDb)) {
-      fs.unlinkSync(listDb);
-    }
-
-    fs.writeFileSync(
-      listConfig,
-      `module.exports = {
-  client: 'better-sqlite3',
-  connection: { filename: ${JSON.stringify(listDb)} },
-  useNullAsDefault: true,
-};
-`
-    );
-
-    const db = knex({
-      client: 'better-sqlite3',
-      connection: { filename: listDb },
-      useNullAsDefault: true,
-    });
-
-    await db.schema.createTable('admin_users', (table) => {
-      table.bigIncrements('id');
-      table.string('email').unique();
-      table.string('password');
-      table.string('name');
-      table.string('role').defaultTo('admin');
-      table.boolean('active').defaultTo(true);
-      table.timestamp('created_at');
-      table.timestamp('updated_at');
-    });
-
-    await db('admin_users').insert({
-      email: 'admin@example.com',
-      password: 'hashed',
-      name: 'Admin User',
-      role: 'admin',
-      active: true,
-      created_at: new Date(),
-      updated_at: new Date(),
-    });
-
-    await db.destroy();
-  });
-
-  afterAll(() => {
-    if (fs.existsSync(listDir)) {
-      fs.rmSync(listDir, { recursive: true, force: true });
-    }
-  });
 
   it('should list admin users', () => {
-    const result = spawnSync(
-      process.execPath,
-      [CLI_PATH, 'admin:list', '-c', listConfig],
-      { cwd: listDir, encoding: 'utf8' }
-    );
+    const result = runCli('admin:list', ['-c', CONFIG_FILE]);
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('Admin Users');

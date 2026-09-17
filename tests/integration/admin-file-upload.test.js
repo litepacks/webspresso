@@ -18,10 +18,9 @@ describe.sequential('Admin file upload fields', () => {
   let app;
   let db;
   let tmpDir;
-  let modelName;
-  let tableName;
-
-  let suiteId = 0;
+  const modelName = 'MediaAsset';
+  const tableName = 'media_assets';
+  let authCookie;
 
   async function loginCookie() {
     await request(app)
@@ -40,15 +39,15 @@ describe.sequential('Admin file upload fields', () => {
     return loginRes.headers['set-cookie'];
   }
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     clearRegistry();
-    suiteId += 1;
-    modelName = `MediaAsset${suiteId}`;
-    tableName = `media_assets_${suiteId}`;
 
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-admin-file-'));
     const destDir = path.join(tmpDir, 'public', 'uploads');
     await fs.mkdir(destDir, { recursive: true });
+
+    const emptyPagesDir = path.join(__dirname, '../fixtures/empty-pages');
+    await fs.mkdir(emptyPagesDir, { recursive: true });
 
     db = createDatabase({
       client: 'better-sqlite3',
@@ -106,7 +105,7 @@ describe.sequential('Admin file upload fields', () => {
     });
 
     const result = createApp({
-      pagesDir: './tests/fixtures/pages',
+      pagesDir: emptyPagesDir,
       viewsDir: './tests/fixtures/views',
       publicDir: path.join(tmpDir, 'public'),
       plugins: [
@@ -119,19 +118,19 @@ describe.sequential('Admin file upload fields', () => {
       ],
     });
     app = result.app;
+    authCookie = await loginCookie();
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db) await db.destroy();
     clearRegistry();
     if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
   it('exposes zdb.file columns as type file in model metadata', async () => {
-    const cookie = await loginCookie();
     const res = await request(app)
       .get(`/_admin/api/models/${modelName}`)
-      .set('Cookie', cookie)
+      .set('Cookie', authCookie)
       .expect(200);
 
     const cover = res.body.columns.find((c) => c.name === 'cover_url');
@@ -149,10 +148,9 @@ describe.sequential('Admin file upload fields', () => {
   });
 
   it('persists uploaded file URL on create', async () => {
-    const cookie = await loginCookie();
     const res = await request(app)
       .post(`/_admin/api/models/${modelName}/records`)
-      .set('Cookie', cookie)
+      .set('Cookie', authCookie)
       .send({
         title: 'Hello',
         cover_url: '/uploads/cover.png',

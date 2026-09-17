@@ -65,13 +65,13 @@ describe('Auth Hash Utilities', () => {
 
   describe('needsRehash()', () => {
     it('should return false for hash with current rounds', async () => {
-      const hashed = await hash('password', 12);
-      expect(needsRehash(hashed, 12)).toBe(false);
+      const hashed = await hash('password', 4);
+      expect(needsRehash(hashed, 4)).toBe(false);
     });
 
     it('should return true for hash with lower rounds', async () => {
-      const hashed = await hash('password', 10);
-      expect(needsRehash(hashed, 12)).toBe(true);
+      const hashed = await hash('password', 4);
+      expect(needsRehash(hashed, 6)).toBe(true);
     });
 
     it('should return true for empty hash', () => {

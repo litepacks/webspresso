@@ -6,7 +6,6 @@
 const fs = require('fs');
 const path = require('path');
 const { loadDbConfig } = require('../utils/db');
-const { generateAdminUsersMigration } = require('../../plugins/admin-panel/migration-template');
 
 function registerCommand(program) {
   program
@@ -53,6 +52,7 @@ function registerCommand(program) {
         const filepath = path.join(migrationDir, filename);
         
         // Generate migration content
+        const { generateAdminUsersMigration } = require('../../plugins/admin-panel/migration-template');
         const content = generateAdminUsersMigration();
         
         // Write migration file

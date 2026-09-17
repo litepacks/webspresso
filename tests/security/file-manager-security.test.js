@@ -135,8 +135,23 @@ describe('Security: File Manager Hardening & Threat Mitigations', () => {
         table.timestamp('updated_at');
       });
 
+      const { hash } = await import('../../core/auth/hash.js');
+      const hashedPassword = await hash('password123', 4);
+      await db.knex('admin_users').insert({
+        email: 'admin@example.com',
+        password: hashedPassword,
+        name: 'Admin User',
+        role: 'admin',
+        active: true,
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+
+      const emptyPagesDir = path.join(__dirname, '../fixtures/empty-pages');
+      await fs.mkdir(emptyPagesDir, { recursive: true });
+
       const result = createApp({
-        pagesDir: './tests/fixtures/pages',
+        pagesDir: emptyPagesDir,
         viewsDir: './tests/fixtures/views',
         publicDir: path.join(tmpDir, 'public'),
         plugins: [
@@ -160,12 +175,6 @@ describe('Security: File Manager Hardening & Threat Mitigations', () => {
     });
 
     it('rejects uploads exceeding storage quota with 507', async () => {
-      // Setup admin
-      await request(app).post('/_admin/api/auth/setup').send({
-        email: 'admin@example.com',
-        password: 'password123',
-        name: 'Admin User',
-      });
       const loginRes = await request(app).post('/_admin/api/auth/login').send({
         email: 'admin@example.com',
         password: 'password123',

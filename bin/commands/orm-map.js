@@ -6,10 +6,6 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { getWebspressoOrmForProject } = require('../utils/resolve-webspresso-orm');
-const { loadProjectModels } = require('../utils/orm-map-load');
-const { buildSnapshot, buildMermaidErDiagram } = require('../utils/orm-map-snapshot');
-const { buildOrmMapHtml, readPackageName } = require('../utils/orm-map-html');
 
 function ensureOpenInsideTrustedRoots(absFile, cwd) {
   if (!fs.existsSync(absFile)) {
@@ -72,6 +68,11 @@ function registerCommand(program) {
     .option('-e, --env <environment>', 'Config environment', 'development')
     .option('-m, --models <dir>', 'Models directory (overrides config default ./models)')
     .action((options) => {
+      const { getWebspressoOrmForProject } = require('../utils/resolve-webspresso-orm');
+      const { loadProjectModels } = require('../utils/orm-map-load');
+      const { buildSnapshot, buildMermaidErDiagram } = require('../utils/orm-map-snapshot');
+      const { buildOrmMapHtml, readPackageName } = require('../utils/orm-map-html');
+
       const cwd = process.cwd();
       const { modelsDir, loaded, errors } = loadProjectModels(cwd, {
         modelsOverride: options.models,
