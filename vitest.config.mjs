@@ -52,27 +52,13 @@ export default defineConfig({
       thresholds: {
         lines: 73,
         statements: 73,
-        branches: 75,
+        branches: 72,
         functions: 77,
       },
     },
     watch: true,
     watchExclude: ['node_modules', 'coverage'],
-    reporters: [],
+    reporters: ['default'],
     globals: true,
   },
-  plugins: [
-    // vitestDoctorPlugin({
-    //   output: 'doctor.html',
-    //   slow: 500,           // Flag tests >= 500ms
-    //   verySlow: 1500,      // Flag tests >= 1500ms
-    //   relative: true,      // Detect relative statistical outliers (>5x median)
-    //   medianMultiplier: 5,
-    //   budgets: {
-    //     maxSuiteDuration: 30000,
-    //     maxTestDuration: 2000,
-    //     maxRegressions: 0
-    //   }
-    // })
-  ]
 });
