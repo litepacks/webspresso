@@ -85,7 +85,7 @@ describe('Admin Panel Column Sorting (3-State & Configuration)', () => {
     await db.getRepository('ProductSortTest').create({ name: 'Gamma', price: 20.0, secret_notes: 'c' });
 
     const result = createApp({
-      pagesDir: './tests/fixtures/pages',
+      pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
       db,

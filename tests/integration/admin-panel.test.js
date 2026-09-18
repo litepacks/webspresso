@@ -21,7 +21,7 @@ describe('Admin Panel Integration', () => {
   let db;
   let server;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     clearRegistry();
 
     // Create in-memory database (skip auto-loading models)
@@ -103,7 +103,7 @@ describe('Admin Panel Integration', () => {
     app = result.app;
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db) {
       await db.destroy();
     }
@@ -123,6 +123,11 @@ describe('Admin Panel Integration', () => {
   });
 
   describe('Setup Flow', () => {
+    beforeAll(async () => {
+      await db.knex('admin_users').del();
+      await db.knex('test_models').del();
+    });
+
     it('should check if admin exists', async () => {
       const res = await request(app)
         .get('/_admin/api/auth/check')
@@ -174,8 +179,8 @@ describe('Admin Panel Integration', () => {
   describe('Authentication', () => {
     let adminCookie;
 
-    beforeEach(async () => {
-      // Setup admin
+    beforeAll(async () => {
+      await db.knex('admin_users').del();
       const setupRes = await request(app)
         .post('/_admin/api/auth/setup')
         .send({
@@ -243,8 +248,8 @@ describe('Admin Panel Integration', () => {
   describe('Model API', () => {
     let adminCookie;
 
-    beforeEach(async () => {
-      // Setup and login
+    beforeAll(async () => {
+      await db.knex('admin_users').del();
       const setupRes = await request(app)
         .post('/_admin/api/auth/setup')
         .send({
@@ -299,8 +304,8 @@ describe('Admin Panel Integration', () => {
     let adminCookie;
     let testRepo;
 
-    beforeEach(async () => {
-      // Setup and login
+    beforeAll(async () => {
+      await db.knex('admin_users').del();
       const setupRes = await request(app)
         .post('/_admin/api/auth/setup')
         .send({
@@ -317,9 +322,11 @@ describe('Admin Panel Integration', () => {
         });
 
       adminCookie = loginRes.headers['set-cookie'] || setupRes.headers['set-cookie'] || [];
-
-      // Get test model repository
       testRepo = db.getRepository('TestModel');
+    });
+
+    beforeEach(async () => {
+      await db.knex('test_models').del();
     });
 
     it('should list records', async () => {
@@ -414,8 +421,8 @@ describe('Admin Panel Integration', () => {
     let adminCookie;
     let testRepo;
 
-    beforeEach(async () => {
-      // Setup admin user first
+    beforeAll(async () => {
+      await db.knex('admin_users').del();
       const setupRes = await request(app)
         .post('/_admin/api/auth/setup')
         .send({
@@ -424,20 +431,12 @@ describe('Admin Panel Integration', () => {
           name: 'Filter Admin',
         });
 
-      if (setupRes.headers['set-cookie']) {
-        adminCookie = setupRes.headers['set-cookie'];
-      } else {
-        const loginRes = await request(app)
-          .post('/_admin/api/auth/login')
-          .send({
-            email: 'filteradmin@test.com',
-            password: 'password123',
-          });
-        adminCookie = loginRes.headers['set-cookie'] || setupRes.headers['set-cookie'];
-      }
+      adminCookie = setupRes.headers['set-cookie'];
       testRepo = db.getRepository('TestModel');
+    });
 
-      // Create test records with different values
+    beforeEach(async () => {
+      await db.knex('test_models').del();
       await testRepo.create({ name: 'Apple', email: 'apple@test.com', active: true });
       await testRepo.create({ name: 'Banana', email: 'banana@test.com', active: false });
       await testRepo.create({ name: 'Cherry', email: 'cherry@test.com', active: true });

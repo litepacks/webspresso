@@ -66,7 +66,7 @@ describe('Data exchange plugin', () => {
     });
 
     const result = createApp({
-      pagesDir: './tests/fixtures/pages',
+      pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
       db,
@@ -238,7 +238,7 @@ describe('Data exchange export with soft delete', () => {
     });
 
     const result = createApp({
-      pagesDir: './tests/fixtures/pages',
+      pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
       db,
@@ -360,7 +360,7 @@ describe('Admin panel built-in data exchange', () => {
 
     // NOTE: only adminPanelPlugin, NO dataExchangePlugin!
     const result = createApp({
-      pagesDir: './tests/fixtures/pages',
+      pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
       db,

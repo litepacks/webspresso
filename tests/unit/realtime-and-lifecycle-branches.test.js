@@ -13,7 +13,7 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
     const { createApp } = require('../../src/server.js');
 
     it('handles Nunjucks safe circular template detection', () => {
-      const fixtureDir = path.join(__dirname, '../fixtures/pages-basic');
+      const fixtureDir = path.join(__dirname, '../fixtures/empty-pages');
       const { nunjucksEnv } = createApp({
         pagesDir: fixtureDir,
         helmet: false,
@@ -49,7 +49,7 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
         },
       };
 
-      const fixtureDir = path.join(__dirname, '../fixtures/pages-basic');
+      const fixtureDir = path.join(__dirname, '../fixtures/empty-pages');
       const { app } = createApp({
         pagesDir: fixtureDir,
         plugins: [pluginWithCsp],
@@ -68,7 +68,7 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
     });
 
     it('handles custom errorPages handlers and customErrorHandler', async () => {
-      const fixtureDir = path.join(__dirname, '../fixtures/pages-basic');
+      const fixtureDir = path.join(__dirname, '../fixtures/empty-pages');
       const request = require('supertest');
 
       const { app } = createApp({
@@ -128,7 +128,7 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
     });
 
     it('handles template rendering failure fallback in error handlers', async () => {
-      const fixtureDir = path.join(__dirname, '../fixtures/pages-basic');
+      const fixtureDir = path.join(__dirname, '../fixtures/empty-pages');
       const request = require('supertest');
 
       const { app } = createApp({
@@ -163,7 +163,7 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
     });
 
     it('handles request draining during shutdown', async () => {
-      const fixtureDir = path.join(__dirname, '../fixtures/pages-basic');
+      const fixtureDir = path.join(__dirname, '../fixtures/empty-pages');
       const request = require('supertest');
       const { app, shutdownManager } = createApp({
         pagesDir: fixtureDir,
@@ -940,7 +940,7 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
     });
 
     it('exercises request timeout and HttpError headers in central error handler', async () => {
-      const fixtureDir = path.join(__dirname, '../fixtures/pages-basic');
+      const fixtureDir = path.join(__dirname, '../fixtures/empty-pages');
       const { app } = createApp({
         pagesDir: fixtureDir,
         helmet: false,
@@ -1087,7 +1087,7 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
     });
 
     it('exercises customErrorHandler fall-through and exception handling in server error boundary', async () => {
-      const fixtureDir = path.join(__dirname, '../fixtures/pages-basic');
+      const fixtureDir = path.join(__dirname, '../fixtures/empty-pages');
 
       // 1. customErrorHandler returning false (falls through)
       const { app: appFallthrough } = createApp({

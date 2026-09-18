@@ -19,24 +19,9 @@ describe.sequential('Admin File Manager Plugin Integration', () => {
   let tmpDir;
   let uploadDir;
 
-  async function loginCookie() {
-    await request(app)
-      .post('/_admin/api/auth/setup')
-      .send({
-        email: 'admin@example.com',
-        password: 'password123',
-        name: 'Admin User',
-      });
-    const loginRes = await request(app)
-      .post('/_admin/api/auth/login')
-      .send({
-        email: 'admin@example.com',
-        password: 'password123',
-      });
-    return loginRes.headers['set-cookie'];
-  }
+  let sharedCookie;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     clearRegistry();
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-admin-fm-'));
     uploadDir = path.join(tmpDir, 'public', 'uploads');
@@ -60,8 +45,9 @@ describe.sequential('Admin File Manager Plugin Integration', () => {
       table.timestamp('updated_at');
     });
 
+    const emptyPagesDir = path.join(__dirname, '../fixtures/empty-pages');
     const result = createApp({
-      pagesDir: './tests/fixtures/pages',
+      pagesDir: emptyPagesDir,
       viewsDir: './tests/fixtures/views',
       publicDir: path.join(tmpDir, 'public'),
       plugins: [
@@ -75,9 +61,18 @@ describe.sequential('Admin File Manager Plugin Integration', () => {
       ],
     });
     app = result.app;
+
+    const setupRes = await request(app)
+      .post('/_admin/api/auth/setup')
+      .send({
+        email: 'admin@example.com',
+        password: 'password123',
+        name: 'Admin User',
+      });
+    sharedCookie = setupRes.headers['set-cookie'];
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db) await db.destroy();
     clearRegistry();
     if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
@@ -89,7 +84,7 @@ describe.sequential('Admin File Manager Plugin Integration', () => {
   });
 
   it('lists directory, creates folder, uploads file, renames and deletes via API', async () => {
-    const cookie = await loginCookie();
+    const cookie = sharedCookie;
 
     // 1. Initial list empty
     const list1 = await request(app)

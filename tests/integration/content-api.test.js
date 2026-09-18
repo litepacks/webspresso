@@ -17,7 +17,7 @@ describe('content plugin API', () => {
   let db;
 
   beforeEach(async () => {
-    ({ app, db } = await createContentTestApp());
+    ({ app, db } = await createContentTestApp({ pagesDir: './tests/fixtures/empty-pages' }));
   });
 
   afterEach(async () => {

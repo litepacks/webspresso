@@ -15,18 +15,15 @@ describe('Multiple Plugins Integration', () => {
   let app;
   let db;
 
-  beforeEach(async () => {
-    // Clear registry first
+  beforeAll(async () => {
     clearRegistry();
 
-    // Create in-memory database (skip auto-loading models from ./models)
     db = createDatabase({
       client: 'better-sqlite3',
       connection: ':memory:',
-      models: './tests/fixtures/models-empty', // Non-existent dir to skip auto-loading
+      models: './tests/fixtures/models-empty',
     });
 
-    // Create a test model (only if not already defined)
     if (!hasModel('TestModel')) {
       const TestModel = defineModel({
         name: 'TestModel',
@@ -45,11 +42,9 @@ describe('Multiple Plugins Integration', () => {
           icon: '🧪',
         },
       });
-      // Register in db instance
       db.registerModel(TestModel);
     }
 
-    // Create tables manually for in-memory database
     await db.knex.schema.createTable('test_models', (table) => {
       table.bigIncrements('id');
       table.string('name');
@@ -70,9 +65,8 @@ describe('Multiple Plugins Integration', () => {
       table.timestamp('updated_at');
     });
 
-    // Create app with multiple plugins
     const result = createApp({
-      pagesDir: './tests/fixtures/pages',
+      pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
       plugins: [
@@ -90,11 +84,16 @@ describe('Multiple Plugins Integration', () => {
     app = result.app;
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db) {
       await db.destroy();
     }
     clearRegistry();
+  });
+
+  beforeEach(async () => {
+    await db.knex('admin_users').del();
+    await db.knex('test_models').del();
   });
 
   describe('Dashboard Plugin Routes', () => {

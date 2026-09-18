@@ -8,6 +8,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import nodemailer from 'nodemailer';
+import knexFactory from 'knex';
 import { interpolate, renderSource } from '../../plugins/email/render.js';
 import { TemplateRegistry } from '../../plugins/email/template-registry.js';
 import { createEmailService } from '../../plugins/email/service.js';
@@ -117,7 +118,6 @@ describe('EmailService', () => {
   });
 
   it('logs to sqlite when knex provided', async () => {
-    const { default: knexFactory } = await import('knex');
     const knex = knexFactory({
       client: 'better-sqlite3',
       connection: ':memory:',
@@ -207,7 +207,6 @@ describe('auth email bridge', () => {
 
 describe('createAuthTokensTable', () => {
   it('creates auth_tokens when missing', async () => {
-    const { default: knexFactory } = await import('knex');
     const knex = knexFactory({
       client: 'better-sqlite3',
       connection: ':memory:',

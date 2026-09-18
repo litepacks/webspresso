@@ -30,7 +30,7 @@ describe('content plugin API contracts', () => {
   let cookie;
 
   beforeEach(async () => {
-    ({ app, db } = await createContentTestApp());
+    ({ app, db } = await createContentTestApp({ pagesDir: './tests/fixtures/empty-pages' }));
     cookie = await loginAdmin(request, app);
   });
 

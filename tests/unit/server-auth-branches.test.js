@@ -595,7 +595,7 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
 
     it('exercises custom timeout handler, HttpError custom headers, and RequestAbortedError', async () => {
       let customTimeoutRan = false;
-      const fixtureDir = path.join(__dirname, '../fixtures/pages-basic');
+      const fixtureDir = path.join(__dirname, '../fixtures/empty-pages');
 
       const { app } = createApp({
         pagesDir: fixtureDir,
@@ -650,7 +650,7 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
 
     it('exercises app lifecycle hooks: onShutdown, close, enableShutdownHooks, disableShutdownHooks, and listen', async () => {
       const { app } = createApp({
-        pagesDir: path.join(__dirname, '../fixtures/pages-basic'),
+        pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
         helmet: {
           contentSecurityPolicy: {
             directives: {

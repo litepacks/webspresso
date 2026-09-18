@@ -100,7 +100,7 @@ describe.sequential('Admin rich-text sanitization API', () => {
     });
 
     const result = createApp({
-      pagesDir: './tests/fixtures/pages',
+      pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
       plugins: [

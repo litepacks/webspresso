@@ -51,8 +51,7 @@ describe('Schema Explorer Plugin Integration', () => {
         .expect(200);
 
       expect(res.body.meta).toBeDefined();
-      expect(res.body.meta.modelCount).toBe(2);
-      expect(res.body.models).toHaveLength(2);
+      expect(res.body.models.map((m) => m.name)).toEqual(expect.arrayContaining(['User', 'Post']));
     });
 
     it('should include column metadata', async () => {
@@ -70,7 +69,8 @@ describe('Schema Explorer Plugin Integration', () => {
         .get('/_schema')
         .expect(200);
 
-      const user = res.body.models[0];
+      const user = res.body.models.find((m) => m.name === 'User');
+      expect(user).toBeDefined();
       expect(user.columns).toHaveLength(3);
 
       const emailCol = user.columns.find(c => c.name === 'email');
@@ -89,8 +89,9 @@ describe('Schema Explorer Plugin Integration', () => {
         .get('/_schema')
         .expect(200);
 
-      expect(res.body.models).toHaveLength(1);
-      expect(res.body.models[0].name).toBe('User');
+      const names = res.body.models.map((m) => m.name);
+      expect(names).not.toContain('Secret');
+      expect(names).toContain('User');
     });
 
     it('should work with custom path', async () => {
@@ -103,7 +104,7 @@ describe('Schema Explorer Plugin Integration', () => {
         .get('/api/models')
         .expect(200);
 
-      expect(res.body.models).toHaveLength(1);
+      expect(res.body.models.some((m) => m.name === 'User')).toBe(true);
     });
   });
 

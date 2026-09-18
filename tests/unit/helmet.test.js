@@ -7,7 +7,7 @@ const path = require('path');
 const request = require('supertest');
 
 describe.sequential('Helmet Configuration', () => {
-  const pagesDir = path.join(__dirname, '../fixtures/pages');
+  const pagesDir = path.join(__dirname, '../fixtures/empty-pages');
   const viewsDir = path.join(__dirname, '../fixtures/views');
 
   describe('Default Configuration', () => {
@@ -249,7 +249,12 @@ describe.sequential('Helmet Configuration', () => {
       try {
         process.env.NODE_ENV = 'production';
         const adminPanelPlugin = require('../../plugins/admin-panel');
-        const mockDb = { getRepository: vi.fn(), knex: { schema: { hasTable: vi.fn().mockResolvedValue(true) } } };
+        const mockDb = {
+          getRepository: vi.fn(),
+          hasModel: vi.fn().mockReturnValue(true),
+          registerModel: vi.fn(),
+          knex: { schema: { hasTable: vi.fn().mockResolvedValue(true) } },
+        };
         const { app } = createApp({
           pagesDir,
           viewsDir,

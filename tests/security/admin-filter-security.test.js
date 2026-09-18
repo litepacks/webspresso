@@ -1,9 +1,9 @@
 const request = require('supertest');
-const { createApp, createDatabase, defineModel, zdb, hasModel } = require('../../index.js');
+const { createApp, createDatabase, defineModel, getModel, zdb, hasModel } = require('../../index.js');
 const { adminPanelPlugin } = require('../../plugins/admin-panel');
 const path = require('path');
 
-const PAGES_DIR = path.join(__dirname, '../fixtures/route-order/pages');
+const PAGES_DIR = path.join(__dirname, '../fixtures/empty-pages');
 
 describe('Security: Admin Panel Filter Column Injection', () => {
   let app;
@@ -16,21 +16,21 @@ describe('Security: Admin Panel Filter Column Injection', () => {
       models: './tests/fixtures/models-empty',
     });
 
-    if (!hasModel('SecProduct')) {
-      const SecProduct = defineModel({
-        name: 'SecProduct',
-        table: 'sec_products',
-        schema: zdb.schema({
-          id: zdb.id(),
-          title: zdb.string(),
-          price: zdb.integer(),
-        }),
-        admin: {
-          enabled: true,
-        },
-      });
-      db.registerModel(SecProduct);
-    }
+    const SecProduct = hasModel('SecProduct')
+      ? getModel('SecProduct')
+      : defineModel({
+          name: 'SecProduct',
+          table: 'sec_products',
+          schema: zdb.schema({
+            id: zdb.id(),
+            title: zdb.string(),
+            price: zdb.integer(),
+          }),
+          admin: {
+            enabled: true,
+          },
+        });
+    db.registerModel(SecProduct);
 
     await db.knex.schema.createTable('sec_products', (table) => {
       table.increments('id').primary();

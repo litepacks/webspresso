@@ -1085,7 +1085,7 @@ describe('Services & Helpers Branch Coverage', () => {
 
     it('exercises nunjucks json, t, and date filters with all parameters', () => {
       const { nunjucksEnv } = createApp({
-        pagesDir: path.join(__dirname, '../fixtures/pages-basic'),
+        pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
         helmet: false,
       });
 
@@ -1117,7 +1117,7 @@ describe('Services & Helpers Branch Coverage', () => {
 
     it('exercises wrapAsync with rejected promises, synchronous errors, and all HTTP methods', async () => {
       const { app } = createApp({
-        pagesDir: path.join(__dirname, '../fixtures/pages-basic'),
+        pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
         helmet: false,
         setupRoutes: (a) => {
           // Promise rejection

@@ -88,7 +88,7 @@ describe('Admin User Statistics widget', () => {
     ]);
 
     const result = createApp({
-      pagesDir: './tests/fixtures/pages',
+      pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
       db,
@@ -183,7 +183,7 @@ describe('User Statistics widget — schema without active/role', () => {
     await db.knex('minimal_users').insert({ email: 'only@cols.test' });
 
     const result = createApp({
-      pagesDir: './tests/fixtures/pages',
+      pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
       db,
@@ -274,7 +274,7 @@ describe('User Statistics widget — schema/DB drift (role in model only)', () =
     await db.knex('drift_users').insert({ email: 'd@x.com' });
 
     const result = createApp({
-      pagesDir: './tests/fixtures/pages',
+      pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
       db,

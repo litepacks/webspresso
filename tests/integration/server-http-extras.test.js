@@ -94,8 +94,11 @@ describe('createApp HTTP extras (integration)', () => {
       const { app } = createApp({
         ...baseOpts(),
         timeout: false,
+        setupRoutes: (a) => {
+          a.get('/api/timeout-disabled-test', (req, res) => res.json({ ok: true }));
+        },
       });
-      await request(app).get('/api/health').expect(200);
+      await request(app).get('/api/timeout-disabled-test').expect(200);
     });
   });
 
@@ -185,6 +188,7 @@ describe('createApp HTTP extras (integration)', () => {
     it('returns default 503 HTML when req.timedout is true', async () => {
       const { app } = createApp({
         ...baseOpts(),
+        timeout: false,
         setupRoutes: (a) => {
           a.get('/__timed-out', (req, res, next) => {
             req.timedout = true;
@@ -200,6 +204,7 @@ describe('createApp HTTP extras (integration)', () => {
     it('returns JSON 503 when req.timedout and Accept is application/json', async () => {
       const { app } = createApp({
         ...baseOpts(),
+        timeout: false,
         setupRoutes: (a) => {
           a.get('/__timed-out-json', (req, res, next) => {
             req.timedout = true;
@@ -218,6 +223,7 @@ describe('createApp HTTP extras (integration)', () => {
     it('calls errorPages.timeout function', async () => {
       const { app } = createApp({
         ...baseOpts(),
+        timeout: false,
         errorPages: {
           timeout: (req, res) => {
             res.status(503).type('text').send('custom-timeout-body');
@@ -237,6 +243,7 @@ describe('createApp HTTP extras (integration)', () => {
     it('renders errorPages.timeout Nunjucks template', async () => {
       const { app } = createApp({
         ...baseOpts(),
+        timeout: false,
         errorPages: { timeout: 'errors/integration-503.njk' },
         setupRoutes: (a) => {
           a.get('/__timeout-tpl', (req, res, next) => {

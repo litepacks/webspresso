@@ -10,14 +10,14 @@ describe('MCP Plugin Full Integration', () => {
   let db;
   let serviceRegistry;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     clearRegistry();
 
     // 1. Setup in-memory DB
     db = createDatabase({
       client: 'better-sqlite3',
       connection: ':memory:',
-      models: './tests/fixtures/models-empty',
+      models: './tests/fixtures/empty-pages',
     });
 
     const Item = defineModel({
@@ -54,7 +54,7 @@ describe('MCP Plugin Full Integration', () => {
 
     // 3. Create Webspresso app with mcpPlugin
     const serverInstance = createApp({
-      pagesDir: './tests/fixtures/pages-empty',
+      pagesDir: './tests/fixtures/empty-pages',
       db,
       serviceRegistry,
       plugins: [
@@ -76,7 +76,7 @@ describe('MCP Plugin Full Integration', () => {
     app = serverInstance.app;
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db && db.destroy) {
       await db.destroy();
     }

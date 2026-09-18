@@ -26,11 +26,14 @@ function getRaw(app, pathStr, headers = {}) {
         port,
         path: pathStr,
         method: 'GET',
-        headers,
+        headers: { connection: 'close', ...headers },
       }, (res) => {
         const chunks = [];
         res.on('data', (chunk) => chunks.push(chunk));
         res.on('end', () => {
+          if (typeof server.closeAllConnections === 'function') {
+            server.closeAllConnections();
+          }
           server.close(() => {
             resolve({
               statusCode: res.statusCode,
@@ -41,6 +44,9 @@ function getRaw(app, pathStr, headers = {}) {
         });
       });
       req.on('error', (err) => {
+        if (typeof server.closeAllConnections === 'function') {
+          server.closeAllConnections();
+        }
         server.close(() => reject(err));
       });
       req.end();

@@ -85,7 +85,7 @@ export async function createContentTestApp(options = {}) {
   await createAdminUsersTable(db.knex);
 
   const { app } = createApp({
-    pagesDir: './tests/fixtures/pages',
+    pagesDir: options.pagesDir || './tests/fixtures/pages',
     viewsDir: './tests/fixtures/views',
     publicDir: './public',
     db,
