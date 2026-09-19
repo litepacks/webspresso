@@ -3,18 +3,19 @@
  * @vitest-environment node
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../src/server.js';
-import { createDatabase, defineModel, zdb } from '../../index.js';
-import { adminPanelPlugin } from '../../plugins/index.js';
+import { createDatabase, defineModel, zdb } from '../../core/orm/index.js';
+import { adminPanelPlugin } from '../../plugins/admin-panel/index.js';
 import { clearRegistry } from '../../core/orm/model.js';
+import { hash } from '../../core/auth/hash.js';
 
 describe('Admin User Statistics widget', () => {
   let app;
   let db;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     clearRegistry();
 
     db = createDatabase({
@@ -23,9 +24,6 @@ describe('Admin User Statistics widget', () => {
       models: './tests/fixtures/models-empty',
     });
 
-    // Unique model name avoids global registry collisions when Vitest runs files in parallel
-    // (another test may have registered `User` with a different schema — skipping defineModel
-    // would leave `model.columns` without `active` and the widget returns null counts).
     const User = defineModel({
       name: 'AdminWidgetStatsUser',
       table: 'users',
@@ -66,6 +64,17 @@ describe('Admin User Statistics widget', () => {
       table.timestamp('updated_at');
     });
 
+    const hashedAdminPass = await hash('password123', 4);
+    await db.knex('admin_users').insert({
+      email: 'panel@example.com',
+      password: hashedAdminPass,
+      name: 'Panel',
+      role: 'admin',
+      active: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
     await db.knex('users').insert([
       {
         email: 'u1@test.com',
@@ -104,17 +113,12 @@ describe('Admin User Statistics widget', () => {
     app = result.app;
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db) await db.destroy();
     clearRegistry();
   });
 
   async function adminCookie() {
-    await request(app).post('/_admin/api/auth/setup').send({
-      email: 'panel@example.com',
-      password: 'password123',
-      name: 'Panel',
-    });
     const loginRes = await request(app).post('/_admin/api/auth/login').send({
       email: 'panel@example.com',
       password: 'password123',
@@ -144,7 +148,7 @@ describe('User Statistics widget — schema without active/role', () => {
   let app;
   let db;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     clearRegistry();
 
     db = createDatabase({
@@ -180,6 +184,17 @@ describe('User Statistics widget — schema without active/role', () => {
       table.timestamp('updated_at');
     });
 
+    const hashedAdminPass = await hash('password123', 4);
+    await db.knex('admin_users').insert({
+      email: 'a@x.com',
+      password: hashedAdminPass,
+      name: 'A',
+      role: 'admin',
+      active: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
     await db.knex('minimal_users').insert({ email: 'only@cols.test' });
 
     const result = createApp({
@@ -199,17 +214,12 @@ describe('User Statistics widget — schema without active/role', () => {
     app = result.app;
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db) await db.destroy();
     clearRegistry();
   });
 
   it('does not error when active/role columns are missing', async () => {
-    await request(app).post('/_admin/api/auth/setup').send({
-      email: 'a@x.com',
-      password: 'password123',
-      name: 'A',
-    });
     const loginRes = await request(app).post('/_admin/api/auth/login').send({
       email: 'a@x.com',
       password: 'password123',
@@ -234,7 +244,7 @@ describe('User Statistics widget — schema/DB drift (role in model only)', () =
   let app;
   let db;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     clearRegistry();
 
     db = createDatabase({
@@ -271,6 +281,17 @@ describe('User Statistics widget — schema/DB drift (role in model only)', () =
       table.timestamp('updated_at');
     });
 
+    const hashedAdminPass = await hash('password123', 4);
+    await db.knex('admin_users').insert({
+      email: 'a@x.com',
+      password: hashedAdminPass,
+      name: 'A',
+      role: 'admin',
+      active: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
     await db.knex('drift_users').insert({ email: 'd@x.com' });
 
     const result = createApp({
@@ -290,17 +311,12 @@ describe('User Statistics widget — schema/DB drift (role in model only)', () =
     app = result.app;
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db) await db.destroy();
     clearRegistry();
   });
 
   it('skips admin count when role column missing on table', async () => {
-    await request(app).post('/_admin/api/auth/setup').send({
-      email: 'a@x.com',
-      password: 'password123',
-      name: 'A',
-    });
     const loginRes = await request(app).post('/_admin/api/auth/login').send({
       email: 'a@x.com',
       password: 'password123',

@@ -7,7 +7,7 @@ const express = require('express');
 const request = require('supertest');
 const { createHtmlStream, renderStream } = require('../../../core/ssr');
 
-describe('SSR Streaming & Chunked Transfer', () => {
+describe.sequential('SSR Streaming & Chunked Transfer', () => {
   let env;
 
   beforeAll(() => {

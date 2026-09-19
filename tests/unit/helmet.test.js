@@ -5,6 +5,7 @@
 const { createApp } = require('../../src/server');
 const path = require('path');
 const request = require('supertest');
+const adminPanelPlugin = require('../../plugins/admin-panel');
 
 describe.sequential('Helmet Configuration', () => {
   const pagesDir = path.join(__dirname, '../fixtures/empty-pages');
@@ -248,7 +249,6 @@ describe.sequential('Helmet Configuration', () => {
       const originalEnv = process.env.NODE_ENV;
       try {
         process.env.NODE_ENV = 'production';
-        const adminPanelPlugin = require('../../plugins/admin-panel');
         const mockDb = {
           getRepository: vi.fn(),
           hasModel: vi.fn().mockReturnValue(true),

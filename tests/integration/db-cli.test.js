@@ -2,10 +2,16 @@
  * Database CLI Command Tests
  */
 
-const { execSync } = require('child_process');
+const { Command } = require('commander');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+
+const { registerCommand: registerDbMigrate } = require('../../bin/commands/db-migrate');
+const { registerCommand: registerDbRollback } = require('../../bin/commands/db-rollback');
+const { registerCommand: registerDbStatus } = require('../../bin/commands/db-status');
+const { registerCommand: registerDbMake } = require('../../bin/commands/db-make');
+const { registerCommand: registerDbScaffold } = require('../../bin/commands/db-scaffold');
 
 describe('Database CLI Commands', () => {
   const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-test-project-'));
@@ -13,6 +19,33 @@ describe('Database CLI Commands', () => {
   const modelsDir = path.join(testDir, 'models');
   const configFile = path.join(testDir, 'webspresso.db.js');
   const ormRequirePath = path.resolve(__dirname, '../../core/orm').replace(/\\/g, '/');
+
+  async function runCliInProcess(args) {
+    const program = new Command();
+    program.exitOverride();
+    registerDbMigrate(program);
+    registerDbRollback(program);
+    registerDbStatus(program);
+    registerDbMake(program);
+    registerDbScaffold(program);
+
+    const logs = [];
+    const origLog = console.log;
+    const origError = console.error;
+    const origWarn = console.warn;
+    console.log = (...a) => logs.push(a.join(' '));
+    console.error = (...a) => logs.push(a.join(' '));
+    console.warn = (...a) => logs.push(a.join(' '));
+
+    try {
+      await program.parseAsync(['node', 'webspresso', ...args]);
+      return logs.join('\n');
+    } finally {
+      console.log = origLog;
+      console.error = origError;
+      console.warn = origWarn;
+    }
+  }
 
   beforeAll(() => {
     // Create test directory structure
@@ -84,187 +117,94 @@ exports.down = function(knex) {
   });
 
   describe('db:status', () => {
-    it('should show migration status', () => {
-      const cliPath = path.join(__dirname, '../../bin/webspresso.js');
-      
-      try {
-        const result = execSync(
-          `node "${cliPath}" db:status --config "${configFile}"`,
-          { encoding: 'utf-8', cwd: testDir }
-        );
-
-        expect(result).toContain('Migration Status');
-      } catch (error) {
-        // If knex or better-sqlite3 not installed, skip
-        if (error.message.includes('Cannot find module')) {
-          console.log('Skipping CLI test - dependencies not installed');
-          return;
-        }
-        throw error;
-      }
+    it('should show migration status', async () => {
+      const result = await runCliInProcess(['db:status', '--config', configFile]);
+      expect(result).toContain('Migration Status');
     });
   });
 
   describe('db:make', () => {
-    it('should create a new migration file', () => {
-      const cliPath = path.join(__dirname, '../../bin/webspresso.js');
+    it('should create a new migration file', async () => {
       const migrationName = 'add_users_table';
+      const result = await runCliInProcess(['db:make', migrationName, '--config', configFile]);
 
-      try {
-        const result = execSync(
-          `node "${cliPath}" db:make ${migrationName} --config "${configFile}"`,
-          { encoding: 'utf-8', cwd: testDir }
-        );
+      expect(result).toContain('Created:');
 
-        expect(result).toContain('Created:');
+      const files = fs.readdirSync(migrationsDir);
+      const newMigration = files.find(f => f.includes(migrationName));
+      expect(newMigration).toBeDefined();
 
-        // Check file was created
-        const files = fs.readdirSync(migrationsDir);
-        const newMigration = files.find(f => f.includes(migrationName));
-        expect(newMigration).toBeDefined();
+      const content = fs.readFileSync(
+        path.join(migrationsDir, newMigration),
+        'utf-8'
+      );
+      expect(content).toContain('exports.up');
+      expect(content).toContain('exports.down');
 
-        // Check content
-        const content = fs.readFileSync(
-          path.join(migrationsDir, newMigration),
-          'utf-8'
-        );
-        expect(content).toContain('exports.up');
-        expect(content).toContain('exports.down');
-
-        // Cleanup
-        fs.unlinkSync(path.join(migrationsDir, newMigration));
-      } catch (error) {
-        if (error.message.includes('Cannot find module')) {
-          console.log('Skipping CLI test - dependencies not installed');
-          return;
-        }
-        throw error;
-      }
+      fs.unlinkSync(path.join(migrationsDir, newMigration));
     });
 
-    it('should parse table name from migration name', () => {
-      const cliPath = path.join(__dirname, '../../bin/webspresso.js');
+    it('should parse table name from migration name', async () => {
       const migrationName = 'create_posts_table';
+      await runCliInProcess(['db:make', migrationName, '--config', configFile]);
 
-      try {
-        execSync(
-          `node "${cliPath}" db:make ${migrationName} --config "${configFile}"`,
-          { encoding: 'utf-8', cwd: testDir }
-        );
+      const files = fs.readdirSync(migrationsDir);
+      const newMigration = files.find(f => f.includes(migrationName));
+      expect(newMigration).toBeDefined();
 
-        const files = fs.readdirSync(migrationsDir);
-        const newMigration = files.find(f => f.includes(migrationName));
-        
-        const content = fs.readFileSync(
-          path.join(migrationsDir, newMigration),
-          'utf-8'
-        );
+      const content = fs.readFileSync(
+        path.join(migrationsDir, newMigration),
+        'utf-8'
+      );
+      expect(content).toContain("'posts'");
 
-        // Should have parsed 'posts' from 'create_posts_table'
-        expect(content).toContain("'posts'");
-
-        // Cleanup
-        fs.unlinkSync(path.join(migrationsDir, newMigration));
-      } catch (error) {
-        if (error.message.includes('Cannot find module')) {
-          console.log('Skipping CLI test - dependencies not installed');
-          return;
-        }
-        throw error;
-      }
+      fs.unlinkSync(path.join(migrationsDir, newMigration));
     });
   });
 
   describe('db:scaffold', () => {
-    it('should generate migrations from models directory', () => {
-      const cliPath = path.join(__dirname, '../../bin/webspresso.js');
+    it('should generate migrations from models directory', async () => {
+      const result = await runCliInProcess(['db:scaffold', '--config', configFile]);
 
-      try {
-        const result = execSync(
-          `node "${cliPath}" db:scaffold --config "${configFile}"`,
-          { encoding: 'utf-8', cwd: testDir }
-        );
+      expect(result).toContain('Created');
+      expect(result).toContain('users');
 
-        expect(result).toContain('Created');
-        expect(result).toContain('users');
+      const files = fs.readdirSync(migrationsDir);
+      const usersMigration = files.find((f) => f.includes('create_users_table'));
+      expect(usersMigration).toBeDefined();
 
-        const files = fs.readdirSync(migrationsDir);
-        const usersMigration = files.find((f) => f.includes('create_users_table'));
-        expect(usersMigration).toBeDefined();
+      const content = fs.readFileSync(path.join(migrationsDir, usersMigration), 'utf-8');
+      expect(content).toContain("createTable('users'");
 
-        const content = fs.readFileSync(path.join(migrationsDir, usersMigration), 'utf-8');
-        expect(content).toContain("createTable('users'");
-
-        if (usersMigration) {
-          fs.unlinkSync(path.join(migrationsDir, usersMigration));
-        }
-      } catch (error) {
-        if (error.message.includes('Cannot find module')) {
-          console.log('Skipping CLI test - dependencies not installed');
-          return;
-        }
-        throw error;
+      if (usersMigration) {
+        fs.unlinkSync(path.join(migrationsDir, usersMigration));
       }
     });
   });
 
   describe('db:migrate', () => {
-    it('should run pending migrations', () => {
-      const cliPath = path.join(__dirname, '../../bin/webspresso.js');
+    it('should run pending migrations', async () => {
+      const result = await runCliInProcess(['db:migrate', '--config', configFile]);
 
-      try {
-        const result = execSync(
-          `node "${cliPath}" db:migrate --config "${configFile}"`,
-          { encoding: 'utf-8', cwd: testDir }
-        );
-
-        // Should either run migrations or say up to date
-        expect(
-          result.includes('migration') || 
-          result.includes('up to date') ||
-          result.includes('Done')
-        ).toBe(true);
-      } catch (error) {
-        if (error.message.includes('Cannot find module')) {
-          console.log('Skipping CLI test - dependencies not installed');
-          return;
-        }
-        throw error;
-      }
+      expect(
+        result.includes('migration') || 
+        result.includes('up to date') ||
+        result.includes('Done')
+      ).toBe(true);
     });
   });
 
   describe('db:rollback', () => {
-    it('should rollback migrations', () => {
-      const cliPath = path.join(__dirname, '../../bin/webspresso.js');
+    it('should rollback migrations', async () => {
+      await runCliInProcess(['db:migrate', '--config', configFile]);
+      const result = await runCliInProcess(['db:rollback', '--config', configFile]);
 
-      try {
-        // First run migrations
-        execSync(
-          `node "${cliPath}" db:migrate --config "${configFile}"`,
-          { encoding: 'utf-8', cwd: testDir }
-        );
-
-        // Then rollback
-        const result = execSync(
-          `node "${cliPath}" db:rollback --config "${configFile}"`,
-          { encoding: 'utf-8', cwd: testDir }
-        );
-
-        expect(
-          result.includes('rollback') || 
-          result.includes('Nothing') ||
-          result.includes('Done') ||
-          result.includes('Rolling back')
-        ).toBe(true);
-      } catch (error) {
-        if (error.message.includes('Cannot find module')) {
-          console.log('Skipping CLI test - dependencies not installed');
-          return;
-        }
-        throw error;
-      }
+      expect(
+        result.includes('rollback') || 
+        result.includes('Nothing') ||
+        result.includes('Done') ||
+        result.includes('Rolling back')
+      ).toBe(true);
     });
   });
 });
-

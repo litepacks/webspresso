@@ -10,7 +10,7 @@ const FIXTURES_PATH = path.join(__dirname, '..', 'fixtures');
 const PAGES_DIR = path.join(FIXTURES_PATH, 'pages');
 const VIEWS_DIR = path.join(FIXTURES_PATH, 'views');
 
-describe('API Routes Integration', () => {
+describe.sequential('API Routes Integration', () => {
   let app;
 
   beforeAll(() => {

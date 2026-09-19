@@ -2,22 +2,86 @@
  * Admin Password CLI Tests
  */
 
-const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const knex = require('knex');
+const { Command } = require('commander');
 const { hash, verify } = require('../../core/auth/hash');
+const { registerCommand: registerAdminPassword } = require('../../bin/commands/admin-password');
 
-const CLI_PATH = path.join(__dirname, '../../bin/webspresso.js');
 const TEST_DIR = path.join(__dirname, '../fixtures/admin-password-cli');
 const DB_FILE = path.join(TEST_DIR, 'test.db');
 const CONFIG_FILE = path.join(TEST_DIR, 'webspresso.db.js');
 
-function runCli(subcommand, args = []) {
-  return spawnSync(process.execPath, [CLI_PATH, subcommand, ...args], {
-    cwd: TEST_DIR,
-    encoding: 'utf8',
+class ProcessExitError extends Error {
+  constructor(code) {
+    super(`Process exited with code ${code}`);
+    this.exitCode = code;
+  }
+}
+
+async function runCliInProcess(args, options = {}) {
+  const origCwd = process.cwd();
+  const origLog = console.log;
+  const origError = console.error;
+  const origWarn = console.warn;
+  const origExit = process.exit;
+
+  let stdout = '';
+  let stderr = '';
+
+  console.log = (...msgs) => {
+    stdout += msgs.map((m) => (typeof m === 'object' ? JSON.stringify(m) : String(m))).join(' ') + '\n';
+  };
+  console.error = (...msgs) => {
+    stderr += msgs.map((m) => (typeof m === 'object' ? JSON.stringify(m) : String(m))).join(' ') + '\n';
+  };
+  console.warn = (...msgs) => {
+    stdout += msgs.map((m) => (typeof m === 'object' ? JSON.stringify(m) : String(m))).join(' ') + '\n';
+  };
+
+  process.exit = (code = 0) => {
+    throw new ProcessExitError(code);
+  };
+
+  const program = new Command();
+  program.exitOverride();
+  program.configureOutput({
+    writeOut: (str) => { stdout += str; },
+    writeErr: (str) => { stderr += str; },
   });
+
+  registerAdminPassword(program);
+
+  let exitCode = 0;
+  try {
+    if (options.cwd) {
+      process.chdir(options.cwd);
+    }
+    const argList = Array.isArray(args) ? args : [args];
+    await program.parseAsync(['node', 'webspresso', ...argList]);
+  } catch (err) {
+    if (err instanceof ProcessExitError) {
+      exitCode = err.exitCode;
+    } else if (err && err.exitCode !== undefined) {
+      exitCode = err.exitCode;
+    } else {
+      exitCode = 1;
+      stderr += (err?.message || String(err)) + '\n';
+    }
+  } finally {
+    process.chdir(origCwd);
+    console.log = origLog;
+    console.error = origError;
+    console.warn = origWarn;
+    process.exit = origExit;
+  }
+
+  return {
+    stdout,
+    stderr,
+    status: exitCode,
+  };
 }
 
 describe('admin:password CLI', () => {
@@ -82,10 +146,8 @@ describe('admin:password CLI', () => {
     }
   });
 
-  it('should show help for admin:password', () => {
-    const result = spawnSync(process.execPath, [CLI_PATH, 'admin:password', '--help'], {
-      encoding: 'utf8',
-    });
+  it('should show help for admin:password', async () => {
+    const result = await runCliInProcess(['admin:password', '--help']);
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('Reset admin user password');
@@ -94,7 +156,8 @@ describe('admin:password CLI', () => {
   });
 
   it('should update password with -e and -p flags using core/auth/hash', async () => {
-    const result = runCli('admin:password', [
+    const result = await runCliInProcess([
+      'admin:password',
       '-c',
       CONFIG_FILE,
       '-e',
@@ -113,8 +176,9 @@ describe('admin:password CLI', () => {
     expect(await verify('oldpass123', user.password)).toBe(false);
   });
 
-  it('should reject password shorter than 6 characters', () => {
-    const result = runCli('admin:password', [
+  it('should reject password shorter than 6 characters', async () => {
+    const result = await runCliInProcess([
+      'admin:password',
       '-c',
       CONFIG_FILE,
       '-e',
@@ -128,8 +192,9 @@ describe('admin:password CLI', () => {
     expect(output).toContain('Password must be at least 6 characters');
   });
 
-  it('should fail when admin user email is not found', () => {
-    const result = runCli('admin:password', [
+  it('should fail when admin user email is not found', async () => {
+    const result = await runCliInProcess([
+      'admin:password',
       '-c',
       CONFIG_FILE,
       '-e',
@@ -144,7 +209,7 @@ describe('admin:password CLI', () => {
     expect(output).toContain('admin@example.com');
   });
 
-  it('should fail when admin_users table does not exist', () => {
+  it('should fail when admin_users table does not exist', async () => {
     const noTableDir = path.join(TEST_DIR, 'no-table');
     const noTableDb = path.join(noTableDir, 'empty.db');
     const noTableConfig = path.join(noTableDir, 'webspresso.db.js');
@@ -160,10 +225,8 @@ describe('admin:password CLI', () => {
 `
     );
 
-    const result = spawnSync(
-      process.execPath,
+    const result = await runCliInProcess(
       [
-        CLI_PATH,
         'admin:password',
         '-c',
         noTableConfig,
@@ -172,7 +235,7 @@ describe('admin:password CLI', () => {
         '-p',
         'newpass456',
       ],
-      { cwd: noTableDir, encoding: 'utf8' }
+      { cwd: noTableDir }
     );
     const output = `${result.stdout}${result.stderr}`;
 
@@ -182,8 +245,8 @@ describe('admin:password CLI', () => {
     fs.rmSync(noTableDir, { recursive: true, force: true });
   });
 
-  it('should list admin users', () => {
-    const result = runCli('admin:list', ['-c', CONFIG_FILE]);
+  it('should list admin users', async () => {
+    const result = await runCliInProcess(['admin:list', '-c', CONFIG_FILE]);
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('Admin Users');

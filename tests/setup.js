@@ -12,6 +12,12 @@ process.env.DEFAULT_LOCALE = 'en';
 process.env.SUPPORTED_LOCALES = 'en,de';
 process.env.BASE_URL = 'http://localhost:3001';
 
+if (typeof afterEach === 'function') {
+  afterEach(() => {
+    process.env.NODE_ENV = 'test';
+  });
+}
+
 // Paths for test fixtures
 const FIXTURES_PATH = path.join(__dirname, 'fixtures');
 const FIXTURES_PAGES_PATH = path.join(FIXTURES_PATH, 'pages');

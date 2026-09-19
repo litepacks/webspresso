@@ -9,9 +9,11 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import { createApp } from '../../src/server.js';
-import { createDatabase } from '../../index.js';
-import { adminPanelPlugin, fileManagerPlugin } from '../../plugins/index.js';
+import { createDatabase } from '../../core/orm/index.js';
+import { adminPanelPlugin } from '../../plugins/admin-panel/index.js';
+import fileManagerPlugin from '../../plugins/file-manager/index.js';
 import { clearRegistry } from '../../core/orm/model.js';
+import { hash } from '../../core/auth/hash.js';
 import {
   validateSafeExtension,
   validateMagicBytes,
@@ -135,7 +137,6 @@ describe('Security: File Manager Hardening & Threat Mitigations', () => {
         table.timestamp('updated_at');
       });
 
-      const { hash } = await import('../../core/auth/hash.js');
       const hashedPassword = await hash('password123', 4);
       await db.knex('admin_users').insert({
         email: 'admin@example.com',

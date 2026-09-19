@@ -4,12 +4,18 @@
  * @module core/auth/hash
  */
 
-let bcrypt;
-try {
-  bcrypt = require('bcrypt');
-} catch {
-  // bcrypt is optional, will throw if used without installation
-  bcrypt = null;
+let bcrypt = null;
+let bcryptChecked = false;
+function getBcrypt() {
+  if (!bcryptChecked) {
+    bcryptChecked = true;
+    try {
+      bcrypt = require('bcrypt');
+    } catch {
+      bcrypt = null;
+    }
+  }
+  return bcrypt;
 }
 
 /**
@@ -25,7 +31,8 @@ const DEFAULT_ROUNDS = process.env.NODE_ENV === 'test' ? 1 : 12;
  * @returns {Promise<string>} Hashed password
  */
 async function hash(password, rounds = DEFAULT_ROUNDS) {
-  if (!bcrypt) {
+  const b = getBcrypt();
+  if (!b) {
     throw new Error('bcrypt is required for password hashing. Install it with: npm install bcrypt');
   }
   
@@ -33,7 +40,7 @@ async function hash(password, rounds = DEFAULT_ROUNDS) {
     throw new Error('Password must be a non-empty string');
   }
   
-  return bcrypt.hash(password, rounds);
+  return b.hash(password, rounds);
 }
 
 /**
@@ -43,7 +50,8 @@ async function hash(password, rounds = DEFAULT_ROUNDS) {
  * @returns {Promise<boolean>} True if password matches
  */
 async function verify(password, hashedPassword) {
-  if (!bcrypt) {
+  const b = getBcrypt();
+  if (!b) {
     throw new Error('bcrypt is required for password verification. Install it with: npm install bcrypt');
   }
   
@@ -52,7 +60,7 @@ async function verify(password, hashedPassword) {
   }
   
   try {
-    return await bcrypt.compare(password, hashedPassword);
+    return await b.compare(password, hashedPassword);
   } catch {
     return false;
   }
@@ -65,7 +73,8 @@ async function verify(password, hashedPassword) {
  * @returns {boolean} True if rehash is needed
  */
 function needsRehash(hashedPassword, rounds = DEFAULT_ROUNDS) {
-  if (!bcrypt) {
+  const b = getBcrypt();
+  if (!b) {
     throw new Error('bcrypt is required. Install it with: npm install bcrypt');
   }
   
@@ -74,7 +83,7 @@ function needsRehash(hashedPassword, rounds = DEFAULT_ROUNDS) {
   }
   
   try {
-    const hashRounds = bcrypt.getRounds(hashedPassword);
+    const hashRounds = b.getRounds(hashedPassword);
     return hashRounds < rounds;
   } catch {
     return true;

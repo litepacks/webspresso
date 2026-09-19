@@ -16,7 +16,7 @@ import { clearRegistry } from '../../core/orm/model.js';
 const require = createRequire(import.meta.url);
 const { isRichTextEmpty } = require('../../plugins/admin-panel/lib/is-rich-text-empty.js');
 
-describe('Admin Panel Integration', () => {
+describe.sequential('Admin Panel Integration', () => {
   let app;
   let db;
   let server;

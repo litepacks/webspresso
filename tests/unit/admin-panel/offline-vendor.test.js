@@ -6,7 +6,7 @@ const express = require('express');
 const request = require('supertest');
 const adminPanelPlugin = require('../../../plugins/admin-panel');
 
-describe('Admin Panel Offline Zero-CDN Static Assets', () => {
+describe.sequential('Admin Panel Offline Zero-CDN Static Assets', () => {
   let app;
 
   const mockDb = {

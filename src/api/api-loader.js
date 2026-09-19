@@ -116,7 +116,9 @@ function createApiHandler(descriptor, context) {
           return next(loadErr);
         }
 
-        apiDef = typeof apiModule === 'function' ? { handler: apiModule } : apiModule.default || apiModule;
+        apiDef = typeof apiModule === 'function'
+          ? Object.assign({ handler: apiModule }, apiModule)
+          : (apiModule.default || apiModule);
         handlerFn = apiDef.handler || (typeof apiModule === 'function' ? apiModule : null);
 
         if (typeof handlerFn !== 'function') {

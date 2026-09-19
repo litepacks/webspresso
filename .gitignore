@@ -46,3 +46,5 @@ benchmarks/current-benchmark.json
 
 # Documentation Cache
 .docboot/
+doctor.html
+.vitest-doctor

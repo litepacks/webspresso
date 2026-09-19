@@ -19,7 +19,7 @@ import path from 'path';
 // Raw HTTP helper to verify exact socket wire bytes and decompression without client auto-unzipping
 function getRaw(app, pathStr, headers = {}) {
   return new Promise((resolve, reject) => {
-    const server = app.listen(0, () => {
+    const server = app.listen(0, '127.0.0.1', () => {
       const port = server.address().port;
       const req = http.request({
         host: '127.0.0.1',
@@ -27,6 +27,7 @@ function getRaw(app, pathStr, headers = {}) {
         path: pathStr,
         method: 'GET',
         headers: { connection: 'close', ...headers },
+        agent: false,
       }, (res) => {
         const chunks = [];
         res.on('data', (chunk) => chunks.push(chunk));
@@ -54,7 +55,7 @@ function getRaw(app, pathStr, headers = {}) {
   });
 }
 
-describe('Webspresso HTTP Response Compression', () => {
+describe.sequential('Webspresso HTTP Response Compression', () => {
   const largeText = 'Hello Webspresso! '.repeat(200); // ~3.6 KB, well above 1024 threshold
   const smallText = 'Hello Webspresso!'; // 17 bytes, well below threshold
 

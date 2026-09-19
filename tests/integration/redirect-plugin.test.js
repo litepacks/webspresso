@@ -15,7 +15,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES_PAGES = path.join(__dirname, '..', 'fixtures', 'pages');
 const FIXTURES_VIEWS = path.join(__dirname, '..', 'fixtures', 'views');
 
-describe('redirectPlugin', () => {
+describe.sequential('redirectPlugin', () => {
   it('redirects GET with default 302 and Location', async () => {
     const { app } = createApp({
       pagesDir: FIXTURES_PAGES,

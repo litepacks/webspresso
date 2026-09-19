@@ -9,6 +9,7 @@ export default defineConfig({
     reporters: ['default'],
   },
   test: {
+    silent: process.env.CI === 'true',
     environment: 'node',
     testTimeout: 30000,
     hookTimeout: 60000,

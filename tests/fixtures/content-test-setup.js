@@ -112,11 +112,14 @@ export async function loginAdmin(request, app) {
     password: 'password123',
     name: 'Admin',
   });
+  if (setupRes.headers['set-cookie'] && setupRes.headers['set-cookie'].length > 0) {
+    return setupRes.headers['set-cookie'];
+  }
   const loginRes = await request(app).post('/_admin/api/auth/login').send({
     email: 'admin@example.com',
     password: 'password123',
   });
-  return loginRes.headers['set-cookie'] || setupRes.headers['set-cookie'];
+  return loginRes.headers['set-cookie'] || [];
 }
 
 /**

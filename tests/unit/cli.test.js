@@ -12,6 +12,20 @@ const CLI_PATH = path.join(__dirname, '../../bin/webspresso.js');
 const TEST_DIR = path.join(__dirname, '../fixtures/cli-test-projects');
 const FAVICON_TEST_DIR = path.join(__dirname, '../fixtures/favicon-test');
 
+const { Command } = require('commander');
+const { registerCommand: registerNew } = require('../../bin/commands/new');
+const { registerCommand: registerAddTailwind } = require('../../bin/commands/add-tailwind');
+const { registerCommand: registerSeed } = require('../../bin/commands/seed');
+const { registerCommand: registerDoctor } = require('../../bin/commands/doctor');
+const { registerCommand: registerFaviconGenerate } = require('../../bin/commands/favicon-generate');
+
+class ProcessExitError extends Error {
+  constructor(code) {
+    super(`Process exited with code ${code}`);
+    this.exitCode = code;
+  }
+}
+
 /** Minimal quoted-string splitter for CLI test arg lines (supports "double quotes"). */
 function tokenizeCliLine(line) {
   const s = String(line).trim();
@@ -97,6 +111,71 @@ function runCli(args, options = {}) {
   };
 }
 
+async function runCommandInProcess(registerFn, args, options = {}) {
+  const argParts = Array.isArray(args) ? [...args] : tokenizeCliLine(args);
+  const origCwd = process.cwd();
+  const origLog = console.log;
+  const origError = console.error;
+  const origWarn = console.warn;
+  const origExit = process.exit;
+
+  let stdout = '';
+  let stderr = '';
+
+  console.log = (...msgs) => {
+    stdout += msgs.map((m) => (typeof m === 'object' ? JSON.stringify(m) : String(m))).join(' ') + '\n';
+  };
+  console.error = (...msgs) => {
+    stderr += msgs.map((m) => (typeof m === 'object' ? JSON.stringify(m) : String(m))).join(' ') + '\n';
+  };
+  console.warn = (...msgs) => {
+    stdout += msgs.map((m) => (typeof m === 'object' ? JSON.stringify(m) : String(m))).join(' ') + '\n';
+  };
+
+  process.exit = (code = 0) => {
+    throw new ProcessExitError(code);
+  };
+
+  const program = new Command();
+  program.exitOverride();
+  program.configureOutput({
+    writeOut: (str) => { stdout += str; },
+    writeErr: (str) => { stderr += str; },
+  });
+
+  registerFn(program);
+
+  let exitCode = 0;
+  try {
+    if (options.cwd) {
+      process.chdir(options.cwd);
+    }
+    await program.parseAsync(['node', 'webspresso', ...argParts]);
+  } catch (err) {
+    if (err instanceof ProcessExitError) {
+      exitCode = err.exitCode;
+    } else if (err && err.exitCode !== undefined) {
+      exitCode = err.exitCode;
+    } else {
+      exitCode = 1;
+      stderr += (err?.message || String(err)) + '\n';
+    }
+  } finally {
+    process.chdir(origCwd);
+    console.log = origLog;
+    console.error = origError;
+    console.warn = origWarn;
+    process.exit = origExit;
+  }
+
+  const combined = `${stdout}${stderr}`;
+  return {
+    stdout: combined,
+    stderr,
+    exitCode,
+  };
+}
+
 // Helper to clean up test projects
 function cleanup(projectName) {
   const projectPath = path.join(TEST_DIR, projectName);
@@ -163,9 +242,9 @@ describe('CLI', () => {
     let projectPath;
     let result;
 
-    beforeAll(() => {
+    beforeAll(async () => {
       cleanup(projectName);
-      result = runCli(`new ${projectName} --yes`);
+      result = await runCommandInProcess(registerNew, `new ${projectName} --yes`, { cwd: TEST_DIR });
       projectPath = path.join(TEST_DIR, projectName);
     }, 60000);
 
@@ -339,10 +418,10 @@ describe('CLI', () => {
     let projectPath;
     let createResult;
 
-    beforeAll(() => {
+    beforeAll(async () => {
       // Clean up and create project once for all tests
       cleanup(projectName);
-      createResult = runCli(`new ${projectName} --yes --no-tailwind`);
+      createResult = await runCommandInProcess(registerNew, `new ${projectName} --yes --no-tailwind`, { cwd: TEST_DIR });
       projectPath = path.join(TEST_DIR, projectName);
     }, 60000);
 
@@ -382,19 +461,19 @@ describe('CLI', () => {
   });
 
   describe.sequential('New Project - Interactive Mode', () => {
-    it('should accept new command without project name parameter', () => {
+    it('should accept new command without project name parameter', async () => {
       // When no project name is provided, it should not error immediately
       // (it will prompt interactively, but we can't easily test that without stdin)
       // So we just verify the command syntax is valid
-      const result = runCli('new --help');
+      const result = await runCommandInProcess(registerNew, 'new --help');
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('[project-name]');
     });
 
-    it('should handle invalid project names', () => {
+    it('should handle invalid project names', async () => {
       // Test that invalid characters are rejected (if validation exists)
       // This is more of a documentation test
-      const result = runCli('new --help');
+      const result = await runCommandInProcess(registerNew, 'new --help');
       // Verify the command accepts optional project name
       expect(result.stdout).toContain('[project-name]');
       expect(result.exitCode).toBe(0);
@@ -405,11 +484,11 @@ describe('CLI', () => {
     const projectName = 'test-install-flow';
     const noTailwindProject = 'test-install-no-tw';
     
-    beforeAll(() => {
+    beforeAll(async () => {
       cleanup(projectName);
       cleanup(noTailwindProject);
-      runCli(`new ${projectName} --yes`);
-      runCli(`new ${noTailwindProject} --yes --no-tailwind`);
+      await runCommandInProcess(registerNew, `new ${projectName} --yes`, { cwd: TEST_DIR });
+      await runCommandInProcess(registerNew, `new ${noTailwindProject} --yes --no-tailwind`, { cwd: TEST_DIR });
     }, 60000);
     
     afterAll(() => {
@@ -458,9 +537,9 @@ describe('CLI', () => {
   describe.sequential('New Project - Database Support', () => {
     const projectName = 'test-db-project';
     
-    beforeAll(() => {
+    beforeAll(async () => {
       cleanup(projectName);
-      runCli(`new ${projectName} --yes`);
+      await runCommandInProcess(registerNew, `new ${projectName} --yes`, { cwd: TEST_DIR });
     }, 60000);
     
     afterAll(() => {
@@ -532,7 +611,7 @@ describe('CLI', () => {
   });
 
   describe.sequential('Error Handling', () => {
-    it('should scaffold into current directory when project name is .', () => {
+    it('should scaffold into current directory when project name is .', async () => {
       const dirName = 'dot-dir-scaffold';
       const projectPath = path.join(TEST_DIR, dirName);
       if (fs.existsSync(projectPath)) {
@@ -541,7 +620,7 @@ describe('CLI', () => {
       fs.mkdirSync(projectPath, { recursive: true });
       fs.writeFileSync(path.join(projectPath, 'README.md'), '# existing\n');
 
-      runCli('new . --yes --no-tailwind', { cwd: projectPath });
+      await runCommandInProcess(registerNew, 'new . --yes --no-tailwind', { cwd: projectPath });
 
       expect(fs.existsSync(path.join(projectPath, 'server.js'))).toBe(true);
       expect(fs.existsSync(path.join(projectPath, 'pages'))).toBe(true);
@@ -551,14 +630,14 @@ describe('CLI', () => {
       fs.rmSync(projectPath, { recursive: true, force: true });
     });
 
-    it('should fail if project directory already exists', () => {
+    it('should fail if project directory already exists', async () => {
       const projectName = 'existing-project';
       const projectPath = path.join(TEST_DIR, projectName);
       
       // Create directory first
       fs.mkdirSync(projectPath, { recursive: true });
       
-      const result = runCli(`new ${projectName} --yes`);
+      const result = await runCommandInProcess(registerNew, `new ${projectName} --yes`, { cwd: TEST_DIR });
       
       // Should fail with error message (exit code might be 1 or 130 due to prompts)
       const output = result.stderr || result.stdout;
@@ -568,7 +647,7 @@ describe('CLI', () => {
       cleanup(projectName);
     });
 
-    it('should fail if current directory already has Webspresso project', () => {
+    it('should fail if current directory already has Webspresso project', async () => {
       // Create a temporary project directory with Webspresso files
       const tempProjectDir = path.join(TEST_DIR, 'temp-webspresso-project');
       fs.mkdirSync(tempProjectDir, { recursive: true });
@@ -578,7 +657,7 @@ describe('CLI', () => {
       // Try to create new project in this directory (simulating interactive mode)
       // This should fail because it already has Webspresso files
       // Note: We can't easily test the interactive prompt, but we can test the validation
-      const result = runCli(`new test-in-existing --yes`, { cwd: tempProjectDir });
+      const result = await runCommandInProcess(registerNew, `new test-in-existing --yes`, { cwd: tempProjectDir });
       
       // Should succeed if we provide a new name, but fail if we try to use current dir
       // Since we're providing a name, it should work - check that project was created
@@ -601,13 +680,13 @@ describe('CLI', () => {
     let projectPath;
     let addResult;
 
-    beforeAll(() => {
+    beforeAll(async () => {
       // Clean up first to ensure clean state
       cleanup(projectName);
       // Create a project without Tailwind first, then add Tailwind
-      runCli(`new ${projectName} --yes --no-tailwind`);
+      await runCommandInProcess(registerNew, `new ${projectName} --yes --no-tailwind`, { cwd: TEST_DIR });
       projectPath = path.join(TEST_DIR, projectName);
-      addResult = runCli('add tailwind', { cwd: projectPath });
+      addResult = await runCommandInProcess(registerAddTailwind, 'add tailwind', { cwd: projectPath });
     }, 60000);
 
     afterAll(() => {
@@ -641,8 +720,8 @@ describe('CLI', () => {
       expect(layoutContent).not.toContain('cdn.tailwindcss.com');
     });
 
-    it('should fail if not in a Webspresso project', () => {
-      const result = runCli('add tailwind', { cwd: TEST_DIR });
+    it('should fail if not in a Webspresso project', async () => {
+      const result = await runCommandInProcess(registerAddTailwind, 'add tailwind', { cwd: TEST_DIR });
       
       expect(result.exitCode).toBe(1);
       expect(result.stderr || result.stdout).toContain('Not a Webspresso project');
@@ -655,18 +734,16 @@ describe('CLI', () => {
 
     beforeAll(() => {
       cleanup(projectName);
-      // Create a basic project with database
-      runCli(`new ${projectName} --yes`, { 
-        env: { ...process.env, CI: 'true' } // Skip interactive prompts
-      });
       projectPath = path.join(TEST_DIR, projectName);
-      
-      // Create models directory and a dummy model file
+      fs.mkdirSync(projectPath, { recursive: true });
+      fs.writeFileSync(path.join(projectPath, 'server.js'), '// mock server\n');
       fs.mkdirSync(path.join(projectPath, 'models'), { recursive: true });
-      
-      // Create webspresso.db.js if it doesn't exist
-      if (!fs.existsSync(path.join(projectPath, 'webspresso.db.js'))) {
-        const dbConfig = `module.exports = {
+      fs.writeFileSync(
+        path.join(projectPath, 'package.json'),
+        JSON.stringify({ name: projectName, dependencies: { '@faker-js/faker': '^8.0.0' } }, null, 2)
+      );
+
+      const dbConfig = `module.exports = {
   client: 'better-sqlite3',
   connection: {
     filename: ':memory:'
@@ -674,29 +751,28 @@ describe('CLI', () => {
   useNullAsDefault: true
 };
 `;
-        fs.writeFileSync(path.join(projectPath, 'webspresso.db.js'), dbConfig);
-      }
-    }, 60000);
+      fs.writeFileSync(path.join(projectPath, 'webspresso.db.js'), dbConfig);
+    });
 
     afterAll(() => {
       cleanup(projectName);
     });
 
-    it('should fail if not in a Webspresso project', () => {
-      const result = runCli('seed', { cwd: TEST_DIR });
+    it('should fail if not in a Webspresso project', async () => {
+      const result = await runCommandInProcess(registerSeed, 'seed', { cwd: TEST_DIR });
       
       expect(result.exitCode).toBe(1);
       expect(result.stderr || result.stdout).toContain('Not a Webspresso project');
     });
 
-    it('should fail if models directory does not exist', () => {
+    it('should fail if models directory does not exist', async () => {
       // Remove models directory
       const modelsDir = path.join(projectPath, 'models');
       if (fs.existsSync(modelsDir)) {
         fs.rmSync(modelsDir, { recursive: true, force: true });
       }
       
-      const result = runCli('seed', { cwd: projectPath });
+      const result = await runCommandInProcess(registerSeed, 'seed', { cwd: projectPath });
       
       expect(result.exitCode).toBe(1);
       expect(result.stderr || result.stdout).toContain('models/ directory not found');
@@ -705,14 +781,14 @@ describe('CLI', () => {
       fs.mkdirSync(modelsDir, { recursive: true });
     });
 
-    it('should fail if seeds/index.js does not exist', () => {
+    it('should fail if seeds/index.js does not exist', async () => {
       // Ensure seeds directory doesn't exist
       const seedsDir = path.join(projectPath, 'seeds');
       if (fs.existsSync(seedsDir)) {
         fs.rmSync(seedsDir, { recursive: true, force: true });
       }
       
-      const result = runCli('seed', { cwd: projectPath });
+      const result = await runCommandInProcess(registerSeed, 'seed', { cwd: projectPath });
       
       expect(result.exitCode).toBe(1);
       const output = result.stderr || result.stdout;
@@ -720,7 +796,7 @@ describe('CLI', () => {
       expect(output).toContain('seeds/index.js not found');
     });
 
-    it('should create seed files with --setup flag', () => {
+    it('should create seed files with --setup flag', async () => {
       const seedsDir = path.join(projectPath, 'seeds');
       const seedIndexPath = path.join(seedsDir, 'index.js');
       
@@ -729,7 +805,7 @@ describe('CLI', () => {
         fs.rmSync(seedsDir, { recursive: true, force: true });
       }
       
-      const result = runCli('seed --setup', { cwd: projectPath });
+      const result = await runCommandInProcess(registerSeed, 'seed --setup', { cwd: projectPath });
       
       // Check that seed files were created
       expect(fs.existsSync(seedsDir)).toBe(true);
@@ -742,8 +818,8 @@ describe('CLI', () => {
       expect(seedContent).toContain('seeder');
     });
 
-    it('should show help for seed command', () => {
-      const result = runCli('seed --help', { cwd: projectPath });
+    it('should show help for seed command', async () => {
+      const result = await runCommandInProcess(registerSeed, 'seed --help', { cwd: projectPath });
       
       expect(result.stdout).toContain('Run database seeders');
       expect(result.stdout).toContain('--setup');
@@ -775,43 +851,43 @@ describe('CLI', () => {
       fs.mkdirSync(pagesPath, { recursive: true });
     });
 
-    it('should display doctor help', () => {
-      const result = runCli('doctor --help', { cwd: doctorTestDir });
+    it('should display doctor help', async () => {
+      const result = await runCommandInProcess(registerDoctor, 'doctor --help', { cwd: doctorTestDir });
       expect(result.stdout).toContain('Check Node version, project layout, and optional database connectivity');
       expect(result.exitCode).toBe(0);
     });
 
-    it('should report success when routing is clean', () => {
+    it('should report success when routing is clean', async () => {
       fs.writeFileSync(path.join(doctorTestDir, 'pages', 'index.njk'), 'index');
       fs.mkdirSync(path.join(doctorTestDir, 'pages', 'products'), { recursive: true });
       fs.writeFileSync(path.join(doctorTestDir, 'pages', 'products', '[slug].njk'), 'slug');
       
-      const result = runCli('doctor', { cwd: doctorTestDir });
+      const result = await runCommandInProcess(registerDoctor, 'doctor', { cwd: doctorTestDir });
       expect(result.stdout).toContain('All route paths are lowercase and free of dynamic collisions');
       expect(result.exitCode).toBe(0);
     });
 
-    it('should report warnings for uppercase naming', () => {
+    it('should report warnings for uppercase naming', async () => {
       fs.writeFileSync(path.join(doctorTestDir, 'pages', 'About.njk'), 'about');
       
-      const result = runCli('doctor', { cwd: doctorTestDir });
+      const result = await runCommandInProcess(registerDoctor, 'doctor', { cwd: doctorTestDir });
       expect(result.stdout).toContain('contains uppercase letters');
       expect(result.exitCode).toBe(0);
     });
 
-    it('should fail in strict mode with warnings', () => {
+    it('should fail in strict mode with warnings', async () => {
       fs.writeFileSync(path.join(doctorTestDir, 'pages', 'About.njk'), 'about');
       
-      const result = runCli('doctor --strict', { cwd: doctorTestDir });
+      const result = await runCommandInProcess(registerDoctor, 'doctor --strict', { cwd: doctorTestDir });
       expect(result.exitCode).toBe(1);
     });
 
-    it('should report warnings for dynamic sibling collisions', () => {
+    it('should report warnings for dynamic sibling collisions', async () => {
       fs.mkdirSync(path.join(doctorTestDir, 'pages', 'products'), { recursive: true });
       fs.writeFileSync(path.join(doctorTestDir, 'pages', 'products', '[id].njk'), 'id');
       fs.writeFileSync(path.join(doctorTestDir, 'pages', 'products', '[slug].njk'), 'slug');
       
-      const result = runCli('doctor', { cwd: doctorTestDir });
+      const result = await runCommandInProcess(registerDoctor, 'doctor', { cwd: doctorTestDir });
       expect(result.stdout).toContain('Dynamic route collision in "pages/products"');
       expect(result.stdout).toContain('resolve to the same segment ":param" and will conflict at runtime');
     });
@@ -860,8 +936,8 @@ describe('CLI', () => {
       }
     });
 
-    it('should display favicon:generate help', () => {
-      const result = runCli('favicon:generate --help');
+    it('should display favicon:generate help', async () => {
+      const result = await runCommandInProcess(registerFaviconGenerate, 'favicon:generate --help');
       expect(result.stdout).toContain('Generate favicon PNGs');
       expect(result.stdout).toContain('--output-dir');
       expect(result.stdout).toContain('--theme-color');
@@ -869,8 +945,8 @@ describe('CLI', () => {
       expect(result.exitCode).toBe(0);
     });
 
-    it('should generate favicon files from PNG source', () => {
-      const result = runCli('favicon:generate logo.png', { cwd: faviconTestDir });
+    it('should generate favicon files from PNG source', async () => {
+      const result = await runCommandInProcess(registerFaviconGenerate, 'favicon:generate logo.png', { cwd: faviconTestDir });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Generating favicons from');
@@ -885,8 +961,8 @@ describe('CLI', () => {
       expect(fs.existsSync(path.join(publicDir, 'manifest.json'))).toBe(true);
     });
 
-    it('should create favicons.njk partial', () => {
-      runCli('favicon:generate logo.png', { cwd: faviconTestDir });
+    it('should create favicons.njk partial', async () => {
+      await runCommandInProcess(registerFaviconGenerate, 'favicon:generate logo.png', { cwd: faviconTestDir });
 
       const partialPath = path.join(faviconTestDir, 'views', 'partials', 'favicons.njk');
       expect(fs.existsSync(partialPath)).toBe(true);
@@ -901,8 +977,8 @@ describe('CLI', () => {
       expect(content).toContain('theme-color');
     });
 
-    it('should create manifest.json with correct structure', () => {
-      runCli('favicon:generate logo.png --name "Test App" --short-name "Test"', { cwd: faviconTestDir });
+    it('should create manifest.json with correct structure', async () => {
+      await runCommandInProcess(registerFaviconGenerate, 'favicon:generate logo.png --name "Test App" --short-name "Test"', { cwd: faviconTestDir });
 
       const manifestPath = path.join(faviconTestDir, 'public', 'manifest.json');
       const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
@@ -915,57 +991,57 @@ describe('CLI', () => {
       expect(manifest.background_color).toBeDefined();
     });
 
-    it('should use custom theme-color in output', () => {
-      runCli('favicon:generate logo.png --theme-color "#1a1a2e"', { cwd: faviconTestDir });
+    it('should use custom theme-color in output', async () => {
+      await runCommandInProcess(registerFaviconGenerate, 'favicon:generate logo.png --theme-color "#1a1a2e"', { cwd: faviconTestDir });
 
       const partialPath = path.join(faviconTestDir, 'views', 'partials', 'favicons.njk');
       const content = fs.readFileSync(partialPath, 'utf8');
       expect(content).toContain('#1a1a2e');
     });
 
-    it('should add include to layout.njk when layout exists', () => {
+    it('should add include to layout.njk when layout exists', async () => {
       fs.mkdirSync(path.join(faviconTestDir, 'views'), { recursive: true });
       fs.writeFileSync(
         path.join(faviconTestDir, 'views', 'layout.njk'),
         '<!DOCTYPE html><html><head><title>Test</title></head><body></body></html>'
       );
 
-      runCli('favicon:generate logo.png', { cwd: faviconTestDir });
+      await runCommandInProcess(registerFaviconGenerate, 'favicon:generate logo.png', { cwd: faviconTestDir });
 
       const layoutContent = fs.readFileSync(path.join(faviconTestDir, 'views', 'layout.njk'), 'utf8');
       expect(layoutContent).toContain('{% include "partials/favicons.njk" %}');
     });
 
-    it('should not modify layout when --no-layout is used', () => {
+    it('should not modify layout when --no-layout is used', async () => {
       fs.mkdirSync(path.join(faviconTestDir, 'views'), { recursive: true });
       const layoutPath = path.join(faviconTestDir, 'views', 'layout.njk');
       const originalContent = '<!DOCTYPE html><html><head><title>Test</title></head><body></body></html>';
       fs.writeFileSync(layoutPath, originalContent);
 
-      runCli('favicon:generate logo.png --no-layout', { cwd: faviconTestDir });
+      await runCommandInProcess(registerFaviconGenerate, 'favicon:generate logo.png --no-layout', { cwd: faviconTestDir });
 
       const layoutContent = fs.readFileSync(layoutPath, 'utf8');
       expect(layoutContent).not.toContain('favicons.njk');
       expect(layoutContent).toBe(originalContent);
     });
 
-    it('should fail when source file does not exist', () => {
-      const result = runCli('favicon:generate non-existent.png', { cwd: faviconTestDir });
+    it('should fail when source file does not exist', async () => {
+      const result = await runCommandInProcess(registerFaviconGenerate, 'favicon:generate non-existent.png', { cwd: faviconTestDir });
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr || result.stdout).toContain('Source file not found');
     });
 
-    it('should fail when source is not PNG', () => {
+    it('should fail when source is not PNG', async () => {
       fs.writeFileSync(path.join(faviconTestDir, 'logo.jpg'), 'fake jpeg');
-      const result = runCli('favicon:generate logo.jpg', { cwd: faviconTestDir });
+      const result = await runCommandInProcess(registerFaviconGenerate, 'favicon:generate logo.jpg', { cwd: faviconTestDir });
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr || result.stdout).toContain('Source must be a PNG file');
     });
 
-    it('should use custom output-dir', () => {
-      runCli('favicon:generate logo.png -o static', { cwd: faviconTestDir });
+    it('should use custom output-dir', async () => {
+      await runCommandInProcess(registerFaviconGenerate, 'favicon:generate logo.png -o static', { cwd: faviconTestDir });
 
       const staticDir = path.join(faviconTestDir, 'static');
       expect(fs.existsSync(path.join(staticDir, 'apple-icon-57x57.png'))).toBe(true);

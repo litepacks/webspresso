@@ -23,13 +23,16 @@ describe.sequential('Admin file upload fields', () => {
   let authCookie;
 
   async function loginCookie() {
-    await request(app)
+    const setupRes = await request(app)
       .post('/_admin/api/auth/setup')
       .send({
         email: 'admin@example.com',
         password: 'password123',
         name: 'Admin User',
       });
+    if (setupRes.headers['set-cookie']) {
+      return setupRes.headers['set-cookie'];
+    }
     const loginRes = await request(app)
       .post('/_admin/api/auth/login')
       .send({

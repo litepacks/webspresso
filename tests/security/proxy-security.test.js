@@ -5,7 +5,7 @@ const path = require('path');
 const PAGES_DIR = path.join(__dirname, '../fixtures/route-order/pages');
 const VIEWS_DIR = path.join(__dirname, '../fixtures/route-order/views');
 
-describe('Security: Proxy & Header Spoofing Protection', () => {
+describe.sequential('Security: Proxy & Header Spoofing Protection', () => {
   it('should ignore X-Forwarded-For and X-Forwarded-Proto when trustProxy is explicitly false', async () => {
     const { app } = createApp({
       pagesDir: PAGES_DIR,

@@ -182,6 +182,17 @@ function renderStream(res, templatePath, context = {}, options = {}) {
     };
 
     res.on('close', cleanup);
+    if (typeof res.on === 'function') {
+      res.on('error', (err) => {
+        if (!finished) {
+          finished = true;
+          if (!stream.destroyed) {
+            stream.destroy(err);
+          }
+          reject(err);
+        }
+      });
+    }
 
     stream.on('data', (chunk) => {
       if (!finished && !res.writableEnded) {

@@ -4,7 +4,13 @@
  */
 
 const multer = require('multer');
-const ExcelJS = require('exceljs');
+let ExcelJS = null;
+function getExcelJS() {
+  if (!ExcelJS) {
+    ExcelJS = require('exceljs');
+  }
+  return ExcelJS;
+}
 const { parse: parseCsv } = require('csv-parse/sync');
 const { buildHeaderMapping, dataRowsToObjects } = require('./parse-table');
 
@@ -132,7 +138,8 @@ function parseCsvToRows(buffer) {
 }
 
 async function parseXlsxToRows(buffer) {
-  const wb = new ExcelJS.Workbook();
+  const ExcelLib = getExcelJS();
+  const wb = new ExcelLib.Workbook();
   await wb.xlsx.load(buffer);
   const ws = wb.worksheets[0];
   if (!ws) return [];

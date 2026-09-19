@@ -64,49 +64,8 @@ const { mountDiscoveredRoutes } = require('./src/routing/mount-discovered-routes
 // ORM exports (lazy loaded)
 const orm = require('./core/orm');
 
-/** Standalone experimental application kernel (event bus, plugin shell, view resolver, flows). Distinct from framework SSR `createApp`. */
-const kernel = require('./core/kernel');
-
-// Built-in plugins
-const {
-  schemaExplorerPlugin,
-  adminPanelPlugin,
-  siteAnalyticsPlugin,
-  auditLogPlugin,
-  recaptchaPlugin,
-  swaggerPlugin,
-  healthCheckPlugin,
-  restResourcePlugin,
-  ormCacheAdminPlugin,
-  uploadPlugin,
-  createLocalFileProvider,
-  dataExchangePlugin,
-  redirectPlugin,
-  rateLimitPlugin,
-  contentPlugin,
-  csrfPlugin,
-  corsPlugin,
-  emailPlugin,
-  basicAuthPlugin,
-  realtimePlugin,
-  realtime,
-  createRealtime,
-  websocket,
-  sse,
-  socketIo,
-  redis,
-  createRedisAdapter,
-  mcpPlugin,
-  createMcpServer,
-  McpServer,
-  fileManagerPlugin,
-  xlsxPlugin,
-  xlsx,
-  csvPlugin,
-  csv,
-} = require('./plugins');
-
-const content = require('./core/content');
+// Lazy-loaded built-in plugins
+const plugins = require('./plugins');
 
 module.exports = {
   // Main API
@@ -198,11 +157,6 @@ module.exports = {
   createHelpers,
   utils,
 
-  // SSR Streaming
-  ssr: require('./core/ssr'),
-  renderStream: require('./core/ssr').renderStream,
-  createHtmlStream: require('./core/ssr').createHtmlStream,
-  
   // Asset management
   AssetManager,
   configureAssets,
@@ -217,53 +171,8 @@ module.exports = {
   // ORM
   ...orm,
 
-  /** Event bus / plugin shell / view resolver / flows (`kernel.createApp` is distinct from SSR `createApp`) */
-  kernel,
-
-  // Direct zdb & z export (for convenience)
+  // Direct zdb export (for convenience)
   zdb: orm.zdb,
-  z: require('./core/validation').z,
-
-  // Plugins
-  schemaExplorerPlugin,
-  adminPanelPlugin,
-  siteAnalyticsPlugin,
-  auditLogPlugin,
-  recaptchaPlugin,
-  swaggerPlugin,
-  healthCheckPlugin,
-  restResourcePlugin,
-  ormCacheAdminPlugin,
-  uploadPlugin,
-  createLocalFileProvider,
-  dataExchangePlugin,
-  redirectPlugin,
-  rateLimitPlugin,
-  contentPlugin,
-  csrfPlugin,
-  corsPlugin,
-  emailPlugin,
-  basicAuthPlugin,
-  realtimePlugin,
-  realtime,
-  createRealtime,
-  websocket,
-  sse,
-  socketIo,
-  redis,
-  createRedisAdapter,
-  queuePlugin: require('./plugins/queue'),
-  queue: require('./core/queue'),
-  createQueueManager: require('./core/queue').createQueueManager,
-  QueueManager: require('./core/queue').QueueManager,
-  mcpPlugin,
-  createMcpServer,
-  McpServer,
-  fileManagerPlugin,
-  xlsxPlugin,
-  xlsx,
-  csvPlugin,
-  csv,
 
   // Discovery, Pages, API, Modules & Routing primitives
   definePage,
@@ -277,8 +186,29 @@ module.exports = {
   compileRouteTable,
   RouteTable,
   mountDiscoveredRoutes,
+};
+
+// Define lazy getters for plugins and heavy core subsystems
+Object.defineProperties(module.exports, {
+  ...Object.getOwnPropertyDescriptors(plugins),
+
+  // SSR Streaming
+  ssr: { get: () => require('./core/ssr'), enumerable: true, configurable: true },
+  renderStream: { get: () => require('./core/ssr').renderStream, enumerable: true, configurable: true },
+  createHtmlStream: { get: () => require('./core/ssr').createHtmlStream, enumerable: true, configurable: true },
+
+  /** Event bus / plugin shell / view resolver / flows (`kernel.createApp` is distinct from SSR `createApp`) */
+  kernel: { get: () => require('./core/kernel'), enumerable: true, configurable: true },
+
+  // Validation
+  z: { get: () => require('./core/validation').z, enumerable: true, configurable: true },
+
+  // Background jobs & queue
+  queue: { get: () => require('./core/queue'), enumerable: true, configurable: true },
+  createQueueManager: { get: () => require('./core/queue').createQueueManager, enumerable: true, configurable: true },
+  QueueManager: { get: () => require('./core/queue').QueueManager, enumerable: true, configurable: true },
 
   // Schema-driven CMS core (framework-agnostic)
-  content,
-};
+  content: { get: () => require('./core/content'), enumerable: true, configurable: true },
+});
 

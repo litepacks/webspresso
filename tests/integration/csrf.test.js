@@ -5,7 +5,7 @@ const session = require('express-session');
 const nunjucks = require('nunjucks');
 const csrfPlugin = require('../../plugins/csrf');
 
-describe('CSRF Plugin', () => {
+describe.sequential('CSRF Plugin', () => {
   let app;
   let env;
   let middlewares;

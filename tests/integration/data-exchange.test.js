@@ -12,7 +12,7 @@ import { clearRegistry } from '../../core/orm/model.js';
 import ExcelJS from 'exceljs';
 import { z } from 'zod';
 
-describe('Data exchange plugin', () => {
+describe.sequential('Data exchange plugin', () => {
   let app;
   let db;
 
@@ -192,7 +192,7 @@ describe('Data exchange plugin', () => {
   });
 });
 
-describe('Data exchange export with soft delete', () => {
+describe.sequential('Data exchange export with soft delete', () => {
   let app;
   let db;
 
@@ -311,7 +311,7 @@ describe('Data exchange export with soft delete', () => {
   });
 });
 
-describe('Admin panel built-in data exchange', () => {
+describe.sequential('Admin panel built-in data exchange', () => {
   let app;
   let db;
 

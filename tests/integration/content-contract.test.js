@@ -24,7 +24,7 @@ import {
   assertContentEntryRecordContract,
 } from '../fixtures/content-contracts.js';
 
-describe('content plugin API contracts', () => {
+describe.sequential('content plugin API contracts', () => {
   let app;
   let db;
   let cookie;

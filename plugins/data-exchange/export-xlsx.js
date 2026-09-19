@@ -3,7 +3,13 @@
  * @module plugins/data-exchange/export-xlsx
  */
 
-const ExcelJS = require('exceljs');
+let ExcelJS = null;
+function getExcelJS() {
+  if (!ExcelJS) {
+    ExcelJS = require('exceljs');
+  }
+  return ExcelJS;
+}
 const { sanitizeForOutput } = require('../../core/orm/utils');
 const { resolveExportRecords } = require('./record-selection');
 
@@ -42,7 +48,8 @@ async function buildXlsxBuffer(model, records) {
   const clean = sanitizeForOutput(records, model);
   const columns = getModelExportColumns(model, clean);
 
-  const wb = new ExcelJS.Workbook();
+  const ExcelLib = getExcelJS();
+  const wb = new ExcelLib.Workbook();
   const ws = wb.addWorksheet('Export', {
     views: [{ state: 'frozen', ySplit: 1 }],
   });
