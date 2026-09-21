@@ -42,6 +42,11 @@ function appendVary(res, field) {
  * @param {Object} [options.deflate] - Custom Deflate options
  * @returns {import('express').RequestHandler}
  */
+function resCompress(enable = true) {
+  this._noCompression = !enable;
+  return this;
+}
+
 function createCompressionMiddleware(options = {}) {
   const threshold = typeof options.threshold === 'number' && options.threshold >= 0 ? options.threshold : 1024;
   const supportedEncodings = Array.isArray(options.encodings) && options.encodings.length > 0
@@ -53,10 +58,7 @@ function createCompressionMiddleware(options = {}) {
   return function compressionMiddleware(req, res, next) {
     // Expose opt-out API on response object
     res._noCompression = false;
-    res.compress = function(enable = true) {
-      res._noCompression = !enable;
-      return res;
-    };
+    res.compress = resCompress;
 
     // Skip compression for HEAD requests
     if (req.method === 'HEAD') {
@@ -64,6 +66,10 @@ function createCompressionMiddleware(options = {}) {
     }
 
     const acceptEncoding = req.headers['accept-encoding'];
+    if (!acceptEncoding) {
+      return next();
+    }
+
     let selectedEncoding = null;
     let checkedEncoding = false;
 
@@ -75,10 +81,10 @@ function createCompressionMiddleware(options = {}) {
       return selectedEncoding;
     }
 
-    // Original methods to wrap
-    const origWrite = res.write.bind(res);
-    const origEnd = res.end.bind(res);
-    const origWriteHead = res.writeHead.bind(res);
+    // Original methods to wrap (store references without .bind() allocation)
+    const origWrite = res.write;
+    const origEnd = res.end;
+    const origWriteHead = res.writeHead;
 
     let compressStream = null;
     let isCompressing = false;
@@ -151,15 +157,15 @@ function createCompressionMiddleware(options = {}) {
 
       // Pipe compression stream chunks directly into underlying socket/response
       compressStream.on('data', (chunk) => {
-        origWrite(chunk);
+        origWrite.call(res, chunk);
       });
 
       compressStream.on('end', () => {
-        origEnd();
+        origEnd.call(res);
       });
 
       compressStream.on('error', (err) => {
-        origEnd();
+        origEnd.call(res);
       });
     }
 
@@ -219,7 +225,7 @@ function createCompressionMiddleware(options = {}) {
           } else {
             // Send buffered chunks uncompressed
             for (const b of bufferedChunks) {
-              origWrite(b);
+              origWrite.call(res, b);
             }
             bufferedChunks = [];
           }
@@ -232,7 +238,7 @@ function createCompressionMiddleware(options = {}) {
         return compressStream.write(buf, callback);
       }
 
-      return origWrite(buf, callback);
+      return origWrite.call(res, buf, callback);
     };
 
     // Wrap end
@@ -253,7 +259,7 @@ function createCompressionMiddleware(options = {}) {
         } else if (isCompressing && compressStream) {
           compressStream.write(buf);
         } else {
-          origWrite(buf);
+          origWrite.call(res, buf);
         }
       }
 
@@ -282,10 +288,10 @@ function createCompressionMiddleware(options = {}) {
             appendVary(res, 'Accept-Encoding');
           }
           for (const b of bufferedChunks) {
-            origWrite(b);
+            origWrite.call(res, b);
           }
           bufferedChunks = [];
-          return origEnd(callback);
+          return origEnd.call(res, callback);
         }
       }
 
@@ -297,7 +303,7 @@ function createCompressionMiddleware(options = {}) {
         return res;
       }
 
-      return origEnd(callback);
+      return origEnd.call(res, callback);
     };
 
     next();

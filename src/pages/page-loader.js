@@ -9,7 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { createHelpers } = require('../helpers');
-const { loadI18n, createTranslator, detectLocale, resolveMiddlewares } = require('../file-router');
+const { loadI18n, createTranslator, detectLocale, resolveMiddlewares, translatorCache } = require('../file-router');
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -111,13 +111,29 @@ function createPageHandler(descriptor, context) {
 
       // i18n
       const defaultLocale = process.env.DEFAULT_LOCALE || 'en';
-      const translations = loadI18n(pagesDir, '', locale, isDev);
-      const fallbackTranslations = locale !== defaultLocale ? loadI18n(pagesDir, '', defaultLocale, isDev) : undefined;
-      const t = createTranslator(translations, {
-        locale,
-        fallbackTranslations,
-        fallbackLocale: defaultLocale,
-      });
+      let t;
+      if (!isDev && translatorCache) {
+        const transKey = `${pagesDir}::::${locale}::${defaultLocale}`;
+        t = translatorCache.get(transKey);
+        if (!t) {
+          const translations = loadI18n(pagesDir, '', locale, false);
+          const fallbackTranslations = locale !== defaultLocale ? loadI18n(pagesDir, '', defaultLocale, false) : undefined;
+          t = createTranslator(translations, {
+            locale,
+            fallbackTranslations,
+            fallbackLocale: defaultLocale,
+          });
+          translatorCache.set(transKey, t);
+        }
+      } else {
+        const translations = loadI18n(pagesDir, '', locale, isDev);
+        const fallbackTranslations = locale !== defaultLocale ? loadI18n(pagesDir, '', defaultLocale, isDev) : undefined;
+        t = createTranslator(translations, {
+          locale,
+          fallbackTranslations,
+          fallbackLocale: defaultLocale,
+        });
+      }
 
       const pageCtx = {
         req,

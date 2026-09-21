@@ -15,6 +15,8 @@ const {
   routeRegistrationMeta,
   resolvePageAssets,
   applyPageAssetsToTemplateData,
+  translatorCache,
+  clearTranslatorCache,
 } = require('../../src/file-router');
 
 describe('file-router.js', () => {
@@ -161,6 +163,15 @@ describe('file-router.js', () => {
       const translations = { msg: 'Hello {{name}}, welcome to {{place}}!' };
       const t = createTranslator(translations);
       expect(t('msg', { name: 'John', place: 'Paris' })).toBe('Hello John, welcome to Paris!');
+    });
+
+    it('should manage translatorCache correctly', () => {
+      clearTranslatorCache();
+      expect(translatorCache.size).toBe(0);
+      translatorCache.set('test::key', () => 'translated');
+      expect(translatorCache.get('test::key')()).toBe('translated');
+      clearTranslatorCache();
+      expect(translatorCache.size).toBe(0);
     });
   });
 

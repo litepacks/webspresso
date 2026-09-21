@@ -3,6 +3,12 @@
  * Parses and validates request input against compiled schemas
  */
 
+const EMPTY_INPUT = Object.freeze({
+  body: undefined,
+  params: undefined,
+  query: undefined,
+});
+
 /**
  * Apply compiled schema to request
  * Parses body, params, and query against their respective schemas
@@ -14,17 +20,18 @@
  * @throws {ZodError} If validation fails
  */
 function applySchema(req, compiledSchema) {
+  // No schema means no validation
+  if (!compiledSchema) {
+    req.input = EMPTY_INPUT;
+    return;
+  }
+
   // Initialize req.input
   req.input = {
     body: undefined,
     params: undefined,
-    query: undefined
+    query: undefined,
   };
-
-  // No schema means no validation
-  if (!compiledSchema) {
-    return;
-  }
 
   // Parse body if schema exists
   if (compiledSchema.body) {

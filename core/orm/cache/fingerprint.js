@@ -28,7 +28,21 @@ function stableValue(v) {
     const k = keys[0];
     return { [k]: stableValue(v[k]) };
   }
-  keys.sort();
+  if (keyLen === 2) {
+    const k0 = keys[0];
+    const k1 = keys[1];
+    return k0 < k1
+      ? { [k0]: stableValue(v[k0]), [k1]: stableValue(v[k1]) }
+      : { [k1]: stableValue(v[k1]), [k0]: stableValue(v[k0]) };
+  }
+  let isSorted = true;
+  for (let i = 1; i < keyLen; i++) {
+    if (keys[i - 1] > keys[i]) {
+      isSorted = false;
+      break;
+    }
+  }
+  if (!isSorted) keys.sort();
   const out = {};
   for (let i = 0; i < keyLen; i++) {
     const k = keys[i];

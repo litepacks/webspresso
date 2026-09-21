@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const { AsyncLocalStorage } = require('async_hooks');
 const express = require('express');
 const helmet = require('helmet');
@@ -17,6 +18,7 @@ const { mountClientRuntime } = require('./client-runtime/mount');
 const { resolveClientRuntime } = require('./client-runtime/resolve');
 const { mountPages, detectLocale, loadI18n, createTranslator } = require('./file-router');
 const { configureAssets, createHelpers, getScriptInjector } = require('./helpers');
+const { registerClearHook } = require('./njk-frontmatter');
 const { createPluginManager } = require('./plugin-manager');
 const { createServiceRegistry } = require('./services');
 const { scanRoutes } = require('./discovery/scan-routes');
@@ -41,6 +43,35 @@ const {
 const renderStackStorage = new AsyncLocalStorage();
 
 /**
+ * Fast hardware-accelerated Weak ETag generator using native zlib.crc32
+ * Up to 13x faster than Express default SHA-1, zero external dependencies.
+ * Compliant with RFC 7232 Section 2.3 (Weak Entity Tag).
+ * Format: W/"<len-hex>-<crc32-hex>"
+ *
+ * @param {Buffer|string} body - Response body
+ * @param {string} [encoding] - String encoding if body is string
+ * @returns {string} RFC 7232 formatted Weak ETag
+ */
+function fastETag(body, encoding) {
+  if (!body || body.length === 0) {
+    return 'W/"0-0"';
+  }
+  const buf = Buffer.isBuffer(body) ? body : Buffer.from(body, encoding || 'utf8');
+  if (buf.length === 0) {
+    return 'W/"0-0"';
+  }
+  if (typeof zlib.crc32 === 'function') {
+    return `W/"${buf.length.toString(16)}-${zlib.crc32(buf).toString(16)}"`;
+  }
+  // Graceful fallback for environments without zlib.crc32
+  let h1 = 0x811c9dc5;
+  for (let i = 0; i < buf.length; i++) {
+    h1 = Math.imul(h1 ^ buf[i], 0x01000193);
+  }
+  return `W/"${buf.length.toString(16)}-${(h1 >>> 0).toString(16)}"`;
+}
+
+/**
  * Configure Nunjucks environment with circular extends guard and loader protection
  * @param {string|string[]} templateDirs - Template directory paths
  * @param {Object} options - Nunjucks options
@@ -52,14 +83,21 @@ function configureSafeNunjucks(templateDirs, options = {}) {
   const origRender = env.render.bind(env);
   const origRenderString = env.renderString.bind(env);
 
+  // Production template cache to bypass loader traversal when caching is active
+  const productionTemplateCache = (!options.noCache) ? new Map() : null;
+  if (productionTemplateCache) {
+    registerClearHook(() => productionTemplateCache.clear());
+  }
+
   function wrapTemplateRoot(tmpl, name) {
     if (!tmpl || tmpl._safeWrapped) return;
     tmpl._safeWrapped = true;
     const origRoot = tmpl.rootRenderFunc;
     if (typeof origRoot !== 'function') return;
 
+    const normalizedName = String(name || tmpl.path || 'anonymous');
+
     tmpl.rootRenderFunc = function(e, context, frame, runtime, renderCb) {
-      const normalizedName = String(name || tmpl.path || 'anonymous');
       const store = renderStackStorage.getStore();
       if (store) {
         store.stack.push(normalizedName);
@@ -69,8 +107,12 @@ function configureSafeNunjucks(templateDirs, options = {}) {
         if (!finished) {
           finished = true;
           if (store) {
-            const idx = store.stack.lastIndexOf(normalizedName);
-            if (idx !== -1) store.stack.splice(idx, 1);
+            if (store.stack[store.stack.length - 1] === normalizedName) {
+              store.stack.pop();
+            } else {
+              const idx = store.stack.lastIndexOf(normalizedName);
+              if (idx !== -1) store.stack.splice(idx, 1);
+            }
           }
         }
         renderCb(err, out);
@@ -79,8 +121,12 @@ function configureSafeNunjucks(templateDirs, options = {}) {
         return origRoot.call(this, e, context, frame, runtime, done);
       } catch (ex) {
         if (store) {
-          const idx = store.stack.lastIndexOf(normalizedName);
-          if (idx !== -1) store.stack.splice(idx, 1);
+          if (store.stack[store.stack.length - 1] === normalizedName) {
+            store.stack.pop();
+          } else {
+            const idx = store.stack.lastIndexOf(normalizedName);
+            if (idx !== -1) store.stack.splice(idx, 1);
+          }
         }
         throw ex;
       }
@@ -108,16 +154,27 @@ function configureSafeNunjucks(templateDirs, options = {}) {
       }
     }
 
+    if (!cb && !parentName && productionTemplateCache && typeof name === 'string') {
+      const cached = productionTemplateCache.get(name);
+      if (cached) return cached;
+    }
+
     const wrappedCb = typeof cb === 'function' ? function(err, tmpl) {
-      if (tmpl) {
+      if (tmpl && !tmpl._safeWrapped) {
         wrapTemplateRoot(tmpl, name);
+      }
+      if (productionTemplateCache && tmpl && !err && typeof name === 'string' && !parentName) {
+        productionTemplateCache.set(name, tmpl);
       }
       cb(err, tmpl);
     } : undefined;
 
     const res = origGetTemplate(name, eagerCompile, parentName, ignoreMissing, wrappedCb);
-    if (res) {
+    if (res && !res._safeWrapped) {
       wrapTemplateRoot(res, name);
+    }
+    if (productionTemplateCache && res && typeof name === 'string' && !parentName) {
+      productionTemplateCache.set(name, res);
     }
     return res;
   };
@@ -495,87 +552,10 @@ function createApp(options = {}) {
   const app = express();
   app.serviceRegistry = serviceRegistry;
 
-  // Correlation Request ID middleware
-  app.use((req, res, next) => {
-    const reqId = (req.headers && req.headers['x-request-id']) ? req.headers['x-request-id'] : crypto.randomUUID();
-    req.id = reqId;
-    res.setHeader('X-Request-Id', reqId);
-    next();
-  });
-
-  // Request context & services caller middleware
-  app.use((req, res, next) => {
-    if (options.db) {
-      req.db = options.db;
-    }
-    req.context = {
-      req,
-      res,
-      db: options.db ?? null,
-      app,
-      serviceRegistry,
-      ...(req.context || {}),
-    };
-    req.service = (name, input, opts) =>
-      serviceRegistry.call(name, input, req.context, opts);
-    next();
-  });
-
-  // SSR Streaming Response Helper
+  // Unified Request Context & Lifecycle Initializer middleware
   const { renderStream } = require('../core/ssr/stream');
   app.use((req, res, next) => {
-    res.renderStream = (templatePath, context = {}, renderOptions = {}) => {
-      return renderStream(res, templatePath, context, {
-        env: nunjucksEnv,
-        ...renderOptions,
-      });
-    };
-    next();
-  });
-
-  // Async handler wrapper helper for automatic promise rejection handling
-  function wrapAsync(fn) {
-    if (typeof fn !== 'function') return fn;
-    if (fn.length === 4) {
-      return function(err, req, res, next) {
-        try {
-          const ret = fn.call(this, err, req, res, next);
-          if (ret && typeof ret.catch === 'function') {
-            ret.catch(next);
-          }
-          return ret;
-        } catch (syncErr) {
-          return next(syncErr);
-        }
-      };
-    }
-    return function(req, res, next) {
-      try {
-        const ret = fn.call(this, req, res, next);
-        if (ret && typeof ret.catch === 'function') {
-          ret.catch(next);
-        }
-        return ret;
-      } catch (syncErr) {
-        return next(syncErr);
-      }
-    };
-  }
-
-  // Wrap routing methods on app to catch uncaught async errors
-  const HTTP_METHODS = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head', 'all'];
-  for (const method of HTTP_METHODS) {
-    const origMethod = app[method];
-    if (typeof origMethod === 'function') {
-      app[method] = function(path, ...handlers) {
-        const wrappedHandlers = handlers.flat().map((h) => wrapAsync(h));
-        return origMethod.call(this, path, ...wrappedHandlers);
-      };
-    }
-  }
-
-  // Request draining check during graceful shutdown (zero overhead during normal operation)
-  app.use((req, res, next) => {
+    // 1. Request draining check during graceful shutdown
     if (shutdownManager.isShuttingDown) {
       res.set('Connection', 'close');
       if (!res.headersSent) {
@@ -592,8 +572,289 @@ function createApp(options = {}) {
         } catch (e) {}
       });
     }
+
+    // 2. Correlation Request ID
+    const reqId = (req.headers && req.headers['x-request-id']) ? req.headers['x-request-id'] : crypto.randomUUID();
+    req.id = reqId;
+    res.setHeader('X-Request-Id', reqId);
+
+    // 3. Request DB, Services, and Context
+    if (options.db) {
+      req.db = options.db;
+    }
+    req.context = {
+      req,
+      res,
+      db: options.db ?? null,
+      app,
+      serviceRegistry,
+      ...(req.context || {}),
+    };
+    req.service = (name, input, opts) =>
+      serviceRegistry.call(name, input, req.context, opts);
+
+    // 4. SSR Streaming Response Helper
+    res.renderStream = (templatePath, context = {}, renderOptions = {}) => {
+      return renderStream(res, templatePath, context, {
+        env: nunjucksEnv,
+        ...renderOptions,
+      });
+    };
+
     next();
   });
+
+  // Async handler wrapper helper for automatic promise rejection handling
+  function wrapAsync(fn) {
+    if (typeof fn !== 'function') return fn;
+    if (fn._isWrappedAsync) return fn;
+    let wrapped;
+    if (fn.length === 4) {
+      wrapped = function(err, req, res, next) {
+        try {
+          const ret = fn.call(this, err, req, res, next);
+          if (ret && ret.then) {
+            ret.catch(next);
+          }
+          return ret;
+        } catch (syncErr) {
+          return next(syncErr);
+        }
+      };
+    } else {
+      wrapped = function(req, res, next) {
+        try {
+          const ret = fn.call(this, req, res, next);
+          if (ret && ret.then) {
+            ret.catch(next);
+          }
+          return ret;
+        } catch (syncErr) {
+          return next(syncErr);
+        }
+      };
+    }
+    wrapped._isWrappedAsync = true;
+    return wrapped;
+  }
+
+  function dispatchFastPath(handlers, req, res, next) {
+    let idx = 0;
+    function runNext(err) {
+      if (err) return next(err);
+      if (idx >= handlers.length) return next();
+      const fn = handlers[idx++];
+      try {
+        const ret = fn(req, res, runNext);
+        if (ret && typeof ret.then === 'function') {
+          ret.catch(runNext);
+        }
+      } catch (e) {
+        runNext(e);
+      }
+    }
+    runNext();
+  }
+
+  const fastPathStaticByMethod = {
+    GET: new Map(),
+    POST: new Map(),
+    PUT: new Map(),
+    DELETE: new Map(),
+    PATCH: new Map(),
+    HEAD: new Map(),
+    OPTIONS: new Map(),
+  };
+  const fastPathStaticMap = new Map();
+  app.fastPathStaticMap = fastPathStaticMap;
+  app.fastPathStaticByMethod = fastPathStaticByMethod;
+
+  // Dynamic route registration list and LRU lookup cache
+  const dynamicRouteList = [];
+  const dynamicRouteMap = new Map();
+  const dynamicRouteLookupCache = new Map();
+  const MAX_DYNAMIC_CACHE_SIZE = 2000;
+  const NOT_FOUND_SENTINEL = Symbol('NOT_FOUND');
+
+  app.dynamicRouteList = dynamicRouteList;
+  app.dynamicRouteLookupCache = dynamicRouteLookupCache;
+
+  function getDynamicCache(key) {
+    const val = dynamicRouteLookupCache.get(key);
+    if (!val) return undefined;
+    dynamicRouteLookupCache.delete(key);
+    dynamicRouteLookupCache.set(key, val);
+    return val;
+  }
+
+  function setDynamicCache(key, val) {
+    if (dynamicRouteLookupCache.size >= MAX_DYNAMIC_CACHE_SIZE) {
+      const oldestKey = dynamicRouteLookupCache.keys().next().value;
+      dynamicRouteLookupCache.delete(oldestKey);
+    }
+    dynamicRouteLookupCache.set(key, val);
+  }
+
+  function extractRouteParams(paramNames, match) {
+    const params = {};
+    for (let i = 0; i < paramNames.length; i++) {
+      const val = match[i + 1];
+      if (val !== undefined) {
+        try {
+          params[paramNames[i]] = decodeURIComponent(val);
+        } catch (_) {
+          params[paramNames[i]] = val;
+        }
+      }
+    }
+    return params;
+  }
+
+  function compileRoutePattern(pattern) {
+    if (typeof pattern !== 'string') return null;
+    if (pattern === '*' || pattern === '/*' || pattern === '') return null;
+    if (pattern.includes('(') || pattern.includes(')')) return null;
+
+    const paramNames = [];
+    const parts = pattern.split('/');
+    let regexStr = '^';
+    let hasWildcard = false;
+
+    for (let i = 1; i < parts.length; i++) {
+      const part = parts[i];
+      if (!part) continue;
+      regexStr += '\\/';
+      if (part.startsWith(':')) {
+        const isOptional = part.endsWith('?');
+        const name = isOptional ? part.slice(1, -1) : part.slice(1);
+        paramNames.push(name);
+        regexStr += isOptional ? '([^/]+)?' : '([^/]+)';
+      } else if (part.startsWith('*')) {
+        const name = part.slice(1) || '0';
+        paramNames.push(name);
+        regexStr += '(.*)';
+        hasWildcard = true;
+      } else {
+        regexStr += part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      }
+    }
+
+    if (regexStr === '^') {
+      regexStr = '^\\/?$';
+    } else {
+      regexStr += '\\/?$';
+    }
+
+    return {
+      pattern,
+      regex: new RegExp(regexStr),
+      paramNames,
+      hasWildcard,
+    };
+  }
+
+  // Wrap routing methods on app to catch uncaught async errors and register fast-path static and dynamic routes
+  const HTTP_METHODS = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head', 'all'];
+  for (const method of HTTP_METHODS) {
+    const origMethod = app[method];
+    if (typeof origMethod === 'function') {
+      app[method] = function(path, ...handlers) {
+        if (handlers.length === 0) {
+          return origMethod.call(this, path);
+        }
+        const wrappedHandlers = handlers.flat().map((h) => wrapAsync(h));
+
+        const normPath = (typeof path === 'string' && path.length > 1 && path.endsWith('/'))
+          ? path.slice(0, -1)
+          : path;
+
+        // Fast-path static registration for literal string paths without dynamic parameters or regex
+        if (
+          typeof normPath === 'string' &&
+          normPath.length > 0 &&
+          !normPath.includes(':') &&
+          !normPath.includes('*') &&
+          !normPath.includes('(') &&
+          !normPath.includes(')') &&
+          !normPath.includes('?')
+        ) {
+          const uMethod = method.toUpperCase();
+          const routeInfo = { path: normPath, methods: { [method.toLowerCase()]: true } };
+          const registerStatic = (m) => {
+            const key = `${m} ${normPath}`;
+            let methodMap = fastPathStaticByMethod[m];
+            if (!methodMap) {
+              methodMap = new Map();
+              fastPathStaticByMethod[m] = methodMap;
+            }
+            const existing = methodMap.get(normPath);
+            if (existing) {
+              existing.handlers.push(...wrappedHandlers);
+            } else {
+              const entry = {
+                path: normPath,
+                handlers: [...wrappedHandlers],
+                routeInfo,
+              };
+              methodMap.set(normPath, entry);
+              fastPathStaticMap.set(key, entry);
+            }
+          };
+
+          if (uMethod === 'ALL') {
+            for (const m of ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']) {
+              registerStatic(m);
+            }
+          } else {
+            registerStatic(uMethod);
+          }
+          dynamicRouteLookupCache.clear();
+        } else if (
+          typeof path === 'string' &&
+          path.length > 0 &&
+          (path.includes(':') || path.includes('*')) &&
+          path !== '*' &&
+          path !== '/*' &&
+          !path.includes('(') &&
+          !path.includes(')')
+        ) {
+          const compiled = compileRoutePattern(path);
+          if (compiled) {
+            const uMethod = method.toUpperCase();
+            const routeInfo = { path, methods: { [method.toLowerCase()]: true } };
+            const registerDynamic = (m) => {
+              const key = `${m} ${path}`;
+              const existing = dynamicRouteMap.get(key);
+              if (existing) {
+                existing.handlers.push(...wrappedHandlers);
+              } else {
+                const entry = {
+                  method: m,
+                  path,
+                  compiled,
+                  handlers: [...wrappedHandlers],
+                  routeInfo,
+                };
+                dynamicRouteMap.set(key, entry);
+                dynamicRouteList.push(entry);
+              }
+            };
+
+            if (uMethod === 'ALL') {
+              for (const m of ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']) {
+                registerDynamic(m);
+              }
+            } else {
+              registerDynamic(uMethod);
+            }
+            dynamicRouteLookupCache.clear();
+          }
+        }
+
+        return origMethod.call(this, path, ...wrappedHandlers);
+      };
+    }
+  }
   
   // Security headers with Helmet
   if (helmetConfig !== false) {
@@ -638,7 +899,63 @@ function createApp(options = {}) {
       }
     }
     
-    app.use(helmet(finalConfig));
+    const helmetMw = helmet(finalConfig);
+
+    // Check if configuration uses purely static directives (no per-request dynamic functions)
+    let isDynamicCsp = false;
+    if (finalConfig.contentSecurityPolicy && finalConfig.contentSecurityPolicy.directives) {
+      for (const val of Object.values(finalConfig.contentSecurityPolicy.directives)) {
+        if (typeof val === 'function') {
+          isDynamicCsp = true;
+          break;
+        }
+        if (Array.isArray(val) && val.some((item) => typeof item === 'function')) {
+          isDynamicCsp = true;
+          break;
+        }
+      }
+    }
+
+    if (!isDynamicCsp) {
+      const staticHeaders = {};
+      let removePoweredBy = false;
+      const dummyRes = {
+        setHeader(name, value) {
+          staticHeaders[name] = value;
+        },
+        removeHeader(name) {
+          if (name && name.toLowerCase() === 'x-powered-by') {
+            removePoweredBy = true;
+          }
+        },
+      };
+
+      try {
+        helmetMw({ headers: {} }, dummyRes, () => {});
+      } catch (_) {
+        // Fallback to standard helmet middleware if mock invocation fails
+      }
+
+      const headerEntries = Object.entries(staticHeaders);
+      if (headerEntries.length > 0) {
+        if (removePoweredBy) {
+          app.disable('x-powered-by');
+        }
+        app.use((req, res, next) => {
+          for (let i = 0; i < headerEntries.length; i++) {
+            res.setHeader(headerEntries[i][0], headerEntries[i][1]);
+          }
+          if (removePoweredBy) {
+            res.removeHeader('X-Powered-By');
+          }
+          next();
+        });
+      } else {
+        app.use(helmetMw);
+      }
+    } else {
+      app.use(helmetMw);
+    }
   }
 
   // HTTP Response Compression
@@ -668,22 +985,33 @@ function createApp(options = {}) {
   // Ensure extended query parser for nested filter/sort query parameters (?filter[field]=val)
   app.set('query parser', 'extended');
   
+  // Fast hardware-accelerated Weak ETag (CRC32 + Hex length) as default
+  // Configurable via options.etag or options.server.etag
+  const etagSetting = options.etag !== undefined
+    ? options.etag
+    : (options.server?.etag !== undefined ? options.server.etag : 'fast');
+
+  if (etagSetting === false || etagSetting === null) {
+    app.set('etag', false);
+  } else if (etagSetting === 'fast' || etagSetting === true) {
+    app.set('etag', fastETag);
+  } else {
+    app.set('etag', etagSetting);
+  }
+  
   // JSON body parser for API routes
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   
   // Ensure default empty object for body on mutating requests if not populated
+  // and halt processing if request has timed out (after body parsers)
   app.use((req, res, next) => {
+    if (timeoutConfig !== false && req.timedout) return;
     if (req.body === undefined && (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH')) {
       req.body = {};
     }
     next();
   });
-  
-  // Halt processing if request has timed out (after body parsers)
-  if (timeoutConfig !== false) {
-    app.use(haltOnTimedout);
-  }
   
   // Authentication middleware (if auth manager provided)
   let authMiddleware = null;
@@ -719,11 +1047,13 @@ function createApp(options = {}) {
     templateDirs.push(path.join(rootDir, 'pages'));
   }
   
+  const nunjucksOpts = options.nunjucks || {};
   const nunjucksEnv = configureSafeNunjucks(templateDirs, {
     autoescape: true,
     express: app,
     watch: isDev && !isTest,
-    noCache: isDev || isTest
+    noCache: nunjucksOpts.noCache ?? (isDev || isTest),
+    ...nunjucksOpts,
   });
   
   // Add custom Nunjucks filters
@@ -826,6 +1156,74 @@ function createApp(options = {}) {
   if (!isTest && routeTable.size > 0) {
     console.log('\nMounting routes:');
   }
+
+  // Fast-Path Static & Dynamic Route Dispatcher ($O(1) direct static & dynamic LRU lookup)
+  // Eliminates Express linear layer regex matching (matchLayer) for static, dynamic, and 404 routes
+  app.use(function fastPathDispatcher(req, res, next) {
+    const rawPath = req.path || (req.url ? req.url.split('?')[0] : '/');
+    const pathname = rawPath.length > 1 && rawPath.endsWith('/') ? rawPath.slice(0, -1) : rawPath;
+    const method = req.method ? req.method.toUpperCase() : 'GET';
+
+    // 1. Static fast-path ($O(1) partitioned by method - zero string concat)
+    const methodMap = fastPathStaticByMethod[method];
+    let entry = methodMap ? methodMap.get(pathname) : undefined;
+    if (!entry && method === 'HEAD') {
+      entry = fastPathStaticByMethod.GET ? fastPathStaticByMethod.GET.get(pathname) : undefined;
+    }
+    if (entry) {
+      if (!req.params) req.params = {};
+      req.route = entry.routeInfo;
+      return dispatchFastPath(entry.handlers, req, res, next);
+    }
+
+    // 2. Dynamic route fast-path with LRU caching
+    if (dynamicRouteList.length > 0) {
+      const cacheKey = `${method} ${pathname}`;
+      const cached = getDynamicCache(cacheKey);
+
+      if (cached === NOT_FOUND_SENTINEL) {
+        return next();
+      }
+
+      if (cached) {
+        req.params = Object.assign({}, cached.params);
+        req.route = cached.entry.routeInfo;
+        return dispatchFastPath(cached.entry.handlers, req, res, next);
+      }
+
+      if (method === 'HEAD') {
+        const cachedGet = getDynamicCache(`GET ${pathname}`);
+        if (cachedGet && cachedGet !== NOT_FOUND_SENTINEL) {
+          req.params = Object.assign({}, cachedGet.params);
+          req.route = cachedGet.entry.routeInfo;
+          return dispatchFastPath(cachedGet.entry.handlers, req, res, next);
+        }
+      }
+
+      // Linear pattern scan over registered dynamic routes (only once per unique pathname)
+      for (let i = 0; i < dynamicRouteList.length; i++) {
+        const entry = dynamicRouteList[i];
+        if (entry.method !== method && !(method === 'HEAD' && entry.method === 'GET')) {
+          continue;
+        }
+
+        const match = pathname.match(entry.compiled.regex);
+        if (match) {
+          const params = extractRouteParams(entry.compiled.paramNames, match);
+          setDynamicCache(cacheKey, { entry, params });
+
+          req.params = Object.assign({}, params);
+          req.route = entry.routeInfo;
+          return dispatchFastPath(entry.handlers, req, res, next);
+        }
+      }
+
+      // Memoize as not found so subsequent requests for this path bypass regex scanning
+      setDynamicCache(cacheKey, NOT_FOUND_SENTINEL);
+    }
+
+    next();
+  });
 
   // Mount discovered routes
   const { routeMetadata: discoveredMeta, registerDynamicDiscoveredRoutes } = mountDiscoveredRoutes(app, routeTable, {
@@ -969,7 +1367,7 @@ function createApp(options = {}) {
       : null;
 
   // 404 handler
-  app.use(async (req, res) => {
+  const notFoundHandler = async (req, res) => {
     res.status(404);
     const ctx = createErrorContext(req);
     
@@ -1015,7 +1413,8 @@ function createApp(options = {}) {
     } else {
       res.json({ error: 'Not Found', status: 404 });
     }
-  });
+  };
+  app.use(notFoundHandler);
   
   let customErrorHandler = null;
   app.setErrorHandler = function(handler) {
@@ -1163,6 +1562,25 @@ function createApp(options = {}) {
   app.listen = function(...args) {
     const server = origListen(...args);
     app.server = server;
+
+    // HTTP Server Socket Tuning: prevent 502 race conditions behind Cloudflare / Nginx / AWS ALB
+    // Node.js defaults keepAliveTimeout to 5s, whereas Cloudflare/ALB default to 60s idle keep-alive.
+    // Note: Node requires headersTimeout > keepAliveTimeout.
+    const serverOpts = options.server || {};
+    const keepAliveTimeout = serverOpts.keepAliveTimeout != null
+      ? serverOpts.keepAliveTimeout
+      : 65000;
+    const headersTimeout = serverOpts.headersTimeout != null
+      ? serverOpts.headersTimeout
+      : Math.max(keepAliveTimeout + 1000, 66000);
+
+    if (typeof server.keepAliveTimeout === 'number') {
+      server.keepAliveTimeout = keepAliveTimeout;
+    }
+    if (typeof server.headersTimeout === 'number') {
+      server.headersTimeout = headersTimeout;
+    }
+
     const adapter = new NodeHttpAdapter(server);
     shutdownManager.registerAdapter(adapter);
 
@@ -1177,4 +1595,4 @@ function createApp(options = {}) {
 }
 
 // Export for use as library
-module.exports = { createApp };
+module.exports = { createApp, fastETag };

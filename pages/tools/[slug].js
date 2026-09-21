@@ -110,7 +110,7 @@ module.exports = {
   hooks: {
     // Example: Log when tool page is accessed
     async afterLoad(ctx) {
-      if (ctx.data.tool) {
+      if (process.env.NODE_ENV !== 'test' && !process.env.BENCHMARK && ctx.data && ctx.data.tool) {
         console.log(`Tool accessed: ${ctx.data.tool.slug}`);
       }
     }

@@ -152,9 +152,20 @@ function loadNjkRouteTemplate(absPath, isDev) {
   return fresh;
 }
 
+const clearHooks = new Set();
+
+function registerClearHook(fn) {
+  if (typeof fn === 'function') clearHooks.add(fn);
+}
+
 function clearNjkFrontmatterCaches() {
   prodRouteCache.clear();
   devRouteCache.clear();
+  for (const fn of clearHooks) {
+    try {
+      fn();
+    } catch (_) {}
+  }
 }
 
 module.exports = {
@@ -162,5 +173,6 @@ module.exports = {
   frontmatterToPatches,
   loadNjkRouteTemplate,
   clearNjkFrontmatterCaches,
+  registerClearHook,
   extractFrontmatterBlock,
 };

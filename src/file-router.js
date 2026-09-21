@@ -14,6 +14,7 @@ const {
   parseNjkFrontmatter,
   frontmatterToPatches,
   clearNjkFrontmatterCaches,
+  registerClearHook,
 } = require('./njk-frontmatter');
 const { renderStream } = require('../core/ssr/stream');
 
@@ -27,11 +28,29 @@ const i18nCache = new Map();
 // Cache for merged i18n (key: `${pagesDir}::${routeDir}::${locale}`, value: { globalMtime, routeMtime, data })
 const mergedI18nCache = new Map();
 
+// Cache for translator instances in production
+const translatorCache = new Map();
+
+function clearTranslatorCache() {
+  translatorCache.clear();
+}
+
 // Cache for route configs in production
 const configCache = new Map();
 
 // Dev-only: avoid require() on every SSR request when the .js file is unchanged (mtime)
 const routeConfigDevCache = new Map();
+
+// Cache for compiled frontmatter string templates (key: fullPath, value: compiled Template)
+const compiledStringTemplateCache = new Map();
+
+function clearCompiledStringTemplateCache() {
+  compiledStringTemplateCache.clear();
+}
+
+if (typeof registerClearHook === 'function') {
+  registerClearHook(clearCompiledStringTemplateCache);
+}
 
 // Cache for API filename -> { method, baseName } (basename keys; stable per process)
 const methodFromFilenameCache = new Map();
@@ -43,6 +62,8 @@ const MAX_LOCALE_LEN = 16;
 
 let cachedSupportedLocalesRaw = null;
 let cachedSupportedLocaleSet = null;
+let cachedDefaultLocaleKey = null;
+let cachedDefaultLocale = 'en';
 
 /** @returns {Set<string>} */
 function parseSupportedLocaleSet() {
@@ -55,6 +76,27 @@ function parseSupportedLocaleSet() {
     raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
   );
   return cachedSupportedLocaleSet;
+}
+
+/**
+ * Get default locale matching supported set
+ * @param {Set<string>} [supported]
+ * @returns {string}
+ */
+function getDefaultLocale(supported = parseSupportedLocaleSet()) {
+  const rawDef = process.env.DEFAULT_LOCALE || 'en';
+  const rawSupp = process.env.SUPPORTED_LOCALES || 'en';
+  const key = rawDef + '|' + rawSupp;
+  if (key === cachedDefaultLocaleKey && cachedDefaultLocale) {
+    return cachedDefaultLocale;
+  }
+  cachedDefaultLocaleKey = key;
+  const defaultCand = normalizeLocaleCandidate(rawDef);
+  cachedDefaultLocale =
+    pickMatchingLocale(defaultCand, supported)
+    ?? (supported.has('en') ? 'en' : [...supported][0])
+    ?? 'en';
+  return cachedDefaultLocale;
 }
 
 /**
@@ -492,15 +534,25 @@ function getPluralRules(locale) {
   return pr;
 }
 
-function resolveTranslationValue(dict, key) {
-  if (!dict || typeof dict !== 'object') return undefined;
-  if (dict[key] !== undefined) return dict[key];
+const KEY_PARTS_CACHE = new Map();
 
-  const parts = key.split('.');
+function resolveTranslationValue(dict, key) {
+  if (!dict || typeof dict !== 'object' || typeof key !== 'string') return undefined;
+  if (dict[key] !== undefined) return dict[key];
+  if (!key.includes('.')) return undefined;
+
+  let parts = KEY_PARTS_CACHE.get(key);
+  if (!parts) {
+    parts = key.split('.');
+    if (KEY_PARTS_CACHE.size < 1000) {
+      KEY_PARTS_CACHE.set(key, parts);
+    }
+  }
+
   let curr = dict;
-  for (const part of parts) {
+  for (let i = 0; i < parts.length; i++) {
     if (curr && typeof curr === 'object') {
-      curr = curr[part];
+      curr = curr[parts[i]];
     } else {
       return undefined;
     }
@@ -726,25 +778,37 @@ function loadGlobalHooks(pagesDir, isDev) {
  * @param {string} hookName - Hook name
  * @param {Object} ctx - Context object
  */
-async function executeHook(hooks, hookName, ctx, ...extra) {
-  if (hooks && typeof hooks[hookName] === 'function') {
-    await hooks[hookName](ctx, ...extra);
+function executeHook(hooks, hookName, ctx, ...extra) {
+  if (!hooks || typeof hooks[hookName] !== 'function') {
+    return;
   }
+  return hooks[hookName](ctx, ...extra);
+}
+
+function runHooks(globalHooks, routeHooks, hookName, ctx, ...extra) {
+  const gFn = globalHooks ? globalHooks[hookName] : undefined;
+  const rFn = routeHooks ? routeHooks[hookName] : undefined;
+  if (typeof gFn !== 'function' && typeof rFn !== 'function') return;
+  return (async () => {
+    if (typeof gFn === 'function') {
+      const gRes = gFn(ctx, ...extra);
+      if (gRes && typeof gRes.then === 'function') await gRes;
+    }
+    if (typeof rFn === 'function') {
+      const rRes = rFn(ctx, ...extra);
+      if (rRes && typeof rRes.then === 'function') await rRes;
+    }
+  })();
 }
 
 /**
  * Detect locale from request
  * @param {Object} req - Express request
+ * @param {Set<string>} [supported] - Optional precomputed supported locales set
+ * @param {string} [def] - Optional precomputed default locale
  * @returns {string} Locale code
  */
-function detectLocale(req) {
-  const supported = parseSupportedLocaleSet();
-  const defaultCand = normalizeLocaleCandidate(process.env.DEFAULT_LOCALE || 'en');
-  const def =
-    pickMatchingLocale(defaultCand, supported)
-    ?? (supported.has('en') ? 'en' : [...supported][0])
-    ?? 'en';
-
+function detectLocale(req, supported = parseSupportedLocaleSet(), def = getDefaultLocale(supported)) {
   if (req.query && req.query.lang != null && req.query.lang !== '') {
     const q = normalizeLocaleCandidate(String(req.query.lang));
     const hit = pickMatchingLocale(q, supported);
@@ -1064,10 +1128,10 @@ function mountPages(app, options) {
             }
           }
           // Same instance as createApp({ db }) / getAppContext().db — available to handler & route middleware
-          if (db != null) {
+          if (db != null && !req.db) {
             req.db = db;
           }
-          if (serviceRegistry != null) {
+          if (serviceRegistry != null && !req.service) {
             req.service = (name, input, opts) =>
               serviceRegistry.call(name, input, { req, res, db }, opts);
           }
@@ -1159,20 +1223,38 @@ function mountPages(app, options) {
             }
           }
           // Detect locale
-          const locale = detectLocale(req);
-          const defaultLocale = process.env.DEFAULT_LOCALE || 'en';
+          const supported = parseSupportedLocaleSet();
+          const defaultLocale = getDefaultLocale(supported);
+          const locale = detectLocale(req, supported, defaultLocale);
           
           // Load translations (primary + fallback)
-          const translations = loadI18n(absolutePagesDir, route.routeDir, locale, isDev);
-          const fallbackTranslations = (locale !== defaultLocale)
-            ? loadI18n(absolutePagesDir, route.routeDir, defaultLocale, isDev)
-            : EMPTY_OBJECT;
-
-          const t = createTranslator(translations, {
-            locale,
-            fallbackTranslations,
-            fallbackLocale: defaultLocale,
-          });
+          let t;
+          if (!isDev) {
+            const transKey = `${absolutePagesDir}::${route.routeDir}::${locale}::${defaultLocale}`;
+            t = translatorCache.get(transKey);
+            if (!t) {
+              const translations = loadI18n(absolutePagesDir, route.routeDir, locale, false);
+              const fallbackTranslations = (locale !== defaultLocale)
+                ? loadI18n(absolutePagesDir, route.routeDir, defaultLocale, false)
+                : EMPTY_OBJECT;
+              t = createTranslator(translations, {
+                locale,
+                fallbackTranslations,
+                fallbackLocale: defaultLocale,
+              });
+              translatorCache.set(transKey, t);
+            }
+          } else {
+            const translations = loadI18n(absolutePagesDir, route.routeDir, locale, true);
+            const fallbackTranslations = (locale !== defaultLocale)
+              ? loadI18n(absolutePagesDir, route.routeDir, defaultLocale, true)
+              : EMPTY_OBJECT;
+            t = createTranslator(translations, {
+              locale,
+              fallbackTranslations,
+              fallbackLocale: defaultLocale,
+            });
+          }
           
           // Load route config
           const config = isDev ? loadRouteConfig(route.configPath, true) : mountConfig;
@@ -1190,6 +1272,8 @@ function mountPages(app, options) {
         }
         
         const njkTpl = loadNjkRouteTemplate(route.fullPath, isDev);
+        const metaTitle = t('meta.title');
+        const metaDesc = t('meta.description');
 
         const ctx = {
           req,
@@ -1208,8 +1292,8 @@ function mountPages(app, options) {
           },
           data: { ...njkTpl.dataPatch },
           meta: {
-            title: t('meta.title') !== 'meta.title' ? t('meta.title') : null,
-            description: t('meta.description') !== 'meta.description' ? t('meta.description') : null,
+            title: metaTitle !== 'meta.title' ? metaTitle : null,
+            description: metaDesc !== 'meta.description' ? metaDesc : null,
             indexable: true,
             canonical: null,
             ...njkTpl.metaPatch,
@@ -1221,16 +1305,16 @@ function mountPages(app, options) {
         req.context = ctx;
         
         // Execute hooks: onRequest
-        await executeHook(globalHooks, 'onRequest', ctx);
-        await executeHook(routeHooks, 'onRequest', ctx);
+        let hookPromise = runHooks(globalHooks, routeHooks, 'onRequest', ctx);
+        if (hookPromise) await hookPromise;
         
         // Execute hooks: onRoute
-        await executeHook(globalHooks, 'onRoute', ctx);
-        await executeHook(routeHooks, 'onRoute', ctx);
+        hookPromise = runHooks(globalHooks, routeHooks, 'onRoute', ctx);
+        if (hookPromise) await hookPromise;
         
         // Execute hooks: beforeMiddleware
-        await executeHook(globalHooks, 'beforeMiddleware', ctx);
-        await executeHook(routeHooks, 'beforeMiddleware', ctx);
+        hookPromise = runHooks(globalHooks, routeHooks, 'beforeMiddleware', ctx);
+        if (hookPromise) await hookPromise;
         
         // Run route middleware (chain fixed at route registration; edit middleware in dev → restart)
         if (preResolvedPageMw.length) {
@@ -1245,8 +1329,8 @@ function mountPages(app, options) {
         }
         
         // Execute hooks: afterMiddleware
-        await executeHook(globalHooks, 'afterMiddleware', ctx);
-        await executeHook(routeHooks, 'afterMiddleware', ctx);
+        hookPromise = runHooks(globalHooks, routeHooks, 'afterMiddleware', ctx);
+        if (hookPromise) await hookPromise;
         
         // Execute hooks: beforeLoad
         if (pluginManager && db) {
@@ -1255,8 +1339,8 @@ function mountPages(app, options) {
             ctx.content = contentApi.getContentService(db);
           }
         }
-        await executeHook(globalHooks, 'beforeLoad', ctx);
-        await executeHook(routeHooks, 'beforeLoad', ctx);
+        hookPromise = runHooks(globalHooks, routeHooks, 'beforeLoad', ctx);
+        if (hookPromise) await hookPromise;
         
         // Run load function
         if (config?.load && typeof config.load === 'function') {
@@ -1267,8 +1351,8 @@ function mountPages(app, options) {
         }
         
         // Execute hooks: afterLoad
-        await executeHook(globalHooks, 'afterLoad', ctx);
-        await executeHook(routeHooks, 'afterLoad', ctx);
+        hookPromise = runHooks(globalHooks, routeHooks, 'afterLoad', ctx);
+        if (hookPromise) await hookPromise;
         
         // Run meta function
         if (config?.meta && typeof config.meta === 'function') {
@@ -1279,8 +1363,8 @@ function mountPages(app, options) {
         }
         
         // Execute hooks: beforeRender
-        await executeHook(globalHooks, 'beforeRender', ctx);
-        await executeHook(routeHooks, 'beforeRender', ctx);
+        hookPromise = runHooks(globalHooks, routeHooks, 'beforeRender', ctx);
+        if (hookPromise) await hookPromise;
         
         const pageAssetBundle = applyPageAssetsToTemplateData(pageAssetsResolved, ctx.data);
         ctx.data = pageAssetBundle.data;
@@ -1316,10 +1400,24 @@ function mountPages(app, options) {
           });
         }
 
-        let html =
-          njkTpl.useStringRender && njkTpl.templateBody != null
-            ? nunjucks.renderString(njkTpl.templateBody, renderContext, { path: route.fullPath })
-            : nunjucks.render(templatePath, renderContext);
+        let html;
+        if (njkTpl.useStringRender && njkTpl.templateBody != null) {
+          if (typeof nunjucks.Template === 'function') {
+            let compiled = isDev ? null : compiledStringTemplateCache.get(route.fullPath);
+            if (!compiled || (isDev && compiled._templateBody !== njkTpl.templateBody)) {
+              compiled = new nunjucks.Template(njkTpl.templateBody, nunjucks, route.fullPath);
+              compiled._templateBody = njkTpl.templateBody;
+              compiledStringTemplateCache.set(route.fullPath, compiled);
+            }
+            html = compiled.render(renderContext);
+          } else if (typeof nunjucks.renderString === 'function') {
+            html = nunjucks.renderString(njkTpl.templateBody, renderContext, { path: route.fullPath });
+          } else {
+            html = nunjucks.render(templatePath, renderContext);
+          }
+        } else {
+          html = nunjucks.render(templatePath, renderContext);
+        }
 
         if (pluginManager) {
           const contentApi = pluginManager.getPluginAPI('content');
@@ -1330,8 +1428,8 @@ function mountPages(app, options) {
         
         // Execute hooks: afterRender
         ctx.html = html;
-        await executeHook(globalHooks, 'afterRender', ctx);
-        await executeHook(routeHooks, 'afterRender', ctx);
+        hookPromise = runHooks(globalHooks, routeHooks, 'afterRender', ctx);
+        if (hookPromise) await hookPromise;
         
         if (route.routePath === '/404' || route.file === '404.njk') {
           res.status(404);
@@ -1404,5 +1502,9 @@ module.exports = {
   frontmatterToPatches,
   loadNjkRouteTemplate,
   clearNjkFrontmatterCaches,
+  compiledStringTemplateCache,
+  clearCompiledStringTemplateCache,
+  translatorCache,
+  clearTranslatorCache,
 };
 

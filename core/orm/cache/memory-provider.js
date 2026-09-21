@@ -56,8 +56,20 @@ function createMemoryCacheProvider(options = {}) {
     if (store.has(key)) removeKey(key);
 
     if (maxEntries > 0 && store.size >= maxEntries) {
-      const first = store.keys().next().value;
-      if (first !== undefined) removeKey(first);
+      // Active sweep: evict expired entries before falling back to FIFO eviction
+      const now = Date.now();
+      let freed = 0;
+      for (const [k, entry] of store.entries()) {
+        if (entry.expiresAt > 0 && now > entry.expiresAt) {
+          removeKey(k);
+          freed++;
+          if (freed >= 10 || store.size < maxEntries) break;
+        }
+      }
+      if (store.size >= maxEntries) {
+        const first = store.keys().next().value;
+        if (first !== undefined) removeKey(first);
+      }
     }
 
     const expiresAt = ttlMs > 0 ? Date.now() + ttlMs : 0;
@@ -82,6 +94,18 @@ function createMemoryCacheProvider(options = {}) {
     for (const t of tags) tagToKeys.delete(t);
   }
 
+  function pruneExpired() {
+    const now = Date.now();
+    let count = 0;
+    for (const [k, entry] of store.entries()) {
+      if (entry.expiresAt > 0 && now > entry.expiresAt) {
+        removeKey(k);
+        count++;
+      }
+    }
+    return count;
+  }
+
   function clear() {
     store.clear();
     tagToKeys.clear();
@@ -99,6 +123,7 @@ function createMemoryCacheProvider(options = {}) {
     get,
     set,
     invalidateTags,
+    pruneExpired,
     clear,
     getSizeStats,
   };
