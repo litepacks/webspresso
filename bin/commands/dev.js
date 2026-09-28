@@ -32,6 +32,7 @@ function registerCommand(program) {
     .description('Start development server')
     .option('-p, --port <port>', 'Port number', '3000')
     .option('--no-css', 'Skip CSS watch (if Tailwind is set up)')
+    .option('--no-js', 'Skip client JS watch (if esbuild / watch:js is set up)')
     .action((options) => {
       if (!fs.existsSync('server.js')) {
         console.error('❌ server.js not found! Make sure you are in a Webspresso project.');
@@ -41,56 +42,84 @@ function registerCommand(program) {
       process.env.PORT = options.port;
       process.env.NODE_ENV = 'development';
       
-      const hasTailwind = fs.existsSync('tailwind.config.js') && fs.existsSync('src/input.css');
+      let packageJson = {};
+      if (fs.existsSync('package.json')) {
+        try {
+          packageJson = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
+        } catch (_) {}
+      }
+      const hasTailwindV3 = fs.existsSync('tailwind.config.js') && fs.existsSync('src/input.css');
+      const hasTailwindV4 = fs.existsSync('src/input.css') && Boolean(
+        (packageJson.devDependencies && (packageJson.devDependencies['@tailwindcss/cli'] || packageJson.devDependencies['tailwindcss'])) ||
+        (packageJson.scripts && packageJson.scripts['watch:css'])
+      );
+      const hasTailwind = hasTailwindV3 || hasTailwindV4;
       const shouldWatchCss = hasTailwind && options.css !== false;
+
+      const hasJsWatch = Boolean(
+        (packageJson.scripts && packageJson.scripts['watch:js']) ||
+        fs.existsSync('src/client/main.js') ||
+        fs.existsSync('src/client/main.ts') ||
+        fs.existsSync('esbuild.config.js')
+      );
+      const shouldWatchJs = hasJsWatch && options.js !== false && Boolean(packageJson.scripts && packageJson.scripts['watch:js']);
       
       // Build watch arguments
       const watchArgs = buildWatchArgs();
       const watchDirs = watchArgs.filter(a => a.startsWith('--watch-path')).map(a => a.split('=')[1]);
       
+      const watchingLabels = ['server.js'];
+      if (watchDirs.length) watchingLabels.push(...watchDirs);
+      if (shouldWatchCss) watchingLabels.push('CSS');
+      if (shouldWatchJs) watchingLabels.push('JS (esbuild)');
+
+      console.log(`\n🚀 Starting development server on port ${options.port}...`);
+      console.log(`   Watching: ${watchingLabels.join(', ')}\n`);
+
+      const managedProcesses = [];
+      let isCleaningUp = false;
+
+      const cleanup = (code = 0) => {
+        if (isCleaningUp) return;
+        isCleaningUp = true;
+        for (const p of managedProcesses) {
+          try {
+            if (p && !p.killed) {
+              p.kill('SIGTERM');
+            }
+          } catch (_) {}
+        }
+        process.exit(code);
+      };
+
+      process.once('SIGINT', () => cleanup(0));
+      process.once('SIGTERM', () => cleanup(0));
+
       if (shouldWatchCss) {
-        console.log(`\n🚀 Starting development server on port ${options.port}...`);
-        console.log(`   Watching: server.js${watchDirs.length ? ', ' + watchDirs.join(', ') : ''}, CSS\n`);
-        
-        // Start CSS watch
         const cssWatch = spawn('npm', ['run', 'watch:css'], {
           stdio: 'inherit',
-          shell: true
-        });
-        
-        // Start server with watch paths
-        const server = spawn('node', watchArgs, {
-          stdio: 'inherit',
           shell: true,
-          env: { ...process.env, PORT: options.port, NODE_ENV: 'development' }
         });
-        
-        // Handle exit
-        const cleanup = () => {
-          cssWatch.kill();
-          server.kill();
-          process.exit(0);
-        };
-        
-        process.on('SIGINT', cleanup);
-        process.on('SIGTERM', cleanup);
-        
-        cssWatch.on('exit', cleanup);
-        server.on('exit', cleanup);
-      } else {
-        console.log(`\n🚀 Starting development server on port ${options.port}...`);
-        console.log(`   Watching: server.js${watchDirs.length ? ', ' + watchDirs.join(', ') : ''}\n`);
-        
-        const child = spawn('node', watchArgs, {
-          stdio: 'inherit',
-          shell: true,
-          env: { ...process.env, PORT: options.port, NODE_ENV: 'development' }
-        });
-        
-        child.on('exit', (code) => {
-          process.exit(code || 0);
-        });
+        managedProcesses.push(cssWatch);
+        cssWatch.on('exit', () => cleanup(0));
       }
+
+      if (shouldWatchJs) {
+        const jsWatch = spawn('npm', ['run', 'watch:js'], {
+          stdio: 'inherit',
+          shell: true,
+        });
+        managedProcesses.push(jsWatch);
+        jsWatch.on('exit', () => cleanup(0));
+      }
+
+      const server = spawn('node', watchArgs, {
+        stdio: 'inherit',
+        shell: true,
+        env: { ...process.env, PORT: options.port, NODE_ENV: 'development' },
+      });
+      managedProcesses.push(server);
+      server.on('exit', (code) => cleanup(code || 0));
     });
 }
 

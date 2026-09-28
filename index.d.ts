@@ -83,9 +83,63 @@ export interface CreateAppOptions {
   services?: {
     dir?: string;
   };
+  /** Development SSE live/hot reload configuration */
+  devReload?: boolean | DevReloadOptions;
+  /** Client-side JS incremental bundler (esbuild context() API) */
+  bundle?: boolean | DevBundlerOptions;
   setupRoutes?: (app: Application, ctx: SetupRoutesContext) => void;
   [key: string]: unknown;
 }
+
+export interface DevReloadOptions {
+  enabled?: boolean;
+  watch?: string[];
+  watchCss?: boolean;
+  autoInject?: boolean;
+  debounce?: number;
+}
+
+export interface DevBundlerOptions {
+  enabled?: boolean;
+  entryPoints?: string[] | Record<string, string>;
+  outdir?: string;
+  bundle?: boolean;
+  sourcemap?: boolean;
+  minify?: boolean;
+  target?: string | string[];
+  format?: string;
+  metafile?: boolean;
+  plugins?: any[];
+  esbuild?: any;
+  watch?: boolean;
+  esbuildOptions?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface DevBundler {
+  isAvailable(): boolean;
+  isWatching(): boolean;
+  isDisposed(): boolean;
+  getEntryPoints(): string[] | Record<string, string>;
+  getOutdir(): string;
+  startWatch(): Promise<any>;
+  rebuild(): Promise<any>;
+  dispose(): Promise<void>;
+  getContext(): any;
+}
+
+export interface BuildBundleResult {
+  result: unknown;
+  manifest: Record<string, unknown>;
+  manifestPath: string;
+}
+
+export function createDevBundler(options?: DevBundlerOptions, devReloadHub?: unknown): DevBundler;
+export function buildBundle(options?: DevBundlerOptions): Promise<BuildBundleResult>;
+export function generateManifest(metafile: unknown, options?: unknown): Record<string, unknown>;
+export function createManifestPlugin(options?: unknown): unknown;
+export function findDefaultEntryPoints(cwd?: string): string[] | Record<string, string>;
+export function findPageEntryPoints(cwd?: string): Record<string, string>;
 
 export interface ServiceContext {
   req?: Request;
@@ -314,6 +368,9 @@ export interface WebspressoApplication extends Application {
   enableShutdownHooks(): this;
   disableShutdownHooks(): this;
   setErrorHandler(handler: (error: unknown, req: Request, res: Response, next: NextFunction) => Promise<unknown> | unknown): this;
+  broadcastDevReload?(type: 'css' | 'full' | string, payload?: Record<string, unknown>): void;
+  devReloadHub?: unknown;
+  devBundler?: DevBundler;
 }
 
 export interface CreateAppResult {
@@ -521,6 +578,14 @@ export const utils: Record<string, unknown>;
 
 export class AssetManager {
   constructor(options?: Record<string, unknown>);
+  resolve(assetPath: string): string;
+  asset(assetPath: string): string;
+  js(src: string, attributes?: Record<string, unknown>): string;
+  css(href: string, attributes?: Record<string, unknown>): string;
+  pageJs(name: string, attributes?: Record<string, unknown>): string;
+  pageJsUrl(name: string): string;
+  pageCss(name: string, attributes?: Record<string, unknown>): string;
+  pageCssUrl(name: string): string;
   [key: string]: unknown;
 }
 
@@ -603,10 +668,111 @@ export interface RelationDefinition {
   localKey?: string;
 }
 
+export interface AdminPermissions {
+  create?: boolean;
+  edit?: boolean;
+  delete?: boolean;
+}
+
+export interface AdminSortConfig {
+  column: string;
+  direction?: 'asc' | 'desc';
+}
+
+export type AdminBadgeColor =
+  | 'green'
+  | 'red'
+  | 'blue'
+  | 'amber'
+  | 'yellow'
+  | 'purple'
+  | 'violet'
+  | 'indigo'
+  | 'gray'
+  | string;
+
+export interface AdminColumnConfig {
+  label?: string;
+  badge?: Record<string, AdminBadgeColor>;
+  hidden?: boolean;
+  readonly?: boolean;
+  sortable?: boolean;
+  [key: string]: unknown;
+}
+
+export interface AdminActionConfig {
+  id: string;
+  label: string;
+  icon?: string;
+  color?: string;
+  models?: string | string[];
+  confirm?: boolean;
+  confirmMessage?: string;
+  showWhen?: Record<string, unknown>;
+  handler?: (record: any, modelName: string, ctx: any) => Promise<unknown> | unknown;
+  visible?: (record: any, modelName: string) => boolean;
+}
+
+export interface AdminBulkActionConfig {
+  id: string;
+  label: string;
+  icon?: string;
+  color?: string;
+  models?: string | string[];
+  confirm?: boolean;
+  confirmMessage?: string;
+  handler?: (records: any[], modelName: string, ctx: any) => Promise<unknown> | unknown;
+}
+
+export interface AdminHookContext<TData = any, TRecord = any> {
+  model: string;
+  data?: TData;
+  record?: TRecord;
+  id?: string | number;
+  req?: any;
+  user?: any;
+  db?: any;
+  stats?: any;
+}
+
+export interface AdminHooksConfig {
+  beforeCreate?: (ctx: AdminHookContext) => Promise<void> | void;
+  afterCreate?: (ctx: AdminHookContext) => Promise<void> | void;
+  beforeUpdate?: (ctx: AdminHookContext) => Promise<void> | void;
+  afterUpdate?: (ctx: AdminHookContext) => Promise<void> | void;
+  beforeDelete?: (ctx: AdminHookContext) => Promise<void> | void;
+  afterDelete?: (ctx: AdminHookContext) => Promise<void> | void;
+  beforeRestore?: (ctx: AdminHookContext) => Promise<void> | void;
+  afterRestore?: (ctx: AdminHookContext) => Promise<void> | void;
+  onRecordView?: (ctx: AdminHookContext) => Promise<void> | void;
+  onDashboardLoad?: (ctx: AdminHookContext) => Promise<void> | void;
+  [key: string]: ((ctx: AdminHookContext) => Promise<void> | void) | undefined;
+}
+
+export interface AdminRelationConfig {
+  displayField?: string;
+  searchFields?: string[];
+  limit?: number;
+  [key: string]: unknown;
+}
+
 export interface AdminMetadata {
   enabled?: boolean;
   label?: string;
   icon?: string | null;
+  group?: string | null;
+  menuOrder?: number | null;
+  listColumns?: string[];
+  searchFields?: string[];
+  displayField?: string;
+  readOnly?: boolean;
+  permissions?: AdminPermissions;
+  defaultSort?: AdminSortConfig;
+  columns?: Record<string, AdminColumnConfig>;
+  actions?: AdminActionConfig[];
+  bulkActions?: AdminBulkActionConfig[];
+  hooks?: AdminHooksConfig;
+  relations?: Record<string, AdminRelationConfig>;
   customFields?: Record<string, unknown>;
   queries?: Record<string, (repo: Repository) => Promise<unknown>>;
 }

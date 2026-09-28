@@ -46,6 +46,8 @@ function registerCommand(program) {
     .description('Create a new Webspresso project')
     .option('-t, --template <template>', 'Template to use (minimal, full)', 'minimal')
     .option('--no-tailwind', 'Skip Tailwind CSS setup')
+    .option('--tailwind-v4', 'Use Tailwind CSS v4 (Oxide engine, zero-config)')
+    .option('--tailwind-version <version>', 'Tailwind version (3 or 4)', '3')
     .option('--no-agents', 'Skip AI Agent guidelines setup (.agents/, AGENTS.md, CLAUDE.md, .cursorrules)')
     .option('-i, --install', 'Auto install dependencies and build CSS')
     .option('-y, --yes', 'Non-interactive: no database, skip install unless -i/--install, skip dev server')
@@ -657,20 +659,43 @@ Visit http://localhost:3000
       
       // Add Tailwind if requested (default: true)
       if (useTailwind) {
-        console.log('\n🎨 Setting up Tailwind CSS...\n');
+        const isV4 = Boolean(options.tailwindV4 || options.tailwindVersion === '4');
+        console.log(`\n🎨 Setting up Tailwind CSS ${isV4 ? 'v4 (Oxide engine, zero-config)' : 'v3'}...\n`);
         
         // Create src directory
         fs.mkdirSync(path.join(projectPath, 'src'), { recursive: true });
         
-        // Create input.css
-        const inputCss = `@tailwind base;
+        // Create public/css directory
+        fs.mkdirSync(path.join(projectPath, 'public', 'css'), { recursive: true });
+        fs.writeFileSync(path.join(projectPath, 'public', 'css', 'style.css'), '/* Run npm run build:css */\n');
+        
+        // Update package.json
+        const updatedPackageJson = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf-8'));
+        updatedPackageJson.devDependencies = updatedPackageJson.devDependencies || {};
+        updatedPackageJson.scripts = updatedPackageJson.scripts || {};
+
+        if (isV4) {
+          const inputCss = `@import "tailwindcss";
+
+@source "../pages/**/*.{njk,js}";
+@source "../views/**/*.njk";
+@source "../src/**/*.js";
+`;
+          fs.writeFileSync(path.join(projectPath, 'src', 'input.css'), inputCss);
+
+          updatedPackageJson.devDependencies['@tailwindcss/cli'] = '^4.0.0';
+          updatedPackageJson.devDependencies['tailwindcss'] = '^4.0.0';
+
+          updatedPackageJson.scripts['build:css'] = '@tailwindcss/cli -i ./src/input.css -o ./public/css/style.css --minify';
+          updatedPackageJson.scripts['watch:css'] = '@tailwindcss/cli -i ./src/input.css -o ./public/css/style.css --watch';
+        } else {
+          const inputCss = `@tailwind base;
 @tailwind components;
 @tailwind utilities;
 `;
-        fs.writeFileSync(path.join(projectPath, 'src', 'input.css'), inputCss);
-        
-        // Create tailwind.config.js
-        const tailwindConfig = `/** @type {import('tailwindcss').Config} */
+          fs.writeFileSync(path.join(projectPath, 'src', 'input.css'), inputCss);
+          
+          const tailwindConfig = `/** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
     './pages/**/*.{njk,js}',
@@ -683,33 +708,25 @@ module.exports = {
   plugins: [],
 }
 `;
-        fs.writeFileSync(path.join(projectPath, 'tailwind.config.js'), tailwindConfig);
-        
-        // Create postcss.config.js
-        const postcssConfig = `module.exports = {
+          fs.writeFileSync(path.join(projectPath, 'tailwind.config.js'), tailwindConfig);
+          
+          const postcssConfig = `module.exports = {
   plugins: {
     tailwindcss: {},
     autoprefixer: {},
   },
 }
 `;
-        fs.writeFileSync(path.join(projectPath, 'postcss.config.js'), postcssConfig);
+          fs.writeFileSync(path.join(projectPath, 'postcss.config.js'), postcssConfig);
+          
+          updatedPackageJson.devDependencies['tailwindcss'] = '^3.4.1';
+          updatedPackageJson.devDependencies['postcss'] = '^8.4.35';
+          updatedPackageJson.devDependencies['autoprefixer'] = '^10.4.17';
+          
+          updatedPackageJson.scripts['build:css'] = 'tailwindcss -i ./src/input.css -o ./public/css/style.css --minify';
+          updatedPackageJson.scripts['watch:css'] = 'tailwindcss -i ./src/input.css -o ./public/css/style.css --watch';
+        }
         
-        // Create public/css directory
-        fs.mkdirSync(path.join(projectPath, 'public', 'css'), { recursive: true });
-        
-        // Create placeholder CSS (will be replaced by build)
-        fs.writeFileSync(path.join(projectPath, 'public', 'css', 'style.css'), '/* Run npm run build:css */\n');
-        
-        // Update package.json
-        const updatedPackageJson = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf-8'));
-        updatedPackageJson.devDependencies = updatedPackageJson.devDependencies || {};
-        updatedPackageJson.devDependencies['tailwindcss'] = '^3.4.1';
-        updatedPackageJson.devDependencies['postcss'] = '^8.4.35';
-        updatedPackageJson.devDependencies['autoprefixer'] = '^10.4.17';
-        
-        updatedPackageJson.scripts['build:css'] = 'tailwindcss -i ./src/input.css -o ./public/css/style.css --minify';
-        updatedPackageJson.scripts['watch:css'] = 'tailwindcss -i ./src/input.css -o ./public/css/style.css --watch';
         updatedPackageJson.scripts.dev = 'webspresso dev';
         updatedPackageJson.scripts.start = 'npm run build:css && NODE_ENV=production node server.js';
         
@@ -718,7 +735,7 @@ module.exports = {
           JSON.stringify(updatedPackageJson, null, 2) + '\n'
         );
         
-        console.log('✅ Tailwind CSS setup complete!');
+        console.log(`✅ Tailwind CSS ${isV4 ? 'v4' : 'v3'} setup complete!`);
       }
 
       // Scaffold AI Agent guidelines unless --no-agents is specified

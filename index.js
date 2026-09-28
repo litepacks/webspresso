@@ -210,5 +210,14 @@ Object.defineProperties(module.exports, {
 
   // Schema-driven CMS core (framework-agnostic)
   content: { get: () => require('./core/content'), enumerable: true, configurable: true },
+
+  // Dev live reload & bundler
+  createDevReloadHub: { get: () => require('./src/dev-reload').createDevReloadHub, enumerable: true, configurable: true },
+  createDevBundler: { get: () => require('./src/bundle').createDevBundler, enumerable: true, configurable: true },
+  buildBundle: { get: () => require('./src/bundle').buildBundle, enumerable: true, configurable: true },
+  generateManifest: { get: () => require('./src/bundle').generateManifest, enumerable: true, configurable: true },
+  createManifestPlugin: { get: () => require('./src/bundle').createManifestPlugin, enumerable: true, configurable: true },
+  findDefaultEntryPoints: { get: () => require('./src/bundle').findDefaultEntryPoints, enumerable: true, configurable: true },
+  findPageEntryPoints: { get: () => require('./src/bundle').findPageEntryPoints, enumerable: true, configurable: true },
 });
 

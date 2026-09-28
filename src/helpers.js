@@ -32,6 +32,21 @@ class AssetManager {
     this.version = options.version || null;
     this.prefix = options.prefix || '';
     
+    // Auto-detect manifest if not explicitly provided
+    if (!this.manifestPath) {
+      const candidates = [
+        path.join(this.publicDir, 'dist', 'manifest.json'),
+        path.join(this.publicDir, 'manifest.json'),
+        path.join(this.publicDir, '.vite', 'manifest.json'),
+      ];
+      for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+          this.manifestPath = candidate;
+          break;
+        }
+      }
+    }
+
     // Load manifest if path provided
     if (this.manifestPath) {
       this.loadManifest();
@@ -65,16 +80,35 @@ class AssetManager {
     
     // Check manifest first
     if (this.manifest) {
-      // Vite manifest format
-      if (this.manifest[lookupPath]) {
-        const entry = this.manifest[lookupPath];
-        const resolved = typeof entry === 'string' ? entry : entry.file;
-        return this.prefix + '/' + resolved;
+      // 1. Direct match with lookupPath or assetPath
+      let entry = this.manifest[lookupPath] || this.manifest[assetPath];
+
+      // 2. Flexible fallback: match by basename or trailing path
+      if (!entry) {
+        const baseName = path.basename(lookupPath);
+        for (const [key, val] of Object.entries(this.manifest)) {
+          if (
+            key === baseName ||
+            path.basename(key) === baseName ||
+            key.endsWith('/' + lookupPath) ||
+            lookupPath.endsWith('/' + key)
+          ) {
+            entry = val;
+            break;
+          }
+        }
       }
-      
-      // Webpack manifest format (direct mapping)
-      if (this.manifest[assetPath]) {
-        return this.prefix + this.manifest[assetPath];
+
+      if (entry) {
+        // Webpack string format (e.g. "/dist/app.xyz789.js")
+        if (typeof entry === 'string') {
+          return this.prefix + entry;
+        }
+        // Vite / esbuild metafile format (e.g. { file: "assets/app-xyz789.js" })
+        if (entry.file) {
+          const file = entry.file.startsWith('/') ? entry.file : '/' + entry.file;
+          return this.prefix ? (this.prefix + file).replace(/\/+/g, '/') : file;
+        }
       }
     }
     
@@ -135,6 +169,86 @@ class AssetManager {
     return `<img ${attrs}>`;
   }
   
+  /**
+   * Resolve page-specific JS script URL
+   * @param {string} name - Page name (e.g. 'home', 'checkout', 'pages/home.js')
+   * @returns {string} Resolved script URL
+   */
+  pageJsUrl(name) {
+    let clean = String(name || '').trim().replace(/^\/+/, '');
+    if (!clean.endsWith('.js') && !clean.endsWith('.mjs')) {
+      clean += '.js';
+    }
+    let pagePath = clean;
+    if (!pagePath.startsWith('pages/') && !pagePath.startsWith('dist/')) {
+      pagePath = 'pages/' + pagePath;
+    }
+    if (this.manifest) {
+      if (this.manifest[pagePath] || this.manifest['js/' + pagePath]) {
+        return this.resolve(pagePath);
+      }
+    }
+    const devPath = pagePath.startsWith('js/') ? pagePath : 'js/' + pagePath;
+    return this.resolve(devPath);
+  }
+
+  /**
+   * Generate page-specific JS script tag
+   * Resolves pages/<name>.js with defer attribute by default
+   * @param {string} name - Page name (e.g. 'home', 'checkout', 'pages/checkout.js')
+   * @param {Object} [attributes={}] - Additional HTML attributes (e.g. { type: 'module' })
+   * @returns {string} Script tag
+   */
+  pageJs(name, attributes = {}) {
+    const resolvedUrl = this.pageJsUrl(name);
+    const attrs = this.buildAttributes({
+      src: resolvedUrl,
+      defer: true,
+      ...attributes,
+    });
+    return `<script ${attrs}></script>`;
+  }
+
+  /**
+   * Resolve page-specific CSS stylesheet URL
+   * @param {string} name - Page name (e.g. 'home', 'checkout', 'pages/home.css')
+   * @returns {string} Resolved stylesheet URL
+   */
+  pageCssUrl(name) {
+    let clean = String(name || '').trim().replace(/^\/+/, '');
+    if (!clean.endsWith('.css')) {
+      clean += '.css';
+    }
+    let pagePath = clean;
+    if (!pagePath.startsWith('pages/') && !pagePath.startsWith('dist/')) {
+      pagePath = 'pages/' + pagePath;
+    }
+    if (this.manifest) {
+      if (this.manifest[pagePath] || this.manifest['css/' + pagePath]) {
+        return this.resolve(pagePath);
+      }
+    }
+    const devPath = pagePath.startsWith('css/') ? pagePath : 'css/' + pagePath;
+    return this.resolve(devPath);
+  }
+
+  /**
+   * Generate page-specific CSS link tag
+   * Resolves pages/<name>.css
+   * @param {string} name - Page name (e.g. 'home', 'checkout', 'pages/checkout.css')
+   * @param {Object} [attributes={}] - Additional HTML attributes
+   * @returns {string} Link tag
+   */
+  pageCss(name, attributes = {}) {
+    const resolvedUrl = this.pageCssUrl(name);
+    const attrs = this.buildAttributes({
+      rel: 'stylesheet',
+      href: resolvedUrl,
+      ...attributes,
+    });
+    return `<link ${attrs}>`;
+  }
+
   /**
    * Build HTML attributes string
    */
@@ -458,6 +572,54 @@ function createHelpers(ctx) {
      */
     img(src, alt = '', attrs = {}) {
       return getAssetManager().img(src, alt, attrs);
+    },
+
+    /**
+     * Generate Dev Live/Hot Reload script tag in development mode
+     * @returns {string} Script tag or empty string
+     */
+    devReload() {
+      const isDev = process.env.NODE_ENV !== 'production';
+      if (!isDev) return '';
+      return '<script defer src="/__webspresso/dev-reload.js"></script>';
+    },
+
+    /**
+     * Generate page-specific JS script tag
+     * @param {string} name - Page name (e.g. 'home', 'checkout', 'pages/checkout.js')
+     * @param {Object} [attrs={}] - Additional HTML attributes
+     * @returns {string}
+     */
+    pageJs(name, attrs = {}) {
+      return getAssetManager().pageJs(name, attrs);
+    },
+
+    /**
+     * Resolve page-specific JS script URL
+     * @param {string} name - Page name
+     * @returns {string}
+     */
+    pageJsUrl(name) {
+      return getAssetManager().pageJsUrl(name);
+    },
+
+    /**
+     * Generate page-specific CSS link tag
+     * @param {string} name - Page name (e.g. 'home', 'checkout', 'pages/checkout.css')
+     * @param {Object} [attrs={}] - Additional HTML attributes
+     * @returns {string}
+     */
+    pageCss(name, attrs = {}) {
+      return getAssetManager().pageCss(name, attrs);
+    },
+
+    /**
+     * Resolve page-specific CSS stylesheet URL
+     * @param {string} name - Page name
+     * @returns {string}
+     */
+    pageCssUrl(name) {
+      return getAssetManager().pageCssUrl(name);
     },
 
     /**
@@ -1073,6 +1235,28 @@ const utils = {
 
   isProd() {
     return process.env.NODE_ENV === 'production';
+  },
+
+  devReload() {
+    const isDev = process.env.NODE_ENV !== 'production';
+    if (!isDev) return '';
+    return '<script defer src="/__webspresso/dev-reload.js"></script>';
+  },
+
+  pageJs(name, attrs = {}) {
+    return getAssetManager().pageJs(name, attrs);
+  },
+
+  pageJsUrl(name) {
+    return getAssetManager().pageJsUrl(name);
+  },
+
+  pageCss(name, attrs = {}) {
+    return getAssetManager().pageCss(name, attrs);
+  },
+
+  pageCssUrl(name) {
+    return getAssetManager().pageCssUrl(name);
   }
 };
 

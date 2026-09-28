@@ -1,3 +1,203 @@
+// Helper to extract custom actions for a model
+function getModelActions(modelName, modelMeta) {
+  const fromMeta = Array.isArray(modelMeta?.actions) ? modelMeta.actions : [];
+  const fromConfig = Array.isArray(window.__ADMIN_CONFIG__?.actions)
+    ? window.__ADMIN_CONFIG__.actions.filter(a => {
+        if (!a.models || a.models === '*') return true;
+        if (Array.isArray(a.models)) return a.models.includes(modelName);
+        return a.models === modelName;
+      })
+    : [];
+
+  const map = new Map();
+  for (const a of fromConfig) map.set(a.id, a);
+  for (const a of fromMeta) map.set(a.id, a);
+  return Array.from(map.values());
+}
+
+// Helper to extract custom bulk actions for a model
+function getModelBulkActions(modelName, modelMeta) {
+  const fromMeta = Array.isArray(modelMeta?.bulkActions) ? modelMeta.bulkActions : [];
+  const fromConfig = Array.isArray(window.__ADMIN_CONFIG__?.bulkActions)
+    ? window.__ADMIN_CONFIG__.bulkActions.filter(a => {
+        if (a.id === 'bulk-delete' || a.id === 'bulk-restore' || a.id === 'bulk-update') return false;
+        if (!a.models || a.models === '*') return true;
+        if (Array.isArray(a.models)) return a.models.includes(modelName);
+        return a.models === modelName;
+      })
+    : [];
+
+  const map = new Map();
+  for (const a of fromConfig) map.set(a.id, a);
+  for (const a of fromMeta) map.set(a.id, a);
+  return Array.from(map.values());
+}
+
+// Evaluate condition whether an action should be shown for a record
+function shouldShowAction(action, record) {
+  if (!action || !action.showWhen) return true;
+  if (!record) return true;
+  if (typeof action.showWhen === 'function') {
+    try {
+      return !!action.showWhen(record);
+    } catch (e) {
+      return false;
+    }
+  }
+  if (typeof action.showWhen === 'object' && action.showWhen !== null) {
+    return Object.entries(action.showWhen).every(([k, v]) => record[k] === v);
+  }
+  return true;
+}
+
+// Render icon for actions (SVG string or common icon names)
+function renderActionIcon(icon) {
+  if (!icon) return null;
+  if (typeof icon === 'string' && (icon.startsWith('<svg') || icon.includes('</svg>'))) {
+    return m.trust(icon);
+  }
+  const iconPaths = {
+    check: 'M5 13l4 4L19 7',
+    copy: 'M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z',
+    duplicate: 'M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z',
+    play: 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z',
+    refresh: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
+    eye: 'M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z',
+    trash: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
+    archive: 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4',
+    mail: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+    star: 'M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z',
+  };
+  const pathD = iconPaths[icon];
+  if (pathD) {
+    return m('svg.w-3.5.h-3.5', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+      m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: pathD })
+    );
+  }
+  return m('span.text-xs', icon);
+}
+
+function getActionColorClass(color) {
+  switch (color) {
+    case 'green':
+      return 'text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-950/40';
+    case 'red':
+      return 'text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/40';
+    case 'blue':
+    case 'indigo':
+      return 'text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40';
+    case 'amber':
+    case 'yellow':
+      return 'text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40';
+    case 'purple':
+    case 'violet':
+      return 'text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/40';
+    default:
+      return 'text-gray-600 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-700/60';
+  }
+}
+
+function getBulkActionColorClass(color) {
+  switch (color) {
+    case 'green':
+      return 'text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-950/40';
+    case 'red':
+      return 'text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/40';
+    case 'blue':
+    case 'indigo':
+      return 'text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40';
+    case 'amber':
+    case 'yellow':
+      return 'text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/40';
+    case 'purple':
+    case 'violet':
+      return 'text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/40';
+    default:
+      return 'text-gray-700 dark:text-slate-300 border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700/40';
+  }
+}
+
+async function executeRecordAction(action, record, modelName, modelMeta, onSuccess) {
+  if (action.confirm) {
+    const msg = action.confirmMessage || ('Are you sure you want to perform "' + action.label + '"?');
+    const isConfirmed = (typeof window !== 'undefined' && window.Admin && typeof window.Admin.confirm === 'function')
+      ? await window.Admin.confirm({ title: action.label, message: msg, danger: action.color === 'red' })
+      : confirm(msg);
+    if (!isConfirmed) return;
+  }
+  const primaryKey = modelMeta?.primaryKey || 'id';
+  const recId = record[primaryKey];
+  const busyKey = action.id + '-' + recId;
+  state.actionInProgress = busyKey;
+  m.redraw();
+  try {
+    const res = await api.post('/extensions/actions/' + action.id + '/' + modelName + '/' + recId);
+    const msg = res?.result?.message || res?.message;
+    if (msg) {
+      if (typeof window !== 'undefined' && window.Admin && typeof window.Admin.toast === 'function') {
+        window.Admin.toast.success(msg);
+      } else {
+        alert(msg);
+      }
+    }
+    if (typeof onSuccess === 'function') {
+      await onSuccess(res);
+    } else if (typeof loadRecords === 'function' && state.pagination) {
+      loadRecords(modelName, state.pagination.page);
+    }
+  } catch (err) {
+    const errText = 'Action failed: ' + (err.message || err);
+    if (typeof window !== 'undefined' && window.Admin && typeof window.Admin.toast === 'function') {
+      window.Admin.toast.error(errText);
+    } else {
+      alert(errText);
+    }
+  } finally {
+    state.actionInProgress = null;
+    m.redraw();
+  }
+}
+
+async function executeBulkAction(action, modelName, modelMeta) {
+  const count = state.selectAllMode ? state.pagination.total : state.selectedRecords.size;
+  if (action.confirm) {
+    const msg = action.confirmMessage || ('Perform "' + action.label + '" on ' + count + ' records?');
+    const isConfirmed = (typeof window !== 'undefined' && window.Admin && typeof window.Admin.confirm === 'function')
+      ? await window.Admin.confirm({ title: action.label, message: msg, danger: action.color === 'red' })
+      : confirm(msg);
+    if (!isConfirmed) return;
+  }
+  state.bulkActionInProgress = true;
+  m.redraw();
+  try {
+    const payload = state.selectAllMode
+      ? { selectAll: true, filters: state.filters, trashed: state.trashedView }
+      : { ids: Array.from(state.selectedRecords), trashed: state.trashedView };
+    const res = await api.post('/extensions/bulk-actions/' + action.id + '/' + modelName, payload);
+    state.selectedRecords = new Set();
+    state.selectAllMode = false;
+    loadRecords(modelName, state.pagination.page);
+    if (res?.result?.message || res?.message) {
+      const msg = res.result?.message || res.message;
+      if (typeof window !== 'undefined' && window.Admin && typeof window.Admin.toast === 'function') {
+        window.Admin.toast.success(msg);
+      } else {
+        alert(msg);
+      }
+    }
+  } catch (err) {
+    const errText = 'Bulk action failed: ' + (err.message || err);
+    if (typeof window !== 'undefined' && window.Admin && typeof window.Admin.toast === 'function') {
+      window.Admin.toast.error(errText);
+    } else {
+      alert(errText);
+    }
+  } finally {
+    state.bulkActionInProgress = false;
+    m.redraw();
+  }
+}
+
 // Record List Component - displays records with dynamic columns
 const RecordList = {
   oninit(vnode) {
@@ -25,8 +225,10 @@ const RecordList = {
   view: (vnode) => {
     const modelName = m.route.param('model');
     const modelMeta = state.currentModelMeta;
-    const displayColumns = modelMeta ? getDisplayColumns(modelMeta.columns) : [];
+    const displayColumns = modelMeta ? getDisplayColumns(modelMeta.columns, modelMeta) : [];
     const primaryKey = modelMeta?.primaryKey || 'id';
+    const customActions = getModelActions(modelName, modelMeta);
+    const customBulkActions = getModelBulkActions(modelName, modelMeta);
     
     // Count active filters
     const activeFilterCount = Object.values(state.filters || {}).filter(filterPayloadIsActive).length;
@@ -155,7 +357,7 @@ const RecordList = {
             ),
             'Import',
           ]) : null,
-          !state.trashedView ? m('button.inline-flex.items-center.gap-2.px-4.py-2.text-sm.font-medium.text-white.bg-indigo-600.rounded-lg.hover:bg-indigo-700.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
+          !state.trashedView && !modelMeta?.readOnly && modelMeta?.permissions?.create !== false ? m('button.inline-flex.items-center.gap-2.px-4.py-2.text-sm.font-medium.text-white.bg-indigo-600.rounded-lg.hover:bg-indigo-700.focus:outline-none.focus:ring-2.focus:ring-indigo-500', {
             onclick: () => {
               state.currentRecord = null;
               state.editing = true;
@@ -283,7 +485,7 @@ const RecordList = {
                       ),
                       'Restore',
                     ])
-                  : m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-red-600.bg-white dark:bg-slate-800.border.border-red-200.rounded.hover:bg-red-50.transition-colors', {
+                  : (!modelMeta?.readOnly && modelMeta?.permissions?.delete !== false ? m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-red-600.bg-white dark:bg-slate-800.border.border-red-200.rounded.hover:bg-red-50.transition-colors', {
                       disabled: state.bulkActionInProgress,
                       onclick: async () => {
                         const count = state.selectAllMode ? state.pagination.total : state.selectedRecords.size;
@@ -310,7 +512,17 @@ const RecordList = {
                         m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' })
                       ),
                       'Delete',
-                    ]),
+                    ]) : null),
+                // Custom bulk actions
+                !state.trashedView && customBulkActions.map(action =>
+                  m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.bg-white.dark:bg-slate-800.border.rounded.transition-colors.' + getBulkActionColorClass(action.color), {
+                    disabled: state.bulkActionInProgress,
+                    onclick: () => executeBulkAction(action, modelName, modelMeta),
+                  }, [
+                    action.icon ? renderActionIcon(action.icon) : null,
+                    action.label,
+                  ])
+                ),
                 !state.trashedView ? m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-blue-600.bg-white dark:bg-slate-800.border.border-blue-200.rounded.hover:bg-blue-50.transition-colors', {
                   disabled: state.bulkActionInProgress,
                   onclick: async () => {
@@ -550,25 +762,48 @@ const RecordList = {
                             },
                           }, 'Restore')
                         : [
+                            // Custom row actions
+                            ...customActions
+                              .filter(action => shouldShowAction(action, record))
+                              .map(action =>
+                                m('button.inline-flex.items-center.px-2.py-1.text-sm.rounded.mr-1.transition-colors.' + getActionColorClass(action.color), {
+                                  disabled: state.actionInProgress === (action.id + '-' + record[primaryKey]),
+                                  onclick: () => executeRecordAction(action, record, modelName, modelMeta),
+                                }, [
+                                  action.icon ? m('span.mr-1', renderActionIcon(action.icon)) : null,
+                                  state.actionInProgress === (action.id + '-' + record[primaryKey]) ? '...' : action.label,
+                                ])
+                              ),
                             m('button.inline-flex.items-center.px-2.py-1.text-sm.text-indigo-600.dark:text-indigo-400.hover:text-indigo-800.dark:hover:text-indigo-300.hover:bg-indigo-50.dark:hover:bg-indigo-950/40.rounded.mr-1.transition-colors', {
                               onclick: () => {
                                 state.currentRecord = record;
                                 state.editing = true;
                                 m.route.set('/models/' + modelName + '/edit/' + record[primaryKey]);
                               },
-                            }, 'Edit'),
-                            m('button.inline-flex.items-center.px-2.py-1.text-sm.text-red-600.dark:text-red-400.hover:text-red-800.dark:hover:text-red-300.hover:bg-red-50.dark:hover:bg-red-950/40.rounded.transition-colors', {
+                            }, modelMeta?.readOnly || modelMeta?.permissions?.edit === false ? 'View' : 'Edit'),
+                            !modelMeta?.readOnly && modelMeta?.permissions?.delete !== false ? m('button.inline-flex.items-center.px-2.py-1.text-sm.text-red-600.dark:text-red-400.hover:text-red-800.dark:hover:text-red-300.hover:bg-red-50.dark:hover:bg-red-950/40.rounded.transition-colors', {
                               onclick: async () => {
-                                if (confirm('Are you sure you want to delete this record?')) {
+                                const isConfirmed = (typeof window !== 'undefined' && window.Admin && typeof window.Admin.confirm === 'function')
+                                  ? await window.Admin.confirm({ title: 'Delete Record', message: 'Are you sure you want to delete this record?', danger: true, confirmText: 'Delete' })
+                                  : confirm('Are you sure you want to delete this record?');
+                                if (isConfirmed) {
                                   try {
                                     await api.delete('/models/' + modelName + '/records/' + record[primaryKey]);
+                                    if (typeof window !== 'undefined' && window.Admin && typeof window.Admin.toast === 'function') {
+                                      window.Admin.toast.success('Record deleted successfully');
+                                    }
                                     loadRecords(modelName, state.pagination.page);
                                   } catch (err) {
-                                    alert('Error: ' + err.message);
+                                    const errMsg = 'Error: ' + err.message;
+                                    if (typeof window !== 'undefined' && window.Admin && typeof window.Admin.toast === 'function') {
+                                      window.Admin.toast.error(errMsg);
+                                    } else {
+                                      alert(errMsg);
+                                    }
                                   }
                                 }
                               },
-                            }, 'Delete'),
+                            }, 'Delete') : null,
                           ],
                     ]),
                   ])

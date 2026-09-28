@@ -25,6 +25,7 @@ function createApiHandlers(options) {
   const {
     path,
     db,
+    registry,
     AdminUser,
     hashPassword,
     comparePassword,
@@ -258,6 +259,11 @@ function createApiHandlers(options) {
             primaryKey: model.primaryKey,
             columns: Array.from(model.columns.keys()),
             relations: Object.keys(model.relations),
+            group: model.admin.group || null,
+            readOnly: model.admin.readOnly === true,
+            permissions: model.admin.permissions || null,
+            displayField: model.admin.displayField || null,
+            defaultSort: model.admin.defaultSort || null,
           });
         }
       }
@@ -311,6 +317,7 @@ function isColumnSortable(name, meta, model) {
       const columns = [];
       for (const [name, meta] of model.columns) {
         const isHidden = hiddenSet.has(name);
+        const colAdminConfig = model.admin.columns?.[name] || null;
         columns.push({
           name,
           type: meta.type,
@@ -327,6 +334,7 @@ function isColumnSortable(name, meta, model) {
           ui: meta.ui ? { ...meta.ui, hidden: isHidden || meta.ui.hidden } : (isHidden ? { hidden: true } : null),
           hidden: isHidden, // Excluded from list display and API responses
           sortable: isColumnSortable(name, meta, model),
+          badge: colAdminConfig?.badge || meta.badge || model.admin.customFields?.[name]?.badge || null,
         });
       }
 
@@ -340,6 +348,48 @@ function isColumnSortable(name, meta, model) {
         relations: Object.keys(model.relations),
         queries: Object.keys(model.admin.queries || {}),
         softDelete: !!model.scopes?.softDelete,
+        listColumns: model.admin.listColumns || null,
+        searchFields: model.admin.searchFields || null,
+        displayField: model.admin.displayField || null,
+        readOnly: model.admin.readOnly === true,
+        permissions: model.admin.permissions || null,
+        defaultSort: model.admin.defaultSort || null,
+        group: model.admin.group || null,
+        columnsConfig: model.admin.columns || null,
+        relationsConfig: model.admin.relations || null,
+        actions: [
+          ...(registry && typeof registry.getActionsForModel === 'function' ? registry.getActionsForModel(model.name) : []),
+          ...(Array.isArray(model.admin.actions) ? model.admin.actions : []),
+        ].reduce((acc, a) => {
+          if (!acc.some(x => x.id === a.id)) {
+            acc.push({
+              id: a.id,
+              label: a.label,
+              icon: a.icon || null,
+              color: a.color || 'gray',
+              confirm: a.confirm === true,
+              confirmMessage: a.confirmMessage || null,
+              showWhen: typeof a.showWhen === 'object' && a.showWhen !== null ? a.showWhen : null,
+            });
+          }
+          return acc;
+        }, []),
+        bulkActions: [
+          ...(registry && typeof registry.getBulkActionsForModel === 'function' ? registry.getBulkActionsForModel(model.name) : []),
+          ...(Array.isArray(model.admin.bulkActions) ? model.admin.bulkActions : []),
+        ].reduce((acc, a) => {
+          if (!acc.some(x => x.id === a.id)) {
+            acc.push({
+              id: a.id,
+              label: a.label,
+              icon: a.icon || null,
+              color: a.color || 'gray',
+              confirm: a.confirm !== false,
+              confirmMessage: a.confirmMessage || null,
+            });
+          }
+          return acc;
+        }, []),
       });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -477,12 +527,17 @@ function isColumnSortable(name, meta, model) {
         }
       }
 
-      // Legacy search support (backward compatibility)
+      // Search support (respects model.admin.searchFields if configured, falls back to string columns)
       if (req.query.search) {
         const searchTerm = `%${req.query.search}%`;
-        const stringColumns = Array.from(model.columns.entries())
-          .filter(([_, meta]) => meta.type === 'string' || meta.type === 'text' || meta.type === 'file')
-          .map(([name]) => name);
+        let stringColumns;
+        if (Array.isArray(model.admin.searchFields) && model.admin.searchFields.length > 0) {
+          stringColumns = model.admin.searchFields.filter((colName) => model.columns.has(colName));
+        } else {
+          stringColumns = Array.from(model.columns.entries())
+            .filter(([_, meta]) => meta.type === 'string' || meta.type === 'text' || meta.type === 'file')
+            .map(([name]) => name);
+        }
 
         if (stringColumns.length > 0) {
           query = query.where(function() {
@@ -515,16 +570,20 @@ function isColumnSortable(name, meta, model) {
       // Apply sorting
       const primaryKey = model.primaryKey || 'id';
       const sortParam = req.query.sort;
-      const orderParam = (req.query.order || 'desc').toLowerCase();
-      const sortOrder = orderParam === 'asc' ? 'asc' : 'desc';
+      const orderParam = (req.query.order || req.query.direction || '').toLowerCase();
 
       if (sortParam && model.columns.has(sortParam)) {
+        const sortOrder = orderParam === 'asc' ? 'asc' : 'desc';
         const colMeta = model.columns.get(sortParam);
         if (isColumnSortable(sortParam, colMeta, model)) {
           query = query.orderBy(sortParam, sortOrder);
         } else {
           query = query.orderBy(primaryKey, 'desc');
         }
+      } else if (model.admin.defaultSort && model.admin.defaultSort.column && model.columns.has(model.admin.defaultSort.column)) {
+        const defCol = model.admin.defaultSort.column;
+        const defOrder = (model.admin.defaultSort.order || model.admin.defaultSort.direction || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+        query = query.orderBy(defCol, defOrder);
       } else {
         query = query.orderBy(primaryKey, 'desc');
       }
@@ -565,9 +624,14 @@ function isColumnSortable(name, meta, model) {
         return res.status(404).json({ error: 'Record not found' });
       }
 
+      if (registry && typeof registry.runHooks === 'function') {
+        await registry.runHooks('onRecordView', { model: model.name, id, record, req, user: req.session?.adminUser, db });
+      }
+
       res.json({ data: sanitizeForOutput(record, model) });
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      const statusCode = error.statusCode || error.status || 500;
+      res.status(statusCode).json({ error: error.message });
     }
   }
 
@@ -609,7 +673,18 @@ function isColumnSortable(name, meta, model) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
+      if (model.admin.readOnly === true) {
+        return res.status(403).json({ error: `Model "${model.name}" is read-only` });
+      }
+      if (model.admin.permissions?.create === false) {
+        return res.status(403).json({ error: `Creation is disabled for model "${model.name}"` });
+      }
+
       mutateRichTextFieldsInBody(req.body, model);
+
+      if (registry && typeof registry.runHooks === 'function') {
+        await registry.runHooks('beforeCreate', { model: model.name, data: req.body, req, user: req.session?.adminUser, db });
+      }
 
       // Validate rich-text fields
       for (const [colName, colMeta] of model.columns) {
@@ -627,10 +702,15 @@ function isColumnSortable(name, meta, model) {
       const repo = db.getRepository(model.name);
       const record = await repo.create(req.body);
 
+      if (registry && typeof registry.runHooks === 'function') {
+        await registry.runHooks('afterCreate', { model: model.name, record, data: req.body, req, user: req.session?.adminUser, db });
+      }
+
       res.status(201).json({ data: sanitizeForOutput(record, model) });
     } catch (error) {
       const fields = extractValidationErrors(error);
-      res.status(400).json({ error: error.message, ...(fields ? { fields } : {}) });
+      const statusCode = error.statusCode || error.status || (error.name === 'ForbiddenError' ? 403 : error.name === 'NotFoundError' ? 404 : 400);
+      res.status(statusCode).json({ error: error.message, ...(fields ? { fields } : {}) });
     }
   }
 
@@ -646,7 +726,18 @@ function isColumnSortable(name, meta, model) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
+      if (model.admin.readOnly === true) {
+        return res.status(403).json({ error: `Model "${model.name}" is read-only` });
+      }
+      if (model.admin.permissions?.edit === false) {
+        return res.status(403).json({ error: `Editing is disabled for model "${model.name}"` });
+      }
+
       mutateRichTextFieldsInBody(req.body, model);
+
+      if (registry && typeof registry.runHooks === 'function') {
+        await registry.runHooks('beforeUpdate', { model: model.name, id, data: req.body, req, user: req.session?.adminUser, db });
+      }
 
       // Validate rich-text fields (only if field is being updated)
       for (const [colName, colMeta] of model.columns) {
@@ -668,10 +759,15 @@ function isColumnSortable(name, meta, model) {
         return res.status(404).json({ error: 'Record not found' });
       }
 
+      if (registry && typeof registry.runHooks === 'function') {
+        await registry.runHooks('afterUpdate', { model: model.name, id, record, data: req.body, req, user: req.session?.adminUser, db });
+      }
+
       res.json({ data: sanitizeForOutput(record, model) });
     } catch (error) {
       const fields = extractValidationErrors(error);
-      res.status(400).json({ error: error.message, ...(fields ? { fields } : {}) });
+      const statusCode = error.statusCode || error.status || (error.name === 'ForbiddenError' ? 403 : error.name === 'NotFoundError' ? 404 : 400);
+      res.status(statusCode).json({ error: error.message, ...(fields ? { fields } : {}) });
     }
   }
 
@@ -687,6 +783,17 @@ function isColumnSortable(name, meta, model) {
         return res.status(404).json({ error: 'Model not found or not enabled' });
       }
 
+      if (model.admin.readOnly === true) {
+        return res.status(403).json({ error: `Model "${model.name}" is read-only` });
+      }
+      if (model.admin.permissions?.delete === false) {
+        return res.status(403).json({ error: `Deletion is disabled for model "${model.name}"` });
+      }
+
+      if (registry && typeof registry.runHooks === 'function') {
+        await registry.runHooks('beforeDelete', { model: model.name, id, req, user: req.session?.adminUser, db });
+      }
+
       const repo = db.getRepository(model.name);
       const deleted = await repo.delete(id);
 
@@ -694,9 +801,14 @@ function isColumnSortable(name, meta, model) {
         return res.status(404).json({ error: 'Record not found' });
       }
 
+      if (registry && typeof registry.runHooks === 'function') {
+        await registry.runHooks('afterDelete', { model: model.name, id, req, user: req.session?.adminUser, db });
+      }
+
       res.json({ success: true });
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      const statusCode = error.statusCode || error.status || (error.name === 'ForbiddenError' ? 403 : 500);
+      res.status(statusCode).json({ error: error.message });
     }
   }
 
@@ -716,6 +828,10 @@ function isColumnSortable(name, meta, model) {
         return res.status(400).json({ error: 'Model does not support soft delete' });
       }
 
+      if (registry && typeof registry.runHooks === 'function') {
+        await registry.runHooks('beforeRestore', { model: model.name, id, req, user: req.session?.adminUser, db });
+      }
+
       const repo = db.getRepository(model.name);
       const record = await repo.restore(id);
 
@@ -723,14 +839,19 @@ function isColumnSortable(name, meta, model) {
         return res.status(404).json({ error: 'Record not found in trash' });
       }
 
+      if (registry && typeof registry.runHooks === 'function') {
+        await registry.runHooks('afterRestore', { model: model.name, id, record, req, user: req.session?.adminUser, db });
+      }
+
       res.json({ success: true, data: sanitizeForOutput(record, model) });
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      const statusCode = error.statusCode || error.status || (error.name === 'ForbiddenError' ? 403 : 500);
+      res.status(statusCode).json({ error: error.message });
     }
   }
 
   /**
-   * Get relation data
+   * Get relation data (with search, pagination, projection, and selected item inclusion)
    */
   async function relationHandler(req, res) {
     try {
@@ -746,13 +867,133 @@ function isColumnSortable(name, meta, model) {
         return res.status(404).json({ error: 'Relation not found' });
       }
 
-      const relatedModel = relation.model();
+      const rawRelatedModel = typeof relation.model === 'function' ? relation.model() : relation.model;
+      const relatedModel = typeof rawRelatedModel === 'string' ? getModelFromDb(rawRelatedModel) : rawRelatedModel;
+      if (!relatedModel) {
+        return res.status(404).json({ error: 'Related model not found' });
+      }
       const relatedRepo = db.getRepository(relatedModel.name);
 
-      // Get all related records (for dropdown/select)
-      const records = await relatedRepo.findAll();
+      const relationConfig = model.admin?.relations?.[relationName] || {};
+      let displayField = relationConfig.displayField || relatedModel.admin?.displayField || null;
+      const primaryKey = relatedModel.primaryKey || 'id';
+      const searchFields = relationConfig.searchFields || relatedModel.admin?.searchFields || null;
 
-      res.json({ data: sanitizeForOutput(records, relatedModel) });
+      if (!displayField && relatedModel.columns) {
+        const candidate = ['name', 'title', 'label', 'username', 'email', 'slug'].find(c => relatedModel.columns.has(c));
+        if (candidate) {
+          displayField = candidate;
+        }
+      }
+
+      const search = (req.query.search || req.query.q || '').trim();
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const defaultLimit = typeof relationConfig.limit === 'number' && relationConfig.limit > 0 ? relationConfig.limit : 50;
+      const limit = Math.min(200, Math.max(1, parseInt(req.query.limit || req.query.perPage, 10) || defaultLimit));
+      const isAll = req.query.all === 'true' || req.query.all === true;
+      const selectedId = req.query.selected || req.query.includeId || null;
+
+      let selectColumns = null;
+      if (displayField && relatedModel.columns) {
+        const cols = new Set([primaryKey]);
+        if (relatedModel.columns.has(displayField)) {
+          cols.add(displayField);
+        }
+        if (Array.isArray(searchFields)) {
+          for (const sf of searchFields) {
+            if (relatedModel.columns.has(sf)) cols.add(sf);
+          }
+        }
+        selectColumns = Array.from(cols);
+      }
+
+      let query = relatedRepo.query();
+      let countQuery = relatedRepo.query();
+
+      // Apply search filter if provided
+      if (search && relatedModel.columns) {
+        const searchTerm = `%${search}%`;
+        let targetSearchCols = [];
+        if (Array.isArray(searchFields) && searchFields.length > 0) {
+          targetSearchCols = searchFields.filter(col => relatedModel.columns.has(col));
+        } else if (displayField && relatedModel.columns.has(displayField)) {
+          targetSearchCols = [displayField];
+        } else {
+          targetSearchCols = Array.from(relatedModel.columns.entries())
+            .filter(([_, meta]) => meta.type === 'string' || meta.type === 'text')
+            .map(([name]) => name);
+        }
+
+        if (targetSearchCols.length > 0) {
+          const filterFn = function() {
+            for (let i = 0; i < targetSearchCols.length; i++) {
+              if (i === 0) {
+                this.where(targetSearchCols[i], 'like', searchTerm);
+              } else {
+                this.orWhere(targetSearchCols[i], 'like', searchTerm);
+              }
+            }
+          };
+          query = query.where(filterFn);
+          countQuery = countQuery.where(filterFn);
+        }
+      }
+
+      // Count total matches
+      const total = await countQuery.count();
+
+      // Ordering
+      if (displayField && relatedModel.columns?.has(displayField)) {
+        query = query.orderBy(displayField, 'asc');
+      } else {
+        query = query.orderBy(primaryKey, 'desc');
+      }
+
+      // Pagination
+      if (isAll) {
+        query = query.limit(1000);
+      } else {
+        const offset = (page - 1) * limit;
+        query = query.offset(offset).limit(limit);
+      }
+
+      if (selectColumns && selectColumns.length > 0) {
+        query = query.select(selectColumns);
+      }
+
+      let records = await query.list();
+
+      // If selectedId was requested and is not present in the current paginated list, include it
+      if (selectedId !== null && selectedId !== undefined && selectedId !== '') {
+        const hasSelected = records.some(r => String(r[primaryKey]) === String(selectedId));
+        if (!hasSelected) {
+          try {
+            const findOpts = selectColumns && selectColumns.length > 0 ? { select: selectColumns } : {};
+            const selectedRecord = await relatedRepo.findById(selectedId, findOpts);
+            if (selectedRecord) {
+              records = [selectedRecord, ...records];
+            }
+          } catch (_) {
+            // Ignore if invalid ID format
+          }
+        }
+      }
+
+      const totalPages = isAll ? 1 : Math.ceil(total / limit);
+      const hasMore = isAll ? false : (page * limit < total);
+
+      res.json({
+        data: sanitizeForOutput(records, relatedModel),
+        displayField,
+        primaryKey,
+        pagination: {
+          page,
+          limit: isAll ? total : limit,
+          total,
+          totalPages,
+          hasMore,
+        },
+      });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

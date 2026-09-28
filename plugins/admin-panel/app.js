@@ -243,7 +243,6 @@ var routes = {
 
 function wrapCustomPageWithLayout(page, rawComp) {
   if (!rawComp) return createCustomPage(page);
-  if (page.layout === false) return rawComp;
 
   return {
     oninit: function(vnode) {
@@ -293,14 +292,15 @@ function wrapCustomPageWithLayout(page, rawComp) {
     view: function(vnode) {
       if (vnode.state.renderError) {
         var err = vnode.state.renderError;
-        var breadcrumbs = [{ label: page.title, href: page.path }];
-        return m(Layout, [
-          m(Breadcrumb, { items: breadcrumbs }),
-          m('.p-6.bg-red-50.border.border-red-200.rounded-xl', [
-            m('h3.text-lg.font-semibold.text-red-800', 'Sayfa Yüklenirken Hata Oluştu'),
-            m('p.text-sm.text-red-600.mt-1', err.message || String(err)),
-          ])
-        ]);
+        return typeof renderCustomPageError === 'function'
+          ? renderCustomPageError(page, err)
+          : m(Layout, [
+              m(Breadcrumb, { items: [{ label: page.title, href: page.path }] }),
+              m('.p-6.bg-red-50.border.border-red-200.rounded-xl', [
+                m('h3.text-lg.font-semibold.text-red-800', 'Custom Page Component Error'),
+                m('p.text-sm.text-red-600.mt-1', err.message || String(err)),
+              ])
+            ]);
       }
       const comp = vnode.state.instance || rawComp;
       var content;
@@ -314,11 +314,25 @@ function wrapCustomPageWithLayout(page, rawComp) {
         }
       } catch (err) {
         console.error('[Admin Panel] Error rendering custom page "' + page.id + '":', err);
-        content = m('.p-6.bg-red-50.border.border-red-200.rounded-xl', [
-          m('h3.text-lg.font-semibold.text-red-800', 'Sayfa Çizilirken Hata Oluştu'),
-          m('p.text-sm.text-red-600.mt-1', err.message || String(err)),
+        return typeof renderCustomPageError === 'function'
+          ? renderCustomPageError(page, err)
+          : m(Layout, [
+              m(Breadcrumb, { items: [{ label: page.title, href: page.path }] }),
+              m('.p-6.bg-red-50.border.border-red-200.rounded-xl', [
+                m('h3.text-lg.font-semibold.text-red-800', 'Custom Page Component Error'),
+                m('p.text-sm.text-red-600.mt-1', err.message || String(err)),
+              ])
+            ]);
+      }
+
+      if (page.layout === false) {
+        return m('div.custom-canvas-page', [
+          content,
+          typeof ToastContainer !== 'undefined' ? m(ToastContainer) : null,
+          typeof ConfirmModalContainer !== 'undefined' ? m(ConfirmModalContainer) : null,
         ]);
       }
+
       if (content && (content.tag === Layout || (content.tag && content.tag.name === 'Layout'))) {
         return content;
       }

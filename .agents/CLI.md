@@ -13,8 +13,12 @@ npx webspresso dev
 #   --port, -p <number> (default: 3001)
 #   --host <string> (default: localhost)
 
-# Build production bundle / verify assets
+# Build production bundle / compile assets (Tailwind + esbuild with manifest.json)
 npx webspresso build
+# Flags:
+#   --no-css    (skip CSS build)
+#   --no-js     (skip JS bundle build)
+#   --no-hash   (disable content hashing in filenames)
 ```
 
 ---
@@ -112,4 +116,35 @@ npx webspresso agents:init
 # Overwrite existing guidelines
 npx webspresso agents:init --force
 ```
+
+---
+
+## 8. Tailwind CSS Setup & Migration (`add:tailwind`)
+
+Add or upgrade Tailwind CSS in a project:
+
+```bash
+# Add Tailwind CSS v4 (Oxide engine, LightningCSS, zero-config)
+npx webspresso add tailwind --v4
+
+# Add Tailwind CSS v3 (legacy PostCSS engine)
+npx webspresso add tailwind --v3
+
+# Upgrade existing Tailwind v3 project to v4
+npx webspresso add tailwind --upgrade
+```
+
+---
+
+## 9. Client Bundler Setup (`add:esbuild`)
+
+Add client-side JS/TS bundling with esbuild incremental watching:
+
+```bash
+# Scaffold esbuild client bundler setup
+npx webspresso add esbuild
+# or
+npx webspresso add:esbuild
+```
+
 

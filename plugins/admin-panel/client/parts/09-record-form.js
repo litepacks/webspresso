@@ -179,16 +179,26 @@ const RecordForm = {
     const id = m.route.param('id');
     const isNew = !id || id === 'new';
     const modelMeta = state.currentModelMeta;
+    const isFormReadOnly = modelMeta?.readOnly === true ||
+      (isNew && modelMeta?.permissions?.create === false) ||
+      (!isNew && modelMeta?.permissions?.edit === false);
     
+    const customActions = !isNew && state.currentRecord && typeof getModelActions === 'function'
+      ? getModelActions(modelName, modelMeta).filter(action => typeof shouldShowAction === 'function' ? shouldShowAction(action, state.currentRecord) : true)
+      : [];
+
     const breadcrumbs = [
       { label: modelMeta?.label || modelName, href: '/models/' + modelName },
-      { label: isNew ? 'New' : 'Edit #' + id, href: '#' },
+      { label: isNew ? 'New' : (isFormReadOnly ? 'View #' + id : 'Edit #' + id), href: '#' },
     ];
     
     return m(Layout, { breadcrumbs }, [
       m('.flex.items-center.justify-between.mb-6', [
-        m('h2.text-2xl.font-bold.text-gray-900.dark:text-slate-100', isNew ? 'New Record' : 'Edit Record'),
-        modelMeta ? m('span.text-gray-500.dark:text-slate-400', modelMeta.label || modelMeta.name) : null,
+        m('h2.text-2xl.font-bold.text-gray-900.dark:text-slate-100', isNew ? 'New Record' : (isFormReadOnly ? 'View Record' : 'Edit Record')),
+        m('.flex.items-center.gap-2', [
+          isFormReadOnly ? m('span.px-2.py-0.5.text-xs.font-semibold.rounded.bg-amber-100.text-amber-800.dark:bg-amber-900/40.dark:text-amber-300', 'Read-Only') : null,
+          modelMeta ? m('span.text-gray-500.dark:text-slate-400', modelMeta.label || modelMeta.name) : null,
+        ]),
       ]),
       
       state.loading ? m('p.text-gray-600.dark:text-slate-400', 'Loading...') :
@@ -198,6 +208,7 @@ const RecordForm = {
         style: 'min-height: calc(100vh - 280px);',
         onsubmit: async (e) => {
           e.preventDefault();
+          if (isFormReadOnly) return;
           state.error = null;
           state.fieldErrors = {};
 
@@ -261,6 +272,9 @@ const RecordForm = {
             } else {
               await api.put('/models/' + modelName + '/records/' + id, payload);
             }
+            if (typeof window !== 'undefined' && window.Admin && typeof window.Admin.toast === 'function') {
+              window.Admin.toast.success(isNew ? 'Record created successfully' : 'Record updated successfully');
+            }
             m.route.set('/models/' + modelName);
           } catch (err) {
             state.error = err.message || 'Failed to save record';
@@ -287,12 +301,13 @@ const RecordForm = {
             // Hide hidden fields
             if (col.ui && col.ui.hidden) return null;
             
-            const isReadonly = !!autoType || (col.ui && col.ui.readonly);
+            const isReadonly = isFormReadOnly || !!autoType || (col.ui && col.ui.readonly);
             const renderer = getFieldRenderer(col, modelMeta);
             const value = state.formData[col.name];
             const fieldError = state.fieldErrors ? state.fieldErrors[col.name] : null;
             
             const onChange = (newValue) => {
+              if (isFormReadOnly) return;
               state.formData[col.name] = newValue;
               if (state.fieldErrors && state.fieldErrors[col.name]) {
                 delete state.fieldErrors[col.name];
@@ -304,14 +319,42 @@ const RecordForm = {
         ]),
         
         // Sticky footer buttons
-        m('.flex.gap-4.p-4.border-t.border-gray-200.dark:border-slate-700.bg-gray-50.dark:bg-slate-900.sticky.bottom-0', [
-          m('button.bg-blue-600.dark:bg-blue-500.text-white.px-6.py-2.rounded-lg.hover:bg-blue-700.dark:hover:bg-blue-600.disabled:opacity-50', {
-            type: 'submit',
-            disabled: state.loading,
-          }, state.loading ? 'Saving...' : 'Save'),
-          m('button.bg-gray-200.dark:bg-slate-700.text-gray-800.dark:text-slate-200.px-6.py-2.rounded.hover:bg-gray-300.dark:hover:bg-slate-600[type=button]', {
-            onclick: () => m.route.set('/models/' + modelName),
-          }, 'Cancel'),
+        m('.flex.items-center.justify-between.gap-4.p-4.border-t.border-gray-200.dark:border-slate-700.bg-gray-50.dark:bg-slate-900.sticky.bottom-0', [
+          m('.flex.items-center.gap-3', [
+            isFormReadOnly
+              ? m('button.bg-gray-600.dark:bg-slate-700.text-white.px-6.py-2.rounded-lg.hover:bg-gray-700.dark:hover:bg-slate-600[type=button]', {
+                  onclick: () => m.route.set('/models/' + modelName),
+                }, 'Back')
+              : [
+                  m('button.bg-blue-600.dark:bg-blue-500.text-white.px-6.py-2.rounded-lg.hover:bg-blue-700.dark:hover:bg-blue-600.disabled:opacity-50', {
+                    type: 'submit',
+                    disabled: state.loading,
+                  }, state.loading ? 'Saving...' : 'Save'),
+                  m('button.bg-gray-200.dark:bg-slate-700.text-gray-800.dark:text-slate-200.px-6.py-2.rounded.hover:bg-gray-300.dark:hover:bg-slate-600[type=button]', {
+                    onclick: () => m.route.set('/models/' + modelName),
+                  }, 'Cancel'),
+                ],
+          ]),
+          !isNew && state.currentRecord && customActions.length > 0 ? m('.flex.items-center.gap-2', customActions.map(action => {
+            const isBusy = state.actionInProgress === (action.id + '-' + id);
+            return m('button.px-3.py-2.text-xs.font-medium.rounded-lg.border.flex.items-center.gap-1.5.transition-colors[type=button]', {
+              class: typeof getBulkActionColorClass === 'function' ? getBulkActionColorClass(action.color) : 'text-gray-700 dark:text-slate-300 border-gray-300 dark:border-slate-600',
+              disabled: isBusy || state.loading,
+              title: action.label,
+              onclick: () => executeRecordAction(action, state.currentRecord, modelName, modelMeta, async () => {
+                const refreshed = await api.get('/models/' + modelName + '/records/' + id);
+                if (refreshed?.data) {
+                  state.currentRecord = refreshed.data;
+                  Object.keys(refreshed.data).forEach(key => {
+                    state.formData[key] = refreshed.data[key];
+                  });
+                }
+              }),
+            }, [
+              isBusy ? m('span.inline-block.animate-spin', '⟳') : (action.icon && typeof renderActionIcon === 'function' ? renderActionIcon(action.icon) : null),
+              m('span', action.label),
+            ]);
+          })) : null,
         ]),
       ]),
     ]);

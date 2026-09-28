@@ -215,6 +215,32 @@ function registerCommand(program) {
         warnings += 1;
       }
 
+      console.log('\nTailwind CSS');
+      console.log('------------');
+      const inputCssPath = path.join(cwd, 'src', 'input.css');
+      if (fs.existsSync(inputCssPath)) {
+        let isV4 = false;
+        try {
+          const inputCssContent = fs.readFileSync(inputCssPath, 'utf8');
+          isV4 = inputCssContent.includes('@import "tailwindcss"') || inputCssContent.includes("@import 'tailwindcss'");
+        } catch (_) {}
+
+        if (isV4) {
+          line('✓', 'Tailwind CSS v4 detected (@import "tailwindcss" — Oxide engine, zero-config)');
+        } else {
+          line('✓', 'Tailwind CSS v3 detected (PostCSS / tailwind.config.js)');
+        }
+        const outputCss = path.join(cwd, 'public', 'css', 'style.css');
+        if (fs.existsSync(outputCss)) {
+          line('✓', 'public/css/style.css compiled output present');
+        } else {
+          line('⚠', 'public/css/style.css not found. Run "npm run build:css" to compile stylesheets.');
+          warnings += 1;
+        }
+      } else {
+        line('○', 'No src/input.css found (Tailwind CSS not configured)');
+      }
+
       console.log('\nAI Agent Guidelines');
       console.log('-------------------');
       const agentsMdPath = path.join(cwd, 'AGENTS.md');

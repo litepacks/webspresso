@@ -340,12 +340,16 @@ function createExtensionApiHandlers(options) {
       }
 
       // Execute action
-      const result = await action.handler(record, modelName, {
+      const context = {
         db,
         req,
         user: req.session?.adminUser,
         body: req.body,
-      });
+        model: modelName,
+        modelName,
+      };
+      const modelArg = Object.assign(new String(modelName), context);
+      const result = await action.handler(record, modelArg, context);
 
       res.json({ success: true, result });
     } catch (error) {
@@ -418,12 +422,16 @@ function createExtensionApiHandlers(options) {
       }
 
       // Execute action
-      const result = await action.handler(records, modelName, {
+      const context = {
         db,
         req,
         user: req.session?.adminUser,
         body: req.body,
-      });
+        model: modelName,
+        modelName,
+      };
+      const modelArg = Object.assign(new String(modelName), context);
+      const result = await action.handler(records, modelArg, context);
 
       res.json({ success: true, result, affected: records.length });
     } catch (error) {
@@ -673,6 +681,10 @@ function createExtensionApiHandlers(options) {
             };
           }
         }
+      }
+
+      if (registry && typeof registry.runHooks === 'function') {
+        await registry.runHooks('onDashboardLoad', { stats, req, user: req.session?.adminUser, db });
       }
 
       res.json({ stats });

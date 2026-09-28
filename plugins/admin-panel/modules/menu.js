@@ -10,32 +10,68 @@
  * @param {Object} options.registry - Admin registry
  * @param {Object} options.db - Database instance
  */
-function registerModelMenuItems(options) {
-  const { registry, db } = options;
+function registerModelMenuItems(options, maybeModels) {
+  let registry = options?.registry;
+  let db = options?.db;
+  let models = options?.models;
+
+  if (!registry && options && typeof options.registerMenuItem === 'function') {
+    registry = options;
+  }
+  if (Array.isArray(maybeModels)) {
+    models = maybeModels;
+  }
+
   const { getAllModels } = require('../../../core/orm/model');
 
-  // Get all admin-enabled models
-  const allModels = db.getAllModels ? db.getAllModels() : Array.from(getAllModels().values());
-  const modelList = Array.isArray(allModels) ? allModels : Array.from(allModels.values());
+  let modelList;
+  if (Array.isArray(models)) {
+    modelList = models;
+  } else if (db && typeof db.getAllModels === 'function') {
+    const res = db.getAllModels();
+    modelList = Array.isArray(res) ? res : Array.from(res.values());
+  } else if (getAllModels) {
+    modelList = Array.from(getAllModels().values());
+  } else {
+    modelList = [];
+  }
 
   // Create "Content" menu group for models
-  registry.registerMenuGroup('content', {
-    label: 'Content',
-    icon: 'database',
-    order: 0,
-  });
+  if (registry && typeof registry.registerMenuGroup === 'function') {
+    registry.registerMenuGroup('content', {
+      label: 'Content',
+      icon: 'database',
+      order: 0,
+    });
+  }
 
   // Register menu items for each model
   for (const model of modelList) {
     if (model.admin?.enabled) {
-      registry.registerMenuItem({
-        id: `model-${model.name}`,
-        label: model.admin.label || model.name,
-        path: `/models/${model.name}`,
-        icon: model.admin.icon || 'table',
-        group: 'content',
-        order: model.admin.menuOrder || 10,
-      });
+      let group = 'content';
+      if (model.admin.group) {
+        group = String(model.admin.group).toLowerCase().trim().replace(/\s+/g, '-');
+        const hasGroup = registry.menuGroups && typeof registry.menuGroups.has === 'function'
+          ? registry.menuGroups.has(group)
+          : false;
+        if (!hasGroup && registry && typeof registry.registerMenuGroup === 'function') {
+          registry.registerMenuGroup(group, {
+            label: model.admin.group,
+            icon: 'database',
+            order: model.admin.groupOrder || 50,
+          });
+        }
+      }
+      if (registry && typeof registry.registerMenuItem === 'function') {
+        registry.registerMenuItem({
+          id: `model-${model.name.toLowerCase()}`,
+          label: model.admin.label || model.name,
+          path: `/models/${model.name}`,
+          icon: model.admin.icon || 'table',
+          group,
+          order: model.admin.menuOrder || 10,
+        });
+      }
     }
   }
 }
@@ -481,6 +517,8 @@ const Layout = {
       m(Sidebar),
       m('main.lg:ml-64.p-6.pt-20.lg:pt-6', vnode.children),
       m(VersionUpdateToast),
+      typeof ToastContainer !== 'undefined' ? m(ToastContainer) : null,
+      typeof ConfirmModalContainer !== 'undefined' ? m(ConfirmModalContainer) : null,
     ]);
   },
 };

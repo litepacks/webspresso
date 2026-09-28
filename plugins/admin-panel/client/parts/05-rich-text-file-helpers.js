@@ -459,7 +459,12 @@ function getFieldRenderer(col, modelMeta) {
       });
     };
   }
-  
+
+  // Auto-detect belongsTo relation for foreign key columns (ends with _id or has references)
+  if (!col.primary && !col.autoIncrement && ((col.name && col.name.endsWith('_id')) || col.references)) {
+    return FieldRenderers.belongsTo;
+  }
+
   // Fallback to standard type renderers
   const typeMap = {
     string: 'string',

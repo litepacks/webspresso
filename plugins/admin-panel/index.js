@@ -144,6 +144,18 @@ function adminPanelPlugin(options = {}) {
       registerStyle(style) {
         return registry.registerStyle(style);
       },
+      registerHook(hookName, callback) {
+        return registry.registerHook(hookName, callback);
+      },
+      runHooks(hookName, context) {
+        return registry.runHooks(hookName, context);
+      },
+      registerAction(id, config) {
+        return registry.registerAction(id, config);
+      },
+      registerBulkAction(id, config) {
+        return registry.registerBulkAction(id, config);
+      },
 
       _ctx: null,
     },
@@ -275,10 +287,61 @@ function adminPanelPlugin(options = {}) {
         });
       }
 
+      // Auto-register model-level declared actions and bulkActions
+      const { getAllModels: getFrameworkModels } = require('../../core/orm/model');
+      const modelMap = new Map();
+      if (getFrameworkModels) {
+        for (const [name, model] of getFrameworkModels()) {
+          modelMap.set(name, model);
+        }
+      }
+      if (db.getAllModels) {
+        const dbModels = db.getAllModels();
+        const list = Array.isArray(dbModels) ? dbModels : Array.from(dbModels.values());
+        for (const model of list) {
+          modelMap.set(model.name, model);
+        }
+      }
+      const appModelList = Array.from(modelMap.values());
+      for (const model of appModelList) {
+        if (model.admin?.actions && Array.isArray(model.admin.actions)) {
+          for (const act of model.admin.actions) {
+            if (act.id && act.label && act.handler && !registry.actions.has(act.id)) {
+              registry.registerAction(act.id, {
+                models: [model.name],
+                ...act,
+              });
+            }
+          }
+        }
+        if (model.admin?.bulkActions && Array.isArray(model.admin.bulkActions)) {
+          for (const bAct of model.admin.bulkActions) {
+            if (bAct.id && bAct.label && bAct.handler && !registry.bulkActions.has(bAct.id)) {
+              registry.registerBulkAction(bAct.id, {
+                models: [model.name],
+                ...bAct,
+              });
+            }
+          }
+        }
+        if (model.admin?.hooks && typeof model.admin.hooks === 'object') {
+          for (const [hookName, fn] of Object.entries(model.admin.hooks)) {
+            if (typeof fn === 'function') {
+              registry.registerHook(hookName, async (ctx) => {
+                if (!ctx.model || ctx.model === model.name) {
+                  await fn(ctx);
+                }
+              });
+            }
+          }
+        }
+      }
+
       // Create API handlers
       const apiHandlers = createApiHandlers({
         path: adminPath,
         db,
+        registry,
         AdminUser,
         hashPassword: (password, rounds) => bcrypt.hash(password, process.env.NODE_ENV === 'test' ? 4 : (rounds || 10)),
         comparePassword: (password, hash) => bcrypt.compare(password, hash),
@@ -330,7 +393,9 @@ function adminPanelPlugin(options = {}) {
       ctx.addRoute('get', `${adminPath}/api/extensions/widgets/:widgetId/data`, requireAuth, extensionHandlers.widgetDataHandler);
       ctx.addRoute('get', `${adminPath}/api/extensions/dashboard/stats`, requireAuth, extensionHandlers.dashboardStatsHandler);
       ctx.addRoute('post', `${adminPath}/api/extensions/actions/:actionId/:model/:id`, requireAuth, extensionHandlers.actionHandler);
+      ctx.addRoute('post', `${adminPath}/api/actions/:actionId/:model/:id`, requireAuth, extensionHandlers.actionHandler);
       ctx.addRoute('post', `${adminPath}/api/extensions/bulk-actions/:actionId/:model`, requireAuth, extensionHandlers.bulkActionHandler);
+      ctx.addRoute('post', `${adminPath}/api/bulk-actions/:actionId/:model`, requireAuth, extensionHandlers.bulkActionHandler);
       ctx.addRoute('get', `${adminPath}/api/extensions/bulk-fields/:model`, requireAuth, extensionHandlers.bulkFieldsHandler);
       ctx.addRoute('post', `${adminPath}/api/extensions/bulk-update/:model`, requireAuth, extensionHandlers.bulkUpdateFieldHandler);
       ctx.addRoute('get', `${adminPath}/api/extensions/export/:model`, requireAuth, extensionHandlers.exportHandler);

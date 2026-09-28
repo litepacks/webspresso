@@ -4,6 +4,8 @@
  * @module plugins/admin-panel/core/registry
  */
 
+const fs = require('fs');
+
 /**
  * Extension types
  */
@@ -46,6 +48,7 @@ class AdminRegistry {
 
     // Client components: JS code strings for custom page rendering
     this.clientComponents = new Map();
+    this.clientComponentFiles = new Map();
 
     // Custom scripts & styles for Admin Panel SSR rendering
     this.scripts = [];
@@ -59,6 +62,8 @@ class AdminRegistry {
       afterUpdate: [],
       beforeDelete: [],
       afterDelete: [],
+      beforeRestore: [],
+      afterRestore: [],
       onRecordView: [],
       onDashboardLoad: [],
     };
@@ -335,17 +340,41 @@ class AdminRegistry {
    * @param {string} pageId - Page ID (must match a registered page)
    * @param {string} jsCode - JavaScript code string that defines the component.
    *   The code should assign a Mithril component to window.__customPages[pageId].
+   * @param {string} [filePath=null] - Absolute file path for dev mode live reloading
    */
-  registerClientComponent(pageId, jsCode) {
+  registerClientComponent(pageId, jsCode, filePath = null) {
     this.clientComponents.set(pageId, jsCode);
+    if (filePath) {
+      this.clientComponentFiles.set(pageId, filePath);
+    }
     return this;
   }
 
   /**
-   * Get all client component code strings concatenated
+   * Get all client component code strings concatenated.
+   * In development mode (NODE_ENV !== 'production'), dynamically re-reads modified
+   * component files from disk to eliminate manual server restarts.
    */
   getClientComponents() {
-    return Array.from(this.clientComponents.values()).join('\n');
+    const isDev = process.env.NODE_ENV !== 'production';
+    const parts = [];
+    for (const [pageId, code] of this.clientComponents.entries()) {
+      const filePath = this.clientComponentFiles.get(pageId);
+      if (isDev && filePath) {
+        try {
+          if (fs.existsSync(filePath)) {
+            const raw = fs.readFileSync(filePath, 'utf8');
+            const { formatClientComponent } = require('./admin-module');
+            parts.push(formatClientComponent(pageId, raw));
+            continue;
+          }
+        } catch (e) {
+          console.error(`[Admin Panel] Failed to reload component for "${pageId}":`, e);
+        }
+      }
+      parts.push(code || '');
+    }
+    return parts.filter(Boolean).join('\n');
   }
 
   /**
@@ -471,19 +500,29 @@ class AdminRegistry {
   toClientConfig() {
     return {
       settings: this.settings,
-      pages: this.getPages().map(p => ({
-        id: p.id,
-        title: p.title,
-        path: p.path,
-        icon: p.icon,
-        description: p.description,
-        permission: p.permission,
-        layout: p.layout !== undefined ? p.layout : true,
-        iframe: p.iframe,
-        url: p.url || p.iframeUrl,
-        html: p.html,
-        hasClientComponent: this.clientComponents.has(p.id),
-      })),
+      pages: this.getPages().map(p => {
+        let html = p.html;
+        if (p.htmlFile && process.env.NODE_ENV !== 'production') {
+          try {
+            if (fs.existsSync(p.htmlFile)) {
+              html = fs.readFileSync(p.htmlFile, 'utf8');
+            }
+          } catch (e) {}
+        }
+        return {
+          id: p.id,
+          title: p.title,
+          path: p.path,
+          icon: p.icon,
+          description: p.description,
+          permission: p.permission,
+          layout: p.layout !== undefined ? p.layout : true,
+          iframe: p.iframe,
+          url: p.url || p.iframeUrl,
+          html,
+          hasClientComponent: this.clientComponents.has(p.id),
+        };
+      }),
 
       widgets: this.getWidgets().map(w => ({
         id: w.id,
@@ -527,6 +566,7 @@ class AdminRegistry {
     this.menuGroups.clear();
     this.fieldRenderers.clear();
     this.clientComponents.clear();
+    this.clientComponentFiles.clear();
     this.scripts = [];
     this.styles = [];
     Object.keys(this.hooks).forEach(k => this.hooks[k] = []);

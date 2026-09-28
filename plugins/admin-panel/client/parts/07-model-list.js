@@ -84,7 +84,27 @@ function formatCellValue(value, col, record = null) {
       return String(value);
     }
   }
-  
+
+  // Badge formatting for status / enum / mapped values
+  const badgeMap = (col && col.badge) || (col && col.customField && col.customField.badge);
+  if (badgeMap && typeof badgeMap === 'object') {
+    const valStr = String(value);
+    const color = badgeMap[valStr] || badgeMap['*'] || 'gray';
+    const colorClasses = {
+      green: 'bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-300 border border-green-200 dark:border-green-800',
+      red: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 border border-red-200 dark:border-red-800',
+      blue: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
+      amber: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
+      yellow: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
+      purple: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800',
+      violet: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800',
+      indigo: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800',
+      gray: 'bg-gray-100 text-gray-800 dark:bg-slate-800 dark:text-slate-300 border border-gray-200 dark:border-slate-700',
+    }[color] || 'bg-gray-100 text-gray-800 dark:bg-slate-800 dark:text-slate-300 border border-gray-200 dark:border-slate-700';
+
+    return m('span.inline-flex.items-center.px-2.5.py-0.5.rounded-full.text-xs.font-medium.' + colorClasses, valStr);
+  }
+
   switch (col?.type) {
     case 'boolean':
       return value 
@@ -414,12 +434,26 @@ const BulkFieldUpdateDropdown = {
   },
 };
 
-// Get columns to display in table (limit to reasonable number)
-function getDisplayColumns(columns) {
+// Get columns to display in table (respects listColumns if configured, else limits to reasonable number)
+function getDisplayColumns(columns, modelMeta = null) {
   if (!columns || columns.length === 0) return [];
 
   // Filter out hidden columns (password_hash, api_token, etc.)
   const visible = [...columns].filter((col) => !col.hidden);
+
+  // If model defines listColumns, respect the explicit column list and ordering
+  if (modelMeta?.listColumns && Array.isArray(modelMeta.listColumns) && modelMeta.listColumns.length > 0) {
+    const colMap = new Map(visible.map((c) => [c.name, c]));
+    const customList = [];
+    for (const name of modelMeta.listColumns) {
+      if (colMap.has(name)) {
+        customList.push(colMap.get(name));
+      }
+    }
+    if (customList.length > 0) {
+      return customList;
+    }
+  }
 
   // Prioritize: id, name/title, then others (excluding long text/json fields)
   const priority = ['id', 'name', 'title', 'email', 'slug', 'status', 'published', 'created_at'];
@@ -633,6 +667,10 @@ function initializeModelView(modelName) {
     .then(modelMeta => {
       state.currentModelMeta = modelMeta;
       state.currentModel = modelMeta;
+      if (!state.sortColumn && modelMeta?.defaultSort?.column) {
+        state.sortColumn = modelMeta.defaultSort.column;
+        state.sortDirection = (modelMeta.defaultSort.order || 'desc').toLowerCase();
+      }
       // Load bulk-updatable fields for this model
       loadBulkFields(modelName);
       return loadRecords(modelName, page, state.filters, state.sortColumn, state.sortDirection);

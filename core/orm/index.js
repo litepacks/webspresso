@@ -211,6 +211,12 @@ function createDatabase(config) {
    * @returns {Array<import('./types').ModelDefinition>}
    */
   function getAllModelInstances() {
+    const globalModels = getAllModels();
+    for (const [name, model] of globalModels) {
+      if (!models.has(name)) {
+        models.set(name, model);
+      }
+    }
     return Array.from(models.values());
   }
 

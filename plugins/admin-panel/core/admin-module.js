@@ -257,8 +257,9 @@ function registerPages(moduleId, pages, deps) {
     const pageId = page.id || moduleId;
 
     let htmlContent = page.html || null;
+    let resolvedHtmlPath = null;
     if (page.htmlFile) {
-      const resolvedHtmlPath = path.resolve(page.htmlFile);
+      resolvedHtmlPath = path.resolve(page.htmlFile);
       if (!fs.existsSync(resolvedHtmlPath)) {
         throw new Error(`Module "${moduleId}", page "${pageId}": htmlFile not found at ${page.htmlFile}`);
       }
@@ -275,6 +276,7 @@ function registerPages(moduleId, pages, deps) {
       iframe: page.iframe,
       url: page.url || page.iframeUrl || undefined,
       html: htmlContent || undefined,
+      htmlFile: resolvedHtmlPath || (page.htmlFile ? path.resolve(page.htmlFile) : undefined),
     });
 
     if (page.componentFile) {
@@ -284,7 +286,7 @@ function registerPages(moduleId, pages, deps) {
       }
       const rawCode = fs.readFileSync(resolvedPath, 'utf8');
       const formattedCode = formatClientComponent(pageId, rawCode);
-      registry.registerClientComponent(pageId, formattedCode);
+      registry.registerClientComponent(pageId, formattedCode, resolvedPath);
     } else if (page.component) {
       const formattedCode = formatClientComponent(pageId, page.component);
       registry.registerClientComponent(pageId, formattedCode);

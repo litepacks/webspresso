@@ -18,6 +18,8 @@ const { mountClientRuntime } = require('./client-runtime/mount');
 const { resolveClientRuntime } = require('./client-runtime/resolve');
 const { mountPages, detectLocale, loadI18n, createTranslator } = require('./file-router');
 const { configureAssets, createHelpers, getScriptInjector } = require('./helpers');
+const { createDevReloadHub } = require('./dev-reload');
+const { createDevBundler } = require('./bundle');
 const { registerClearHook } = require('./njk-frontmatter');
 const { createPluginManager } = require('./plugin-manager');
 const { createServiceRegistry } = require('./services');
@@ -673,6 +675,7 @@ function createApp(options = {}) {
   const dynamicRouteList = [];
   const dynamicRouteMap = new Map();
   const dynamicRouteLookupCache = new Map();
+  const prefixMiddlewares = [];
   const MAX_DYNAMIC_CACHE_SIZE = 2000;
   const NOT_FOUND_SENTINEL = Symbol('NOT_FOUND');
 
@@ -855,6 +858,21 @@ function createApp(options = {}) {
       };
     }
   }
+
+  // Wrap app.use to track path-prefixed middlewares for fast-path dispatcher execution
+  const origAppUse = app.use.bind(app);
+  app.use = function(pathOrHandler, ...handlers) {
+    if (typeof pathOrHandler === 'string' && handlers.length > 0) {
+      const normPrefix = (pathOrHandler.length > 1 && pathOrHandler.endsWith('/'))
+        ? pathOrHandler.slice(0, -1)
+        : pathOrHandler;
+      prefixMiddlewares.push({
+        prefix: normPrefix,
+        handlers: handlers.flat().map((h) => wrapAsync(h)),
+      });
+    }
+    return origAppUse(pathOrHandler, ...handlers);
+  };
   
   // Security headers with Helmet
   if (helmetConfig !== false) {
@@ -1041,6 +1059,50 @@ function createApp(options = {}) {
 
   mountClientRuntime(app, clientRuntime);
 
+  // Development Hot / Live Reload Hub (SSE & CSS hot swap)
+  const devReloadOption = options.devReload;
+  const isDevReloadExplicit = devReloadOption === true || (typeof devReloadOption === 'object' && devReloadOption.enabled === true);
+  const isDevReloadDisabled = devReloadOption === false || (typeof devReloadOption === 'object' && devReloadOption.enabled === false);
+  const devReloadEnabled = isDevReloadExplicit || (!isDevReloadDisabled && isDev && !isTest);
+
+  const devReloadHub = createDevReloadHub({
+    app,
+    publicDir,
+    options: typeof devReloadOption === 'object' ? devReloadOption : {},
+    enabled: devReloadEnabled,
+    logger: logging ? console : null,
+  });
+
+  if (devReloadHub) {
+    app.devReloadHub = devReloadHub;
+    app.broadcastDevReload = (type, payload) => devReloadHub.broadcast(type, payload);
+    if (shutdownManager) {
+      shutdownManager.registerDisposer('devReload', () => devReloadHub.close());
+    }
+  }
+
+  // Client-side JS incremental bundler (esbuild context() API)
+  const bundleOption = options.bundle;
+  const isBundleExplicit = bundleOption === true || (typeof bundleOption === 'object' && bundleOption.enabled !== false);
+  const isBundleDisabled = bundleOption === false;
+
+  if (isBundleExplicit && !isBundleDisabled) {
+    const bundlerOpts = typeof bundleOption === 'object' ? { ...bundleOption } : {};
+    if (!bundlerOpts.cwd) bundlerOpts.cwd = rootDir;
+    const devBundler = createDevBundler(bundlerOpts, devReloadHub);
+    app.devBundler = devBundler;
+
+    if (devBundler.isAvailable() && bundlerOpts.watch !== false && isDev && !isTest) {
+      devBundler.startWatch().catch((err) => {
+        if (logging) console.error('[Webspresso Bundler] Watch error:', err.message);
+      });
+    }
+
+    if (shutdownManager) {
+      shutdownManager.registerDisposer('devBundler', () => devBundler.dispose());
+    }
+  }
+
   // Configure Nunjucks with viewsDir priority and circular extension guard
   const templateDirs = [viewsDir, pagesDir].filter(Boolean);
   if (templateDirs.length === 0) {
@@ -1164,6 +1226,18 @@ function createApp(options = {}) {
     const pathname = rawPath.length > 1 && rawPath.endsWith('/') ? rawPath.slice(0, -1) : rawPath;
     const method = req.method ? req.method.toUpperCase() : 'GET';
 
+    function getHandlersWithMiddlewares(routeHandlers) {
+      if (prefixMiddlewares.length === 0) return routeHandlers;
+      const applicable = [];
+      for (let i = 0; i < prefixMiddlewares.length; i++) {
+        const pm = prefixMiddlewares[i];
+        if (pathname === pm.prefix || pathname.startsWith(pm.prefix + '/')) {
+          applicable.push(...pm.handlers);
+        }
+      }
+      return applicable.length > 0 ? [...applicable, ...routeHandlers] : routeHandlers;
+    }
+
     // 1. Static fast-path ($O(1) partitioned by method - zero string concat)
     const methodMap = fastPathStaticByMethod[method];
     let entry = methodMap ? methodMap.get(pathname) : undefined;
@@ -1173,7 +1247,7 @@ function createApp(options = {}) {
     if (entry) {
       if (!req.params) req.params = {};
       req.route = entry.routeInfo;
-      return dispatchFastPath(entry.handlers, req, res, next);
+      return dispatchFastPath(getHandlersWithMiddlewares(entry.handlers), req, res, next);
     }
 
     // 2. Dynamic route fast-path with LRU caching
@@ -1188,7 +1262,7 @@ function createApp(options = {}) {
       if (cached) {
         req.params = Object.assign({}, cached.params);
         req.route = cached.entry.routeInfo;
-        return dispatchFastPath(cached.entry.handlers, req, res, next);
+        return dispatchFastPath(getHandlersWithMiddlewares(cached.entry.handlers), req, res, next);
       }
 
       if (method === 'HEAD') {
@@ -1196,7 +1270,7 @@ function createApp(options = {}) {
         if (cachedGet && cachedGet !== NOT_FOUND_SENTINEL) {
           req.params = Object.assign({}, cachedGet.params);
           req.route = cachedGet.entry.routeInfo;
-          return dispatchFastPath(cachedGet.entry.handlers, req, res, next);
+          return dispatchFastPath(getHandlersWithMiddlewares(cachedGet.entry.handlers), req, res, next);
         }
       }
 
@@ -1214,7 +1288,7 @@ function createApp(options = {}) {
 
           req.params = Object.assign({}, params);
           req.route = entry.routeInfo;
-          return dispatchFastPath(entry.handlers, req, res, next);
+          return dispatchFastPath(getHandlersWithMiddlewares(entry.handlers), req, res, next);
         }
       }
 
