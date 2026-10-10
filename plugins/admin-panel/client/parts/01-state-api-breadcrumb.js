@@ -18,9 +18,10 @@ const api = {
       if (response.status === 401 && path.indexOf('/auth/') !== 0) {
         redirectToLogin();
       }
-      const err = new Error(error.error || 'Request failed');
+      const err = new Error(error.error || error.message || 'Request failed');
       if (error.fields) err.fields = error.fields;
       err.response = error;
+      err.status = response.status;
       throw err;
     }
     
