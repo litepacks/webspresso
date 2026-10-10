@@ -667,6 +667,9 @@ function initializeModelView(modelName) {
     .then(modelMeta => {
       state.currentModelMeta = modelMeta;
       state.currentModel = modelMeta;
+      if (typeof setAdminPageTitle === 'function') {
+        setAdminPageTitle(modelMeta?.label || modelName);
+      }
       if (!state.sortColumn && modelMeta?.defaultSort?.column) {
         state.sortColumn = modelMeta.defaultSort.column;
         state.sortDirection = (modelMeta.defaultSort.order || 'desc').toLowerCase();

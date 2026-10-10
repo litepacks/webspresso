@@ -8,7 +8,7 @@ const path = require('path');
 const { ZodError } = require('zod');
 const { compileSchema, invalidateSchema } = require('../core/compileSchema');
 const { applySchema } = require('../core/applySchema');
-const { createHelpers } = require('./helpers');
+const { createHelpers, getAssetManager } = require('./helpers');
 const {
   loadNjkRouteTemplate,
   parseNjkFrontmatter,
@@ -313,29 +313,31 @@ function extractMethodFromFilename(filename) {
 
 /**
  * Whether `load()` return values for `stylesheets` and `scripts` are promoted to
- * `pageHead` in Nunjucks (see `createApp({ pageAssets })`).
- * @param {boolean|{enabled?: boolean, stylesheets?: boolean, scripts?: boolean}|null|undefined} raw
- * @returns {{ enabled: boolean, stylesheets: boolean, scripts: boolean }}
+ * `pageHead` in Nunjucks (see `createApp({ pageAssets })`), with optional automatic
+ * per-route script/stylesheet discovery.
+ * @param {boolean|{enabled?: boolean, stylesheets?: boolean, scripts?: boolean, auto?: boolean}|null|undefined} raw
+ * @returns {{ enabled: boolean, stylesheets: boolean, scripts: boolean, auto: boolean }}
  */
 function resolvePageAssets(raw) {
   if (raw === true) {
-    return { enabled: true, stylesheets: true, scripts: true };
+    return { enabled: true, stylesheets: true, scripts: true, auto: true };
   }
   if (raw == null || raw === false) {
-    return { enabled: false, stylesheets: false, scripts: false };
+    return { enabled: false, stylesheets: false, scripts: false, auto: false };
   }
   if (typeof raw === 'object') {
     const on = raw.enabled !== false;
     if (!on) {
-      return { enabled: false, stylesheets: false, scripts: false };
+      return { enabled: false, stylesheets: false, scripts: false, auto: false };
     }
     return {
       enabled: true,
       stylesheets: raw.stylesheets !== false,
       scripts: raw.scripts !== false,
+      auto: raw.auto !== false,
     };
   }
-  return { enabled: false, stylesheets: false, scripts: false };
+  return { enabled: false, stylesheets: false, scripts: false, auto: false };
 }
 
 /**
@@ -348,11 +350,13 @@ function toList(v) {
 }
 
 /**
- * @param {{ enabled: boolean, stylesheets: boolean, scripts: boolean }} cfg
+ * @param {{ enabled: boolean, stylesheets: boolean, scripts: boolean, auto?: boolean }} cfg
  * @param {Object} data
+ * @param {{ file?: string, routePath?: string }} [routeInfo={}]
+ * @param {Object|null} [assetManager=null]
  * @returns {{ data: Object, pageHead: { stylesheets: unknown[], scripts: unknown[] }|null, pageAssets: boolean }}
  */
-function applyPageAssetsToTemplateData(cfg, data) {
+function applyPageAssetsToTemplateData(cfg, data, routeInfo = {}, assetManager = null) {
   if (!cfg || !cfg.enabled) {
     return { data, pageHead: null, pageAssets: false };
   }
@@ -367,6 +371,40 @@ function applyPageAssetsToTemplateData(cfg, data) {
     scriptItems = toList(out.scripts);
     delete out.scripts;
   }
+
+  // Auto-discover page assets from route if enabled
+  if (cfg.auto && assetManager && (routeInfo.file || routeInfo.routePath)) {
+    const candidates = typeof assetManager.getRouteAssetCandidates === 'function'
+      ? assetManager.getRouteAssetCandidates(routeInfo.file, routeInfo.routePath)
+      : [];
+
+    if (cfg.stylesheets) {
+      for (const cand of candidates) {
+        if (typeof assetManager.hasPageCss === 'function' && assetManager.hasPageCss(cand)) {
+          const cssUrl = assetManager.pageCssUrl(cand);
+          const already = styles.some((s) => (typeof s === 'string' ? s === cssUrl : s?.href === cssUrl));
+          if (!already) {
+            styles.push(cssUrl);
+          }
+          break;
+        }
+      }
+    }
+
+    if (cfg.scripts) {
+      for (const cand of candidates) {
+        if (typeof assetManager.hasPageJs === 'function' && assetManager.hasPageJs(cand)) {
+          const jsUrl = assetManager.pageJsUrl(cand);
+          const already = scriptItems.some((s) => (typeof s === 'string' ? s === jsUrl : s?.src === jsUrl));
+          if (!already) {
+            scriptItems.push({ src: jsUrl, defer: true });
+          }
+          break;
+        }
+      }
+    }
+  }
+
   return {
     data: out,
     pageHead: { stylesheets: styles, scripts: scriptItems },
@@ -1366,7 +1404,15 @@ function mountPages(app, options) {
         hookPromise = runHooks(globalHooks, routeHooks, 'beforeRender', ctx);
         if (hookPromise) await hookPromise;
         
-        const pageAssetBundle = applyPageAssetsToTemplateData(pageAssetsResolved, ctx.data);
+        const pageAssetBundle = applyPageAssetsToTemplateData(
+          pageAssetsResolved,
+          ctx.data,
+          {
+            file: route.file,
+            routePath: route.routePath,
+          },
+          ctx.fsy?.assetManager || getAssetManager()
+        );
         ctx.data = pageAssetBundle.data;
         const renderContext = {
           ...ctx.data,

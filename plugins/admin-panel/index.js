@@ -43,6 +43,8 @@ function adminPanelPlugin(options = {}) {
   const {
     path: adminPath = '/_admin',
     enabled = true,
+    title,
+    titleTemplate,
     sessionSecret,
     db,
     auth,
@@ -63,6 +65,12 @@ function adminPanelPlugin(options = {}) {
 
   // Create fresh registry for this plugin instance
   const registry = new AdminRegistry();
+  if (title) {
+    registry.setTitle(title);
+  }
+  if (titleTemplate) {
+    registry.setTitleTemplate(titleTemplate);
+  }
 
   // Dependencies are now in main package
   const session = require('express-session');
@@ -155,6 +163,20 @@ function adminPanelPlugin(options = {}) {
       },
       registerBulkAction(id, config) {
         return registry.registerBulkAction(id, config);
+      },
+      setTitle(title) {
+        registry.setTitle(title);
+        return this;
+      },
+      getTitle() {
+        return registry.getTitle();
+      },
+      setTitleTemplate(template) {
+        registry.setTitleTemplate(template);
+        return this;
+      },
+      getTitleTemplate() {
+        return registry.getTitleTemplate();
       },
 
       _ctx: null,

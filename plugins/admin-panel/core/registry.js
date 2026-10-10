@@ -71,6 +71,7 @@ class AdminRegistry {
     // Settings
     this.settings = {
       title: 'Admin Panel',
+      titleTemplate: '%s | %b',
       logo: null,
       primaryColor: '#3B82F6',
       perPage: 20,
@@ -412,6 +413,44 @@ class AdminRegistry {
   }
 
   /**
+   * Set base admin panel title
+   * @param {string} title - Base title (e.g., 'Acme Admin')
+   */
+  setTitle(title) {
+    if (typeof title === 'string') {
+      this.settings.title = title;
+    }
+    return this;
+  }
+
+  /**
+   * Get base admin panel title
+   * @returns {string}
+   */
+  getTitle() {
+    return this.settings.title;
+  }
+
+  /**
+   * Set admin page title template
+   * @param {string} template - Title template (e.g., '%s | %b', '%s — %b', '%s')
+   */
+  setTitleTemplate(template) {
+    if (typeof template === 'string') {
+      this.settings.titleTemplate = template;
+    }
+    return this;
+  }
+
+  /**
+   * Get admin page title template
+   * @returns {string}
+   */
+  getTitleTemplate() {
+    return this.settings.titleTemplate;
+  }
+
+  /**
    * Enable user management
    * @param {Object} config - User management configuration
    * @param {Object} config.model - User model name
@@ -512,6 +551,7 @@ class AdminRegistry {
         return {
           id: p.id,
           title: p.title,
+          documentTitle: p.documentTitle,
           path: p.path,
           icon: p.icon,
           description: p.description,

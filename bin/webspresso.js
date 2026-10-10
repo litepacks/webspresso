@@ -31,6 +31,7 @@ const { registerCommand: registerAdminSetup } = require('./commands/admin-setup'
 const { registerCommand: registerAdminPassword } = require('./commands/admin-password');
 const { registerCommand: registerFaviconGenerate } = require('./commands/favicon-generate');
 const { registerCommand: registerAuditPrune } = require('./commands/audit-prune');
+const { registerCommand: registerAnalyticsPrune } = require('./commands/analytics-prune');
 const { registerCommand: registerDoctor } = require('./commands/doctor');
 const { registerCommand: registerUpgrade } = require('./commands/upgrade');
 const { registerCommand: registerOrmMap } = require('./commands/orm-map');
@@ -57,6 +58,7 @@ registerAdminSetup(program);
 registerAdminPassword(program);
 registerFaviconGenerate(program);
 registerAuditPrune(program);
+registerAnalyticsPrune(program);
 registerDoctor(program);
 registerUpgrade(program);
 registerOrmMap(program);

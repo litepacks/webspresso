@@ -122,8 +122,30 @@ Request rate limiting using express-rate-limit logic.
 - **Options**: `{ windowMs: 15 * 60 * 1000, max: 100 }`
 
 ### 2.9 `siteAnalyticsPlugin` (`plugins/site-analytics`)
-Self-hosted privacy-focused page view analytics and client error tracking.
-- **Options**: `{ path: '/_analytics', db }`
+Self-hosted privacy-focused page view analytics, client error tracking, and automated retention cleanup.
+- **Options**:
+  - `db`: Knex database instance.
+  - `tableName`: Table name for page views (default: `'analytics_page_views'`).
+  - `errorsTableName`: Table name for client errors (default: `'analytics_client_errors'`).
+  - `retentionDays`: Page views retention window in days (default: `90`).
+  - `errorRetentionDays`: Client error logs retention window in days (default: `30`).
+  - `cleanupIntervalMs`: Background scheduled cleanup interval in milliseconds (default: `86400000` / 24 hours).
+  - `autoCleanup`: Enable automated periodic background cleanup (default: `true`).
+  - `cleanupOnStart`: Run an initial non-blocking cleanup shortly after startup (default: `true`).
+  - `retention`: Shorthand object `{ enabled, days, errorDays, intervalMs, runOnStart }` or `false` to disable retention cleanup.
+  - `excludePaths`, `excludeBots`, `customBots`, `anonymizeIp`, `trustProxy`, `collectErrors`, `dashboard`.
+- **Programmatic API (`plugin.api`)**:
+  - `purge({ days, errorDays, olderThan, errorsOlderThan })`: Manual purge of page views and error logs.
+  - `purgeAnalyticsData(knex, options)`: Standalone query purge helper.
+  - `startCleanup(intervalMs)` / `stopCleanup()`: Control background cleanup lifecycle.
+  - `getRetentionConfig()`: Inspect active retention configuration.
+- **Admin REST Endpoint**: `POST /_admin/api/analytics/purge` (accepts `{ days, errorDays }`).
+- **Admin UI**: "Purge Old Data" button with confirmation prompt in the Analytics admin dashboard header.
+- **CLI Command**:
+  ```bash
+  webspresso analytics:prune --days 90 --error-days 30
+  ```
+- **Lifecycle Integration**: Background timer uses `.unref()` to avoid keeping Node event loop open, and registers a framework disposer to clear timers on shutdown.
 
 ### 2.10 `emailPlugin` (`plugins/email`)
 Transactional email compiler (MJML) & Nodemailer transport integration.
@@ -185,7 +207,32 @@ Admin mutation tracking and audit log audit history.
 ORM Cache inspection and invalidation dashboard.
 
 ### 2.14 `schemaExplorerPlugin` (`plugins/schema-explorer`)
-Interactive JSON schema & OpenAPI route specification generator.
+Interactive Database Schema & ER Diagram Explorer for both raw JSON/OpenAPI endpoints and Admin Panel SPA.
+- **Admin Panel Page (`/_admin/schema`)**:
+  - Interactive Table & Column details (Primary Keys, Foreign Keys, Nullability, Types, Constraints, Scopes).
+  - Visual Relationship Map (ER Diagram) with bidirectional incoming & outgoing relation links.
+  - Interactive table cards highlighting connected models and key mappings (`posts.author_id ➔ authors.id`).
+  - One-click Mermaid.js ER diagram code generation and copy.
+  - JSON schema export.
+- **Options**:
+  - `admin: true` — Automatically registers into `adminPanelPlugin` when present.
+  - `adminPath: '/schema'` — Custom path inside Admin Panel.
+  - `menuLabel: 'Schema Explorer'` — Sidebar menu label.
+  - `menuIcon: 'database'` — Sidebar icon.
+  - `path: '/_schema'` — Raw JSON endpoint path.
+  - `exclude: ['SecretModel']` — Models to exclude.
+- **Usage**:
+  ```js
+  const { createApp } = require('webspresso');
+  const { adminPanelPlugin, schemaExplorerPlugin } = require('webspresso/plugins');
+
+  const { app } = createApp({
+    plugins: [
+      adminPanelPlugin({ db }),
+      schemaExplorerPlugin({ admin: true }),
+    ],
+  });
+  ```
 
 ### 2.15 `swaggerPlugin` (`plugins/swagger`)
 Interactive OpenAPI 3.0 Swagger UI documentation.

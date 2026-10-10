@@ -11,7 +11,8 @@ const { generateOrmCacheAdminComponent } = require('./admin-component');
  * @param {import('../../core/orm/types').DatabaseInstance} options.db - From createDatabase({ cache: true })
  */
 function ormCacheAdminPlugin(options = {}) {
-  const { db } = options;
+  const { db, title, adminTitle } = options;
+  const pageTitle = title || adminTitle || 'ORM Cache';
 
   if (!db) {
     throw new Error('orm-cache-admin plugin requires `db` (database instance from createDatabase)');
@@ -41,9 +42,10 @@ function ormCacheAdminPlugin(options = {}) {
 
       adminApi.registerModule({
         id: 'orm-cache',
+        title: pageTitle,
         pages: [{
           id: 'orm-cache',
-          title: 'ORM Cache',
+          title: pageTitle,
           path: '/orm-cache',
           icon: 'database',
           component: generateOrmCacheAdminComponent(),

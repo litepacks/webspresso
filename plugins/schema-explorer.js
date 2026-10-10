@@ -1,23 +1,41 @@
 /**
  * Schema Explorer Plugin
- * Exposes ORM model metadata via API endpoint
- * Useful for documentation, admin tools, and frontend code generation
+ * Exposes ORM model metadata via API endpoint and interactive Admin Panel SPA page.
+ * Useful for documentation, database architecture visualization, ER diagrams, and admin tools.
  */
+
+'use strict';
 
 const { getAllModels, getModel } = require('../core/orm/model');
 const { getColumnMeta } = require('../core/orm/schema-helpers');
 const { generateOrmOpenApiSchemas } = require('../core/openapi/orm-components');
+const {
+  extractAllRelationships,
+  enrichModelsWithGraph,
+  generateMermaidErDiagram,
+} = require('./schema-explorer/relations-graph');
+const {
+  generateSchemaExplorerAdminComponent,
+} = require('./schema-explorer/admin-component');
 
 /**
  * Create Schema Explorer plugin
- * @param {Object} options - Plugin options
- * @param {string} [options.path='/_schema'] - API endpoint path
- * @param {boolean} [options.enabled] - Force enable/disable (default: auto based on NODE_ENV)
+ * @param {Object} [options] - Plugin options
+ * @param {string} [options.path='/_schema'] - Raw API endpoint path
+ * @param {boolean} [options.enabled] - Force enable/disable raw API (default: auto based on NODE_ENV)
  * @param {string[]} [options.exclude=[]] - Model names to exclude
  * @param {boolean} [options.includeColumns=true] - Include column metadata
  * @param {boolean} [options.includeRelations=true] - Include relation metadata
  * @param {boolean} [options.includeScopes=true] - Include scope configuration
  * @param {Function} [options.authorize] - Custom authorization function (req) => boolean
+ * @param {boolean} [options.admin=true] - Enable Admin Panel module when admin-panel plugin is present
+ * @param {string} [options.title] - Admin page title (default: menuLabel or 'Schema Explorer')
+ * @param {string} [options.adminTitle] - Admin page title alias
+ * @param {string} [options.adminPath='/schema'] - Path within admin panel
+ * @param {string} [options.menuLabel='Schema Explorer'] - Admin sidebar menu label
+ * @param {string} [options.menuIcon='database'] - Admin sidebar icon
+ * @param {number} [options.menuOrder=85] - Admin sidebar menu order
+ * @param {string} [options.apiPrefix='/schema'] - Admin API prefix under /_admin/api
  * @returns {Object} Plugin definition
  */
 function schemaExplorerPlugin(options = {}) {
@@ -29,13 +47,24 @@ function schemaExplorerPlugin(options = {}) {
     includeRelations = true,
     includeScopes = true,
     authorize,
+    admin = true,
+    adminPath = '/schema',
+    title,
+    adminTitle,
+    menuLabel = 'Schema Explorer',
+    menuIcon = 'database',
+    menuOrder = 85,
+    apiPrefix = '/schema',
   } = options;
+
+  const pageTitle = title || adminTitle || menuLabel;
 
   return {
     name: 'schema-explorer',
     version: '1.0.0',
+    description: 'Database schema, ER diagram & relation explorer for API and Admin Panel',
 
-    // Expose API for other plugins
+    // Expose API for other plugins & programmatic consumption
     api: {
       /**
        * Get all models metadata
@@ -43,6 +72,16 @@ function schemaExplorerPlugin(options = {}) {
        */
       getModels() {
         return serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
+      },
+
+      /**
+       * Get all models enriched with incoming/outgoing relationships graph
+       * @returns {Object[]}
+       */
+      getEnrichedModels() {
+        const raw = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
+        const rels = extractAllRelationships(raw);
+        return enrichModelsWithGraph(raw, rels);
       },
 
       /**
@@ -64,81 +103,217 @@ function schemaExplorerPlugin(options = {}) {
         const models = getAllModels();
         return [...models.keys()].filter(name => !exclude.includes(name));
       },
+
+      /**
+       * Get unified relationships graph
+       * @returns {Object[]}
+       */
+      getRelationships() {
+        const raw = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
+        return extractAllRelationships(raw);
+      },
+
+      /**
+       * Generate Mermaid ER diagram syntax
+       * @returns {string}
+       */
+      getMermaid() {
+        const raw = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
+        const rels = extractAllRelationships(raw);
+        return generateMermaidErDiagram(raw, rels);
+      },
+
+      extractAllRelationships,
+      enrichModelsWithGraph,
+      generateMermaidErDiagram,
     },
 
     onRoutesReady(ctx) {
       const isDev = process.env.NODE_ENV !== 'production';
-      const isEnabled = enabled !== undefined ? enabled : isDev;
+      const isRawEnabled = enabled !== undefined ? enabled : isDev;
 
-      if (!isEnabled) {
-        return;
+      // 1. Raw API Endpoints (if enabled or dev mode)
+      if (isRawEnabled) {
+        // List all models with schema metadata
+        ctx.addRoute('get', path, (req, res) => {
+          if (authorize && !authorize(req)) {
+            return res.status(403).json({ error: 'Forbidden' });
+          }
+
+          const rawModels = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
+          const relationships = extractAllRelationships(rawModels);
+          const models = enrichModelsWithGraph(rawModels, relationships);
+
+          res.json({
+            meta: {
+              version: '1.0.0',
+              generatedAt: new Date().toISOString(),
+              modelCount: models.length,
+              relationCount: relationships.length,
+            },
+            models,
+            relationships,
+          });
+        });
+
+        // OpenAPI/JSON Schema export (must be registered before :modelName route)
+        ctx.addRoute('get', `${path}/openapi`, (req, res) => {
+          if (authorize && !authorize(req)) {
+            return res.status(403).json({ error: 'Forbidden' });
+          }
+
+          const openApiSchemas = generateOrmOpenApiSchemas({ exclude });
+
+          res.json({
+            openapi: '3.0.0',
+            info: {
+              title: 'Database Schema',
+              version: '1.0.0',
+            },
+            components: {
+              schemas: openApiSchemas,
+            },
+          });
+        });
+
+        // Mermaid ER Diagram export
+        ctx.addRoute('get', `${path}/mermaid`, (req, res) => {
+          if (authorize && !authorize(req)) {
+            return res.status(403).json({ error: 'Forbidden' });
+          }
+
+          const rawModels = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
+          const relationships = extractAllRelationships(rawModels);
+          const mermaid = generateMermaidErDiagram(rawModels, relationships);
+
+          if (req.accepts('text/plain') && !req.accepts('json')) {
+            res.type('text/plain').send(mermaid);
+          } else {
+            res.json({ mermaid });
+          }
+        });
+
+        // Get single model by name
+        ctx.addRoute('get', `${path}/:modelName`, (req, res) => {
+          if (authorize && !authorize(req)) {
+            return res.status(403).json({ error: 'Forbidden' });
+          }
+
+          const { modelName } = req.params;
+          const model = getModel(modelName);
+
+          if (!model || exclude.includes(modelName)) {
+            return res.status(404).json({ error: `Model "${modelName}" not found` });
+          }
+
+          res.json({
+            meta: {
+              version: '1.0.0',
+              generatedAt: new Date().toISOString(),
+            },
+            model: serializeModel(model, { includeColumns, includeRelations, includeScopes }),
+          });
+        });
+
+        if (isDev) {
+          console.log(`  📋 Schema Explorer API: ${path}`);
+        }
       }
 
-      // List all models
-      ctx.addRoute('get', path, (req, res) => {
-        // Check authorization
-        if (authorize && !authorize(req)) {
-          return res.status(403).json({ error: 'Forbidden' });
+      // 2. Admin Panel Integration (when adminPanelPlugin is present and admin !== false)
+      if (admin !== false && typeof ctx.usePlugin === 'function') {
+        const adminApi = ctx.usePlugin('admin-panel');
+        if (adminApi) {
+          const normAdminPath = adminPath.startsWith('/') ? adminPath : '/' + adminPath;
+
+          adminApi.registerModule({
+            id: 'schema-explorer',
+            title: pageTitle,
+            pages: [{
+              id: 'schema-explorer',
+              title: pageTitle,
+              path: normAdminPath,
+              icon: menuIcon,
+              component: generateSchemaExplorerAdminComponent({ apiPrefix }),
+            }],
+            menu: [{
+              id: 'schema-explorer',
+              label: menuLabel,
+              path: normAdminPath,
+              icon: menuIcon,
+              order: menuOrder,
+            }],
+            api: {
+              prefix: apiPrefix,
+              routes: [
+                {
+                  method: 'get',
+                  path: '',
+                  handler: (req, res) => {
+                    const rawModels = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
+                    const relationships = extractAllRelationships(rawModels);
+                    const models = enrichModelsWithGraph(rawModels, relationships);
+                    const mermaid = generateMermaidErDiagram(rawModels, relationships);
+
+                    res.json({
+                      meta: {
+                        version: '1.0.0',
+                        generatedAt: new Date().toISOString(),
+                        modelCount: models.length,
+                        relationCount: relationships.length,
+                      },
+                      models,
+                      relationships,
+                      mermaid,
+                    });
+                  },
+                },
+                {
+                  method: 'get',
+                  path: '/relations',
+                  handler: (req, res) => {
+                    const rawModels = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
+                    const relationships = extractAllRelationships(rawModels);
+                    res.json({ relationships });
+                  },
+                },
+                {
+                  method: 'get',
+                  path: '/mermaid',
+                  handler: (req, res) => {
+                    const rawModels = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
+                    const relationships = extractAllRelationships(rawModels);
+                    const mermaid = generateMermaidErDiagram(rawModels, relationships);
+                    res.json({ mermaid });
+                  },
+                },
+                {
+                  method: 'get',
+                  path: '/models/:modelName',
+                  handler: (req, res) => {
+                    const { modelName } = req.params;
+                    const model = getModel(modelName);
+
+                    if (!model || exclude.includes(modelName)) {
+                      return res.status(404).json({ error: `Model "${modelName}" not found` });
+                    }
+
+                    const rawModels = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
+                    const relationships = extractAllRelationships(rawModels);
+                    const models = enrichModelsWithGraph(rawModels, relationships);
+                    const found = models.find(m => m.name === modelName);
+
+                    res.json({ model: found });
+                  },
+                },
+              ],
+            },
+          });
+
+          if (isDev) {
+            console.log(`  🗄️ Schema Explorer Admin: ${adminApi.getAdminPath ? adminApi.getAdminPath() : '/_admin'}${normAdminPath}`);
+          }
         }
-
-        const models = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
-
-        res.json({
-          meta: {
-            version: '1.0.0',
-            generatedAt: new Date().toISOString(),
-            modelCount: models.length,
-          },
-          models,
-        });
-      });
-
-      // OpenAPI/JSON Schema export (must be registered before :modelName route)
-      ctx.addRoute('get', `${path}/openapi`, (req, res) => {
-        // Check authorization
-        if (authorize && !authorize(req)) {
-          return res.status(403).json({ error: 'Forbidden' });
-        }
-
-        const openApiSchemas = generateOrmOpenApiSchemas({ exclude });
-
-        res.json({
-          openapi: '3.0.0',
-          info: {
-            title: 'Database Schema',
-            version: '1.0.0',
-          },
-          components: {
-            schemas: openApiSchemas,
-          },
-        });
-      });
-
-      // Get single model by name (must be after /openapi to avoid matching "openapi" as modelName)
-      ctx.addRoute('get', `${path}/:modelName`, (req, res) => {
-        // Check authorization
-        if (authorize && !authorize(req)) {
-          return res.status(403).json({ error: 'Forbidden' });
-        }
-
-        const { modelName } = req.params;
-        const model = getModel(modelName);
-
-        if (!model || exclude.includes(modelName)) {
-          return res.status(404).json({ error: `Model "${modelName}" not found` });
-        }
-
-        res.json({
-          meta: {
-            version: '1.0.0',
-            generatedAt: new Date().toISOString(),
-          },
-          model: serializeModel(model, { includeColumns, includeRelations, includeScopes }),
-        });
-      });
-
-      if (isDev) {
-        console.log(`  📋 Schema Explorer: ${path}`);
       }
     },
   };
@@ -264,4 +439,8 @@ function serializeRelations(relations) {
 }
 
 module.exports = schemaExplorerPlugin;
-
+module.exports.schemaExplorerPlugin = schemaExplorerPlugin;
+module.exports.extractAllRelationships = extractAllRelationships;
+module.exports.enrichModelsWithGraph = enrichModelsWithGraph;
+module.exports.generateMermaidErDiagram = generateMermaidErDiagram;
+module.exports.generateSchemaExplorerAdminComponent = generateSchemaExplorerAdminComponent;

@@ -45,6 +45,7 @@ export interface CreateAppOptions {
         enabled?: boolean;
         stylesheets?: boolean;
         scripts?: boolean;
+        auto?: boolean;
       };
   /** Trust proxy configuration (default: 1) */
   trustProxy?: boolean | number | string;
@@ -586,6 +587,11 @@ export class AssetManager {
   pageJsUrl(name: string): string;
   pageCss(name: string, attributes?: Record<string, unknown>): string;
   pageCssUrl(name: string): string;
+  hasPageJs(name: string): boolean;
+  hasPageCss(name: string): boolean;
+  getRouteAssetCandidates(routeFile?: string, routePath?: string): string[];
+  pageAssets(nameOrOptions?: string | Record<string, unknown>, attributes?: Record<string, unknown>): string;
+  pageAssetsForRoute(routeFile?: string, routePath?: string, options?: Record<string, unknown>): string;
   [key: string]: unknown;
 }
 
@@ -1140,15 +1146,134 @@ export function validateQueryComplexity(
   includes: string[];
 };
 
-// --- Built-in plugins (subset re-exported from main index.js) ---
+export interface SchemaExplorerPluginOptions {
+  /** Raw JSON API endpoint path (default: '/_schema') */
+  path?: string;
+  /** Force enable/disable raw API (default: auto based on NODE_ENV) */
+  enabled?: boolean;
+  /** Model names to exclude from schema exploration */
+  exclude?: string[];
+  /** Include column metadata (default: true) */
+  includeColumns?: boolean;
+  /** Include relation metadata (default: true) */
+  includeRelations?: boolean;
+  /** Include scope configuration (default: true) */
+  includeScopes?: boolean;
+  /** Custom authorization check for raw endpoint */
+  authorize?: (req: any) => boolean;
+  /** Register interactive page in Admin Panel when adminPanelPlugin is present (default: true) */
+  admin?: boolean;
+  /** Path within admin panel (default: '/schema') */
+  adminPath?: string;
+  /** Admin sidebar menu label (default: 'Schema Explorer') */
+  menuLabel?: string;
+  /** Admin sidebar icon (default: 'database') */
+  menuIcon?: string;
+  /** Admin sidebar menu order (default: 85) */
+  menuOrder?: number;
+  /** Admin page title (default: menuLabel or 'Schema Explorer') */
+  title?: string;
+  /** Admin page title alias */
+  adminTitle?: string;
+  /** Admin API prefix (default: '/schema') */
+  apiPrefix?: string;
+}
 
-export function schemaExplorerPlugin(options?: Record<string, unknown>): WebspressoPlugin;
+export function schemaExplorerPlugin(options?: SchemaExplorerPluginOptions): WebspressoPlugin;
 
-export function adminPanelPlugin(options?: Record<string, unknown>): WebspressoPlugin;
+export interface AdminPanelPluginOptions {
+  /** Database instance (required) */
+  db?: any;
+  /** Base URL path for the admin panel (default: '/_admin') */
+  path?: string;
+  /** Enable or disable the plugin (default: true) */
+  enabled?: boolean;
+  /** Custom admin panel title displayed in HTML <title> and header (default: 'Admin Panel') */
+  title?: string;
+  /** Dynamic page title template where %s is page title and %b is base title (default: '%s | %b') */
+  titleTemplate?: string;
+  /** Session secret for admin auth cookie encryption */
+  sessionSecret?: string;
+  /** Auth manager instance for optional user management integration */
+  auth?: any;
+  /** User management configuration */
+  userManagement?: {
+    enabled?: boolean;
+    model?: string;
+    fields?: Record<string, string>;
+  };
+  /** Staff user management option (default: true) */
+  adminUsers?: boolean | { enabled?: boolean };
+  /** Custom registry configuration callback */
+  configure?: (registry: any) => void;
+  /** POST URL for file uploads */
+  uploadUrl?: string;
+  /** Sanitize rich-text HTML values (default: true) */
+  richTextSanitize?: boolean;
+  /** Auto-register data exchange export/import services (default: true) */
+  dataExchange?: boolean;
+  [key: string]: unknown;
+}
+
+export function adminPanelPlugin(options?: AdminPanelPluginOptions): WebspressoPlugin;
 
 export function dataExchangePlugin(options?: Record<string, unknown>): WebspressoPlugin;
 
-export function siteAnalyticsPlugin(options?: Record<string, unknown>): WebspressoPlugin;
+export interface SiteAnalyticsRetentionConfig {
+  enabled?: boolean;
+  days?: number;
+  errorDays?: number;
+  intervalMs?: number;
+  runOnStart?: boolean;
+}
+
+export interface SiteAnalyticsPurgeResult {
+  viewsDeleted: number;
+  errorsDeleted: number;
+  viewsCutoff: string;
+  errorsCutoff: string;
+}
+
+export interface SiteAnalyticsPurgeOptions {
+  days?: number;
+  errorDays?: number;
+  olderThan?: Date;
+  errorsOlderThan?: Date;
+  tableName?: string;
+  errorsTableName?: string;
+}
+
+export interface SiteAnalyticsPluginOptions {
+  db?: any;
+  tableName?: string;
+  errorsTableName?: string;
+  excludePaths?: (string | RegExp)[];
+  excludeBots?: boolean;
+  customBots?: string[];
+  anonymizeIp?: boolean;
+  trustProxy?: boolean;
+  collectErrors?: boolean;
+  dashboard?: boolean;
+  retentionDays?: number;
+  errorRetentionDays?: number;
+  cleanupIntervalMs?: number;
+  autoCleanup?: boolean;
+  cleanupOnStart?: boolean;
+  retention?: boolean | SiteAnalyticsRetentionConfig;
+  [key: string]: unknown;
+}
+
+export function siteAnalyticsPlugin(options?: SiteAnalyticsPluginOptions): WebspressoPlugin & {
+  api?: {
+    purge(options?: SiteAnalyticsPurgeOptions): Promise<SiteAnalyticsPurgeResult>;
+    purgeAnalyticsData(knex: any, options?: SiteAnalyticsPurgeOptions): Promise<SiteAnalyticsPurgeResult>;
+    startCleanup(intervalMs?: number): void;
+    stopCleanup(): void;
+    getRetentionConfig(): SiteAnalyticsRetentionConfig;
+  };
+  dispose?(): void;
+  shutdown?(): void;
+};
 
 export function auditLogPlugin(options?: Record<string, unknown>): WebspressoPlugin;
 

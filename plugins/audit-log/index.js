@@ -20,11 +20,16 @@ const { purgeAuditLogs } = require('./purge');
 function auditLogPlugin(options = {}) {
   const {
     db,
+    title,
+    adminTitle,
+    pageTitle: customPageTitle,
     adminPath: adminPathOpt,
     tableName = 'audit_logs',
     includeDefaultPage = true,
     apiPrefix = '/audit-logs',
   } = options;
+
+  const pageTitle = title || adminTitle || customPageTitle || 'Audit log';
 
   if (!db) {
     throw new Error('audit-log plugin requires a database instance. Pass `db` in options.');
@@ -61,11 +66,12 @@ function auditLogPlugin(options = {}) {
 
       adminApi.registerModule({
         id: 'audit-log',
+        title: pageTitle,
 
         pages: includeDefaultPage
           ? [{
             id: 'audit-log',
-            title: 'Audit log',
+            title: pageTitle,
             path: '/audit-log',
             icon: 'database',
             component: generateAuditLogComponent({ apiPrefix }),

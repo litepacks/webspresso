@@ -133,7 +133,59 @@ registry.registerPageDir(path.join(__dirname, 'admin-pages'));
 
 ---
 
-## 5. Custom Field Renderers (`registerFieldRenderer`)
+## 5. Page & Plugin Title Management
+
+Admin Panel supports configurable base titles, title templates, and dynamic SPA page titles:
+
+### Plugin Configuration
+```js
+adminPanelPlugin({
+  db,
+  title: 'Acme Admin',           // Base title in <title> and header (default: 'Admin Panel')
+  titleTemplate: '%s | %b',      // Format template: %s = page title, %b = base title (default: '%s | %b')
+});
+```
+
+### Module & Page Title Configuration
+When registering modules and custom pages, titles are automatically propagated to navigation and browser document title:
+```js
+adminApi.registerModule({
+  id: 'reports',
+  title: 'Reports & Analytics',   // Module fallback title
+  pages: [
+    {
+      id: 'monthly-report',
+      title: 'Monthly Report',    // Document title -> "Monthly Report | Acme Admin"
+      path: '/reports/monthly',
+      component: ...,
+    },
+    {
+      id: 'live-dashboard',
+      documentTitle: 'Live Monitor (Fullscreen)', // Raw document.title override
+      path: '/reports/live',
+      layout: false,
+      component: ...,
+    }
+  ]
+});
+```
+
+### Dynamic Client-Side Title Helper (`setAdminPageTitle`)
+From any Mithril component or client script:
+```js
+// Dynamic title formatted with template (e.g. "Sales Overview | Acme Admin")
+window.setAdminPageTitle('Sales Overview');
+
+// Custom template override
+window.setAdminPageTitle('Sales Overview', { template: '%s — %b' });
+
+// Raw document title without template
+window.setAdminPageTitle('Sales Overview', { raw: true });
+```
+
+---
+
+## 6. Custom Field Renderers (`registerFieldRenderer`)
 
 Register custom display and edit renderers for specific column types:
 
@@ -152,7 +204,7 @@ registry.registerFieldRenderer('color-picker', {
 
 ---
 
-## 6. Dashboard Widgets (`registerWidget`)
+## 7. Dashboard Widgets (`registerWidget`)
 
 Register dashboard widgets for the Admin overview screen:
 
@@ -166,7 +218,7 @@ registry.registerWidget('recent-orders', {
 
 ---
 
-## 7. Single Record & Bulk Table Actions
+## 8. Single Record & Bulk Table Actions
 
 Add custom action buttons to model table views:
 
@@ -196,7 +248,7 @@ registry.registerBulkAction('Product', {
 
 ---
 
-## 8. Client Components & Custom Client Script Injections
+## 9. Client Components & Custom Client Script Injections
 
 Inject custom client-side JavaScript / Mithril components into the Admin SPA runtime:
 
@@ -213,7 +265,7 @@ registry.registerClientComponent('custom-banner', `
 
 ---
 
-## 9. Offline & Zero-CDN Architecture
+## 10. Offline & Zero-CDN Architecture
 
 The Admin Panel is 100% self-contained and operates completely offline without external CDN dependencies (`unpkg.com`, `cdn.jsdelivr.net`, or `cdn.tailwindcss.com`):
 - **Vendored Static Assets (`plugins/admin-panel/vendor/`)**:

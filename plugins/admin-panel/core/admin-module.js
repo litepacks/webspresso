@@ -193,19 +193,22 @@ function registerModule(config, deps) {
     menuList = menuList.concat(dirMenuItems);
   }
 
+  const moduleTitle = config.title;
+
   for (const p of pagesList) {
     if (p.menu && !menuList.some(m => m.id === p.id)) {
+      const pageLabel = p.title || moduleTitle || p.id;
       if (p.menu === true) {
         menuList.push({
           id: p.id,
-          label: p.title,
+          label: pageLabel,
           path: p.path,
           icon: p.icon,
         });
       } else if (typeof p.menu === 'object') {
         menuList.push({
           id: p.id,
-          label: p.title,
+          label: pageLabel,
           path: p.path,
           icon: p.icon,
           ...p.menu,
@@ -215,7 +218,7 @@ function registerModule(config, deps) {
   }
 
   if (pagesList.length > 0) {
-    registerPages(config.id, pagesList, { registry, adminPath, ctx, optionalAuth, serveAdminPanel });
+    registerPages(config.id, pagesList, { registry, adminPath, ctx, optionalAuth, serveAdminPanel }, moduleTitle);
   }
 
   if (menuList.length > 0) {
@@ -246,7 +249,7 @@ function registerPageDir(dirPath, deps) {
   }
 }
 
-function registerPages(moduleId, pages, deps) {
+function registerPages(moduleId, pages, deps, moduleTitle) {
   if (!Array.isArray(pages)) {
     throw new Error(`Module "${moduleId}": pages must be an array`);
   }
@@ -267,7 +270,8 @@ function registerPages(moduleId, pages, deps) {
     }
 
     registry.registerPage(pageId, {
-      title: page.title,
+      title: page.title || moduleTitle,
+      documentTitle: page.documentTitle,
       path: page.path,
       icon: page.icon,
       description: page.description,

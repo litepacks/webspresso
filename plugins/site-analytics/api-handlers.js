@@ -329,6 +329,47 @@ function createAnalyticsApiHandlers(options) {
     }
   }
 
+  /**
+   * POST /purge - Purge old analytics data
+   */
+  async function purge(req, res) {
+    try {
+      const rawDays = req.body?.days !== undefined ? req.body.days : req.query?.days;
+      let days = 90;
+      if (rawDays !== undefined && rawDays !== null && rawDays !== '') {
+        days = typeof rawDays === 'number' ? rawDays : Number(rawDays);
+        if (Number.isNaN(days) || days <= 0) {
+          return res.status(400).json({ error: 'days must be a positive number' });
+        }
+      }
+
+      const rawErrorDays = req.body?.errorDays !== undefined ? req.body.errorDays : req.query?.errorDays;
+      let errorDays = 30;
+      if (rawErrorDays !== undefined && rawErrorDays !== null && rawErrorDays !== '') {
+        errorDays = typeof rawErrorDays === 'number' ? rawErrorDays : Number(rawErrorDays);
+        if (Number.isNaN(errorDays) || errorDays <= 0) {
+          return res.status(400).json({ error: 'errorDays must be a positive number' });
+        }
+      }
+
+      const { purgeAnalyticsData } = require('./purge');
+      const result = await purgeAnalyticsData(knex, {
+        tableName,
+        errorsTableName,
+        days,
+        errorDays,
+      });
+
+      res.json({
+        ok: true,
+        success: true,
+        ...result,
+      });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  }
+
   return {
     getStats,
     getViewsOverTime,
@@ -338,6 +379,7 @@ function createAnalyticsApiHandlers(options) {
     getCountries,
     getClientErrors,
     getRecent,
+    purge,
   };
 }
 

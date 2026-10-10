@@ -283,17 +283,24 @@ describe('file-router.js', () => {
 
   describe('resolvePageAssets', () => {
     it('defaults to disabled', () => {
-      expect(resolvePageAssets()).toEqual({ enabled: false, stylesheets: false, scripts: false });
-      expect(resolvePageAssets(false)).toEqual({ enabled: false, stylesheets: false, scripts: false });
+      expect(resolvePageAssets()).toEqual({ enabled: false, stylesheets: false, scripts: false, auto: false });
+      expect(resolvePageAssets(false)).toEqual({ enabled: false, stylesheets: false, scripts: false, auto: false });
     });
     it('enables all when true', () => {
-      expect(resolvePageAssets(true)).toEqual({ enabled: true, stylesheets: true, scripts: true });
+      expect(resolvePageAssets(true)).toEqual({ enabled: true, stylesheets: true, scripts: true, auto: true });
     });
     it('allows selective flags', () => {
       expect(resolvePageAssets({ enabled: true, stylesheets: true, scripts: false })).toEqual({
         enabled: true,
         stylesheets: true,
         scripts: false,
+        auto: true,
+      });
+      expect(resolvePageAssets({ enabled: true, auto: false })).toEqual({
+        enabled: true,
+        stylesheets: true,
+        scripts: true,
+        auto: false,
       });
     });
     it('respects enabled: false', () => {
@@ -301,6 +308,7 @@ describe('file-router.js', () => {
         enabled: false,
         stylesheets: false,
         scripts: false,
+        auto: false,
       });
     });
   });

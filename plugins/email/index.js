@@ -33,6 +33,8 @@ const { emailPluginOptionsFromManifest } = require('./manifest');
 function emailPlugin(options = {}) {
   const {
     db,
+    title,
+    adminTitle,
     transport,
     smtp,
     defaults = {},
@@ -47,6 +49,8 @@ function emailPlugin(options = {}) {
     emailTemplates: emailTemplatesOpt,
     manifest,
   } = options;
+
+  const pageTitle = title || adminTitle || 'Email';
 
   const logToDb = options.logToDb !== undefined ? options.logToDb : !!db;
   const knex = db ? (db.knex || db) : null;
@@ -159,10 +163,11 @@ function emailPlugin(options = {}) {
 
       adminApi.registerModule({
         id: 'email',
+        title: pageTitle,
 
         pages: [{
           id: 'email',
-          title: 'Email',
+          title: pageTitle,
           path: '/email',
           icon: 'mail',
           component: generateEmailComponent({ apiPrefix }),

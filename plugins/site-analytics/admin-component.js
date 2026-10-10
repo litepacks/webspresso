@@ -305,6 +305,29 @@ var AnalyticsPage = {
               onclick: function() { AnalyticsPage.setDays(vnode, d); },
             }, 'Last ' + d + ' days');
           })),
+          // Purge old data button
+          m('button.px-3.py-1.5.text-sm.font-medium.rounded-md.border.border-gray-200.dark:border-slate-700.text-gray-600.dark:text-slate-300.hover:bg-gray-50.dark:hover:bg-slate-700.transition-colors.flex.items-center.gap-1.5', {
+            title: 'Purge analytics data older than 90 days and error logs older than 30 days',
+            disabled: s.purging,
+            onclick: function() {
+              if (!confirm('Are you sure you want to purge analytics data older than 90 days and error logs older than 30 days?')) return;
+              s.purging = true;
+              m.redraw();
+              api.post('/analytics/purge', { days: 90, errorDays: 30 })
+                .then(function(res) {
+                  s.purging = false;
+                  var views = (res && res.viewsDeleted != null) ? res.viewsDeleted : 0;
+                  var errs = (res && res.errorsDeleted != null) ? res.errorsDeleted : 0;
+                  alert('Purged ' + views + ' page views and ' + errs + ' client errors.');
+                  AnalyticsPage.loadData(vnode);
+                })
+                .catch(function(err) {
+                  s.purging = false;
+                  alert('Failed to purge analytics: ' + (err && err.message ? err.message : String(err)));
+                  m.redraw();
+                });
+            },
+          }, s.purging ? 'Purging...' : 'Purge Old Data'),
         ]),
       ]),
 

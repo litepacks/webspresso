@@ -492,8 +492,11 @@ function createApp(options = {}) {
   const pluginManager = createPluginManager();
   
   // Configure asset manager
+  const projectBase = publicDir ? path.dirname(path.resolve(publicDir)) : process.cwd();
   configureAssets({
     publicDir: publicDir || 'public',
+    srcDir: options.srcDir || path.join(projectBase, 'src'),
+    pagesDir: pagesDir || 'pages',
     ...assetsConfig
   });
   

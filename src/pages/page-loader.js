@@ -8,8 +8,16 @@
 
 const fs = require('fs');
 const path = require('path');
-const { createHelpers } = require('../helpers');
-const { loadI18n, createTranslator, detectLocale, resolveMiddlewares, translatorCache } = require('../file-router');
+const { createHelpers, getAssetManager } = require('../helpers');
+const {
+  loadI18n,
+  createTranslator,
+  detectLocale,
+  resolveMiddlewares,
+  translatorCache,
+  resolvePageAssets,
+  applyPageAssetsToTemplateData,
+} = require('../file-router');
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -179,10 +187,36 @@ function createPageHandler(descriptor, context) {
       const templateExists = hasNjkTemplate !== null ? hasNjkTemplate : fs.existsSync(njkCandidate);
 
       if (templateExists && nunjucks) {
+        let pageHead = headData;
+        let pageAssetsActive = false;
+        const pageAssetsOpt = context.pageAssets || (appOptions && appOptions.pageAssets);
+        if (pageAssetsOpt) {
+          const pageAssetsResolved = resolvePageAssets(pageAssetsOpt);
+          if (pageAssetsResolved.enabled) {
+            const pageAssetBundle = applyPageAssetsToTemplateData(
+              pageAssetsResolved,
+              loadedData,
+              {
+                file: descriptor.source || descriptor.file,
+                routePath: descriptor.path,
+              },
+              fsy?.assetManager || getAssetManager()
+            );
+            loadedData = pageAssetBundle.data;
+            pageHead = {
+              ...headData,
+              stylesheets: [...(headData.stylesheets || []), ...(pageAssetBundle.pageHead?.stylesheets || [])],
+              scripts: [...(headData.scripts || []), ...(pageAssetBundle.pageHead?.scripts || [])],
+            };
+            pageAssetsActive = true;
+          }
+        }
+
         const templateData = {
           ...loadedData,
-          head: headData,
-          pageHead: headData,
+          head: pageHead,
+          pageHead,
+          pageAssets: pageAssetsActive || Boolean(loadedData.pageAssets),
           fsy,
           locale,
           t,

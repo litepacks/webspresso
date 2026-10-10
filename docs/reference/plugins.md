@@ -60,12 +60,13 @@ module.exports = {
 | `redirectPlugin` | HTTP redirects | — |
 | `healthCheckPlugin` | Liveness probe | — |
 | `realtimePlugin` | WebSocket / SSE / Socket.IO | — |
-| `siteAnalyticsPlugin` | Self-hosted analytics | — |
+| `siteAnalyticsPlugin` | Self-hosted analytics & retention pruning | — |
 | `auditLogPlugin` | Admin audit trail | — |
 | `dataExchangePlugin` | Admin CSV/XLSX import/export | — |
 | `swaggerPlugin` | OpenAPI + Swagger UI | — |
 | `recaptchaPlugin` | reCAPTCHA verification | — |
 | `sitemapPlugin` | sitemap.xml / robots.txt | — |
+| `schemaExplorerPlugin` | Schema & ER diagram explorer (API & Admin) | — |
 | `xlsxPlugin` | Excel XLSX generation, parsing & ORM export | — |
 | `csvPlugin` | RFC 4180 CSV generation, parsing & ORM export | — |
 

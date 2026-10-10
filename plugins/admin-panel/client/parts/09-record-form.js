@@ -144,6 +144,10 @@ const RecordForm = {
     api.get('/models/' + modelName)
       .then(modelMeta => {
         state.currentModelMeta = modelMeta;
+        if (typeof setAdminPageTitle === 'function') {
+          const label = modelMeta?.label || modelName;
+          setAdminPageTitle((id && id !== 'new' ? 'Edit ' : 'New ') + label);
+        }
         
         // Initialize form data with defaults
         modelMeta.columns.forEach(col => {

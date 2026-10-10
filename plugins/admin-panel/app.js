@@ -9,6 +9,50 @@ module.exports = components + `
 // Set route prefix to admin path
 m.route.prefix = window.__ADMIN_PATH__ || '/_admin';
 
+// Title formatting and synchronization helper
+function formatAdminTitle(pageTitle, baseTitle, template) {
+  baseTitle = baseTitle || 'Admin Panel';
+  if (!pageTitle || pageTitle === baseTitle) {
+    return baseTitle;
+  }
+  if (typeof template === 'function') {
+    return template(pageTitle, baseTitle);
+  }
+  if (typeof template === 'string' && template.trim()) {
+    var formatted = template;
+    if (formatted.indexOf('%s') !== -1) {
+      formatted = formatted.replace(/%s/g, pageTitle);
+    }
+    if (formatted.indexOf('%b') !== -1) {
+      formatted = formatted.replace(/%b/g, baseTitle);
+    }
+    return formatted;
+  }
+  return pageTitle + ' | ' + baseTitle;
+}
+
+function setAdminPageTitle(pageTitle, options) {
+  try {
+    var config = window.__ADMIN_CONFIG__ || {};
+    var settings = config.settings || {};
+    var baseTitle = settings.title || 'Admin Panel';
+    var template = (options && options.template) || settings.titleTemplate || '%s | %b';
+
+    if (options && options.raw) {
+      document.title = pageTitle || baseTitle;
+      return;
+    }
+
+    document.title = formatAdminTitle(pageTitle, baseTitle, template);
+  } catch (e) {
+    if (pageTitle) {
+      document.title = pageTitle;
+    }
+  }
+}
+window.formatAdminTitle = formatAdminTitle;
+window.setAdminPageTitle = setAdminPageTitle;
+
 // Helper to check auth status
 async function checkAuth() {
   if (state.user) return true;
@@ -122,12 +166,15 @@ var routes = {
     onmatch: async () => {
       const needsSetup = await checkSetupNeeded();
       if (needsSetup) {
+        setAdminPageTitle('Setup');
         return SetupForm;
       }
       const isAuth = await checkAuth();
       if (!isAuth) {
+        setAdminPageTitle('Sign In');
         return LoginForm;
       }
+      setAdminPageTitle('Dashboard');
       return Dashboard;
     }
   },
@@ -138,6 +185,7 @@ var routes = {
         m.route.set(consumeIntendedRoute('/'));
         return;
       }
+      setAdminPageTitle('Sign In');
       return LoginForm;
     }
   },
@@ -148,6 +196,7 @@ var routes = {
         m.route.set('/login');
         return;
       }
+      setAdminPageTitle('Setup');
       return SetupForm;
     }
   },
@@ -158,6 +207,7 @@ var routes = {
         redirectToLogin();
         return;
       }
+      setAdminPageTitle('Settings');
       return SettingsPage;
     }
   },
@@ -168,6 +218,7 @@ var routes = {
         redirectToLogin();
         return;
       }
+      setAdminPageTitle('Profile');
       return ProfilePage;
     }
   },
@@ -178,12 +229,14 @@ var routes = {
         redirectToLogin();
         return;
       }
+      setAdminPageTitle('Staff Users');
       return AdminUsersPage;
     }
   },
   '/users/sessions': {
     onmatch: async () => {
       if (!(await guardUserManagementRoutes())) return;
+      setAdminPageTitle('Active Sessions');
       return UserSessionsPage;
     }
   },
@@ -216,6 +269,8 @@ var routes = {
         redirectToLogin();
         return;
       }
+      const model = m.route.param('model');
+      setAdminPageTitle(model);
       return RecordList;
     }
   },
@@ -226,6 +281,8 @@ var routes = {
         redirectToLogin();
         return;
       }
+      const model = m.route.param('model');
+      setAdminPageTitle('New ' + model);
       return RecordForm;
     }
   },
@@ -236,6 +293,8 @@ var routes = {
         redirectToLogin();
         return;
       }
+      const model = m.route.param('model');
+      setAdminPageTitle('Edit ' + model);
       return RecordForm;
     }
   },
@@ -246,6 +305,13 @@ function wrapCustomPageWithLayout(page, rawComp) {
 
   return {
     oninit: function(vnode) {
+      if (page) {
+        if (page.documentTitle) {
+          document.title = page.documentTitle;
+        } else if (page.title || page.id) {
+          setAdminPageTitle(page.title || page.id);
+        }
+      }
       try {
         const instance = typeof rawComp === 'function' ? rawComp.call(rawComp, vnode) : rawComp;
         vnode.state.instance = instance;
@@ -356,6 +422,11 @@ if (config && config.pages) {
         if (!isAuth) {
           redirectToLogin();
           return;
+        }
+        if (page.documentTitle) {
+          document.title = page.documentTitle;
+        } else {
+          setAdminPageTitle(page.title || page.id);
         }
         const comp = (window.__customPages && window.__customPages[page.id])
           ? wrapCustomPageWithLayout(page, window.__customPages[page.id])

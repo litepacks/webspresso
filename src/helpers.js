@@ -27,6 +27,8 @@ const isPathRegexCache = new Map();
 class AssetManager {
   constructor(options = {}) {
     this.publicDir = options.publicDir || 'public';
+    this.srcDir = options.srcDir || 'src';
+    this.pagesDir = options.pagesDir || 'pages';
     this.manifestPath = options.manifestPath || null;
     this.manifest = null;
     this.version = options.version || null;
@@ -247,6 +249,243 @@ class AssetManager {
       ...attributes,
     });
     return `<link ${attrs}>`;
+  }
+
+  /**
+   * Derive candidate page asset names from route file and path
+   * @param {string} [routeFile] - e.g. 'checkout.njk', 'pages/products/[id].njk'
+   * @param {string} [routePath] - e.g. '/checkout', '/products/:id', '/'
+   * @returns {string[]} Ordered candidate asset names
+   */
+  getRouteAssetCandidates(routeFile, routePath) {
+    const candidates = new Set();
+
+    if (routeFile) {
+      let cleanFile = String(routeFile).trim().replace(/^\/+/, '');
+      if (cleanFile.startsWith('pages/')) {
+        cleanFile = cleanFile.slice(6);
+      }
+      cleanFile = cleanFile.replace(/\.(njk|html|ejs|hbs|js)$/, '');
+      if (cleanFile) {
+        candidates.add(cleanFile);
+        if (cleanFile.endsWith('/index')) {
+          candidates.add(cleanFile.slice(0, -6));
+        }
+        if (cleanFile.includes('[')) {
+          const parts = cleanFile.split('/');
+          const staticParts = parts.filter(p => !p.startsWith('['));
+          if (staticParts.length > 0) {
+            candidates.add(staticParts.join('/'));
+          }
+        }
+        if (cleanFile === 'index') {
+          candidates.add('home');
+        }
+      }
+    }
+
+    if (routePath) {
+      let cleanPath = String(routePath).trim().replace(/^\/+/, '').replace(/\/+$/, '');
+      if (cleanPath) {
+        candidates.add(cleanPath);
+        if (cleanPath.includes(':')) {
+          const bracketed = cleanPath.split('/').map(seg => seg.startsWith(':') ? `[${seg.slice(1)}]` : seg).join('/');
+          candidates.add(bracketed);
+          const withoutParams = cleanPath.split('/').filter(seg => !seg.startsWith(':')).join('/');
+          if (withoutParams) candidates.add(withoutParams);
+        }
+      } else {
+        candidates.add('index');
+        candidates.add('home');
+      }
+    }
+
+    return Array.from(candidates);
+  }
+
+  /**
+   * Check if a page-specific JS script exists (in manifest or on filesystem)
+   * @param {string} name - Page name
+   * @returns {boolean}
+   */
+  hasPageJs(name) {
+    if (!name || typeof name !== 'string') return false;
+    let clean = String(name).trim().replace(/^\/+/, '');
+    if (clean.startsWith('pages/')) clean = clean.slice(6);
+    if (clean.startsWith('dist/pages/')) clean = clean.slice(11);
+    if (clean.startsWith('js/pages/')) clean = clean.slice(9);
+    const base = clean.replace(/\.(js|mjs|ts)$/, '');
+    const pagePath = 'pages/' + base + '.js';
+
+    // 1. Check in manifest (production or dev manifest)
+    if (this.manifest) {
+      if (
+        this.manifest[pagePath] ||
+        this.manifest['js/' + pagePath] ||
+        this.manifest['pages/' + base] ||
+        this.manifest[base + '.js'] ||
+        this.manifest[base] ||
+        this.manifest['src/client/' + pagePath] ||
+        this.manifest['client/' + pagePath]
+      ) {
+        return true;
+      }
+    }
+
+    // 2. Check filesystem
+    const publicDir = this.publicDir || 'public';
+    const srcDir = this.srcDir || 'src';
+    const pagesDir = this.pagesDir || 'pages';
+
+    const diskChecks = [
+      path.join(publicDir, 'js', pagePath),
+      path.join(publicDir, pagePath),
+      path.join(publicDir, 'dist', pagePath),
+      path.join(srcDir, 'client', pagePath),
+      path.join(srcDir, 'client', 'pages', base + '.ts'),
+      path.join('src', 'client', 'pages', base + '.js'),
+      path.join('src', 'client', 'pages', base + '.ts'),
+      path.join('client', 'pages', base + '.js'),
+      path.join('client', 'pages', base + '.ts'),
+      path.join(pagesDir, base + '.client.js'),
+      path.join(pagesDir, base + '.client.ts'),
+      path.join('pages', base + '.client.js'),
+      path.join('pages', base + '.client.ts'),
+    ];
+
+    for (const p of diskChecks) {
+      try {
+        if (fs.existsSync(p)) {
+          return true;
+        }
+      } catch (_) {}
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if a page-specific CSS stylesheet exists (in manifest or on filesystem)
+   * @param {string} name - Page name
+   * @returns {boolean}
+   */
+  hasPageCss(name) {
+    if (!name || typeof name !== 'string') return false;
+    let clean = String(name).trim().replace(/^\/+/, '');
+    if (clean.startsWith('pages/')) clean = clean.slice(6);
+    if (clean.startsWith('dist/pages/')) clean = clean.slice(11);
+    if (clean.startsWith('css/pages/')) clean = clean.slice(10);
+    const base = clean.replace(/\.css$/, '');
+    const pagePath = 'pages/' + base + '.css';
+
+    // 1. Check in manifest
+    if (this.manifest) {
+      if (
+        this.manifest[pagePath] ||
+        this.manifest['css/' + pagePath] ||
+        this.manifest['pages/' + base] ||
+        this.manifest[base + '.css'] ||
+        this.manifest[base] ||
+        this.manifest['src/client/' + pagePath] ||
+        this.manifest['client/' + pagePath]
+      ) {
+        return true;
+      }
+    }
+
+    // 2. Check filesystem
+    const publicDir = this.publicDir || 'public';
+    const srcDir = this.srcDir || 'src';
+    const pagesDir = this.pagesDir || 'pages';
+
+    const diskChecks = [
+      path.join(publicDir, 'css', pagePath),
+      path.join(publicDir, pagePath),
+      path.join(publicDir, 'dist', pagePath),
+      path.join(srcDir, 'client', pagePath),
+      path.join('src', 'client', 'pages', base + '.css'),
+      path.join('client', 'pages', base + '.css'),
+      path.join(pagesDir, base + '.css'),
+      path.join('pages', base + '.css'),
+      path.join('public', 'css', 'pages', base + '.css'),
+    ];
+
+    for (const p of diskChecks) {
+      try {
+        if (fs.existsSync(p)) {
+          return true;
+        }
+      } catch (_) {}
+    }
+
+    return false;
+  }
+
+  /**
+   * Generate combined page asset tags (link and/or script) for a given page name
+   * @param {string|Object} [nameOrOptions] - Page name or options
+   * @param {Object} [options={}] - Options ({ js?: boolean, css?: boolean, cssAttrs?: Object, ...jsAttrs })
+   * @returns {string} HTML tags joined with newline
+   */
+  pageAssets(nameOrOptions, options = {}) {
+    let name = nameOrOptions;
+    let opts = options;
+    if (typeof nameOrOptions === 'object' && nameOrOptions !== null) {
+      opts = nameOrOptions;
+      name = null;
+    }
+
+    if (!name) return '';
+
+    const tags = [];
+    const includeCss = opts.css !== false;
+    const includeJs = opts.js !== false;
+
+    if (includeCss && this.hasPageCss(name)) {
+      tags.push(this.pageCss(name, opts.cssAttrs || {}));
+    }
+
+    if (includeJs && this.hasPageJs(name)) {
+      const { css: _c, js: _j, cssAttrs: _ca, ...jsAttrs } = opts;
+      tags.push(this.pageJs(name, jsAttrs));
+    }
+
+    return tags.join('\n');
+  }
+
+  /**
+   * Generate combined page asset tags automatically matching a route
+   * @param {string} [routeFile] - Route template file
+   * @param {string} [routePath] - Route path
+   * @param {Object} [options={}] - Options ({ js?: boolean, css?: boolean, cssAttrs?: Object, ...jsAttrs })
+   * @returns {string} HTML tags joined with newline
+   */
+  pageAssetsForRoute(routeFile, routePath, options = {}) {
+    const candidates = this.getRouteAssetCandidates(routeFile, routePath);
+    const tags = [];
+    const includeCss = options.css !== false;
+    const includeJs = options.js !== false;
+
+    if (includeCss) {
+      for (const cand of candidates) {
+        if (this.hasPageCss(cand)) {
+          tags.push(this.pageCss(cand, options.cssAttrs || {}));
+          break;
+        }
+      }
+    }
+
+    if (includeJs) {
+      for (const cand of candidates) {
+        if (this.hasPageJs(cand)) {
+          const { css: _c, js: _j, cssAttrs: _ca, ...jsAttrs } = options;
+          tags.push(this.pageJs(cand, jsAttrs));
+          break;
+        }
+      }
+    }
+
+    return tags.join('\n');
   }
 
   /**
@@ -620,6 +859,40 @@ function createHelpers(ctx) {
      */
     pageCssUrl(name) {
       return getAssetManager().pageCssUrl(name);
+    },
+
+    /**
+     * Check if a page-specific JS script exists
+     * @param {string} name - Page name
+     * @returns {boolean}
+     */
+    hasPageJs(name) {
+      return getAssetManager().hasPageJs(name);
+    },
+
+    /**
+     * Check if a page-specific CSS stylesheet exists
+     * @param {string} name - Page name
+     * @returns {boolean}
+     */
+    hasPageCss(name) {
+      return getAssetManager().hasPageCss(name);
+    },
+
+    /**
+     * Generate combined page asset tags (link and/or script) for a given page name or current route
+     * @param {string|Object} [nameOrAttrs] - Page name (e.g. 'checkout') or options object
+     * @param {Object} [attrs={}] - Additional attributes
+     * @returns {string} HTML string
+     */
+    pageAssets(nameOrAttrs, attrs) {
+      if (typeof nameOrAttrs === 'string' && nameOrAttrs.trim()) {
+        return getAssetManager().pageAssets(nameOrAttrs, attrs);
+      }
+      const opts = (typeof nameOrAttrs === 'object' && nameOrAttrs !== null) ? nameOrAttrs : (attrs || {});
+      const routeFile = req?.context?.file;
+      const routePath = req?.context?.path || req?.path;
+      return getAssetManager().pageAssetsForRoute(routeFile, routePath, opts);
     },
 
     /**
@@ -1257,6 +1530,18 @@ const utils = {
 
   pageCssUrl(name) {
     return getAssetManager().pageCssUrl(name);
+  },
+
+  hasPageJs(name) {
+    return getAssetManager().hasPageJs(name);
+  },
+
+  hasPageCss(name) {
+    return getAssetManager().hasPageCss(name);
+  },
+
+  pageAssets(nameOrAttrs, attrs) {
+    return getAssetManager().pageAssets(nameOrAttrs, attrs);
   }
 };
 

@@ -110,8 +110,8 @@ describe('Site Analytics Plugin', () => {
       const componentCode = registry.clientComponents.get('analytics');
       expect(componentCode).toContain('AnalyticsPage');
 
-      // report-error + 8 data routes + 1 SPA route
-      expect(routes.length).toBe(10);
+      // report-error + 9 API routes (including purge) + 1 SPA route
+      expect(routes.length).toBe(11);
       expect(routes.some((r) => r.path === '/_analytics/report-error' && r.method === 'post')).toBe(true);
       const apiPaths = routes.map(r => r.path);
       expect(apiPaths).toContain('/_admin/api/analytics/stats');
@@ -122,6 +122,8 @@ describe('Site Analytics Plugin', () => {
       expect(apiPaths).toContain('/_admin/api/analytics/countries');
       expect(apiPaths).toContain('/_admin/api/analytics/client-errors');
       expect(apiPaths).toContain('/_admin/api/analytics/recent');
+      expect(apiPaths).toContain('/_admin/api/analytics/purge');
+      expect(routes.some(r => r.path === '/_admin/api/analytics/purge' && r.method === 'post')).toBe(true);
       expect(apiPaths).toContain('/_admin/analytics');
     });
 
