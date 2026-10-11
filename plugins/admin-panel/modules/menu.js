@@ -64,7 +64,7 @@ function registerModelMenuItems(options, maybeModels) {
       }
       if (registry && typeof registry.registerMenuItem === 'function') {
         registry.registerMenuItem({
-          id: `model-${model.name.toLowerCase()}`,
+          id: `model-${model.name}`,
           label: model.admin.label || model.name,
           path: `/models/${model.name}`,
           icon: model.admin.icon || 'table',

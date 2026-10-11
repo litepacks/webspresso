@@ -490,16 +490,22 @@ describe('Admin Panel Declarative Model DX (ORM ↔ Admin)', () => {
       expect(systemGroup.label).toBe('System');
 
       // Check model items have their assigned group
-      const articleItem = registeredItems.find((i) => i.id === 'model-articledxtest');
+      const articleItem = registeredItems.find((i) => i.id === 'model-ArticleDxTest' || i.id === 'model-articledxtest');
+      expect(articleItem).toBeDefined();
+      expect(articleItem.id).toBe('model-ArticleDxTest');
       expect(articleItem.group).toBe('editorial');
 
-      const authorItem = registeredItems.find((i) => i.id === 'model-authordxtest');
+      const authorItem = registeredItems.find((i) => i.id === 'model-AuthorDxTest' || i.id === 'model-authordxtest');
+      expect(authorItem).toBeDefined();
+      expect(authorItem.id).toBe('model-AuthorDxTest');
       expect(authorItem.group).toBe('editorial');
 
-      const auditItem = registeredItems.find((i) => i.id === 'model-auditlogdxtest');
+      const auditItem = registeredItems.find((i) => i.id === 'model-AuditLogDxTest' || i.id === 'model-auditlogdxtest');
+      expect(auditItem).toBeDefined();
+      expect(auditItem.id).toBe('model-AuditLogDxTest');
       expect(auditItem.group).toBe('system');
 
-      const orphanItem = registeredItems.find((i) => i.id === 'model-orphanmodel');
+      const orphanItem = registeredItems.find((i) => i.id === 'model-OrphanModel' || i.id === 'model-orphanmodel');
       expect(orphanItem).toBeUndefined();
     });
   });
