@@ -191,7 +191,10 @@ function registerUserManagement(options) {
     models: modelName,
     visible: (record) => !record[fieldMap.active],
     handler: async (record, model, { db }) => {
-      const repo = db.getRepository(model);
+      const targetModel = typeof model === 'object' && model !== null
+        ? (model.name || model.modelName || model.model || String(model))
+        : String(model);
+      const repo = db.getRepository(targetModel);
       await repo.update(record.id, { [fieldMap.active]: true });
       return { message: 'User activated' };
     },
@@ -204,7 +207,10 @@ function registerUserManagement(options) {
     models: modelName,
     visible: (record) => record[fieldMap.active],
     handler: async (record, model, { db }) => {
-      const repo = db.getRepository(model);
+      const targetModel = typeof model === 'object' && model !== null
+        ? (model.name || model.modelName || model.model || String(model))
+        : String(model);
+      const repo = db.getRepository(targetModel);
       await repo.update(record.id, { [fieldMap.active]: false });
       return { message: 'User deactivated' };
     },
@@ -218,7 +224,10 @@ function registerUserManagement(options) {
     confirm: true,
     confirmMessage: 'This will generate a new random password. Continue?',
     handler: async (record, model, { db }) => {
-      const repo = db.getRepository(model);
+      const targetModel = typeof model === 'object' && model !== null
+        ? (model.name || model.modelName || model.model || String(model))
+        : String(model);
+      const repo = db.getRepository(targetModel);
       // Generate random password
       const newPassword = generateRandomPassword(12);
       const hashedPassword = await hash(newPassword);
@@ -234,7 +243,10 @@ function registerUserManagement(options) {
     color: 'green',
     models: modelName,
     handler: async (records, model, { db }) => {
-      const repo = db.getRepository(model);
+      const targetModel = typeof model === 'object' && model !== null
+        ? (model.name || model.modelName || model.model || String(model))
+        : String(model);
+      const repo = db.getRepository(targetModel);
       for (const record of records) {
         await repo.update(record.id, { [fieldMap.active]: true });
       }
@@ -248,7 +260,10 @@ function registerUserManagement(options) {
     color: 'red',
     models: modelName,
     handler: async (records, model, { db }) => {
-      const repo = db.getRepository(model);
+      const targetModel = typeof model === 'object' && model !== null
+        ? (model.name || model.modelName || model.model || String(model))
+        : String(model);
+      const repo = db.getRepository(targetModel);
       for (const record of records) {
         await repo.update(record.id, { [fieldMap.active]: false });
       }
@@ -264,7 +279,10 @@ function registerUserManagement(options) {
     confirm: true,
     confirmMessage: 'Are you sure you want to delete the selected users? This cannot be undone.',
     handler: async (records, model, { db }) => {
-      const repo = db.getRepository(model);
+      const targetModel = typeof model === 'object' && model !== null
+        ? (model.name || model.modelName || model.model || String(model))
+        : String(model);
+      const repo = db.getRepository(targetModel);
       for (const record of records) {
         await repo.delete(record.id);
       }

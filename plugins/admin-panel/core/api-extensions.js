@@ -347,8 +347,16 @@ function createExtensionApiHandlers(options) {
         body: req.body,
         model: modelName,
         modelName,
+        name: modelName,
       };
-      const modelArg = Object.assign(new String(modelName), context);
+      const modelArg = Object.assign(new String(modelName), context, {
+        name: modelName,
+        modelName,
+        model: modelName,
+        valueOf: () => modelName,
+        toString: () => modelName,
+        [Symbol.toPrimitive]: () => modelName,
+      });
       const result = await action.handler(record, modelArg, context);
 
       res.json({ success: true, result });
@@ -429,8 +437,16 @@ function createExtensionApiHandlers(options) {
         body: req.body,
         model: modelName,
         modelName,
+        name: modelName,
       };
-      const modelArg = Object.assign(new String(modelName), context);
+      const modelArg = Object.assign(new String(modelName), context, {
+        name: modelName,
+        modelName,
+        model: modelName,
+        valueOf: () => modelName,
+        toString: () => modelName,
+        [Symbol.toPrimitive]: () => modelName,
+      });
       const result = await action.handler(records, modelArg, context);
 
       res.json({ success: true, result, affected: records.length });

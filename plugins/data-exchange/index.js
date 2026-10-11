@@ -76,14 +76,17 @@ function dataExchangePlugin(options = {}) {
           models: '*',
           confirm: false,
           handler: async (records, modelName, { db: d }) => {
+            const targetModel = typeof modelName === 'object' && modelName !== null
+              ? (modelName.name || modelName.modelName || modelName.model || String(modelName))
+              : String(modelName);
             const { getModel } = require('../../core/orm/model');
-            const model = d.getModel ? d.getModel(modelName) : getModel(modelName);
+            const model = d.getModel ? d.getModel(targetModel) : getModel(targetModel);
             const pk = model?.primaryKey || 'id';
             const ids = records.map((r) => r[pk]).join(',');
             return {
               download: true,
-              url: `${adminPath}/api/data-exchange/export/${modelName}?ids=${encodeURIComponent(ids)}`,
-              filename: `${modelName}_export.xlsx`,
+              url: `${adminPath}/api/data-exchange/export/${targetModel}?ids=${encodeURIComponent(ids)}`,
+              filename: `${targetModel}_export.xlsx`,
             };
           },
         });

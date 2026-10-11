@@ -169,12 +169,35 @@ function registerModelHooks(modelName, hooks) {
 }
 
 /**
+ * Extract model name string from string, String object, or model definition/context
+ * @param {string|Object} nameOrModel - Model name or object
+ * @returns {string}
+ */
+function resolveModelName(nameOrModel) {
+  if (typeof nameOrModel === 'string') {
+    return nameOrModel;
+  }
+  if (nameOrModel && typeof nameOrModel === 'object') {
+    if (typeof nameOrModel.name === 'string') return nameOrModel.name;
+    if (typeof nameOrModel.modelName === 'string') return nameOrModel.modelName;
+    if (typeof nameOrModel.model === 'string') return nameOrModel.model;
+    if (typeof nameOrModel.valueOf === 'function') {
+      const val = nameOrModel.valueOf();
+      if (typeof val === 'string') return val;
+    }
+    return String(nameOrModel);
+  }
+  return nameOrModel != null ? String(nameOrModel) : '';
+}
+
+/**
  * Get a model by name
- * @param {string} name - Model name
+ * @param {string|Object} name - Model name
  * @returns {import('./types').ModelDefinition|undefined}
  */
 function getModel(name) {
-  return modelRegistry.get(name);
+  const modelName = resolveModelName(name);
+  return modelRegistry.get(modelName);
 }
 
 /**
@@ -187,11 +210,12 @@ function getAllModels() {
 
 /**
  * Check if a model exists
- * @param {string} name - Model name
+ * @param {string|Object} name - Model name
  * @returns {boolean}
  */
 function hasModel(name) {
-  return modelRegistry.has(name);
+  const modelName = resolveModelName(name);
+  return modelRegistry.has(modelName);
 }
 
 /**
@@ -203,11 +227,12 @@ function clearRegistry() {
 
 /**
  * Unregister a model by name
- * @param {string} name - Model name
+ * @param {string|Object} name - Model name
  * @returns {boolean} Whether the model was removed
  */
 function unregisterModel(name) {
-  return modelRegistry.delete(name);
+  const modelName = resolveModelName(name);
+  return modelRegistry.delete(modelName);
 }
 
 /**
@@ -217,7 +242,7 @@ function unregisterModel(name) {
  */
 function resolveRelationModel(relation) {
   let model = typeof relation.model === 'function' ? relation.model() : relation.model;
-  if (typeof model === 'string') {
+  if (typeof model === 'string' || (model && typeof model === 'object' && !model.table)) {
     model = getModel(model);
   }
   if (!model || !model.name) {
@@ -255,6 +280,7 @@ module.exports = {
   hasModel,
   clearRegistry,
   unregisterModel,
+  resolveModelName,
   resolveRelationModel,
   getRelationKeys,
   // Export registry for testing

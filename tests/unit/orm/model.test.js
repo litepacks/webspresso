@@ -155,6 +155,18 @@ describe('Model', () => {
       expect(found).toBe(original);
     });
 
+    it('should retrieve model using String instance or object', () => {
+      const schema = z.object({ id: zdb.id() });
+      const original = defineModel({ name: 'FindableObj', table: 'findables_obj', schema });
+
+      expect(getModel(new String('FindableObj'))).toBe(original);
+      expect(getModel({ name: 'FindableObj' })).toBe(original);
+      expect(getModel({ modelName: 'FindableObj' })).toBe(original);
+      expect(getModel({ model: 'FindableObj' })).toBe(original);
+      expect(hasModel(new String('FindableObj'))).toBe(true);
+      expect(hasModel({ modelName: 'FindableObj' })).toBe(true);
+    });
+
     it('should return undefined for non-existent model', () => {
       expect(getModel('NonExistent')).toBeUndefined();
     });

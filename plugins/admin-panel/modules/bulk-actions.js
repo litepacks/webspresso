@@ -22,12 +22,15 @@ function registerDefaultBulkActions(options) {
     confirm: true,
     confirmMessage: 'Restore the selected records?',
     handler: async (records, modelName, { db }) => {
+      const targetModel = typeof modelName === 'object' && modelName !== null
+        ? (modelName.name || modelName.modelName || modelName.model || String(modelName))
+        : String(modelName);
       const { getModel } = require('../../../core/orm/model');
-      const model = db.getModel ? db.getModel(modelName) : getModel(modelName);
+      const model = db.getModel ? db.getModel(targetModel) : getModel(targetModel);
       if (!model?.scopes?.softDelete) {
         return { message: 'Model does not support restore', error: true };
       }
-      const repo = db.getRepository(modelName);
+      const repo = db.getRepository(targetModel);
       let restored = 0;
       for (const record of records) {
         try {
@@ -48,9 +51,11 @@ function registerDefaultBulkActions(options) {
     color: 'red',
     models: '*',
     confirm: true,
-    confirmMessage: 'Are you sure you want to delete the selected records? This action cannot be undone.',
     handler: async (records, model, { db }) => {
-      const repo = db.getRepository(model);
+      const targetModel = typeof model === 'object' && model !== null
+        ? (model.name || model.modelName || model.model || String(model))
+        : String(model);
+      const repo = db.getRepository(targetModel);
       let deleted = 0;
       
       for (const record of records) {
@@ -131,7 +136,10 @@ function createFieldUpdateBulkAction(modelName, field, value, options = {}) {
     confirm,
     confirmMessage,
     handler: async (records, model, { db }) => {
-      const repo = db.getRepository(model);
+      const targetModel = typeof model === 'object' && model !== null
+        ? (model.name || model.modelName || model.model || String(model))
+        : String(model);
+      const repo = db.getRepository(targetModel);
       let updated = 0;
 
       for (const record of records) {

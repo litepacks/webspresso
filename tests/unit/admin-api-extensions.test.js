@@ -298,6 +298,53 @@ describe('admin api-extensions', () => {
       expect(r2.statusCode).toBe(400);
     });
 
+    it('bulkActionHandler executes action and resolves model with getRepository', async () => {
+      let passedModel;
+      registry.registerBulkAction('bulk-test', {
+        label: 'BT',
+        models: '*',
+        handler: async (records, model, { db: d }) => {
+          passedModel = model;
+          const repo = d.getRepository(model);
+          for (const rec of records) {
+            await repo.delete(rec.id);
+          }
+          return { deleted: records.length };
+        },
+      });
+
+      const deletedIds = [];
+      const mockRepo = {
+        findById: async (id) => ({ id, title: `Item ${id}` }),
+        delete: async (id) => { deletedIds.push(id); },
+      };
+
+      const handlers = createExtensionApiHandlers({
+        registry,
+        db: {
+          ...db,
+          getModel: (name) => ({ name: String(name), primaryKey: 'id', scopes: {} }),
+          getRepository: (name) => {
+            expect(typeof name === 'string' || typeof name?.name === 'string' || typeof name?.valueOf === 'function').toBe(true);
+            return mockRepo;
+          },
+        },
+      });
+
+      const res = createMockRes();
+      await handlers.bulkActionHandler(
+        { params: { actionId: 'bulk-test', model: 'TestPost' }, body: { ids: [10, 20, 30] } },
+        res,
+      );
+
+      expect(res.statusCode).toBe(200);
+      expect(res.payload.success).toBe(true);
+      expect(res.payload.affected).toBe(3);
+      expect(res.payload.result).toEqual({ deleted: 3 });
+      expect(deletedIds).toEqual([10, 20, 30]);
+      expect(String(passedModel)).toBe('TestPost');
+    });
+
     it('bulkFieldsHandler returns enum and boolean fields', () => {
       const model = {
         name: 'X',

@@ -7,7 +7,7 @@
 const path = require('path');
 const fs = require('fs');
 const { createSchemaHelpers, extractColumnsFromSchema, getColumnMeta } = require('./schema-helpers');
-const { defineModel, getModel, getAllModels, hasModel, clearRegistry } = require('./model');
+const { defineModel, getModel, getAllModels, hasModel, clearRegistry, resolveModelName } = require('./model');
 const { createRepository } = require('./repository');
 const { createMigrationManager } = require('./migrations');
 const { createSeeder } = require('./seeder');
@@ -172,13 +172,11 @@ function createDatabase(config) {
 
   /**
    * Get a model by name
-   * @param {string|import('./types').ModelDefinition} nameOrModel - Model name or model definition
+   * @param {string|Object|import('./types').ModelDefinition} nameOrModel - Model name or model definition
    * @returns {import('./types').ModelDefinition}
    */
   function getModelInstance(nameOrModel) {
-    const name = typeof nameOrModel === 'object' && nameOrModel !== null && nameOrModel.name
-      ? nameOrModel.name
-      : nameOrModel;
+    const name = resolveModelName(nameOrModel);
 
     // First check local registry
     let model = models.get(name);
@@ -199,11 +197,12 @@ function createDatabase(config) {
 
   /**
    * Check if a model exists
-   * @param {string} name - Model name
+   * @param {string|Object} name - Model name
    * @returns {boolean}
    */
   function hasModelInstance(name) {
-    return models.has(name);
+    const modelName = resolveModelName(name);
+    return models.has(modelName) || hasModel(modelName);
   }
 
   /**
