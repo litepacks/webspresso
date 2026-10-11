@@ -3,8 +3,24 @@ const LoginForm = {
   oninit: () => {
     state.loading = false;
     state.error = null;
+    state.notice = null;
+    var reason = null;
+    try {
+      if (typeof m !== 'undefined' && m.route && typeof m.route.param === 'function') {
+        reason = m.route.param('reason');
+      }
+      if (!reason && typeof window !== 'undefined' && window.location && window.location.search) {
+        var match = window.location.search.match(/[?&]reason=([^&]+)/);
+        if (match && match[1]) reason = decodeURIComponent(match[1]);
+      }
+    } catch (e) {}
+    if (reason === 'expired') {
+      state.notice = 'Your session has expired. Please sign in again.';
+    }
   },
   view: () => m('.min-h-screen.flex.items-center.justify-center.p-4.sm:p-6.bg-gradient-to-br.from-blue-600.via-indigo-600.to-purple-700', [
+    typeof ToastContainer !== 'undefined' ? m(ToastContainer) : null,
+    typeof ConfirmModalContainer !== 'undefined' ? m(ConfirmModalContainer) : null,
     m('.w-full.max-w-md', [
       m('.bg-white.dark:bg-slate-800.rounded-2xl.shadow-2xl.p-6.sm:p-8', [
         m('div.text-center.mb-6', [
@@ -33,6 +49,7 @@ const LoginForm = {
               });
               state.user = result.user;
               state.error = null;
+              state.notice = null;
               m.route.set(consumeIntendedRoute('/'));
             } catch (err) {
               state.error = err.message || 'Invalid email or password';
@@ -42,6 +59,10 @@ const LoginForm = {
             }
           }
         }, [
+          state.notice ? m('.bg-amber-50.border.border-amber-200.text-amber-800.dark:bg-amber-950/50.dark:border-amber-800/80.dark:text-amber-200.px-4.py-3.rounded-lg.mb-4.text-sm.flex.items-center.gap-2', [
+            m('span.text-base.select-none', 'ℹ️'),
+            m('span.flex-1', state.notice),
+          ]) : null,
           state.error ? m('.bg-red-50.border.border-red-200.text-red-700.dark:bg-red-950/50.dark:border-red-800/80.dark:text-red-200.px-4.py-3.rounded-lg.mb-4.text-sm.flex.items-center.gap-2', [
             m('span.text-base.select-none', '⚠️'),
             m('span.flex-1', state.error),
@@ -90,8 +111,11 @@ const SetupForm = {
   oninit: () => {
     state.loading = false;
     state.error = null;
+    state.notice = null;
   },
   view: () => m('.min-h-screen.flex.items-center.justify-center.p-4.sm:p-6.bg-gradient-to-br.from-blue-600.via-indigo-600.to-purple-700', [
+    typeof ToastContainer !== 'undefined' ? m(ToastContainer) : null,
+    typeof ConfirmModalContainer !== 'undefined' ? m(ConfirmModalContainer) : null,
     m('.w-full.max-w-md', [
       m('.bg-white.dark:bg-slate-800.rounded-2xl.shadow-2xl.p-6.sm:p-8', [
         m('div.text-center.mb-6', [

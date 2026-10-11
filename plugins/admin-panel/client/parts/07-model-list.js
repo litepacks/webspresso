@@ -318,7 +318,7 @@ const BulkFieldUpdateDropdown = {
                             vnode.state._bulkFieldName = null;
                             if (onComplete) onComplete();
                           } catch (err) {
-                            alert('Error: ' + err.message);
+                            notifyError('Error: ' + err.message);
                           } finally {
                             state.bulkActionInProgress = false;
                             m.redraw();
@@ -339,9 +339,9 @@ const BulkFieldUpdateDropdown = {
                       const trimmed = vnode.state.bulkTemporalInput && String(vnode.state.bulkTemporalInput).trim();
                       if (!trimmed) {
                         if (state.selectedBulkField.nullable) {
-                          alert('Enter a date/time or use Clear (set null).');
+                          notifyWarning('Enter a date/time or use Clear (set null).');
                         } else {
-                          alert('Please enter a value.');
+                          notifyWarning('Please enter a value.');
                         }
                         return;
                       }
@@ -362,7 +362,7 @@ const BulkFieldUpdateDropdown = {
                         vnode.state._bulkFieldName = null;
                         if (onComplete) onComplete();
                       } catch (err) {
-                        alert('Error: ' + err.message);
+                        notifyError('Error: ' + err.message);
                       } finally {
                         state.bulkActionInProgress = false;
                         m.redraw();
@@ -383,7 +383,7 @@ const BulkFieldUpdateDropdown = {
                         state.selectedBulkField = null;
                         if (onComplete) onComplete();
                       } catch (err) {
-                        alert('Error: ' + err.message);
+                        notifyError('Error: ' + err.message);
                       } finally {
                         state.bulkActionInProgress = false;
                         m.redraw();

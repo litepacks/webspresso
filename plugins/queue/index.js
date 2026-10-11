@@ -72,6 +72,12 @@ function queuePlugin(options = {}) {
         pollInterval,
         jobsDir,
         autoStart,
+        retention: options.retention,
+        retentionDays: options.retentionDays,
+        retentionStatuses: options.retentionStatuses,
+        cleanupIntervalMs: options.cleanupIntervalMs,
+        autoCleanup: options.autoCleanup,
+        cleanupOnStart: options.cleanupOnStart,
       });
 
       // Expose to ctx & app
@@ -88,6 +94,11 @@ function queuePlugin(options = {}) {
       }
 
       this.queue = queueManager;
+    },
+
+    api: {
+      getQueueManager: () => queueManager,
+      clean: (opts) => queueManager?.clean(opts),
     },
 
     onRoutesReady(ctx) {

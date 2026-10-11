@@ -29,6 +29,15 @@ const { emailPluginOptionsFromManifest } = require('./manifest');
  * @param {Object} [options.authEmails] - Auth email bridge config
  * @param {Object} [options.emailTemplates] - Precompiled templates from build manifest
  * @param {Object} [options.manifest] - Full build manifest (uses emailTemplates field)
+ * @param {Object|boolean} [options.retention] - Retention policy configuration (set false to disable)
+ * @param {number} [options.retention.days=90] - Days to retain email logs
+ * @param {number} [options.retention.intervalMs=86400000] - Auto-cleanup timer frequency (24h)
+ * @param {boolean} [options.retention.runOnStart=true] - Run initial purge shortly after startup
+ * @param {number} [options.retentionDays=90] - Shorthand for retention.days
+ * @param {number} [options.cleanupIntervalMs=86400000] - Shorthand for retention.intervalMs
+ * @param {boolean} [options.autoCleanup=true] - Enable automatic background cleanup
+ * @param {boolean} [options.cleanupOnStart=true] - Run initial purge on start
+ * @param {number} [options.cleanupStartDelayMs] - Delay in ms before start purge
  */
 function emailPlugin(options = {}) {
   const {
@@ -59,6 +68,90 @@ function emailPlugin(options = {}) {
     console.warn('[email] logToDb is enabled but no db was passed — logging disabled');
   }
 
+  // Retention configuration
+  const retentionOption = options.retention;
+  const isRetentionDisabled =
+    retentionOption === false ||
+    (typeof retentionOption === 'object' && retentionOption.enabled === false) ||
+    options.retentionDays === null ||
+    options.retentionDays === 0 ||
+    !logToDb ||
+    !knex;
+
+  const autoCleanupEnabled =
+    !isRetentionDisabled &&
+    options.autoCleanup !== false &&
+    (typeof retentionOption !== 'object' || retentionOption.autoCleanup !== false);
+
+  const retentionConfig = {
+    enabled: !isRetentionDisabled,
+    autoCleanup: autoCleanupEnabled,
+    days: (typeof options.retentionDays === 'number' && options.retentionDays > 0)
+      ? options.retentionDays
+      : (typeof retentionOption === 'object' && retentionOption?.days ? retentionOption.days : 90),
+    intervalMs: (typeof options.cleanupIntervalMs === 'number' && options.cleanupIntervalMs > 0)
+      ? options.cleanupIntervalMs
+      : (typeof retentionOption === 'object' && retentionOption?.intervalMs ? retentionOption.intervalMs : 24 * 60 * 60 * 1000),
+    runOnStart: (typeof retentionOption === 'object' && retentionOption?.runOnStart !== undefined)
+      ? !!retentionOption.runOnStart
+      : (options.cleanupOnStart !== undefined ? !!options.cleanupOnStart : true),
+  };
+
+  let cleanupInterval = null;
+  let cleanupStartTimeout = null;
+
+  async function runCleanup() {
+    if (!knex) return 0;
+    try {
+      return await purgeEmailLogs(knex, {
+        tableName,
+        days: retentionConfig.days,
+      });
+    } catch (err) {
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('[email] Failed to run retention cleanup:', err.message);
+      }
+    }
+  }
+
+  function startCleanup(customIntervalMs) {
+    stopCleanup();
+    if (!retentionConfig.enabled || !knex) return;
+    if (typeof customIntervalMs === 'number' && customIntervalMs > 0) {
+      retentionConfig.intervalMs = customIntervalMs;
+    }
+
+    if (retentionConfig.runOnStart) {
+      const delayMs = typeof options.cleanupStartDelayMs === 'number'
+        ? options.cleanupStartDelayMs
+        : (process.env.NODE_ENV === 'test' ? 50 : 5000);
+      cleanupStartTimeout = setTimeout(() => {
+        runCleanup();
+      }, delayMs);
+      if (cleanupStartTimeout && cleanupStartTimeout.unref) {
+        cleanupStartTimeout.unref();
+      }
+    }
+
+    cleanupInterval = setInterval(() => {
+      runCleanup();
+    }, retentionConfig.intervalMs);
+    if (cleanupInterval && cleanupInterval.unref) {
+      cleanupInterval.unref();
+    }
+  }
+
+  function stopCleanup() {
+    if (cleanupStartTimeout) {
+      clearTimeout(cleanupStartTimeout);
+      cleanupStartTimeout = null;
+    }
+    if (cleanupInterval) {
+      clearInterval(cleanupInterval);
+      cleanupInterval = null;
+    }
+  }
+
   const registry = new TemplateRegistry();
 
   const manifestChunks = emailTemplatesOpt
@@ -85,7 +178,7 @@ function emailPlugin(options = {}) {
   return {
     name: 'email',
     version: '1.0.0',
-    description: 'MJML + Nodemailer email sending with optional admin UI and auth integration',
+    description: 'MJML + Nodemailer email sending with optional admin UI, auth integration, and retention cleanup',
     dependencies: includeAdminPage ? { 'admin-panel': '*' } : {},
 
     api: {
@@ -96,12 +189,28 @@ function emailPlugin(options = {}) {
       listTemplates: () => registry.list(),
       verifyConnection: () => emailService.verifyConnection(),
       queryLogs: (filters) => emailService.queryLogs(filters),
+      purge: (opts = {}) => {
+        if (!knex) throw new Error('Database is required for purge');
+        return purgeEmailLogs(knex, {
+          tableName: opts.tableName || tableName,
+          days: opts.days !== undefined ? opts.days : (opts.retentionDays !== undefined ? opts.retentionDays : retentionConfig.days),
+          olderThan: opts.olderThan,
+          ...opts,
+        });
+      },
       purgeLogs: (opts = {}) => {
         if (!knex) throw new Error('Database is required for purgeLogs');
         return purgeEmailLogs(knex, {
           tableName: opts.tableName || tableName,
           olderThan: opts.olderThan,
+          days: opts.days !== undefined ? opts.days : (opts.retentionDays !== undefined ? opts.retentionDays : retentionConfig.days),
+          ...opts,
         });
+      },
+      startCleanup,
+      stopCleanup,
+      getRetentionConfig() {
+        return { ...retentionConfig };
       },
       getMigrationTemplate: (name) => generateEmailLogsMigration(name || tableName),
       isTransportReady: () => emailService.isTransportReady(),
@@ -124,6 +233,22 @@ function emailPlugin(options = {}) {
           }
         }
       }
+
+      if (retentionConfig.enabled && autoCleanupEnabled) {
+        startCleanup();
+      }
+
+      return () => {
+        stopCleanup();
+      };
+    },
+
+    dispose() {
+      stopCleanup();
+    },
+
+    shutdown() {
+      stopCleanup();
     },
 
     onRoutesReady(ctx) {

@@ -111,3 +111,46 @@ module.exports.options = {
   backoff: { type: 'exponential', delay: 2000 },
 };
 ```
+
+---
+
+## 5. Job Retention & Pruning
+
+To prevent the queue database table or memory cache from accumulating indefinitely:
+
+### 1. Auto-Retention in `createQueueManager` / `queuePlugin`
+```js
+queuePlugin({
+  adapter: 'database',
+  db: appDb,
+  retentionDays: 7, // Keep completed jobs for 7 days
+  cleanupIntervalMs: 24 * 60 * 60 * 1000, // Run every 24h
+  autoCleanup: true,
+  retentionStatuses: ['completed'], // or ['completed', 'failed']
+});
+```
+
+### 2. Programmatic `clean()`
+```js
+// Delete completed jobs older than 7 days
+const deletedCount = await queue.clean({
+  days: 7,
+  status: ['completed'], // or 'failed', or ['completed', 'failed']
+});
+
+// Or with an explicit cutoff date:
+await queue.clean({
+  olderThan: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+  status: 'failed',
+});
+```
+
+### 3. CLI Command: `queue:prune`
+```bash
+# Delete completed jobs older than 7 days
+webspresso queue:prune --days 7
+
+# Delete both completed and failed jobs older than 14 days
+webspresso queue:prune --days 14 --status completed,failed
+```
+

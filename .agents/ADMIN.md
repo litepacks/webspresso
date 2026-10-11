@@ -216,6 +216,17 @@ registry.registerWidget('recent-orders', {
 });
 ```
 
+### Built-in Dashboard Widgets
+- **`model-stats`**: Model overview cards displaying record counts, column counts, and last update timestamps.
+- **`database-storage`**: Database Storage & Health monitor showing:
+  - Database engine (SQLite, PostgreSQL, MySQL) & active file sizes
+  - Total tables and total record counts across the schema
+  - Storage health status badge with high-volume alerts for unpruned logs
+  - Top tables by row count with visual progress percentage bars
+  - Direct navigation links to model CRUD screens
+- **`quick-actions`**: Fast shortcuts to create new records across enabled models.
+- **`recent-activity`**: Timeline of recent administrative mutations (creates, updates, deletes).
+
 ---
 
 ## 8. Single Record & Bulk Table Actions
@@ -274,4 +285,89 @@ The Admin Panel is 100% self-contained and operates completely offline without e
   - `quill.min.js` & `quill.snow.min.css` — Rich-text WYSIWYG editor.
 - **Local Asset Serving**: Served locally at `GET /_admin/vendor/:file` with proper MIME types, path traversal protections, and `Cache-Control: public, max-age=86400` caching.
 - **Hardened CSP**: Works in air-gapped / intranet environments with strict `'self'` Content Security Policy without leaking third-party network requests.
+
+---
+
+## 11. Toast Notifications, Modal Confirmations & Session Expiry UX
+
+The Admin SPA includes a built-in reactive notification and modal system that replaces intrusive browser `alert()` and `confirm()` dialogs.
+
+### Toast Notifications (`window.notify`)
+Display auto-dismissing, animated toasts in the top-right corner with pause-on-hover:
+
+```js
+// Available on window.notify or as global helpers: notifySuccess, notifyError, notifyWarning, notifyInfo
+notify.success('Record created successfully');
+notify.error('Failed to save record: Validation error');
+notify.warning('Please review unsaved changes');
+notify.info('Export started in the background');
+
+// Custom duration (TTL in milliseconds, default 4000ms):
+notify.success('Saved!', 2000);
+```
+
+### Confirmation Modal (`window.confirmModal` / `confirmAction`)
+Display an accessible, styled modal dialog returning a Promise resolving to `true` or `false`:
+
+```js
+// Destructive confirmation (danger: true highlights the confirm button in red)
+const confirmed = await confirmAction({
+  title: 'Delete User',
+  message: 'Are you sure you want to permanently delete this user?',
+  confirmText: 'Delete',
+  cancelText: 'Cancel',
+  danger: true,
+});
+
+if (confirmed) {
+  await api.delete(`/users/${id}`);
+  notify.success('User deleted');
+}
+```
+
+### Session Expiration & Intended Return-To Redirection
+When an authenticated staff user's session expires or an API call returns `401 Unauthorized`:
+1. `redirectToLogin('expired')` captures the active route and redirects to `/_admin/#!/login?returnTo=<route>&reason=expired`.
+2. The login screen displays an informational notice banner: *"Your session has expired. Please sign in again."*
+3. After authenticating successfully, the user is automatically redirected to their intended route.
+4. **Open-Redirect Hardening**: All return destinations are strictly validated by `isSafeIntendedRoute(path)` to disallow protocol-relative URLs (`//evil.com`), foreign protocols (`http:`, `javascript:`), or backslashes.
+
+---
+
+## 12. Admin Login Brute-Force Protection & Rate Limiting
+
+The Admin Panel includes built-in in-memory rate limiting to defend staff login endpoints against credential stuffing and brute-force password guessing.
+
+### Configuration (`adminPanelPlugin`)
+
+```js
+import { createApp, adminPanelPlugin } from 'webspresso';
+
+const app = createApp({
+  plugins: [
+    adminPanelPlugin({
+      db,
+      // Configure or disable login rate limiting:
+      loginRateLimit: {
+        enabled: true,                  // Default: true
+        maxAttempts: 5,                 // Max failed attempts before blocking (default: 5)
+        windowMs: 15 * 60 * 1000,       // Tracking window (default: 15 minutes)
+        blockDurationMs: 15 * 60 * 1000 // Temporary block duration (default: 15 minutes)
+      },
+    }),
+  ],
+});
+```
+
+To disable rate limiting (e.g. in test or internal automated environments):
+```js
+adminPanelPlugin({ db, loginRateLimit: false });
+```
+
+### Protection Mechanics
+- **IP Tracking**: Tracks failed attempts keyed by client IP (`req.ip` or upstream trusted proxy headers).
+- **Automatic Block**: After `maxAttempts` failed logins within `windowMs`, returns HTTP 429 Too Many Requests with a `Retry-After: <seconds>` response header and JSON error payload.
+- **Success Reset**: A single successful login clears the failed attempt counter for that IP.
+- **Programmatic Reset**: Cleared automatically upon server restart or via `plugin.api.resetLoginAttempts(ip)`.
+
 

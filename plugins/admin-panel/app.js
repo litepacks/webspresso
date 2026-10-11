@@ -89,7 +89,7 @@ function getUserManagementModel() {
 async function guardUserManagementRoutes() {
   var isAuth = await checkAuth();
   if (!isAuth) {
-    redirectToLogin();
+    redirectToLogin('expired');
     return false;
   }
   if (!getUserManagementModel()) {
@@ -142,13 +142,20 @@ const UserSessionsPage = {
                   m('td.px-3.py-2.text-gray-700.dark:text-slate-300', r.created_at ? new Date(r.created_at).toLocaleString() : ''),
                   m('td.px-3.py-2', m('button.text-red-600.dark:text-red-400.text-xs', {
                     onclick: async function () {
-                      if (!confirm('Revoke this session?')) return;
+                      var ok = await confirmAction({
+                        title: 'Revoke Session',
+                        message: 'Revoke this session?',
+                        danger: true,
+                        confirmText: 'Revoke'
+                      });
+                      if (!ok) return;
                       try {
                         await api.delete('/users/sessions/' + encodeURIComponent(r.token));
                         vnode.state.rows = vnode.state.rows.filter(function (x) { return x.token !== r.token; });
+                        notifySuccess('Session revoked successfully');
                         m.redraw();
                       } catch (err) {
-                        alert(err.message || err);
+                        notifyError(err.message || String(err));
                       }
                     },
                   }, 'Revoke')),
@@ -204,7 +211,7 @@ var routes = {
     onmatch: async () => {
       const isAuth = await checkAuth();
       if (!isAuth) {
-        redirectToLogin();
+        redirectToLogin('expired');
         return;
       }
       setAdminPageTitle('Settings');
@@ -215,7 +222,7 @@ var routes = {
     onmatch: async () => {
       const isAuth = await checkAuth();
       if (!isAuth) {
-        redirectToLogin();
+        redirectToLogin('expired');
         return;
       }
       setAdminPageTitle('Profile');
@@ -226,7 +233,7 @@ var routes = {
     onmatch: async () => {
       const isAuth = await checkAuth();
       if (!isAuth) {
-        redirectToLogin();
+        redirectToLogin('expired');
         return;
       }
       setAdminPageTitle('Staff Users');
@@ -266,7 +273,7 @@ var routes = {
     onmatch: async () => {
       const isAuth = await checkAuth();
       if (!isAuth) {
-        redirectToLogin();
+        redirectToLogin('expired');
         return;
       }
       const model = m.route.param('model');
@@ -278,7 +285,7 @@ var routes = {
     onmatch: async () => {
       const isAuth = await checkAuth();
       if (!isAuth) {
-        redirectToLogin();
+        redirectToLogin('expired');
         return;
       }
       const model = m.route.param('model');
@@ -290,7 +297,7 @@ var routes = {
     onmatch: async () => {
       const isAuth = await checkAuth();
       if (!isAuth) {
-        redirectToLogin();
+        redirectToLogin('expired');
         return;
       }
       const model = m.route.param('model');
@@ -420,7 +427,7 @@ if (config && config.pages) {
       onmatch: async () => {
         const isAuth = await checkAuth();
         if (!isAuth) {
-          redirectToLogin();
+          redirectToLogin('expired');
           return;
         }
         if (page.documentTitle) {

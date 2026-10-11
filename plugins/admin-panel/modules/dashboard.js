@@ -135,6 +135,176 @@ function registerDashboardWidgets(options) {
       return actions.slice(0, 5); // Max 5 quick actions
     },
   });
+
+  // Database Storage & Health widget
+  registry.registerWidget('database-storage', {
+    title: 'Database Storage & Health',
+    size: 'full',
+    order: 15,
+    dataLoader: async ({ db }) => {
+      return await collectDatabaseStorageStats(db);
+    },
+  });
+}
+
+/**
+ * Collect database storage and health statistics
+ * @param {Object} db - Database instance
+ * @returns {Promise<Object>}
+ */
+async function collectDatabaseStorageStats(db) {
+  if (!db || !db.knex) {
+    return {
+      engine: 'Unknown',
+      totalTables: 0,
+      totalRows: 0,
+      overallHealth: 'healthy',
+      tables: [],
+      sqliteInfo: null,
+    };
+  }
+
+  const clientName = String(db.knex.client?.config?.client || 'unknown').toLowerCase();
+  const isSqlite = clientName.includes('sqlite');
+  const isPostgres = clientName.includes('pg') || clientName.includes('postgres');
+  const isMysql = clientName.includes('mysql');
+
+  const { getAllModels } = require('../../../core/orm/model');
+  const allModels = db.getAllModels ? db.getAllModels() : Array.from(getAllModels().values());
+  const modelList = Array.isArray(allModels) ? allModels : Array.from(allModels.values());
+  const modelByTable = new Map();
+  for (const m of modelList) {
+    if (m.table) modelByTable.set(m.table, m);
+  }
+
+  // 1. Discover table names
+  const tableNamesSet = new Set();
+
+  try {
+    if (isSqlite) {
+      const res = await db.knex.raw("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';");
+      const rows = Array.isArray(res) ? res : (res?.rows || []);
+      for (const r of rows) {
+        if (r && r.name) tableNamesSet.add(r.name);
+      }
+    } else if (isPostgres) {
+      const res = await db.knex.raw("SELECT table_name as name FROM information_schema.tables WHERE table_schema='public';");
+      const rows = res?.rows || (Array.isArray(res) ? res : []);
+      for (const r of rows) {
+        if (r && r.name) tableNamesSet.add(r.name);
+      }
+    } else if (isMysql) {
+      const res = await db.knex.raw('SHOW TABLES;');
+      const rows = Array.isArray(res) && Array.isArray(res[0]) ? res[0] : (Array.isArray(res) ? res : []);
+      for (const r of rows) {
+        const val = Object.values(r || {})[0];
+        if (val) tableNamesSet.add(val);
+      }
+    }
+  } catch (e) {
+    // If raw query fails, fall back to known tables
+  }
+
+  // Always include model tables and known system tables
+  for (const m of modelList) {
+    if (m.table) tableNamesSet.add(m.table);
+  }
+  const knownSystemTables = [
+    'admin_users',
+    'admin_activity_logs',
+    'audit_logs',
+    'email_logs',
+    'webspresso_jobs',
+    'analytics_page_views',
+    'analytics_sessions',
+    'knex_migrations',
+  ];
+  for (const t of knownSystemTables) {
+    tableNamesSet.add(t);
+  }
+
+  const tables = [];
+  let totalRows = 0;
+  let hasAttention = false;
+
+  for (const table of tableNamesSet) {
+    try {
+      const exists = await db.knex.schema.hasTable(table);
+      if (!exists) continue;
+
+      const countRes = await db.knex(table).count('* as count').first();
+      const countVal = countRes ? (countRes.count ?? countRes['count(*)'] ?? countRes['COUNT(*)'] ?? 0) : 0;
+      const count = parseInt(countVal, 10) || 0;
+      totalRows += count;
+
+      let category = 'system';
+      const model = modelByTable.get(table);
+      if (model) {
+        category = 'orm';
+      } else if (table === 'audit_logs' || table === 'email_logs' || table === 'admin_activity_logs') {
+        category = 'logs';
+      } else if (table.startsWith('analytics_')) {
+        category = 'analytics';
+      } else if (table.includes('jobs') || table.includes('queue')) {
+        category = 'queue';
+      }
+
+      // Attention flag if logs or queue tables exceed 25,000 rows
+      const isHighVolume = (category === 'logs' || category === 'analytics' || category === 'queue') && count > 25000;
+      if (isHighVolume) hasAttention = true;
+
+      tables.push({
+        table,
+        count,
+        category,
+        modelName: model ? model.name : null,
+        modelLabel: model?.admin?.label || (model ? model.name : null),
+        modelIcon: model?.admin?.icon || null,
+        isHighVolume,
+      });
+    } catch (e) {
+      // Table query error, ignore
+    }
+  }
+
+  // Sort tables by row count descending
+  tables.sort((a, b) => b.count - a.count);
+
+  // SQLite storage stats if available
+  let sqliteInfo = null;
+  if (isSqlite) {
+    try {
+      const pageCountRes = await db.knex.raw('PRAGMA page_count;');
+      const pageSizeRes = await db.knex.raw('PRAGMA page_size;');
+      const freelistRes = await db.knex.raw('PRAGMA freelist_count;');
+
+      const pageCount = (pageCountRes[0]?.page_count ?? pageCountRes[0]?.[0]) || 0;
+      const pageSize = (pageSizeRes[0]?.page_size ?? pageSizeRes[0]?.[0]) || 4096;
+      const freelistCount = (freelistRes[0]?.freelist_count ?? freelistRes[0]?.[0]) || 0;
+
+      const sizeBytes = pageCount * pageSize;
+      const freeBytes = freelistCount * pageSize;
+      const fragmentation = pageCount > 0 ? ((freelistCount / pageCount) * 100).toFixed(1) : 0;
+
+      sqliteInfo = {
+        pageCount,
+        pageSize,
+        freelistCount,
+        sizeBytes,
+        freeBytes,
+        fragmentation: Number(fragmentation),
+      };
+    } catch (e) {}
+  }
+
+  return {
+    engine: isSqlite ? 'SQLite' : isPostgres ? 'PostgreSQL' : isMysql ? 'MySQL' : clientName,
+    totalTables: tables.length,
+    totalRows,
+    overallHealth: hasAttention ? 'attention' : 'healthy',
+    tables,
+    sqliteInfo,
+  };
 }
 
 /**
@@ -297,6 +467,118 @@ const WidgetRenderers = {
         ]),
       ]);
     },
+  },
+
+  // Database Storage & Health Widget
+  'database-storage': {
+    render: (data) => {
+      if (!data) return m('div.text-gray-500.dark:text-slate-400', 'No data');
+      const totalRows = data.totalRows || 0;
+      const tables = data.tables || [];
+      const isAttention = data.overallHealth === 'attention';
+
+      function formatStorageBytes(bytes) {
+        if (!bytes || bytes <= 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+      }
+
+      const categoryStyles = {
+        orm: { bg: 'bg-blue-100 dark:bg-blue-950/60', text: 'text-blue-700 dark:text-blue-300', bar: 'bg-blue-600' },
+        logs: { bg: 'bg-amber-100 dark:bg-amber-950/60', text: 'text-amber-800 dark:text-amber-300', bar: 'bg-amber-500' },
+        analytics: { bg: 'bg-purple-100 dark:bg-purple-950/60', text: 'text-purple-700 dark:text-purple-300', bar: 'bg-purple-600' },
+        queue: { bg: 'bg-rose-100 dark:bg-rose-950/60', text: 'text-rose-700 dark:text-rose-300', bar: 'bg-rose-500' },
+        system: { bg: 'bg-gray-100 dark:bg-slate-800', text: 'text-gray-700 dark:text-slate-300', bar: 'bg-gray-500' },
+      };
+
+      return m('div.space-y-4', [
+        // 4 Metric Tiles
+        m('div.grid.grid-cols-2.sm:grid-cols-4.gap-3', [
+          m('div.p-3.bg-gray-50.dark:bg-slate-900.rounded-xl.border.border-gray-200.dark:border-slate-800', [
+            m('p.text-xs.font-medium.text-gray-500.dark:text-slate-400', 'Database Engine'),
+            m('p.text-lg.font-bold.text-gray-900.dark:text-slate-100.mt-1', data.engine || 'SQL'),
+            data.sqliteInfo && data.sqliteInfo.sizeBytes > 0
+              ? m('p.text-xs.text-blue-600.dark:text-blue-400.mt-0.5', formatStorageBytes(data.sqliteInfo.sizeBytes))
+              : null,
+          ]),
+          m('div.p-3.bg-gray-50.dark:bg-slate-900.rounded-xl.border.border-gray-200.dark:border-slate-800', [
+            m('p.text-xs.font-medium.text-gray-500.dark:text-slate-400', 'Total Tables'),
+            m('p.text-lg.font-bold.text-gray-900.dark:text-slate-100.mt-1', data.totalTables || 0),
+            m('p.text-xs.text-gray-400.dark:text-slate-500.mt-0.5', 'Active in schema'),
+          ]),
+          m('div.p-3.bg-gray-50.dark:bg-slate-900.rounded-xl.border.border-gray-200.dark:border-slate-800', [
+            m('p.text-xs.font-medium.text-gray-500.dark:text-slate-400', 'Total Records'),
+            m('p.text-lg.font-bold.text-gray-900.dark:text-slate-100.mt-1', totalRows.toLocaleString()),
+            m('p.text-xs.text-gray-400.dark:text-slate-500.mt-0.5', 'Across all tables'),
+          ]),
+          m('div.p-3.rounded-xl.border', {
+            class: isAttention
+              ? 'bg-amber-50.border-amber-200.dark:bg-amber-950/40.dark:border-amber-800/80'
+              : 'bg-emerald-50.border-emerald-200.dark:bg-emerald-950/40.dark:border-emerald-800/80'
+          }, [
+            m('p.text-xs.font-medium', {
+              class: isAttention ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'
+            }, 'Storage Health'),
+            m('div.flex.items-center.gap-1.5.mt-1', [
+              m('span.w-2.5.h-2.5.rounded-full', {
+                class: isAttention ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+              }),
+              m('p.text-lg.font-bold', {
+                class: isAttention ? 'text-amber-800 dark:text-amber-200' : 'text-emerald-800 dark:text-emerald-200'
+              }, isAttention ? 'Attention' : 'Healthy'),
+            ]),
+            m('p.text-xs.mt-0.5', {
+              class: isAttention ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
+            }, isAttention ? 'High row count in logs' : 'No table bloat detected'),
+          ]),
+        ]),
+
+        // Table Breakdown List with Progress Bars
+        m('div.bg-gray-50.dark:bg-slate-900.rounded-xl.border.border-gray-200.dark:border-slate-800.p-4', [
+          m('div.flex.items-center.justify-between.mb-3', [
+            m('h4.text-xs.font-bold.uppercase.tracking-wider.text-gray-500.dark:text-slate-400', 'Top Tables by Row Count'),
+            m('span.text-xs.text-gray-400.dark:text-slate-500', tables.length + ' tables'),
+          ]),
+          tables.length === 0
+            ? m('p.text-xs.text-gray-400.text-center.py-4', 'No tables detected')
+            : m('div.space-y-2.5', tables.slice(0, 8).map(t => {
+                const pct = totalRows > 0 ? ((t.count / totalRows) * 100).toFixed(1) : 0;
+                const style = categoryStyles[t.category] || categoryStyles.system;
+
+                return m('div.flex.flex-col.gap-1', [
+                  m('div.flex.items-center.justify-between.text-xs', [
+                    m('div.flex.items-center.gap-2', [
+                      t.modelName
+                        ? m('a.font-semibold.text-blue-600.dark:text-blue-400.hover:underline', {
+                            href: '/models/' + t.modelName,
+                            onclick: (e) => { e.preventDefault(); m.route.set('/models/' + t.modelName); }
+                          }, (t.modelIcon ? t.modelIcon + ' ' : '') + t.table)
+                        : m('span.font-medium.text-gray-800.dark:text-slate-200', t.table),
+                      m('span.px-1.5.py-0.5.rounded.text-[10px].font-medium', {
+                        class: style.bg + ' ' + style.text
+                      }, t.category.toUpperCase()),
+                      t.isHighVolume
+                        ? m('span.text-[10px].text-amber-600.dark:text-amber-400.font-medium', '⚠️ High volume')
+                        : null,
+                    ]),
+                    m('div.flex.items-center.gap-2', [
+                      m('span.font-semibold.text-gray-900.dark:text-slate-100', t.count.toLocaleString() + ' rows'),
+                      m('span.text-gray-400.dark:text-slate-500.w-10.text-right', pct + '%'),
+                    ])
+                  ]),
+                  m('div.w-full.bg-gray-200.dark:bg-slate-700.rounded-full.h-1.5.overflow-hidden', [
+                    m('div.h-1.5.rounded-full.transition-all', {
+                      class: style.bar,
+                      style: { width: Math.max(1, Math.min(100, Number(pct))) + '%' }
+                    })
+                  ])
+                ]);
+              }))
+        ])
+      ]);
+    }
   },
 
   // Default renderer
@@ -473,4 +755,5 @@ const Dashboard = {
 module.exports = {
   registerDashboardWidgets,
   generateDashboardComponent,
+  collectDatabaseStorageStats,
 };

@@ -78,6 +78,17 @@ function generateAuditLogComponent(options = {}) {
             m('button.bg-blue-600.text-white.px-4.py-1.rounded', {
               onclick: function() { page = 1; load(); },
             }, 'Apply'),
+            m('button.border.px-3.py-1.rounded.text-red-700.ml-auto', {
+              onclick: function() {
+                if (!confirm('Delete audit logs older than 90 days?')) return;
+                api.post(API + '/purge', { days: 90 }).then(function() {
+                  page = 1;
+                  load();
+                }).catch(function(e) {
+                  alert('Purge failed: ' + (e.message || String(e)));
+                });
+              },
+            }, 'Purge 90d'),
           ]),
           m('div.text-sm.text-gray-500', 'Total: ' + total),
           m('div.overflow-x-auto.border.rounded', [

@@ -42,6 +42,42 @@ class QueueManager extends EventEmitter {
     this.isRunning = false;
     this._timer = null;
 
+    // Retention configuration
+    const retentionOption = options.retention;
+    const isRetentionDisabled =
+      retentionOption === false ||
+      (typeof retentionOption === 'object' && retentionOption.enabled === false) ||
+      options.retentionDays === null;
+
+    const autoCleanupEnabled =
+      !isRetentionDisabled &&
+      options.autoCleanup !== false &&
+      (typeof retentionOption !== 'object' || retentionOption.autoCleanup !== false) &&
+      (retentionOption !== undefined || options.retentionDays !== undefined || options.cleanupIntervalMs !== undefined);
+
+    this.retentionConfig = {
+      enabled: !isRetentionDisabled && autoCleanupEnabled,
+      days: (typeof options.retentionDays === 'number' && options.retentionDays >= 0)
+        ? options.retentionDays
+        : (typeof retentionOption === 'object' && retentionOption?.days ? retentionOption.days : 7),
+      statuses: (typeof retentionOption === 'object' && retentionOption?.statuses)
+        ? retentionOption.statuses
+        : (options.retentionStatuses || ['completed']),
+      intervalMs: (typeof options.cleanupIntervalMs === 'number' && options.cleanupIntervalMs > 0)
+        ? options.cleanupIntervalMs
+        : (typeof retentionOption === 'object' && retentionOption?.intervalMs ? retentionOption.intervalMs : 24 * 60 * 60 * 1000),
+      runOnStart: (typeof retentionOption === 'object' && retentionOption?.runOnStart !== undefined)
+        ? !!retentionOption.runOnStart
+        : (options.cleanupOnStart !== undefined ? !!options.cleanupOnStart : false),
+    };
+
+    this._cleanupInterval = null;
+    this._cleanupStartTimeout = null;
+
+    if (this.retentionConfig.enabled) {
+      this.startCleanup();
+    }
+
     if (this.jobsDir && fs.existsSync(this.jobsDir)) {
       this.loadJobsFromDirectory(this.jobsDir);
     }
@@ -199,6 +235,7 @@ class QueueManager extends EventEmitter {
 
     this.isDraining = false;
     this.isRunning = false;
+    this.stopCleanup();
     this.emit('drain');
   }
 
@@ -208,7 +245,93 @@ class QueueManager extends EventEmitter {
   async stop() {
     this.pause();
     this.isRunning = false;
+    this.stopCleanup();
     this.emit('stop');
+  }
+
+  /**
+   * Delete completed or failed jobs older than a cutoff date
+   * @param {Object} [options={}]
+   * @param {string|string[]} [options.status=['completed']]
+   * @param {Date|string|number} [options.olderThan]
+   * @param {number} [options.days=7]
+   * @param {number} [options.retentionDays]
+   * @param {number} [options.limit]
+   * @returns {Promise<number>}
+   */
+  async clean(options = {}) {
+    if (this.adapter && typeof this.adapter.clean === 'function') {
+      return this.adapter.clean(options);
+    }
+    return 0;
+  }
+
+  /**
+   * Run one-time retention cleanup pass
+   * @returns {Promise<number>}
+   */
+  async runCleanup() {
+    try {
+      return await this.clean({
+        status: this.retentionConfig.statuses,
+        days: this.retentionConfig.days,
+      });
+    } catch (err) {
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('[QueueManager] Failed to run retention cleanup:', err.message);
+      }
+      return 0;
+    }
+  }
+
+  /**
+   * Start auto-retention cleanup timer
+   * @param {number} [customIntervalMs]
+   */
+  startCleanup(customIntervalMs) {
+    this.stopCleanup();
+    if (!this.retentionConfig.enabled) return;
+    if (typeof customIntervalMs === 'number' && customIntervalMs > 0) {
+      this.retentionConfig.intervalMs = customIntervalMs;
+    }
+
+    if (this.retentionConfig.runOnStart) {
+      const delayMs = process.env.NODE_ENV === 'test' ? 50 : 5000;
+      this._cleanupStartTimeout = setTimeout(() => {
+        this.runCleanup();
+      }, delayMs);
+      if (this._cleanupStartTimeout && this._cleanupStartTimeout.unref) {
+        this._cleanupStartTimeout.unref();
+      }
+    }
+
+    this._cleanupInterval = setInterval(() => {
+      this.runCleanup();
+    }, this.retentionConfig.intervalMs);
+    if (this._cleanupInterval && this._cleanupInterval.unref) {
+      this._cleanupInterval.unref();
+    }
+  }
+
+  /**
+   * Stop auto-retention cleanup timer
+   */
+  stopCleanup() {
+    if (this._cleanupStartTimeout) {
+      clearTimeout(this._cleanupStartTimeout);
+      this._cleanupStartTimeout = null;
+    }
+    if (this._cleanupInterval) {
+      clearInterval(this._cleanupInterval);
+      this._cleanupInterval = null;
+    }
+  }
+
+  /**
+   * Get retention configuration
+   */
+  getRetentionConfig() {
+    return { ...this.retentionConfig };
   }
 
   /**

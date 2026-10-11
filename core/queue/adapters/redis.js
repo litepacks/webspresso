@@ -337,6 +337,86 @@ class RedisQueueAdapter {
   }
 
   /**
+   * Delete completed or failed jobs older than a cutoff date
+   * @param {Object} [options={}]
+   * @param {string|string[]} [options.status=['completed']]
+   * @param {Date|string|number} [options.olderThan]
+   * @param {number} [options.days=7]
+   * @param {number} [options.retentionDays]
+   * @param {number} [options.limit]
+   * @returns {Promise<number>}
+   */
+  async clean(options = {}) {
+    let olderThan;
+    if (options.olderThan !== undefined) {
+      olderThan = options.olderThan instanceof Date
+        ? options.olderThan
+        : new Date(options.olderThan);
+
+      if (Number.isNaN(olderThan.getTime())) {
+        throw new Error('clean: invalid olderThan date');
+      }
+    } else {
+      const rawDays = options.days !== undefined
+        ? options.days
+        : (options.retentionDays !== undefined ? options.retentionDays : 7);
+      const days = typeof rawDays === 'number' ? rawDays : Number(rawDays);
+      if (Number.isNaN(days) || days < 0) {
+        throw new Error('clean: days must be a non-negative number');
+      }
+      olderThan = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    }
+
+    let statuses = ['completed'];
+    if (options.status) {
+      if (Array.isArray(options.status)) {
+        statuses = options.status;
+      } else if (typeof options.status === 'string') {
+        if (options.status === '*' || options.status === 'all') {
+          statuses = ['completed', 'failed'];
+        } else {
+          statuses = options.status.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+      }
+    }
+
+    const cutoffTime = olderThan.getTime();
+    let deletedCount = 0;
+    const limit = typeof options.limit === 'number' && options.limit > 0 ? options.limit : Infinity;
+
+    for (const status of statuses) {
+      const setKey = this._key(status);
+      let jobIds = [];
+      try {
+        if (typeof this.client.smembers === 'function') {
+          jobIds = (await this.client.smembers(setKey)) || [];
+        } else if (typeof this.client.sMembers === 'function') {
+          jobIds = (await this.client.sMembers(setKey)) || [];
+        }
+      } catch {}
+
+      for (const id of jobIds) {
+        if (deletedCount >= limit) break;
+        const job = await this.getJob(id);
+        const jobTime = job?.updatedAt ? new Date(job.updatedAt).getTime() : 0;
+        if (!job || jobTime < cutoffTime) {
+          if (typeof this.client.srem === 'function') {
+            await this.client.srem(setKey, id);
+          } else if (typeof this.client.sRem === 'function') {
+            await this.client.sRem(setKey, id);
+          }
+          if (typeof this.client.del === 'function') {
+            await this.client.del(this._key('job:' + id));
+          }
+          deletedCount++;
+        }
+      }
+    }
+
+    return deletedCount;
+  }
+
+  /**
    * Clear all queue keys
    * @returns {Promise<void>}
    */

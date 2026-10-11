@@ -3,6 +3,8 @@
  * @module plugins/audit-log/api-handlers
  */
 
+const { purgeAuditLogs } = require('./purge');
+
 /**
  * @param {Object} options
  * @param {import('knex').Knex} options.knex
@@ -51,6 +53,37 @@ function createAuditLogHandlers(options) {
     }
   }
 
+  async function purgeHandler(req, res) {
+    try {
+      const body = req.body || {};
+      const query = req.query || {};
+      const rawDays = body.days !== undefined
+        ? body.days
+        : (body.retentionDays !== undefined ? body.retentionDays : (query.days !== undefined ? query.days : 90));
+      const days = parseInt(rawDays, 10);
+      if (Number.isNaN(days) || days < 1) {
+        return res.status(400).json({ error: 'days must be a positive integer' });
+      }
+
+      const olderThan = body.olderThan
+        ? new Date(body.olderThan)
+        : new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      if (Number.isNaN(olderThan.getTime())) {
+        return res.status(400).json({ error: 'invalid olderThan date' });
+      }
+
+      const deleted = await purgeAuditLogs(knex, {
+        tableName,
+        olderThan,
+      });
+
+      res.json({ ok: true, success: true, deleted, olderThan: olderThan.toISOString() });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+
   /**
    * Programmatic list (for other plugins)
    * @param {Object} [filters]
@@ -74,6 +107,7 @@ function createAuditLogHandlers(options) {
 
   return {
     listHandler,
+    purgeHandler,
     queryLogs,
   };
 }

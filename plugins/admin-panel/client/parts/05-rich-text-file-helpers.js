@@ -343,12 +343,12 @@ async function handleAdminFileUpload(file, onChange, meta, state) {
     uploadUrl = (cfg && cfg.settings && cfg.settings.uploadUrl) ? String(cfg.settings.uploadUrl) : '';
   } catch (e) {}
   if (!uploadUrl) {
-    alert('Upload URL is not configured.');
+    notifyError('Upload URL is not configured.');
     return;
   }
   var maxSize = meta.maxSize || meta.maxBytes || (10 * 1024 * 1024);
   if (file.size > maxSize) {
-    alert('File too large (max ' + Math.round(maxSize / 1024 / 1024) + ' MB).');
+    notifyWarning('File too large (max ' + Math.round(maxSize / 1024 / 1024) + ' MB).');
     return;
   }
   if (state && file.type && file.type.indexOf('image/') === 0) {
@@ -365,7 +365,7 @@ async function handleAdminFileUpload(file, onChange, meta, state) {
     if (!res.ok) {
       revokeLocalPreview(state);
       m.redraw();
-      alert(data.message || data.error || ('Upload failed (' + res.status + ')'));
+      notifyError(data.message || data.error || ('Upload failed (' + res.status + ')'));
       return;
     }
     revokeLocalPreview(state);
@@ -375,7 +375,7 @@ async function handleAdminFileUpload(file, onChange, meta, state) {
   } catch (err) {
     revokeLocalPreview(state);
     m.redraw();
-    alert(err.message || 'Upload failed');
+    notifyError(err.message || 'Upload failed');
   }
 }
 

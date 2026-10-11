@@ -126,6 +126,25 @@ function uploadPlugin(options = {}) {
     version: '1.0.0',
     description: 'Multipart file uploads with pluggable storage',
 
+    api: {
+      scanOrphanedUploads(opts = {}) {
+        const { scanOrphanedUploads } = require('./orphan-pruner');
+        return scanOrphanedUploads({
+          destDir: local?.destDir,
+          publicBasePath: local?.publicBasePath,
+          ...opts,
+        });
+      },
+      pruneOrphanedUploads(opts = {}) {
+        const { pruneOrphanedUploads } = require('./orphan-pruner');
+        return pruneOrphanedUploads({
+          destDir: local?.destDir,
+          publicBasePath: local?.publicBasePath,
+          ...opts,
+        });
+      },
+    },
+
     register(ctx) {
       if (ctx.app && ctx.app.serviceRegistry) {
         const { createMediaServices } = require('../../src/services/builtins/media');
@@ -221,7 +240,14 @@ function uploadPlugin(options = {}) {
   };
 }
 
+const {
+  scanOrphanedUploads,
+  pruneOrphanedUploads,
+} = require('./orphan-pruner');
+
 module.exports = {
   uploadPlugin,
   createLocalFileProvider,
+  scanOrphanedUploads,
+  pruneOrphanedUploads,
 };

@@ -461,13 +461,25 @@ var toastState = {
   }
 };
 
+function normalizeToastOptions(options) {
+  if (typeof options === 'number') {
+    return { duration: options };
+  }
+  return options || {};
+}
+
 var AdminToast = function(message, type, options) {
-  return toastState.add(type || 'info', message, options);
+  var opts = normalizeToastOptions(options);
+  if (typeof type === 'object') {
+    opts = type;
+    type = opts.type || 'info';
+  }
+  return toastState.add(type || 'info', message, opts);
 };
-AdminToast.success = function(message, options) { return toastState.add('success', message, options); };
-AdminToast.error = function(message, options) { return toastState.add('error', message, options); };
-AdminToast.warning = function(message, options) { return toastState.add('warning', message, options); };
-AdminToast.info = function(message, options) { return toastState.add('info', message, options); };
+AdminToast.success = function(message, options) { return toastState.add('success', message, normalizeToastOptions(options)); };
+AdminToast.error = function(message, options) { return toastState.add('error', message, normalizeToastOptions(options)); };
+AdminToast.warning = function(message, options) { return toastState.add('warning', message, normalizeToastOptions(options)); };
+AdminToast.info = function(message, options) { return toastState.add('info', message, normalizeToastOptions(options)); };
 AdminToast.remove = function(id) { return toastState.remove(id); };
 AdminToast.clear = function() { return toastState.clear(); };
 
@@ -607,6 +619,11 @@ if (typeof window !== 'undefined') {
   window.Admin.ui = AdminUI;
   window.Admin.toast = AdminToast;
   window.Admin.confirm = AdminConfirm;
+  window.notify = AdminToast;
+  window.toast = AdminToast;
+  window.confirmModal = AdminConfirm;
+  window.toastState = toastState;
+  window.confirmState = confirmState;
   window.ToastContainer = ToastContainer;
   window.ConfirmModalContainer = ConfirmModalContainer;
 }

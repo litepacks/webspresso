@@ -54,6 +54,7 @@ function adminPanelPlugin(options = {}) {
     uploadUrl: uploadUrlOption,
     richTextSanitize = true,
     dataExchange: dataExchangeOption = true,
+    loginRateLimit,
   } = options;
 
   const adminUsersConfig = typeof adminUsersOption === 'object' ? adminUsersOption : { enabled: adminUsersOption !== false };
@@ -178,8 +179,14 @@ function adminPanelPlugin(options = {}) {
       getTitleTemplate() {
         return registry.getTitleTemplate();
       },
+      resetLoginAttempts(ip) {
+        if (this._apiHandlers && typeof this._apiHandlers.resetLoginAttempts === 'function') {
+          return this._apiHandlers.resetLoginAttempts(ip);
+        }
+      },
 
       _ctx: null,
+      _apiHandlers: null,
     },
 
     /**
@@ -368,7 +375,9 @@ function adminPanelPlugin(options = {}) {
         hashPassword: (password, rounds) => bcrypt.hash(password, process.env.NODE_ENV === 'test' ? 4 : (rounds || 10)),
         comparePassword: (password, hash) => bcrypt.compare(password, hash),
         richTextSanitize,
+        loginRateLimit,
       });
+      this.api._apiHandlers = apiHandlers;
 
       const extensionHandlers = createExtensionApiHandlers({
         registry,

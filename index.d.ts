@@ -5,6 +5,7 @@
 import type { Application, NextFunction, Request, RequestHandler, Response } from 'express';
 import type { Knex } from 'knex';
 import type { ZodObject, ZodTypeAny } from 'zod';
+import type { EventEmitter } from 'events';
 
 /** Registered as createApp middlewares[name]: plain handler or (options) => handler (for middleware: ['name', options]). */
 export type WebspressoRegisteredMiddleware =
@@ -1212,6 +1213,13 @@ export interface AdminPanelPluginOptions {
   richTextSanitize?: boolean;
   /** Auto-register data exchange export/import services (default: true) */
   dataExchange?: boolean;
+  /** Admin login brute-force protection / rate limiting (default: enabled with 5 attempts per 15 mins) */
+  loginRateLimit?: boolean | {
+    enabled?: boolean;
+    maxAttempts?: number;
+    windowMs?: number;
+    blockDurationMs?: number;
+  };
   [key: string]: unknown;
 }
 
@@ -1275,7 +1283,103 @@ export function siteAnalyticsPlugin(options?: SiteAnalyticsPluginOptions): Websp
   shutdown?(): void;
 };
 
-export function auditLogPlugin(options?: Record<string, unknown>): WebspressoPlugin;
+export interface AuditLogRetentionConfig {
+  enabled?: boolean;
+  autoCleanup?: boolean;
+  days?: number;
+  intervalMs?: number;
+  runOnStart?: boolean;
+}
+
+export interface AuditLogPluginOptions {
+  db: any;
+  title?: string;
+  adminTitle?: string;
+  pageTitle?: string;
+  adminPath?: string;
+  tableName?: string;
+  includeDefaultPage?: boolean;
+  apiPrefix?: string;
+  retentionDays?: number;
+  cleanupIntervalMs?: number;
+  autoCleanup?: boolean;
+  cleanupOnStart?: boolean;
+  cleanupStartDelayMs?: number;
+  retention?: boolean | AuditLogRetentionConfig;
+  [key: string]: unknown;
+}
+
+export function auditLogPlugin(options?: AuditLogPluginOptions): WebspressoPlugin & {
+  api?: {
+    purge(options?: { tableName?: string; days?: number; retentionDays?: number; olderThan?: Date | string | number }): Promise<number>;
+    purgeAuditLogs(knex?: any, options?: { tableName?: string; days?: number; retentionDays?: number; olderThan?: Date | string | number }): Promise<number>;
+    startCleanup(intervalMs?: number): void;
+    stopCleanup(): void;
+    getRetentionConfig(): AuditLogRetentionConfig;
+    queryLogs(filters?: Record<string, unknown>): Promise<any[]>;
+    getMigrationTemplate(tableName?: string): string;
+  };
+  dispose?(): void;
+  shutdown?(): void;
+};
+
+export interface EmailRetentionConfig {
+  enabled?: boolean;
+  autoCleanup?: boolean;
+  days?: number;
+  intervalMs?: number;
+  runOnStart?: boolean;
+}
+
+export interface EmailPluginOptions {
+  db?: any;
+  title?: string;
+  adminTitle?: string;
+  transport?: any;
+  smtp?: any;
+  defaults?: Record<string, unknown>;
+  templatesDir?: string;
+  templates?: Record<string, string>;
+  tableName?: string;
+  includeAdminPage?: boolean;
+  adminPath?: string;
+  apiPrefix?: string;
+  auth?: any;
+  authEmails?: any;
+  emailTemplates?: any;
+  manifest?: any;
+  logToDb?: boolean;
+  retentionDays?: number;
+  cleanupIntervalMs?: number;
+  autoCleanup?: boolean;
+  cleanupOnStart?: boolean;
+  cleanupStartDelayMs?: number;
+  retention?: boolean | EmailRetentionConfig;
+  [key: string]: unknown;
+}
+
+export function emailPlugin(options?: EmailPluginOptions): WebspressoPlugin & {
+  api?: {
+    send(options: Record<string, unknown>): Promise<any>;
+    sendTemplate(name: string, options: Record<string, unknown>): Promise<any>;
+    preview(nameOrOpts: any, data?: Record<string, unknown>): Promise<any>;
+    registerTemplate(id: string, source: string): void;
+    listTemplates(): any[];
+    verifyConnection(): Promise<any>;
+    queryLogs(filters?: Record<string, unknown>): Promise<any>;
+    purge(options?: { tableName?: string; days?: number; retentionDays?: number; olderThan?: Date | string | number }): Promise<number>;
+    purgeLogs(options?: { tableName?: string; days?: number; retentionDays?: number; olderThan?: Date | string | number }): Promise<number>;
+    startCleanup(intervalMs?: number): void;
+    stopCleanup(): void;
+    getRetentionConfig(): EmailRetentionConfig;
+    getMigrationTemplate(tableName?: string): string;
+    isTransportReady(): boolean;
+    loadFromManifest(chunks: any): void;
+    emailPluginOptionsFromManifest(manifest: any): any;
+  };
+  dispose?(): void;
+  shutdown?(): void;
+};
 
 export function recaptchaPlugin(options?: Record<string, unknown>): WebspressoPlugin;
 
@@ -1473,6 +1577,42 @@ export function createLocalFileProvider(options?: {
   destDir?: string;
   publicBasePath?: string;
 }): UploadStorageProvider;
+
+export interface OrphanedUploadsResult {
+  destDir: string;
+  totalFiles: number;
+  totalBytes: number;
+  totalBytesFormatted: string;
+  referencedCount: number;
+  orphanedCount: number;
+  orphanedBytes: number;
+  orphanedBytesFormatted: string;
+  orphanedFiles: Array<{
+    relativePath: string;
+    absolutePath: string;
+    size: number;
+    publicUrl: string;
+    mtime: Date;
+  }>;
+  dryRun?: boolean;
+  deletedCount?: number;
+  deletedBytes?: number;
+  deletedBytesFormatted?: string;
+  deletedFiles?: string[];
+}
+
+export function scanOrphanedUploads(options?: {
+  db?: any;
+  destDir?: string;
+  publicBasePath?: string;
+}): Promise<OrphanedUploadsResult>;
+
+export function pruneOrphanedUploads(options?: {
+  db?: any;
+  destDir?: string;
+  publicBasePath?: string;
+  dryRun?: boolean;
+}): Promise<OrphanedUploadsResult>;
 
 // --- Realtime Layer Types ---
 
@@ -1799,6 +1939,13 @@ export class MemoryQueueAdapter implements QueueAdapter {
   getJob(jobId: string | number): Promise<Job | null>;
   getStats(): Promise<{ pending: number; running: number; completed: number; failed: number; total: number }>;
   clear(): Promise<void>;
+  clean?(options?: {
+    status?: string | string[];
+    days?: number;
+    retentionDays?: number;
+    olderThan?: Date | string | number;
+    limit?: number;
+  }): Promise<number>;
 }
 
 export class DatabaseQueueAdapter implements QueueAdapter {
@@ -1812,6 +1959,13 @@ export class DatabaseQueueAdapter implements QueueAdapter {
   getJob(jobId: string | number): Promise<Job | null>;
   getStats(): Promise<{ pending: number; running: number; completed: number; failed: number; total: number }>;
   clear(): Promise<void>;
+  clean(options?: {
+    status?: string | string[];
+    days?: number;
+    retentionDays?: number;
+    olderThan?: Date | string | number;
+    limit?: number;
+  }): Promise<number>;
 }
 
 export class RedisQueueAdapter implements QueueAdapter {
@@ -1824,6 +1978,13 @@ export class RedisQueueAdapter implements QueueAdapter {
   getJob(jobId: string | number): Promise<Job | null>;
   getStats(): Promise<{ pending: number; running: number; completed: number; failed: number; total: number }>;
   clear(): Promise<void>;
+  clean(options?: {
+    status?: string | string[];
+    days?: number;
+    retentionDays?: number;
+    olderThan?: Date | string | number;
+    limit?: number;
+  }): Promise<number>;
 }
 
 export interface DispatchOptions {
@@ -1834,19 +1995,35 @@ export interface DispatchOptions {
   backoff?: number | { type?: 'exponential' | 'fixed'; delay?: number };
 }
 
-export class QueueManager extends import('events').EventEmitter {
+export interface QueueRetentionConfig {
+  enabled?: boolean;
+  autoCleanup?: boolean;
+  days?: number;
+  statuses?: string[];
+  intervalMs?: number;
+  runOnStart?: boolean;
+}
+
+export class QueueManager extends EventEmitter {
   adapter: QueueAdapter;
   concurrency: number;
   pollInterval: number;
   isRunning: boolean;
   isPaused: boolean;
   isDraining: boolean;
+  retentionConfig: QueueRetentionConfig;
   constructor(options?: {
     adapter?: QueueAdapter;
     concurrency?: number;
     pollInterval?: number;
     jobsDir?: string | null;
     autoStart?: boolean;
+    retention?: boolean | QueueRetentionConfig;
+    retentionDays?: number;
+    retentionStatuses?: string[];
+    cleanupIntervalMs?: number;
+    autoCleanup?: boolean;
+    cleanupOnStart?: boolean;
   });
   define(name: string, handler: (job: Job, ctx: { queue: QueueManager }) => Promise<any> | any, options?: DispatchOptions): this;
   has(name: string): boolean;
@@ -1856,6 +2033,17 @@ export class QueueManager extends import('events').EventEmitter {
   resume(): this;
   drain(timeoutMs?: number): Promise<void>;
   stop(): Promise<void>;
+  clean(options?: {
+    status?: string | string[];
+    days?: number;
+    retentionDays?: number;
+    olderThan?: Date | string | number;
+    limit?: number;
+  }): Promise<number>;
+  runCleanup(): Promise<number>;
+  startCleanup(customIntervalMs?: number): void;
+  stopCleanup(): void;
+  getRetentionConfig(): QueueRetentionConfig;
   getStats(): Promise<Record<string, unknown>>;
   getJob(jobId: string | number): Promise<Job | null>;
   loadJobsFromDirectory(dirPath: string): void;
@@ -1867,6 +2055,12 @@ export function createQueueManager(options?: {
   pollInterval?: number;
   jobsDir?: string | null;
   autoStart?: boolean;
+  retention?: boolean | QueueRetentionConfig;
+  retentionDays?: number;
+  retentionStatuses?: string[];
+  cleanupIntervalMs?: number;
+  autoCleanup?: boolean;
+  cleanupOnStart?: boolean;
 }): QueueManager;
 
 export function queuePlugin(options?: {
@@ -1879,7 +2073,24 @@ export function queuePlugin(options?: {
   pollInterval?: number;
   jobsDir?: string;
   autoStart?: boolean;
-}): PluginDefinition;
+  retention?: boolean | QueueRetentionConfig;
+  retentionDays?: number;
+  retentionStatuses?: string[];
+  cleanupIntervalMs?: number;
+  autoCleanup?: boolean;
+  cleanupOnStart?: boolean;
+}): WebspressoPlugin & {
+  api?: {
+    getQueueManager(): QueueManager | null;
+    clean(options?: {
+      status?: string | string[];
+      days?: number;
+      retentionDays?: number;
+      olderThan?: Date | string | number;
+      limit?: number;
+    }): Promise<number>;
+  };
+};
 
 // --- SSR Streaming & Chunked Transfer ---
 

@@ -497,7 +497,16 @@ const AdminUsersPage = {
     };
 
     vnode.state.deleteAdmin = async function(admin) {
-      if (!confirm('Are you sure you want to delete administrator "' + (admin.name || admin.email) + '"? This action cannot be undone.')) {
+      var confirmed = typeof confirmAction === 'function'
+        ? await confirmAction({
+            title: 'Delete Administrator',
+            message: 'Are you sure you want to delete administrator "' + (admin.name || admin.email) + '"? This action cannot be undone.',
+            danger: true,
+            confirmText: 'Delete'
+          })
+        : confirm('Are you sure you want to delete administrator "' + (admin.name || admin.email) + '"? This action cannot be undone.');
+
+      if (!confirmed) {
         return;
       }
       vnode.state.loading = true;
@@ -506,9 +515,15 @@ const AdminUsersPage = {
       try {
         await api.delete('/admins/' + encodeURIComponent(admin.id));
         vnode.state.success = 'Administrator deleted successfully';
+        if (typeof notifySuccess === 'function') {
+          notifySuccess('Administrator deleted successfully');
+        }
         await vnode.state.loadAdmins();
       } catch (err) {
         vnode.state.error = err.message || 'Failed to delete administrator';
+        if (typeof notifyError === 'function') {
+          notifyError(vnode.state.error);
+        }
         vnode.state.loading = false;
         m.redraw();
       }

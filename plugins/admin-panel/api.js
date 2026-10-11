@@ -9,6 +9,7 @@ const { sanitizeForOutput } = require('../../core/orm/utils');
 const { checkAdminExists, setupAdmin, login, logout, requireAuth } = require('./auth');
 const { isRichTextEmpty } = require('./lib/is-rich-text-empty');
 const { sanitizeRichHtml } = require('./lib/sanitize-rich-html');
+const { LoginRateLimiter } = require('./lib/login-rate-limiter');
 
 /**
  * Create API route handlers
@@ -19,6 +20,7 @@ const { sanitizeRichHtml } = require('./lib/sanitize-rich-html');
  * @param {Function} options.hashPassword - Bcrypt hash function
  * @param {Function} options.comparePassword - Bcrypt compare function
  * @param {boolean} [options.richTextSanitize=true] - Sanitize rich-text HTML before create/update
+ * @param {boolean|Object} [options.loginRateLimit] - Login rate limiting options
  * @returns {Object} Route handlers
  */
 function createApiHandlers(options) {
@@ -30,9 +32,11 @@ function createApiHandlers(options) {
     hashPassword,
     comparePassword,
     richTextSanitize = true,
+    loginRateLimit,
   } = options;
   const adminPath = path || '/_admin';
   const apiPath = `${adminPath}/api`;
+  const rateLimiter = options.rateLimiter || new LoginRateLimiter(loginRateLimit);
 
   /** Strip XSS vectors from rich-text columns present on body; nullable columns normalize empty → null */
   function mutateRichTextFieldsInBody(body, model) {
@@ -114,11 +118,22 @@ function createApiHandlers(options) {
    */
   async function loginHandler(req, res) {
     try {
+      const blockStatus = rateLimiter.isBlocked(req);
+      if (blockStatus.blocked) {
+        if (typeof res.setHeader === 'function') {
+          res.setHeader('Retry-After', String(blockStatus.retryAfter));
+        }
+        return res.status(429).json({
+          error: blockStatus.message,
+          retryAfter: blockStatus.retryAfter,
+        });
+      }
+
       if (!AdminUserRepo || !comparePassword) {
         return res.status(500).json({ error: 'Admin user system not initialized' });
       }
 
-      const { email, password } = req.body;
+      const { email, password } = req.body || {};
 
       if (!email || !password) {
         return res.status(400).json({ error: 'Email and password are required' });
@@ -127,8 +142,11 @@ function createApiHandlers(options) {
       const user = await login(AdminUserRepo, email, password, comparePassword);
 
       if (!user) {
+        rateLimiter.recordFailure(req);
         return res.status(401).json({ error: 'Invalid credentials' });
       }
+
+      rateLimiter.recordSuccess(req);
 
       // Set session
       req.session.adminUser = user;
@@ -1074,9 +1092,12 @@ function isColumnSortable(name, meta, model) {
     relationHandler,
     queryHandler,
     resetHandler,
+    rateLimiter,
+    resetLoginAttempts: (ip) => rateLimiter.reset(ip),
   };
 }
 
 module.exports = {
   createApiHandlers,
+  LoginRateLimiter,
 };

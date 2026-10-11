@@ -91,6 +91,8 @@ Schema-driven headless CMS & inline content editing.
 Multipart file upload manager with local / cloud storage providers.
 - **Options**: `{ path: '/api/upload', local: { destDir, publicBasePath }, maxBytes: 10000000, mimeAllowlist: ['image/png', 'image/jpeg'] }`
 - **Features**: Single & multi-file uploads, file size & extension validation, storage drivers.
+- **Orphan Pruning**: `scanOrphanedUploads({ db, destDir })` and `pruneOrphanedUploads({ db, destDir, dryRun })` to detect and remove disk files no longer referenced by any database model, accompanied by CLI command `webspresso upload:prune [--dry-run]`.
+
 
 ### 2.5 `fileManagerPlugin` (`plugins/file-manager`)
 Filesystem-first media library, directory explorer, and modal asset picker for Admin Panel.
@@ -148,8 +150,23 @@ Self-hosted privacy-focused page view analytics, client error tracking, and auto
 - **Lifecycle Integration**: Background timer uses `.unref()` to avoid keeping Node event loop open, and registers a framework disposer to clear timers on shutdown.
 
 ### 2.10 `emailPlugin` (`plugins/email`)
-Transactional email compiler (MJML) & Nodemailer transport integration.
-- **Options**: `{ transport, from: 'noreply@example.com', templatesDir }`
+Transactional email compiler (MJML) & Nodemailer transport integration with database delivery logging and auto-retention cleanup.
+- **Options**:
+  - `transport` / `smtp`: Nodemailer transport or SMTP settings.
+  - `defaults`: Default sender/reply-to address.
+  - `templatesDir`: Directory containing `.mjml` templates.
+  - `logToDb`: Store delivery history in database (default `true` when `db` is supplied).
+  - `tableName`: Database table name (default `'email_logs'`).
+  - `retentionDays`: Days to retain email logs (default `90`).
+  - `cleanupIntervalMs`: Background cleanup timer frequency (default 24h).
+  - `autoCleanup`: Enable scheduled background purge (default `true`).
+  - `cleanupOnStart`: Run initial purge shortly after boot (default `true`).
+  - `retention`: `{ enabled, days: 90, intervalMs: 86400000, runOnStart: true }` (or `false` to disable).
+- **Pruning CLI**:
+  ```bash
+  webspresso email:prune --days 90
+  ```
+- **Admin Panel UI**: Includes log listing, test email dispatch, template preview, connection verification, and "Purge 90d" action.
 
 ### 2.11 `polarPlugin` (`plugins/polar`)
 Polar.sh subscription billing — checkout, customer portal, webhooks, Customer State sync, tier columns. Zero extra deps (`crypto` + `fetch`).
@@ -200,8 +217,23 @@ Polar.sh subscription billing — checkout, customer portal, webhooks, Customer 
   - [docs/guides/polar-production-checklist.md](../docs/guides/polar-production-checklist.md)
 
 ### 2.12 `auditLogPlugin` (`plugins/audit-log`)
-Admin mutation tracking and audit log audit history.
-- **Options**: `{ db, retainDays: 90 }`
+Admin mutation tracking and audit history with scheduled retention and manual purge API.
+- **Options**:
+  - `db`: Database instance (must expose `.knex`).
+  - `tableName`: Database table name (default `'audit_logs'`).
+  - `retentionDays`: Days to retain audit trail entries (default `90`).
+  - `cleanupIntervalMs`: Background cleanup timer frequency (default 24h).
+  - `autoCleanup`: Enable scheduled background purge (default `true`).
+  - `cleanupOnStart`: Run initial purge shortly after boot (default `true`).
+  - `retention`: `{ enabled, days: 90, intervalMs: 86400000, runOnStart: true }` (or `false` to disable).
+- **Pruning CLI**:
+  ```bash
+  webspresso audit:prune --days 90
+  ```
+- **API & Admin Panel**:
+  - `POST /_admin/api/audit-logs/purge`: `{ days: 90 }` or `{ olderThan: '2026-01-01' }`
+  - "Purge 90d" button directly in the Admin Panel audit log viewer.
+  - Lifecycle integration: background timers use `.unref()` and clean up on server shutdown.
 
 ### 2.13 `ormCacheAdminPlugin` (`plugins/orm-cache-admin`)
 ORM Cache inspection and invalidation dashboard.

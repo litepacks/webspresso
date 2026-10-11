@@ -147,4 +147,31 @@ npx webspresso add esbuild
 npx webspresso add:esbuild
 ```
 
+---
+
+## 10. Data Retention & Storage Cleanup Commands
+
+Keep databases and storage clean by pruning historical records and unreferenced files:
+
+```bash
+# Delete audit log entries older than N days (default: 90)
+npx webspresso audit:prune --days 90
+
+# Delete email delivery logs older than N days (default: 90)
+npx webspresso email:prune --days 90
+
+# Delete completed/failed background jobs older than N days (default: 30)
+npx webspresso queue:prune --days 30
+
+# Delete expired site analytics visits & JS errors older than N days
+npx webspresso analytics:prune --days 90
+
+# Scan and delete orphaned uploads not referenced by any database model
+npx webspresso upload:prune
+
+# Dry run mode (inspect orphaned files without deleting)
+npx webspresso upload:prune --dry-run
+```
+
+
 

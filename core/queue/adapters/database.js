@@ -272,6 +272,100 @@ class DatabaseQueueAdapter {
   }
 
   /**
+   * Delete completed or failed jobs older than a cutoff date
+   * @param {Object} [options={}]
+   * @param {string|string[]} [options.status=['completed']] - Job statuses to prune
+   * @param {Date|string|number} [options.olderThan] - Explicit cutoff date
+   * @param {number} [options.days=7] - Retention in days (used if olderThan not provided)
+   * @param {number} [options.retentionDays] - Alias for days
+   * @param {number} [options.limit] - Max number of records to delete
+   * @returns {Promise<number>} Number of deleted jobs
+   */
+  async clean(options = {}) {
+    await this.ensureTable();
+
+    let olderThan;
+    if (options.olderThan !== undefined) {
+      olderThan = options.olderThan instanceof Date
+        ? options.olderThan
+        : new Date(options.olderThan);
+
+      if (Number.isNaN(olderThan.getTime())) {
+        throw new Error('clean: invalid olderThan date');
+      }
+    } else {
+      const rawDays = options.days !== undefined
+        ? options.days
+        : (options.retentionDays !== undefined ? options.retentionDays : 7);
+      const days = typeof rawDays === 'number' ? rawDays : Number(rawDays);
+      if (Number.isNaN(days) || days < 0) {
+        throw new Error('clean: days must be a non-negative number');
+      }
+      olderThan = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    }
+
+    let statuses = ['completed'];
+    if (options.status) {
+      if (Array.isArray(options.status)) {
+        statuses = options.status;
+      } else if (typeof options.status === 'string') {
+        if (options.status === '*' || options.status === 'all') {
+          statuses = ['completed', 'failed', 'pending'];
+        } else {
+          statuses = options.status.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+      }
+    }
+
+    const client = this.knex?.client?.config?.client;
+    const isSqlite = client === 'sqlite3' || client === 'better-sqlite3';
+
+    let query = this.knex(this.tableName);
+
+    if (statuses.length === 1) {
+      query = query.where('status', statuses[0]);
+    } else if (statuses.length > 1) {
+      query = query.whereIn('status', statuses);
+    }
+
+    if (isSqlite) {
+      const iso = olderThan.toISOString();
+      const cutoffMs = olderThan.getTime();
+      query = query.where((builder) => {
+        builder
+          .whereRaw(
+            "((typeof(updated_at) = 'integer' and updated_at < ?) or (typeof(updated_at) = 'text' and updated_at < ?))",
+            [cutoffMs, iso]
+          )
+          .orWhere((b2) => {
+            b2.whereNull('updated_at').andWhereRaw(
+              "((typeof(created_at) = 'integer' and created_at < ?) or (typeof(created_at) = 'text' and created_at < ?))",
+              [cutoffMs, iso]
+            );
+          });
+      });
+    } else {
+      query = query.where((builder) => {
+        builder.where('updated_at', '<', olderThan)
+          .orWhere((b2) => {
+            b2.whereNull('updated_at').andWhere('created_at', '<', olderThan);
+          });
+      });
+    }
+
+    if (typeof options.limit === 'number' && options.limit > 0) {
+      const rows = await query.clone().select('id').limit(options.limit);
+      if (rows.length === 0) return 0;
+      const ids = rows.map((r) => r.id);
+      const deleted = await this.knex(this.tableName).whereIn('id', ids).del();
+      return Number(deleted) || 0;
+    }
+
+    const deleted = await query.del();
+    return Number(deleted) || 0;
+  }
+
+  /**
    * Clear all jobs from table
    * @returns {Promise<void>}
    */

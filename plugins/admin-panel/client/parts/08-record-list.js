@@ -120,9 +120,7 @@ function getBulkActionColorClass(color) {
 async function executeRecordAction(action, record, modelName, modelMeta, onSuccess) {
   if (action.confirm) {
     const msg = action.confirmMessage || ('Are you sure you want to perform "' + action.label + '"?');
-    const isConfirmed = (typeof window !== 'undefined' && window.Admin && typeof window.Admin.confirm === 'function')
-      ? await window.Admin.confirm({ title: action.label, message: msg, danger: action.color === 'red' })
-      : confirm(msg);
+    const isConfirmed = await confirmAction({ title: action.label, message: msg, danger: action.color === 'red' });
     if (!isConfirmed) return;
   }
   const primaryKey = modelMeta?.primaryKey || 'id';
@@ -134,11 +132,7 @@ async function executeRecordAction(action, record, modelName, modelMeta, onSucce
     const res = await api.post('/extensions/actions/' + action.id + '/' + modelName + '/' + recId);
     const msg = res?.result?.message || res?.message;
     if (msg) {
-      if (typeof window !== 'undefined' && window.Admin && typeof window.Admin.toast === 'function') {
-        window.Admin.toast.success(msg);
-      } else {
-        alert(msg);
-      }
+      notifySuccess(msg);
     }
     if (typeof onSuccess === 'function') {
       await onSuccess(res);
@@ -147,11 +141,7 @@ async function executeRecordAction(action, record, modelName, modelMeta, onSucce
     }
   } catch (err) {
     const errText = 'Action failed: ' + (err.message || err);
-    if (typeof window !== 'undefined' && window.Admin && typeof window.Admin.toast === 'function') {
-      window.Admin.toast.error(errText);
-    } else {
-      alert(errText);
-    }
+    notifyError(errText);
   } finally {
     state.actionInProgress = null;
     m.redraw();
@@ -162,9 +152,7 @@ async function executeBulkAction(action, modelName, modelMeta) {
   const count = state.selectAllMode ? state.pagination.total : state.selectedRecords.size;
   if (action.confirm) {
     const msg = action.confirmMessage || ('Perform "' + action.label + '" on ' + count + ' records?');
-    const isConfirmed = (typeof window !== 'undefined' && window.Admin && typeof window.Admin.confirm === 'function')
-      ? await window.Admin.confirm({ title: action.label, message: msg, danger: action.color === 'red' })
-      : confirm(msg);
+    const isConfirmed = await confirmAction({ title: action.label, message: msg, danger: action.color === 'red' });
     if (!isConfirmed) return;
   }
   state.bulkActionInProgress = true;
@@ -179,19 +167,11 @@ async function executeBulkAction(action, modelName, modelMeta) {
     loadRecords(modelName, state.pagination.page);
     if (res?.result?.message || res?.message) {
       const msg = res.result?.message || res.message;
-      if (typeof window !== 'undefined' && window.Admin && typeof window.Admin.toast === 'function') {
-        window.Admin.toast.success(msg);
-      } else {
-        alert(msg);
-      }
+      notifySuccess(msg);
     }
   } catch (err) {
     const errText = 'Bulk action failed: ' + (err.message || err);
-    if (typeof window !== 'undefined' && window.Admin && typeof window.Admin.toast === 'function') {
-      window.Admin.toast.error(errText);
-    } else {
-      alert(errText);
-    }
+    notifyError(errText);
   } finally {
     state.bulkActionInProgress = false;
     m.redraw();
@@ -303,7 +283,7 @@ const RecordList = {
                 if (state.trashedView) payload.trashed = 'only';
                 await downloadDataExchangeXlsx(modelName, payload);
               } catch (err) {
-                alert('Error: ' + err.message);
+                notifyError('Error: ' + err.message);
               }
             },
           }, [
@@ -321,7 +301,12 @@ const RecordList = {
               e.target.value = '';
               if (!file) return;
               const adminPath = window.__ADMIN_PATH__ || '/_admin';
-              const mode = window.confirm('OK = upsert by id, Cancel = insert only') ? 'upsert' : 'insert';
+              const mode = (await confirmAction({
+                title: 'Import Mode',
+                message: 'Confirm to upsert records matching existing IDs, or cancel to insert as new records only.',
+                confirmText: 'Upsert by ID',
+                cancelText: 'Insert only'
+              })) ? 'upsert' : 'insert';
               const upsertKey = 'id';
               const fd = new FormData();
               fd.append('file', file);
@@ -339,10 +324,10 @@ const RecordList = {
                 if (body.errors && body.errors.length) {
                   msg += 'First errors: ' + body.errors.slice(0, 3).map(function (x) { return 'row ' + x.row + ': ' + x.message; }).join('; ');
                 }
-                alert(msg);
+                notifySuccess(msg);
                 loadRecords(modelName, state.pagination.page, state.filters);
               } catch (err) {
-                alert('Error: ' + err.message);
+                notifyError('Error: ' + err.message);
               }
             },
           }) : null,
@@ -461,7 +446,7 @@ const RecordList = {
                   ? m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-green-600.bg-white dark:bg-slate-800.border.border-green-200.rounded.hover:bg-green-50.transition-colors', {
                       disabled: state.bulkActionInProgress,
                       onclick: async () => {
-                        if (!confirm('Restore the selected records?')) return;
+                        if (!(await confirmAction({ title: 'Restore Records', message: 'Restore the selected records?', confirmText: 'Restore' }))) return;
                         state.bulkActionInProgress = true;
                         m.redraw();
                         try {
@@ -471,9 +456,10 @@ const RecordList = {
                           await api.post('/extensions/bulk-actions/bulk-restore/' + modelName, payload);
                           state.selectedRecords = new Set();
                           state.selectAllMode = false;
+                          notifySuccess('Records restored successfully');
                           loadRecords(modelName, 1);
                         } catch (err) {
-                          alert('Error: ' + err.message);
+                          notifyError('Error: ' + err.message);
                         } finally {
                           state.bulkActionInProgress = false;
                           m.redraw();
@@ -489,7 +475,7 @@ const RecordList = {
                       disabled: state.bulkActionInProgress,
                       onclick: async () => {
                         const count = state.selectAllMode ? state.pagination.total : state.selectedRecords.size;
-                        if (!confirm('Are you sure you want to delete ' + count + ' records? This action cannot be undone.')) return;
+                        if (!(await confirmAction({ title: 'Delete Records', message: 'Are you sure you want to delete ' + count + ' records? This action cannot be undone.', danger: true, confirmText: 'Delete' }))) return;
                         state.bulkActionInProgress = true;
                         m.redraw();
                         try {
@@ -499,9 +485,10 @@ const RecordList = {
                           await api.post('/extensions/bulk-actions/bulk-delete/' + modelName, payload);
                           state.selectedRecords = new Set();
                           state.selectAllMode = false;
+                          notifySuccess('Records deleted successfully');
                           loadRecords(modelName, 1);
                         } catch (err) {
-                          alert('Error: ' + err.message);
+                          notifyError('Error: ' + err.message);
                         } finally {
                           state.bulkActionInProgress = false;
                           m.redraw();
@@ -547,7 +534,7 @@ const RecordList = {
                         URL.revokeObjectURL(url);
                       }, 1000);
                     } catch (err) {
-                      alert('Error: ' + err.message);
+                      notifyError('Error: ' + err.message);
                     } finally {
                       state.bulkActionInProgress = false;
                       m.redraw();
@@ -569,7 +556,7 @@ const RecordList = {
                         ? { selectAll: true, filters: state.filters }
                         : { ids: Array.from(state.selectedRecords) };
                       if (!state.selectAllMode && (!payload.ids || payload.ids.length === 0)) {
-                        alert('Please select at least one record to export');
+                        notifyWarning('Please select at least one record to export');
                         return;
                       }
                       const response = await api.post('/extensions/export?model=' + modelName + '&format=csv', payload);
@@ -587,7 +574,7 @@ const RecordList = {
                         URL.revokeObjectURL(url);
                       }, 1000);
                     } catch (err) {
-                      alert('Error: ' + err.message);
+                      notifyError('Error: ' + err.message);
                     } finally {
                       state.bulkActionInProgress = false;
                       m.redraw();
@@ -609,13 +596,13 @@ const RecordList = {
                         ? { selectAll: true, filters: state.filters }
                         : { ids: Array.from(state.selectedRecords) };
                       if (!state.selectAllMode && (!payload.ids || payload.ids.length === 0)) {
-                        alert('Please select at least one record to export');
+                        notifyWarning('Please select at least one record to export');
                         return;
                       }
                       if (state.trashedView) payload.trashed = 'only';
                       await downloadDataExchangeXlsx(modelName, payload);
                     } catch (err) {
-                      alert('Error: ' + err.message);
+                      notifyError('Error: ' + err.message);
                     } finally {
                       state.bulkActionInProgress = false;
                       m.redraw();
@@ -755,9 +742,10 @@ const RecordList = {
                             onclick: async () => {
                               try {
                                 await api.post('/models/' + modelName + '/records/' + record[primaryKey] + '/restore');
+                                notifySuccess('Record restored successfully');
                                 loadRecords(modelName, state.pagination.page);
                               } catch (err) {
-                                alert('Error: ' + err.message);
+                                notifyError('Error: ' + err.message);
                               }
                             },
                           }, 'Restore')
@@ -783,23 +771,20 @@ const RecordList = {
                             }, modelMeta?.readOnly || modelMeta?.permissions?.edit === false ? 'View' : 'Edit'),
                             !modelMeta?.readOnly && modelMeta?.permissions?.delete !== false ? m('button.inline-flex.items-center.px-2.py-1.text-sm.text-red-600.dark:text-red-400.hover:text-red-800.dark:hover:text-red-300.hover:bg-red-50.dark:hover:bg-red-950/40.rounded.transition-colors', {
                               onclick: async () => {
-                                const isConfirmed = (typeof window !== 'undefined' && window.Admin && typeof window.Admin.confirm === 'function')
-                                  ? await window.Admin.confirm({ title: 'Delete Record', message: 'Are you sure you want to delete this record?', danger: true, confirmText: 'Delete' })
-                                  : confirm('Are you sure you want to delete this record?');
+                                const isConfirmed = await confirmAction({
+                                  title: 'Delete Record',
+                                  message: 'Are you sure you want to delete this record?',
+                                  danger: true,
+                                  confirmText: 'Delete'
+                                });
                                 if (isConfirmed) {
                                   try {
                                     await api.delete('/models/' + modelName + '/records/' + record[primaryKey]);
-                                    if (typeof window !== 'undefined' && window.Admin && typeof window.Admin.toast === 'function') {
-                                      window.Admin.toast.success('Record deleted successfully');
-                                    }
+                                    notifySuccess('Record deleted successfully');
                                     loadRecords(modelName, state.pagination.page);
                                   } catch (err) {
                                     const errMsg = 'Error: ' + err.message;
-                                    if (typeof window !== 'undefined' && window.Admin && typeof window.Admin.toast === 'function') {
-                                      window.Admin.toast.error(errMsg);
-                                    } else {
-                                      alert(errMsg);
-                                    }
+                                    notifyError(errMsg);
                                   }
                                 }
                               },

@@ -108,6 +108,7 @@ describe('Audit Log Plugin & API Handlers (plugins/audit-log)', () => {
     expect(registeredModule).not.toBeNull();
     expect(registeredModule.id).toBe('audit-log');
     expect(registeredModule.pages.length).toBe(1);
-    expect(registeredModule.api.routes.length).toBe(1);
+    expect(registeredModule.api.routes.length).toBe(2);
+    expect(registeredModule.api.routes.some((r) => r.method === 'post' && r.path === '/purge')).toBe(true);
   });
 });
