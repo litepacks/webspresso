@@ -1,5 +1,8 @@
+'use strict';
+
 /**
  * Build OpenAPI 3 document from file-router API route metadata + Zod schemas
+ * @module core/openapi/build-from-api-routes
  */
 
 const fs = require('fs');
@@ -16,9 +19,79 @@ const OPENAPI_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'head'
  * @returns {string}
  */
 function expressPathToOpenApi(expressPath) {
+  if (!expressPath) return '';
   return String(expressPath)
     .replace(/:([A-Za-z0-9_]+)/g, '{$1}')
+    .replace(/\[([A-Za-z0-9_]+)\]/g, '{$1}')
     .replace(/\*/g, '{wildcard}');
+}
+
+/**
+ * Resolves the physical file path of an API route descriptor
+ * @param {Object} route
+ * @param {string} [pagesDir]
+ * @returns {string|null}
+ */
+function resolveRouteFilePath(route, pagesDir) {
+  const rawFile = route.file || route.source;
+  if (!rawFile) return null;
+
+  if (path.isAbsolute(rawFile) && fs.existsSync(rawFile)) {
+    return rawFile;
+  }
+
+  const fromCwd = path.resolve(process.cwd(), rawFile);
+  if (fs.existsSync(fromCwd)) {
+    return fromCwd;
+  }
+
+  if (pagesDir) {
+    const fromPages = path.join(path.resolve(pagesDir), rawFile);
+    if (fs.existsSync(fromPages)) {
+      return fromPages;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Infers an expressive operation summary from HTTP method and path
+ * @param {string} method
+ * @param {string} routePath
+ * @returns {string}
+ */
+function inferOperationSummary(method, routePath) {
+  const clean = String(routePath || '').replace(/^\/api\/?/, '').replace(/\/$/, '');
+  const segments = clean.split('/').filter(Boolean);
+  const lastSeg = segments[segments.length - 1] || 'root';
+  const isParam = lastSeg.startsWith(':') || (lastSeg.startsWith('{') && lastSeg.endsWith('}')) || (lastSeg.startsWith('[') && lastSeg.endsWith(']'));
+  const resource = isParam && segments.length > 1 ? segments[segments.length - 2] : lastSeg;
+  const m = String(method || 'GET').toUpperCase();
+
+  if (m === 'GET') {
+    return isParam ? `Get ${resource} by ID` : `List ${resource}`;
+  }
+  if (m === 'POST') return `Create ${resource}`;
+  if (m === 'PUT' || m === 'PATCH') return `Update ${resource}`;
+  if (m === 'DELETE') return `Delete ${resource}`;
+  return `${m} /api/${clean}`;
+}
+
+/**
+ * Infers tag category from route path segments
+ * @param {string} routePath
+ * @param {string[]} [explicitTags]
+ * @returns {string[]}
+ */
+function inferOperationTags(routePath, explicitTags) {
+  if (Array.isArray(explicitTags) && explicitTags.length > 0) return explicitTags;
+  const clean = String(routePath || '').replace(/^\/api\/?/, '').replace(/\/$/, '');
+  const firstSeg = clean.split('/').filter(Boolean)[0];
+  if (firstSeg && !firstSeg.startsWith(':') && !firstSeg.startsWith('{') && !firstSeg.startsWith('[')) {
+    return [firstSeg];
+  }
+  return ['api'];
 }
 
 /**
@@ -38,19 +111,22 @@ function expandZodObjectToParameters(zodObj, where) {
 }
 
 /**
- * @param {object} route - { type, method, pattern, file }
+ * @param {object} route - { type, method, pattern, path, file }
  * @param {object|null} compiled - compileSchema result
+ * @param {object|null} [mod] - Raw route module
  * @returns {object} OpenAPI Operation Object
  */
-function buildOperation(route, compiled) {
-  const filePath = route.file;
-  const method = route.method.toLowerCase();
-  const summary = `${method.toUpperCase()} ${filePath}`;
+function buildOperation(route, compiled, mod = null) {
+  const filePath = route.file || route.source || '';
+  const method = (route.method || 'GET').toLowerCase();
+  const routePath = route.path || route.pattern || filePath;
+  const summary = (mod && mod.summary) || inferOperationSummary(method, routePath);
+  const tags = inferOperationTags(routePath, mod && mod.tags);
 
   const op = {
-    tags: ['api'],
+    tags,
     summary,
-    operationId: String(filePath)
+    operationId: String(filePath || routePath)
       .replace(/[^a-zA-Z0-9]+/g, '_')
       .replace(/^_|_$/g, ''),
     responses: {
@@ -59,6 +135,25 @@ function buildOperation(route, compiled) {
       },
     },
   };
+
+  if (mod && mod.description) {
+    op.description = mod.description;
+  }
+
+  // Auth / Security detection
+  const middlewares = Array.isArray(route.middleware)
+    ? route.middleware
+    : (Array.isArray(mod?.middleware) ? mod.middleware : []);
+  const security = [];
+  if (middlewares.includes('jwt') || middlewares.includes('bearer')) {
+    security.push({ bearerAuth: [] });
+  }
+  if (middlewares.includes('auth') || middlewares.includes('session')) {
+    security.push({ sessionAuth: [] });
+  }
+  if (security.length > 0) {
+    op.security = security;
+  }
 
   if (compiled?.response) {
     op.responses['200'] = {
@@ -94,16 +189,17 @@ function buildOperation(route, compiled) {
 }
 
 /**
+ * Builds an OpenAPI 3.0 document from application routes and ORM components
  * @param {object} opts
- * @param {object[]} opts.routes - route metadata from mountPages
- * @param {string} opts.pagesDir
- * @param {boolean} [opts.includeOrmSchemas]
- * @param {string[]} [opts.ormExclude]
+ * @param {object[]} opts.routes - Route metadata array
+ * @param {string} [opts.pagesDir] - Optional pages directory path
+ * @param {boolean} [opts.includeOrmSchemas=false]
+ * @param {string[]} [opts.ormExclude=[]]
  * @param {object} [opts.info]
  * @param {object[]} [opts.servers]
  * @returns {object} OpenAPI 3.0.x document
  */
-function buildOpenApiDocument(opts) {
+function buildOpenApiDocument(opts = {}) {
   const {
     routes = [],
     pagesDir,
@@ -113,36 +209,36 @@ function buildOpenApiDocument(opts) {
     servers = [{ url: '/' }],
   } = opts;
 
-  if (!pagesDir) {
-    throw new Error('buildOpenApiDocument: pagesDir is required');
-  }
-
   const paths = Object.create(null);
-  const apiRoutes = routes.filter((r) => r.type === 'api');
-  const absPages = path.resolve(pagesDir);
+  const apiRoutes = routes.filter((r) => r.type === 'api' || (r.path && r.path.startsWith('/api')));
 
   for (const route of apiRoutes) {
-    const fullPath = path.join(absPages, route.file);
-    if (!fs.existsSync(fullPath)) {
-      continue;
-    }
+    const fullPath = resolveRouteFilePath(route, pagesDir);
 
-    let mod;
-    try {
-      mod = require(fullPath);
-    } catch {
-      continue;
-    }
-
+    let mod = null;
     let compiled = null;
-    try {
-      compiled = compileSchema(fullPath, mod);
-    } catch {
-      compiled = null;
+
+    if (fullPath) {
+      try {
+        mod = require(fullPath);
+      } catch {
+        mod = null;
+      }
+
+      if (mod) {
+        try {
+          compiled = compileSchema(fullPath, mod);
+        } catch {
+          compiled = null;
+        }
+      }
     }
 
-    const openApiPath = expressPathToOpenApi(route.pattern);
-    const method = route.method.toLowerCase();
+    const routePattern = route.path || route.pattern || '';
+    if (!routePattern) continue;
+
+    const openApiPath = expressPathToOpenApi(routePattern);
+    const method = (route.method || 'GET').toLowerCase();
 
     if (!OPENAPI_METHODS.has(method)) {
       continue;
@@ -152,7 +248,7 @@ function buildOpenApiDocument(opts) {
       paths[openApiPath] = Object.create(null);
     }
 
-    paths[openApiPath][method] = buildOperation(route, compiled);
+    paths[openApiPath][method] = buildOperation(route, compiled, mod);
   }
 
   const doc = {
@@ -165,6 +261,20 @@ function buildOpenApiDocument(opts) {
     servers,
     paths,
     components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'Stateless JWT Bearer token authentication',
+        },
+        sessionAuth: {
+          type: 'apiKey',
+          in: 'cookie',
+          name: 'connect.sid',
+          description: 'Session cookie authentication',
+        },
+      },
       schemas: includeOrmSchemas ? generateOrmOpenApiSchemas({ exclude: ormExclude }) : {},
     },
   };
@@ -174,5 +284,9 @@ function buildOpenApiDocument(opts) {
 
 module.exports = {
   expressPathToOpenApi,
+  resolveRouteFilePath,
+  inferOperationSummary,
+  inferOperationTags,
+  buildOperation,
   buildOpenApiDocument,
 };

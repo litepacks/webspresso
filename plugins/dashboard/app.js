@@ -10,6 +10,8 @@ const state = {
   filter: 'all',
   search: '',
   routes: window.__DASHBOARD_DATA__.routes || [],
+  models: window.__DASHBOARD_DATA__.models || [],
+  services: window.__DASHBOARD_DATA__.services || [],
   plugins: window.__DASHBOARD_DATA__.plugins || [],
   config: window.__DASHBOARD_DATA__.config || {}
 };
@@ -29,18 +31,27 @@ const Icons = {
 // Components
 const Header = {
   view: () => m('.header', [
-    m('h1', [
-      Icons.logo(),
-      'Webspresso Dashboard'
+    m('div', [
+      m('h1', [
+        Icons.logo(),
+        'Webspresso Dashboard'
+      ]),
+      m('span.dev-badge', 'development')
     ]),
-    m('span.dev-badge', 'development')
+    m('.header-actions', [
+      m('a.action-link', { href: '/_admin', target: '_blank', rel: 'noopener' }, '⚙️ Admin Panel ↗'),
+      m('a.action-link', { href: '/_swagger', target: '_blank', rel: 'noopener' }, '📖 API Docs ↗'),
+      m('a.action-link', { href: '/_schema', target: '_blank', rel: 'noopener' }, '🗂️ Schema Explorer ↗')
+    ])
   ])
 };
 
 const Tabs = {
   view: () => m('.tabs', [
-    ['routes', 'Routes'],
-    ['plugins', 'Plugins'],
+    ['routes', 'Routes (' + state.routes.length + ')'],
+    ['models', 'Models (' + state.models.length + ')'],
+    ['services', 'Services (' + state.services.length + ')'],
+    ['plugins', 'Plugins (' + state.plugins.length + ')'],
     ['config', 'Config']
   ].map(([id, label]) => 
     m('button.tab', {
@@ -72,32 +83,36 @@ const FilterBar = {
 };
 
 const MethodBadge = {
-  view: (vnode) => m('span.method-badge.method-' + vnode.attrs.method, 
-    vnode.attrs.method.toUpperCase()
+  view: (vnode) => m('span.method-badge.method-' + (vnode.attrs.method || 'get').toLowerCase(), 
+    (vnode.attrs.method || 'GET').toUpperCase()
   )
 };
 
 const TypeBadge = {
-  view: (vnode) => m('span.type-badge.type-' + vnode.attrs.type, 
-    vnode.attrs.type.toUpperCase()
-  )
+  view: (vnode) => {
+    const rawType = vnode.attrs.type || 'page';
+    const label = rawType === 'page' ? 'SSR' : rawType.toUpperCase();
+    return m('span.type-badge.type-' + (rawType === 'page' ? 'ssr' : rawType), label);
+  }
 };
 
 const RoutesTable = {
   view: () => {
     let routes = state.routes;
     
-    // Apply filter
-    if (state.filter !== 'all') {
-      routes = routes.filter(r => r.type === state.filter);
+    // Apply filter: SSR matches both 'ssr' and 'page'
+    if (state.filter === 'ssr') {
+      routes = routes.filter(r => r.type === 'ssr' || r.type === 'page');
+    } else if (state.filter === 'api') {
+      routes = routes.filter(r => r.type === 'api');
     }
     
-    // Apply search
+    // Apply search: checks path or pattern or file
     if (state.search) {
       const search = state.search.toLowerCase();
       routes = routes.filter(r => 
-        r.pattern.toLowerCase().includes(search) ||
-        r.file.toLowerCase().includes(search)
+        ((r.path || r.pattern || '')).toLowerCase().includes(search) ||
+        ((r.file || '')).toLowerCase().includes(search)
       );
     }
     
@@ -121,17 +136,18 @@ const RoutesTable = {
           ])
         ),
         m('tbody',
-          routes.map(route =>
-            m('tr', [
+          routes.map(route => {
+            const displayPath = route.path || route.pattern || '/';
+            return m('tr', [
               m('td', m(MethodBadge, { method: route.method })),
               m('td', [
-                m('span.code', route.pattern),
+                m('span.code', displayPath),
                 route.isDynamic ? m('span.dynamic-indicator', '⚡ dynamic') : null
               ]),
-              m('td', m('span.file-path', route.file)),
+              m('td', m('span.file-path', route.file || 'custom')),
               m('td', m(TypeBadge, { type: route.type }))
-            ])
-          )
+            ]);
+          })
         )
       ])
     );
@@ -140,7 +156,7 @@ const RoutesTable = {
 
 const StatsGrid = {
   view: () => {
-    const ssrCount = state.routes.filter(r => r.type === 'ssr').length;
+    const ssrCount = state.routes.filter(r => r.type === 'ssr' || r.type === 'page').length;
     const apiCount = state.routes.filter(r => r.type === 'api').length;
     const dynamicCount = state.routes.filter(r => r.isDynamic).length;
     
@@ -171,6 +187,116 @@ const RoutesView = {
     m(FilterBar),
     m(RoutesTable)
   ])
+};
+
+const ModelsView = {
+  view: () => {
+    const models = state.models || [];
+    if (models.length === 0) {
+      return m('.table-container',
+        m('.empty-state', [
+          Icons.empty(),
+          m('p', 'No ORM models registered in core/orm')
+        ])
+      );
+    }
+
+    return m('div', [
+      m('.stats-grid', [
+        m('.card', [
+          m('.card-title', 'Total Models'),
+          m('.card-value', models.length)
+        ]),
+        m('.card', [
+          m('.card-title', 'Cached Models'),
+          m('.card-value', models.filter(m => Boolean(m.cache)).length)
+        ]),
+        m('.card', [
+          m('.card-title', 'Soft-Delete Enabled'),
+          m('.card-value', models.filter(m => Boolean(m.softDelete)).length)
+        ])
+      ]),
+      m('.table-container',
+        m('table', [
+          m('thead',
+            m('tr', [
+              m('th', 'Model'),
+              m('th', 'Table'),
+              m('th', 'Primary Key'),
+              m('th', 'Columns'),
+              m('th', 'Soft Delete'),
+              m('th', 'Cache')
+            ])
+          ),
+          m('tbody',
+            models.map(mod =>
+              m('tr', [
+                m('td', m('strong', mod.name)),
+                m('td', m('span.code-badge', mod.table)),
+                m('td', m('span.badge.badge-blue', mod.primaryKey || 'id')),
+                m('td', (mod.columnCount || 0) + ' columns'),
+                m('td', mod.softDelete ? m('span.badge.badge-green', 'Enabled') : m('span.badge.badge-gray', 'Disabled')),
+                m('td', mod.cache ? m('span.badge.badge-purple', String(mod.cache)) : m('span.badge.badge-gray', 'None'))
+              ])
+            )
+          )
+        ])
+      )
+    ]);
+  }
+};
+
+const ServicesView = {
+  view: () => {
+    const services = state.services || [];
+    if (services.length === 0) {
+      return m('.table-container',
+        m('.empty-state', [
+          Icons.empty(),
+          m('p', 'No services registered in services/ or ServiceRegistry')
+        ])
+      );
+    }
+
+    return m('div', [
+      m('.stats-grid', [
+        m('.card', [
+          m('.card-title', 'Total Services'),
+          m('.card-value', services.length)
+        ]),
+        m('.card', [
+          m('.card-title', 'ACID Transactions'),
+          m('.card-value', services.filter(s => s.transaction).length)
+        ]),
+        m('.card', [
+          m('.card-title', 'Auth Protected'),
+          m('.card-value', services.filter(s => s.auth).length)
+        ])
+      ]),
+      m('.table-container',
+        m('table', [
+          m('thead',
+            m('tr', [
+              m('th', 'Service Name'),
+              m('th', 'Transaction (ACID)'),
+              m('th', 'Auth Guard'),
+              m('th', 'Schema Validation')
+            ])
+          ),
+          m('tbody',
+            services.map(srv =>
+              m('tr', [
+                m('td', m('span.code-badge', srv.name)),
+                m('td', srv.transaction ? m('span.badge.badge-green', 'Active') : m('span.badge.badge-gray', 'No')),
+                m('td', srv.auth ? m('span.badge.badge-orange', String(srv.auth)) : m('span.badge.badge-gray', 'Public')),
+                m('td', srv.hasSchema ? m('span.badge.badge-blue', 'Zod Schema') : m('span.badge.badge-gray', 'None'))
+              ])
+            )
+          )
+        ])
+      )
+    ]);
+  }
 };
 
 const PluginsView = {
@@ -254,6 +380,8 @@ const App = {
     m(Header),
     m(Tabs),
     state.activeTab === 'routes' ? m(RoutesView) : null,
+    state.activeTab === 'models' ? m(ModelsView) : null,
+    state.activeTab === 'services' ? m(ServicesView) : null,
     state.activeTab === 'plugins' ? m(PluginsView) : null,
     state.activeTab === 'config' ? m(ConfigView) : null
   ])
@@ -262,6 +390,3 @@ const App = {
 // Mount app
 m.mount(document.getElementById('app'), App);
 `;
-
-
-

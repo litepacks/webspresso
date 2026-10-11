@@ -378,6 +378,84 @@ tr:hover td {
   animation: spin 0.8s linear infinite;
   margin-right: 12px;
 }
+
+/* Header Actions */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  transition: all 0.15s ease;
+}
+
+.action-link:hover {
+  background: var(--border);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.badge-green {
+  background: rgba(63, 185, 80, 0.15);
+  color: var(--green);
+  border: 1px solid rgba(63, 185, 80, 0.3);
+}
+
+.badge-blue {
+  background: rgba(88, 166, 255, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(88, 166, 255, 0.3);
+}
+
+.badge-purple {
+  background: rgba(163, 113, 247, 0.15);
+  color: var(--purple);
+  border: 1px solid rgba(163, 113, 247, 0.3);
+}
+
+.badge-orange {
+  background: rgba(210, 153, 34, 0.15);
+  color: var(--orange);
+  border: 1px solid rgba(210, 153, 34, 0.3);
+}
+
+.badge-gray {
+  background: rgba(110, 118, 129, 0.15);
+  color: var(--text-muted);
+  border: 1px solid rgba(110, 118, 129, 0.3);
+}
+
+.code-badge {
+  font-family: 'SF Mono', SFMono-Regular, ui-monospace, monospace;
+  font-size: 12px;
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--accent);
+}
 `;
 
 

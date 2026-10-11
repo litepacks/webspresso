@@ -199,6 +199,7 @@ function registerCommand(program) {
     .description('Scaffold a new service in services/<domain>/<action>.js')
     .option('-t, --transaction', 'Enable ACID transaction wrapper (transaction: true)')
     .option('-a, --auth <role>', 'Require authentication or specific role')
+    .option('--root <dir>', 'Root directory of the project', process.cwd())
     .action(async (nameArg, options) => {
       const fs = require('fs');
       let serviceName = nameArg ? String(nameArg).trim() : '';
@@ -223,7 +224,8 @@ function registerCommand(program) {
       const actionName = parts.pop();
       const domainPath = parts.join(path.sep);
 
-      const servicesDir = path.resolve(process.cwd(), 'services');
+      const rootDir = path.resolve(options.root || process.cwd());
+      const servicesDir = path.resolve(rootDir, 'services');
       const targetDir = path.join(servicesDir, domainPath);
       fs.mkdirSync(targetDir, { recursive: true });
 
@@ -241,13 +243,14 @@ function registerCommand(program) {
 
       const content = `'use strict';
 
+const { defineService } = require('webspresso');
 const { z } = require('zod');
 
 /**
  * Service: ${serviceName}
  * @type {import('webspresso').ServiceDefinition}
  */
-module.exports = {
+module.exports = defineService({
   // Input validation schema (Zod)
   schema: z.object({
     // Define input properties here
@@ -262,7 +265,7 @@ module.exports = {
       data: input,
     };
   },
-};
+});
 `;
 
       fs.writeFileSync(serviceFile, content, 'utf8');

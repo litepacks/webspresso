@@ -266,8 +266,37 @@ Interactive Database Schema & ER Diagram Explorer for both raw JSON/OpenAPI endp
   });
   ```
 
-### 2.15 `swaggerPlugin` (`plugins/swagger`)
-Interactive OpenAPI 3.0 Swagger UI documentation.
+### 2.15 `swaggerPlugin` / `openapiPlugin` (`plugins/swagger`)
+Interactive OpenAPI 3.0 API documentation supporting both modern **Scalar API Reference** and classic **Swagger UI**, automated parameter/tag/summary inference, auth detection, Admin Panel embedding, and CLI export.
+
+- **Options**:
+  - `path`: Base path for documentation (default: `/_swagger`). Spec served at `{path}/openapi.json`.
+  - `ui`: Default playground engine: `'swagger'` or `'scalar'` (default: `'swagger'`).
+  - `theme`: Theme for Scalar UI (`'default'`, `'purple'`, `'moon'`, `'solarized'`, etc.).
+  - `darkMode`: Scalar dark mode toggle (default: `true`).
+  - `admin`: Auto-register inside Admin Panel (`/_admin/#!/api-docs`) when `admin-panel` plugin is loaded (default: `true`).
+  - `adminTitle`: Admin navigation label (default: `'API Docs'`).
+  - `includeOrmSchemas`: Merge ORM models into `components.schemas` (default: `false`).
+  - `authorize`: Custom `(req) => boolean` guard function.
+- **Endpoints**:
+  - `GET /_swagger`: Primary UI (Scalar or Swagger based on `ui` option).
+  - `GET /_swagger/scalar`: Always serves modern Scalar UI.
+  - `GET /_swagger/swagger`: Always serves Swagger UI.
+  - `GET /_swagger/openapi.json`: OpenAPI 3.0 specification document.
+- **Example**:
+  ```javascript
+  const { createApp, openapiPlugin } = require('webspresso');
+
+  const { app } = createApp({
+    plugins: [
+      openapiPlugin({
+        ui: 'scalar',
+        theme: 'purple',
+        includeOrmSchemas: true,
+      }),
+    ],
+  });
+  ```
 
 ### 2.16 `realtimePlugin` (`plugins/realtime`, `core/realtime`)
 Framework-agnostic, plugin-based, and adapter-driven Realtime layer supporting WebSocket, SSE, Socket.IO, and distributed Redis Pub/Sub transports with zero SSR execution hazards.
@@ -493,6 +522,42 @@ RFC 4180 compliant CSV generator, parser, ORM model export, streaming chunk writ
   - `csv.fromModel(repository, filterOrQuery, options)` → `Promise<Buffer>`
   - `csv.createStreamWriter(stream, options)` → `{ writeHeader, writeRow, writeRows, end }`
 - **Built-in Services**: `csv.generate`, `csv.parse`, `csv.exportModel` accessible via `ctx.service()` or `req.service()`.
+
+### 2.19 `dashboardPlugin` / `devToolbarPlugin` (`plugins/dashboard`)
+Interactive Webspresso Developer Dashboard SPA mounted at `/_webspresso` and Floating In-Page DevTools bar (`fsy.devToolbar()`) inspired by Django Debug Toolbar and Nuxt DevTools.
+
+- **Aliases**: `dashboardPlugin`, `devToolbarPlugin`, `devtoolsPlugin`.
+- **Options**:
+  - `path`: Base URL path for dashboard (default `/_webspresso`).
+  - `title`: Dashboard browser title (default `'Webspresso Developer Dashboard'`).
+  - `enabled`: Boolean to force enable in production (default `process.env.NODE_ENV !== 'production'`).
+- **Dashboard Features (`/_webspresso`)**:
+  - **Routes Tab**: Full table of file-based SSR and API routes with live search, method badges, dynamic parameters (`[id]`), and target files.
+  - **Models Tab**: All registered ORM models with database tables, columns list, cache strategy (`smart` / `auto`), and soft-delete status.
+  - **Services Tab**: All business services with transaction safety status, authentication guards (`admin`, roles), schemas, and cache TTL.
+  - **Plugins & Config Tabs**: Active plugin manifests, dependencies, and sanitized framework configuration.
+  - **JSON API Endpoints**:
+    - `GET /_webspresso/api/routes`
+    - `GET /_webspresso/api/plugins`
+    - `GET /_webspresso/api/config`
+    - `GET /_webspresso/api/models`
+    - `GET /_webspresso/api/services`
+    - `GET /_webspresso/api/overview` (aggregate system metrics, memory, uptime, node version)
+- **Floating In-Page Dev Toolbar (`fsy.devToolbar()`)**:
+  - Automatically embedded in `views/layout.njk` during development (`NODE_ENV !== 'production'`).
+  - **Collapsed Bottom Pill**:
+    - `⚡ DEV` toggle button with `Alt+D` hotkey shortcut.
+    - Current route method, HTTP status code (`[GET 200] /path`).
+    - Ambient database queries pill (`🗄️ N queries (Xms)`) from `AsyncLocalStorage` request profiler.
+    - Prominent N+1 warning alert badge (`⚠️ N+1 (M)`).
+    - Quick access buttons to `Dashboard (/_webspresso)`, `Admin (/_admin)`, `API Docs (/_swagger)`, and `Schema (/_schema)`.
+  - **Expandable DevTools Drawer (toggled via click or `Alt+D`)**:
+    - **🗄️ SQL Queries Tab**: Execution duration (<40ms green, >40ms red), table pills, formatted SQL statement, and N+1 warning box with actionable suggestions (`repo.query().include(...)`).
+    - **📄 Route & Page Tab**: Route path, matched file, template name, params, and parsed query string.
+    - **🚀 Quick Links Tab**: Configurable tool cards for fast navigation between admin, swagger, and custom tooling.
+    - **💻 System Tab**: Process uptime, memory usage, environment, and Node platform metrics.
+  - **Zero Production Overhead**: When `process.env.NODE_ENV === 'production'`, `devToolbar()` immediately returns `""` with zero overhead.
+
 
 
 

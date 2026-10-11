@@ -219,5 +219,14 @@ Object.defineProperties(module.exports, {
   createManifestPlugin: { get: () => require('./src/bundle').createManifestPlugin, enumerable: true, configurable: true },
   findDefaultEntryPoints: { get: () => require('./src/bundle').findDefaultEntryPoints, enumerable: true, configurable: true },
   findPageEntryPoints: { get: () => require('./src/bundle').findPageEntryPoints, enumerable: true, configurable: true },
+
+  // Dev & DX Tooling
+  dev: { get: () => require('./src/dev'), enumerable: true, configurable: true },
+  formatDevBanner: { get: () => require('./src/dev').formatDevBanner, enumerable: true, configurable: true },
+  printDevBanner: { get: () => require('./src/dev').printDevBanner, enumerable: true, configurable: true },
+  formatRouteTable: { get: () => require('./src/dev').formatRouteTable, enumerable: true, configurable: true },
+  createDevProfilerMiddleware: { get: () => require('./src/dev').createDevProfilerMiddleware, enumerable: true, configurable: true },
+  generateTypes: { get: () => require('./src/dev/typegen').generateTypes, enumerable: true, configurable: true },
+  typegen: { get: () => require('./src/dev/typegen'), enumerable: true, configurable: true },
 });
 

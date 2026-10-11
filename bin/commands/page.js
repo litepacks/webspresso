@@ -19,14 +19,17 @@ const path = require('path');
 function registerCommand(program) {
   program
     .command('page [route]')
+    .alias('make:page')
+    .alias('page:make')
     .description('Add a new SSR page (Nunjucks template + companion load() loader)')
     .option('--no-loader', 'Skip creating companion .js loader file')
     .option('--locales', 'Create page-level locale files')
+    .option('--root <dir>', 'Root directory of the project', process.cwd())
     .action(async (routeArg, options) => {
-      const pagesDir = path.resolve(process.cwd(), 'pages');
+      const rootDir = path.resolve(options.root || process.cwd());
+      const pagesDir = path.join(rootDir, 'pages');
       if (!fs.existsSync(pagesDir)) {
-        console.error('❌ Not a Webspresso project! (pages/ directory not found)');
-        process.exit(1);
+        fs.mkdirSync(pagesDir, { recursive: true });
       }
 
       let route = routeArg ? String(routeArg).trim() : '';

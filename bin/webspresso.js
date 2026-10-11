@@ -42,6 +42,11 @@ const { registerCommand: registerService } = require('./commands/service');
 const { registerCommand: registerMcp } = require('./commands/mcp');
 const { registerCommand: registerPolarMigrate } = require('./commands/polar-migrate');
 const { registerCommand: registerAgentsInit } = require('./commands/agents-init');
+const { registerCommand: registerRoutes } = require('./commands/routes');
+const { registerCommand: registerMakeModel } = require('./commands/make-model');
+const { registerCommand: registerMakeJob } = require('./commands/make-job');
+const { registerCommand: registerOpenapi } = require('./commands/openapi');
+const { registerCommand: registerTypegen } = require('./commands/typegen');
 
 registerNew(program);
 registerPage(program);
@@ -72,6 +77,11 @@ registerService(program);
 registerMcp(program);
 registerPolarMigrate(program);
 registerAgentsInit(program);
+registerRoutes(program);
+registerMakeModel(program);
+registerMakeJob(program);
+registerOpenapi(program);
+registerTypegen(program);
 
 // Parse arguments
 program.parse();

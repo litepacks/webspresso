@@ -181,7 +181,8 @@ const CLIENT_RUNTIME_SCRIPT = `(function() {
           reloadCss(data.file);
         } else if (data.type === 'full') {
           clearOverlay();
-          console.log('[Webspresso] 🔄 Reloading page...');
+          var reasonMsg = data.reason ? ' (' + data.reason + ')' : '';
+          console.log('[Webspresso] 🔄 Reloading page' + reasonMsg + '...');
           window.location.reload();
         } else if (data.type === 'error') {
           showOverlay(data);
@@ -217,17 +218,25 @@ const CLIENT_RUNTIME_SCRIPT = `(function() {
  * @param {Object} config
  * @param {import('express').Express} [config.app]
  * @param {string} [config.publicDir]
+ * @param {string} [config.pagesDir]
+ * @param {string} [config.viewsDir]
  * @param {Object} [config.options]
  * @param {boolean} [config.enabled]
  * @param {Object} [config.logger]
+ * @param {Function} [config.onTemplateChange]
+ * @param {Object} [config.nunjucksEnv]
  */
 function createDevReloadHub(config = {}) {
   const {
     app,
     publicDir,
+    pagesDir,
+    viewsDir,
     options = {},
     enabled = false,
     logger = null,
+    onTemplateChange = null,
+    nunjucksEnv = null,
   } = config;
 
   if (!enabled) {
@@ -236,14 +245,35 @@ function createDevReloadHub(config = {}) {
 
   const debounceMs = typeof options.debounce === 'number' ? options.debounce : 50;
   const watchCss = options.watchCss !== false;
+  const watchTemplates = options.watchTemplates !== false;
   const autoInject = options.autoInject !== false;
+  const watchPublicAll = options.watchPublicAll === true;
   const extraWatch = Array.isArray(options.watch) ? options.watch : [];
+
+  const templateExtensions = new Set(
+    (Array.isArray(options.templateExtensions)
+      ? options.templateExtensions
+      : ['.njk', '.html', '.jinja', '.jinja2']
+    ).map((ext) => (ext.startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`))
+  );
+
+  const pageExtensions = new Set(
+    (Array.isArray(options.pageExtensions)
+      ? options.pageExtensions
+      : ['.njk', '.html', '.jinja', '.jinja2', '.js', '.json']
+    ).map((ext) => (ext.startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`))
+  );
 
   const clients = new Set();
   const watchers = [];
+  const watchedPaths = new Set();
   let heartbeatTimer = null;
   let cssDebounceTimer = null;
+  let templateDebounceTimer = null;
   let isClosed = false;
+
+  let activeNunjucksEnv = nunjucksEnv;
+  let onTemplateChangeCallback = onTemplateChange;
 
   function broadcast(type, payload = {}) {
     if (isClosed) return;
@@ -258,13 +288,59 @@ function createDevReloadHub(config = {}) {
     }
   }
 
+  function invalidateTemplateCache(changedFile) {
+    try {
+      const { clearNjkFrontmatterCaches } = require('../njk-frontmatter');
+      clearNjkFrontmatterCaches();
+    } catch (_) {}
+
+    if (activeNunjucksEnv) {
+      try {
+        if (typeof activeNunjucksEnv.invalidateCache === 'function') {
+          activeNunjucksEnv.invalidateCache();
+        }
+        if (Array.isArray(activeNunjucksEnv.loaders)) {
+          for (const loader of activeNunjucksEnv.loaders) {
+            if (loader && loader.cache) {
+              loader.cache = {};
+            }
+            if (loader && typeof loader.invalidateCache === 'function') {
+              loader.invalidateCache();
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (typeof onTemplateChangeCallback === 'function') {
+      try {
+        onTemplateChangeCallback(changedFile);
+      } catch (_) {}
+    }
+  }
+
   const hub = {
     broadcast,
     close,
     getClientsCount: () => clients.size,
+    getWatchersCount: () => watchers.length,
+    getWatchedPaths: () => Array.from(watchedPaths),
     handleSse,
     handleScript,
     autoInjectMiddleware,
+    attachNunjucks: (env) => {
+      activeNunjucksEnv = env;
+    },
+    setOnTemplateChange: (fn) => {
+      onTemplateChangeCallback = fn;
+    },
+    invalidateTemplateCache,
+    triggerTemplateReload: (filename, reason = 'template') => {
+      onTemplateFileChanged(filename, reason);
+    },
+    triggerCssReload: (filename) => {
+      onCssFileChanged(filename);
+    },
   };
 
   // Heartbeat ping every 25s
@@ -330,6 +406,33 @@ function createDevReloadHub(config = {}) {
     }
   }
 
+  function shouldIgnore(filename) {
+    if (!filename) return false;
+    const basename = path.basename(filename);
+    if (basename.startsWith('.')) return true;
+    if (
+      basename.endsWith('~') ||
+      basename.endsWith('.swp') ||
+      basename.endsWith('.swo') ||
+      basename.endsWith('.tmp')
+    ) {
+      return true;
+    }
+    if (basename.endsWith('.test.js') || basename.endsWith('.spec.js')) {
+      return true;
+    }
+    const normalized = filename.replace(/\\/g, '/');
+    if (
+      normalized.includes('/node_modules/') ||
+      normalized.startsWith('node_modules/') ||
+      normalized.includes('/.git/') ||
+      normalized.startsWith('.git/')
+    ) {
+      return true;
+    }
+    return false;
+  }
+
   function onCssFileChanged(filename) {
     if (filename && !filename.endsWith('.css')) return;
     if (cssDebounceTimer) clearTimeout(cssDebounceTimer);
@@ -340,37 +443,134 @@ function createDevReloadHub(config = {}) {
     }, debounceMs);
   }
 
-  function startWatchers() {
-    const dirsToWatch = new Set();
-    if (watchCss && publicDir && fs.existsSync(publicDir)) {
-      const absPublic = path.resolve(publicDir);
-      dirsToWatch.add(absPublic);
-      const cssSub = path.join(absPublic, 'css');
-      if (fs.existsSync(cssSub)) {
-        dirsToWatch.add(cssSub);
-      }
-    }
-    for (const w of extraWatch) {
-      if (fs.existsSync(w)) {
-        dirsToWatch.add(path.resolve(w));
+  function onTemplateFileChanged(filename, reason = 'template') {
+    if (templateDebounceTimer) clearTimeout(templateDebounceTimer);
+    templateDebounceTimer = setTimeout(() => {
+      templateDebounceTimer = null;
+      invalidateTemplateCache(filename);
+      if (logger) logger.log(`[Webspresso] 🔄 Template change detected: ${filename || 'view.njk'}`);
+      hub.broadcast('full', { file: filename || 'view.njk', reason });
+    }, debounceMs);
+  }
+
+  function watchDirectory(targetDir, handler) {
+    if (!targetDir) return;
+    const absDir = path.resolve(targetDir);
+    if (!fs.existsSync(absDir)) return;
+    if (watchedPaths.has(absDir)) return;
+    watchedPaths.add(absDir);
+
+    function addWatcher(dirToWatch, recursive) {
+      try {
+        const w = fs.watch(dirToWatch, { recursive }, (eventType, filename) => {
+          handler(eventType, filename, dirToWatch);
+        });
+        w.on('error', () => {});
+        watchers.push(w);
+        return true;
+      } catch (_) {
+        return false;
       }
     }
 
-    for (const dir of dirsToWatch) {
-      try {
-        const w = fs.watch(dir, { recursive: true }, (eventType, filename) => {
-          onCssFileChanged(filename);
-        });
-        watchers.push(w);
-      } catch (err) {
-        // Fallback without recursive option if platform does not support it
+    const recursiveSuccess = addWatcher(absDir, true);
+    if (!recursiveSuccess) {
+      function walkAndWatch(currentDir) {
+        addWatcher(currentDir, false);
         try {
-          const w = fs.watch(dir, (eventType, filename) => {
-            onCssFileChanged(filename);
-          });
-          watchers.push(w);
+          const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+              walkAndWatch(path.join(currentDir, entry.name));
+            }
+          }
         } catch (_) {}
       }
+      walkAndWatch(absDir);
+    }
+  }
+
+  function startWatchers() {
+    // 1. Watch publicDir for CSS hot-reload (and optional public assets)
+    if (watchCss && publicDir && fs.existsSync(publicDir)) {
+      watchDirectory(publicDir, (eventType, filename) => {
+        if (!filename || shouldIgnore(filename)) return;
+        const ext = path.extname(filename).toLowerCase();
+        if (ext === '.css') {
+          onCssFileChanged(filename);
+        } else if (watchPublicAll) {
+          onTemplateFileChanged(filename, 'public');
+        }
+      });
+      const cssSub = path.join(path.resolve(publicDir), 'css');
+      if (fs.existsSync(cssSub)) {
+        watchDirectory(cssSub, (eventType, filename) => {
+          if (!filename || shouldIgnore(filename)) return;
+          if (filename.endsWith('.css')) {
+            onCssFileChanged(filename);
+          }
+        });
+      }
+    }
+
+    // 2. Watch viewsDir for template live-reload
+    if (watchTemplates && viewsDir && fs.existsSync(viewsDir)) {
+      watchDirectory(viewsDir, (eventType, filename) => {
+        if (!filename || shouldIgnore(filename)) return;
+        const ext = path.extname(filename).toLowerCase();
+        if (ext === '.css') {
+          onCssFileChanged(filename);
+        } else if (templateExtensions.has(ext)) {
+          onTemplateFileChanged(filename, 'views');
+        }
+      });
+    }
+
+    // 3. Watch pagesDir for page templates and loaders
+    if (watchTemplates && pagesDir && fs.existsSync(pagesDir)) {
+      watchDirectory(pagesDir, (eventType, filename) => {
+        if (!filename || shouldIgnore(filename)) return;
+        const ext = path.extname(filename).toLowerCase();
+        if (ext === '.css') {
+          onCssFileChanged(filename);
+        } else if (pageExtensions.has(ext)) {
+          onTemplateFileChanged(filename, 'pages');
+        }
+      });
+    }
+
+    // 4. Extra watch paths
+    for (const extra of extraWatch) {
+      if (!extra || !fs.existsSync(extra)) continue;
+      const absExtra = path.resolve(extra);
+      try {
+        const stat = fs.statSync(absExtra);
+        if (stat.isDirectory()) {
+          watchDirectory(absExtra, (eventType, filename) => {
+            if (!filename || shouldIgnore(filename)) return;
+            const ext = path.extname(filename).toLowerCase();
+            if (ext === '.css') {
+              onCssFileChanged(filename);
+            } else {
+              onTemplateFileChanged(filename, 'extra');
+            }
+          });
+        } else {
+          const w = fs.watch(absExtra, (eventType, filename) => {
+            const fileTarget = filename || path.basename(absExtra);
+            if (!fileTarget || shouldIgnore(fileTarget)) return;
+            const ext = path.extname(fileTarget).toLowerCase();
+            if (ext === '.css') {
+              onCssFileChanged(fileTarget);
+            } else {
+              onTemplateFileChanged(fileTarget, 'extra');
+            }
+          });
+          w.on('error', () => {});
+          watchers.push(w);
+          watchedPaths.add(absExtra);
+        }
+      } catch (_) {}
     }
   }
 
@@ -386,10 +586,15 @@ function createDevReloadHub(config = {}) {
       clearTimeout(cssDebounceTimer);
       cssDebounceTimer = null;
     }
+    if (templateDebounceTimer) {
+      clearTimeout(templateDebounceTimer);
+      templateDebounceTimer = null;
+    }
     for (const w of watchers) {
       try { w.close(); } catch (_) {}
     }
     watchers.length = 0;
+    watchedPaths.clear();
     for (const client of clients) {
       try { client.end(); } catch (_) {}
     }

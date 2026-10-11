@@ -30,6 +30,12 @@ const { discoverModuleDetails } = require('./modules/module-discovery');
 const { ShutdownManager, NodeHttpAdapter } = require('../core/shutdown');
 const { createCompressionMiddleware } = require('../core/compression');
 const {
+  createDevProfilerMiddleware,
+  attachProfilerToKnex,
+  formatDevBanner,
+  printDevBanner,
+} = require('./dev');
+const {
   WebspressoError,
   HttpError,
   NotFoundError,
@@ -466,7 +472,13 @@ function createApp(options = {}) {
     timeout: timeoutConfig = '30s',
     auth: authManager = null,
     setupRoutes,
+    dev: devOpts = {},
   } = options;
+
+  // Auto-instrument Knex queries for dev profiler
+  if (options.db && options.db.knex) {
+    attachProfilerToKnex(options.db.knex);
+  }
   
   if (!initialPagesDir && !options.pages && !options.api && !options.modules && !options.routes && !options.rootDir) {
     throw new Error('pagesDir is required');
@@ -1062,7 +1074,7 @@ function createApp(options = {}) {
 
   mountClientRuntime(app, clientRuntime);
 
-  // Development Hot / Live Reload Hub (SSE & CSS hot swap)
+  // Development Hot / Live Reload Hub (SSE & CSS hot swap & Template Live Reload)
   const devReloadOption = options.devReload;
   const isDevReloadExplicit = devReloadOption === true || (typeof devReloadOption === 'object' && devReloadOption.enabled === true);
   const isDevReloadDisabled = devReloadOption === false || (typeof devReloadOption === 'object' && devReloadOption.enabled === false);
@@ -1071,6 +1083,8 @@ function createApp(options = {}) {
   const devReloadHub = createDevReloadHub({
     app,
     publicDir,
+    pagesDir,
+    viewsDir,
     options: typeof devReloadOption === 'object' ? devReloadOption : {},
     enabled: devReloadEnabled,
     logger: logging ? console : null,
@@ -1120,6 +1134,10 @@ function createApp(options = {}) {
     noCache: nunjucksOpts.noCache ?? (isDev || isTest),
     ...nunjucksOpts,
   });
+
+  if (devReloadHub && typeof devReloadHub.attachNunjucks === 'function') {
+    devReloadHub.attachNunjucks(nunjucksEnv);
+  }
   
   // Add custom Nunjucks filters
   nunjucksEnv.addFilter('json', (obj) => {
@@ -1189,16 +1207,18 @@ function createApp(options = {}) {
   const pluginContext = { app, nunjucksEnv, options, middlewares, shutdownManager };
   pluginManager.registerSync(plugins, pluginContext);
   
-  // Request logging middleware
+  // Request logging & query profiling middleware
   if (logging) {
-    app.use((req, res, next) => {
-      const start = Date.now();
-      res.on('finish', () => {
-        const duration = Date.now() - start;
-        console.log(`${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
-      });
-      next();
+    const profilerMiddleware = createDevProfilerMiddleware({
+      db: options.db ?? null,
+      logger: options.logger || console,
+      detectNPlusOne: devOpts.nPlusOne !== false,
+      thresholdNPlusOne: devOpts.nPlusOneThreshold ?? 4,
+      slowQueryMs: devOpts.slowQueryMs ?? 50,
+      verbose: devOpts.verbose ?? false,
+      colors: devOpts.colors !== false,
     });
+    app.use(profilerMiddleware);
   }
   
   // 1. Scan and compile discovered routes (src/pages, src/api, modules/*)
@@ -1665,7 +1685,58 @@ function createApp(options = {}) {
       shutdownManager.enableShutdownHooks();
     }
 
+    // Development startup banner
+    const shouldShowBanner =
+      devOpts.banner !== false &&
+      options.banner !== false &&
+      isDev &&
+      !isTest;
+
+    if (shouldShowBanner) {
+      server.once('listening', () => {
+        printDevBanner({
+          app,
+          server,
+          routeTable,
+          options,
+          db: options.db ?? null,
+          serviceRegistry,
+          pluginManager,
+          logger: options.logger || console,
+          showRouteTable: devOpts.routeTable !== false && options.routeTable !== false,
+        });
+      });
+    }
+
     return server;
+  };
+
+  app.printDevBanner = function(opts = {}) {
+    printDevBanner({
+      app,
+      server: app.server,
+      routeTable,
+      options,
+      db: options.db ?? null,
+      serviceRegistry,
+      pluginManager,
+      logger: options.logger || console,
+      showRouteTable: true,
+      ...opts,
+    });
+  };
+
+  app.formatDevBanner = function(opts = {}) {
+    return formatDevBanner({
+      app,
+      server: app.server,
+      routeTable,
+      options,
+      db: options.db ?? null,
+      serviceRegistry,
+      pluginManager,
+      ...opts,
+    });
   };
   
   return { app, nunjucksEnv, pluginManager, authMiddleware, shutdownManager };

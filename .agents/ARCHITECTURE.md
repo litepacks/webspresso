@@ -116,4 +116,14 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 | `xlsxPlugin` | Excel / Export | Excel spreadsheet generation, parsing, ORM streaming export (`res.xlsx`), and services |
 | `csvPlugin` | CSV / Export | RFC 4180 CSV generator, parser, Excel UTF-8 BOM, streaming writer (`res.csv`), and services |
 
+---
+
+## 5. Developer Experience & Live/Hot Reload (`src/dev-reload/`)
+
+- **Zero-Dependency SSE Reload Hub**: Enabled via `createApp({ devReload: true })` (or `devReload: { watchTemplates: true, watchCss: true, debounce: 50 }`).
+- **Instant CSS Hot Swap**: Modifying `.css` files dynamically refreshes all `<link rel="stylesheet">` elements without page refresh or DOM state loss.
+- **Template & Layout Live Reload**: Modifying Nunjucks templates (`.njk`, `.html`) in `views/` or pages in `pages/` automatically invalidates frontmatter/loader caches and broadcasts a debounced `'full'` reload event to active browser tabs.
+- **Error Overlay Frame**: Client runtime script automatically renders terminal-free in-browser error frames for compile/build errors with line numbers and dismiss keyboard shortcuts (`Esc`).
+- **DevTools Toolbar & Dashboard**: Embedded via `fsy.devToolbar()` and available at `/_webspresso` for interactive inspection of routes, models, services, cache, and profiler metrics.
+
 

@@ -173,5 +173,137 @@ npx webspresso upload:prune
 npx webspresso upload:prune --dry-run
 ```
 
+---
+
+## 11. Routes Introspection (`routes`)
+
+List and inspect all compiled file-based and API routes in terminal:
+
+```bash
+# List all application routes in a colorized table
+npx webspresso routes
+
+# Filter to only API endpoints
+npx webspresso routes --api
+
+# Filter to only SSR page routes
+npx webspresso routes --pages
+
+# Output routes as machine-readable JSON
+npx webspresso routes --json
+```
+
+---
+
+## 12. Dev Server DX & Query Profiler
+
+When starting in development mode (`isDev: true` / `process.env.NODE_ENV !== 'production'`), Webspresso automatically:
+
+- **Displays Startup Banner**: ASCII box with Node/Framework version, Local & Admin URLs, Database dialect, and counts of routes, models, services, and plugins.
+- **Request Profiler & Logger**: Color-coded HTTP requests with status, response duration, and database metrics:
+  ```text
+  [GET 200] /api/notes — 14.2ms | 2 DB queries (2.8ms)
+  ```
+- **N+1 Query Detection**: Flags queries executing repeatedly against the same table within a single request:
+  ```text
+  ⚠️  [webspresso:n+1] Potential N+1 query pattern detected on table 'users' (5 queries, 6.4ms). Consider eager loading with repo.query().include('users') or batching.
+  ```
+- **Configuration (`dev` options in `createApp`)**:
+  ```javascript
+  createApp({
+    dev: {
+      banner: true,        // show startup banner (default: true in dev)
+      routeTable: true,    // show route table in banner (default: true)
+      profiler: true,      // enable request & DB profiler (default: true)
+      nPlusOne: true,      // detect N+1 queries (default: true)
+      nPlusOneThreshold: 4,// query count threshold for warning (default: 4)
+      slowQueryMs: 50,     // flag queries slower than N ms (default: 50)
+      verbose: false,      // log individual SQL statements
+    }
+  });
+  ```
+
+---
+
+## 13. Scaffolding & Code Generation (`make:*` Commands)
+
+Quickly generate boilerplate adhering strictly to Webspresso contracts:
+
+```bash
+# 1. Scaffold an ORM Model in models/<Name>.js with parsed zdb fields and Knex migration
+npx webspresso make:model Post --fields title:string,content:text,published:boolean,views:integer --migration
+# Flags:
+#   --fields <list>   (title:string,content:text,views:integer,price:number,published:boolean,authorId:id)
+#   --table <name>    (custom table name; defaults to pluralized lowercase)
+#   --migration, -m   (auto-generate timestamped Knex migration in migrations/)
+#   --soft-deletes    (include deletedAt column and default scope)
+
+# 2. Scaffold API Endpoints in pages/api/
+# Single endpoint with Zod validation and handler:
+npx webspresso make:api notes/export --method POST --auth
+
+# Full REST CRUD Suite (list, create, detail, update, delete) in pages/api/posts:
+npx webspresso make:api posts --crud --model Post
+
+# 3. Scaffold an SSR Page in pages/
+npx webspresso make:page blog/[slug]
+# Generates pages/blog/[slug].njk template + companion loader pages/blog/[slug].js
+
+# 4. Scaffold a Service in services/<domain>/<action>.js
+npx webspresso make:service order.process --transaction --auth admin
+
+# 5. Scaffold a Background Queue Worker in jobs/<name>.js
+npx webspresso make:job send-welcome-email --queue default --retries 3
+```
+
+---
+
+## 14. OpenAPI & API Documentation Export (`openapi` / `api:docs`)
+
+Generate and export standard OpenAPI 3.0 JSON specification from file-based API routes and Zod schemas:
+
+```bash
+# Print OpenAPI 3.0 specification to stdout
+npx webspresso openapi
+
+# Export directly to a JSON file
+npx webspresso openapi --out openapi.json
+
+# Export with custom title, version, and server URL
+npx webspresso api:docs --out public/openapi.json --title "My API" --api-version "2.0.0" --server "https://api.myapp.com"
+
+# Include ORM model schemas in components.schemas
+npx webspresso openapi --out openapi.json --include-orm
+```
+
+---
+
+## 15. TypeScript Definitions & IDE Auto-Complete Generator (`typegen` / `types`)
+
+Scan ORM models, business services, and routes to automatically generate typed TypeScript declaration files (`.webspresso/types.d.ts` and `webspresso-env.d.ts`) with module augmentation:
+
+```bash
+# Generate TypeScript definitions
+npx webspresso typegen
+
+# Aliases
+npx webspresso types
+npx webspresso generate:types
+
+# Watch mode (automatically regenerates on model/service/page edits)
+npx webspresso typegen --watch
+
+# Custom output destination
+npx webspresso typegen --out types/webspresso.d.ts --no-env-file
+```
+
+### Generated Capabilities & IDE DX:
+- **Typed Models (`db.getRepository('Model')`)**: Auto-completes model names and infers entity column types from Zod schemas.
+- **Typed Services (`req.service('name', input)`)**: Auto-completes registered service names and enforces validated input payloads.
+- **Typed Route Table (`AppRoute`, `AppRoutePath`)**: Union types for all discovered SSR and API routes.
+
+
+
+
 
 

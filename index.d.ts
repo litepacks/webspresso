@@ -68,6 +68,17 @@ export interface CreateAppOptions {
   compression?: boolean | CompressionOptions;
   /** Shutdown and lifecycle configuration */
   shutdown?: ShutdownOptions;
+  /** Development tooling and DX options */
+  dev?: {
+    banner?: boolean;
+    routeTable?: boolean;
+    profiler?: boolean;
+    nPlusOne?: boolean;
+    nPlusOneThreshold?: number;
+    slowQueryMs?: number;
+    verbose?: boolean;
+    colors?: boolean;
+  };
   server?: {
     port?: number;
     shutdown?: ShutdownOptions;
@@ -97,8 +108,28 @@ export interface DevReloadOptions {
   enabled?: boolean;
   watch?: string[];
   watchCss?: boolean;
+  watchTemplates?: boolean;
+  watchPublicAll?: boolean;
+  templateExtensions?: string[];
+  pageExtensions?: string[];
   autoInject?: boolean;
   debounce?: number;
+}
+
+export interface DevReloadHub {
+  broadcast(type: 'css' | 'full' | 'error' | 'clear-error' | string, payload?: Record<string, unknown>): void;
+  close(): void;
+  getClientsCount(): number;
+  getWatchersCount(): number;
+  getWatchedPaths(): string[];
+  attachNunjucks(env: unknown): void;
+  setOnTemplateChange(fn: (file?: string) => void): void;
+  invalidateTemplateCache(file?: string): void;
+  triggerTemplateReload(filename?: string, reason?: string): void;
+  triggerCssReload(filename?: string): void;
+  handleSse(req: any, res: any): void;
+  handleScript(req: any, res: any): void;
+  autoInjectMiddleware(req: any, res: any, next: () => void): void;
 }
 
 export interface DevBundlerOptions {
@@ -371,8 +402,10 @@ export interface WebspressoApplication extends Application {
   disableShutdownHooks(): this;
   setErrorHandler(handler: (error: unknown, req: Request, res: Response, next: NextFunction) => Promise<unknown> | unknown): this;
   broadcastDevReload?(type: 'css' | 'full' | string, payload?: Record<string, unknown>): void;
-  devReloadHub?: unknown;
+  devReloadHub?: DevReloadHub;
   devBundler?: DevBundler;
+  printDevBanner?(opts?: Record<string, unknown>): void;
+  formatDevBanner?(opts?: Record<string, unknown>): { bannerText: string; plainText: string; summary: Record<string, unknown> };
 }
 
 export interface CreateAppResult {
@@ -384,6 +417,11 @@ export interface CreateAppResult {
 }
 
 export function createApp(options?: CreateAppOptions): CreateAppResult;
+
+export function formatDevBanner(context?: Record<string, unknown>, options?: Record<string, unknown>): { bannerText: string; plainText: string; summary: Record<string, unknown> };
+export function printDevBanner(context?: Record<string, unknown>, options?: Record<string, unknown>): void;
+export function formatRouteTable(routeTable: unknown, options?: Record<string, unknown>): string;
+export function createDevProfilerMiddleware(options?: Record<string, unknown>): RequestHandler;
 
 // --- Exceptions & Errors ---
 
@@ -1028,8 +1066,30 @@ export interface MigrationManager {
   unlock(): Promise<void>;
 }
 
+export interface WebspressoModels {
+  [key: string]: Record<string, any>;
+}
+
+export interface WebspressoServices {
+  [key: string]: { input: any; output: any };
+}
+
+export interface WebspressoServiceCaller {
+  <K extends keyof WebspressoServices>(
+    name: K,
+    input?: WebspressoServices[K]['input'],
+    opts?: unknown
+  ): Promise<WebspressoServices[K]['output']>;
+  <TInput = unknown, TOutput = unknown>(
+    name: string,
+    input?: TInput,
+    opts?: unknown
+  ): Promise<TOutput>;
+}
+
 export interface TransactionContext {
   trx: Knex.Transaction;
+  getRepository<K extends keyof WebspressoModels>(modelName: K, scopeContext?: ScopeContext): Repository<WebspressoModels[K]>;
   getRepository<T = Record<string, any>>(modelName: string, scopeContext?: ScopeContext): Repository<T>;
   createRepository<T = Record<string, any>>(model: ModelDefinition<T>, scopeContext?: ScopeContext): Repository<T>;
 }
@@ -1041,6 +1101,7 @@ export interface DatabaseInstance {
   hasModel(name: string): boolean;
   getAllModels(): ModelDefinition<any>[];
   registerModel<T = Record<string, any>>(model: ModelDefinition<T>): void;
+  getRepository<K extends keyof WebspressoModels>(modelName: K, scopeContext?: ScopeContext): Repository<WebspressoModels[K]>;
   getRepository<T = Record<string, any>>(modelName: string, scopeContext?: ScopeContext): Repository<T>;
   createRepository<T = Record<string, any>>(model: ModelDefinition<T>, scopeContext?: ScopeContext): Repository<T>;
   query<T = Record<string, any>>(modelName: string, scopeContext?: ScopeContext): QueryBuilder<T>;
@@ -1179,6 +1240,19 @@ export interface SchemaExplorerPluginOptions {
   /** Admin API prefix (default: '/schema') */
   apiPrefix?: string;
 }
+
+export interface DashboardPluginOptions {
+  /** Base URL path for the developer dashboard (default: '/_webspresso') */
+  path?: string;
+  /** Custom dashboard title displayed in HTML <title> and header (default: 'Webspresso Developer Dashboard') */
+  title?: string;
+  /** Enable or disable the plugin (default: true) */
+  enabled?: boolean;
+}
+
+export function dashboardPlugin(options?: DashboardPluginOptions): WebspressoPlugin;
+export function devToolbarPlugin(options?: DashboardPluginOptions): WebspressoPlugin;
+export function devtoolsPlugin(options?: DashboardPluginOptions): WebspressoPlugin;
 
 export function schemaExplorerPlugin(options?: SchemaExplorerPluginOptions): WebspressoPlugin;
 
@@ -1383,7 +1457,46 @@ export function emailPlugin(options?: EmailPluginOptions): WebspressoPlugin & {
 
 export function recaptchaPlugin(options?: Record<string, unknown>): WebspressoPlugin;
 
-export function swaggerPlugin(options?: Record<string, unknown>): WebspressoPlugin;
+export interface SwaggerPluginOptions {
+  /** Base path for docs (default: '/_swagger') */
+  path?: string;
+  /** UI playground engine: 'swagger' or 'scalar' (default: 'swagger') */
+  ui?: 'swagger' | 'scalar';
+  /** Enable plugin (defaults to true in development) */
+  enabled?: boolean;
+  /** Custom authorization guard */
+  authorize?: (req: any) => boolean;
+  /** Automatically merge ORM model schemas into components.schemas */
+  includeOrmSchemas?: boolean;
+  /** Exclude specific ORM models from documentation */
+  ormExclude?: string[];
+  /** OpenAPI info.title override */
+  title?: string;
+  /** OpenAPI info.version override */
+  version?: string;
+  /** OpenAPI info.description override */
+  description?: string;
+  /** Primary server URL in spec */
+  serverUrl?: string;
+  /** Theme for Scalar UI ('default', 'purple', 'solarized', etc.) */
+  theme?: string;
+  /** Dark mode default for Scalar UI */
+  darkMode?: boolean;
+  /** Auto-register in Admin Panel if admin-panel plugin is present (default: true) */
+  admin?: boolean;
+  /** Admin menu and page title (default: 'API Docs') */
+  adminTitle?: string;
+  /** Admin menu sort order (default: 92) */
+  adminOrder?: number;
+  /** Custom options passed to Scalar */
+  scalarOptions?: Record<string, unknown>;
+  /** Custom options passed to Swagger UI */
+  swaggerOptions?: Record<string, unknown>;
+}
+
+export function swaggerPlugin(options?: SwaggerPluginOptions): WebspressoPlugin;
+export function openapiPlugin(options?: SwaggerPluginOptions): WebspressoPlugin;
+export function apiDocsPlugin(options?: SwaggerPluginOptions): WebspressoPlugin;
 
 export function healthCheckPlugin(options?: Record<string, unknown>): WebspressoPlugin;
 
@@ -2365,7 +2478,7 @@ export interface PageContext<TParams = Record<string, string>, TQuery = Record<s
   res: import('express').Response;
   params: TParams;
   query: TQuery;
-  service: <TInput = unknown, TOutput = unknown>(name: string, input?: TInput, opts?: unknown) => Promise<TOutput>;
+  service: WebspressoServiceCaller;
   module: string | null;
   config: Record<string, unknown>;
   logger: Console;
@@ -2399,7 +2512,7 @@ export interface ApiContext<TBody = any, TParams = Record<string, string>, TQuer
   query: TQuery;
   body: TBody;
   input: { body?: TBody; params?: TParams; query?: TQuery; headers?: Record<string, string> };
-  service: <TInput = unknown, TOutput = unknown>(name: string, input?: TInput, opts?: unknown) => Promise<TOutput>;
+  service: WebspressoServiceCaller;
   module: string | null;
   config: Record<string, unknown>;
   logger: Console;
@@ -2481,6 +2594,41 @@ export function compileRouteTable(
   descriptors?: RouteDescriptor[],
   options?: { explicitRoutes?: Array<{ method?: string; path: string }>; isDev?: boolean }
 ): RouteTable;
+
+export interface GenerateTypesOptions {
+  /** Root directory of the project (default: process.cwd()) */
+  rootDir?: string;
+  /** Alias for rootDir */
+  cwd?: string;
+  /** Models directory relative to root (default: 'models') */
+  modelsDir?: string;
+  /** Services directory relative to root (default: 'services') */
+  servicesDir?: string;
+  /** Pages directory relative to root (default: 'pages') */
+  pagesDir?: string;
+  /** Output directory (default: '.webspresso') */
+  outDir?: string;
+  /** Custom output file path (default: '.webspresso/types.d.ts') */
+  outFile?: string;
+  /** Create companion webspresso-env.d.ts at project root (default: true) */
+  createEnvFile?: boolean;
+  /** Write declaration files to disk (default: true) */
+  write?: boolean;
+  /** Suppress console output (default: false) */
+  silent?: boolean;
+}
+
+export interface GenerateTypesResult {
+  code: string;
+  modelsCount: number;
+  servicesCount: number;
+  routesCount: number;
+  outFile: string;
+  envFile: string | null;
+}
+
+export function generateTypes(options?: GenerateTypesOptions): GenerateTypesResult;
+
 
 
 
