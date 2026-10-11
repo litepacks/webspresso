@@ -120,8 +120,17 @@ function buildOperation(route, compiled, mod = null) {
   const filePath = route.file || route.source || '';
   const method = (route.method || 'GET').toLowerCase();
   const routePath = route.path || route.pattern || filePath;
-  const summary = (mod && mod.summary) || inferOperationSummary(method, routePath);
-  const tags = inferOperationTags(routePath, mod && mod.tags);
+
+  let summary = (mod && (mod.summary || mod.openapi?.summary)) || route.summary;
+  if (!summary) {
+    if (filePath) {
+      summary = `${method.toUpperCase()} ${filePath}`;
+    } else {
+      summary = inferOperationSummary(method, routePath);
+    }
+  }
+
+  const tags = inferOperationTags(routePath, (mod && (mod.tags || mod.openapi?.tags)) || route.tags);
 
   const op = {
     tags,
@@ -192,7 +201,7 @@ function buildOperation(route, compiled, mod = null) {
  * Builds an OpenAPI 3.0 document from application routes and ORM components
  * @param {object} opts
  * @param {object[]} opts.routes - Route metadata array
- * @param {string} [opts.pagesDir] - Optional pages directory path
+ * @param {string} opts.pagesDir - Pages directory path
  * @param {boolean} [opts.includeOrmSchemas=false]
  * @param {string[]} [opts.ormExclude=[]]
  * @param {object} [opts.info]
@@ -209,11 +218,19 @@ function buildOpenApiDocument(opts = {}) {
     servers = [{ url: '/' }],
   } = opts;
 
+  if (!pagesDir) {
+    throw new Error('buildOpenApiDocument: pagesDir is required');
+  }
+
   const paths = Object.create(null);
   const apiRoutes = routes.filter((r) => r.type === 'api' || (r.path && r.path.startsWith('/api')));
 
   for (const route of apiRoutes) {
     const fullPath = resolveRouteFilePath(route, pagesDir);
+
+    if (route.file && !fullPath) {
+      continue;
+    }
 
     let mod = null;
     let compiled = null;

@@ -79,31 +79,28 @@ describe('Swagger & Scalar Plugin Enhancements', () => {
         type: 'api',
         method: 'get',
         path: '/api/users',
-        file: 'pages/api/users.get.js',
       },
       {
         type: 'api',
         method: 'get',
         path: '/api/users/:id',
-        file: 'pages/api/users/[id].get.js',
         middleware: ['jwt'],
       },
       {
         type: 'api',
         method: 'post',
         path: '/api/users',
-        file: 'pages/api/users.post.js',
         middleware: ['auth'],
       },
       {
         type: 'api',
         method: 'delete',
         path: '/api/products/[slug]',
-        file: 'pages/api/products/[slug].delete.js',
       },
     ];
 
     const doc = buildOpenApiDocument({
+      pagesDir: FIXTURES_PAGES,
       routes: mockRoutes,
       info: { title: 'Test API', version: '1.0.0' },
     });
