@@ -280,6 +280,80 @@ const routeList = app.routes.list();
 // ]
 ```
 
+### 5.5 Server-Sent Events (SSE) Streaming (`res.sse`)
+For real-time event streaming and LLM token outputs, use the native `res.sse()` helper (or `{ sse }` from `ctx`):
+
+```javascript
+// File: pages/api/ai/chat.post.js
+const { defineApi } = require('webspresso');
+
+module.exports = defineApi({
+  handler: async (req, res, { sse }) => {
+    // 1. Controller mode with automatic keepalive & reconnection directives
+    const stream = sse({ heartbeat: 15000, retry: 3000 });
+
+    await stream.send({ delta: 'Hello ' });
+    await stream.send({ event: 'delta', data: { text: 'world!' }, id: '1' });
+    stream.close();
+
+    // 2. OR stream an async generator / LLM stream directly:
+    // return res.sse(async function*() {
+    //   for await (const chunk of llmStream) {
+    //     yield { token: chunk.text };
+    //   }
+    // });
+  },
+});
+```
+
+### 5.6 Cascading Middleware (`_middleware.js`) & Nested Layouts (`_layout.njk`)
+
+Webspresso supports folder-level cascading middleware inheritance and nested layouts across directory trees:
+
+#### 1. Cascading Middleware (`_middleware.js`)
+Any directory under `pages/` can declare a `_middleware.js` file:
+- **Execution Order**: Middlewares execute in top-down ancestral order (from root down to route leaf) before route handlers and route-specific middleware.
+- **Early Termination**: If any middleware sends headers (e.g. `res.status(401).json(...)` or `res.redirect('/login')`), execution halts immediately and downstream middlewares/handlers are skipped.
+- **Export Formats**: Standard Express middleware function `(req, res, next)`, async function, named middleware string/array `['auth', 'cors']`, or middleware tuples with options `[['rateLimit', { max: 100 }]]`.
+
+```
+pages/
+├── _middleware.js            # Runs for ALL routes (adds global headers / request ID)
+├── api/
+│   └── admin/
+│       ├── _middleware.js    # Protects all /api/admin/* endpoints
+│       └── metrics.get.js    # Inherits root + admin middleware
+└── dashboard/
+    ├── _middleware.js        # Auth guard for /dashboard/* pages
+    └── settings.njk
+```
+
+#### 2. Nested Layouts (`_layout.njk` & `_layout.js`)
+Pages under `pages/` automatically inherit ancestor layouts:
+- **Wrapping Order**: Child template is rendered first, then wrapped by layouts from innermost to outermost using `{{ content | safe }}`.
+- **Layout Loaders (`_layout.js`)**: Companion `_layout.js` files can export `async function load(req, ctx)` to supply shared data (e.g., site title, navigation, breadcrumbs) in top-down order before the page loader runs.
+- **Opt-Out**: A page can opt out of automatic layout wrapping by setting `layout: false` in its companion `.js` config/loader, or by explicitly using `{% extends "..." %}` in its Nunjucks template.
+
+```html
+{# pages/_layout.njk #}
+<!DOCTYPE html>
+<html>
+<head><title>{{ siteTitle }}</title></head>
+<body>
+  <header>Global Nav</header>
+  {{ content | safe }}
+</body>
+</html>
+```
+
+```html
+{# pages/dashboard/_layout.njk #}
+<div class="dashboard-shell">
+  <aside>Dashboard Sidebar</aside>
+  <main>{{ content | safe }}</main>
+</div>
+```
+
 ---
 
 ## 6. Summary Checklist for Agents

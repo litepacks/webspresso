@@ -10,6 +10,8 @@ const path = require('path');
 const fs = require('fs');
 const { Job } = require('./job');
 const { MemoryQueueAdapter } = require('./adapters/memory');
+const { CronExpression } = require('./cron');
+const { TaskScheduler } = require('./scheduler');
 
 class QueueManager extends EventEmitter {
   /**
@@ -77,6 +79,12 @@ class QueueManager extends EventEmitter {
     if (this.retentionConfig.enabled) {
       this.startCleanup();
     }
+
+    // Initialize TaskScheduler for recurring cron tasks
+    this.scheduler = new TaskScheduler(this, {
+      autoStart: options.autoStart !== false,
+      ...(options.scheduler || {}),
+    });
 
     if (this.jobsDir && fs.existsSync(this.jobsDir)) {
       this.loadJobsFromDirectory(this.jobsDir);
@@ -181,6 +189,9 @@ class QueueManager extends EventEmitter {
     this.isPaused = false;
     this._currentPollInterval = this.pollInterval;
     this._scheduleNextTick(0);
+    if (this.scheduler) {
+      this.scheduler.start();
+    }
     this.emit('start');
     return this;
   }
@@ -194,6 +205,9 @@ class QueueManager extends EventEmitter {
       clearTimeout(this._timer);
       this._timer = null;
     }
+    if (this.scheduler) {
+      this.scheduler.stop();
+    }
     this.emit('pause');
     return this;
   }
@@ -206,6 +220,9 @@ class QueueManager extends EventEmitter {
     this.isPaused = false;
     this._currentPollInterval = this.pollInterval;
     this._scheduleNextTick(0);
+    if (this.scheduler) {
+      this.scheduler.start();
+    }
     this.emit('resume');
     return this;
   }
@@ -218,6 +235,9 @@ class QueueManager extends EventEmitter {
   async drain(timeoutMs = 10000) {
     this.isDraining = true;
     this.pause();
+    if (this.scheduler) {
+      this.scheduler.stop();
+    }
 
     if (this.runningCount === 0) {
       this.isDraining = false;
@@ -245,8 +265,56 @@ class QueueManager extends EventEmitter {
   async stop() {
     this.pause();
     this.isRunning = false;
+    if (this.scheduler) {
+      this.scheduler.stop();
+    }
     this.stopCleanup();
     this.emit('stop');
+  }
+
+  /**
+   * Schedule a recurring cron job
+   * @param {string|CronExpression} cronExpression - Cron pattern or alias (e.g. '0 0 * * *', '@daily')
+   * @param {string} name - Registered job name
+   * @param {any} [data={}] - Job data payload
+   * @param {Object} [options={}] - Schedule options (overlap, maxRuns, utc, runImmediately)
+   * @returns {Object} Registered schedule object
+   */
+  schedule(cronExpression, name, data = {}, options = {}) {
+    return this.scheduler.schedule(cronExpression, name, data, options);
+  }
+
+  /**
+   * Alias for schedule()
+   */
+  cron(cronExpression, name, data, options) {
+    return this.schedule(cronExpression, name, data, options);
+  }
+
+  /**
+   * Unschedule a recurring job by ID or job name
+   * @param {string} idOrJobName
+   * @returns {boolean}
+   */
+  unschedule(idOrJobName) {
+    return this.scheduler.unschedule(idOrJobName);
+  }
+
+  /**
+   * Get all registered schedules
+   * @returns {Array<Object>}
+   */
+  getSchedules() {
+    return this.scheduler.getSchedules();
+  }
+
+  /**
+   * Get single schedule by ID or job name
+   * @param {string} idOrJobName
+   * @returns {Object|null}
+   */
+  getSchedule(idOrJobName) {
+    return this.scheduler.getSchedule(idOrJobName);
   }
 
   /**
@@ -371,7 +439,10 @@ class QueueManager extends EventEmitter {
         if (entry.isDirectory()) {
           readRecursive(fullPath, basePrefix ? `${basePrefix}.${entry.name}` : entry.name);
         } else if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.cjs'))) {
-          const nameWithoutExt = entry.name.replace(/\.(c)?js$/, '');
+          const isCronFile = entry.name.endsWith('.cron.js') || entry.name.endsWith('.cron.cjs');
+          const nameWithoutExt = isCronFile
+            ? entry.name.replace(/\.cron\.(c)?js$/, '')
+            : entry.name.replace(/\.(c)?js$/, '');
           const jobName = basePrefix ? `${basePrefix}.${nameWithoutExt}` : nameWithoutExt;
 
           try {
@@ -381,6 +452,16 @@ class QueueManager extends EventEmitter {
 
             if (typeof handler === 'function') {
               this.define(jobName, handler, options);
+
+              const cronExpr = mod.cron || mod.schedule || (isCronFile ? (mod.expression || `@${nameWithoutExt}`) : null);
+              if (cronExpr) {
+                this.schedule(
+                  cronExpr,
+                  jobName,
+                  mod.data || {},
+                  { ...options, ...(mod.scheduleOptions || {}) }
+                );
+              }
             }
           } catch (err) {
             console.error(`[QueueManager] Failed to load job from ${fullPath}:`, err.message);

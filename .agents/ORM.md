@@ -122,16 +122,31 @@ const result = await productRepo.query()
 
 ---
 
-## 3. Relations & Eager Loading
+## 3. Relations & Nested Eager Loading
 
-Support for `belongsTo`, `hasMany`, and `hasOne`:
+Support for `belongsTo`, `hasMany`, and `hasOne` with arbitrary-depth batch nested loading:
 
 ```js
-// Eager-load relations using include
-const productsWithCategory = await productRepo.query()
+// 1. Direct eager loading
+const products = await productRepo.query()
   .include('category', 'reviews')
   .find();
+
+// 2. Nested eager loading (dot notation)
+const posts = await postRepo.query()
+  .include('author.profile', 'author.company.country', 'comments.author')
+  .find();
+
+// 3. Eager loading via repository methods
+const post = await postRepo.findById(id, { include: ['author.profile'] });
+const list = await postRepo.find({ active: true }, { include: ['author.company'] });
+
+// 4. Shorthand repository chaining
+const result = await postRepo.include('author.profile').where('user_id', 1).find();
 ```
+
+> [!TIP]
+> Nested relations are loaded using optimized batch queries (`whereIn`) with zero N+1 queries. Shared object references and JSON columns on related models are automatically handled.
 
 ---
 

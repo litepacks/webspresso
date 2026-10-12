@@ -15,6 +15,15 @@ const {
   dropAuthTokensTable,
   createKnexAuthTokensAdapter,
 } = require('./tokens');
+const {
+  OAuthClient,
+  OAuthError,
+  createOAuthClient,
+  generatePKCE,
+  createSignedState,
+  verifySignedState,
+  DEFAULT_PROVIDERS,
+} = require('./oauth');
 
 /**
  * Create authentication instance
@@ -195,6 +204,15 @@ module.exports = {
   createKnexAuthTokensAdapter,
   TOKEN_TYPES,
   
+  // OAuth 2.0 & Social Login
+  OAuthClient,
+  OAuthError,
+  createOAuthClient,
+  generatePKCE,
+  createSignedState,
+  verifySignedState,
+  DEFAULT_PROVIDERS,
+
   // Config
   DEFAULT_CONFIG,
 };

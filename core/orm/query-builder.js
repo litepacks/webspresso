@@ -266,6 +266,15 @@ class QueryBuilder {
   }
 
   /**
+   * Add relations to eager load (alias for with)
+   * @param {...string} relations - Relation names or nested paths (e.g. 'author.profile')
+   * @returns {this}
+   */
+  include(...relations) {
+    return this.with(...relations);
+  }
+
+  /**
    * Include soft-deleted records
    * @returns {this}
    */
@@ -416,7 +425,7 @@ class QueryBuilder {
 
       const withs = self.getWiths();
       if (withs.length > 0) {
-        await loadRelations([result], ensureArray(withs), self.model, self.knex, self.scopeContext);
+        await loadRelations([result], ensureArray(withs), self.model, self.getActiveKnex(), self.scopeContext);
       }
 
       ModelEvents.emit(self.model.name, Hooks.AFTER_FIND, result, ctx);
@@ -482,7 +491,7 @@ class QueryBuilder {
 
       const withs = self.getWiths();
       if (withs.length > 0 && results.length > 0) {
-        await loadRelations(results, ensureArray(withs), self.model, self.knex, self.scopeContext);
+        await loadRelations(results, ensureArray(withs), self.model, self.getActiveKnex(), self.scopeContext);
       }
 
       for (const record of results) {
@@ -524,6 +533,14 @@ class QueryBuilder {
    * @returns {Promise<Object[]>}
    */
   async get() {
+    return this.list();
+  }
+
+  /**
+   * Alias for list()
+   * @returns {Promise<Object[]>}
+   */
+  async find() {
     return this.list();
   }
 
@@ -613,7 +630,7 @@ class QueryBuilder {
 
       const withs = self.getWiths();
       if (withs.length > 0 && data.length > 0) {
-        await loadRelations(data, ensureArray(withs), self.model, self.knex, self.scopeContext);
+        await loadRelations(data, ensureArray(withs), self.model, self.getActiveKnex(), self.scopeContext);
       }
 
       for (const record of data) {

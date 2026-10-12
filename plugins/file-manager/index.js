@@ -92,6 +92,26 @@ function fileManagerPlugin(options = {}) {
         return;
       }
 
+      const componentCode = generateFileManagerComponent({
+        apiPrefix,
+        publicBasePath,
+      });
+
+      // Always configure fileManager in admin settings and register client component
+      // so window.__openFileManagerPicker is available across all admin pages (models, records, rich-text)
+      if (typeof adminApi.getRegistry === 'function') {
+        const registry = adminApi.getRegistry();
+        registry.configure({
+          fileManager: {
+            enabled: true,
+            apiPrefix,
+            publicBasePath,
+            pageTitle,
+          },
+        });
+        registry.registerClientComponent('files', componentCode);
+      }
+
       adminApi.registerModule({
         id: 'files',
         pages: includePage
@@ -100,10 +120,7 @@ function fileManagerPlugin(options = {}) {
               title: pageTitle,
               path: '/files',
               icon: 'folder',
-              component: generateFileManagerComponent({
-                apiPrefix,
-                publicBasePath,
-              }),
+              component: componentCode,
             }]
           : [],
 

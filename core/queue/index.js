@@ -1,5 +1,5 @@
 /**
- * Webspresso Core Background Job Queue Engine
+ * Webspresso Core Background Job Queue & Task Scheduler Engine
  * @module core/queue
  */
 
@@ -10,6 +10,8 @@ const { QueueManager, createQueueManager } = require('./manager');
 const { MemoryQueueAdapter } = require('./adapters/memory');
 const { DatabaseQueueAdapter } = require('./adapters/database');
 const { RedisQueueAdapter } = require('./adapters/redis');
+const { CronExpression, isValidCron, parseCron, resolveCronAlias } = require('./cron');
+const { TaskScheduler } = require('./scheduler');
 
 module.exports = {
   Job,
@@ -18,4 +20,9 @@ module.exports = {
   MemoryQueueAdapter,
   DatabaseQueueAdapter,
   RedisQueueAdapter,
+  CronExpression,
+  isValidCron,
+  parseCron,
+  resolveCronAlias,
+  TaskScheduler,
 };

@@ -9,11 +9,13 @@
 const path = require('path');
 const { buildComponentsBody } = require(path.join(__dirname, 'load-parts.js'));
 
+const vm = require('vm');
 const body = buildComponentsBody();
 const checks = [
   ['has api helper', () => body.includes('const api =')],
   ['has Mithril globals', () => body.includes('window.__ADMIN_COMPONENTS__')],
   ['has reasonable size', () => body.length > 50_000],
+  ['valid JS syntax', () => { vm.compileFunction(body); return true; }],
 ];
 
 let failed = false;

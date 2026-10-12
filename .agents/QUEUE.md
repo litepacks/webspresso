@@ -154,3 +154,87 @@ webspresso queue:prune --days 7
 webspresso queue:prune --days 14 --status completed,failed
 ```
 
+---
+
+## 6. Cron & Recurring Task Scheduler
+
+Webspresso includes a native, zero-dependency task scheduler with a POSIX-compliant 5-field cron parser (`core/queue/cron.js` & `core/queue/scheduler.js`).
+
+### 1. Cron Expression Syntax
+- Standard 5 fields: `minute hour day-of-month month day-of-week`
+- Wildcards: `*`
+- Steps: `*/5`, `10-30/5`
+- Ranges: `1-5`, `MON-FRI`, `JAN-DEC`
+- Lists: `1,15,30`, `MON,WED,FRI`
+- Descriptive aliases:
+  - `@yearly`, `@annually` (`0 0 1 1 *`)
+  - `@monthly` (`0 0 1 * *`)
+  - `@weekly` (`0 0 * * 0`)
+  - `@daily`, `@midnight` (`0 0 * * *`)
+  - `@hourly` (`0 * * * *`)
+  - `@every_minute`, `@minutely` (`* * * * *`)
+  - `@every <N>m` (e.g. `@every 5m` → `*/5 * * * *`)
+  - `@every <N>h` (e.g. `@every 2h` → `0 */2 * * *`)
+
+### 2. Programmatic Scheduling
+```js
+// Schedule daily digest at 09:00 AM
+queue.schedule('0 9 * * *', 'reports.daily-digest', { channel: 'slack' }, {
+  overlap: false, // Prevent concurrent execution if previous run is still active (default: false)
+  maxRuns: 10,    // Optional maximum executions before auto-unscheduling
+  utc: false,     // Use local timezone or UTC
+});
+
+// Or use the .cron() alias
+queue.cron('@every 15m', 'metrics.collect');
+
+// Query schedules
+const schedules = queue.getSchedules();
+// [{ id, name, cronExpression, nextRunAt, lastRunAt, isRunning, runsCount, ... }]
+
+// Unschedule by schedule ID or job name
+queue.unschedule('metrics.collect');
+```
+
+### 3. Schedule Options
+| Option | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `string` | `schedule:${job}:${cron}` | Custom unique identifier |
+| `overlap` | `boolean` | `false` | When `false`, skips tick if a previous job run is still processing |
+| `maxRuns` | `number` | `null` | Automatically unschedules task after N runs |
+| `utc` | `boolean` | `false` | Evaluate cron expressions in UTC instead of local timezone |
+| `runImmediately` | `boolean` | `false` | Triggers a run right after scheduling |
+
+### 4. File-Based Cron Discovery (`jobs/`)
+Jobs in the `jobs/` folder can automatically declare their recurrence in two ways:
+
+#### Option A: `cron` / `schedule` property in job module
+```js
+// jobs/reports/summary.js
+module.exports = async function(job, ctx) {
+  // run summary logic...
+};
+
+module.exports.cron = '0 8 * * 1-5'; // Every weekday at 8:00 AM
+module.exports.data = { reportType: 'executive' };
+module.exports.options = {
+  overlap: false,
+};
+```
+
+#### Option B: `.cron.js` file naming
+```js
+// jobs/cleanup-logs.cron.js (auto-discovers job name 'cleanup-logs')
+module.exports = {
+  cron: '@daily',
+  handler: async function(job, ctx) {
+    // perform cleanup
+  },
+};
+```
+
+### 5. Lifecycle & Overlap Management
+- The scheduler automatically pauses when `queue.pause()` is called and resumes with `queue.resume()`.
+- On `queue.drain()` or `queue.stop()`, recurring schedules are stopped and active dispatched jobs are given time to complete.
+- Overlap prevention (`overlap: false`) hooks into `job:completed` and `job:failed` events, ensuring slow asynchronous tasks never collide or duplicate.
+

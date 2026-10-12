@@ -99,6 +99,10 @@ function queuePlugin(options = {}) {
     api: {
       getQueueManager: () => queueManager,
       clean: (opts) => queueManager?.clean(opts),
+      schedule: (expr, name, data, opts) => queueManager?.schedule(expr, name, data, opts),
+      cron: (expr, name, data, opts) => queueManager?.cron(expr, name, data, opts),
+      unschedule: (idOrName) => queueManager?.unschedule(idOrName),
+      getSchedules: () => queueManager?.getSchedules() || [],
     },
 
     onRoutesReady(ctx) {

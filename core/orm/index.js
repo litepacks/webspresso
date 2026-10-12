@@ -372,6 +372,10 @@ module.exports = {
   Hooks,
   HookCancellationError,
   createEventContext,
+  // Eager loading & nested relations
+  loadRelations: require('./eager-loader').loadRelations,
+  loadRelation: require('./eager-loader').loadRelation,
+  parseRelationTree: require('./eager-loader').parseRelationTree,
   // Query Complexity & DoS Protection
   QueryComplexityError: require('./complexity').QueryComplexityError,
   validateQueryComplexity: require('./complexity').validateQueryComplexity,

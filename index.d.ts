@@ -541,6 +541,41 @@ export function mountPages(
   registerDynamicFileRoutes: () => void;
 };
 
+export interface CascadingLayoutInfo {
+  layoutRelPath: string;
+  fullPath: string;
+  configPath: string | null;
+}
+
+export namespace cascading {
+  export function getDirectoryChain(relativeFilePath: string): string[];
+  export function templateHasExtends(templateBody?: string | null, fullPath?: string): boolean;
+  export function findCascadingMiddlewareFiles(baseDir: string, relativeFilePath: string, isDev?: boolean): string[];
+  export function loadCascadingMiddlewares(
+    baseDir: string,
+    relativeFilePath: string,
+    middlewareRegistry?: Record<string, unknown>,
+    isDev?: boolean
+  ): Array<(req: any, res: any, next: (err?: any) => void) => void>;
+  export function runMiddleware(mw: Function, req: any, res: any): Promise<void>;
+  export function runMiddlewareChain(chain: Function[], req: any, res: any): Promise<void>;
+  export function findCascadingLayouts(baseDir: string, relativeFilePath: string, isDev?: boolean): CascadingLayoutInfo[];
+  export function executeCascadingLayoutLoads(layouts: CascadingLayoutInfo[], req: any, ctx: any, isDev?: boolean): Promise<void>;
+  export function applyCascadingLayouts(
+    nunjucksEnv: any,
+    layouts: CascadingLayoutInfo[],
+    pageHtml: string,
+    renderContext: Record<string, unknown>,
+    isDev?: boolean
+  ): string;
+  export function clearCascadingCaches(): void;
+}
+
+export function resolveMiddlewares(
+  middlewareConfig: unknown[] | null | undefined,
+  middlewareRegistry?: Record<string, unknown>
+): Array<(req: any, res: any, next: (err?: any) => void) => void>;
+
 export function filePathToRoute(filePath: string, pagesDir: string): string;
 
 export function extractMethodFromFilename(filename: string): {
@@ -934,7 +969,10 @@ export function getColumnMeta(schema: ZodTypeAny): unknown;
 
 export interface FindOptions {
   with?: string[];
+  include?: string[];
   select?: string[];
+  limit?: number;
+  offset?: number;
 }
 
 export interface PaginatedResult<T = Record<string, any>> {
@@ -957,11 +995,13 @@ export interface QueryBuilder<T = Record<string, any>> {
   limit(n: number): this;
   offset(n: number): this;
   with(...relations: string[]): this;
+  include(...relations: string[]): this;
   withTrashed(): this;
   onlyTrashed(): this;
   first(): Promise<T | null>;
   list(): Promise<T[]>;
   get(): Promise<T[]>;
+  find(): Promise<T[]>;
   count(): Promise<number>;
   paginate(page?: number, perPage?: number): Promise<PaginatedResult<T>>;
   exists(): Promise<boolean>;
@@ -976,6 +1016,7 @@ export interface Repository<T = Record<string, any>> {
   findById(id: string | number, options?: FindOptions): Promise<T | null>;
   findOne(conditions: Partial<T> | Record<string, unknown>, options?: FindOptions): Promise<T | null>;
   findAll(options?: FindOptions): Promise<T[]>;
+  find(conditions?: Partial<T> | Record<string, unknown>, options?: FindOptions): Promise<T[]>;
   create(data: Partial<T> | Record<string, unknown>): Promise<T>;
   createMany(data: (Partial<T> | Record<string, unknown>)[]): Promise<T[]>;
   update(id: string | number, data: Partial<T> | Record<string, unknown>): Promise<T | null>;
@@ -988,6 +1029,7 @@ export interface Repository<T = Record<string, any>> {
   count(conditions?: Partial<T> | Record<string, unknown>): Promise<number>;
   exists(conditions: Partial<T> | Record<string, unknown>): Promise<boolean>;
   with(...relations: string[]): QueryBuilder<T>;
+  include(...relations: string[]): QueryBuilder<T>;
   model: ModelDefinition<T>;
 }
 
@@ -2117,6 +2159,75 @@ export interface QueueRetentionConfig {
   runOnStart?: boolean;
 }
 
+export interface ScheduleOptions {
+  id?: string;
+  overlap?: boolean;
+  maxRuns?: number;
+  utc?: boolean;
+  runImmediately?: boolean;
+  delay?: number | Date;
+  attempts?: number;
+  priority?: number;
+  timeout?: number;
+  backoff?: number | { type?: 'exponential' | 'fixed'; delay?: number };
+  [key: string]: unknown;
+}
+
+export interface ScheduleInfo {
+  id: string;
+  name: string;
+  cronExpression: string;
+  cron?: CronExpression;
+  data: unknown;
+  options: ScheduleOptions;
+  runsCount: number;
+  lastRunAt: Date | null;
+  nextRunAt: Date | null;
+  isRunning: boolean;
+  activeJobId: string | number | null;
+  registeredAt: Date;
+}
+
+export class CronExpression {
+  rawExpression: string;
+  resolvedExpression: string;
+  utc: boolean;
+  minutes: Set<number>;
+  hours: Set<number>;
+  doms: Set<number>;
+  months: Set<number>;
+  dows: Set<number>;
+  constructor(expression: string, options?: { utc?: boolean });
+  match(date?: Date): boolean;
+  getNextDate(fromDate?: Date): Date | null;
+  getNextDates(count?: number, fromDate?: Date): Date[];
+  static isValid(expression: string): boolean;
+  static parse(expression: string, options?: { utc?: boolean }): CronExpression;
+}
+
+export function parseCron(expression: string, options?: { utc?: boolean }): CronExpression;
+export function isValidCron(expression: string): boolean;
+export function resolveCronAlias(str: string): string;
+export const CRON_ALIASES: Record<string, string>;
+
+export class TaskScheduler {
+  queue: QueueManager;
+  maxIntervalMs: number;
+  isRunning: boolean;
+  schedules: Map<string, any>;
+  constructor(queue: QueueManager, options?: { autoStart?: boolean; maxIntervalMs?: number });
+  schedule(cronExpression: string | CronExpression, jobName: string, data?: unknown, options?: ScheduleOptions): ScheduleInfo;
+  cron(cronExpression: string | CronExpression, jobName: string, data?: unknown, options?: ScheduleOptions): ScheduleInfo;
+  unschedule(idOrJobName: string): boolean;
+  getSchedules(): ScheduleInfo[];
+  getSchedule(idOrJobName: string): ScheduleInfo | null;
+  trigger(idOrJobName: string): Promise<Job | null>;
+  start(): this;
+  stop(): this;
+  clear(): void;
+  destroy(): void;
+}
+
 export class QueueManager extends EventEmitter {
   adapter: QueueAdapter;
   concurrency: number;
@@ -2125,6 +2236,7 @@ export class QueueManager extends EventEmitter {
   isPaused: boolean;
   isDraining: boolean;
   retentionConfig: QueueRetentionConfig;
+  scheduler: TaskScheduler;
   constructor(options?: {
     adapter?: QueueAdapter;
     concurrency?: number;
@@ -2141,6 +2253,11 @@ export class QueueManager extends EventEmitter {
   define(name: string, handler: (job: Job, ctx: { queue: QueueManager }) => Promise<any> | any, options?: DispatchOptions): this;
   has(name: string): boolean;
   dispatch(name: string, data?: unknown, options?: DispatchOptions): Promise<Job>;
+  schedule(cronExpression: string | CronExpression, name: string, data?: unknown, options?: ScheduleOptions): ScheduleInfo;
+  cron(cronExpression: string | CronExpression, name: string, data?: unknown, options?: ScheduleOptions): ScheduleInfo;
+  unschedule(idOrJobName: string): boolean;
+  getSchedules(): ScheduleInfo[];
+  getSchedule(idOrJobName: string): ScheduleInfo | null;
   start(): this;
   pause(): this;
   resume(): this;
@@ -2202,6 +2319,10 @@ export function queuePlugin(options?: {
       olderThan?: Date | string | number;
       limit?: number;
     }): Promise<number>;
+    schedule(cronExpression: string | CronExpression, name: string, data?: unknown, options?: ScheduleOptions): ScheduleInfo | undefined;
+    cron(cronExpression: string | CronExpression, name: string, data?: unknown, options?: ScheduleOptions): ScheduleInfo | undefined;
+    unschedule(idOrJobName: string): boolean | undefined;
+    getSchedules(): ScheduleInfo[];
   };
 };
 
@@ -2232,6 +2353,54 @@ export function renderStream(
 export const ssr: {
   createHtmlStream: typeof createHtmlStream;
   renderStream: typeof renderStream;
+};
+
+// --- Server-Sent Events (SSE) Streaming ---
+
+export interface SseOptions {
+  status?: number;
+  headers?: Record<string, string>;
+  heartbeat?: number | boolean;
+  heartbeatComment?: string;
+  retry?: number;
+  map?: (chunk: any) => any;
+}
+
+export interface SseEventObject {
+  data?: any;
+  event?: string;
+  id?: string | number;
+  retry?: number;
+}
+
+export class ServerSentEventsStream extends EventEmitter {
+  req: import('http').IncomingMessage;
+  res: import('http').ServerResponse;
+  options: SseOptions;
+  isOpen: boolean;
+  isClosed: boolean;
+
+  constructor(req: import('http').IncomingMessage, res: import('http').ServerResponse, options?: SseOptions);
+  send(payloadOrData: any | SseEventObject, event?: string, id?: string | number): Promise<boolean>;
+  comment(text: string): boolean;
+  heartbeat(comment?: string): boolean;
+  retry(ms: number): boolean;
+  pipe(source: AsyncIterable<any> | Iterable<any> | import('stream').Readable, mapFn?: (chunk: any) => any): Promise<void>;
+  stream(generatorFn: (stream: ServerSentEventsStream) => any): Promise<void>;
+  close(): void;
+}
+
+export function createSseStream(
+  req: import('http').IncomingMessage,
+  res: import('http').ServerResponse,
+  sourceOrOptions?: SseOptions | AsyncIterable<any> | Iterable<any> | import('stream').Readable | ((stream: ServerSentEventsStream) => any),
+  maybeOptions?: SseOptions
+): ServerSentEventsStream | Promise<void>;
+
+export const sseStream: {
+  ServerSentEventsStream: typeof ServerSentEventsStream;
+  createSseStream: typeof createSseStream;
+  formatSseFrame: (data?: any, event?: string, id?: string | number, retry?: number) => string;
 };
 
 // --- Model Context Protocol (MCP) Plugin ---
@@ -2628,6 +2797,127 @@ export interface GenerateTypesResult {
 }
 
 export function generateTypes(options?: GenerateTypesOptions): GenerateTypesResult;
+
+// --- OAuth 2.0 & Social Login Plugin ---
+
+export class OAuthError extends Error {
+  code: string;
+  details?: any;
+  constructor(message: string, code?: string, details?: any);
+}
+
+export interface OAuthUserProfile {
+  provider: string;
+  id: string;
+  email?: string | null;
+  emailVerified?: boolean;
+  name?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  username?: string | null;
+  avatarUrl?: string | null;
+  bio?: string | null;
+  location?: string | null;
+  locale?: string | null;
+  raw: Record<string, any>;
+  [key: string]: any;
+}
+
+export interface OAuthProviderConfig {
+  name?: string;
+  clientId: string;
+  clientSecret: string;
+  redirectUri?: string;
+  authorizationUrl?: string;
+  tokenUrl?: string;
+  userInfoUrl?: string;
+  scopes?: string[] | string;
+  defaultScopes?: string[];
+  params?: Record<string, any>;
+  normalizeProfile?: (raw: any, extra?: any) => OAuthUserProfile;
+  fetchExtra?: (tokens: any) => Promise<any>;
+}
+
+export interface OAuthClientConfig {
+  secret?: string;
+  stateTtlMs?: number;
+  providers?: Record<string, OAuthProviderConfig>;
+}
+
+export class OAuthClient {
+  secret: string;
+  stateTtlMs: number;
+  providers: Record<string, OAuthProviderConfig>;
+  constructor(config?: OAuthClientConfig);
+  registerProvider(name: string, options?: OAuthProviderConfig): this;
+  getProvider(name: string): OAuthProviderConfig;
+  getProviderNames(): string[];
+  getAuthorizationUrl(providerName: string, options?: {
+    redirectUri?: string;
+    scopes?: string[] | string;
+    stateData?: Record<string, any>;
+    pkce?: boolean;
+    extraParams?: Record<string, any>;
+  }): { url: string; state: string; codeVerifier?: string };
+  exchangeCode(providerName: string, params: {
+    code: string;
+    redirectUri?: string;
+    codeVerifier?: string;
+  }): Promise<Record<string, any>>;
+  fetchUserProfile(providerName: string, tokens: Record<string, any>): Promise<OAuthUserProfile>;
+  handleCallback(providerName: string, params: {
+    code: string;
+    state: string;
+    redirectUri?: string;
+  }): Promise<{ provider: string; user: OAuthUserProfile; tokens: Record<string, any>; stateData: Record<string, any> }>;
+}
+
+export function createOAuthClient(config?: OAuthClientConfig): OAuthClient;
+export function generatePKCE(): { codeVerifier: string; codeChallenge: string; codeChallengeMethod: 'S256' };
+export function createSignedState(payload: Record<string, any>, secret: string): string;
+export function verifySignedState(stateString: string, secret: string, maxAgeMs?: number): Record<string, any>;
+
+export interface OAuthPluginOptions {
+  client?: OAuthClient;
+  providers?: Record<string, OAuthProviderConfig>;
+  secret?: string;
+  pathPrefix?: string;
+  routes?: boolean;
+  pkce?: boolean;
+  stateTtlMs?: number;
+  defaultReturnTo?: string;
+  failureRedirect?: string;
+  findOrCreateUser?: (params: {
+    provider: string;
+    profile: OAuthUserProfile;
+    tokens: Record<string, any>;
+    stateData: Record<string, any>;
+    req: any;
+    res: any;
+    db?: any;
+  }) => Promise<any>;
+  onSuccess?: (params: {
+    provider: string;
+    user: any;
+    profile: OAuthUserProfile;
+    tokens: Record<string, any>;
+    stateData: Record<string, any>;
+    req: any;
+    res: any;
+    client: OAuthClient;
+  }) => Promise<void | any>;
+  onError?: (params: {
+    error: Error | OAuthError;
+    provider: string;
+    req: any;
+    res: any;
+    client: OAuthClient;
+  }) => Promise<void | any>;
+  db?: any;
+}
+
+export function oauthPlugin(options?: OAuthPluginOptions): WebspressoPlugin;
+
 
 
 

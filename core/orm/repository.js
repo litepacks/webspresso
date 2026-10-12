@@ -73,7 +73,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    * @returns {Promise<Object|null>}
    */
   async function findById(id, options = {}, emitEvents = true) {
-    const { with: withs = [], select } = options;
+    const { with: withs = options.include || [], select } = options;
     const shouldEmit = emitEvents && (
       ModelEvents.hasListeners(model.name, Hooks.BEFORE_FIND) ||
       ModelEvents.hasListeners(model.name, Hooks.AFTER_FIND)
@@ -144,7 +144,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    * @returns {Promise<Object|null>}
    */
   async function findOne(conditions, options = {}) {
-    const { with: withs = [], select } = options;
+    const { with: withs = options.include || [], select } = options;
     const shouldEmit = (
       ModelEvents.hasListeners(model.name, Hooks.BEFORE_FIND) ||
       ModelEvents.hasListeners(model.name, Hooks.AFTER_FIND)
@@ -230,7 +230,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    * @returns {Promise<Object[]>}
    */
   async function findAll(options = {}) {
-    const { with: withs = [], select } = options;
+    const { with: withs = options.include || [], select } = options;
     const shouldEmit = (
       ModelEvents.hasListeners(model.name, Hooks.BEFORE_FIND) ||
       ModelEvents.hasListeners(model.name, Hooks.AFTER_FIND)
@@ -619,10 +619,38 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     return query().with(...relations);
   }
 
+  /**
+   * Find records matching conditions (with optional relations to eager load)
+   * @param {Object} [conditions={}] - WHERE conditions
+   * @param {import('./types').FindOptions} [options={}] - Find options
+   * @returns {Promise<Object[]>}
+   */
+  async function find(conditions = {}, options = {}) {
+    if (!conditions || Object.keys(conditions).length === 0) {
+      return findAll(options);
+    }
+    const withs = options.include || options.with || [];
+    let qb = query().where(conditions);
+    if (withs.length > 0) {
+      qb = qb.with(withs);
+    }
+    if (options.select && options.select.length > 0) {
+      qb = qb.select(options.select);
+    }
+    if (options.limit !== undefined) {
+      qb = qb.limit(options.limit);
+    }
+    if (options.offset !== undefined) {
+      qb = qb.offset(options.offset);
+    }
+    return qb.list();
+  }
+
   return {
     findById,
     findOne,
     findAll,
+    find,
     create,
     createMany,
     update,
@@ -635,6 +663,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     count,
     exists,
     with: withRelations,
+    include: withRelations,
     // Expose model for introspection
     model,
   };

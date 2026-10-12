@@ -558,6 +558,25 @@ Interactive Webspresso Developer Dashboard SPA mounted at `/_webspresso` and Flo
     - **💻 System Tab**: Process uptime, memory usage, environment, and Node platform metrics.
   - **Zero Production Overhead**: When `process.env.NODE_ENV === 'production'`, `devToolbar()` immediately returns `""` with zero overhead.
 
+### 2.19 `oauthPlugin` (`plugins/oauth`)
+Zero-dependency OAuth 2.0 & Social Login plugin supporting Google, GitHub, and custom providers with RFC 7636 PKCE, HMAC-signed anti-CSRF state tokens, and Dual Auth integration.
+- **Options**:
+  - `secret`: Secret key for HMAC state signing (`process.env.OAUTH_SECRET || process.env.SESSION_SECRET`).
+  - `pathPrefix`: Base path for OAuth routes (default `'/auth'`).
+  - `providers`: Provider configuration dictionary (`google`, `github`, or custom).
+  - `defaultReturnTo`: Fallback redirect path after successful login (default `'/'`).
+  - `failureRedirect`: Redirect path on OAuth failure (default `'/login'`).
+  - `findOrCreateUser`: `async ({ provider, profile, tokens, db, req, res }) => user`.
+  - `onSuccess`: `async ({ provider, user, profile, tokens, stateData, req, res, client }) => void`.
+  - `onError`: `async ({ error, provider, req, res, client }) => void`.
+- **Automatic Routes**:
+  - `GET /auth/:provider`: Initiates OAuth authorization flow with PKCE and signed state.
+  - `GET /auth/:provider/callback`: Exchanges authorization code, fetches normalized profile, links or creates user, and logs into session or returns JWT token.
+- **Template Helper**:
+  - `fsy.oauthUrl('google')` ➔ `"/auth/google"`
+  - `fsy.oauthUrl('github', { returnTo: '/dashboard' })` ➔ `"/auth/github?returnTo=%2Fdashboard"`
+
+
 
 
 

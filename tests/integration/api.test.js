@@ -252,4 +252,19 @@ describe.sequential('API Routes Integration', () => {
       expect(res.body.marker).toBe(true);
     });
   });
+
+  describe('GET /api/stream (Server-Sent Events streaming)', () => {
+    it('should stream Server-Sent Events via defineApi and res.sse()', async () => {
+      const res = await request(app)
+        .get('/api/stream')
+        .expect('Content-Type', /text\/event-stream/)
+        .expect('Cache-Control', 'no-cache, no-transform')
+        .expect('Connection', 'keep-alive')
+        .expect(200);
+
+      expect(res.text).toBe(
+        'data: {"message":"chunk 1"}\n\ndata: {"message":"chunk 2"}\n\n'
+      );
+    });
+  });
 });

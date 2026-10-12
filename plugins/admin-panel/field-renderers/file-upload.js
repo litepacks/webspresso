@@ -27,8 +27,23 @@ function shouldShowImagePreview(url, accept) {
   return isImageAccept(accept) || isImageUrl(url);
 }
 
-function renderUploadedFilePreview(url, { accept, readonly, onRemove, label }) {
+function renderUploadedFilePreview(url, { accept, readonly, onRemove, onSelectLibrary, label }) {
   if (!url) return null;
+
+  const actions = !readonly ? m('.flex.items-center.gap-3.mt-1', [
+    onSelectLibrary
+      ? m('button.text-indigo-600.dark:text-indigo-400.hover:text-indigo-800.dark:hover:text-indigo-300.text-xs.font-medium', {
+          type: 'button',
+          onclick: onSelectLibrary,
+        }, '📁 Change from Library')
+      : null,
+    onRemove
+      ? m('button.text-red-600.dark:text-red-400.hover:text-red-800.dark:hover:text-red-300.text-xs', {
+          type: 'button',
+          onclick: onRemove,
+        }, 'Remove')
+      : null,
+  ]) : null;
 
   if (shouldShowImagePreview(url, accept)) {
     return m('.mt-3.flex.flex-col.items-start.gap-2', [
@@ -40,12 +55,7 @@ function renderUploadedFilePreview(url, { accept, readonly, onRemove, label }) {
         })
       ),
       m('p.text-xs.text-gray-500.dark:text-slate-400.break-all', url),
-      !readonly && onRemove
-        ? m('button.text-red-600.dark:text-red-400.hover:text-red-800.dark:hover:text-red-300.text-sm', {
-            type: 'button',
-            onclick: onRemove,
-          }, 'Remove')
-        : null,
+      actions,
     ]);
   }
 
@@ -55,12 +65,7 @@ function renderUploadedFilePreview(url, { accept, readonly, onRemove, label }) {
       target: '_blank',
       rel: 'noopener noreferrer',
     }, url),
-    !readonly && onRemove
-      ? m('button.text-red-600.dark:text-red-400.hover:text-red-800.dark:hover:text-red-300.text-sm', {
-          type: 'button',
-          onclick: onRemove,
-        }, 'Remove')
-      : null,
+    actions,
   ]);
 }
 
@@ -141,6 +146,19 @@ module.exports = {
         if (vnode.attrs.onchange) vnode.attrs.onchange('');
       };
 
+      const openLibraryPicker = () => {
+        if (typeof window !== 'undefined' && window.__openFileManagerPicker) {
+          window.__openFileManagerPicker({
+            accept,
+            title: 'Choose from Media Library',
+            onSelect: (pickedUrl) => {
+              revokeLocalPreview(state);
+              if (vnode.attrs.onchange) vnode.attrs.onchange(pickedUrl);
+            }
+          });
+        }
+      };
+
       if (!uploadUrl) {
         return m('.mb-4', [
           m(
@@ -148,7 +166,14 @@ module.exports = {
             label,
             required ? m('span.text-red-500', ' *') : null
           ),
-          m('p.text-xs.text-amber-700.dark:text-amber-400.mb-2', 'Upload URL is not configured.'),
+          typeof window !== 'undefined' && window.__openFileManagerPicker
+            ? m('.flex.items-center.gap-2.mb-3', [
+                m('button.px-3.py-1.5.bg-indigo-600.hover:bg-indigo-700.text-white.text-xs.font-medium.rounded.flex.items-center.gap-1.shadow-sm', {
+                  type: 'button',
+                  onclick: openLibraryPicker,
+                }, '📁 Choose from Media Library')
+              ])
+            : m('p.text-xs.text-amber-700.dark:text-amber-400.mb-2', 'Upload URL is not configured.'),
           m('input.w-full.px-3.py-2.border.rounded', {
             type: 'text',
             name,
@@ -161,7 +186,7 @@ module.exports = {
             },
           }),
           value
-            ? renderUploadedFilePreview(value, { accept, readonly, onRemove: clearValue, label })
+            ? renderUploadedFilePreview(value, { accept, readonly, onRemove: clearValue, onSelectLibrary: openLibraryPicker, label })
             : null,
         ]);
       }
@@ -173,7 +198,7 @@ module.exports = {
           required ? m('span.text-red-500', ' *') : null
         ),
         displayUrl
-          ? renderUploadedFilePreview(displayUrl, { accept, readonly, onRemove: clearValue, label })
+          ? renderUploadedFilePreview(displayUrl, { accept, readonly, onRemove: clearValue, onSelectLibrary: openLibraryPicker, label })
           : null,
         m(
           'div.border-2.border-dashed.border-gray-300.dark:border-slate-600.rounded.p-6.text-center',
@@ -200,11 +225,26 @@ module.exports = {
                     'p.text-gray-600.dark:text-slate-400.mb-2',
                     displayUrl ? 'Drag and drop to replace, or' : 'Drag and drop a file here, or'
                   ),
-                  m(
-                    'label.text-blue-600.hover:text-blue-800.cursor-pointer',
-                    { for: 'file-input-' + name },
-                    displayUrl ? 'choose another file' : 'browse'
-                  ),
+                  m('.flex.items-center.justify-center.gap-3.flex-wrap', [
+                    m(
+                      'label.text-blue-600.hover:text-blue-800.cursor-pointer',
+                      { for: 'file-input-' + name },
+                      displayUrl ? 'choose another file' : 'browse'
+                    ),
+                    typeof window !== 'undefined' && window.__openFileManagerPicker
+                      ? m('button.text-indigo-600.hover:text-indigo-800.dark:text-indigo-400.cursor-pointer.font-medium.flex.items-center.gap-1.text-sm', {
+                          type: 'button',
+                          onclick: (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            openLibraryPicker();
+                          }
+                        }, [
+                          m('span', '•'),
+                          m('span', '📁 Choose from Media Library')
+                        ])
+                      : null,
+                  ]),
                 ]),
           ]
         ),
@@ -280,6 +320,98 @@ module.exports = {
 
       const urls = Array.isArray(value) ? value : (value ? [value] : []);
 
+      const openLibraryPicker = () => {
+        if (typeof window !== 'undefined' && window.__openFileManagerPicker) {
+          window.__openFileManagerPicker({
+            accept,
+            title: 'Add from Media Library',
+            onSelect: (pickedUrl) => {
+              const newUrls = [...urls, pickedUrl];
+              if (vnode.attrs.onchange) vnode.attrs.onchange(newUrls);
+            }
+          });
+        }
+      };
+
+      const renderGrid = () => {
+        if (urls.length === 0) return null;
+        return m('.grid.grid-cols-2.sm:grid-cols-3.md:grid-cols-4.gap-4.mb-3', urls.map((url, idx) => {
+          const isDragOver = state.dragOverIndex === idx;
+          const baseClasses = '.relative.group.border.rounded-lg.p-2.transition-all';
+          const cursorClass = readonly ? '' : '.cursor-move';
+          const borderClasses = isDragOver ? '.border-blue-500.border-2.dark:border-blue-500' : '.border-gray-200.dark:border-slate-700';
+          const bgClasses = isDragOver ? '.bg-blue-50.dark:bg-slate-800' : '.bg-gray-50.dark:bg-slate-900';
+          
+          return m(baseClasses + cursorClass + borderClasses + bgClasses, {
+            draggable: !readonly,
+            ondragstart: (e) => {
+              state.draggedIndex = idx;
+              e.dataTransfer.effectAllowed = 'move';
+              e.dataTransfer.setData('text/plain', idx);
+            },
+            ondragover: (e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+            },
+            ondragenter: (e) => {
+              state.dragOverIndex = idx;
+            },
+            ondragleave: (e) => {
+              if (state.dragOverIndex === idx) {
+                state.dragOverIndex = null;
+              }
+            },
+            ondrop: (e) => {
+              e.preventDefault();
+              const fromIdx = state.draggedIndex;
+              const toIdx = idx;
+              if (fromIdx !== null && fromIdx !== undefined && fromIdx !== toIdx) {
+                const newUrls = [...urls];
+                const [movedItem] = newUrls.splice(fromIdx, 1);
+                newUrls.splice(toIdx, 0, movedItem);
+                if (vnode.attrs.onchange) vnode.attrs.onchange(newUrls);
+              }
+              state.draggedIndex = null;
+              state.dragOverIndex = null;
+            },
+            ondragend: (e) => {
+              state.draggedIndex = null;
+              state.dragOverIndex = null;
+            }
+          }, [
+            shouldShowImagePreview(url, accept)
+              ? m('a.block', { href: url, target: '_blank', rel: 'noopener noreferrer', draggable: false },
+                  m('img.h-32.w-full.rounded.object-contain.bg-white.dark:bg-slate-950', {
+                    src: url,
+                    alt: `${label} ${idx + 1}`,
+                    loading: 'lazy',
+                    draggable: false,
+                  })
+                )
+              : m('a.flex.items-center.justify-center.h-32.w-full.text-sm.text-indigo-600.dark:text-indigo-400.break-all.p-2', {
+                  href: url,
+                  target: '_blank',
+                  rel: 'noopener noreferrer',
+                  draggable: false,
+                }, url.substring(url.lastIndexOf('/') + 1) || url),
+            !readonly
+              ? m('button.absolute.top-1.right-1.bg-red-500.text-white.rounded-full.p-1.shadow-md.opacity-0.group-hover:opacity-100.hover:bg-red-700.transition-opacity', {
+                  type: 'button',
+                  onclick: () => {
+                    const newUrls = urls.filter((_, i) => i !== idx);
+                    if (vnode.attrs.onchange) vnode.attrs.onchange(newUrls);
+                  },
+                  title: 'Remove file',
+                }, [
+                  m('svg.w-4.h-4', { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                    m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M6 18L18 6M6 6l12 12' })
+                  )
+                ])
+              : null,
+          ]);
+        }));
+      };
+
       if (!uploadUrl) {
         return m('.mb-4', [
           m(
@@ -287,7 +419,19 @@ module.exports = {
             label,
             required ? m('span.text-red-500', ' *') : null
           ),
-          m('p.text-xs.text-amber-700.dark:text-amber-400.mb-2', 'Upload URL is not configured.'),
+          typeof window !== 'undefined' && window.__openFileManagerPicker
+            ? m('.flex.items-center.gap-2.mb-3', [
+                m('button.px-3.py-1.5.bg-indigo-600.hover:bg-indigo-700.text-white.text-xs.font-medium.rounded.flex.items-center.gap-1.shadow-sm', {
+                  type: 'button',
+                  onclick: openLibraryPicker,
+                }, '📁 Add from Media Library')
+              ])
+            : m('p.text-xs.text-amber-700.dark:text-amber-400.mb-2', 'Upload URL is not configured.'),
+          renderGrid(),
+          m('input[type=hidden]', {
+            name,
+            value: JSON.stringify(urls),
+          }),
         ]);
       }
 
@@ -298,83 +442,7 @@ module.exports = {
           required ? m('span.text-red-500', ' *') : null
         ),
 
-        urls.length > 0
-          ? m('.grid.grid-cols-2.sm:grid-cols-3.md:grid-cols-4.gap-4.mb-3', urls.map((url, idx) => {
-              const isDragOver = state.dragOverIndex === idx;
-              const baseClasses = '.relative.group.border.rounded-lg.p-2.transition-all';
-              const cursorClass = readonly ? '' : '.cursor-move';
-              const borderClasses = isDragOver ? '.border-blue-500.border-2.dark:border-blue-500' : '.border-gray-200.dark:border-slate-700';
-              const bgClasses = isDragOver ? '.bg-blue-50.dark:bg-slate-800' : '.bg-gray-50.dark:bg-slate-900';
-              
-              return m(baseClasses + cursorClass + borderClasses + bgClasses, {
-                draggable: !readonly,
-                ondragstart: (e) => {
-                  state.draggedIndex = idx;
-                  e.dataTransfer.effectAllowed = 'move';
-                  e.dataTransfer.setData('text/plain', idx);
-                },
-                ondragover: (e) => {
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = 'move';
-                },
-                ondragenter: (e) => {
-                  state.dragOverIndex = idx;
-                },
-                ondragleave: (e) => {
-                  if (state.dragOverIndex === idx) {
-                    state.dragOverIndex = null;
-                  }
-                },
-                ondrop: (e) => {
-                  e.preventDefault();
-                  const fromIdx = state.draggedIndex;
-                  const toIdx = idx;
-                  if (fromIdx !== null && fromIdx !== undefined && fromIdx !== toIdx) {
-                    const newUrls = [...urls];
-                    const [movedItem] = newUrls.splice(fromIdx, 1);
-                    newUrls.splice(toIdx, 0, movedItem);
-                    if (vnode.attrs.onchange) vnode.attrs.onchange(newUrls);
-                  }
-                  state.draggedIndex = null;
-                  state.dragOverIndex = null;
-                },
-                ondragend: (e) => {
-                  state.draggedIndex = null;
-                  state.dragOverIndex = null;
-                }
-              }, [
-                shouldShowImagePreview(url, accept)
-                  ? m('a.block', { href: url, target: '_blank', rel: 'noopener noreferrer', draggable: false },
-                      m('img.h-32.w-full.rounded.object-contain.bg-white.dark:bg-slate-950', {
-                        src: url,
-                        alt: `${label} ${idx + 1}`,
-                        loading: 'lazy',
-                        draggable: false,
-                      })
-                    )
-                  : m('a.flex.items-center.justify-center.h-32.w-full.text-sm.text-indigo-600.dark:text-indigo-400.break-all.p-2', {
-                      href: url,
-                      target: '_blank',
-                      rel: 'noopener noreferrer',
-                      draggable: false,
-                    }, url.substring(url.lastIndexOf('/') + 1) || url),
-                !readonly
-                  ? m('button.absolute.top-1.right-1.bg-red-500.text-white.rounded-full.p-1.shadow-md.opacity-0.group-hover:opacity-100.hover:bg-red-700.transition-opacity', {
-                      type: 'button',
-                      onclick: () => {
-                        const newUrls = urls.filter((_, i) => i !== idx);
-                        if (vnode.attrs.onchange) vnode.attrs.onchange(newUrls);
-                      },
-                      title: 'Remove file',
-                    }, [
-                      m('svg.w-4.h-4', { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
-                        m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M6 18L18 6M6 6l12 12' })
-                      )
-                    ])
-                  : null,
-              ]);
-            }))
-          : null,
+        renderGrid(),
 
         m(
           'div.border-2.border-dashed.border-gray-300.dark:border-slate-600.rounded.p-6.text-center',
@@ -405,11 +473,26 @@ module.exports = {
                           'p.text-gray-600.dark:text-slate-400.mb-2',
                           'Drag and drop files here, or'
                         ),
-                        m(
-                          'label.text-blue-600.hover:text-blue-800.cursor-pointer',
-                          { for: 'file-input-multiple-' + name },
-                          'browse'
-                        ),
+                        m('.flex.items-center.justify-center.gap-3.flex-wrap', [
+                          m(
+                            'label.text-blue-600.hover:text-blue-800.cursor-pointer',
+                            { for: 'file-input-multiple-' + name },
+                            'browse'
+                          ),
+                          typeof window !== 'undefined' && window.__openFileManagerPicker
+                            ? m('button.text-indigo-600.hover:text-indigo-800.dark:text-indigo-400.cursor-pointer.font-medium.flex.items-center.gap-1.text-sm', {
+                                type: 'button',
+                                onclick: (e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  openLibraryPicker();
+                                }
+                              }, [
+                                m('span', '•'),
+                                m('span', '📁 Add from Media Library')
+                              ])
+                            : null,
+                        ]),
                       ]),
                 ]),
           ]

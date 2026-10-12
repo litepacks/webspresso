@@ -186,19 +186,33 @@ module.exports = {
   compileRouteTable,
   RouteTable,
   mountDiscoveredRoutes,
+  resolveMiddlewares: require('./src/routing/middleware-resolver').resolveMiddlewares,
 };
 
 // Define lazy getters for plugins and heavy core subsystems
 Object.defineProperties(module.exports, {
   ...Object.getOwnPropertyDescriptors(plugins),
 
+  // Cascading Middleware & Layouts
+  cascading: { get: () => require('./src/routing/cascading'), enumerable: true, configurable: true },
+
   // SSR Streaming
   ssr: { get: () => require('./core/ssr'), enumerable: true, configurable: true },
   renderStream: { get: () => require('./core/ssr').renderStream, enumerable: true, configurable: true },
   createHtmlStream: { get: () => require('./core/ssr').createHtmlStream, enumerable: true, configurable: true },
 
+  // Server-Sent Events (SSE) Streaming
+  sse: { get: () => require('./core/sse'), enumerable: true, configurable: true },
+  createSseStream: { get: () => require('./core/sse').createSseStream, enumerable: true, configurable: true },
+  ServerSentEventsStream: { get: () => require('./core/sse').ServerSentEventsStream, enumerable: true, configurable: true },
+
   /** Event bus / plugin shell / view resolver / flows (`kernel.createApp` is distinct from SSR `createApp`) */
   kernel: { get: () => require('./core/kernel'), enumerable: true, configurable: true },
+
+  // Authentication & OAuth
+  auth: { get: () => require('./core/auth'), enumerable: true, configurable: true },
+  createAuth: { get: () => require('./core/auth').createAuth, enumerable: true, configurable: true },
+  quickAuth: { get: () => require('./core/auth').quickAuth, enumerable: true, configurable: true },
 
   // Validation
   z: { get: () => require('./core/validation').z, enumerable: true, configurable: true },
@@ -207,6 +221,10 @@ Object.defineProperties(module.exports, {
   queue: { get: () => require('./core/queue'), enumerable: true, configurable: true },
   createQueueManager: { get: () => require('./core/queue').createQueueManager, enumerable: true, configurable: true },
   QueueManager: { get: () => require('./core/queue').QueueManager, enumerable: true, configurable: true },
+  TaskScheduler: { get: () => require('./core/queue').TaskScheduler, enumerable: true, configurable: true },
+  CronExpression: { get: () => require('./core/queue').CronExpression, enumerable: true, configurable: true },
+  parseCron: { get: () => require('./core/queue').parseCron, enumerable: true, configurable: true },
+  isValidCron: { get: () => require('./core/queue').isValidCron, enumerable: true, configurable: true },
 
   // Schema-driven CMS core (framework-agnostic)
   content: { get: () => require('./core/content'), enumerable: true, configurable: true },

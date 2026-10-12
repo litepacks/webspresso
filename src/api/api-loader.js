@@ -198,6 +198,7 @@ function createApiHandler(descriptor, context) {
         config: appOptions,
         logger: console,
         db,
+        sse: (sourceOrOptions, maybeOptions) => res.sse(sourceOrOptions, maybeOptions),
       };
 
       req.ctx = apiCtx;

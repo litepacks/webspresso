@@ -571,6 +571,7 @@ function createApp(options = {}) {
 
   // Unified Request Context & Lifecycle Initializer middleware
   const { renderStream } = require('../core/ssr/stream');
+  const { createSseStream } = require('../core/sse/stream');
   app.use((req, res, next) => {
     // 1. Request draining check during graceful shutdown
     if (shutdownManager.isShuttingDown) {
@@ -616,6 +617,11 @@ function createApp(options = {}) {
         env: nunjucksEnv,
         ...renderOptions,
       });
+    };
+
+    // 5. Server-Sent Events (SSE) Response Helper
+    res.sse = (sourceOrOptions, maybeOptions) => {
+      return createSseStream(req, res, sourceOrOptions, maybeOptions);
     };
 
     next();

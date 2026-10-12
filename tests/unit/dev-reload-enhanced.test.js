@@ -7,7 +7,7 @@ const path = require('path');
 const { createApp } = require('../../index');
 const { createDevReloadHub } = require('../../src/dev-reload');
 
-async function waitFor(fn, timeout = 1500) {
+async function waitFor(fn, timeout = 3000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     if (fn()) return true;

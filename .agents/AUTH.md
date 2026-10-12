@@ -101,3 +101,58 @@ module.exports = {
   },
 };
 ```
+
+---
+
+## 5. Zero-Dependency OAuth 2.0 & Social Login (`plugins/oauth`, `core/auth/oauth`)
+
+Webspresso includes a built-in, zero-dependency OAuth 2.0 client and plugin with RFC 7636 PKCE, HMAC-SHA256 signed anti-CSRF state tokens, profile normalization, and seamless Dual Auth integration:
+
+### 5.1 Plugin Configuration
+```javascript
+const { createApp, oauthPlugin } = require('webspresso');
+
+const app = createApp({
+  plugins: [
+    oauthPlugin({
+      secret: process.env.SESSION_SECRET,
+      providers: {
+        google: {
+          clientId: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          // redirectUri is optional; auto-inferred from request host if omitted
+        },
+        github: {
+          clientId: process.env.GITHUB_CLIENT_ID,
+          clientSecret: process.env.GITHUB_CLIENT_SECRET,
+        },
+      },
+      // Optional hook to find or create the user in your database
+      async findOrCreateUser({ provider, profile, tokens, db }) {
+        let user = await db.getRepository('User').findOne({ email: profile.email });
+        if (!user) {
+          user = await db.getRepository('User').create({
+            email: profile.email,
+            name: profile.name,
+            avatar_url: profile.avatarUrl,
+          });
+        }
+        return user;
+      },
+      defaultReturnTo: '/dashboard',
+    }),
+  ],
+});
+```
+
+### 5.2 Automatic Routes
+- `GET /auth/:provider` (e.g. `/auth/google?returnTo=/dashboard`): Generates PKCE code challenge and HMAC-signed state token with embedded return URL, redirecting the browser to the provider's authorization page.
+- `GET /auth/:provider/callback`: Validates anti-CSRF state, exchanges authorization code for tokens, fetches normalized profile, calls `findOrCreateUser`, automatically establishes session via `req.auth.login(user)`, and redirects to `returnTo`. For API/mobile clients (`format=json` or `Accept: application/json`), returns `{ success: true, user, token }`.
+
+### 5.3 Template Helper (`fsy.oauthUrl`)
+In Nunjucks templates:
+```html
+<a href="{{ fsy.oauthUrl('google') }}" class="btn">Sign in with Google</a>
+<a href="{{ fsy.oauthUrl('github', { returnTo: '/settings' }) }}" class="btn">Connect GitHub</a>
+```
+

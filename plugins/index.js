@@ -53,6 +53,10 @@ module.exports = {
   get xlsx() { return require('./xlsx').xlsx; },
   get csvPlugin() { return require('./csv').csvPlugin; },
   get csv() { return require('./csv').csv; },
+  get oauthPlugin() { return require('./oauth'); },
+  get OAuthClient() { return require('./oauth').OAuthClient; },
+  get OAuthError() { return require('./oauth').OAuthError; },
+  get createOAuthClient() { return require('./oauth').createOAuthClient; },
 };
 
 

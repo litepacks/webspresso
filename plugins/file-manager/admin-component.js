@@ -569,30 +569,46 @@ function generateFileManagerComponent(options = {}) {
     var onSelect = opts.onSelect;
     var accept = opts.accept || '';
 
+    var existing = document.getElementById('file-manager-picker-modal-root');
+    if (existing && existing.parentNode) {
+      m.mount(existing, null);
+      existing.parentNode.removeChild(existing);
+    }
+
     var modalContainer = document.createElement('div');
     modalContainer.id = 'file-manager-picker-modal-root';
     document.body.appendChild(modalContainer);
 
     function cleanup() {
+      document.removeEventListener('keydown', onKeyDown);
       if (modalContainer && modalContainer.parentNode) {
         m.mount(modalContainer, null);
         modalContainer.parentNode.removeChild(modalContainer);
       }
     }
 
+    function onKeyDown(e) {
+      if (e.key === 'Escape') cleanup();
+    }
+    document.addEventListener('keydown', onKeyDown);
+
     var PickerModalComponent = {
       view: function() {
-        return m('div.fixed.inset-0.bg-black/60.flex.items-center.justify-center.z-[9999].p-4.backdrop-blur-sm', [
+        return m('div.fixed.inset-0.bg-black/60.flex.items-center.justify-center.z-[9999].p-4.backdrop-blur-sm', {
+          onclick: function(e) {
+            if (e.target === e.currentTarget) cleanup();
+          }
+        }, [
           m('div.bg-white.dark:bg-slate-900.rounded-2xl.shadow-2xl.max-w-4xl.w-full.max-h-[90vh].flex.flex-col.overflow-hidden.border.border-gray-200.dark:border-slate-700', [
             m('div.flex.items-center.justify-between.p-4.border-b.border-gray-200.dark:border-slate-700.bg-gray-50.dark:bg-slate-800', [
-              m('h2.text-base.font-bold.text-gray-900.dark:text-slate-100', opts.title || '📁 Ortam Kütüphanesinden Dosya Seç'),
+              m('h2.text-base.font-bold.text-gray-900.dark:text-slate-100', opts.title || 'Choose from Media Library'),
               m('button.text-gray-400.hover:text-gray-600.dark:hover:text-slate-200.text-xl', {
                 onclick: cleanup
               }, '✕')
             ]),
             m('div.p-4.overflow-y-auto.flex-1', [
-              m(FileManagerView(true, function(selectedUrl) {
-                if (onSelect) onSelect(selectedUrl);
+              m(FileManagerView(true, function(selectedUrl, item) {
+                if (onSelect) onSelect(selectedUrl, item);
                 cleanup();
               }, accept))
             ])

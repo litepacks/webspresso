@@ -61,6 +61,33 @@ const RichTextField = {
                 onchange(content);
               }
             });
+
+            // Hook Quill image toolbar button to Media Library picker if available
+            try {
+              const toolbar = quill.getModule('toolbar');
+              if (toolbar && typeof window !== 'undefined') {
+                toolbar.addHandler('image', function() {
+                  if (typeof window.__openFileManagerPicker === 'function') {
+                    window.__openFileManagerPicker({
+                      accept: 'image/*',
+                      title: 'Insert Image (Media Library)',
+                      onSelect: function(pickedUrl) {
+                        const range = quill.getSelection(true) || { index: quill.getLength() };
+                        quill.insertEmbed(range.index, 'image', pickedUrl);
+                        quill.setSelection(range.index + 1);
+                      }
+                    });
+                  } else {
+                    const url = prompt('Image URL:');
+                    if (url) {
+                      const range = quill.getSelection(true) || { index: quill.getLength() };
+                      quill.insertEmbed(range.index, 'image', url);
+                      quill.setSelection(range.index + 1);
+                    }
+                  }
+                });
+              }
+            } catch (_) {}
           }
           
           editorEl._quill = quill;
@@ -134,8 +161,27 @@ function renderUploadedFilePreview(url, options) {
   var accept = options.accept;
   var readonly = options.readonly;
   var onRemove = options.onRemove;
+  var onSelectLibrary = options.onSelectLibrary;
   var label = options.label;
   if (!url) return null;
+
+  var actionsRow = !readonly ? m('div.flex.items-center.gap-3.flex-wrap', [
+    typeof window !== 'undefined' && window.__openFileManagerPicker && onSelectLibrary
+      ? m('button.text-indigo-600.dark:text-indigo-400.hover:text-indigo-800.dark:hover:text-indigo-300.text-xs.font-medium.flex.items-center.gap-1', {
+          type: 'button',
+          onclick: onSelectLibrary,
+        }, [
+          m('span', '📁'),
+          m('span', 'Change from Library')
+        ])
+      : null,
+    onRemove
+      ? m('button.text-red-600.dark:text-red-400.hover:text-red-800.dark:hover:text-red-300.text-xs.font-medium', {
+          type: 'button',
+          onclick: onRemove,
+        }, 'Remove')
+      : null,
+  ]) : null;
 
   if (shouldShowImagePreview(url, accept)) {
     return m('.mt-3.flex.flex-col.items-start.gap-2', [
@@ -147,12 +193,7 @@ function renderUploadedFilePreview(url, options) {
         })
       ),
       m('p.text-xs.text-gray-500.dark:text-slate-400.break-all', url),
-      !readonly && onRemove
-        ? m('button.text-red-600.dark:text-red-400.hover:text-red-800.dark:hover:text-red-300.text-sm', {
-            type: 'button',
-            onclick: onRemove,
-          }, 'Remove')
-        : null,
+      actionsRow,
     ]);
   }
 
@@ -162,12 +203,7 @@ function renderUploadedFilePreview(url, options) {
       target: '_blank',
       rel: 'noopener noreferrer',
     }, url),
-    !readonly && onRemove
-      ? m('button.text-red-600.dark:text-red-400.hover:text-red-800.dark:hover:text-red-300.text-sm', {
-          type: 'button',
-          onclick: onRemove,
-        }, 'Remove')
-      : null,
+    actionsRow,
   ]);
 }
 
@@ -178,7 +214,7 @@ function revokeLocalPreview(state) {
   }
 }
 
-// File upload field (multipart POST to settings.uploadUrl; field name "file")
+// File upload field (supports local drag & drop, manual URL, and Media Library Picker)
 const FileUploadField = {
   oninit: function (vnode) {
     vnode.state.localPreview = null;
@@ -190,7 +226,7 @@ const FileUploadField = {
     const col = vnode.attrs.col;
     const readonly = vnode.attrs.readonly;
     if (readonly) return;
-    var cfg = window.__ADMIN_CONFIG__;
+    var cfg = (typeof window !== 'undefined' && window.__ADMIN_CONFIG__) ? window.__ADMIN_CONFIG__ : null;
     var uploadUrl = (cfg && cfg.settings && cfg.settings.uploadUrl) ? String(cfg.settings.uploadUrl) : '';
     if (!uploadUrl) return;
     const dropZoneId = 'drop-zone-' + col.name;
@@ -242,7 +278,7 @@ const FileUploadField = {
     const required = !col.nullable && !readonly;
     var uploadUrl = '';
     try {
-      var cfg2 = window.__ADMIN_CONFIG__;
+      var cfg2 = (typeof window !== 'undefined' && window.__ADMIN_CONFIG__) ? window.__ADMIN_CONFIG__ : null;
       uploadUrl = (cfg2 && cfg2.settings && cfg2.settings.uploadUrl) ? String(cfg2.settings.uploadUrl) : '';
     } catch (e) { uploadUrl = ''; }
     var maxSize = meta.maxSize || meta.maxBytes || (10 * 1024 * 1024);
@@ -252,6 +288,18 @@ const FileUploadField = {
     var clearValue = function () {
       revokeLocalPreview(state);
       if (onChange) onChange('');
+    };
+    var openLibraryPicker = function() {
+      if (typeof window !== 'undefined' && window.__openFileManagerPicker) {
+        window.__openFileManagerPicker({
+          accept: accept,
+          title: 'Choose from Media Library',
+          onSelect: function(pickedUrl) {
+            revokeLocalPreview(state);
+            if (onChange) onChange(pickedUrl);
+          }
+        });
+      }
     };
     var error = vnode.attrs.error;
     var borderClass = error ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-slate-600';
@@ -270,7 +318,21 @@ const FileUploadField = {
           label,
           required ? m('span.text-red-500', ' *') : null,
         ]),
-        m('p.text-xs.text-amber-700.dark:text-amber-400.mb-2', 'Upload URL is not configured. Enter a public URL or path manually.'),
+        typeof window !== 'undefined' && window.__openFileManagerPicker
+          ? m('div.mb-2.flex.items-center.gap-2.flex-wrap', [
+              m('button.px-3.py-1.5.text-xs.font-semibold.bg-indigo-600.hover:bg-indigo-700.text-white.rounded-lg.flex.items-center.gap-1.5.shadow-sm.transition', {
+                type: 'button',
+                onclick: function(e) {
+                  e.preventDefault();
+                  openLibraryPicker();
+                }
+              }, [
+                m('span', '📁'),
+                m('span', 'Choose from Media Library')
+              ]),
+              m('span.text-xs.text-gray-400.dark:text-slate-500', 'or enter external URL:')
+            ])
+          : m('p.text-xs.text-amber-700.dark:text-amber-400.mb-2', 'Upload URL is not configured. Enter a public URL or path manually.'),
         m('input.w-full.px-3.py-2.border.rounded-md.bg-white.dark:bg-slate-900/70.text-gray-900.dark:text-slate-100.placeholder-gray-400.dark:placeholder-slate-500', {
           type: 'text',
           id: col.name,
@@ -281,7 +343,7 @@ const FileUploadField = {
           class: borderClass,
           oninput: function (e) { if (onChange) onChange(e.target.value); },
         }),
-        value ? renderUploadedFilePreview(value, { accept: accept, readonly: false, onRemove: clearValue, label: label }) : null,
+        value ? renderUploadedFilePreview(value, { accept: accept, readonly: false, onRemove: clearValue, onSelectLibrary: openLibraryPicker, label: label }) : null,
         error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
       ]);
     }
@@ -291,7 +353,7 @@ const FileUploadField = {
         required ? m('span.text-red-500', ' *') : null,
       ]),
       displayUrl
-        ? renderUploadedFilePreview(displayUrl, { accept: accept, readonly: false, onRemove: clearValue, label: label })
+        ? renderUploadedFilePreview(displayUrl, { accept: accept, readonly: false, onRemove: clearValue, onSelectLibrary: openLibraryPicker, label: label })
         : null,
       m('div#' + dropZoneId + '.border-2.border-dashed.rounded-lg.p-6.text-center.bg-gray-50.dark:bg-slate-900/40', { class: borderClass, style: 'cursor: pointer;' }, [
         m('input[type=file].hidden', {
@@ -313,17 +375,11 @@ const FileUploadField = {
                   onclick: function(e) {
                     e.preventDefault();
                     e.stopPropagation();
-                    window.__openFileManagerPicker({
-                      accept: accept,
-                      title: '📁 Ortam Kütüphanesinden Seç',
-                      onSelect: function(pickedUrl) {
-                        if (onChange) onChange(pickedUrl);
-                      }
-                    });
+                    openLibraryPicker();
                   }
                 }, [
                   m('span', '•'),
-                  m('span', 'Kütüphaneden Seç')
+                  m('span', 'Choose from Media Library')
                 ])
               : null
           ])
@@ -336,10 +392,167 @@ const FileUploadField = {
   },
 };
 
+// Multiple files upload field (supports drag-and-drop, multiple uploads, and Media Library Picker)
+const FilesUploadField = {
+  oninit: function(vnode) {
+    vnode.state.uploading = false;
+  },
+  oncreate: function(vnode) {
+    const col = vnode.attrs.col;
+    const readonly = vnode.attrs.readonly;
+    if (readonly) return;
+    const dropZoneId = 'drop-zone-multiple-' + col.name;
+    const dropZone = document.getElementById(dropZoneId);
+    if (!dropZone) return;
+    const meta = col.ui || {};
+    const onChange = vnode.attrs.onChange;
+    const state = vnode.state;
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function(eventName) {
+      dropZone.addEventListener(eventName, function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    });
+    ['dragenter', 'dragover'].forEach(function(eventName) {
+      dropZone.addEventListener(eventName, function() {
+        dropZone.classList.add('border-blue-500', 'bg-blue-50', 'dark:bg-slate-800');
+      });
+    });
+    ['dragleave', 'drop'].forEach(function(eventName) {
+      dropZone.addEventListener(eventName, function() {
+        dropZone.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-slate-800');
+      });
+    });
+    dropZone.addEventListener('drop', function(e) {
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        handleAdminMultipleFilesUpload(files, onChange, meta, state, vnode.attrs.value);
+      }
+    });
+    const fileInput = dropZone.querySelector('input[type=file]');
+    if (fileInput) {
+      fileInput.addEventListener('change', function(e) {
+        if (e.target.files.length > 0) {
+          handleAdminMultipleFilesUpload(e.target.files, onChange, meta, state, vnode.attrs.value);
+        }
+      });
+    }
+  },
+  view: function(vnode) {
+    const col = vnode.attrs.col;
+    const rawVal = vnode.attrs.value;
+    const urls = Array.isArray(rawVal) ? rawVal : (typeof rawVal === 'string' && rawVal ? (function() {
+      try {
+        const parsed = JSON.parse(rawVal);
+        return Array.isArray(parsed) ? parsed : [rawVal];
+      } catch (e) {
+        return [rawVal];
+      }
+    })() : []);
+    const onChange = vnode.attrs.onChange;
+    const readonly = vnode.attrs.readonly || false;
+    const state = vnode.state;
+    const meta = col.ui || {};
+    const label = meta.label || formatColumnLabel(col.name);
+    const hint = meta.hint || '';
+    const required = !col.nullable && !readonly;
+    const maxSize = meta.maxSize || meta.maxBytes || (10 * 1024 * 1024);
+    const accept = meta.accept || '*/*';
+    const dropZoneId = 'drop-zone-multiple-' + col.name;
+    const error = vnode.attrs.error;
+    const borderClass = error ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-slate-600';
+
+    const openLibraryPicker = function() {
+      if (typeof window !== 'undefined' && window.__openFileManagerPicker) {
+        window.__openFileManagerPicker({
+          accept: accept,
+          title: 'Choose from Media Library',
+          onSelect: function(pickedUrl) {
+            if (onChange) {
+              onChange([...urls, pickedUrl]);
+            }
+          }
+        });
+      }
+    };
+
+    return m('.mb-4', [
+      m('label.block.text-sm.font-medium.text-gray-700.dark:text-slate-300.mb-1', [
+        label,
+        required ? m('span.text-red-500', ' *') : null,
+      ]),
+      // Thumbnails Grid
+      urls.length > 0 ? m('div.grid.grid-cols-2.sm:grid-cols-3.md:grid-cols-4.gap-3.mb-3', urls.map(function(url, idx) {
+        return m('div.relative.group.border.border-gray-200.dark:border-slate-700.rounded-lg.p-2.bg-white.dark:bg-slate-900.shadow-sm', [
+          shouldShowImagePreview(url, accept)
+            ? m('a.block', { href: url, target: '_blank', rel: 'noopener noreferrer' },
+                m('img.h-28.w-full.rounded.object-contain.bg-gray-50.dark:bg-slate-950', { src: url, alt: `${label} ${idx + 1}`, loading: 'lazy' })
+              )
+            : m('a.flex.items-center.justify-center.h-28.w-full.text-xs.text-indigo-600.dark:text-indigo-400.break-all.p-1.text-center', {
+                href: url, target: '_blank', rel: 'noopener noreferrer'
+              }, url.substring(url.lastIndexOf('/') + 1) || url),
+          !readonly && onChange ? m('button.absolute.top-1.right-1.bg-red-500.text-white.rounded-full.w-6.h-6.flex.items-center.justify-center.shadow-md.opacity-0.group-hover:opacity-100.hover:bg-red-700.transition-opacity', {
+            type: 'button',
+            title: 'Remove',
+            onclick: function() {
+              const updated = urls.filter(function(_, i) { return i !== idx; });
+              onChange(updated);
+            }
+          }, '✕') : null,
+        ]);
+      })) : null,
+
+      // Dropzone & Media Library Action
+      !readonly ? m('div#' + dropZoneId + '.border-2.border-dashed.rounded-lg.p-6.text-center.bg-gray-50.dark:bg-slate-900/40', {
+        class: borderClass,
+        style: 'cursor: pointer;'
+      }, [
+        m('input[type=file].hidden', {
+          id: 'file-input-multiple-' + col.name,
+          accept: accept,
+          multiple: true,
+          onchange: function(e) {
+            if (e.target.files.length > 0) {
+              handleAdminMultipleFilesUpload(e.target.files, onChange, meta, state, urls);
+            }
+          }
+        }),
+        state.uploading
+          ? m('p.text-indigo-600.dark:text-indigo-400.animate-pulse.text-sm.font-medium', 'Uploading files...')
+          : m('div', [
+              m('p.text-gray-600.dark:text-slate-400.mb-2.text-sm', 'Drag and drop files here, or'),
+              m('div.flex.items-center.justify-center.gap-3.flex-wrap', [
+                m('label.text-blue-600.hover:text-blue-800.dark:text-blue-400.cursor-pointer.font-medium.text-sm', {
+                  for: 'file-input-multiple-' + col.name
+                }, 'browse'),
+                typeof window !== 'undefined' && window.__openFileManagerPicker
+                  ? m('button.text-indigo-600.hover:text-indigo-800.dark:text-indigo-400.cursor-pointer.font-medium.flex.items-center.gap-1.text-sm', {
+                      type: 'button',
+                      onclick: function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openLibraryPicker();
+                      }
+                    }, [
+                      m('span', '•'),
+                      m('span', 'Add from Media Library')
+                    ])
+                  : null
+              ])
+            ])
+      ]) : null,
+      m('input[type=hidden]', { name: col.name, value: JSON.stringify(urls) }),
+      m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', 'Max ' + Math.round(maxSize / 1024 / 1024) + ' MB per file'),
+      error ? m('p.text-xs.text-red-600.dark:text-red-400.mt-1.font-medium', error) : (hint ? m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', hint) : null),
+    ]);
+  }
+};
+
 async function handleAdminFileUpload(file, onChange, meta, state) {
   var uploadUrl = '';
   try {
-    var cfg = window.__ADMIN_CONFIG__;
+    var cfg = (typeof window !== 'undefined' && window.__ADMIN_CONFIG__) ? window.__ADMIN_CONFIG__ : null;
     uploadUrl = (cfg && cfg.settings && cfg.settings.uploadUrl) ? String(cfg.settings.uploadUrl) : '';
   } catch (e) {}
   if (!uploadUrl) {
@@ -379,6 +592,52 @@ async function handleAdminFileUpload(file, onChange, meta, state) {
   }
 }
 
+async function handleAdminMultipleFilesUpload(files, onChange, meta, state, currentUrls = []) {
+  var uploadUrl = '';
+  try {
+    var cfg = (typeof window !== 'undefined' && window.__ADMIN_CONFIG__) ? window.__ADMIN_CONFIG__ : null;
+    uploadUrl = (cfg && cfg.settings && cfg.settings.uploadUrl) ? String(cfg.settings.uploadUrl) : '';
+  } catch (e) {}
+
+  if (!uploadUrl) {
+    notifyError('Upload URL is not configured.');
+    return;
+  }
+  var maxSize = meta.maxSize || meta.maxBytes || (10 * 1024 * 1024);
+  var baseUrls = Array.isArray(currentUrls) ? [...currentUrls] : (currentUrls ? [currentUrls] : []);
+
+  state.uploading = true;
+  if (typeof m !== 'undefined' && m.redraw) m.redraw();
+
+  try {
+    for (var i = 0; i < files.length; i++) {
+      var file = files[i];
+      if (file.size > maxSize) {
+        notifyWarning('File ' + file.name + ' too large.');
+        continue;
+      }
+      var fd = new FormData();
+      fd.append('file', file);
+      try {
+        var res = await fetch(uploadUrl, { method: 'POST', body: fd, credentials: 'include' });
+        var data = {};
+        try { data = await res.json(); } catch (_) { data = {}; }
+        if (res.ok && (data.url || data.publicUrl)) {
+          baseUrls.push(data.url || data.publicUrl);
+        } else {
+          notifyError('Upload failed: ' + (data.message || data.error || res.status));
+        }
+      } catch (err) {
+        notifyError('Upload failed for ' + file.name + ': ' + err.message);
+      }
+    }
+    if (onChange) onChange(baseUrls);
+  } finally {
+    state.uploading = false;
+    if (typeof m !== 'undefined' && m.redraw) m.redraw();
+  }
+}
+
 // Get appropriate renderer for a column type
 function getFieldRenderer(col, modelMeta) {
   // Check for custom field first
@@ -395,11 +654,22 @@ function getFieldRenderer(col, modelMeta) {
         });
       };
     }
-    if (col.customField.type === 'file-upload') {
+    if (col.customField.type === 'file-upload' || col.customField.type === 'file' || col.customField.type === 'image') {
       return (col, value, onChange, readonly, error) => {
         return m(FileUploadField, {
           col,
           value: value || '',
+          onChange,
+          readonly: readonly || false,
+          error,
+        });
+      };
+    }
+    if (col.customField.type === 'files' || col.customField.type === 'files-upload') {
+      return (col, value, onChange, readonly, error) => {
+        return m(FilesUploadField, {
+          col,
+          value: value || [],
           onChange,
           readonly: readonly || false,
           error,
@@ -414,7 +684,7 @@ function getFieldRenderer(col, modelMeta) {
     }
 
     // Check registered custom field renderers in browser
-    const custom = window.__customFieldRenderers && window.__customFieldRenderers[col.customField.type];
+    const custom = (typeof window !== 'undefined' && window.__customFieldRenderers) ? window.__customFieldRenderers[col.customField.type] : null;
     if (custom) {
       return (col, value, onChange, readonly, error) => {
         try {
@@ -432,7 +702,7 @@ function getFieldRenderer(col, modelMeta) {
   }
 
   // Check schema type custom field renderers
-  if (col.type && window.__customFieldRenderers && window.__customFieldRenderers[col.type]) {
+  if (col.type && typeof window !== 'undefined' && window.__customFieldRenderers && window.__customFieldRenderers[col.type]) {
     const custom = window.__customFieldRenderers[col.type];
     return (col, value, onChange, readonly, error) => {
       try {
@@ -448,7 +718,7 @@ function getFieldRenderer(col, modelMeta) {
     };
   }
 
-  if (col.type === 'file') {
+  if (col.type === 'file' || col.type === 'image' || (col.ui && (col.ui.widget === 'file' || col.ui.widget === 'image'))) {
     return (col, value, onChange, readonly, error) => {
       return m(FileUploadField, {
         col,
@@ -460,10 +730,29 @@ function getFieldRenderer(col, modelMeta) {
     };
   }
 
+  if (col.type === 'files' || (col.ui && col.ui.widget === 'files')) {
+    return (col, value, onChange, readonly, error) => {
+      return m(FilesUploadField, {
+        col,
+        value: value || [],
+        onChange,
+        readonly: readonly || false,
+        error,
+      });
+    };
+  }
+
   // Auto-detect belongsTo relation for foreign key columns (ends with _id or has references)
   if (!col.primary && !col.autoIncrement && ((col.name && col.name.endsWith('_id')) || col.references)) {
     return FieldRenderers.belongsTo;
   }
+
+  // Attach file renderers to FieldRenderers object
+  FieldRenderers['file-upload'] = (col, value, onChange, readonly, error) => m(FileUploadField, { col, value: value || '', onChange, readonly: readonly || false, error });
+  FieldRenderers.file = FieldRenderers['file-upload'];
+  FieldRenderers.image = FieldRenderers['file-upload'];
+  FieldRenderers.files = (col, value, onChange, readonly, error) => m(FilesUploadField, { col, value: value || [], onChange, readonly: readonly || false, error });
+  FieldRenderers['files-upload'] = FieldRenderers.files;
 
   // Fallback to standard type renderers
   const typeMap = {
@@ -480,6 +769,9 @@ function getFieldRenderer(col, modelMeta) {
     enum: 'enum',
     json: 'json',
     array: 'array',
+    file: 'file',
+    files: 'files',
+    image: 'image',
     uuid: 'string',
     nanoid: 'string',
     belongsTo: 'belongsTo',

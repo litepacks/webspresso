@@ -17,6 +17,19 @@ const {
   registerClearHook,
 } = require('./njk-frontmatter');
 const { renderStream } = require('../core/ssr/stream');
+const {
+  loadCascadingMiddlewares,
+  runMiddlewareChain,
+  findCascadingLayouts,
+  executeCascadingLayoutLoads,
+  applyCascadingLayouts,
+  templateHasExtends,
+} = require('./routing/cascading');
+const {
+  isMiddlewareFactory,
+  resolveNamedMiddleware,
+  resolveMiddlewares,
+} = require('./routing/middleware-resolver');
 
 const NOOP = () => {};
 const EMPTY_OBJECT = Object.freeze({});
@@ -871,86 +884,6 @@ function detectLocale(req, supported = parseSupportedLocaleSet(), def = getDefau
 }
 
 /**
- * True when the registry entry is (options) => (req, res, next) => …
- * Express handlers typically have length >= 2 (req, res) or 3 (req, res, next).
- */
-function isMiddlewareFactory(fn) {
-  return typeof fn === 'function' && fn.length <= 1;
-}
-
-/**
- * Resolve a named middleware from createApp({ middlewares }).
- * @param {string} name
- * @param {Function} entry
- * @param {boolean} fromTuple - true when route used ['name', options]
- * @param {unknown} tupleOptions - second element of the tuple (only when fromTuple)
- * @param {Object} middlewareRegistry - for error messages
- * @returns {Function} Express middleware
- */
-function resolveNamedMiddleware(name, entry, fromTuple, tupleOptions, middlewareRegistry) {
-  if (!entry) {
-    throw new Error(`Middleware "${name}" not found in registry. Available: ${Object.keys(middlewareRegistry).join(', ') || 'none'}`);
-  }
-  if (typeof entry !== 'function') {
-    throw new Error(`Middleware "${name}" must be a function`);
-  }
-
-  if (fromTuple) {
-    if (!isMiddlewareFactory(entry)) {
-      throw new Error(
-        `Middleware "${name}" must be a factory (options) => (req, res, next) => … when using ["${name}", options] tuple form`
-      );
-    }
-    const produced = entry(tupleOptions);
-    if (typeof produced !== 'function') {
-      throw new Error(`Middleware factory "${name}" must return an Express middleware function`);
-    }
-    return produced;
-  }
-
-  if (isMiddlewareFactory(entry)) {
-    const produced = entry({});
-    if (typeof produced !== 'function') {
-      throw new Error(`Middleware factory "${name}" must return an Express middleware function`);
-    }
-    return produced;
-  }
-
-  return entry;
-}
-
-/**
- * Resolve middleware from config — functions, string names, or [name, options] tuples
- * @param {Array} middlewareConfig - middleware functions, names, or ['name', options] tuples
- * @param {Object} middlewareRegistry - Named middleware registry (plain handlers or option factories)
- * @returns {Array} Array of resolved middleware functions
- */
-function resolveMiddlewares(middlewareConfig, middlewareRegistry = EMPTY_OBJECT) {
-  if (!middlewareConfig || !Array.isArray(middlewareConfig) || middlewareConfig.length === 0) {
-    return EMPTY_ARRAY;
-  }
-  
-  return middlewareConfig.map((mw, index) => {
-    if (typeof mw === 'function') {
-      return mw;
-    }
-    
-    if (typeof mw === 'string') {
-      return resolveNamedMiddleware(mw, middlewareRegistry[mw], false, undefined, middlewareRegistry);
-    }
-
-    if (Array.isArray(mw) && mw.length === 2 && typeof mw[0] === 'string') {
-      const name = mw[0];
-      return resolveNamedMiddleware(name, middlewareRegistry[name], true, mw[1], middlewareRegistry);
-    }
-    
-    throw new Error(
-      `Invalid middleware at index ${index}: must be a function, string name, or [name, options] tuple`
-    );
-  });
-}
-
-/**
  * Mount all pages as routes on the Express app
  * @param {Object} app - Express app
  * @param {Object} options - Options
@@ -1209,19 +1142,32 @@ function mountPages(app, options) {
             throw err;
           }
           
+          // Run cascading folder middlewares (_middleware.js)
+          const cascadingMw = loadCascadingMiddlewares(absolutePagesDir, route.file, middlewares, isDev);
+          if (cascadingMw.length) {
+            await runMiddlewareChain(cascadingMw, req, res);
+            if (res.headersSent) return;
+          }
+
           // Run middleware if defined (resolved at route registration — required for stateful middleware like express-rate-limit)
           if (preResolvedMw.length) {
-            for (const mw of preResolvedMw) {
-              await new Promise((resolve, reject) => {
-                mw(req, res, (err) => {
-                  if (err) reject(err);
-                  else resolve();
-                });
-              });
-            }
+            await runMiddlewareChain(preResolvedMw, req, res);
+            if (res.headersSent) return;
           }
-          
-          await fn(req, res, next);
+          const apiCtx = Object.assign((err) => next(err), {
+            req,
+            res,
+            next,
+            params: req.params || {},
+            query: req.query || {},
+            body: req.body || {},
+            input: req.input,
+            service: req.service,
+            db,
+            sse: res.sse,
+          });
+
+          await fn(req, res, apiCtx);
         } catch (err) {
           console.error(`API error ${route.routePath}:`, err);
           const hookCtx = { req, res, error: err };
@@ -1354,16 +1300,17 @@ function mountPages(app, options) {
         hookPromise = runHooks(globalHooks, routeHooks, 'beforeMiddleware', ctx);
         if (hookPromise) await hookPromise;
         
+        // Run cascading folder middlewares (_middleware.js)
+        const cascadingMw = loadCascadingMiddlewares(absolutePagesDir, route.file, middlewares, isDev);
+        if (cascadingMw.length) {
+          await runMiddlewareChain(cascadingMw, req, res);
+          if (res.headersSent) return;
+        }
+
         // Run route middleware (chain fixed at route registration; edit middleware in dev → restart)
         if (preResolvedPageMw.length) {
-          for (const mw of preResolvedPageMw) {
-            await new Promise((resolve, reject) => {
-              mw(req, res, (err) => {
-                if (err) reject(err);
-                else resolve();
-              });
-            });
-          }
+          await runMiddlewareChain(preResolvedPageMw, req, res);
+          if (res.headersSent) return;
         }
         
         // Execute hooks: afterMiddleware
@@ -1380,6 +1327,14 @@ function mountPages(app, options) {
         hookPromise = runHooks(globalHooks, routeHooks, 'beforeLoad', ctx);
         if (hookPromise) await hookPromise;
         
+        // Find cascading layouts (_layout.njk)
+        const cascadingLayouts = findCascadingLayouts(absolutePagesDir, route.file, isDev);
+
+        // Run cascading _layout.js load() functions in top-down order (outermost first)
+        if (cascadingLayouts.length > 0) {
+          await executeCascadingLayoutLoads(cascadingLayouts, req, ctx, isDev);
+        }
+
         // Run load function
         if (config?.load && typeof config.load === 'function') {
           const loadData = await config.load(req, ctx);
@@ -1463,6 +1418,16 @@ function mountPages(app, options) {
           }
         } else {
           html = nunjucks.render(templatePath, renderContext);
+        }
+
+        // Apply cascading nested layouts if not opted-out and template does not extend another template
+        const shouldApplyLayout = config?.layout !== false &&
+          ctx.data?.layout !== false &&
+          ctx.meta?.layout !== false &&
+          !templateHasExtends(njkTpl.templateBody, route.fullPath);
+
+        if (shouldApplyLayout && cascadingLayouts.length > 0) {
+          html = applyCascadingLayouts(nunjucks, cascadingLayouts, html, renderContext, isDev);
         }
 
         if (pluginManager) {

@@ -1,31 +1,109 @@
 /**
  * Webspresso ORM - Eager Loader
- * Batch loading algorithm for relations
+ * Batch loading algorithm for relations (supports direct & arbitrary nested relations)
  * @module core/orm/eager-loader
  */
 
 const { resolveRelationModel, getRelationKeys } = require('./model');
 const { applyScopes, createScopeContext } = require('./scopes');
+const { getJsonColumns, deserializeJsonFields } = require('./json-fields');
 
 /**
- * Load relations for a set of records using batch queries
+ * Parse relation specifications into a grouped structure: Map<topLevelRelation, string[]>
+ * Supports dot notation ('author.profile'), arrays (['author', 'comments.author']),
+ * and nested relation chains of arbitrary depth.
+ * 
+ * @param {Array<string|Object>} relationNames
+ * @returns {Map<string, string[]>}
+ */
+function parseRelationTree(relationNames) {
+  const tree = new Map();
+
+  function addPath(top, nested) {
+    if (!top || typeof top !== 'string') return;
+    const cleanTop = top.trim();
+    if (!cleanTop) return;
+
+    if (!tree.has(cleanTop)) {
+      tree.set(cleanTop, []);
+    }
+    if (nested) {
+      if (Array.isArray(nested)) {
+        for (const item of nested) {
+          if (item && typeof item === 'string') tree.get(cleanTop).push(item.trim());
+        }
+      } else if (typeof nested === 'string') {
+        const cleanNested = nested.trim();
+        if (cleanNested) tree.get(cleanTop).push(cleanNested);
+      }
+    }
+  }
+
+  function processItem(item) {
+    if (!item) return;
+
+    if (typeof item === 'string') {
+      const dotIndex = item.indexOf('.');
+      if (dotIndex === -1) {
+        addPath(item);
+      } else {
+        const top = item.slice(0, dotIndex);
+        const rest = item.slice(dotIndex + 1);
+        addPath(top, rest);
+      }
+    } else if (Array.isArray(item)) {
+      for (const sub of item) {
+        processItem(sub);
+      }
+    } else if (typeof item === 'object') {
+      for (const [key, value] of Object.entries(item)) {
+        if (value === true || value == null) {
+          processItem(key);
+        } else if (typeof value === 'string' || Array.isArray(value)) {
+          const dotIndex = key.indexOf('.');
+          if (dotIndex === -1) {
+            addPath(key, value);
+          } else {
+            const top = key.slice(0, dotIndex);
+            const rest = key.slice(dotIndex + 1);
+            const nestedValues = Array.isArray(value) ? value : [value];
+            for (const v of nestedValues) {
+              addPath(top, `${rest}.${v}`);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const list = Array.isArray(relationNames) ? relationNames : [relationNames];
+  for (const item of list) {
+    processItem(item);
+  }
+
+  return tree;
+}
+
+/**
+ * Load relations for a set of records using batch queries (supports nested relations)
  * @param {Object[]} records - Records to load relations for
- * @param {string[]} relationNames - Names of relations to load
+ * @param {Array<string|Object>} relationNames - Names of relations to load (e.g. ['author.profile', 'comments.author'])
  * @param {import('./types').ModelDefinition} model - Model definition
  * @param {import('knex').Knex|import('knex').Knex.Transaction} knex - Knex instance
  * @param {import('./types').ScopeContext} [scopeContext] - Scope context
  * @returns {Promise<Object[]>} Records with relations attached
  */
 async function loadRelations(records, relationNames, model, knex, scopeContext) {
-  if (!records.length || !relationNames.length) {
+  if (!records || !records.length || !relationNames || !relationNames.length) {
     return records;
   }
 
   const context = scopeContext || createScopeContext();
+  const tree = parseRelationTree(relationNames);
 
-  // Process each relation
-  for (const relationName of relationNames) {
-    const relation = model.relations[relationName];
+  // Process each relation grouped by top-level
+  for (const [relationName, nestedPaths] of tree.entries()) {
+    const relation = model.relations?.[relationName];
     if (!relation) {
       console.warn(`Relation "${relationName}" not found on model "${model.name}"`);
       continue;
@@ -43,6 +121,38 @@ async function loadRelations(records, relationNames, model, knex, scopeContext) 
       case 'hasOne':
         await loadHasOne(records, relationName, localKey, foreignKey, relatedModel, knex, context);
         break;
+      default:
+        console.warn(`Unsupported relation type "${relation.type}" for relation "${relationName}" on model "${model.name}"`);
+        continue;
+    }
+
+    // Process nested relations if any
+    if (nestedPaths.length > 0) {
+      const childRecords = [];
+      const seenRefs = new Set();
+      const len = records.length;
+
+      for (let i = 0; i < len; i++) {
+        const child = records[i][relationName];
+        if (!child) continue;
+
+        if (Array.isArray(child)) {
+          for (let j = 0; j < child.length; j++) {
+            const item = child[j];
+            if (item && typeof item === 'object' && !seenRefs.has(item)) {
+              seenRefs.add(item);
+              childRecords.push(item);
+            }
+          }
+        } else if (typeof child === 'object' && !seenRefs.has(child)) {
+          seenRefs.add(child);
+          childRecords.push(child);
+        }
+      }
+
+      if (childRecords.length > 0) {
+        await loadRelations(childRecords, nestedPaths, relatedModel, knex, context);
+      }
     }
   }
 
@@ -116,6 +226,14 @@ async function loadBelongsTo(records, relationName, localKey, foreignKey, relate
     relatedModel
   );
 
+  const jsonCols = getJsonColumns(relatedModel);
+  if (jsonCols.size > 0) {
+    const rLen = relatedRecords.length;
+    for (let i = 0; i < rLen; i++) {
+      deserializeJsonFields(relatedRecords[i], jsonCols);
+    }
+  }
+
   const relatedMap = new Map();
   const rLen = relatedRecords.length;
   const pk = relatedModel.primaryKey;
@@ -170,6 +288,14 @@ async function loadHasMany(records, relationName, localKey, foreignKey, relatedM
     scopeContext,
     relatedModel
   );
+
+  const jsonCols = getJsonColumns(relatedModel);
+  if (jsonCols.size > 0) {
+    const rLen = relatedRecords.length;
+    for (let i = 0; i < rLen; i++) {
+      deserializeJsonFields(relatedRecords[i], jsonCols);
+    }
+  }
 
   const relatedGroups = new Map();
   const rLen = relatedRecords.length;
@@ -229,6 +355,14 @@ async function loadHasOne(records, relationName, localKey, foreignKey, relatedMo
     relatedModel
   );
 
+  const jsonCols = getJsonColumns(relatedModel);
+  if (jsonCols.size > 0) {
+    const rLen = relatedRecords.length;
+    for (let i = 0; i < rLen; i++) {
+      deserializeJsonFields(relatedRecords[i], jsonCols);
+    }
+  }
+
   const relatedMap = new Map();
   const rLen = relatedRecords.length;
   for (let i = 0; i < rLen; i++) {
@@ -247,9 +381,9 @@ async function loadHasOne(records, relationName, localKey, foreignKey, relatedMo
 }
 
 /**
- * Load a single relation for a single record
+ * Load a single relation (or nested relation path) for a single record
  * @param {Object} record - Record to load relation for
- * @param {string} relationName - Name of relation to load
+ * @param {string} relationName - Name or dot-separated path of relation to load (e.g. 'author.profile')
  * @param {import('./types').ModelDefinition} model - Model definition
  * @param {import('knex').Knex} knex - Knex instance
  * @param {import('./types').ScopeContext} [scopeContext] - Scope context
@@ -267,5 +401,5 @@ module.exports = {
   loadHasMany,
   loadHasOne,
   queryInChunks,
+  parseRelationTree,
 };
-
