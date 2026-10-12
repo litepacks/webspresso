@@ -53,7 +53,10 @@ All routes are automatically discovered and registered from the `pages/` directo
 | `pages/index.njk` | `GET` | `/` | Home page (SSR Nunjucks) |
 | `pages/about.njk` | `GET` | `/about` | Static SSR page |
 | `pages/notes/[id].njk` | `GET` | `/notes/:id` | Dynamic SSR route with param |
+| `pages/(marketing)/about.njk` | `GET` | `/about` | Route Group page (omits `(marketing)`) |
+| `pages/(auth)/login.njk` | `GET` | `/login` | Route Group with isolated layout & middleware |
 | `pages/api/notes.get.js` | `GET` | `/api/notes` | List notes API endpoint |
+| `pages/api/(v1)/notes.get.js` | `GET` | `/api/notes` | API route inside Route Group |
 | `pages/api/notes.post.js` | `POST` | `/api/notes` | Create note API endpoint |
 | `pages/api/notes/[id].get.js` | `GET` | `/api/notes/:id` | Get single note API endpoint |
 | `pages/api/notes/[id].put.js` | `PUT` | `/api/notes/:id` | Update note API endpoint |
@@ -148,7 +151,50 @@ module.exports = {
 
 ---
 
-## 4. SSR Page Routes (`load()` Loader)
+## 4. Route Groups `(group)` Syntax & Layout Isolation
+
+Webspresso supports Next.js / Nuxt-style **Route Groups**. Any directory name wrapped in parentheses `(groupName)` is treated as an organizational group:
+- **Clean Public URLs**: The parenthesized directory name is completely omitted from the generated URL path.
+- **Layout & Middleware Isolation**: The directory hierarchy is preserved for cascading middleware (`_middleware.js`) and nested layouts (`_layout.njk`), allowing distinct shells and security guards without polluting public route URLs.
+- **Nesting & Dynamic Route Support**: Route groups can be nested (e.g. `(shop)/(checkout)/cart.njk` → `/cart`), combined with dynamic segments (e.g. `(app)/users/[id].njk` → `/users/:id`), and applied to API routes (`pages/api/(v1)/items.get.js` → `/api/items` or `pages/(marketing)/api/newsletter.post.js` → `/api/newsletter`).
+
+### 4.1 Route Group Structure Example
+
+```
+pages/
+├── (marketing)/
+│   ├── _layout.njk          # Marketing layout (Hero header, footer)
+│   ├── _middleware.js       # Track analytics / marketing headers
+│   ├── index.njk            -> GET /
+│   ├── about.njk            -> GET /about
+│   └── api/
+│       └── newsletter.post.js -> POST /api/newsletter
+├── (auth)/
+│   ├── _layout.njk          # Centered card layout (no nav/footer)
+│   ├── _middleware.js       # Guest-only guard (redirects authenticated users)
+│   ├── login.njk            -> GET /login
+│   └── register.njk         -> GET /register
+└── (app)/
+    ├── _layout.njk          # App shell layout with sidebar
+    ├── _middleware.js       # Strict session auth guard
+    └── dashboard.njk        -> GET /dashboard
+```
+
+### 4.2 Programmatic Utilities
+Webspresso exports core helpers to inspect and transform route group paths:
+```javascript
+const { isRouteGroupSegment, stripRouteGroups } = require('webspresso');
+
+isRouteGroupSegment('(marketing)'); // true
+isRouteGroupSegment('about');       // false
+
+stripRouteGroups('/(marketing)/about'); // '/about'
+stripRouteGroups('/(shop)/(checkout)/cart'); // '/cart'
+```
+
+---
+
+## 5. SSR Page Routes (`load()` Loader)
 
 For server-rendered Nunjucks HTML pages, use `.njk` templates and companion `.js` loader files (or inline `async function load` in a `.js` file):
 
@@ -174,7 +220,7 @@ module.exports = {
 
 ---
 
-## 5. Module & File-Based Discovery (`src/pages`, `src/api`, `modules/{name}`)
+## 6. Module & File-Based Discovery (`src/pages`, `src/api`, `modules/{name}`)
 
 Webspresso supports clean, domain-driven module discovery alongside root-level pages and APIs:
 
@@ -204,7 +250,7 @@ src/
         auth-guard.js   -> module-local named middleware 'authGuard'
 ```
 
-### 5.1 `definePage()` Contract
+### 6.1 `definePage()` Contract
 ```javascript
 const { definePage } = require('webspresso');
 
@@ -230,7 +276,7 @@ module.exports = definePage({
 });
 ```
 
-### 5.2 `defineApi()` Contract
+### 6.2 `defineApi()` Contract
 ```javascript
 const { defineApi, z } = require('webspresso');
 
@@ -252,7 +298,7 @@ module.exports = defineApi({
 });
 ```
 
-### 5.3 `defineModule()` Contract
+### 6.3 `defineModule()` Contract
 ```javascript
 const { defineModule } = require('webspresso');
 
@@ -270,7 +316,7 @@ module.exports = defineModule({
 });
 ```
 
-### 5.4 Route Introspection (`app.routes.list()`)
+### 6.4 Route Introspection (`app.routes.list()`)
 Compiled routes are accessible at runtime for tooling, CLI inspection, and documentation:
 ```javascript
 const routeList = app.routes.list();
@@ -280,7 +326,7 @@ const routeList = app.routes.list();
 // ]
 ```
 
-### 5.5 Server-Sent Events (SSE) Streaming (`res.sse`)
+### 6.5 Server-Sent Events (SSE) Streaming (`res.sse`)
 For real-time event streaming and LLM token outputs, use the native `res.sse()` helper (or `{ sse }` from `ctx`):
 
 ```javascript
@@ -306,7 +352,7 @@ module.exports = defineApi({
 });
 ```
 
-### 5.6 Cascading Middleware (`_middleware.js`) & Nested Layouts (`_layout.njk`)
+### 6.6 Cascading Middleware (`_middleware.js`) & Nested Layouts (`_layout.njk`)
 
 Webspresso supports folder-level cascading middleware inheritance and nested layouts across directory trees:
 
@@ -356,7 +402,7 @@ Pages under `pages/` automatically inherit ancestor layouts:
 
 ---
 
-## 6. Summary Checklist for Agents
+## 7. Summary Checklist for Agents
 
 When a user asks to add or modify endpoints:
 1. Identify the URL and method (e.g. `POST /api/auth/register` or `POST /auth/login`).

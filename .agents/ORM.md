@@ -243,3 +243,72 @@ defineModel({
 - **Include Guards**: Excessive `query().with(...)` or `?include=...` relations beyond `maxIncludes` throw `QueryComplexityError` or safely cap relations.
 - **REST Resources Protection**: Automatically validates client parameters (`?perPage=5000` or `?include=...`) against model complexity boundaries.
 
+---
+
+## 8. Universal Full-Text Search (FTS)
+
+Webspresso ORM provides database-agnostic full-text and keyword search with transparent dialect optimizations for SQLite, PostgreSQL, and MySQL.
+
+### 8.1 Model Configuration (`searchable`)
+
+Declare default searchable columns on your model:
+
+```javascript
+defineModel({
+  name: 'Article',
+  table: 'articles',
+  schema: zdb.schema({
+    id: zdb.id(),
+    title: zdb.string(),
+    content: zdb.text(),
+    author: zdb.string(),
+  }),
+  searchable: ['title', 'content'], // Default columns for .search()
+});
+```
+
+*(Note: If `searchable` is not defined, `.search()` automatically falls back to `admin.searchFields` if available.)*
+
+### 8.2 Using Search in Application Code
+
+Search is available both on repository instances (`repo.search`) and on query builders (`query().search()` / `query().orSearch()`):
+
+```javascript
+const articleRepo = req.db.getRepository('Article');
+
+// 1. Basic search across default searchable columns
+const results = await articleRepo.search('webspresso framework').get();
+
+// 2. Chained with filtering, ordering, and pagination
+const page = await articleRepo
+  .search(req.query.q) // Safe no-op when req.query.q is empty or undefined
+  .where('status', 'published')
+  .orderBy('created_at', 'desc')
+  .paginate({ page: 1, limit: 10 });
+
+// 3. Dynamic column override
+const byAuthor = await articleRepo.search('Alice', ['author']).get();
+
+// 4. Exact phrase matching
+const exact = await articleRepo.search('zero dependency sprawl', null, { exact: true }).get();
+
+// 5. OR matching between words (default is AND)
+const anyWord = await articleRepo.search('vue react angular', null, { matchAllWords: false }).get();
+
+// 6. Disjoined search conditions with orSearch()
+const mixed = await articleRepo.query()
+  .where('author', 'Bob')
+  .orSearch('featured article', ['title'])
+  .get();
+```
+
+### 8.3 Dialect Features & Modes
+
+| Dialect | Mode (`options.mode`) | SQL Strategy | Notes |
+| :--- | :--- | :--- | :--- |
+| **SQLite** | `'auto'` (default) | Tokenized case-insensitive `LIKE` | Safe out-of-the-box, no virtual table required. |
+| **SQLite** | `'fts'` | `articles MATCH ?` or virtual table subquery | Set `{ mode: 'fts', ftsTable: 'articles_fts' }` for FTS5 tables. |
+| **PostgreSQL** | `'auto'` / `'fts'` | `to_tsvector @@ plainto_tsquery` / `websearch_to_tsquery` | Native Postgres tsvector search. Pass `{ rank: true }` to order by `ts_rank` relevance. |
+| **MySQL** | `'fts'` | `MATCH(...) AGAINST(? IN BOOLEAN MODE)` | Requires FULLTEXT index on table. |
+
+

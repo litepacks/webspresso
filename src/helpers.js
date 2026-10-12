@@ -278,6 +278,15 @@ class AssetManager {
             candidates.add(staticParts.join('/'));
           }
         }
+        if (cleanFile.includes('(')) {
+          const withoutGroups = cleanFile.split('/').filter(p => !(p.startsWith('(') && p.endsWith(')'))).join('/');
+          if (withoutGroups) {
+            candidates.add(withoutGroups);
+            if (withoutGroups.endsWith('/index')) {
+              candidates.add(withoutGroups.slice(0, -6));
+            }
+          }
+        }
         if (cleanFile === 'index') {
           candidates.add('home');
         }

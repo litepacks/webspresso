@@ -60,6 +60,7 @@ const DEFAULT_CONFIG = {
     logout: '/logout',
     home: '/',
     redirectAfterLogin: '/dashboard',
+    twoFactor: '/2fa',
   },
 };
 
@@ -106,6 +107,10 @@ class AuthManager {
       emailVerification: config.notifications?.emailVerification || null,
       welcome: config.notifications?.welcome || null,
     };
+
+    // TOTP & 2FA initialization
+    this.totp = require('./totp');
+    this.twoFactor = config.twoFactor || { enabled: false };
 
     if (config.jwt) {
       const jwtSecret = typeof config.jwt === 'object' && config.jwt.secret
@@ -329,6 +334,9 @@ class AuthManager {
           }
         }
         
+        // Clear 2FA session state
+        this.clear2Fa();
+
         // Clear user
         req.user = null;
         
@@ -375,6 +383,119 @@ class AuthManager {
        */
       id() {
         return req.user?.id || null;
+      },
+
+      /**
+       * TOTP helper utilities (RFC 6238 / RFC 4226)
+       */
+      totp: self.totp,
+
+      /**
+       * Check if two-factor authentication has been verified in current session/request
+       * @returns {boolean}
+       */
+      is2FaVerified() {
+        if (req.session?.twoFactorVerified) return true;
+        if (req.jwtPayload?.twoFactorVerified) return true;
+        return false;
+      },
+
+      /**
+       * Check if two-factor authentication is pending verification
+       * @returns {boolean}
+       */
+      is2FaPending() {
+        return Boolean(req.session?.twoFactorPending);
+      },
+
+      /**
+       * Mark two-factor authentication as verified
+       * @param {boolean} [verified=true]
+       */
+      set2FaVerified(verified = true) {
+        if (req.session) {
+          req.session.twoFactorVerified = Boolean(verified);
+          if (verified) {
+            delete req.session.twoFactorPending;
+            delete req.session.twoFactorUserId;
+          }
+        }
+      },
+
+      /**
+       * Mark two-factor authentication as pending verification for a user
+       * @param {Object} [user] - User object or user ID
+       */
+      set2FaPending(user) {
+        if (req.session) {
+          req.session.twoFactorPending = true;
+          req.session.twoFactorVerified = false;
+          if (user?.id) {
+            req.session.twoFactorUserId = user.id;
+          } else if (typeof user === 'string' || typeof user === 'number') {
+            req.session.twoFactorUserId = user;
+          }
+        }
+      },
+
+      /**
+       * Clear two-factor authentication status from session
+       */
+      clear2Fa() {
+        if (req.session) {
+          delete req.session.twoFactorVerified;
+          delete req.session.twoFactorPending;
+          delete req.session.twoFactorUserId;
+        }
+      },
+
+      /**
+       * Verify submitted TOTP token or recovery code
+       * Automatically marks 2FA as verified upon success
+       * @param {string} tokenOrCode - Submitted 6-digit TOTP code or recovery code
+       * @param {Object|string} secretOrUser - Secret string or user object with totp_secret / recovery_codes
+       * @param {Object} [options]
+       * @returns {{ success: boolean, type?: 'totp'|'recovery_code', delta?: number, remainingHashedCodes?: string[], matchedIndex?: number }}
+       */
+      verify2Fa(tokenOrCode, secretOrUser, options = {}) {
+        if (!tokenOrCode) {
+          return { success: false };
+        }
+
+        let secret = null;
+        let recoveryCodes = null;
+
+        if (typeof secretOrUser === 'string') {
+          secret = secretOrUser;
+        } else if (secretOrUser && typeof secretOrUser === 'object') {
+          secret = secretOrUser.totp_secret || secretOrUser.totpSecret || secretOrUser.two_factor_secret || secretOrUser.twoFactorSecret;
+          recoveryCodes = secretOrUser.recovery_codes || secretOrUser.recoveryCodes || secretOrUser.two_factor_recovery_codes;
+        }
+
+        // Try TOTP code first
+        if (secret) {
+          const totpResult = self.totp.verifyTotp(tokenOrCode, secret, { ...options, detailed: true });
+          if (totpResult.valid) {
+            this.set2FaVerified(true);
+            return { success: true, type: 'totp', delta: totpResult.delta };
+          }
+        }
+
+        // Try recovery codes if provided
+        if (recoveryCodes && Array.isArray(recoveryCodes) && recoveryCodes.length > 0) {
+          const recResult = self.totp.verifyRecoveryCode(tokenOrCode, recoveryCodes);
+          if (recResult.valid) {
+            this.set2FaVerified(true);
+            return {
+              success: true,
+              type: 'recovery_code',
+              matchedIndex: recResult.matchedIndex,
+              remainingHashedCodes: recResult.remainingHashedCodes,
+            };
+          }
+        }
+
+        return { success: false };
       },
 
       /**
@@ -800,6 +921,19 @@ class AuthManager {
       this._authMiddleware = createAuthMiddleware(this);
     }
     return this._authMiddleware.requireJwt(options);
+  }
+
+  /**
+   * Get require2Fa guard middleware for Express routes
+   * @param {Object} [options]
+   * @returns {Function} Express middleware
+   */
+  require2Fa(options = {}) {
+    if (!this._authMiddleware) {
+      const { createAuthMiddleware } = require('./middleware');
+      this._authMiddleware = createAuthMiddleware(this);
+    }
+    return this._authMiddleware.require2Fa(options);
   }
 }
 

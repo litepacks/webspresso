@@ -8,7 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { parseFileRoute, isPrivateOrIgnored } = require('./file-route-parser');
+const { parseFileRoute, isPrivateOrIgnored, isApiRouteFile } = require('./file-route-parser');
 const { discoverModuleDetails } = require('../modules/module-discovery');
 
 const SUPPORTED_EXTENSIONS = new Set(['.js', '.njk']);
@@ -99,7 +99,7 @@ function scanRoutes(options = {}) {
         }
 
         // Skip api directory inside pages (handled by classic mountPages or explicit api scan)
-        const isUnderApi = relativePath.startsWith('api' + path.sep) || relativePath.startsWith('api/');
+        const isUnderApi = isApiRouteFile(relativePath);
         if (isUnderApi) {
           continue;
         }

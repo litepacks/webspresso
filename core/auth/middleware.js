@@ -256,6 +256,83 @@ function createAuthMiddleware(authManager) {
   }
 
   /**
+   * Require Two-Factor Authentication (2FA / TOTP) middleware
+   * Checks if user has completed 2FA step if 2FA is required or enabled for the user
+   * @param {Object} [options] - Options
+   * @param {boolean} [options.always=false] - Always enforce 2FA verification regardless of user flag
+   * @param {boolean} [options.api=false] - Return JSON error instead of redirect
+   * @param {string} [options.redirectTo] - Redirect URL (default: config.routes.twoFactor || '/2fa')
+   * @param {string} [options.redirectToLogin] - Redirect URL if unauthenticated (default: config.routes.login)
+   * @param {Function} [options.isUser2FaEnabled] - Custom predicate (user) => boolean
+   */
+  function require2Fa(options = {}) {
+    return (req, res, next) => {
+      // 1. Must be logged in or have a pending 2FA authentication session
+      if (!req.user && !req.session?.twoFactorPending) {
+        if (options.api || req.xhr || req.headers?.accept?.includes('application/json')) {
+          return res.status(401).json({
+            error: 'Unauthorized',
+            message: 'Authentication required',
+          });
+        }
+        if (req.session) {
+          req.session.intendedUrl = req.originalUrl;
+        }
+        const loginUrl = options.redirectToLogin || config.routes.login;
+        return res.redirect(loginUrl);
+      }
+
+      // 2. Check if 2FA is required for this user or route
+      let userRequires2Fa = options.always === true;
+      if (!userRequires2Fa) {
+        if (typeof options.isUser2FaEnabled === 'function') {
+          userRequires2Fa = options.isUser2FaEnabled(req.user);
+        } else if (req.user) {
+          userRequires2Fa = Boolean(
+            req.user.two_factor_enabled ||
+            req.user.twoFactorEnabled ||
+            req.user.totp_enabled ||
+            req.user.totpEnabled
+          );
+        } else if (req.session?.twoFactorPending) {
+          userRequires2Fa = true;
+        }
+      }
+
+      // If user does not have 2FA enabled and route does not enforce it unconditionally, pass
+      if (!userRequires2Fa) {
+        return next();
+      }
+
+      // 3. Check if 2FA is already verified in this session
+      const isVerified = Boolean(
+        req.auth?.is2FaVerified?.() ||
+        req.session?.twoFactorVerified ||
+        req.jwtPayload?.twoFactorVerified
+      );
+
+      if (isVerified) {
+        return next();
+      }
+
+      // 4. Not verified -> reject with 403 or redirect to 2FA verification page
+      if (options.api || req.xhr || req.headers?.accept?.includes('application/json')) {
+        return res.status(403).json({
+          error: 'TwoFactorRequired',
+          message: 'Two-factor authentication required',
+        });
+      }
+
+      if (req.session) {
+        req.session.intendedUrl = req.originalUrl;
+      }
+
+      const redirectTo = options.redirectTo || config.routes.twoFactor || '/2fa';
+      return res.redirect(redirectTo);
+    };
+  }
+
+  /**
    * Parse middleware string like 'can:edit,post' into middleware function
    * @param {string} middlewareString - Middleware string
    * @returns {Function} Middleware function
@@ -273,6 +350,13 @@ function createAuthMiddleware(authManager) {
       
       case 'guest':
         return requireGuest();
+
+      case '2fa':
+      case 'totp':
+        return require2Fa({
+          api: args.includes('api'),
+          always: args.includes('always'),
+        });
       
       case 'can':
         // can:action,policy
@@ -297,6 +381,8 @@ function createAuthMiddleware(authManager) {
     requireAuth,
     requireJwt,
     requireGuest,
+    require2Fa,
+    requireTotp: require2Fa,
     requireCan,
     requireVerified,
     
@@ -307,6 +393,8 @@ function createAuthMiddleware(authManager) {
     auth: requireAuth,
     jwt: requireJwt,
     guest: requireGuest,
+    twoFactor: require2Fa,
+    totp: require2Fa,
   };
 }
 

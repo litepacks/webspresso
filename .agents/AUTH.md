@@ -156,3 +156,117 @@ In Nunjucks templates:
 <a href="{{ fsy.oauthUrl('github', { returnTo: '/settings' }) }}" class="btn">Connect GitHub</a>
 ```
 
+---
+
+## 6. Zero-Dependency Two-Factor Authentication (2FA / TOTP)
+
+Webspresso provides an enterprise-grade, zero-dependency 2FA/TOTP suite adhering strictly to **RFC 6238 (TOTP)**, **RFC 4226 (HOTP)**, and **RFC 4648 (Base32)**. It requires NO external npm libraries and features offline SVG QR code generation to prevent leaking secret keys to third-party APIs.
+
+### 6.1 Key Capabilities
+- **RFC 6238 Time-Based OTP**: Standard 30s step, 6/8 digits, HMAC-SHA1/SHA256/SHA512.
+- **Time Drift Tolerance**: Built-in clock drift window (`window: 1` verifies $t \pm 30s$) and detailed delta analysis.
+- **Offline QR Code Generator**: Generates crisp vector SVG strings and data URIs directly in pure Node.js.
+- **Single-Use Recovery Codes**: Cryptographically secure alphanumeric codes, SHA-256 hashed storage, and timing-safe single-use burning.
+- **Session & Guard Integration**: `req.auth.verify2Fa()`, `req.auth.is2FaVerified()`, and `middleware: ['2fa']`.
+
+### 6.2 Initializing 2FA Setup for a User
+```javascript
+const { totp } = require('webspresso');
+
+// In an API route: POST /api/user/2fa/setup
+module.exports = {
+  middleware: ['auth'],
+  async handler(req, res) {
+    const setup = totp.createTotpSetup({
+      user: req.user,
+      issuer: 'My SaaS App',
+      recoveryCodeCount: 8,
+    });
+
+    // 1. Temporarily save secret and hashed recovery codes to DB for confirmation
+    await req.db.getRepository('User').update(req.user.id, {
+      temp_totp_secret: setup.secret,
+      temp_recovery_codes: JSON.stringify(setup.recoveryCodesHashed),
+    });
+
+    // 2. Return QR SVG and plaintext recovery codes for user to record
+    return res.json({
+      secret: setup.secret,
+      qrSvg: setup.qrSvg,
+      qrDataUri: setup.qrDataUri,
+      recoveryCodes: setup.recoveryCodes,
+    });
+  },
+};
+```
+
+### 6.3 Confirming 2FA Activation
+```javascript
+// In an API route: POST /api/user/2fa/confirm
+module.exports = {
+  middleware: ['auth'],
+  schema: ({ z }) => ({
+    body: z.object({ token: z.string().min(6).max(8) }),
+  }),
+  async handler(req, res) {
+    const user = req.user;
+    const { token } = req.input.body;
+
+    const isValid = totp.verifyTotp(token, user.temp_totp_secret);
+    if (!isValid) {
+      return res.status(400).json({ error: 'Invalid verification code' });
+    }
+
+    // Activate 2FA on user record
+    await req.db.getRepository('User').update(user.id, {
+      two_factor_enabled: true,
+      totp_secret: user.temp_totp_secret,
+      recovery_codes: user.temp_recovery_codes,
+      temp_totp_secret: null,
+      temp_recovery_codes: null,
+    });
+
+    req.auth.set2FaVerified(true);
+    return res.json({ success: true, message: '2FA enabled successfully' });
+  },
+};
+```
+
+### 6.4 2FA Login Flow & Guard Middleware
+```javascript
+// Step 1: Initial password login
+const user = await req.auth.findUserByCredentials(email, password);
+if (user.two_factor_enabled) {
+  // Mark session as 2FA pending without full login
+  req.auth.set2FaPending(user);
+  return res.json({ require2Fa: true });
+}
+await req.auth.login(user);
+
+// Step 2: 2FA Verification Endpoint (accepts 6-digit TOTP token OR recovery code)
+const verification = req.auth.verify2Fa(tokenOrRecoveryCode, user);
+if (verification.success) {
+  if (verification.type === 'recovery_code') {
+    // Burn used recovery code
+    await req.db.getRepository('User').update(user.id, {
+      recovery_codes: JSON.stringify(verification.remainingHashedCodes),
+    });
+  }
+  await req.auth.login(user);
+  req.auth.set2FaVerified(true);
+  return res.json({ success: true });
+}
+```
+
+### 6.5 Route Protection with `middleware: ['2fa']`
+```javascript
+// In pages/api/account/billing.get.js or pages/security/index.njk
+module.exports = {
+  middleware: ['auth', '2fa'], // Rejects unverified users with 403 or redirects to /2fa
+  async handler(req, res) {
+    return res.json({ secureData: true });
+  },
+};
+```
+
+

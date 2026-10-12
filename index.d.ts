@@ -578,6 +578,10 @@ export function resolveMiddlewares(
 
 export function filePathToRoute(filePath: string, pagesDir: string): string;
 
+export function isRouteGroupSegment(segment: string): boolean;
+
+export function stripRouteGroups(route: string): string;
+
 export function extractMethodFromFilename(filename: string): {
   method: string;
   baseName: string;
@@ -899,6 +903,7 @@ export interface ModelOptions<TSchema extends ZodObject<any> = ZodObject<Record<
     maxIncludes?: number;
     maxFilterConditions?: number;
   };
+  searchable?: string[];
   cache?: boolean | 'auto' | 'smart' | { strategy: 'auto' | 'smart' };
 }
 
@@ -933,6 +938,7 @@ export interface ModelDefinition<TModel = Record<string, any>> {
     maxIncludes?: number;
     maxFilterConditions?: number;
   };
+  searchable?: string[];
   hooks: Record<string, unknown>;
   cache?: boolean | 'auto' | 'smart' | { strategy: 'auto' | 'smart' };
 }
@@ -983,6 +989,16 @@ export interface PaginatedResult<T = Record<string, any>> {
   totalPages: number;
 }
 
+export interface SearchOptions {
+  mode?: 'auto' | 'fts' | 'like';
+  language?: string;
+  matchAllWords?: boolean;
+  exact?: boolean;
+  rank?: boolean;
+  ftsTable?: string;
+  boolean?: 'and' | 'or';
+}
+
 export interface QueryBuilder<T = Record<string, any>> {
   where(column: keyof T | string, value: unknown): this;
   where(column: keyof T | string, operator: string, value: unknown): this;
@@ -992,6 +1008,9 @@ export interface QueryBuilder<T = Record<string, any>> {
   whereBetween(column: keyof T | string, range: [unknown, unknown]): this;
   select(...columns: (keyof T | string)[]): this;
   orderBy(column: keyof T | string, direction?: 'asc' | 'desc'): this;
+  orderByRaw(sql: string, bindings?: unknown[]): this;
+  search(term: string, columns?: string | string[], options?: SearchOptions): this;
+  orSearch(term: string, columns?: string | string[], options?: SearchOptions): this;
   limit(n: number): this;
   offset(n: number): this;
   with(...relations: string[]): this;
@@ -1030,6 +1049,7 @@ export interface Repository<T = Record<string, any>> {
   exists(conditions: Partial<T> | Record<string, unknown>): Promise<boolean>;
   with(...relations: string[]): QueryBuilder<T>;
   include(...relations: string[]): QueryBuilder<T>;
+  search(term: string, columns?: string | string[], options?: SearchOptions): QueryBuilder<T>;
   model: ModelDefinition<T>;
 }
 
@@ -1249,6 +1269,24 @@ export function validateQueryComplexity(
   perPage: number;
   includes: string[];
 };
+
+export function buildSearchClause(params: {
+  knex: any;
+  model: any;
+  term: string;
+  columns?: string | string[];
+  options?: SearchOptions;
+}): {
+  raw: true;
+  sql: string;
+  bindings: any[];
+  boolean: 'and' | 'or';
+  rankClause: { sql: string; bindings: any[] } | null;
+} | null;
+
+export function tokenizeSearchTerm(term: string): string[];
+
+export function detectDialect(knex: any): 'sqlite' | 'postgres' | 'mysql' | 'generic';
 
 export interface SchemaExplorerPluginOptions {
   /** Raw JSON API endpoint path (default: '/_schema') */
@@ -2917,6 +2955,123 @@ export interface OAuthPluginOptions {
 }
 
 export function oauthPlugin(options?: OAuthPluginOptions): WebspressoPlugin;
+
+// ==========================================
+// 2FA / TOTP (RFC 6238, RFC 4226, RFC 4648)
+// ==========================================
+
+export interface Base32EncodeOptions {
+  padding?: boolean;
+}
+
+export interface TotpSecretOptions extends Base32EncodeOptions {
+  length?: number;
+}
+
+export interface HotpOptions {
+  digits?: number;
+  algorithm?: 'sha1' | 'sha256' | 'sha512' | string;
+  encoding?: 'base32' | 'ascii' | 'utf8' | 'hex';
+}
+
+export interface TotpOptions extends HotpOptions {
+  time?: number | Date;
+  step?: number;
+  epoch?: number;
+}
+
+export interface TotpVerifyOptions extends TotpOptions {
+  window?: number;
+  detailed?: boolean;
+}
+
+export interface TotpUriOptions {
+  secret: string;
+  account?: string;
+  issuer?: string;
+  label?: string;
+  algorithm?: string;
+  digits?: number;
+  period?: number;
+}
+
+export interface QrSvgOptions {
+  size?: number;
+  margin?: number;
+  darkColor?: string;
+  lightColor?: string;
+  version?: number;
+  ecc?: 'L' | 'M' | 'Q' | 'H';
+  mask?: number;
+}
+
+export interface RecoveryCodeOptions {
+  count?: number;
+  length?: number;
+  hyphen?: boolean;
+}
+
+export interface TotpSetupOptions extends TotpSecretOptions {
+  user?: any;
+  account?: string;
+  issuer?: string;
+  recoveryCodeCount?: number;
+  qrOptions?: QrSvgOptions;
+  algorithm?: string;
+  digits?: number;
+  period?: number;
+}
+
+export interface TotpSetupResult {
+  secret: string;
+  uri: string;
+  qrSvg: string;
+  qrDataUri: string;
+  recoveryCodes: string[];
+  recoveryCodesHashed: string[];
+}
+
+export function base32Encode(buffer: Buffer | string, options?: Base32EncodeOptions): string;
+export function base32Decode(input: string): Buffer;
+export function generateTotpSecret(options?: TotpSecretOptions): string;
+export function generateHotp(secret: string | Buffer, counter: number | bigint, options?: HotpOptions): string;
+export function verifyHotp(token: string, secret: string | Buffer, counter: number | bigint, options?: HotpOptions): boolean;
+export function generateTotp(secret: string | Buffer, options?: TotpOptions): string;
+export function verifyTotp(token: string, secret: string | Buffer, options?: TotpVerifyOptions): boolean | { valid: boolean; delta: number | null };
+export function generateTotpUri(options: TotpUriOptions): string;
+export function generateTotpQrSvg(uriOrOptions: string | TotpUriOptions, svgOptions?: QrSvgOptions): string;
+export function generateTotpQrDataUri(uriOrOptions: string | TotpUriOptions, svgOptions?: QrSvgOptions): string;
+export function generateRecoveryCodes(options?: RecoveryCodeOptions): string[];
+export function hashRecoveryCode(code: string): string;
+export function verifyRecoveryCode(code: string, hashedCodes: string[]): { valid: boolean; matchedIndex: number; remainingHashedCodes: string[] };
+export function createTotpSetup(options?: TotpSetupOptions): TotpSetupResult;
+
+export function createQrMatrix(text: string, options?: QrSvgOptions): { matrix: boolean[][]; size: number; version: number };
+export function generateQrSvg(text: string, options?: QrSvgOptions): string;
+export function generateQrDataUri(text: string, options?: QrSvgOptions): string;
+
+export namespace totp {
+  export {
+    base32Encode,
+    base32Decode,
+    generateTotpSecret,
+    generateHotp,
+    verifyHotp,
+    generateTotp,
+    verifyTotp,
+    generateTotpUri,
+    generateTotpQrSvg,
+    generateTotpQrDataUri,
+    generateRecoveryCodes,
+    hashRecoveryCode,
+    verifyRecoveryCode,
+    createTotpSetup,
+    createQrMatrix,
+    generateQrSvg,
+    generateQrDataUri,
+  };
+}
+
 
 
 

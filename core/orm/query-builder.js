@@ -15,6 +15,7 @@ const {
 } = require('./json-fields');
 const { getAmbientTransaction } = require('./transaction');
 const { validateQueryComplexity } = require('./complexity');
+const { buildSearchClause } = require('./search');
 
 /**
  * Create a new query builder
@@ -233,6 +234,70 @@ class QueryBuilder {
   }
 
   /**
+   * Add a raw ORDER BY clause
+   * @param {string} sql - Raw SQL expression
+   * @param {Array} [bindings=[]] - Parameter bindings
+   * @returns {this}
+   */
+  orderByRaw(sql, bindings = []) {
+    this.state.orderBys.push({ raw: true, sql, bindings });
+    return this;
+  }
+
+  /**
+   * Full-Text / Keyword Search across columns
+   * Supports SQLite, PostgreSQL, and MySQL with dialect-aware FTS and tokenized LIKE fallback
+   * @param {string} term - Search query string
+   * @param {string|string[]} [columns] - Columns to search (defaults to model.searchable)
+   * @param {Object} [options] - Search options
+   * @param {'auto'|'fts'|'like'} [options.mode='auto'] - Search mode
+   * @param {string} [options.language='english'] - PostgreSQL text search language
+   * @param {boolean} [options.matchAllWords=true] - Require all words to match (AND)
+   * @param {boolean} [options.exact=false] - Match exact phrase
+   * @param {boolean} [options.rank=false] - Order by relevance rank (Postgres)
+   * @param {string} [options.ftsTable] - Separate SQLite FTS virtual table name
+   * @returns {this}
+   */
+  search(term, columns, options = {}) {
+    const activeKnex = this.getActiveKnex();
+    const clause = buildSearchClause({
+      knex: activeKnex,
+      model: this.model,
+      term,
+      columns,
+      options,
+    });
+
+    if (!clause) {
+      return this;
+    }
+
+    this.state.wheres.push({
+      raw: true,
+      sql: clause.sql,
+      bindings: clause.bindings,
+      boolean: clause.boolean || 'and',
+    });
+
+    if (clause.rankClause) {
+      this.orderByRaw(clause.rankClause.sql, clause.rankClause.bindings);
+    }
+
+    return this;
+  }
+
+  /**
+   * Add an OR Full-Text / Keyword Search clause
+   * @param {string} term - Search query string
+   * @param {string|string[]} [columns] - Columns to search
+   * @param {Object} [options] - Search options
+   * @returns {this}
+   */
+  orSearch(term, columns, options = {}) {
+    return this.search(term, columns, { ...options, boolean: 'or' });
+  }
+
+  /**
    * Set LIMIT
    * @param {number} limit - Limit value
    * @returns {this}
@@ -385,7 +450,11 @@ class QueryBuilder {
 
     // Apply order by
     for (const orderBy of this.state.orderBys) {
-      qb = qb.orderBy(orderBy.column, orderBy.direction);
+      if (orderBy.raw) {
+        qb = qb.orderByRaw(orderBy.sql, orderBy.bindings);
+      } else {
+        qb = qb.orderBy(orderBy.column, orderBy.direction);
+      }
     }
 
     if (includeLimitOffset) {

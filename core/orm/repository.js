@@ -646,6 +646,17 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     return qb.list();
   }
 
+  /**
+   * Search records using Full-Text / Keyword Search
+   * @param {string} term - Search query
+   * @param {string|string[]} [columns] - Columns to search
+   * @param {Object} [options] - Search options
+   * @returns {import('./query-builder').QueryBuilder}
+   */
+  function search(term, columns, options) {
+    return query().search(term, columns, options);
+  }
+
   return {
     findById,
     findOne,
@@ -659,6 +670,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     forceDelete,
     restore,
     query,
+    search,
     raw,
     count,
     exists,

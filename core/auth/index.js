@@ -24,6 +24,28 @@ const {
   verifySignedState,
   DEFAULT_PROVIDERS,
 } = require('./oauth');
+const totp = require('./totp');
+const {
+  base32Encode,
+  base32Decode,
+  generateTotpSecret,
+  generateHotp,
+  verifyHotp,
+  generateTotp,
+  verifyTotp,
+  generateTotpUri,
+  generateTotpQrSvg,
+  generateTotpQrDataUri,
+  generateRecoveryCodes,
+  hashRecoveryCode,
+  verifyRecoveryCode,
+  createTotpSetup,
+} = totp;
+const {
+  createQrMatrix,
+  generateQrSvg,
+  generateQrDataUri,
+} = require('./qrcode');
 
 /**
  * Create authentication instance
@@ -212,6 +234,26 @@ module.exports = {
   createSignedState,
   verifySignedState,
   DEFAULT_PROVIDERS,
+
+  // 2FA / TOTP (RFC 6238, RFC 4226, RFC 4648)
+  totp,
+  base32Encode,
+  base32Decode,
+  generateTotpSecret,
+  generateHotp,
+  verifyHotp,
+  generateTotp,
+  verifyTotp,
+  generateTotpUri,
+  generateTotpQrSvg,
+  generateTotpQrDataUri,
+  generateRecoveryCodes,
+  hashRecoveryCode,
+  verifyRecoveryCode,
+  createTotpSetup,
+  createQrMatrix,
+  generateQrSvg,
+  generateQrDataUri,
 
   // Config
   DEFAULT_CONFIG,

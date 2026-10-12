@@ -187,6 +187,73 @@ function escapeRegExp(s) {
 }
 
 /**
+ * Checks if a path segment is a route group, e.g. '(marketing)', '(auth)'.
+ * Route groups are enclosed in parentheses and do not affect the public URL path.
+ * @param {string} segment
+ * @returns {boolean}
+ */
+function isRouteGroupSegment(segment) {
+  return (
+    typeof segment === 'string' &&
+    segment.length > 2 &&
+    segment.charCodeAt(0) === 40 /* '(' */ &&
+    segment.charCodeAt(segment.length - 1) === 41 /* ')' */
+  );
+}
+
+/**
+ * Strips route group segments from a slash-separated route path.
+ * E.g., '(marketing)/about' -> 'about'
+ *       '/(auth)/login' -> '/login'
+ *       '/(marketing)/(sub)/page' -> '/page'
+ *       '(marketing)/index' -> 'index'
+ * @param {string} route
+ * @returns {string}
+ */
+function stripRouteGroups(route) {
+  if (!route || typeof route !== 'string' || !route.includes('(')) {
+    return route;
+  }
+  const hadLeadingSlash = route.startsWith('/');
+  const rawSegments = route.split('/');
+  const filtered = rawSegments.filter((seg) => !isRouteGroupSegment(seg));
+
+  if (filtered.length === 0 || (filtered.length === 1 && filtered[0] === '')) {
+    return hadLeadingSlash ? '/' : '';
+  }
+
+  let res = filtered.join('/');
+  if (hadLeadingSlash && !res.startsWith('/')) {
+    res = '/' + res;
+  }
+  return res;
+}
+
+/**
+ * Checks if a file path belongs to an API route, accounting for optional parent route groups.
+ * E.g., 'api/users.get.js' -> true
+ *       'api/(v1)/users.get.js' -> true
+ *       '(marketing)/api/newsletter.post.js' -> true
+ *       'about.njk' -> false
+ * @param {string} file
+ * @returns {boolean}
+ */
+function isApiRouteFile(file) {
+  if (!file || typeof file !== 'string') return false;
+  const normalized = file.split(/[/\\]/).join('/');
+  if (normalized.startsWith('api/')) return true;
+  const parts = normalized.split('/');
+  const apiIndex = parts.indexOf('api');
+  if (apiIndex > 0) {
+    const prefix = parts.slice(0, apiIndex);
+    if (prefix.every(isRouteGroupSegment)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Convert a file path to an Express route pattern
  * @param {string} filePath - Relative path from pages/
  * @param {string} ext - File extension (.njk or .js)
@@ -199,11 +266,14 @@ function filePathToRoute(filePath, ext) {
   // Normalize path separators to forward slashes (handle both / and \)
   route = route.split(path.sep).join('/');
   route = route.split('\\').join('/'); // Also handle literal backslashes
+
+  // Strip route group segments (e.g. (marketing), (auth), (dashboard))
+  route = stripRouteGroups(route);
   
   // Handle index files
   if (route.endsWith('/index')) {
     route = route.slice(0, -6) || '/';
-  } else if (route === 'index') {
+  } else if (route === 'index' || route === '') {
     route = '/';
   }
   
@@ -1006,7 +1076,7 @@ function mountPages(app, options) {
   
   for (const file of files) {
     const ext = path.extname(file);
-    const isApi = file.startsWith('api' + path.sep) || file.startsWith('api/');
+    const isApi = isApiRouteFile(file);
     
     if (isApi && ext === '.js') {
       // API route
@@ -1500,6 +1570,8 @@ module.exports = {
   mountPages,
   filePathToRoute,
   extractMethodFromFilename,
+  isRouteGroupSegment,
+  stripRouteGroups,
   scanDirectory,
   loadI18n,
   createTranslator,

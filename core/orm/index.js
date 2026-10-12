@@ -381,4 +381,8 @@ module.exports = {
   validateQueryComplexity: require('./complexity').validateQueryComplexity,
   resolveQueryLimits: require('./complexity').resolveQueryLimits,
   DEFAULT_QUERY_LIMITS: require('./complexity').DEFAULT_QUERY_LIMITS,
+  // Universal Full-Text Search
+  buildSearchClause: require('./search').buildSearchClause,
+  tokenizeSearchTerm: require('./search').tokenizeSearchTerm,
+  detectDialect: require('./search').detectDialect,
 };

@@ -33,6 +33,7 @@ function defineModel(options) {
     hidden = [],
     queryLimits = {},
     cache: cacheOption,
+    searchable,
   } = options;
 
   // Validate required fields
@@ -131,6 +132,9 @@ function defineModel(options) {
       allowInclude: Array.isArray(rest.allowInclude) ? rest.allowInclude.filter((x) => typeof x === 'string') : null,
     },
     hidden: Array.isArray(hidden) ? hidden : [],
+    searchable: Array.isArray(searchable)
+      ? searchable
+      : (Array.isArray(admin.searchFields) ? admin.searchFields : null),
     queryLimits: typeof queryLimits === 'object' && queryLimits !== null ? queryLimits : {},
     hooks: {},
     cache: cacheOption,

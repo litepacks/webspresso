@@ -158,8 +158,11 @@ function parseFileRoute(relativePath, options = {}) {
   // Replace last segment with cleanFilename
   const routeSegments = [...segments.slice(0, -1), cleanFilename];
 
+  // Filter out route group segments (e.g. (marketing), (auth))
+  const filteredSegments = routeSegments.filter((seg) => !isRouteGroupSegment(seg));
+
   // Process dynamic brackets in segments
-  const transformedSegments = routeSegments.map(transformDynamicSegment);
+  const transformedSegments = filteredSegments.map(transformDynamicSegment);
 
   // Handle 'index' at the end of path
   if (transformedSegments[transformedSegments.length - 1] === 'index') {
@@ -190,8 +193,48 @@ function parseFileRoute(relativePath, options = {}) {
   };
 }
 
+/**
+ * Checks if a path segment is a route group, e.g. '(marketing)', '(auth)'
+ * @param {string} segment
+ * @returns {boolean}
+ */
+function isRouteGroupSegment(segment) {
+  return (
+    typeof segment === 'string' &&
+    segment.length > 2 &&
+    segment.charCodeAt(0) === 40 /* '(' */ &&
+    segment.charCodeAt(segment.length - 1) === 41 /* ')' */
+  );
+}
+
+/**
+ * Checks if a file path belongs to an API route, accounting for optional parent route groups.
+ * E.g., 'api/users.get.js' -> true
+ *       'api/(v1)/users.get.js' -> true
+ *       '(marketing)/api/newsletter.post.js' -> true
+ *       'about.njk' -> false
+ * @param {string} file
+ * @returns {boolean}
+ */
+function isApiRouteFile(file) {
+  if (!file || typeof file !== 'string') return false;
+  const normalized = file.split(/[/\\]/).join('/');
+  if (normalized.startsWith('api/')) return true;
+  const parts = normalized.split('/');
+  const apiIndex = parts.indexOf('api');
+  if (apiIndex > 0) {
+    const prefix = parts.slice(0, apiIndex);
+    if (prefix.every(isRouteGroupSegment)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 module.exports = {
   parseFileRoute,
+  isRouteGroupSegment,
+  isApiRouteFile,
   isPrivateOrIgnored,
   normalizePrefix,
   transformDynamicSegment,
