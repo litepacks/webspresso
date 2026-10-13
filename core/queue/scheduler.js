@@ -8,8 +8,6 @@
 
 const { CronExpression } = require('./cron');
 
-let scheduleCounter = 0;
-
 class TaskScheduler {
   /**
    * @param {import('./manager').QueueManager} queue - QueueManager instance
@@ -23,7 +21,7 @@ class TaskScheduler {
     }
 
     this.queue = queue;
-    this.maxIntervalMs = options.maxIntervalMs || 60000;
+    this.maxIntervalMs = Math.max(100, options.maxIntervalMs || 60000);
     this.isRunning = false;
     this._timer = null;
 
@@ -55,8 +53,11 @@ class TaskScheduler {
    * @param {Object} [options]
    * @param {string} [options.id] - Optional custom schedule ID
    * @param {boolean} [options.overlap=false] - Allow concurrent executions of the same schedule
+   * @param {boolean} [options.preventOverlap] - Inverted alias for overlap: false
    * @param {number} [options.maxRuns] - Maximum number of runs before auto-unscheduling
    * @param {boolean} [options.utc=false] - Evaluate schedule in UTC
+   * @param {string} [options.timezone] - IANA Timezone (e.g. 'Europe/Istanbul')
+   * @param {string} [options.tz] - Alias for timezone
    * @param {boolean} [options.runImmediately=false] - Run immediately upon registration
    * @returns {Object} Registered schedule object
    */
@@ -67,12 +68,17 @@ class TaskScheduler {
 
     const cron = cronExpression instanceof CronExpression
       ? cronExpression
-      : new CronExpression(cronExpression, { utc: !!options.utc });
+      : new CronExpression(cronExpression, {
+          utc: !!options.utc,
+          timezone: options.timezone || options.tz,
+        });
 
     const id = options.id || `schedule:${jobName}:${cron.resolvedExpression}`;
 
     const now = new Date();
     const nextRunAt = cron.getNextDate(now);
+
+    const allowOverlap = options.overlap === true || (options.preventOverlap === false);
 
     const scheduleObj = {
       id,
@@ -81,7 +87,8 @@ class TaskScheduler {
       cron,
       data,
       options: {
-        overlap: options.overlap === true,
+        overlap: allowOverlap,
+        preventOverlap: !allowOverlap,
         maxRuns: typeof options.maxRuns === 'number' && options.maxRuns > 0 ? options.maxRuns : null,
         runImmediately: !!options.runImmediately,
         ...options,
@@ -91,6 +98,7 @@ class TaskScheduler {
       nextRunAt,
       isRunning: false,
       activeJobId: null,
+      activeJobIds: new Set(),
       registeredAt: now,
     };
 
@@ -98,7 +106,11 @@ class TaskScheduler {
     this.queue.emit('schedule:registered', scheduleObj);
 
     if (options.runImmediately) {
-      setImmediate(() => this.trigger(id));
+      setImmediate(() => {
+        this.trigger(id).catch((err) => {
+          this.queue.emit('schedule:error', scheduleObj, err);
+        });
+      });
     }
 
     this._rescheduleTimer();
@@ -118,24 +130,28 @@ class TaskScheduler {
    * @returns {boolean} True if removed, false if not found
    */
   unschedule(idOrJobName) {
-    let targetId = null;
-
     if (this.schedules.has(idOrJobName)) {
-      targetId = idOrJobName;
-    } else {
-      for (const [id, s] of this.schedules.entries()) {
-        if (s.name === idOrJobName) {
-          targetId = id;
-          break;
-        }
+      const scheduleObj = this.schedules.get(idOrJobName);
+      this.schedules.delete(idOrJobName);
+      this.queue.emit('schedule:unregistered', scheduleObj);
+      this._rescheduleTimer();
+      return true;
+    }
+
+    const toRemove = [];
+    for (const [id, s] of this.schedules.entries()) {
+      if (s.name === idOrJobName) {
+        toRemove.push({ id, s });
       }
     }
 
-    if (!targetId) return false;
+    if (toRemove.length === 0) return false;
 
-    const scheduleObj = this.schedules.get(targetId);
-    this.schedules.delete(targetId);
-    this.queue.emit('schedule:unregistered', scheduleObj);
+    for (const { id, s } of toRemove) {
+      this.schedules.delete(id);
+      this.queue.emit('schedule:unregistered', s);
+    }
+
     this._rescheduleTimer();
     return true;
   }
@@ -156,6 +172,7 @@ class TaskScheduler {
       nextRunAt: s.nextRunAt,
       isRunning: s.isRunning,
       activeJobId: s.activeJobId,
+      activeJobIds: Array.from(s.activeJobIds || []),
       registeredAt: s.registeredAt,
     }));
   }
@@ -186,7 +203,8 @@ class TaskScheduler {
       throw new Error(`Schedule not found: '${idOrJobName}'`);
     }
 
-    if (!s.options.overlap && s.isRunning) {
+    const allowOverlap = s.options.overlap === true || s.options.preventOverlap === false;
+    if (!allowOverlap && s.isRunning) {
       this.queue.emit('schedule:skipped', s, 'overlap');
       return null;
     }
@@ -198,6 +216,9 @@ class TaskScheduler {
     try {
       const job = await this.queue.dispatch(s.name, s.data, s.options);
       s.activeJobId = job.id;
+      if (!s.activeJobIds) s.activeJobIds = new Set();
+      s.activeJobIds.add(job.id);
+
       this.queue.emit('schedule:triggered', s, job);
 
       if (s.options.maxRuns && s.runsCount >= s.options.maxRuns) {
@@ -206,8 +227,10 @@ class TaskScheduler {
 
       return job;
     } catch (err) {
-      s.isRunning = false;
-      s.activeJobId = null;
+      if (!s.activeJobIds || s.activeJobIds.size === 0) {
+        s.isRunning = false;
+        s.activeJobId = null;
+      }
       throw err;
     }
   }
@@ -237,6 +260,20 @@ class TaskScheduler {
   }
 
   /**
+   * Pause alias for stop
+   */
+  pause() {
+    return this.stop();
+  }
+
+  /**
+   * Resume alias for start
+   */
+  resume() {
+    return this.start();
+  }
+
+  /**
    * Clear all schedules and stop timer
    */
   clear() {
@@ -260,9 +297,16 @@ class TaskScheduler {
    */
   _handleJobSettled(job, err, result) {
     for (const s of this.schedules.values()) {
-      if (s.activeJobId === job.id) {
-        s.isRunning = false;
-        s.activeJobId = null;
+      if (s.activeJobIds?.has(job.id) || s.activeJobId === job.id) {
+        if (s.activeJobIds) {
+          s.activeJobIds.delete(job.id);
+        }
+        if (!s.activeJobIds || s.activeJobIds.size === 0) {
+          s.isRunning = false;
+          s.activeJobId = null;
+        } else {
+          s.activeJobId = s.activeJobIds.values().next().value || null;
+        }
         this.queue.emit('schedule:finished', s, job, err ? { error: err } : { result });
         break;
       }
@@ -297,7 +341,7 @@ class TaskScheduler {
 
     if (earliest === Infinity) return;
 
-    const delay = Math.max(50, Math.min(earliest - now, this.maxIntervalMs));
+    const delay = Math.max(0, Math.min(earliest - now, this.maxIntervalMs));
 
     this._timer = setTimeout(() => this._tick(), delay);
   }
@@ -309,51 +353,63 @@ class TaskScheduler {
   async _tick() {
     if (!this.isRunning) return;
 
-    const now = new Date();
-    const nowTime = now.getTime();
+    try {
+      const now = new Date();
+      const nowTime = now.getTime();
 
-    const dueList = [];
-    for (const s of this.schedules.values()) {
-      if (s.nextRunAt && s.nextRunAt.getTime() <= nowTime) {
-        dueList.push(s);
+      const dueList = [];
+      for (const s of this.schedules.values()) {
+        if (s.nextRunAt && s.nextRunAt.getTime() <= nowTime) {
+          dueList.push(s);
+        }
       }
-    }
 
-    for (const s of dueList) {
-      // Calculate next run date immediately
-      s.nextRunAt = s.cron.getNextDate(now);
+      for (const s of dueList) {
+        if (!this.isRunning) break;
 
-      // Check overlap
-      if (!s.options.overlap && s.isRunning) {
-        this.queue.emit('schedule:skipped', s, 'overlap');
+        // Advance next run date immediately to avoid double tick
+        s.nextRunAt = s.cron.getNextDate(now);
+
+        const allowOverlap = s.options.overlap === true || s.options.preventOverlap === false;
+        if (!allowOverlap && s.isRunning) {
+          this.queue.emit('schedule:skipped', s, 'overlap');
+          s.lastRunAt = now;
+          continue;
+        }
+
+        s.isRunning = true;
         s.lastRunAt = now;
-        continue;
-      }
+        s.runsCount++;
 
-      s.isRunning = true;
-      s.lastRunAt = now;
-      s.runsCount++;
+        try {
+          const job = await this.queue.dispatch(s.name, s.data, s.options);
+          s.activeJobId = job.id;
+          if (!s.activeJobIds) s.activeJobIds = new Set();
+          s.activeJobIds.add(job.id);
 
-      try {
-        const job = await this.queue.dispatch(s.name, s.data, s.options);
-        s.activeJobId = job.id;
-        this.queue.emit('schedule:triggered', s, job);
-      } catch (err) {
-        s.isRunning = false;
-        s.activeJobId = null;
-        this.queue.emit('schedule:error', s, err);
-      }
+          this.queue.emit('schedule:triggered', s, job);
+        } catch (err) {
+          if (!s.activeJobIds || s.activeJobIds.size === 0) {
+            s.isRunning = false;
+            s.activeJobId = null;
+          }
+          this.queue.emit('schedule:error', s, err);
+        }
 
-      // Check maxRuns
-      if (s.options.maxRuns && s.runsCount >= s.options.maxRuns) {
-        this.unschedule(s.id);
+        // Check maxRuns
+        if (s.options.maxRuns && s.runsCount >= s.options.maxRuns) {
+          this.unschedule(s.id);
+        }
       }
+    } catch (err) {
+      this.queue.emit('schedule:error', null, err);
+    } finally {
+      this._rescheduleTimer();
     }
-
-    this._rescheduleTimer();
   }
 }
 
 module.exports = {
   TaskScheduler,
 };
+

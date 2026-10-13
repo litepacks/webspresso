@@ -2393,8 +2393,11 @@ export interface QueueRetentionConfig {
 export interface ScheduleOptions {
   id?: string;
   overlap?: boolean;
+  preventOverlap?: boolean;
   maxRuns?: number;
   utc?: boolean;
+  timezone?: string;
+  tz?: string;
   runImmediately?: boolean;
   delay?: number | Date;
   attempts?: number;
@@ -2416,6 +2419,7 @@ export interface ScheduleInfo {
   nextRunAt: Date | null;
   isRunning: boolean;
   activeJobId: string | number | null;
+  activeJobIds?: (string | number)[];
   registeredAt: Date;
 }
 
@@ -2423,21 +2427,22 @@ export class CronExpression {
   rawExpression: string;
   resolvedExpression: string;
   utc: boolean;
+  timezone: string | null;
   minutes: Set<number>;
   hours: Set<number>;
   doms: Set<number>;
   months: Set<number>;
   dows: Set<number>;
-  constructor(expression: string, options?: { utc?: boolean });
-  match(date?: Date): boolean;
-  getNextDate(fromDate?: Date): Date | null;
-  getNextDates(count?: number, fromDate?: Date): Date[];
-  static isValid(expression: string): boolean;
-  static parse(expression: string, options?: { utc?: boolean }): CronExpression;
+  constructor(expression: string, options?: { utc?: boolean; timezone?: string; tz?: string });
+  match(date?: Date | string | number): boolean;
+  getNextDate(fromDate?: Date | string | number): Date | null;
+  getNextDates(count?: number, fromDate?: Date | string | number): Date[];
+  static isValid(expression: string, options?: { utc?: boolean; timezone?: string; tz?: string }): boolean;
+  static parse(expression: string, options?: { utc?: boolean; timezone?: string; tz?: string }): CronExpression;
 }
 
-export function parseCron(expression: string, options?: { utc?: boolean }): CronExpression;
-export function isValidCron(expression: string): boolean;
+export function parseCron(expression: string, options?: { utc?: boolean; timezone?: string; tz?: string }): CronExpression;
+export function isValidCron(expression: string, options?: { utc?: boolean; timezone?: string; tz?: string }): boolean;
 export function resolveCronAlias(str: string): string;
 export const CRON_ALIASES: Record<string, string>;
 
@@ -2455,6 +2460,8 @@ export class TaskScheduler {
   trigger(idOrJobName: string): Promise<Job | null>;
   start(): this;
   stop(): this;
+  pause(): this;
+  resume(): this;
   clear(): void;
   destroy(): void;
 }
@@ -2489,6 +2496,8 @@ export class QueueManager extends EventEmitter {
   unschedule(idOrJobName: string): boolean;
   getSchedules(): ScheduleInfo[];
   getSchedule(idOrJobName: string): ScheduleInfo | null;
+  triggerSchedule(idOrJobName: string): Promise<Job | null>;
+  triggerCron(idOrJobName: string): Promise<Job | null>;
   start(): this;
   pause(): this;
   resume(): this;

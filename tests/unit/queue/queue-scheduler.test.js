@@ -61,6 +61,74 @@ describe('Cron Expression Parser & Matcher', () => {
       expect(isValidCron('*/0 * * * *')).toBe(false); // step 0
       expect(isValidCron('5-2 * * * *')).toBe(false); // reverse range
     });
+
+    it('supports step syntax on offsets and ranges', () => {
+      const e1 = new CronExpression('10/15 * * * *');
+      expect(Array.from(e1.minutes)).toEqual([10, 25, 40, 55]);
+
+      const e2 = new CronExpression('5-25/10 * * * *');
+      expect(Array.from(e2.minutes)).toEqual([5, 15, 25]);
+    });
+
+    it('correctly parses day-of-week ranges with Sunday (7 and names)', () => {
+      // 5-7 is Friday (5), Saturday (6), Sunday (7 -> 0)
+      const e1 = new CronExpression('0 0 * * 5-7');
+      expect(Array.from(e1.dows).sort()).toEqual([0, 5, 6]);
+
+      // 1-7 is Monday through Sunday
+      const e2 = new CronExpression('0 0 * * 1-7');
+      expect(Array.from(e2.dows).sort()).toEqual([0, 1, 2, 3, 4, 5, 6]);
+
+      // MON-SUN
+      const e3 = new CronExpression('0 0 * * MON-SUN');
+      expect(Array.from(e3.dows).sort()).toEqual([0, 1, 2, 3, 4, 5, 6]);
+
+      // FRI-SUN
+      const e4 = new CronExpression('0 0 * * FRI-SUN');
+      expect(Array.from(e4.dows).sort()).toEqual([0, 5, 6]);
+
+      // SUN-WED
+      const e5 = new CronExpression('0 0 * * SUN-WED');
+      expect(Array.from(e5.dows).sort()).toEqual([0, 1, 2, 3]);
+    });
+
+    it('supports question mark wildcard (?) in DOM and DOW', () => {
+      expect(isValidCron('0 0 ? * MON-FRI')).toBe(true);
+      expect(isValidCron('0 0 1 1 ?')).toBe(true);
+
+      const expr = new CronExpression('0 0 ? * 1-5', { utc: true });
+      // 2026-10-12 is Monday
+      expect(expr.match(new Date(Date.UTC(2026, 9, 12, 0, 0, 0)))).toBe(true);
+      // 2026-10-11 is Sunday
+      expect(expr.match(new Date(Date.UTC(2026, 9, 11, 0, 0, 0)))).toBe(false);
+    });
+
+    it('supports extended cron aliases and day interval shortcuts', () => {
+      expect(resolveCronAlias('@weekdays')).toBe('0 0 * * 1-5');
+      expect(resolveCronAlias('@workdays')).toBe('0 0 * * 1-5');
+      expect(resolveCronAlias('@weekends')).toBe('0 0 * * 6,0');
+      expect(resolveCronAlias('@every_hour')).toBe('0 * * * *');
+      expect(resolveCronAlias('@every 2d')).toBe('0 0 */2 * *');
+      expect(isValidCron('@every 3d')).toBe(true);
+    });
+
+    it('supports IANA timezone evaluation and validates timezone names', () => {
+      expect(() => new CronExpression('* * * * *', { timezone: 'Invalid/Zone' })).toThrow(/Invalid timeZone/);
+
+      // 12:00 in Europe/Istanbul is 09:00 UTC (UTC+3)
+      const exprIstanbul = new CronExpression('0 12 * * *', { timezone: 'Europe/Istanbul' });
+      const testDate = new Date('2026-10-13T09:00:00.000Z');
+      expect(exprIstanbul.match(testDate)).toBe(true);
+
+      const nonMatch = new Date('2026-10-13T12:00:00.000Z');
+      expect(exprIstanbul.match(nonMatch)).toBe(false);
+
+      // getNextDate in timezone
+      const from = new Date('2026-10-13T08:00:00.000Z');
+      const next = exprIstanbul.getNextDate(from);
+      expect(next).toBeInstanceOf(Date);
+      expect(exprIstanbul.match(next)).toBe(true);
+    });
   });
 
   describe('matching and next date calculations', () => {
@@ -100,6 +168,7 @@ describe('Cron Expression Parser & Matcher', () => {
     });
   });
 });
+
 
 describe('TaskScheduler & QueueManager Recurring Jobs', () => {
   let queue;
@@ -256,6 +325,84 @@ describe('TaskScheduler & QueueManager Recurring Jobs', () => {
 
     queue.stop();
     expect(queue.scheduler.isRunning).toBe(false);
+  });
+
+  it('triggers schedules via queue.triggerSchedule and queue.triggerCron', async () => {
+    queue = createQueueManager({ concurrency: 2, pollInterval: 20 });
+    let calls = 0;
+
+    queue.define('call.test', async () => {
+      calls++;
+    });
+
+    const s = queue.schedule('@daily', 'call.test');
+    await queue.triggerSchedule(s.id);
+    await new Promise((r) => setTimeout(r, 40));
+    expect(calls).toBe(1);
+
+    await queue.triggerCron(s.id);
+    await new Promise((r) => setTimeout(r, 40));
+    expect(calls).toBe(2);
+  });
+
+  it('unschedules all matching schedules when unscheduled by job name', () => {
+    queue = createQueueManager({ concurrency: 1, pollInterval: 50 });
+
+    queue.schedule('@daily', 'multi.report', { dept: 'a' }, { id: 'm1' });
+    queue.schedule('@weekly', 'multi.report', { dept: 'b' }, { id: 'm2' });
+    queue.schedule('@hourly', 'other.job', {}, { id: 'o1' });
+
+    expect(queue.getSchedules().length).toBe(3);
+
+    const removed = queue.unschedule('multi.report');
+    expect(removed).toBe(true);
+
+    const remaining = queue.getSchedules();
+    expect(remaining.length).toBe(1);
+    expect(remaining[0].id).toBe('o1');
+  });
+
+  it('tracks multiple concurrent runs when overlap: true', async () => {
+    queue = createQueueManager({ concurrency: 3, pollInterval: 10 });
+    const resolvers = [];
+
+    queue.define('concurrent.job', async () => {
+      return new Promise((resolve) => {
+        resolvers.push(resolve);
+      });
+    });
+
+    const s = queue.schedule('@daily', 'concurrent.job', {}, { overlap: true });
+
+    // Trigger run 1
+    const p1 = queue.triggerSchedule(s.id);
+    await new Promise((r) => setTimeout(r, 30));
+
+    // Trigger run 2 concurrently
+    const p2 = queue.triggerSchedule(s.id);
+    await new Promise((r) => setTimeout(r, 30));
+
+    expect(s.isRunning).toBe(true);
+    expect(s.activeJobIds.size).toBe(2);
+
+    // Resolve first job
+    resolvers[0]({ done: 1 });
+    await p1;
+    await new Promise((r) => setTimeout(r, 30));
+
+    // Schedule should still be running because run 2 is in-flight
+    expect(s.isRunning).toBe(true);
+    expect(s.activeJobIds.size).toBe(1);
+
+    // Resolve second job
+    resolvers[1]({ done: 2 });
+    await p2;
+    await new Promise((r) => setTimeout(r, 30));
+
+    // Now all settled
+    expect(s.isRunning).toBe(false);
+    expect(s.activeJobIds.size).toBe(0);
+    expect(s.runsCount).toBe(2);
   });
 });
 

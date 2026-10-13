@@ -10,7 +10,7 @@ const path = require('path');
 const fs = require('fs');
 const { Job } = require('./job');
 const { MemoryQueueAdapter } = require('./adapters/memory');
-const { CronExpression } = require('./cron');
+const { CronExpression, CRON_ALIASES } = require('./cron');
 const { TaskScheduler } = require('./scheduler');
 
 class QueueManager extends EventEmitter {
@@ -318,6 +318,24 @@ class QueueManager extends EventEmitter {
   }
 
   /**
+   * Manually trigger a scheduled job immediately
+   * @param {string} idOrJobName
+   * @returns {Promise<Job|null>}
+   */
+  triggerSchedule(idOrJobName) {
+    return this.scheduler.trigger(idOrJobName);
+  }
+
+  /**
+   * Alias for triggerSchedule()
+   * @param {string} idOrJobName
+   * @returns {Promise<Job|null>}
+   */
+  triggerCron(idOrJobName) {
+    return this.scheduler.trigger(idOrJobName);
+  }
+
+  /**
    * Delete completed or failed jobs older than a cutoff date
    * @param {Object} [options={}]
    * @param {string|string[]} [options.status=['completed']]
@@ -453,7 +471,7 @@ class QueueManager extends EventEmitter {
             if (typeof handler === 'function') {
               this.define(jobName, handler, options);
 
-              const cronExpr = mod.cron || mod.schedule || (isCronFile ? (mod.expression || `@${nameWithoutExt}`) : null);
+              const cronExpr = mod.cron || mod.schedule || (isCronFile ? (mod.expression || (CRON_ALIASES[`@${nameWithoutExt}`] ? `@${nameWithoutExt}` : null)) : null);
               if (cronExpr) {
                 this.schedule(
                   cronExpr,

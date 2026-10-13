@@ -162,27 +162,30 @@ Webspresso includes a native, zero-dependency task scheduler with a POSIX-compli
 
 ### 1. Cron Expression Syntax
 - Standard 5 fields: `minute hour day-of-month month day-of-week`
-- Wildcards: `*`
-- Steps: `*/5`, `10-30/5`
-- Ranges: `1-5`, `MON-FRI`, `JAN-DEC`
+- Wildcards: `*`, `?` (supported in day-of-month and day-of-week)
+- Steps & Offsets: `*/5`, `10/15` (starting at minute 10, every 15 min), `10-30/5`
+- Ranges: `1-5`, `5-7` (Fri-Sun), `MON-FRI`, `MON-SUN`, `JAN-DEC`
 - Lists: `1,15,30`, `MON,WED,FRI`
 - Descriptive aliases:
   - `@yearly`, `@annually` (`0 0 1 1 *`)
   - `@monthly` (`0 0 1 * *`)
   - `@weekly` (`0 0 * * 0`)
+  - `@weekdays`, `@workdays` (`0 0 * * 1-5`)
+  - `@weekends` (`0 0 * * 6,0`)
   - `@daily`, `@midnight` (`0 0 * * *`)
-  - `@hourly` (`0 * * * *`)
+  - `@hourly`, `@every_hour` (`0 * * * *`)
   - `@every_minute`, `@minutely` (`* * * * *`)
   - `@every <N>m` (e.g. `@every 5m` → `*/5 * * * *`)
   - `@every <N>h` (e.g. `@every 2h` → `0 */2 * * *`)
+  - `@every <N>d` (e.g. `@every 2d` → `0 0 */2 * *`)
 
 ### 2. Programmatic Scheduling
 ```js
-// Schedule daily digest at 09:00 AM
+// Schedule daily digest at 09:00 AM with Timezone support
 queue.schedule('0 9 * * *', 'reports.daily-digest', { channel: 'slack' }, {
-  overlap: false, // Prevent concurrent execution if previous run is still active (default: false)
-  maxRuns: 10,    // Optional maximum executions before auto-unscheduling
-  utc: false,     // Use local timezone or UTC
+  timezone: 'Europe/Istanbul', // IANA timezone support ('Europe/Istanbul', 'America/New_York')
+  overlap: false,              // Prevent concurrent execution if previous run is still active (default: false)
+  maxRuns: 10,                 // Optional maximum executions before auto-unscheduling
 });
 
 // Or use the .cron() alias
@@ -190,9 +193,12 @@ queue.cron('@every 15m', 'metrics.collect');
 
 // Query schedules
 const schedules = queue.getSchedules();
-// [{ id, name, cronExpression, nextRunAt, lastRunAt, isRunning, runsCount, ... }]
+// [{ id, name, cronExpression, nextRunAt, lastRunAt, isRunning, activeJobId, activeJobIds, runsCount, ... }]
 
-// Unschedule by schedule ID or job name
+// Manually trigger a schedule immediately
+await queue.triggerSchedule('reports.daily-digest');
+
+// Unschedule by schedule ID or job name (removes all schedules matching the job name)
 queue.unschedule('metrics.collect');
 ```
 
@@ -201,8 +207,10 @@ queue.unschedule('metrics.collect');
 | :--- | :--- | :--- | :--- |
 | `id` | `string` | `schedule:${job}:${cron}` | Custom unique identifier |
 | `overlap` | `boolean` | `false` | When `false`, skips tick if a previous job run is still processing |
+| `preventOverlap` | `boolean` | `true` | Alias for `overlap: false` |
 | `maxRuns` | `number` | `null` | Automatically unschedules task after N runs |
 | `utc` | `boolean` | `false` | Evaluate cron expressions in UTC instead of local timezone |
+| `timezone` (`tz`) | `string` | `null` | IANA timezone name (e.g. `'Europe/Istanbul'`, `'America/New_York'`) |
 | `runImmediately` | `boolean` | `false` | Triggers a run right after scheduling |
 
 ### 4. File-Based Cron Discovery (`jobs/`)
