@@ -52,6 +52,19 @@ const {
   createMagicLinkVerifyMiddleware,
   createMagicLinkRequestHandler,
 } = require('./magic-link');
+const {
+  createUserSessionsTable,
+  dropUserSessionsTable,
+  createKnexSessionTracker,
+  createMemorySessionTracker,
+  getClientIp,
+  parseUserAgent,
+} = require('./sessions');
+const {
+  SessionManager,
+  createListSessionsHandler,
+  createRevokeSessionHandler,
+} = require('./session-manager');
 
 /**
  * Create authentication instance
@@ -80,6 +93,7 @@ function createAuth(config) {
  * @param {boolean} [options.rememberMe=true] - Enable remember me
  * @param {boolean} [options.authTokens=false] - Enable auth_tokens adapter (password reset / email verify)
  * @param {boolean} [options.magicLink=false] - Enable magic link / passwordless auth tokens adapter
+ * @param {boolean} [options.sessionTracking=false] - Enable active session tracking & revocation
  * @param {Object|boolean} [options.jwt=false] - Enable JWT support or JWT config
  * @param {string} [options.verifiedField='email_verified_at'] - Verified timestamp column
  * @returns {AuthManager}
@@ -94,6 +108,7 @@ function quickAuth(options) {
     rememberMe = true,
     authTokens: enableAuthTokens = false,
     magicLink = false,
+    sessionTracking = false,
     jwt = false,
     verifiedField = 'email_verified_at',
   } = options;
@@ -161,6 +176,11 @@ function quickAuth(options) {
 
   if (enableAuthTokens || magicLink) {
     config.authTokens = createKnexAuthTokensAdapter(db);
+  }
+
+  if (sessionTracking) {
+    config.sessionTracking = true;
+    config.sessionTracker = createKnexSessionTracker(db);
   }
 
   return createAuth(config);
@@ -273,6 +293,28 @@ module.exports = {
     formatMagicLinkHtml,
     createMagicLinkVerifyMiddleware,
     createMagicLinkRequestHandler,
+  },
+
+  // Active Devices & Session Management
+  SessionManager,
+  createUserSessionsTable,
+  dropUserSessionsTable,
+  createKnexSessionTracker,
+  createMemorySessionTracker,
+  getClientIp,
+  parseUserAgent,
+  createListSessionsHandler,
+  createRevokeSessionHandler,
+  sessions: {
+    SessionManager,
+    createUserSessionsTable,
+    dropUserSessionsTable,
+    createKnexSessionTracker,
+    createMemorySessionTracker,
+    getClientIp,
+    parseUserAgent,
+    createListSessionsHandler,
+    createRevokeSessionHandler,
   },
 
   // Config

@@ -6,6 +6,7 @@
 
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
+const { createListSessionsHandler, createRevokeSessionHandler } = require('./session-manager');
 
 /**
  * Create authentication middleware stack
@@ -79,12 +80,29 @@ function createAuthMiddleware(authManager) {
 
       // Try to load user from session if not authenticated by JWT
       if (!req.user && req.session?.userId) {
-        const user = await authManager.findUserById(req.session.userId);
-        if (user) {
-          req.user = user;
-        } else {
-          // User no longer exists, clear session
+        // If session tracking is enabled, verify session has not been revoked
+        let isSessionValid = true;
+        if (authManager.sessionManager && req.sessionID) {
+          isSessionValid = await authManager.isSessionValid(req.sessionID, req.session.userId);
+        }
+
+        if (!isSessionValid) {
+          // Session was revoked remotely
           delete req.session.userId;
+          if (typeof req.session.destroy === 'function') {
+            req.session.destroy(() => {});
+          }
+        } else {
+          const user = await authManager.findUserById(req.session.userId);
+          if (user) {
+            req.user = user;
+            if (req.sessionID && authManager.sessionManager) {
+              authManager.touchSession(req.sessionID).catch(() => {});
+            }
+          } else {
+            // User no longer exists, clear session
+            delete req.session.userId;
+          }
         }
       }
 
@@ -95,6 +113,9 @@ function createAuthMiddleware(authManager) {
           req.user = user;
           req.session.userId = user.id;
           req.session.loggedInAt = Date.now();
+          if (req.sessionID && authManager.sessionManager) {
+            authManager.trackSession(req.sessionID, user.id, req).catch(() => {});
+          }
         }
       }
 
@@ -389,6 +410,10 @@ function createAuthMiddleware(authManager) {
     // Utility
     parseMiddlewareString,
     
+    // Session handlers
+    listSessions: createListSessionsHandler(authManager),
+    revokeSession: createRevokeSessionHandler(authManager),
+
     // Aliases for route config (factories — file-router calls requireAuth(opts) / requireGuest(opts))
     auth: requireAuth,
     jwt: requireJwt,

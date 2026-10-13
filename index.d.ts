@@ -3291,11 +3291,85 @@ export namespace magicLink {
   };
 }
 
+// Active Devices & Session Management
+export interface DeviceInfo {
+  browser: string;
+  os: string;
+  device: 'desktop' | 'mobile' | 'tablet' | 'bot' | 'unknown';
+  isMobile: boolean;
+  isTablet: boolean;
+  isDesktop: boolean;
+  isBot: boolean;
+}
 
+export interface UserSession {
+  id?: number | string;
+  session_id: string;
+  user_id: number | string;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  browser?: string | null;
+  os?: string | null;
+  device?: string | null;
+  last_active_at: Date;
+  created_at?: Date;
+  is_current?: boolean;
+}
 
+export interface SessionTracker {
+  track(sessionId: string, userId: string | number, metadata?: { ip?: string; userAgent?: string; browser?: string; os?: string; device?: string }): Promise<UserSession | null>;
+  touch(sessionId: string): Promise<boolean>;
+  get(sessionId: string): Promise<UserSession | null>;
+  list(userId: string | number, currentSessionId?: string | null): Promise<UserSession[]>;
+  isSessionValid(sessionId: string, userId?: string | number | null): Promise<boolean>;
+  revoke(sessionId: string): Promise<boolean>;
+  revokeOthers(userId: string | number, currentSessionId?: string | null): Promise<number>;
+  revokeAll(userId: string | number): Promise<number>;
+  purgeExpired(maxAgeMs: number): Promise<number>;
+}
 
+export interface SessionManagerOptions {
+  tracker?: SessionTracker;
+  sessionStore?: any;
+  touchThrottleMs?: number;
+  emitter?: any;
+}
 
+export class SessionManager {
+  constructor(options?: SessionManagerOptions);
+  tracker: SessionTracker;
+  sessionStore?: any;
+  touchThrottleMs: number;
+  emitter?: any;
+  track(sessionId: string, userId: string | number, req?: any): Promise<UserSession | null>;
+  touch(sessionId: string): Promise<boolean>;
+  isSessionValid(sessionId: string, userId?: string | number | null): Promise<boolean>;
+  listSessions(userId: string | number, currentSessionId?: string | null): Promise<UserSession[]>;
+  revokeSession(sessionId: string, options?: { userId?: string | number; revokedBy?: string }): Promise<boolean>;
+  revokeOtherSessions(userId: string | number, currentSessionId: string): Promise<number>;
+  revokeAllSessions(userId: string | number): Promise<number>;
+}
 
+export function parseUserAgent(userAgent?: string): DeviceInfo;
+export function getClientIp(req?: any): string;
+export function createUserSessionsTable(knex: any): Promise<void>;
+export function dropUserSessionsTable(knex: any): Promise<void>;
+export function createKnexSessionTracker(db: any, options?: { tableName?: string }): SessionTracker;
+export function createMemorySessionTracker(): SessionTracker;
+export function createListSessionsHandler(authManager: any): (req: any, res: any) => Promise<any>;
+export function createRevokeSessionHandler(authManager: any): (req: any, res: any) => Promise<any>;
 
-
+export namespace sessions {
+  export {
+    SessionManager,
+    createUserSessionsTable,
+    dropUserSessionsTable,
+    createKnexSessionTracker,
+    createMemorySessionTracker,
+    getClientIp,
+    parseUserAgent,
+    createListSessionsHandler,
+    createRevokeSessionHandler,
+  };
+}
 

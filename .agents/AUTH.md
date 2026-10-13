@@ -45,6 +45,10 @@ Attached to Express request during auth middleware execution:
 | `req.auth.refreshAccessToken(refreshToken, options)` | Refresh access token & rotate refresh token |
 | `req.auth.check()` / `req.auth.guest()` | Check if user is authenticated or guest |
 | `req.auth.user()` / `req.auth.id()` | Get current user object or ID |
+| `req.auth.sessions()` | List active sessions & device info for current user |
+| `req.auth.revokeSession(sessionId)` | Revoke a specific session (remotely log out device) |
+| `req.auth.revokeOtherSessions()` | Revoke all sessions except the current active session |
+| `req.auth.revokeAllSessions(userId?)` | Revoke all active sessions (force logout from all devices) |
 
 ---
 
@@ -376,6 +380,137 @@ authManager.on('magicLink:requested', ({ userId, email, expiresAt }) => {
 
 authManager.on('magicLink:verified', ({ userId }) => {
   console.log(`User ${userId} signed in via magic link`);
+});
+```
+
+---
+
+## 8. Active Devices & Remote Session Revocation
+
+Webspresso provides a zero-dependency session management and device tracking system (`webspresso/core/auth`) allowing users to view all active logins, detect browser/OS/hardware types, and remotely revoke unwanted sessions.
+
+### 8.1 Database Migration
+Create the `user_sessions` table using the built-in migration helper:
+```javascript
+const { createUserSessionsTable } = require('webspresso/core/auth');
+
+exports.up = async function(knex) {
+  await createUserSessionsTable(knex);
+};
+
+exports.down = async function(knex) {
+  const { dropUserSessionsTable } = require('webspresso/core/auth');
+  await dropUserSessionsTable(knex);
+};
+```
+
+Schema columns:
+- `id`: Bigint primary key
+- `session_id`: Unique Express session ID
+- `user_id`: User ID reference
+- `ip_address`: Proxy-safe client IP (`x-forwarded-for`, `x-real-ip`, or socket)
+- `user_agent`: Raw User-Agent string
+- `browser`: Detected browser and version (e.g. `Chrome 128`, `Safari 17`, `Firefox 125`, `Edge 122`)
+- `os`: Detected operating system (e.g. `macOS 14`, `Windows 10/11`, `iOS 17.4`, `Android 14`, `Ubuntu Linux`)
+- `device`: Device form factor (`desktop`, `mobile`, `tablet`, `bot`)
+- `last_active_at`: Last seen timestamp (throttled to 60s by default to protect DB performance)
+- `created_at`: Initial login timestamp
+
+### 8.2 Enabling Session Tracking
+Enable session tracking in `createAuth` or `quickAuth`:
+```javascript
+const { quickAuth } = require('webspresso/core/auth');
+
+const auth = quickAuth({
+  db,
+  sessionTracking: true, // Automatically enables Knex session tracker and active session verification
+});
+```
+
+Or manually with custom options:
+```javascript
+const { createAuth, createKnexSessionTracker } = require('webspresso/core/auth');
+
+const auth = createAuth({
+  db,
+  sessionTracking: true,
+  sessionTracker: createKnexSessionTracker(db),
+  sessionTouchThrottleMs: 60000, // Touch session at most once per minute
+  // ...other config
+});
+```
+
+### 8.3 File-Based API Routes (`pages/api/*`)
+
+#### List Active Devices (`pages/api/auth/sessions.get.js`)
+```javascript
+const { defineApi } = require('webspresso');
+
+module.exports = defineApi({
+  middleware: ['auth'],
+  async handler(req, res) {
+    // Returns array of active sessions with is_current flag for current device
+    const sessions = await req.auth.sessions();
+    return res.json({ ok: true, sessions });
+  },
+});
+```
+
+#### Revoke Session / Remote Logout (`pages/api/auth/sessions/revoke.post.js`)
+```javascript
+const { defineApi } = require('webspresso');
+
+module.exports = defineApi({
+  middleware: ['auth'],
+  schema: ({ z }) => ({
+    body: z.object({
+      sessionId: z.string().optional(),
+      allOthers: z.boolean().optional(),
+    }),
+  }),
+  async handler(req, res) {
+    const { sessionId, allOthers } = req.input.body;
+
+    if (allOthers) {
+      // Revokes all sessions except current device
+      const count = await req.auth.revokeOtherSessions();
+      return res.json({ ok: true, revokedCount: count, message: 'All other sessions revoked' });
+    }
+
+    if (sessionId) {
+      // Revokes specified session (logs out current user if it is the current session)
+      await req.auth.revokeSession(sessionId);
+      return res.json({ ok: true, message: 'Session revoked' });
+    }
+
+    return res.status(400).json({ error: 'sessionId or allOthers is required' });
+  },
+});
+```
+
+### 8.4 Automatic Invalidation in Middleware
+When a session is revoked remotely, Webspresso's `authenticate` middleware automatically detects it on the next incoming request from that device:
+- The revoked session is destroyed in `req.sessionStore`.
+- `req.user` is set to `null`.
+- Any subsequent `requireAuth` or `middleware: ['auth']` guard immediately redirects or rejects the request with `401 Unauthorized`.
+
+### 8.5 Session Lifecycle Events
+`AuthManager` emits EventEmitter events for monitoring and security audits:
+```javascript
+auth.on('session:created', ({ sessionId, userId, ip, browser, os, device }) => {
+  console.log(`New session created for user ${userId} from ${device} (${browser} on ${os}) at ${ip}`);
+});
+
+auth.on('session:revoked', ({ sessionId, userId, revokedBy }) => {
+  console.log(`Session ${sessionId} was revoked`);
+});
+
+auth.on('sessions:revoked_others', ({ userId, currentSessionId, count }) => {
+  console.log(`User ${userId} revoked ${count} other sessions`);
+});
+
+auth.on('sessions:revoked_all', ({ userId, count }) => {
+  console.log(`All ${count} sessions revoked for user ${userId}`);
 });
 ```
 

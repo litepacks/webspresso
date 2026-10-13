@@ -116,3 +116,65 @@ module.exports = {
   },
 };
 ```
+
+---
+
+## 5. Active Devices & Remote Session Revocation
+
+Webspresso provides built-in zero-dependency device tracking and remote session revocation (`webspresso/core/auth`):
+
+```javascript
+const { quickAuth, createUserSessionsTable } = require('webspresso/core/auth');
+
+// Migration: create user_sessions table
+await createUserSessionsTable(db.knex);
+
+// Enable session tracking
+const auth = quickAuth({
+  db,
+  sessionTracking: true,
+});
+```
+
+### Listing Active Sessions & Devices
+```javascript
+// pages/api/auth/sessions.get.js
+const { defineApi } = require('webspresso');
+
+module.exports = defineApi({
+  middleware: ['auth'],
+  async handler(req, res) {
+    const sessions = await req.auth.sessions();
+    // Returns: [{ session_id, ip_address, browser: 'Chrome 128', os: 'macOS 14', device: 'desktop', last_active_at, is_current: true }]
+    return res.json({ ok: true, sessions });
+  },
+});
+```
+
+### Revoking a Remote Session
+```javascript
+// pages/api/auth/sessions/revoke.post.js
+const { defineApi } = require('webspresso');
+
+module.exports = defineApi({
+  middleware: ['auth'],
+  schema: ({ z }) => ({
+    body: z.object({
+      sessionId: z.string().optional(),
+      allOthers: z.boolean().optional(),
+    }),
+  }),
+  async handler(req, res) {
+    const { sessionId, allOthers } = req.input.body;
+
+    if (allOthers) {
+      const count = await req.auth.revokeOtherSessions();
+      return res.json({ ok: true, revokedCount: count });
+    }
+
+    await req.auth.revokeSession(sessionId);
+    return res.json({ ok: true });
+  },
+});
+```
+

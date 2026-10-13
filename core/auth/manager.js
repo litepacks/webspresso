@@ -141,6 +141,30 @@ class AuthManager extends EventEmitter {
     
     // Policy manager instance
     this.policies = new PolicyManager();
+
+    // Session tracking and revocation manager
+    const { SessionManager } = require('./session-manager');
+    const { createKnexSessionTracker, createMemorySessionTracker } = require('./sessions');
+
+    let tracker = config.sessionTracker || null;
+    if (!tracker && (config.sessionTracking || config.trackSessions)) {
+      if (config.db || this.config.db) {
+        tracker = createKnexSessionTracker(config.db || this.config.db);
+      } else {
+        tracker = createMemorySessionTracker();
+      }
+    }
+
+    if (tracker || config.sessionTracking || config.trackSessions) {
+      this.sessionManager = new SessionManager({
+        tracker: tracker || createMemorySessionTracker(),
+        sessionStore: config.sessionStore || this.config.session?.store,
+        touchThrottleMs: config.sessionTouchThrottleMs,
+        emitter: this,
+      });
+    } else {
+      this.sessionManager = null;
+    }
   }
 
   /**
@@ -288,7 +312,7 @@ class AuthManager extends EventEmitter {
         
         // Set req.user
         req.user = user;
-        
+
         // Handle remember me
         if (options.remember && self.rememberTokens && self.config.rememberMe.enabled) {
           await self.createRememberToken(user.id, res);
@@ -297,17 +321,33 @@ class AuthManager extends EventEmitter {
         // Regenerate session ID for security if supported
         if (req.session && typeof req.session.regenerate === 'function') {
           return new Promise((resolve, reject) => {
-            req.session.regenerate((err) => {
+            req.session.regenerate(async (err) => {
               if (err) {
                 reject(new AuthenticationError('Session regeneration failed', 'SESSION_ERROR'));
               } else {
                 // Restore userId after regenerate
                 req.session.userId = user.id;
                 req.session.loggedInAt = Date.now();
+                if (req.sessionID && self.sessionManager) {
+                  try {
+                    await self.sessionManager.track(req.sessionID, user.id, req);
+                  } catch (e) {
+                    // Non-blocking
+                  }
+                }
                 resolve();
               }
             });
           });
+        }
+
+        // Track active session if sessionManager is active and not regenerated
+        if (req.sessionID && self.sessionManager) {
+          try {
+            await self.sessionManager.track(req.sessionID, user.id, req);
+          } catch (e) {
+            // Non-blocking
+          }
         }
       },
 
@@ -339,6 +379,19 @@ class AuthManager extends EventEmitter {
         
         // Clear 2FA session state
         this.clear2Fa();
+
+        // Revoke session if sessionManager is active
+        if (req.sessionID && self.sessionManager) {
+          try {
+            if (options.everywhere && userId) {
+              await self.sessionManager.revokeAllSessions(userId);
+            } else {
+              await self.sessionManager.revokeSession(req.sessionID, { userId });
+            }
+          } catch (e) {
+            // Non-blocking
+          }
+        }
 
         // Clear user
         req.user = null;
@@ -571,6 +624,52 @@ class AuthManager extends EventEmitter {
         }
 
         return response;
+      },
+
+      /**
+       * List active sessions/devices for current user
+       * @returns {Promise<Array<Object>>}
+       */
+      sessions() {
+        if (!req.user?.id) return Promise.resolve([]);
+        return self.listSessions(req.user.id, req.sessionID);
+      },
+
+      /**
+       * Revoke a specific session
+       * @param {string} sessionId
+       * @returns {Promise<boolean>}
+       */
+      async revokeSession(sessionId) {
+        if (sessionId === req.sessionID) {
+          await this.logout();
+          return true;
+        }
+        return await self.revokeSession(sessionId, { userId: req.user?.id });
+      },
+
+      /**
+       * Revoke all other active sessions except current
+       * @returns {Promise<number>}
+       */
+      revokeOtherSessions() {
+        if (!req.user?.id) return Promise.resolve(0);
+        return self.revokeOtherSessions(req.user.id, req.sessionID);
+      },
+
+      /**
+       * Revoke all active sessions for user (force logout from all devices)
+       * @param {string|number} [userId]
+       * @returns {Promise<number>}
+       */
+      async revokeAllSessions(userId = null) {
+        const targetUserId = userId || req.user?.id;
+        if (!targetUserId) return 0;
+        const count = await self.revokeAllSessions(targetUserId);
+        if (targetUserId === req.user?.id) {
+          await this.logout();
+        }
+        return count;
       },
     };
   }
@@ -1089,6 +1188,89 @@ class AuthManager extends EventEmitter {
       this._authMiddleware = createAuthMiddleware(this);
     }
     return this._authMiddleware.require2Fa(options);
+  }
+
+  /**
+   * Track session for a request
+   * @param {string} sessionId
+   * @param {string|number} userId
+   * @param {Object} req
+   */
+  async trackSession(sessionId, userId, req) {
+    if (this.sessionManager) {
+      return await this.sessionManager.track(sessionId, userId, req);
+    }
+    return null;
+  }
+
+  /**
+   * Touch session to update activity timestamp
+   * @param {string} sessionId
+   */
+  async touchSession(sessionId) {
+    if (this.sessionManager) {
+      return await this.sessionManager.touch(sessionId);
+    }
+    return false;
+  }
+
+  /**
+   * List active sessions for user
+   * @param {string|number} userId
+   * @param {string} [currentSessionId]
+   */
+  async listSessions(userId, currentSessionId = null) {
+    if (this.sessionManager) {
+      return await this.sessionManager.listSessions(userId, currentSessionId);
+    }
+    return [];
+  }
+
+  /**
+   * Check if session is valid in store
+   * @param {string} sessionId
+   * @param {string|number} [userId]
+   */
+  async isSessionValid(sessionId, userId = null) {
+    if (this.sessionManager) {
+      return await this.sessionManager.isSessionValid(sessionId, userId);
+    }
+    return true;
+  }
+
+  /**
+   * Revoke a specific session
+   * @param {string} sessionId
+   * @param {Object} [options]
+   */
+  async revokeSession(sessionId, options = {}) {
+    if (this.sessionManager) {
+      return await this.sessionManager.revokeSession(sessionId, options);
+    }
+    return false;
+  }
+
+  /**
+   * Revoke all other sessions for user
+   * @param {string|number} userId
+   * @param {string} currentSessionId
+   */
+  async revokeOtherSessions(userId, currentSessionId) {
+    if (this.sessionManager) {
+      return await this.sessionManager.revokeOtherSessions(userId, currentSessionId);
+    }
+    return 0;
+  }
+
+  /**
+   * Revoke all sessions for user
+   * @param {string|number} userId
+   */
+  async revokeAllSessions(userId) {
+    if (this.sessionManager) {
+      return await this.sessionManager.revokeAllSessions(userId);
+    }
+    return 0;
   }
 }
 
