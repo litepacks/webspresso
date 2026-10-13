@@ -53,13 +53,13 @@ function formatMagicLinkHtml(data) {
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f4f4f5; margin: 0; padding: 24px; color: #18181b;">
   <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; padding: 32px; border: 1px solid #e4e4e7;">
-    <h2 style="margin-top: 0; font-size: 22px; font-weight: 700; color: #18181b;">Şifresiz Giriş Yapın</h2>
-    <p style="font-size: 15px; line-height: 1.6; color: #52525b;">Merhaba ${name},</p>
-    <p style="font-size: 15px; line-height: 1.6; color: #52525b;">Hesabınıza şifre girmeden tek tıkla oturum açmak için aşağıdaki butona tıklayın. Bu bağlantı <strong>${minutes} dakika</strong> boyunca geçerlidir.</p>
+    <h2 style="margin-top: 0; font-size: 22px; font-weight: 700; color: #18181b;">Sign in to your account</h2>
+    <p style="font-size: 15px; line-height: 1.6; color: #52525b;">Hello ${name},</p>
+    <p style="font-size: 15px; line-height: 1.6; color: #52525b;">Click the button below to sign in to your account without a password. This link is valid for <strong>${minutes} minutes</strong>.</p>
     <div style="margin: 28px 0; text-align: center;">
-      <a href="${url}" style="display: inline-block; background-color: #4f46e5; color: #ffffff; text-decoration: none; padding: 12px 28px; font-weight: 600; font-size: 15px; border-radius: 12px;">Giriş Yap →</a>
+      <a href="${url}" style="display: inline-block; background-color: #4f46e5; color: #ffffff; text-decoration: none; padding: 12px 28px; font-weight: 600; font-size: 15px; border-radius: 12px;">Sign In →</a>
     </div>
-    <p style="font-size: 13px; line-height: 1.5; color: #a1a1aa; border-top: 1px solid #f4f4f5; padding-top: 16px;">Eğer bu girişi siz talep etmediyseniz, bu e-postayı güvenle görmezden gelebilirsiniz.</p>
+    <p style="font-size: 13px; line-height: 1.5; color: #a1a1aa; border-top: 1px solid #f4f4f5; padding-top: 16px;">If you did not request this link, you can safely ignore this email.</p>
   </div>
 </body>
 </html>`;

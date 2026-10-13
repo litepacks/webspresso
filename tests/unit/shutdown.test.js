@@ -219,7 +219,7 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
     expect(errorThrown).toBe(true);
   });
 
-  // 7. timeout sonrası force close
+  // 7. force close after timeout
   it('7. forces connection termination if graceful timeout expires', async () => {
     let resolveStarted;
     const requestStarted = new Promise((r) => { resolveStarted = r; });
@@ -289,7 +289,7 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
     expect(asyncFinished).toBe(true);
   });
 
-  // 10. hata atan shutdown hook
+  // 10. shutdown hook throwing an error
   it('10. handles a throwing shutdown hook gracefully without unhandled rejection', async () => {
     const { app } = createApp({
       pagesDir: FIXTURES_PAGES,
@@ -303,7 +303,7 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
     expect(app.shutdownManager.isClosed).toBe(true);
   });
 
-  // 11. bir hook hata atarken diğerlerinin devam etmesi
+  // 11. one hook errors while others continue
   it('11. continues executing subsequent shutdown hooks when one fails', async () => {
     const executed = [];
     const { app } = createApp({
@@ -327,7 +327,7 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
     expect(executed).toEqual(['first', 'failing', 'third']);
   });
 
-  // 12. plugin disposer çalışması
+  // 12. plugin disposer execution
   it('12. executes plugin returned disposer function on shutdown', async () => {
     let disposed = false;
     const samplePlugin = {
@@ -404,7 +404,7 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
     expect(asyncDisposed).toBe(true);
   });
 
-  // 15. disposer hata verdiğinde diğerlerinin devam etmesi
+  // 15. other disposers continue when one fails
   it('15. continues executing other plugin disposers if one fails', async () => {
     const order = [];
 
@@ -433,7 +433,7 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
     expect(order).toEqual(['p3', 'p2-fail', 'p1']);
   });
 
-  // 16. closeAllConnections olmayan Node/server implementation
+  // 16. Node/server implementation without closeAllConnections
   it('16. forceClose falls back to socket destruction when closeAllConnections is absent', () => {
     const fakeSocket = {
       destroyed: false,
@@ -457,7 +457,7 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
     expect(fakeSocket.destroy).toHaveBeenCalled();
   });
 
-  // 17. HTTP server'ın yeni bağlantıları kabul etmeyi bırakması / 503 draining
+  // 17. HTTP server stops accepting new connections / 503 draining
   it('17. server stops accepting new connections and drains with 503 during shutdown', async () => {
     const { app } = createApp({
       pagesDir: FIXTURES_PAGES,
@@ -478,7 +478,7 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
     expect(drainRes.headers['connection']).toBe('close');
   });
 
-  // 18. keep-alive connection senaryosu
+  // 18. keep-alive connection scenario
   it('18. closes keep-alive connections on response finish during shutdown', async () => {
     const { app } = createApp({
       pagesDir: FIXTURES_PAGES,
@@ -504,7 +504,7 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
     expect(app.shutdownManager.isClosed).toBe(true);
   });
 
-  // 19. manual app.close() çağrısının process.exit() çağırmaması
+  // 19. manual app.close() does not call process.exit()
   it('19. manual app.close() never calls process.exit()', async () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
 
@@ -519,7 +519,7 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
     exitSpy.mockRestore();
   });
 
-  // 20. watch-mode force shutdown davranışı
+  // 20. watch-mode force shutdown behavior
   it('20. supports watch/development configuration with force mode and short timeout', async () => {
     const { app } = createApp({
       pagesDir: FIXTURES_PAGES,

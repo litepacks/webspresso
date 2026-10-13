@@ -96,8 +96,8 @@ describe('Admin Media Library / File Manager Picker in Model Forms', () => {
         fileManagerPlugin({
           baseDir: uploadDir,
           publicBasePath: '/uploads',
-          pageTitle: 'Ortam Kütüphanesi',
-          menuLabel: 'Ortam',
+          pageTitle: 'Media Library',
+          menuLabel: 'Media',
         }),
         adminPanelPlugin({ db }),
       ],
@@ -132,7 +132,7 @@ describe('Admin Media Library / File Manager Picker in Model Forms', () => {
       expect(res.text).toContain('"fileManager"');
       expect(res.text).toContain('"apiPrefix":"/files"');
       expect(res.text).toContain('"publicBasePath":"/uploads"');
-      expect(res.text).toContain('"pageTitle":"Ortam Kütüphanesi"');
+      expect(res.text).toContain('"pageTitle":"Media Library"');
     });
 
     it('includes model column metadata for file and files types', async () => {

@@ -110,11 +110,11 @@ describe('admin-module file and folder custom pages', () => {
 
       fs.writeFileSync(path.join(pageFolder, 'page.json'), JSON.stringify({
         id: 'products-create',
-        title: 'Yeni Ürün Ekle',
+        title: 'Add New Product',
         path: '/products-create',
         icon: 'plus',
         menu: {
-          label: 'Yeni Ürün',
+          label: 'New Product',
           order: 5,
         },
       }));
@@ -129,13 +129,13 @@ describe('admin-module file and folder custom pages', () => {
 
       const page = deps.registry.pages.get('products-create');
       expect(page).toBeDefined();
-      expect(page.title).toBe('Yeni Ürün Ekle');
+      expect(page.title).toBe('Add New Product');
       expect(page.path).toBe('/products-create');
 
       const menuItems = deps.registry.menuItems;
       const menuItem = menuItems.find(m => m.id === 'products-create');
       expect(menuItem).toBeDefined();
-      expect(menuItem.label).toBe('Yeni Ürün');
+      expect(menuItem.label).toBe('New Product');
       expect(menuItem.order).toBe(5);
 
       const clientCode = deps.registry.clientComponents.get('products-create');

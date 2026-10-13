@@ -133,7 +133,7 @@ function generateFileManagerComponent(options = {}) {
         inputFolderValue = '';
         loadDirectory();
       }).catch(function(err) {
-        alert('Klasör oluşturulamadı: ' + (err.message || String(err)));
+        alert('Failed to create folder: ' + (err.message || String(err)));
       });
     }
 
@@ -145,7 +145,7 @@ function generateFileManagerComponent(options = {}) {
         selectedItem = null;
         loadDirectory();
       }).catch(function(err) {
-        alert('Yeniden adlandırılamadı: ' + (err.message || String(err)));
+        alert('Failed to rename: ' + (err.message || String(err)));
       });
     }
 
@@ -163,7 +163,7 @@ function generateFileManagerComponent(options = {}) {
     function handleFileUpload(fileList) {
       if (!fileList || fileList.length === 0) return;
       uploading = true;
-      uploadStatus = fileList.length + ' dosya yükleniyor…';
+      uploadStatus = 'Uploading ' + fileList.length + ' file(s)…';
       if (typeof m !== 'undefined' && m.redraw) m.redraw();
 
       var fd = new FormData();
@@ -183,13 +183,13 @@ function generateFileManagerComponent(options = {}) {
         if (res.success) {
           loadDirectory();
         } else {
-          alert('Yükleme hatası: ' + (res.error || 'Bilinmeyen hata'));
+          alert('Upload error: ' + (res.error || 'Unknown error'));
           if (typeof m !== 'undefined' && m.redraw) m.redraw();
         }
       }).catch(function(err) {
         uploading = false;
         uploadStatus = '';
-        alert('Yükleme hatası: ' + (err.message || String(err)));
+        alert('Upload error: ' + (err.message || String(err)));
         if (typeof m !== 'undefined' && m.redraw) m.redraw();
       });
     }
@@ -231,7 +231,7 @@ function generateFileManagerComponent(options = {}) {
               m('div.relative', [
                 m('input.text-xs.pl-8.pr-3.py-1.5.border.border-gray-200.dark:border-slate-700.rounded-lg.bg-gray-50.dark:bg-slate-900.text-gray-900.dark:text-slate-100.placeholder-gray-400', {
                   type: 'text',
-                  placeholder: 'Dosyalarda ara…',
+                  placeholder: 'Search files…',
                   value: searchQuery,
                   oninput: function(e) { searchQuery = e.target.value; },
                   onkeydown: function(e) { if (e.key === 'Enter') loadDirectory(); }
@@ -244,13 +244,13 @@ function generateFileManagerComponent(options = {}) {
                 value: typeFilter,
                 onchange: function(e) { typeFilter = e.target.value; loadDirectory(); }
               }, [
-                m('option', { value: 'all' }, 'Tüm Dosyalar'),
-                m('option', { value: 'image' }, 'Resimler'),
-                m('option', { value: 'document' }, 'Belgeler'),
-                m('option', { value: 'video' }, 'Videolar'),
-                m('option', { value: 'audio' }, 'Sesler'),
-                m('option', { value: 'archive' }, 'Arşivler'),
-                m('option', { value: 'code' }, 'Kod & Metin'),
+                m('option', { value: 'all' }, 'All Files'),
+                m('option', { value: 'image' }, 'Images'),
+                m('option', { value: 'document' }, 'Documents'),
+                m('option', { value: 'video' }, 'Videos'),
+                m('option', { value: 'audio' }, 'Audio'),
+                m('option', { value: 'archive' }, 'Archives'),
+                m('option', { value: 'code' }, 'Code & Text'),
               ]),
 
               // Grid / List View switch
@@ -262,7 +262,7 @@ function generateFileManagerComponent(options = {}) {
                 m('button.px-2.5.py-1.text-xs.font-medium', {
                   class: viewMode === 'list' ? 'bg-indigo-600 text-white' : 'bg-gray-50 dark:bg-slate-900 text-gray-700 dark:text-slate-300',
                   onclick: function() { viewMode = 'list'; }
-                }, 'Liste'),
+                }, 'List'),
               ]),
 
               // New Folder Button
@@ -270,13 +270,13 @@ function generateFileManagerComponent(options = {}) {
                 onclick: function() { inputFolderValue = ''; modalState = 'newFolder'; }
               }, [
                 m('span', '+'),
-                m('span', 'Yeni Klasör')
+                m('span', 'New Folder')
               ]),
 
               // Upload Button
               m('label.px-3.py-1.5.text-xs.font-medium.bg-indigo-600.hover:bg-indigo-700.text-white.rounded-lg.cursor-pointer.flex.items-center.gap-1.transition', [
                 m('span', '↑'),
-                m('span', 'Yükle'),
+                m('span', 'Upload'),
                 m('input[type=file].hidden', {
                   multiple: true,
                   onchange: function(e) { handleFileUpload(e.target.files); e.target.value = ''; }
@@ -285,7 +285,7 @@ function generateFileManagerComponent(options = {}) {
 
               // Refresh
               m('button.p-1.5.text-xs.text-gray-500.hover:text-gray-900.dark:hover:text-slate-100.rounded-lg', {
-                title: 'Yenile',
+                title: 'Refresh',
                 onclick: function() { loadDirectory(); }
               }, '🔄')
             ])
@@ -310,15 +310,15 @@ function generateFileManagerComponent(options = {}) {
           }, [
             loading ? m('div.flex.flex-col.items-center.justify-center.py-20.text-gray-400', [
               m('div.w-8.h-8.border-2.border-indigo-600.border-t-transparent.rounded-full.animate-spin.mb-2'),
-              m('p.text-xs', 'Dosyalar yükleniyor…')
+              m('p.text-xs', 'Loading files…')
             ]) : null,
 
             !loading && error ? m('div.p-6.text-center.text-red-600.dark:text-red-400.text-sm', error) : null,
 
             !loading && !error && items.length === 0 ? m('div.flex.flex-col.items-center.justify-center.py-20.text-gray-400.border-2.border-dashed.border-gray-200.dark:border-slate-800.rounded-xl', [
               m('span.text-4xl.mb-2', '📂'),
-              m('p.text-sm.font-medium.text-gray-600.dark:text-slate-400', 'Bu klasör boş'),
-              m('p.text-xs.text-gray-400.mt-1', 'Dosyaları buraya sürükleyip bırakabilir veya "Yükle" butonunu kullanabilirsiniz.')
+              m('p.text-sm.font-medium.text-gray-600.dark:text-slate-400', 'This folder is empty'),
+              m('p.text-xs.text-gray-400.mt-1', 'You can drag and drop files here or use the "Upload" button.')
             ]) : null,
 
             // GRID VIEW
@@ -347,7 +347,7 @@ function generateFileManagerComponent(options = {}) {
                 // Info
                 m('p.text-xs.font-medium.text-gray-900.dark:text-slate-100.truncate', { title: item.name }, item.name),
                 m('div.flex.items-center.justify-between.text-[11px].text-gray-400.dark:text-slate-500.mt-1', [
-                  m('span', item.isDir ? 'Klasör' : formatBytes(item.size)),
+                  m('span', item.isDir ? 'Folder' : formatBytes(item.size)),
                   // Menu dots
                   m('div.relative.opacity-0.group-hover:opacity-100.transition', [
                     m('button.hover:text-gray-700.dark:hover:text-slate-200.px-1', {
@@ -375,11 +375,11 @@ function generateFileManagerComponent(options = {}) {
               m('table.min-w-full.text-left.text-xs', [
                 m('thead.bg-gray-50.dark:bg-slate-900.border-b.border-gray-200.dark:border-slate-700.text-gray-500', [
                   m('tr', [
-                    m('th.p-3', 'Ad'),
-                    m('th.p-3', 'Tür'),
-                    m('th.p-3', 'Boyut'),
-                    m('th.p-3', 'Tarih'),
-                    m('th.p-3.text-right', 'İşlemler'),
+                    m('th.p-3', 'Name'),
+                    m('th.p-3', 'Type'),
+                    m('th.p-3', 'Size'),
+                    m('th.p-3', 'Date'),
+                    m('th.p-3.text-right', 'Actions'),
                   ])
                 ]),
                 m('tbody.divide-y.divide-gray-100.dark:divide-slate-700/50', items.map(function(item) {
@@ -399,7 +399,7 @@ function generateFileManagerComponent(options = {}) {
                       m('span', renderFileIcon(item)),
                       m('span.truncate.max-w-xs.md:max-w-md', item.name)
                     ]),
-                    m('td.p-3.text-gray-500.dark:text-slate-400', item.isDir ? 'Klasör' : (item.ext || item.type).toUpperCase()),
+                    m('td.p-3.text-gray-500.dark:text-slate-400', item.isDir ? 'Folder' : (item.ext || item.type).toUpperCase()),
                     m('td.p-3.text-gray-500.dark:text-slate-400', item.isDir ? '—' : formatBytes(item.size)),
                     m('td.p-3.text-gray-500.dark:text-slate-400', formatDate(item.mtime)),
                     m('td.p-3.text-right.space-x-2', [
@@ -407,7 +407,7 @@ function generateFileManagerComponent(options = {}) {
                         onclick: function(e) {
                           e.stopPropagation();
                           copyToClipboard(item.publicUrl);
-                          alert('URL kopyalandı: ' + item.publicUrl);
+                          alert('URL copied: ' + item.publicUrl);
                         }
                       }, 'URL') : null,
                       m('button.text-gray-600.dark:text-slate-400.hover:text-gray-900', {
@@ -417,14 +417,14 @@ function generateFileManagerComponent(options = {}) {
                           inputRenameValue = item.name;
                           modalState = 'rename';
                         }
-                      }, 'Ad Değiştir'),
+                      }, 'Rename'),
                       m('button.text-red-600.dark:text-red-400.hover:underline', {
                         onclick: function(e) {
                           e.stopPropagation();
                           selectedItem = item;
                           modalState = 'delete';
                         }
-                      }, 'Sil'),
+                      }, 'Delete'),
                     ])
                   ]);
                 }))
@@ -436,10 +436,10 @@ function generateFileManagerComponent(options = {}) {
           // 1. New Folder Modal
           modalState === 'newFolder' ? m('div.fixed.inset-0.bg-black/50.flex.items-center.justify-center.z-50.p-4', [
             m('div.bg-white.dark:bg-slate-800.rounded-xl.shadow-xl.max-w-md.w-full.p-6.space-y-4', [
-              m('h3.text-base.font-bold.text-gray-900.dark:text-slate-100', 'Yeni Klasör Oluştur'),
+              m('h3.text-base.font-bold.text-gray-900.dark:text-slate-100', 'Create New Folder'),
               m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-lg.bg-white.dark:bg-slate-900.text-sm', {
                 type: 'text',
-                placeholder: 'Klasör adı…',
+                placeholder: 'Folder name…',
                 value: inputFolderValue,
                 oninput: function(e) { inputFolderValue = e.target.value; },
                 onkeydown: function(e) { if (e.key === 'Enter') createFolder(); }
@@ -447,10 +447,10 @@ function generateFileManagerComponent(options = {}) {
               m('div.flex.justify-end.gap-2', [
                 m('button.px-4.py-2.text-xs.rounded-lg.border.border-gray-300.dark:border-slate-600.text-gray-700.dark:text-slate-300', {
                   onclick: function() { modalState = null; }
-                }, 'İptal'),
+                }, 'Cancel'),
                 m('button.px-4.py-2.text-xs.rounded-lg.bg-indigo-600.text-white.font-medium', {
                   onclick: createFolder
-                }, 'Oluştur')
+                }, 'Create')
               ])
             ])
           ]) : null,
@@ -458,7 +458,7 @@ function generateFileManagerComponent(options = {}) {
           // 2. Rename Modal
           modalState === 'rename' && selectedItem ? m('div.fixed.inset-0.bg-black/50.flex.items-center.justify-center.z-50.p-4', [
             m('div.bg-white.dark:bg-slate-800.rounded-xl.shadow-xl.max-w-md.w-full.p-6.space-y-4', [
-              m('h3.text-base.font-bold.text-gray-900.dark:text-slate-100', 'Yeniden Adlandır'),
+              m('h3.text-base.font-bold.text-gray-900.dark:text-slate-100', 'Rename'),
               m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-lg.bg-white.dark:bg-slate-900.text-sm', {
                 type: 'text',
                 value: inputRenameValue,
@@ -468,10 +468,10 @@ function generateFileManagerComponent(options = {}) {
               m('div.flex.justify-end.gap-2', [
                 m('button.px-4.py-2.text-xs.rounded-lg.border.border-gray-300.dark:border-slate-600.text-gray-700.dark:text-slate-300', {
                   onclick: function() { modalState = null; }
-                }, 'İptal'),
+                }, 'Cancel'),
                 m('button.px-4.py-2.text-xs.rounded-lg.bg-indigo-600.text-white.font-medium', {
                   onclick: renameSelected
-                }, 'Kaydet')
+                }, 'Save')
               ])
             ])
           ]) : null,
@@ -479,18 +479,18 @@ function generateFileManagerComponent(options = {}) {
           // 3. Delete Confirmation Modal
           modalState === 'delete' && selectedItem ? m('div.fixed.inset-0.bg-black/50.flex.items-center.justify-center.z-50.p-4', [
             m('div.bg-white.dark:bg-slate-800.rounded-xl.shadow-xl.max-w-md.w-full.p-6.space-y-4', [
-              m('h3.text-base.font-bold.text-red-600.dark:text-red-400', 'Silmeyi Onayla'),
+              m('h3.text-base.font-bold.text-red-600.dark:text-red-400', 'Confirm Delete'),
               m('p.text-sm.text-gray-600.dark:text-slate-300', [
                 m('strong', selectedItem.name),
-                ' kalıcı olarak silinecek. Emin misiniz?'
+                ' will be permanently deleted. Are you sure?'
               ]),
               m('div.flex.justify-end.gap-2', [
                 m('button.px-4.py-2.text-xs.rounded-lg.border.border-gray-300.dark:border-slate-600.text-gray-700.dark:text-slate-300', {
                   onclick: function() { modalState = null; }
-                }, 'Vazgeç'),
+                }, 'Cancel'),
                 m('button.px-4.py-2.text-xs.rounded-lg.bg-red-600.text-white.font-medium', {
                   onclick: deleteSelected
-                }, 'Sil')
+                }, 'Delete')
               ])
             ])
           ]) : null,
@@ -519,16 +519,16 @@ function generateFileManagerComponent(options = {}) {
                           ? m('audio.w-full', { src: selectedItem.publicUrl, controls: true })
                           : m('div.text-center.p-8', [
                               renderFileIcon(selectedItem),
-                              m('p.text-xs.text-gray-500.mt-2', 'Önizleme mevcut değil')
+                              m('p.text-xs.text-gray-500.mt-2', 'Preview not available')
                             ])))
               ]),
               // File Info Pane
               m('div.p-4.space-y-2.text-xs.text-gray-600.dark:text-slate-300.border-t.border-gray-200.dark:border-slate-700', [
                 m('div.grid.grid-cols-2.gap-2', [
-                  m('p', [m('span.text-gray-400', 'Boyut: '), formatBytes(selectedItem.size)]),
-                  m('p', [m('span.text-gray-400', 'Tür: '), selectedItem.mimeType || selectedItem.ext]),
-                  m('p', [m('span.text-gray-400', 'Tarih: '), formatDate(selectedItem.mtime)]),
-                  m('p.truncate', [m('span.text-gray-400', 'Yol: '), selectedItem.path]),
+                  m('p', [m('span.text-gray-400', 'Size: '), formatBytes(selectedItem.size)]),
+                  m('p', [m('span.text-gray-400', 'Type: '), selectedItem.mimeType || selectedItem.ext]),
+                  m('p', [m('span.text-gray-400', 'Date: '), formatDate(selectedItem.mtime)]),
+                  m('p.truncate', [m('span.text-gray-400', 'Path: '), selectedItem.path]),
                 ]),
                 selectedItem.publicUrl ? m('div.flex.items-center.gap-2.pt-2', [
                   m('input.flex-1.px-2.py-1.text-xs.border.rounded.bg-gray-50.dark:bg-slate-900.text-gray-700.dark:text-slate-300', {
@@ -538,15 +538,15 @@ function generateFileManagerComponent(options = {}) {
                   m('button.px-3.py-1.bg-indigo-600.text-white.rounded.font-medium.hover:bg-indigo-700', {
                     onclick: function() {
                       copyToClipboard(selectedItem.publicUrl);
-                      alert('URL kopyalandı!');
+                      alert('URL copied!');
                     }
-                  }, 'Kopyala'),
+                  }, 'Copy'),
                   isPickerMode && onSelectCallback ? m('button.px-3.py-1.bg-emerald-600.text-white.rounded.font-medium.hover:bg-emerald-700', {
                     onclick: function() {
                       onSelectCallback(selectedItem.publicUrl);
                       modalState = null;
                     }
-                  }, 'Bu Dosyayı Seç') : null
+                  }, 'Select This File') : null
                 ]) : null
               ])
             ])

@@ -168,14 +168,14 @@ Multipart file upload manager with local / cloud storage providers.
 
 ### 2.5 `fileManagerPlugin` (`plugins/file-manager`)
 Filesystem-first media library, directory explorer, and modal asset picker for Admin Panel.
-- **Options**: `{ baseDir: './public/uploads', publicBasePath: '/uploads', apiPrefix: '/files', pageTitle: 'Dosya Yöneticisi', maxUploadBytes: 10485760, allowedExtensions, allowedMimeTypes, includePage: true }`
+- **Options**: `{ baseDir: './public/uploads', publicBasePath: '/uploads', apiPrefix: '/files', pageTitle: 'File Manager', maxUploadBytes: 10485760, allowedExtensions, allowedMimeTypes, includePage: true }`
 - **Features**:
   - Directory tree navigation (breadcrumbs), safe subfolder creation (`mkdir`), item rename, delete, and move.
   - Path traversal attack protection (`resolveSafePath`).
   - Grid (thumbnail gallery) & List (table) view modes.
   - Search by filename and type filter (Images, Documents, Videos, Audio, Archives, Code).
   - Media preview modal with copy URL and direct playback/preview.
-  - "Kütüphaneden Seç" modal picker integrated with `FileUploadField` and `zdb.file()` form fields.
+  - "Choose from Media Library" modal picker integrated with `FileUploadField` and `zdb.file()` form fields.
   - Built-in services: `fileManager.list`, `fileManager.mkdir`, `fileManager.rename`, `fileManager.delete`, `fileManager.move`, `fileManager.upload`.
 
 ### 2.6 `corsPlugin` (`plugins/cors`)
@@ -293,19 +293,19 @@ Admin mutation tracking, record change timeline, and audit history with schedule
 - **Options**:
   - `db`: Database instance (must expose `.knex`).
   - `tableName`: Database table name (default `'audit_logs'`).
-  - `registerRecordAction`: Register built-in "Zaman Tüneli" action on all admin models (default `true`).
+  - `registerRecordAction`: Register built-in "Timeline" action on all admin models (default `true`).
   - `retentionDays`: Days to retain audit trail entries (default `90`).
   - `cleanupIntervalMs`: Background cleanup timer frequency (default 24h).
   - `autoCleanup`: Enable scheduled background purge (default `true`).
   - `cleanupOnStart`: Run initial purge shortly after boot (default `true`).
   - `retention`: `{ enabled, days: 90, intervalMs: 86400000, runOnStart: true }` (or `false` to disable).
-- **Zaman Tüneli (Timeline UI) Features**:
-  - **Dual Mode**: Switch seamlessly between **Zaman Tüneli (Timeline View)** and **Tablo Görünümü (Table View)**.
+- **Timeline UI Features**:
+  - **Dual Mode**: Switch seamlessly between **Timeline View** and **Table View**.
   - **Record Focus Mode**: Clicking any `Model #ID` tag instantly filters and displays that specific record's revision timeline.
   - **Visual Spine & Status Icons**: Color-coded action nodes for `create` (emerald +), `update` (blue ✏️), `delete` (rose 🗑️), and `restore` (amber ↺).
   - **Changed Fields Diff**: Clearly lists modified fields (e.g. `title`, `price`) on every update event.
   - **Expandable Details**: Inspect full HTTP request path, actor IP, user agent, and pretty-printed JSON metadata.
-  - **Built-in Record Action**: One-click "Zaman Tüneli" button on record lists and edit forms jumps straight to that record's audit history.
+  - **Built-in Record Action**: One-click "Timeline" button on record lists and edit forms jumps straight to that record's audit history.
 - **API & Admin Panel Endpoints**:
   - `GET /_admin/api/audit-logs`: List paginated logs with filters (`model`, `recordId`, `action`, `search`, `from`, `to`).
   - `GET /_admin/api/audit-logs/timeline/:model/:id`: Dedicated chronological record change timeline with summary stats.

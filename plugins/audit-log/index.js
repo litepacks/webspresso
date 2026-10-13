@@ -224,7 +224,7 @@ function auditLogPlugin(options = {}) {
       if (registerRecordAction && typeof adminApi.registerAction === 'function') {
         adminApi.registerAction('audit-timeline', {
           id: 'audit-timeline',
-          label: 'Zaman Tüneli',
+          label: 'Timeline',
           icon: 'clock',
           color: 'blue',
           models: '*',
@@ -234,7 +234,7 @@ function auditLogPlugin(options = {}) {
             const modelName = model?.name || (typeof model === 'string' ? model : '');
             return {
               redirect: `/audit-log?model=${encodeURIComponent(modelName)}&recordId=${encodeURIComponent(id)}`,
-              message: `Zaman tüneli: ${modelName} #${id}`,
+              message: `Timeline: ${modelName} #${id}`,
             };
           },
         });

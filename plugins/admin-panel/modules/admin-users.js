@@ -692,7 +692,7 @@ const AdminUsersPage = {
                   m('input.w-full.px-3.py-2.border.border-gray-300.dark:border-slate-600.rounded-lg.bg-white.dark:bg-slate-900.text-gray-900.dark:text-slate-100.focus:ring-2.focus:ring-blue-500', {
                     type: 'text',
                     required: true,
-                    placeholder: 'e.g. Ahmet Yılmaz',
+                    placeholder: 'e.g. Jane Doe',
                     value: s.formName,
                     oninput: (e) => { s.formName = e.target.value; },
                   }),

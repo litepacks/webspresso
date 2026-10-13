@@ -1,6 +1,6 @@
 /**
  * Audit log admin page — Mithril component source (string)
- * Features dual Table & Timeline View (Zaman Tüneli) with record focus & diff metadata
+ * Features dual Table & Timeline View with record focus & diff metadata
  * @module plugins/audit-log/admin-component
  */
 
@@ -26,11 +26,11 @@ function generateAuditLogComponent(options = {}) {
       var diffHour = Math.floor(diffMin / 60);
       var diffDay = Math.floor(diffHour / 24);
 
-      if (diffSec < 60) return 'Az önce';
-      if (diffMin < 60) return diffMin + ' dk önce';
-      if (diffHour < 24) return diffHour + ' sa önce';
-      if (diffDay === 1) return 'Dün';
-      if (diffDay < 30) return diffDay + ' gün önce';
+      if (diffSec < 60) return 'Just now';
+      if (diffMin < 60) return diffMin + 'm ago';
+      if (diffHour < 24) return diffHour + 'h ago';
+      if (diffDay === 1) return 'Yesterday';
+      if (diffDay < 30) return diffDay + 'd ago';
       return d.toLocaleDateString();
     } catch (e) {
       return dateStr;
@@ -41,7 +41,7 @@ function generateAuditLogComponent(options = {}) {
     switch (action) {
       case 'create':
         return {
-          label: 'OLUŞTURULDU',
+          label: 'CREATED',
           color: 'emerald',
           badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800',
           dotClass: 'bg-emerald-500 text-white ring-4 ring-emerald-100 dark:ring-emerald-950/60',
@@ -49,7 +49,7 @@ function generateAuditLogComponent(options = {}) {
         };
       case 'update':
         return {
-          label: 'GÜNCELLENDİ',
+          label: 'UPDATED',
           color: 'blue',
           badgeClass: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800',
           dotClass: 'bg-blue-500 text-white ring-4 ring-blue-100 dark:ring-blue-950/60',
@@ -57,7 +57,7 @@ function generateAuditLogComponent(options = {}) {
         };
       case 'delete':
         return {
-          label: 'SİLİNDİ',
+          label: 'DELETED',
           color: 'rose',
           badgeClass: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800',
           dotClass: 'bg-rose-500 text-white ring-4 ring-rose-100 dark:ring-rose-950/60',
@@ -65,7 +65,7 @@ function generateAuditLogComponent(options = {}) {
         };
       case 'restore':
         return {
-          label: 'GERİ YÜKLENDİ',
+          label: 'RESTORED',
           color: 'amber',
           badgeClass: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800',
           dotClass: 'bg-amber-500 text-white ring-4 ring-amber-100 dark:ring-amber-950/60',
@@ -73,7 +73,7 @@ function generateAuditLogComponent(options = {}) {
         };
       default:
         return {
-          label: (action || 'İŞLEM').toUpperCase(),
+          label: (action || 'ACTION').toUpperCase(),
           color: 'gray',
           badgeClass: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
           dotClass: 'bg-gray-500 text-white ring-4 ring-gray-100 dark:ring-slate-800',
@@ -224,10 +224,10 @@ function generateAuditLogComponent(options = {}) {
                 m('span.p-2.rounded-lg.bg-indigo-50.text-indigo-600.dark:bg-indigo-950/40.dark:text-indigo-400',
                   renderSvgIcon('clock', 'w-5 h-5')
                 ),
-                m('h1.text-2xl.font-bold.text-gray-900.dark:text-slate-100', 'Denetim Günlüğü & Zaman Tüneli'),
+                m('h1.text-2xl.font-bold.text-gray-900.dark:text-slate-100', 'Audit Log & Timeline'),
               ]),
               m('p.text-sm.text-gray-500.dark:text-slate-400.mt-1',
-                'Tüm yönetici CRUD işlemlerinin ve model mutasyonlarının denetim geçmişi.'
+                'Audit trail of all administrative CRUD operations and model mutations.'
               ),
             ]),
 
@@ -241,7 +241,7 @@ function generateAuditLogComponent(options = {}) {
                   onclick: function() { viewMode = 'timeline'; }
                 }, [
                   renderSvgIcon('clock', 'w-3.5 h-3.5'),
-                  m('span', 'Zaman Tüneli'),
+                  m('span', 'Timeline'),
                 ]),
                 m('button.px-3.py-1.5.text-xs.font-medium.rounded-md.flex.items-center.gap-1.5.transition-all', {
                   class: viewMode === 'table'
@@ -250,22 +250,22 @@ function generateAuditLogComponent(options = {}) {
                   onclick: function() { viewMode = 'table'; }
                 }, [
                   renderSvgIcon('table', 'w-3.5 h-3.5'),
-                  m('span', 'Tablo'),
+                  m('span', 'Table'),
                 ]),
               ]),
 
               // Purge button
               m('button.px-3.py-1.5.text-xs.font-medium.border.border-rose-200.dark:border-rose-900.text-rose-700.dark:text-rose-400.rounded-lg.hover:bg-rose-50.dark:hover:bg-rose-950/40.transition-colors', {
                 onclick: function() {
-                  if (!confirm('90 günden eski denetim günlükleri silinsin mi?')) return;
+                  if (!confirm('Delete audit logs older than 90 days?')) return;
                   api.post(API + '/purge', { days: 90 }).then(function() {
                     page = 1;
                     load();
                   }).catch(function(e) {
-                    alert('Temizleme hatası: ' + (e.message || String(e)));
+                    alert('Purge error: ' + (e.message || String(e)));
                   });
                 },
-              }, '90 Gün Öncesini Temizle'),
+              }, 'Purge Older than 90 Days'),
             ]),
           ]),
 
@@ -275,16 +275,16 @@ function generateAuditLogComponent(options = {}) {
               m('span.w-9.h-9.rounded-full.bg-indigo-600.text-white.flex.items-center.justify-center.font-bold.text-sm', '📌'),
               m('div', [
                 m('h3.text-sm.font-semibold.text-indigo-950.dark:text-indigo-200',
-                  (filterModel ? filterModel + ' #' : 'Kayıt #') + filterRecordId + ' İçin Değişiklik Zaman Tüneli'
+                  'Change Timeline for ' + (filterModel ? filterModel + ' #' : 'Record #') + filterRecordId
                 ),
                 m('p.text-xs.text-indigo-700.dark:text-indigo-400',
-                  'Bu kayda ait tüm ekleme, güncelleme ve silme geçmişi filtreleniyor.'
+                  'Filtering all creation, update, and deletion history for this record.'
                 ),
               ]),
             ]),
             m('button.px-3.py-1.5.text-xs.font-medium.bg-white.dark:bg-slate-800.text-indigo-700.dark:text-indigo-300.border.border-indigo-200.dark:border-indigo-700.rounded-lg.hover:bg-indigo-50.dark:hover:bg-indigo-900/60.transition-colors', {
               onclick: clearFocus,
-            }, '✕ Filtreyi Kaldır'),
+            }, '✕ Clear Filter'),
           ]) : null,
 
           // 3. Search & Filter Controls Card
@@ -295,7 +295,7 @@ function generateAuditLogComponent(options = {}) {
                 m('label.block.text-xs.font-medium.text-gray-600.dark:text-slate-400.mb-1', 'Model'),
                 m('input.w-full.border.border-gray-300.dark:border-slate-600.bg-white.dark:bg-slate-900.text-gray-900.dark:text-slate-100.rounded-lg.px-3.py-1.5.text-sm.focus:ring-2.focus:ring-indigo-500.focus:outline-none', {
                   value: filterModel,
-                  placeholder: 'Örn. Post, User',
+                  placeholder: 'e.g. Post, User',
                   oninput: function(e) { filterModel = e.target.value; },
                   onkeydown: function(e) { if (e.key === 'Enter') { page = 1; load(); } },
                 }),
@@ -303,10 +303,10 @@ function generateAuditLogComponent(options = {}) {
 
               // Record ID Filter
               m('div', [
-                m('label.block.text-xs.font-medium.text-gray-600.dark:text-slate-400.mb-1', 'Kayıt ID'),
+                m('label.block.text-xs.font-medium.text-gray-600.dark:text-slate-400.mb-1', 'Record ID'),
                 m('input.w-full.border.border-gray-300.dark:border-slate-600.bg-white.dark:bg-slate-900.text-gray-900.dark:text-slate-100.rounded-lg.px-3.py-1.5.text-sm.focus:ring-2.focus:ring-indigo-500.focus:outline-none', {
                   value: filterRecordId,
-                  placeholder: 'Örn. 42',
+                  placeholder: 'e.g. 42',
                   oninput: function(e) { filterRecordId = e.target.value; },
                   onkeydown: function(e) { if (e.key === 'Enter') { page = 1; load(); } },
                 }),
@@ -314,26 +314,26 @@ function generateAuditLogComponent(options = {}) {
 
               // Action Filter
               m('div', [
-                m('label.block.text-xs.font-medium.text-gray-600.dark:text-slate-400.mb-1', 'İşlem Türü'),
+                m('label.block.text-xs.font-medium.text-gray-600.dark:text-slate-400.mb-1', 'Action'),
                 m('select.w-full.border.border-gray-300.dark:border-slate-600.bg-white.dark:bg-slate-900.text-gray-900.dark:text-slate-100.rounded-lg.px-3.py-1.5.text-sm.focus:ring-2.focus:ring-indigo-500.focus:outline-none', {
                   value: filterAction,
                   onchange: function(e) { filterAction = e.target.value; page = 1; load(); },
                 }, [
-                  m('option', { value: '' }, 'Tüm İşlemler'),
-                  m('option', { value: 'create' }, 'Oluşturma (create)'),
-                  m('option', { value: 'update' }, 'Güncelleme (update)'),
-                  m('option', { value: 'delete' }, 'Silme (delete)'),
-                  m('option', { value: 'restore' }, 'Geri Yükleme (restore)'),
+                  m('option', { value: '' }, 'All Actions'),
+                  m('option', { value: 'create' }, 'Creation (create)'),
+                  m('option', { value: 'update' }, 'Update (update)'),
+                  m('option', { value: 'delete' }, 'Deletion (delete)'),
+                  m('option', { value: 'restore' }, 'Restore (restore)'),
                 ]),
               ]),
 
               // Search Filter (Actor, Path)
               m('div', [
-                m('label.block.text-xs.font-medium.text-gray-600.dark:text-slate-400.mb-1', 'Arama'),
+                m('label.block.text-xs.font-medium.text-gray-600.dark:text-slate-400.mb-1', 'Search'),
                 m('div.relative', [
                   m('input.w-full.border.border-gray-300.dark:border-slate-600.bg-white.dark:bg-slate-900.text-gray-900.dark:text-slate-100.rounded-lg.pl-8.pr-3.py-1.5.text-sm.focus:ring-2.focus:ring-indigo-500.focus:outline-none', {
                     value: filterSearch,
-                    placeholder: 'E-posta, IP veya yol...',
+                    placeholder: 'Email, IP or path...',
                     oninput: function(e) { filterSearch = e.target.value; },
                     onkeydown: function(e) { if (e.key === 'Enter') { page = 1; load(); } },
                   }),
@@ -360,19 +360,19 @@ function generateAuditLogComponent(options = {}) {
           // 4. Main Content Area (Timeline vs Table)
           loading ? m('div.py-16.text-center.space-y-3', [
             m('div.inline-block.animate-spin.rounded-full.h-8.w-8.border-4.border-indigo-600.border-t-transparent'),
-            m('p.text-sm.text-gray-500.dark:text-slate-400', 'Denetim kayıtları yükleniyor...'),
+            m('p.text-sm.text-gray-500.dark:text-slate-400', 'Loading audit logs...'),
           ]) : error ? m('div.p-6.rounded-xl.bg-red-50.dark:bg-red-950/40.border.border-red-200.dark:border-red-800.text-red-700.dark:text-red-300', [
-            m('h4.font-semibold.text-sm', 'Kayıtlar Yüklenemedi'),
+            m('h4.font-semibold.text-sm', 'Failed to Load Records'),
             m('p.text-xs.mt-1', error),
           ]) : rows.length === 0 ? m('div.py-16.text-center.bg-white.dark:bg-slate-800.rounded-xl.border.border-dashed.border-gray-300.dark:border-slate-700.p-8', [
             m('div.w-12.h-12.mx-auto.rounded-full.bg-gray-100.dark:bg-slate-700.flex.items-center.justify-center.text-gray-400.mb-3',
               renderSvgIcon('clock', 'w-6 h-6')
             ),
-            m('h3.text-base.font-medium.text-gray-900.dark:text-slate-100', 'Kayıt Bulunamadı'),
-            m('p.text-sm.text-gray-500.dark:text-slate-400.mt-1', 'Seçilen filtrelere uygun herhangi bir denetim kaydı bulunamadı.'),
+            m('h3.text-base.font-medium.text-gray-900.dark:text-slate-100', 'No Records Found'),
+            m('p.text-sm.text-gray-500.dark:text-slate-400.mt-1', 'No audit records found matching the selected filters.'),
             (filterModel || filterAction || filterRecordId || filterSearch) ? m('button.mt-4.text-xs.text-indigo-600.dark:text-indigo-400.hover:underline', {
               onclick: clearAllFilters,
-            }, 'Filtreleri temizle ve tekrar dene') : null,
+            }, 'Clear filters and try again') : null,
           ]) : viewMode === 'timeline' ? (
             // ==================== TIMELINE VIEW ====================
             m('div.space-y-6', [
@@ -403,7 +403,7 @@ function generateAuditLogComponent(options = {}) {
 
                         // Model & ID Tag (Clickable to focus)
                         m('button.px-2.5.py-0.5.text-xs.font-medium.bg-gray-100.dark:bg-slate-700.text-gray-800.dark:text-slate-200.rounded-md.hover:bg-indigo-100.dark:hover:bg-indigo-900/60.hover:text-indigo-700.transition-colors.flex.items-center.gap-1', {
-                          title: 'Bu kaydın tüm geçmişini zaman tünelinde göster',
+                          title: 'Show entire history of this record in timeline',
                           onclick: function() { focusRecord(r.resource_model, r.resource_id); },
                         }, [
                           m('span.font-semibold', r.resource_model),
@@ -425,7 +425,7 @@ function generateAuditLogComponent(options = {}) {
                         m('span.w-6.h-6.rounded-full.bg-slate-200.dark:bg-slate-700.text-slate-700.dark:text-slate-300.font-bold.flex.items-center.justify-center.text-[10px]',
                           ((r.actor_email && r.actor_email[0]) || 'A').toUpperCase()
                         ),
-                        m('span.font-medium.text-gray-900.dark:text-slate-100', r.actor_email || 'Sistem / Otomasyon'),
+                        m('span.font-medium.text-gray-900.dark:text-slate-100', r.actor_email || 'System / Automation'),
                         r.actor_id != null ? m('span.text-gray-400', '(ID: ' + r.actor_id + ')') : null,
                       ]),
 
@@ -434,16 +434,16 @@ function generateAuditLogComponent(options = {}) {
 
                     // Changes / Mutated Fields Summary
                     r.action === 'update' && changedFields.length > 0 ? m('div.pt-1.space-y-1.5', [
-                      m('span.text-xs.font-medium.text-gray-500.dark:text-slate-400', 'Değiştirilen Alanlar:'),
+                      m('span.text-xs.font-medium.text-gray-500.dark:text-slate-400', 'Changed Fields:'),
                       m('div.flex.flex-wrap.gap-1.5', changedFields.map(function(f) {
                         return m('span.px-2.py-0.5.rounded-md.bg-blue-50.text-blue-700.dark:bg-blue-950/40.dark:text-blue-300.border.border-blue-200.dark:border-blue-800.text-xs.font-mono', f);
                       })),
                     ]) : r.action === 'create' ? m('p.text-xs.text-gray-600.dark:text-slate-300',
-                      'Kayıt başarıyla oluşturuldu ve veritabanına eklendi.'
+                      'Record successfully created and added to database.'
                     ) : r.action === 'delete' ? m('p.text-xs.text-rose-600.dark:text-rose-400',
-                      'Kayıt veritabanından silindi (soft delete/hard delete).'
+                      'Record deleted from database (soft delete/hard delete).'
                     ) : r.action === 'restore' ? m('p.text-xs.text-amber-600.dark:text-amber-400',
-                      'Silinmiş kayıt başarıyla geri yüklendi.'
+                      'Deleted record successfully restored.'
                     ) : null,
 
                     // Details Toggle Accordion
@@ -451,17 +451,17 @@ function generateAuditLogComponent(options = {}) {
                       m('button.text-xs.text-indigo-600.dark:text-indigo-400.hover:underline.flex.items-center.gap-1', {
                         onclick: function() { toggleExpand(r.id); }
                       }, [
-                        m('span', isExpanded ? '▲ Teknik Detayları Gizle' : '▼ Teknik Detayları Göster'),
+                        m('span', isExpanded ? '▲ Hide Technical Details' : '▼ Show Technical Details'),
                       ]),
 
                       isExpanded ? m('div.mt-3.p-3.rounded-lg.bg-gray-50.dark:bg-slate-900.border.border-gray-200.dark:border-slate-700.text-xs.space-y-2', [
                         m('div.grid.grid-cols-1.md:grid-cols-2.gap-2', [
                           m('div', [
-                            m('span.font-semibold.text-gray-600.dark:text-slate-400', 'Yol: '),
+                            m('span.font-semibold.text-gray-600.dark:text-slate-400', 'Path: '),
                             m('span.font-mono.text-gray-800.dark:text-slate-200', (r.http_method || '') + ' ' + (r.path || '—')),
                           ]),
                           m('div', [
-                            m('span.font-semibold.text-gray-600.dark:text-slate-400', 'Tarayıcı / Agent: '),
+                            m('span.font-semibold.text-gray-600.dark:text-slate-400', 'User Agent: '),
                             m('span.truncate.text-gray-800.dark:text-slate-200.inline-block.max-w-xs', { title: r.user_agent || '' }, r.user_agent || '—'),
                           ]),
                         ]),
@@ -483,13 +483,13 @@ function generateAuditLogComponent(options = {}) {
               m('table.min-w-full.text-sm', [
                 m('thead.bg-gray-50.dark:bg-slate-900.border-b.border-gray-200.dark:border-slate-700', [
                   m('tr', [
-                    m('th.text-left.p-3.font-semibold.text-gray-700.dark:text-slate-300', 'Zaman'),
-                    m('th.text-left.p-3.font-semibold.text-gray-700.dark:text-slate-300', 'Kullanıcı'),
-                    m('th.text-left.p-3.font-semibold.text-gray-700.dark:text-slate-300', 'İşlem'),
+                    m('th.text-left.p-3.font-semibold.text-gray-700.dark:text-slate-300', 'Time'),
+                    m('th.text-left.p-3.font-semibold.text-gray-700.dark:text-slate-300', 'Actor'),
+                    m('th.text-left.p-3.font-semibold.text-gray-700.dark:text-slate-300', 'Action'),
                     m('th.text-left.p-3.font-semibold.text-gray-700.dark:text-slate-300', 'Model'),
-                    m('th.text-left.p-3.font-semibold.text-gray-700.dark:text-slate-300', 'Kayıt ID'),
-                    m('th.text-left.p-3.font-semibold.text-gray-700.dark:text-slate-300', 'Yol'),
-                    m('th.text-right.p-3.font-semibold.text-gray-700.dark:text-slate-300', 'Zaman Tüneli'),
+                    m('th.text-left.p-3.font-semibold.text-gray-700.dark:text-slate-300', 'Record ID'),
+                    m('th.text-left.p-3.font-semibold.text-gray-700.dark:text-slate-300', 'Path'),
+                    m('th.text-right.p-3.font-semibold.text-gray-700.dark:text-slate-300', 'Timeline'),
                   ]),
                 ]),
                 m('tbody.divide-y.divide-gray-100.dark:divide-slate-700', rows.map(function(r) {
@@ -500,7 +500,7 @@ function generateAuditLogComponent(options = {}) {
                       m('span.text-xs.text-gray-400', r.created_at || ''),
                     ]),
                     m('td.p-3.text-gray-800.dark:text-slate-200', [
-                      m('span.block.font-medium', r.actor_email || 'Sistem'),
+                      m('span.block.font-medium', r.actor_email || 'System'),
                       r.actor_id != null ? m('span.text-xs.text-gray-400', '#' + r.actor_id) : null,
                     ]),
                     m('td.p-3', [
@@ -514,7 +514,7 @@ function generateAuditLogComponent(options = {}) {
                     m('td.p-3.text-right', [
                       m('button.px-2.5.py-1.text-xs.font-medium.text-indigo-600.dark:text-indigo-400.hover:bg-indigo-50.dark:hover:bg-indigo-950/40.rounded-lg.transition-colors', {
                         onclick: function() { focusRecord(r.resource_model, r.resource_id); },
-                      }, 'Tünelde Gör →'),
+                      }, 'View Timeline →'),
                     ]),
                   ]);
                 })),

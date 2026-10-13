@@ -222,7 +222,7 @@ describe('Audit Log Timeline & Record History (plugins/audit-log)', () => {
 
       expect(registeredAction).not.toBeNull();
       expect(registeredAction.id).toBe('audit-timeline');
-      expect(registeredAction.label).toBe('Zaman Tüneli');
+      expect(registeredAction.label).toBe('Timeline');
 
       // Test handler redirect response
       const actionResult = await registeredAction.handler({ id: 42 }, { name: 'Post' });
@@ -234,8 +234,8 @@ describe('Audit Log Timeline & Record History (plugins/audit-log)', () => {
     it('generates Mithril component with timeline and table views', () => {
       const code = generateAuditLogComponent({ apiPrefix: '/_admin/api/audit-logs' });
       expect(code).toContain('/_admin/api/audit-logs');
-      expect(code).toContain('Zaman Tüneli');
-      expect(code).toContain('Tablo');
+      expect(code).toContain('Timeline');
+      expect(code).toContain('Table');
       expect(code).toContain('formatRelativeTime');
       expect(code).toContain('getActionTheme');
       expect(code).toContain('focusRecord');

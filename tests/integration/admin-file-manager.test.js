@@ -54,8 +54,8 @@ describe.sequential('Admin File Manager Plugin Integration', () => {
         fileManagerPlugin({
           baseDir: uploadDir,
           publicBasePath: '/uploads',
-          pageTitle: 'Dosya Yöneticisi',
-          menuLabel: 'Dosyalar',
+          pageTitle: 'File Manager',
+          menuLabel: 'Files',
         }),
         adminPanelPlugin({ db }),
       ],
