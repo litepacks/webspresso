@@ -525,9 +525,8 @@ function generateAuditLogComponent(options = {}) {
           // 5. Pagination Bar
           m('div.flex.flex-col.sm:flex-row.items-center.justify-between.gap-3.pt-2', [
             m('div.text-xs.text-gray-500.dark:text-slate-400', [
-              m('span', 'Total: '),
               m('strong.font-semibold.text-gray-800.dark:text-slate-200', total),
-              m('span', ' records'),
+              m('span', ' records listed'),
             ]),
 
             m('div.flex.items-center.gap-2', [
