@@ -1454,6 +1454,7 @@ export interface AuditLogPluginOptions {
   tableName?: string;
   includeDefaultPage?: boolean;
   apiPrefix?: string;
+  registerRecordAction?: boolean;
   retentionDays?: number;
   cleanupIntervalMs?: number;
   autoCleanup?: boolean;
@@ -1471,6 +1472,8 @@ export function auditLogPlugin(options?: AuditLogPluginOptions): WebspressoPlugi
     stopCleanup(): void;
     getRetentionConfig(): AuditLogRetentionConfig;
     queryLogs(filters?: Record<string, unknown>): Promise<any[]>;
+    queryTimeline(model: string, recordId: string | number): Promise<any[]>;
+    getRecordTimeline(model: string, recordId: string | number): Promise<any[]>;
     getMigrationTemplate(tableName?: string): string;
   };
   dispose?(): void;
@@ -1711,6 +1714,86 @@ export interface BasicAuthPluginOptions {
 }
 
 export function basicAuthPlugin(options?: BasicAuthPluginOptions): WebspressoPlugin;
+
+export interface ApiKeyRecord {
+  id?: number | string;
+  name: string;
+  key_hash: string;
+  key_hint: string;
+  prefix?: string;
+  user_id?: number | string | null;
+  scopes?: string[] | string | null;
+  rate_limit?: number | null;
+  metadata?: any;
+  expires_at?: Date | string | null;
+  last_used_at?: Date | string | null;
+  revoked_at?: Date | string | null;
+  created_at?: Date | string;
+  updated_at?: Date | string;
+  user?: any;
+  [key: string]: any;
+}
+
+export interface ApiKeyPluginOptions {
+  /** Database instance or Knex instance. */
+  db?: any;
+  /** Knex instance. */
+  knex?: any;
+  /** Table name for API keys. Default 'api_keys'. */
+  tableName?: string;
+  /** Default key prefix. Default 'wsp_live_'. */
+  prefix?: string;
+  /** Random byte length for key generation. Default 24. */
+  byteLength?: number;
+  /** Protect all matching routes globally. Default false. */
+  global?: boolean;
+  /** Route prefixes to protect when global: true. Default true (all routes). */
+  routes?: string | string[] | boolean;
+  /** Path prefixes to bypass authentication. */
+  skipPaths?: string[];
+  /** Custom predicate function to skip authentication. */
+  skip?: (req: Request) => boolean;
+  /** Static in-memory keys for testing, serverless, or microservices. */
+  keys?: Array<{ key?: string; key_hash?: string; name?: string; scopes?: string[] | string; [key: string]: any }> | Record<string, any>;
+  /** Automatically update last_used_at timestamp. Default true. */
+  trackUsage?: boolean;
+  /** Throttle interval in milliseconds for last_used_at updates. Default 60000. */
+  updateLastUsedThrottleMs?: number;
+  /** Allow query parameter extraction (?apiKey=...). Default false. */
+  allowQueryParam?: boolean;
+  /** Query parameter name. Default 'apiKey'. */
+  queryParamName?: string;
+  /** Custom key extraction function. */
+  extractKey?: (req: Request) => string | null;
+  /** Custom key lookup by SHA-256 hash. */
+  findKeyByHash?: (hash: string, req?: Request) => Promise<ApiKeyRecord | null> | ApiKeyRecord | null;
+  /** Custom verification hook. */
+  verify?: (rawKey: string, req?: Request) => Promise<ApiKeyRecord | null> | ApiKeyRecord | null;
+  /** Custom user loader for key. */
+  getUser?: (record: ApiKeyRecord, req?: Request) => Promise<any> | any;
+  /** Callback hook on successful authentication. */
+  onAuthenticated?: (req: Request, record: ApiKeyRecord) => void | Promise<void>;
+  /** Custom 401 Unauthorized response handler, string, or object. */
+  unauthorizedResponse?: ((req: Request, res: Response, info?: any) => unknown) | string | Record<string, unknown>;
+  /** Custom 403 Forbidden response handler, string, or object. */
+  forbiddenResponse?: ((req: Request, res: Response, info?: any) => unknown) | string | Record<string, unknown>;
+}
+
+export interface ApiKeyRouteOptions {
+  /** Required scope(s) for this route. Supports wildcards ('*', 'reports:*'). */
+  scopes?: string | string[];
+  /** Whether all required scopes must be present (true) or any scope (false). Default true. */
+  requireAllScopes?: boolean;
+  /** If true, allows requests without API key to pass through without error. Default false. */
+  optional?: boolean;
+  /** Custom 401 Unauthorized response. */
+  unauthorizedResponse?: ((req: Request, res: Response, info?: any) => unknown) | string | Record<string, unknown>;
+  /** Custom 403 Forbidden response. */
+  forbiddenResponse?: ((req: Request, res: Response, info?: any) => unknown) | string | Record<string, unknown>;
+}
+
+export function apiKeyPlugin(options?: ApiKeyPluginOptions): WebspressoPlugin;
+export function createApiKeyMiddleware(options?: ApiKeyPluginOptions & ApiKeyRouteOptions): RequestHandler;
 
 export interface ContentPluginOptions {
   db: import('./index').Database;

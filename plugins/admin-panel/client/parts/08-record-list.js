@@ -134,6 +134,11 @@ async function executeRecordAction(action, record, modelName, modelMeta, onSucce
     if (msg) {
       notifySuccess(msg);
     }
+    const redirectUrl = res?.result?.redirect || res?.redirect;
+    if (redirectUrl) {
+      m.route.set(redirectUrl);
+      return;
+    }
     if (typeof onSuccess === 'function') {
       await onSuccess(res);
     } else if (typeof loadRecords === 'function' && state.pagination) {

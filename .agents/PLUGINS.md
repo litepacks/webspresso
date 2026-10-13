@@ -77,6 +77,41 @@ Zero-dependency HTTP Basic Authentication (RFC 7617) plugin with timing-safe equ
   - `onAuthenticated`: Callback hook `(req, user) => ...`.
 - **Named Middleware**: Registers `ctx.middlewares.basicAuth` for route files.
 
+### 2.2 `apiKeyPlugin` (`plugins/api-key`)
+Zero-dependency B2B & Developer API Key Management Plugin with standard prefix format (`wsp_live_...`), SHA-256 secure hash storage, timing-safe constant-time verification (`crypto.timingSafeEqual`), granular scopes/permissions with wildcard support, non-blocking `last_used_at` usage tracking, and programmatic creation/revocation APIs.
+- **Options**:
+  - `db` / `knex`: Webspresso Database or Knex instance.
+  - `tableName`: Database table name (default `'api_keys'`).
+  - `prefix`: Default key prefix (default `'wsp_live_'`).
+  - `byteLength`: Random byte count for key generation (default `24`).
+  - `global`: Boolean, whether to protect routes globally (default `false`).
+  - `routes`: Route prefix(es) to protect when `global: true`.
+  - `skipPaths` / `skip`: Exclusion paths or predicate function `(req) => boolean`.
+  - `keys`: Static in-memory keys for testing / serverless / simple setups (`[{ key, name, scopes }]` or map).
+  - `trackUsage`: Boolean (default `true`), whether to automatically update `last_used_at` on verified keys.
+  - `updateLastUsedThrottleMs`: Throttle period in ms to avoid DB write thrashing (default `60000`).
+  - `allowQueryParam`: Boolean (default `false`), allow extracting API key via `?apiKey=...`.
+  - `findKeyByHash` / `verify`: Custom key lookup or verification hook.
+  - `getUser`: Custom async user resolver `(apiKeyRecord, req) => Promise<User | null>`.
+  - `onAuthenticated`: Callback hook `(req, apiKeyRecord) => void`.
+- **Named Middleware**:
+  - `middleware: ['apiKey']`: Requires valid API key via `X-API-Key`, `api-key`, or `Authorization: Bearer <key>`.
+  - `middleware: [['apiKey', { scopes: ['reports:read', 'orders:*'] }]]`: Enforces required granular scopes with prefix wildcard support (`*`, `namespace:*`).
+  - `middleware: [['apiKey', { optional: true }]]`: Non-blocking authentication (populates `req.apiKey` if present, passes through if absent).
+- **Request Context Injected**:
+  - `req.apiKey`: The authenticated API key record (including name, key_hint, scopes, metadata).
+  - `req.auth.apiKey`: Equivalent reference inside `req.auth`.
+  - `req.auth.user` & `req.user`: Associated user record (if `user_id` or `getUser` resolved).
+- **Programmatic API (`apiKeyPlugin.api`)**:
+  - `generateKey(options)`: Generate fresh key with hash and masked hint (`wsp_live_...4f2a`).
+  - `hashKey(rawKey)`: Compute SHA-256 hex string.
+  - `maskKey(rawKey, prefix)`: Mask raw key for logs/UI.
+  - `createApiKey(data, options)`: Generates key, hashes it, and stores in database table (returns raw key once).
+  - `verifyApiKey(rawKey, options)`: Verify raw key against DB, checking expiration and revocation.
+  - `revokeApiKey(idOrHash, options)`: Mark key as revoked in DB (`revoked_at = now()`).
+  - `getMigrationTemplate(tableName)`: Knex migration script creating `api_keys` table.
+  - `createApiKeyModel(tableName)`: Webspresso ORM model definition with hidden `key_hash`.
+
 ### 2.2 `adminPanelPlugin` (`plugins/admin-panel`)
 Mithril.js SPA Admin Panel mounted at `/_admin`.
 - **Options**: `{ path: '/_admin', db, title: 'Webspresso Admin' }`
@@ -217,23 +252,37 @@ Polar.sh subscription billing — checkout, customer portal, webhooks, Customer 
   - [docs/guides/polar-production-checklist.md](../docs/guides/polar-production-checklist.md)
 
 ### 2.12 `auditLogPlugin` (`plugins/audit-log`)
-Admin mutation tracking and audit history with scheduled retention and manual purge API.
+Admin mutation tracking, record change timeline, and audit history with scheduled retention and manual purge API.
 - **Options**:
   - `db`: Database instance (must expose `.knex`).
   - `tableName`: Database table name (default `'audit_logs'`).
+  - `registerRecordAction`: Register built-in "Zaman Tüneli" action on all admin models (default `true`).
   - `retentionDays`: Days to retain audit trail entries (default `90`).
   - `cleanupIntervalMs`: Background cleanup timer frequency (default 24h).
   - `autoCleanup`: Enable scheduled background purge (default `true`).
   - `cleanupOnStart`: Run initial purge shortly after boot (default `true`).
   - `retention`: `{ enabled, days: 90, intervalMs: 86400000, runOnStart: true }` (or `false` to disable).
+- **Zaman Tüneli (Timeline UI) Features**:
+  - **Dual Mode**: Switch seamlessly between **Zaman Tüneli (Timeline View)** and **Tablo Görünümü (Table View)**.
+  - **Record Focus Mode**: Clicking any `Model #ID` tag instantly filters and displays that specific record's revision timeline.
+  - **Visual Spine & Status Icons**: Color-coded action nodes for `create` (emerald +), `update` (blue ✏️), `delete` (rose 🗑️), and `restore` (amber ↺).
+  - **Changed Fields Diff**: Clearly lists modified fields (e.g. `title`, `price`) on every update event.
+  - **Expandable Details**: Inspect full HTTP request path, actor IP, user agent, and pretty-printed JSON metadata.
+  - **Built-in Record Action**: One-click "Zaman Tüneli" button on record lists and edit forms jumps straight to that record's audit history.
+- **API & Admin Panel Endpoints**:
+  - `GET /_admin/api/audit-logs`: List paginated logs with filters (`model`, `recordId`, `action`, `search`, `from`, `to`).
+  - `GET /_admin/api/audit-logs/timeline/:model/:id`: Dedicated chronological record change timeline with summary stats.
+  - `POST /_admin/api/audit-logs/purge`: `{ days: 90 }` or `{ olderThan: '2026-01-01' }`.
+- **Programmatic Plugin API**:
+  ```javascript
+  const audit = ctx.usePlugin('audit-log');
+  const history = await audit.queryTimeline('Post', 42);
+  const logs = await audit.queryLogs({ model: 'User', action: 'delete' });
+  ```
 - **Pruning CLI**:
   ```bash
   webspresso audit:prune --days 90
   ```
-- **API & Admin Panel**:
-  - `POST /_admin/api/audit-logs/purge`: `{ days: 90 }` or `{ olderThan: '2026-01-01' }`
-  - "Purge 90d" button directly in the Admin Panel audit log viewer.
-  - Lifecycle integration: background timers use `.unref()` and clean up on server shutdown.
 
 ### 2.13 `ormCacheAdminPlugin` (`plugins/orm-cache-admin`)
 ORM Cache inspection and invalidation dashboard.

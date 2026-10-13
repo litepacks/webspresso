@@ -10,6 +10,8 @@ import {
   zdb,
   restResourcePlugin,
   corsPlugin,
+  apiKeyPlugin,
+  createApiKeyMiddleware,
   getAllModels,
   type InferModel,
   type InferModelCreate,
@@ -30,8 +32,12 @@ const { app }: { app: WebspressoApplication } = createApp({
   plugins: [
     restResourcePlugin({ path: '/api/rest' }),
     corsPlugin({ origin: ['https://example.com'], credentials: true }),
+    apiKeyPlugin({ prefix: 'wsp_live_', tableName: 'api_keys' }),
   ],
 });
+
+const _apiKeyMw = createApiKeyMiddleware({ scopes: ['users:read'] });
+void _apiKeyMw;
 
 void app;
 void app.serviceRegistry;

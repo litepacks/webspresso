@@ -225,7 +225,7 @@ registry.registerWidget('recent-orders', {
   - Top tables by row count with visual progress percentage bars
   - Direct navigation links to model CRUD screens
 - **`quick-actions`**: Fast shortcuts to create new records across enabled models.
-- **`recent-activity`**: Timeline of recent administrative mutations (creates, updates, deletes).
+- **`recent-activity`**: Timeline of recent administrative mutations (creates, updates, deletes) powered by `audit_logs` / `admin_activity_logs` with direct links to record changes.
 
 ---
 
@@ -242,6 +242,16 @@ registry.registerAction('Product', {
   handler: async (record, { request, reload }) => {
     await request.post(`/api/products/${record.id}/duplicate`);
     reload();
+  },
+});
+
+// Record action with navigation redirect (e.g. audit-timeline)
+registry.registerAction('Product', {
+  id: 'view-history',
+  label: 'History',
+  icon: 'clock',
+  handler: async (record, model) => {
+    return { redirect: `/_admin/audit-log?model=${model.name}&recordId=${record.id}` };
   },
 });
 

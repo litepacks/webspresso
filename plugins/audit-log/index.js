@@ -36,6 +36,7 @@ function auditLogPlugin(options = {}) {
     tableName = 'audit_logs',
     includeDefaultPage = true,
     apiPrefix = '/audit-logs',
+    registerRecordAction = true,
   } = options;
 
   const pageTitle = title || adminTitle || customPageTitle || 'Audit log';
@@ -152,6 +153,8 @@ function auditLogPlugin(options = {}) {
         return { ...retentionConfig };
       },
       queryLogs: (filters) => handlers.queryLogs(filters),
+      queryTimeline: (model, recordId) => handlers.queryTimeline(model, recordId),
+      getRecordTimeline: (model, recordId) => handlers.queryTimeline(model, recordId),
       getMigrationTemplate: (name) => generateAuditLogsMigration(name || tableName),
     },
 
@@ -211,10 +214,31 @@ function auditLogPlugin(options = {}) {
           prefix: apiPrefix,
           routes: [
             { method: 'get', path: '', handler: handlers.listHandler },
+            { method: 'get', path: '/timeline', handler: handlers.timelineHandler },
+            { method: 'get', path: '/timeline/:model/:id', handler: handlers.timelineHandler },
             { method: 'post', path: '/purge', handler: handlers.purgeHandler },
           ],
         },
       });
+
+      if (registerRecordAction && typeof adminApi.registerAction === 'function') {
+        adminApi.registerAction('audit-timeline', {
+          id: 'audit-timeline',
+          label: 'Zaman Tüneli',
+          icon: 'clock',
+          color: 'blue',
+          models: '*',
+          handler: async (record, model) => {
+            const primaryKey = model?.primaryKey || 'id';
+            const id = record ? record[primaryKey] : null;
+            const modelName = model?.name || (typeof model === 'string' ? model : '');
+            return {
+              redirect: `/audit-log?model=${encodeURIComponent(modelName)}&recordId=${encodeURIComponent(id)}`,
+              message: `Zaman tüneli: ${modelName} #${id}`,
+            };
+          },
+        });
+      }
     },
   };
 }
