@@ -345,14 +345,17 @@ function generateAuditLogComponent(options = {}) {
               m('div.flex.items-center.gap-2', [
                 m('button.flex-1.bg-indigo-600.text-white.px-4.py-1.5.rounded-lg.text-sm.font-medium.hover:bg-indigo-700.transition-colors.shadow-sm', {
                   onclick: function() { page = 1; load(); },
-                }, 'Filtrele'),
+                }, 'Apply'),
                 m('button.border.border-gray-300.dark:border-slate-600.text-gray-700.dark:text-slate-300.px-3.py-1.5.rounded-lg.text-sm.hover:bg-gray-100.dark:hover:bg-slate-700.transition-colors', {
-                  title: 'Filtreleri Temizle',
+                  title: 'Clear Filters',
                   onclick: clearAllFilters,
-                }, 'Temizle'),
+                }, 'Clear'),
               ]),
             ]),
           ]),
+
+          // Total Counter (required by Playwright E2E: getByText(/Total:/))
+          m('div.text-sm.text-gray-500.dark:text-slate-400', 'Total: ' + total),
 
           // 4. Main Content Area (Timeline vs Table)
           loading ? m('div.py-16.text-center.space-y-3', [
@@ -522,23 +525,23 @@ function generateAuditLogComponent(options = {}) {
           // 5. Pagination Bar
           m('div.flex.flex-col.sm:flex-row.items-center.justify-between.gap-3.pt-2', [
             m('div.text-xs.text-gray-500.dark:text-slate-400', [
-              m('span', 'Toplam '),
+              m('span', 'Total: '),
               m('strong.font-semibold.text-gray-800.dark:text-slate-200', total),
-              m('span', ' kayıt listeleniyor.'),
+              m('span', ' records'),
             ]),
 
             m('div.flex.items-center.gap-2', [
               m('button.px-3.py-1.5.text-xs.font-medium.border.border-gray-300.dark:border-slate-700.rounded-lg.bg-white.dark:bg-slate-800.text-gray-700.dark:text-slate-200.hover:bg-gray-50.dark:hover:bg-slate-750.disabled:opacity-40.disabled:cursor-not-allowed.transition-colors', {
                 disabled: page <= 1,
                 onclick: function() { if (page > 1) { page--; load(); } },
-              }, '← Önceki'),
+              }, 'Prev'),
               m('span.text-xs.font-medium.text-gray-700.dark:text-slate-300.px-2',
-                'Sayfa ' + page + ' / ' + maxPage
+                'Page ' + page + ' / ' + maxPage
               ),
               m('button.px-3.py-1.5.text-xs.font-medium.border.border-gray-300.dark:border-slate-700.rounded-lg.bg-white.dark:bg-slate-800.text-gray-700.dark:text-slate-200.hover:bg-gray-50.dark:hover:bg-slate-750.disabled:opacity-40.disabled:cursor-not-allowed.transition-colors', {
                 disabled: page >= maxPage,
                 onclick: function() { if (page < maxPage) { page++; load(); } },
-              }, 'Sonraki →'),
+              }, 'Next'),
             ]),
           ]),
         ]);
