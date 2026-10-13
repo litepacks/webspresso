@@ -302,8 +302,55 @@ npx webspresso typegen --out types/webspresso.d.ts --no-env-file
 - **Typed Services (`req.service('name', input)`)**: Auto-completes registered service names and enforces validated input payloads.
 - **Typed Route Table (`AppRoute`, `AppRoutePath`)**: Union types for all discovered SSR and API routes.
 
+---
 
+## 16. Containerization & Docker Setup (`add:docker` / `docker`)
 
+Generate production-ready, security-hardened, multi-stage `Dockerfile`, `.dockerignore`, and `docker-compose.yml`:
 
+```bash
+# Generate Dockerfile, .dockerignore, and docker-compose.yml
+npx webspresso add:docker
 
+# Customize Node.js version, database service, or container port
+npx webspresso add:docker --node 22-alpine --db postgres --redis --port 3000
 
+# Overwrite existing files
+npx webspresso add:docker --force
+```
+
+### Generated Artifacts:
+- **Multi-Stage `Dockerfile`**:
+  - `deps` stage: caches production dependencies with native build tools (`python3`, `make`, `g++`).
+  - `builder` stage: runs asset build scripts (`npm run build`).
+  - `runner` stage: runs as unprivileged user `webspresso` (UID 1001), health check with `/health` and `/healthz`, and `SIGTERM` signal handling.
+- **`.dockerignore`**: Excludes `node_modules`, `.env`, local `.sqlite` databases, test files, and git metadata while preserving upload directories.
+- **`docker-compose.yml`**: Configures app container with persistent upload volumes, database services (PostgreSQL, MySQL, or SQLite), and optional Redis.
+- **`package.json` Scripts**: Adds `docker:build`, `docker:run`, `docker:up`, and `docker:down`.
+
+---
+
+## 17. Production Deployment Preflight Check (`deploy:check` / `check:deploy`)
+
+Run comprehensive pre-flight verification before deploying to Fly.io, Railway, Render, VPS, or Kubernetes:
+
+```bash
+# Run production preflight verification
+npx webspresso deploy:check
+
+# Run against a specific environment (.env.staging or .env.production)
+npx webspresso deploy:check --env staging
+
+# Strict mode: fail with exit code 1 on warnings as well as errors (ideal for CI/CD)
+npx webspresso deploy:check --strict
+
+# Machine-readable JSON output for automated deployment pipelines
+npx webspresso deploy:check --json
+```
+
+### Audited Verification Areas:
+1. **Secrets & Cryptography**: Ensures `SESSION_SECRET` or `APP_KEY` is set, >= 32 characters, and not using weak placeholder defaults.
+2. **Git & Leak Prevention**: Verifies `.env` and local database files are excluded in `.gitignore`.
+3. **Container Hardening**: Ensures `Dockerfile` runs as a non-root `USER`, configures a `HEALTHCHECK`, and uses multi-stage caching.
+4. **Database & Migrations**: Audits for pending unapplied migrations and warns against ephemeral SQLite storage.
+5. **Server Optimizations**: Validates HTTP compression (`compression: true`), graceful shutdown, and health check endpoints.

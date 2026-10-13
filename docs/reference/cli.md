@@ -75,3 +75,24 @@ Generates all required favicon sizes, PWA `manifest.json`, and Nunjucks `<head>`
 
 ### `webspresso admin:password`
 Interactively updates an admin staff user's password with secure bcrypt hashing.
+
+### `webspresso add:docker`
+Generates a production-ready, multi-stage `Dockerfile`, `.dockerignore`, `docker-compose.yml`, and `package.json` scripts (`docker:build`, `docker:run`, `docker:up`).
+
+| Option / Flag | Description |
+| :--- | :--- |
+| `-n, --node <version>` | Node.js base image version (default: `22-alpine`). |
+| `-d, --db <type>` | Database service: `postgres`, `mysql`, `sqlite`, `none` (auto-detected). |
+| `-r, --redis` | Include Redis container in `docker-compose.yml`. |
+| `-p, --port <port>` | Application container port (default: `3000`). |
+| `-f, --force` | Overwrite existing files without prompting. |
+
+### `webspresso deploy:check` (alias: `check:deploy`)
+Runs a production preflight audit validating environment variables (`SESSION_SECRET`, `NODE_ENV`), cryptographic secret strength, `.gitignore` leakage prevention, container security (non-root user, health check), and pending database migrations.
+
+| Option / Flag | Description |
+| :--- | :--- |
+| `-e, --env <env>` | Target environment to evaluate (default: `production`). |
+| `--strict` | Fail with exit code 1 if any warnings are detected (ideal for CI/CD). |
+| `--json` | Output results in JSON format for automated pipelines. |
+
