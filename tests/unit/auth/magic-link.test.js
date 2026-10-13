@@ -74,7 +74,7 @@ describe('Magic Link Authentication (core/auth/magic-link)', () => {
 
       expect(html).toContain('Alice');
       expect(html).toContain('https://mysite.com/verify?token=xyz');
-      expect(html).toContain('10 dakika');
+      expect(html).toContain('10 minutes');
     });
 
     it('formatMagicLinkHtml handles default name and expiry', () => {
@@ -83,7 +83,7 @@ describe('Magic Link Authentication (core/auth/magic-link)', () => {
       });
 
       expect(html).toContain('there');
-      expect(html).toContain('15 dakika');
+      expect(html).toContain('15 minutes');
     });
   });
 
