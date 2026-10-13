@@ -94,34 +94,14 @@ function registerDashboardWidgets(options) {
     order: 20,
     dataLoader: async ({ db }) => {
       try {
-        let hasTable = await db.knex.schema.hasTable('admin_activity_logs');
-        let activities = [];
-
-        if (hasTable) {
-          activities = await db.knex('admin_activity_logs')
-            .orderBy('created_at', 'desc')
-            .limit(10);
-        } else {
-          hasTable = await db.knex.schema.hasTable('audit_logs');
-          if (hasTable) {
-            const rawLogs = await db.knex('audit_logs')
-              .orderBy('created_at', 'desc')
-              .limit(10);
-            activities = rawLogs.map((r) => ({
-              id: r.id,
-              action: r.action,
-              model: r.resource_model,
-              record_id: r.resource_id,
-              created_at: r.created_at,
-              user_name: r.actor_email || (r.actor_id != null ? `User #${r.actor_id}` : null),
-              description: `${r.action} on ${r.resource_model}${r.resource_id != null ? ' #' + r.resource_id : ''}`,
-            }));
-          }
-        }
-
+        const hasTable = await db.knex.schema.hasTable('admin_activity_logs');
         if (!hasTable) {
           return { enabled: false, activities: [] };
         }
+
+        const activities = await db.knex('admin_activity_logs')
+          .orderBy('created_at', 'desc')
+          .limit(10);
 
         return { enabled: true, activities };
       } catch (e) {
