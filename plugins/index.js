@@ -59,6 +59,8 @@ module.exports = {
   get createOAuthClient() { return require('./oauth').createOAuthClient; },
   get apiKeyPlugin() { return require('./api-key').apiKeyPlugin; },
   get createApiKeyMiddleware() { return require('./api-key').createApiKeyMiddleware; },
+  get webhooksPlugin() { return require('./webhooks').webhooksPlugin; },
+  get WebhookDispatcher() { return require('./webhooks').WebhookDispatcher; },
 };
 
 

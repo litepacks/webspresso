@@ -12,6 +12,7 @@ import {
   corsPlugin,
   apiKeyPlugin,
   createApiKeyMiddleware,
+  webhooksPlugin,
   getAllModels,
   type InferModel,
   type InferModelCreate,
@@ -33,6 +34,7 @@ const { app }: { app: WebspressoApplication } = createApp({
     restResourcePlugin({ path: '/api/rest' }),
     corsPlugin({ origin: ['https://example.com'], credentials: true }),
     apiKeyPlugin({ prefix: 'wsp_live_', tableName: 'api_keys' }),
+    webhooksPlugin({ endpointsTable: 'webhook_endpoints' }),
   ],
 });
 

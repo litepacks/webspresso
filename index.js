@@ -272,5 +272,9 @@ Object.defineProperties(module.exports, {
   createDevProfilerMiddleware: { get: () => require('./src/dev').createDevProfilerMiddleware, enumerable: true, configurable: true },
   generateTypes: { get: () => require('./src/dev/typegen').generateTypes, enumerable: true, configurable: true },
   typegen: { get: () => require('./src/dev/typegen'), enumerable: true, configurable: true },
+
+  // Webhooks plugin
+  webhooks: { get: () => require('./plugins/webhooks'), enumerable: true, configurable: true },
+  webhooksPlugin: { get: () => require('./plugins/webhooks').webhooksPlugin, enumerable: true, configurable: true },
 });
 

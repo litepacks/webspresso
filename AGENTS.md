@@ -143,6 +143,7 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 - `xlsxPlugin`: Excel spreadsheet generation, parsing, ORM streaming export (`res.xlsx`), and built-in services (`xlsx.generate`, `xlsx.parse`, `xlsx.exportModel`).
 - `csvPlugin`: RFC 4180 CSV generator, parser, Excel UTF-8 BOM compatibility, formula sanitization, streaming writer (`res.csv`), and built-in services (`csv.generate`, `csv.parse`, `csv.exportModel`).
 - `apiKeyPlugin`: Zero-dependency B2B & Developer API Key Management with SHA-256 secure storage, constant-time verification, granular wildcard scopes, named route middleware (`ctx.middlewares.apiKey`), and non-blocking usage tracking.
+- `webhooksPlugin`: Outgoing Webhook Dispatcher with HMAC-SHA256 cryptographic signatures, wildcard event matching (`*`, `order.*`), automatic retries with exponential backoff, background job queue integration (`core/queue`), built-in services (`webhook.dispatch`, `webhook.ping`, `webhook.retry`), and Mithril.js Admin Panel management UI.
 
 ---
 

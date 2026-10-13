@@ -112,7 +112,44 @@ Zero-dependency B2B & Developer API Key Management Plugin with standard prefix f
   - `getMigrationTemplate(tableName)`: Knex migration script creating `api_keys` table.
   - `createApiKeyModel(tableName)`: Webspresso ORM model definition with hidden `key_hash`.
 
-### 2.2 `adminPanelPlugin` (`plugins/admin-panel`)
+### 2.3 `webhooksPlugin` (`plugins/webhooks`)
+Outgoing Webhook Dispatcher and Management Plugin with zero external dependencies. Dispatches events to subscribed external HTTP endpoints, signs payloads with HMAC-SHA256 (`X-Webspresso-Signature` and standard timestamped `webhook-signature`), filters events with wildcards (`*`, `order.*`), automatically retries failed deliveries using exponential backoff, hooks directly into Webspresso Queue (`core/queue`), and provides an interactive Mithril.js Admin Panel management UI.
+- **Options**:
+  - `db` / `knex`: Webspresso Database or Knex instance.
+  - `endpointsTable`: Database table for endpoints (default `'webhook_endpoints'`).
+  - `deliveriesTable`: Database table for delivery logs (default `'webhook_deliveries'`).
+  - `maxAttempts`: Maximum retry attempts on delivery failure (default `3`).
+  - `backoffBaseMs`: Base delay for exponential backoff in milliseconds (default `1000`).
+  - `timeoutMs`: HTTP request timeout in milliseconds (default `10000`).
+  - `wrapPayload`: Boolean (default `true`), wrap data in standard `{ id, event, timestamp, data }` event envelope.
+  - `queue`: Custom `QueueManager` instance (auto-detected from `ctx.app.queue` if present).
+  - `endpoints`: Static in-memory endpoints array (useful for testing or serverless setups).
+  - `apiPrefix`: Admin REST API prefix (default `'/webhooks'`).
+  - `includeDefaultPage`: Register Admin UI page and sidebar menu item (default `true`).
+  - `pageTitle`: Admin page title (default `'Webhooks'`).
+  - `menuOrder`: Admin sidebar order (default `92`).
+- **Request & Application Context Injected**:
+  - `req.webhooks`: Direct reference to the `WebhookDispatcher` instance.
+  - `app.webhooks`: Direct reference on the Webspresso Application instance.
+- **Built-in Services Registered**:
+  - `'webhook.dispatch'`: Dispatch events via `ctx.service('webhook.dispatch', { event, payload })`.
+  - `'webhook.ping'`: Test endpoint connectivity via `ctx.service('webhook.ping', { endpointId })`.
+  - `'webhook.retry'`: Manually retry a delivery via `ctx.service('webhook.retry', { deliveryId })`.
+- **Programmatic API (`webhooksPlugin.api` / `dispatcher`)**:
+  - `dispatch(event, payload, options)`: Match endpoints and deliver payload asynchronously (or await with `wait: true`).
+  - `pingEndpoint(endpointId)`: Send a test `ping` event to verify destination connectivity.
+  - `retryDelivery(deliveryId)`: Re-send a failed delivery with incremented attempt count.
+  - `createEndpoint(data)`: Register a new webhook endpoint with custom or auto-generated `whsec_` secret.
+  - `updateEndpoint(id, data)` / `deleteEndpoint(id)`: Update or delete endpoint records.
+  - `listEndpoints(filters)`: List endpoints with delivery statistics.
+  - `listDeliveries(filters)`: Query delivery logs with filtering by endpoint, event, and success status.
+  - `purgeDeliveries(options)`: Purge logs older than specified retention days.
+  - `signPayload(payload, secret, options)`: Compute HMAC-SHA256 signature (`sha256=...` and `t=...,v1=...`).
+  - `verifySignature(payload, header, secret, options)`: Constant-time signature verification with drift tolerance.
+  - `getMigrationTemplate()`: Knex migration script for `webhook_endpoints` and `webhook_deliveries`.
+  - `getModels()`: Webspresso ORM model definitions for `WebhookEndpoint` and `WebhookDelivery`.
+
+### 2.4 `adminPanelPlugin` (`plugins/admin-panel`)
 Mithril.js SPA Admin Panel mounted at `/_admin`.
 - **Options**: `{ path: '/_admin', db, title: 'Webspresso Admin' }`
 - **Features**: Auto CRUD screens for ORM models, user staff auth, custom page registration, widgets, field renderers.

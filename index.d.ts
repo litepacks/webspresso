@@ -1795,6 +1795,82 @@ export interface ApiKeyRouteOptions {
 export function apiKeyPlugin(options?: ApiKeyPluginOptions): WebspressoPlugin;
 export function createApiKeyMiddleware(options?: ApiKeyPluginOptions & ApiKeyRouteOptions): RequestHandler;
 
+export interface WebhookEndpoint {
+  id?: number | string;
+  name: string;
+  url: string;
+  secret?: string;
+  events?: string[] | string;
+  is_active?: boolean;
+  description?: string | null;
+  headers?: Record<string, string> | string | null;
+  metadata?: Record<string, any> | string | null;
+  created_at?: Date | string;
+  updated_at?: Date | string;
+  [key: string]: any;
+}
+
+export interface WebhookDelivery {
+  id?: number | string;
+  endpoint_id: number | string;
+  event: string;
+  payload: string;
+  status_code?: number | null;
+  success: boolean;
+  duration_ms?: number | null;
+  error?: string | null;
+  response_body?: string | null;
+  attempt?: number;
+  max_attempts?: number;
+  next_retry_at?: Date | string | null;
+  created_at?: Date | string;
+  updated_at?: Date | string;
+  [key: string]: any;
+}
+
+export interface WebhooksPluginOptions {
+  db?: any;
+  knex?: any;
+  endpointsTable?: string;
+  deliveriesTable?: string;
+  maxAttempts?: number;
+  backoffBaseMs?: number;
+  timeoutMs?: number;
+  wrapPayload?: boolean;
+  queue?: any;
+  endpoints?: WebhookEndpoint[];
+  apiPrefix?: string;
+  includeDefaultPage?: boolean;
+  pageTitle?: string;
+  menuOrder?: number;
+}
+
+export interface WebhookDispatchResult {
+  dispatched: number;
+  deliveries: WebhookDelivery[];
+  results?: Array<{ success?: boolean; statusCode?: number; error?: string; [key: string]: any }>;
+}
+
+export interface WebhookDispatcherInstance {
+  dispatch(event: string, payload: any, options?: { wait?: boolean; endpointId?: number | string }): Promise<WebhookDispatchResult>;
+  pingEndpoint(endpointId: number | string): Promise<any>;
+  retryDelivery(deliveryId: number | string): Promise<any>;
+  createEndpoint(data: Partial<WebhookEndpoint>): Promise<WebhookEndpoint>;
+  getEndpoint(id: number | string): Promise<WebhookEndpoint | null>;
+  updateEndpoint(id: number | string, data: Partial<WebhookEndpoint>): Promise<WebhookEndpoint | null>;
+  deleteEndpoint(id: number | string): Promise<boolean>;
+  listEndpoints(filters?: { active?: boolean; search?: string; limit?: number; offset?: number }): Promise<WebhookEndpoint[]>;
+  listDeliveries(filters?: { endpointId?: number | string; event?: string; success?: boolean | string; page?: number; limit?: number }): Promise<{ items: WebhookDelivery[]; total: number; page: number; limit: number; pages: number }>;
+  getDelivery(id: number | string): Promise<WebhookDelivery | null>;
+  purgeDeliveries(options?: { days?: number }): Promise<number>;
+  dispose(): void;
+  on(event: string, listener: (...args: any[]) => void): this;
+}
+
+export function webhooksPlugin(options?: WebhooksPluginOptions): WebspressoPlugin & {
+  dispatcher: WebhookDispatcherInstance;
+};
+
 export interface ContentPluginOptions {
   db: import('./index').Database;
   adminPath?: string;
