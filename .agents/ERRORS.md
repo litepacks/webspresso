@@ -199,3 +199,62 @@ In server logs, 500 errors are automatically highlighted with visual banners pin
   Phase:  handler
 ```
 
+---
+
+## 6. Directory-Level Error Boundaries (`_error.njk` & `_error.js`)
+
+In addition to API JSON errors and the top-level 500 error page, Webspresso provides **Directory-Level Error Boundaries** for SSR pages (similar to Next.js `error.js` or Nuxt `error.vue`):
+
+```
+pages/
+├── _layout.njk                # Root site layout
+├── _error.njk                 # Global site error fallback
+└── dashboard/
+    ├── _layout.njk            # Dashboard layout (sidebar, header)
+    ├── _error.njk             # Dashboard-scoped error boundary
+    ├── _error.js              # Optional companion loader
+    ├── billing/
+    │   └── invoices.njk       # If load() fails here...
+    └── settings.njk
+```
+
+### 6.1 Isolated Error Containment
+When an unhandled error is thrown in a page route's `load()`, template rendering, or lifecycle hooks:
+1. Webspresso searches up the directory hierarchy (innermost leaf to root `pages/`) for the nearest `_error.njk`.
+2. The error boundary is rendered **inside** the ancestor cascading layouts (`_layout.njk`), ensuring that headers, sidebars, and navigation remain visible while displaying the isolated error state.
+3. The HTTP response status is preserved from `error.status || error.statusCode || 500` (e.g. throwing `NotFoundError` sets HTTP 404).
+
+### 6.2 Companion Loader (`_error.js`)
+An optional companion `_error.js` can prefetch support data, report errors to monitoring services, or enrich the context:
+
+```javascript
+// pages/dashboard/_error.js
+module.exports = {
+  load: async ({ error, req, res, ctx, db }) => {
+    return {
+      supportEmail: 'support@example.com',
+      incidentId: req.id,
+    };
+  },
+};
+```
+
+### 6.3 Template Context Variables
+Inside `_error.njk`, the following variables are injected:
+- `error`: `{ message, status, statusCode, code, name, details, fields, stack }` (stack is only exposed when `isDev === true`).
+- `route`: `{ routePath, file }`.
+- `req`: `{ path, query, params, method, url }`.
+- `fsy`: Template helper suite.
+- Plus any data returned by companion `_error.js` loader.
+
+### 6.4 Layout Opt-Out
+To render a full-page custom error view without the parent layout, set `layout: false` in `_error.js` or frontmatter:
+```yaml
+---
+layout: false
+---
+<div class="standalone-error-screen">
+  <h1>{{ error.status }} - {{ error.message }}</h1>
+</div>
+```
+

@@ -547,6 +547,19 @@ export interface CascadingLayoutInfo {
   configPath: string | null;
 }
 
+export interface CascadingErrorBoundaryInfo {
+  dirSegment: string;
+  errorRelPath: string;
+  fullPath: string;
+  configPath: string | null;
+}
+
+export interface CascadingLoadingInfo {
+  dirSegment: string;
+  loadingRelPath: string;
+  fullPath: string;
+}
+
 export namespace cascading {
   export function getDirectoryChain(relativeFilePath: string): string[];
   export function templateHasExtends(templateBody?: string | null, fullPath?: string): boolean;
@@ -568,6 +581,16 @@ export namespace cascading {
     renderContext: Record<string, unknown>,
     isDev?: boolean
   ): string;
+  export function findNearestErrorBoundary(
+    baseDir: string,
+    relativeFilePath: string,
+    isDev?: boolean
+  ): CascadingErrorBoundaryInfo | null;
+  export function findNearestLoadingTemplate(
+    baseDir: string,
+    relativeFilePath: string,
+    isDev?: boolean
+  ): CascadingLoadingInfo | null;
   export function clearCascadingCaches(): void;
 }
 
@@ -2540,14 +2563,20 @@ export interface HtmlStreamOptions {
   env: import('nunjucks').Environment;
   templatePath: string;
   context?: Record<string, unknown>;
-  defer?: Record<string, Promise<unknown> | { promise: Promise<unknown>; template?: string }>;
+  defer?: Record<string, Promise<unknown> | { promise: Promise<unknown>; template?: string; loadingTemplate?: string }>;
+  nonce?: string;
+  loadingTemplate?: string | null;
+  layouts?: CascadingLayoutInfo[];
 }
 
 export interface RenderStreamOptions {
   env?: import('nunjucks').Environment;
-  defer?: Record<string, Promise<unknown> | { promise: Promise<unknown>; template?: string }>;
+  defer?: Record<string, Promise<unknown> | { promise: Promise<unknown>; template?: string; loadingTemplate?: string }>;
   status?: number;
   flushImmediately?: boolean;
+  nonce?: string;
+  loadingTemplate?: string | null;
+  layouts?: CascadingLayoutInfo[];
 }
 
 export function createHtmlStream(options: HtmlStreamOptions): import('stream').Readable;

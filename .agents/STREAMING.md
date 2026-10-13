@@ -71,3 +71,38 @@ export async function load({ req, db }) {
   };
 }
 ```
+
+---
+
+## 4. Folder-Based Loading Skeletons (`_loading.njk`)
+
+Directory trees under `pages/` support automatic loading skeleton discovery and injection:
+
+```
+pages/
+├── _loading.njk               # Root fallback skeleton
+└── dashboard/
+    ├── _loading.njk           # Dashboard-specific skeleton
+    ├── _layout.njk            # Cascading layout (wraps streaming shell)
+    ├── overview.njk
+    └── overview.js            # Returns { stream: true, defer: { metrics: ... } }
+```
+
+### Automatic Slot Population
+When `_loading.njk` exists in a folder hierarchy, any empty `<div data-stream-target="slotName"></div>` element is automatically populated with the rendered `_loading.njk` template inside the initial flushed HTML shell:
+
+```html
+<!-- pages/dashboard/overview.njk -->
+<h1>Dashboard Overview</h1>
+
+<!-- Automatically receives _loading.njk skeleton on initial flush! -->
+<div data-stream-target="metrics"></div>
+```
+
+### Template Context Availability
+The skeleton HTML is also directly accessible in the template context:
+- `{{ loadingSkeleton | safe }}`
+- `{{ loadingHtml | safe }}`
+
+### Nested Layouts with Streaming
+Cascading `_layout.njk` layouts automatically wrap the initial streaming shell chunk, preserving headers, navigation, and sidebars without extra configuration.

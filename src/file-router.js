@@ -23,6 +23,8 @@ const {
   findCascadingLayouts,
   executeCascadingLayoutLoads,
   applyCascadingLayouts,
+  findNearestErrorBoundary,
+  findNearestLoadingTemplate,
   templateHasExtends,
 } = require('./routing/cascading');
 const {
@@ -33,6 +35,148 @@ const {
 
 const NOOP = () => {};
 const EMPTY_OBJECT = Object.freeze({});
+
+/**
+ * Handles directory-level error boundaries (_error.njk and companion _error.js)
+ * @returns {Promise<boolean>} True if rendered, false if unhandled
+ */
+async function handleDirectoryErrorBoundary({
+  err,
+  route,
+  req,
+  res,
+  ctx,
+  absolutePagesDir,
+  nunjucks,
+  isDev,
+  compiledStringTemplateCache,
+  baseHelpers,
+}) {
+  if (res.headersSent) {
+    return false;
+  }
+
+  const errorBoundary = findNearestErrorBoundary(absolutePagesDir, route.file, isDev);
+  if (!errorBoundary) {
+    return false;
+  }
+
+  const statusCode =
+    err?.status ||
+    err?.statusCode ||
+    (typeof err?.getStatus === 'function' ? err.getStatus() : null) ||
+    500;
+
+  try {
+    let errorData = {};
+    let errorConfig = null;
+
+    if (errorBoundary.configPath) {
+      try {
+        if (isDev && require.cache[require.resolve(errorBoundary.configPath)]) {
+          delete require.cache[require.resolve(errorBoundary.configPath)];
+        }
+        const mod = require(errorBoundary.configPath);
+        errorConfig = mod?.default || mod;
+        const loadFn = typeof errorConfig === 'function' ? errorConfig : errorConfig?.load;
+        if (typeof loadFn === 'function') {
+          const loaded = await loadFn({
+            req,
+            res,
+            error: err,
+            ctx,
+            db: req.db,
+          });
+          if (loaded && typeof loaded === 'object' && !Array.isArray(loaded)) {
+            Object.assign(errorData, loaded);
+          }
+        }
+      } catch (loadErr) {
+        console.error(`[webspresso] Error in _error.js loader "${errorBoundary.configPath}":`, loadErr.message);
+      }
+    }
+
+    const njkTpl = loadNjkRouteTemplate(errorBoundary.fullPath, isDev);
+    if (njkTpl.dataPatch && Object.keys(njkTpl.dataPatch).length > 0) {
+      Object.assign(errorData, njkTpl.dataPatch);
+    }
+
+    const errorRenderContext = {
+      ...(ctx?.data || {}),
+      ...errorData,
+      error: {
+        message: err?.message || 'An error occurred',
+        status: statusCode,
+        statusCode,
+        code: err?.code || 'ERROR',
+        name: err?.name || 'Error',
+        details: err?.details,
+        fields: err?.fields,
+        stack: isDev ? err?.stack : undefined,
+      },
+      route: {
+        routePath: route.routePath,
+        file: route.file,
+      },
+      meta: Object.assign({}, ctx?.meta, {
+        title: errorData.title || `Error ${statusCode}`,
+        description: errorData.description || err?.message,
+      }),
+      locale: ctx?.locale,
+      t: ctx?.t,
+      fsy: ctx?.fsy || (typeof createHelpers === 'function' ? createHelpers({ req, res, locale: ctx?.locale || 'en' }) : {}),
+      clientRuntime: ctx?.clientRuntime,
+      req: {
+        path: req.path,
+        query: req.query,
+        params: req.params,
+        method: req.method,
+        url: req.url,
+      },
+      isDev,
+    };
+
+    let html;
+    if (njkTpl.useStringRender && njkTpl.templateBody != null) {
+      if (typeof nunjucks.Template === 'function') {
+        let compiled = isDev ? null : compiledStringTemplateCache.get(errorBoundary.fullPath);
+        if (!compiled || (isDev && compiled._templateBody !== njkTpl.templateBody)) {
+          compiled = new nunjucks.Template(njkTpl.templateBody, nunjucks, errorBoundary.fullPath);
+          compiled._templateBody = njkTpl.templateBody;
+          compiledStringTemplateCache.set(errorBoundary.fullPath, compiled);
+        }
+        html = compiled.render(errorRenderContext);
+      } else if (typeof nunjucks.renderString === 'function') {
+        html = nunjucks.renderString(njkTpl.templateBody, errorRenderContext, { path: errorBoundary.fullPath });
+      } else {
+        html = nunjucks.render(errorBoundary.errorRelPath, errorRenderContext);
+      }
+    } else {
+      html = nunjucks.render(errorBoundary.errorRelPath, errorRenderContext);
+    }
+
+    const shouldApplyLayout = errorConfig?.layout !== false &&
+      errorData?.layout !== false &&
+      !templateHasExtends(njkTpl.templateBody, errorBoundary.fullPath);
+
+    if (shouldApplyLayout) {
+      const errorLayouts = findCascadingLayouts(absolutePagesDir, errorBoundary.errorRelPath, isDev);
+      if (errorLayouts.length > 0) {
+        const layoutCtx = { data: { ...errorRenderContext } };
+        await executeCascadingLayoutLoads(errorLayouts, req, layoutCtx, isDev);
+        const mergedLayoutContext = { ...errorRenderContext, ...(layoutCtx.data || {}) };
+        html = applyCascadingLayouts(nunjucks, errorLayouts, html, mergedLayoutContext, isDev);
+      }
+    }
+
+    res.status(statusCode);
+    res.send(html);
+    return true;
+  } catch (renderErr) {
+    console.error(`[webspresso] Failed rendering error boundary "${errorBoundary.errorRelPath}":`, renderErr);
+    return false;
+  }
+}
 const EMPTY_ARRAY = Object.freeze([]);
 
 // Cache for i18n files (key: filePath, value: { mtime, data })
@@ -1459,15 +1603,26 @@ function mountPages(app, options) {
         
         // Render the template
         const templatePath = route.file.split(path.sep).join('/');
+        const nearestLoading = findNearestLoadingTemplate(absolutePagesDir, route.file, isDev);
+        if (nearestLoading) {
+          renderContext.loadingTemplate = nearestLoading.loadingRelPath;
+        }
 
         // SSR Streaming mode (chunked transfer)
-        if (config?.stream || ctx.data?.__stream || ctx.defer) {
-          const streamDefer = ctx.defer || ctx.data?.__defer || {};
+        if (config?.stream || ctx.data?.__stream || ctx.data?.stream || ctx.defer || ctx.data?.defer) {
+          const streamDefer = ctx.defer || ctx.data?.defer || ctx.data?.__defer || {};
           const status = (route.routePath === '/404' || route.file === '404.njk') ? 404 : 200;
+          const shouldApplyLayout = config?.layout !== false &&
+            ctx.data?.layout !== false &&
+            ctx.meta?.layout !== false &&
+            !templateHasExtends(njkTpl.templateBody, route.fullPath);
+
           return await renderStream(res, templatePath, renderContext, {
             env: nunjucks,
             defer: streamDefer,
             status,
+            loadingTemplate: nearestLoading?.loadingRelPath,
+            layouts: shouldApplyLayout && cascadingLayouts.length > 0 ? cascadingLayouts : undefined,
           });
         }
 
@@ -1520,13 +1675,27 @@ function mountPages(app, options) {
         console.error(`SSR error ${route.routePath}:`, err);
         
         // Execute onError hook
-        const ctx = { req, res, error: err };
+        const hookCtx = { req, res, error: err };
         try {
-          await executeHook(globalHooks, 'onError', ctx, err);
+          await executeHook(globalHooks, 'onError', hookCtx, err);
         } catch (hookErr) {
           console.error('Error in onError hook:', hookErr);
         }
         
+        const handled = await handleDirectoryErrorBoundary({
+          err,
+          route,
+          req,
+          res,
+          ctx: req.context || hookCtx,
+          absolutePagesDir,
+          nunjucks,
+          isDev,
+          compiledStringTemplateCache,
+        });
+
+        if (handled) return;
+
         return next(err);
       }
     });

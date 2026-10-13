@@ -13,6 +13,8 @@ import {
   findCascadingLayouts,
   executeCascadingLayoutLoads,
   applyCascadingLayouts,
+  findNearestErrorBoundary,
+  findNearestLoadingTemplate,
   clearCascadingCaches,
 } from '../../../src/routing/cascading';
 import { createApp } from '../../../src/server';
@@ -583,6 +585,123 @@ data:
       expect(res.status).toBe(200);
       expect(res.text).toContain('style="background-color: #4f46e5"');
       expect(res.text).toContain('<p>Hello world</p>');
+    });
+  });
+
+  describe('findNearestErrorBoundary', () => {
+    it('finds _error.njk in leaf directory', () => {
+      const pagesDir = path.join(tempDir, 'pages');
+      const billingDir = path.join(pagesDir, 'dashboard', 'billing');
+      fs.mkdirSync(billingDir, { recursive: true });
+
+      const leafError = path.join(billingDir, '_error.njk');
+      fs.writeFileSync(leafError, '<h1>Billing Error</h1>');
+
+      const found = findNearestErrorBoundary(pagesDir, 'dashboard/billing/invoices.njk', true);
+      expect(found).not.toBeNull();
+      expect(found?.dirSegment).toBe('dashboard/billing');
+      expect(found?.errorRelPath).toBe('dashboard/billing/_error.njk');
+      expect(found?.fullPath).toBe(leafError);
+      expect(found?.configPath).toBeNull();
+    });
+
+    it('falls back to parent _error.njk if leaf has none', () => {
+      const pagesDir = path.join(tempDir, 'pages');
+      const dashboardDir = path.join(pagesDir, 'dashboard');
+      const billingDir = path.join(dashboardDir, 'billing');
+      fs.mkdirSync(billingDir, { recursive: true });
+
+      const dashError = path.join(dashboardDir, '_error.njk');
+      const dashErrorJs = path.join(dashboardDir, '_error.js');
+      fs.writeFileSync(dashError, '<h1>Dashboard Error</h1>');
+      fs.writeFileSync(dashErrorJs, 'module.exports = { load: () => ({ custom: true }) };');
+
+      const found = findNearestErrorBoundary(pagesDir, 'dashboard/billing/invoices.njk', true);
+      expect(found).not.toBeNull();
+      expect(found?.dirSegment).toBe('dashboard');
+      expect(found?.errorRelPath).toBe('dashboard/_error.njk');
+      expect(found?.fullPath).toBe(dashError);
+      expect(found?.configPath).toBe(dashErrorJs);
+    });
+
+    it('falls back to root _error.njk when no intermediate error boundary exists', () => {
+      const pagesDir = path.join(tempDir, 'pages');
+      const deepDir = path.join(pagesDir, 'a', 'b', 'c');
+      fs.mkdirSync(deepDir, { recursive: true });
+
+      const rootError = path.join(pagesDir, '_error.njk');
+      fs.writeFileSync(rootError, '<h1>Root Error</h1>');
+
+      const found = findNearestErrorBoundary(pagesDir, 'a/b/c/page.njk', true);
+      expect(found).not.toBeNull();
+      expect(found?.dirSegment).toBe('');
+      expect(found?.errorRelPath).toBe('_error.njk');
+      expect(found?.fullPath).toBe(rootError);
+    });
+
+    it('returns null when no _error.njk exists in hierarchy', () => {
+      const pagesDir = path.join(tempDir, 'pages');
+      const deepDir = path.join(pagesDir, 'a', 'b');
+      fs.mkdirSync(deepDir, { recursive: true });
+
+      const found = findNearestErrorBoundary(pagesDir, 'a/b/page.njk', true);
+      expect(found).toBeNull();
+    });
+
+    it('caches discovered boundaries in production mode', () => {
+      const pagesDir = path.join(tempDir, 'pages');
+      fs.mkdirSync(pagesDir, { recursive: true });
+      const rootError = path.join(pagesDir, '_error.njk');
+      fs.writeFileSync(rootError, '<h1>Root</h1>');
+
+      const first = findNearestErrorBoundary(pagesDir, 'index.njk', false);
+      const second = findNearestErrorBoundary(pagesDir, 'index.njk', false);
+      expect(first).toBe(second);
+
+      clearCascadingCaches();
+      const third = findNearestErrorBoundary(pagesDir, 'index.njk', false);
+      expect(third).toEqual(first);
+      expect(third).not.toBe(first);
+    });
+  });
+
+  describe('findNearestLoadingTemplate', () => {
+    it('finds _loading.njk in innermost directory', () => {
+      const pagesDir = path.join(tempDir, 'pages');
+      const reportsDir = path.join(pagesDir, 'dashboard', 'reports');
+      fs.mkdirSync(reportsDir, { recursive: true });
+
+      const reportsLoading = path.join(reportsDir, '_loading.njk');
+      fs.writeFileSync(reportsLoading, '<p>Loading report...</p>');
+
+      const found = findNearestLoadingTemplate(pagesDir, 'dashboard/reports/quarterly.njk', true);
+      expect(found).not.toBeNull();
+      expect(found?.dirSegment).toBe('dashboard/reports');
+      expect(found?.loadingRelPath).toBe('dashboard/reports/_loading.njk');
+      expect(found?.fullPath).toBe(reportsLoading);
+    });
+
+    it('falls back to ancestor _loading.njk', () => {
+      const pagesDir = path.join(tempDir, 'pages');
+      const dashDir = path.join(pagesDir, 'dashboard');
+      const reportsDir = path.join(dashDir, 'reports');
+      fs.mkdirSync(reportsDir, { recursive: true });
+
+      const dashLoading = path.join(dashDir, '_loading.njk');
+      fs.writeFileSync(dashLoading, '<p>Loading dashboard...</p>');
+
+      const found = findNearestLoadingTemplate(pagesDir, 'dashboard/reports/quarterly.njk', true);
+      expect(found).not.toBeNull();
+      expect(found?.dirSegment).toBe('dashboard');
+      expect(found?.loadingRelPath).toBe('dashboard/_loading.njk');
+    });
+
+    it('returns null when no _loading.njk exists', () => {
+      const pagesDir = path.join(tempDir, 'pages');
+      fs.mkdirSync(pagesDir, { recursive: true });
+
+      const found = findNearestLoadingTemplate(pagesDir, 'index.njk', true);
+      expect(found).toBeNull();
     });
   });
 });

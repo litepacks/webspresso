@@ -17,7 +17,15 @@ const { Readable } = require('stream');
  * @returns {Readable}
  */
 function createHtmlStream(options = {}) {
-  const { env, templatePath, context = {}, defer = {}, nonce: optionNonce } = options;
+  const {
+    env,
+    templatePath,
+    context = {},
+    defer = {},
+    nonce: optionNonce,
+    loadingTemplate,
+    layouts = [],
+  } = options;
   const nonce = optionNonce || context.nonce || context.cspNonce || '';
   const scriptTag = nonce ? `<script nonce="${nonce}">` : '<script>';
 
@@ -35,16 +43,33 @@ function createHtmlStream(options = {}) {
 
       if (deferredKeys.length === 0) {
         // Standard template streaming (render and stream)
-        const html = env.render(templatePath, context);
+        let html = env.render(templatePath, context);
+        if (layouts && layouts.length > 0) {
+          const { applyCascadingLayouts } = require('../../src/routing/cascading');
+          html = applyCascadingLayouts(env, layouts, html, context);
+        }
         stream.push(html);
         stream.push(null);
         return;
+      }
+
+      // Render loading skeleton if provided
+      let loadingHtml = '';
+      if (loadingTemplate) {
+        try {
+          loadingHtml = env.render(loadingTemplate, { ...context, __streaming: true });
+        } catch (_) {
+          loadingHtml = '';
+        }
       }
 
       // Initial shell rendering with deferred slot placeholders
       const shellContext = {
         ...context,
         __streaming: true,
+        loadingHtml,
+        __loadingHtml: loadingHtml,
+        loadingSkeleton: loadingHtml,
       };
 
       for (const key of deferredKeys) {
@@ -52,6 +77,35 @@ function createHtmlStream(options = {}) {
       }
 
       let shellHtml = env.render(templatePath, shellContext);
+
+      // Check slot-specific loading templates first
+      for (const key of deferredKeys) {
+        const deferredItem = defer[key];
+        if (deferredItem && typeof deferredItem === 'object' && deferredItem.loadingTemplate) {
+          try {
+            const slotLoadingHtml = env.render(deferredItem.loadingTemplate, { ...context, __streaming: true });
+            const slotRegex = new RegExp(
+              `(<([a-zA-Z0-9_-]+)\\b[^>]*data-stream-target=["']${key}["'][^>]*>)\\s*(<\\/\\2>)`,
+              'g'
+            );
+            shellHtml = shellHtml.replace(slotRegex, `$1${slotLoadingHtml}$3`);
+          } catch (_) {}
+        }
+      }
+
+      // If empty stream targets exist and default loadingHtml is available, populate them
+      if (loadingHtml) {
+        shellHtml = shellHtml.replace(
+          /(<([a-zA-Z0-9_-]+)\b[^>]*data-stream-target=["'][^"']+["'][^>]*>)\s*(<\/\2>)/g,
+          `$1${loadingHtml}$3`
+        );
+      }
+
+      // Wrap shell with cascading nested layouts if provided
+      if (layouts && layouts.length > 0) {
+        const { applyCascadingLayouts } = require('../../src/routing/cascading');
+        shellHtml = applyCascadingLayouts(env, layouts, shellHtml, shellContext);
+      }
 
       // Check if template contains streaming slot markers, or split at first slot
       // We push the initial shell chunk immediately to start browser TTFB & CSS download
@@ -127,6 +181,8 @@ ${scriptTag}
  * @param {Object} [options.defer] - Deferred slot promises
  * @param {number} [options.status=200] - HTTP status code
  * @param {boolean} [options.flushImmediately=true] - Flush headers immediately
+ * @param {string} [options.loadingTemplate] - Loading skeleton template
+ * @param {Array<Object>} [options.layouts] - Cascading layouts
  * @returns {Promise<void>}
  */
 function renderStream(res, templatePath, context = {}, options = {}) {
@@ -137,6 +193,8 @@ function renderStream(res, templatePath, context = {}, options = {}) {
       status = 200,
       flushImmediately = true,
       nonce: optionNonce,
+      loadingTemplate,
+      layouts,
     } = options;
 
     const nonce =
@@ -169,6 +227,8 @@ function renderStream(res, templatePath, context = {}, options = {}) {
       context,
       defer,
       nonce,
+      loadingTemplate,
+      layouts,
     });
 
     let finished = false;

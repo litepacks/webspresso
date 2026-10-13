@@ -107,19 +107,65 @@ Webspresso injects a comprehensive suite of template helpers into every render c
 
 ---
 
-## 4. Chunked SSR Streaming (`res.renderStream`)
+## 4. Cascading Nested Layouts (`_layout.njk` & `_layout.js`)
+
+Webspresso supports automatic directory-based layout nesting (similar to Next.js App Router):
+
+- **Folder Hierarchy**: Any folder under `pages/` can define a `_layout.njk` shell and optional `_layout.js` data loader.
+- **Top-Down Execution**: Outer `_layout.js` loaders run first, followed by child loaders, and finally the page's own `load()` function.
+- **Nesting Order**: Child page HTML is rendered first and placed into `{{ content | safe }}` of the innermost layout, propagating up to the root layout.
+- **Opt-Out**: Set `layout: false` in page config, or declare `layout: false` in frontmatter or `{% extends ... %}`.
+
+```html
+<!-- pages/dashboard/_layout.njk -->
+<div class="flex min-h-screen">
+  <aside class="w-64 bg-slate-900 text-white p-6">
+    <nav>{% include "views/partials/dashboard-nav.njk" %}</nav>
+  </aside>
+  <main class="flex-1 p-8">
+    {{ content | safe }}
+  </main>
+</div>
+```
+
+---
+
+## 5. Chunked SSR Streaming & Loading Skeletons (`_loading.njk`)
 
 For large pages or slow database queries, stream HTML chunks to the browser immediately using native chunked transfer encoding (TTFB optimization):
 
 ```javascript
 // pages/dashboard/report.js
 module.exports = {
-  async handler(req, res) {
-    // Starts streaming the <head> and layout immediately while awaiting slow metrics
-    res.renderStream('pages/dashboard/report.njk', {
-      user: req.user,
-      metricsPromise: req.service('analytics.get-yearly-report', { year: 2026 }),
-    });
+  async load({ db }) {
+    return {
+      stream: true,
+      defer: {
+        metrics: db.getRepository('Metric').query().where('active', true).find(),
+      },
+    };
   },
 };
 ```
+
+### Folder Loading Skeletons (`_loading.njk`)
+When `_loading.njk` is placed in a directory, Webspresso automatically injects its rendered skeleton into empty streaming slot targets (`<div data-stream-target="metrics"></div>`) in the initial flushed shell:
+
+```html
+<!-- pages/dashboard/_loading.njk -->
+<div class="animate-pulse space-y-4">
+  <div class="h-6 bg-slate-200 dark:bg-slate-700 rounded w-1/3"></div>
+  <div class="h-24 bg-slate-200 dark:bg-slate-700 rounded"></div>
+</div>
+```
+
+---
+
+## 6. Directory-Level Error Boundaries (`_error.njk` & `_error.js`)
+
+Catch exceptions locally within a section of your application without crashing the whole page:
+
+- **Isolated UI**: `_error.njk` renders **inside** the parent nested `_layout.njk` chain, keeping navigation and sidebars intact.
+- **Companion Loader (`_error.js`)**: Export `load({ error, req, ctx })` to fetch custom error data.
+- **Status Preservation**: Thrown HTTP exceptions (`NotFoundError`, `ForbiddenError`) automatically preserve their status codes (`404`, `403`).
+- **Template Context**: Access `{{ error.message }}`, `{{ error.status }}`, `{{ route.routePath }}`, and `fsy` helpers.

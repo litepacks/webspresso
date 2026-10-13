@@ -83,6 +83,9 @@ function frontmatterToPatches(fm) {
   if (d && typeof d === 'object' && !Array.isArray(d)) {
     dataPatch = { ...d };
   }
+  if (Object.prototype.hasOwnProperty.call(fmObj, 'layout') && fmObj.layout !== undefined) {
+    dataPatch.layout = fmObj.layout;
+  }
 
   return { metaPatch, dataPatch };
 }

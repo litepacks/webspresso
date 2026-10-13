@@ -16,6 +16,8 @@ const EMPTY_ARRAY = Object.freeze([]);
 // Caches for production mode (key: directory path)
 const middlewareFileCache = new Map();
 const layoutFileCache = new Map();
+const errorFileCache = new Map();
+const loadingFileCache = new Map();
 
 /**
  * Returns ancestor directory segments from root down to file's directory.
@@ -359,9 +361,117 @@ function applyCascadingLayouts(nunjucksEnv, layouts, pageHtml, renderContext, is
   return currentHtml;
 }
 
+/**
+ * Discover the nearest _error.njk error boundary template in the directory hierarchy
+ * (from the file's directory segment climbing up to the root pages directory).
+ *
+ * @param {string} baseDir - Base pages directory
+ * @param {string} relativeFilePath - Relative file path (e.g. 'dashboard/billing/invoices.njk')
+ * @param {boolean} [isDev=false]
+ * @returns {{ dirSegment: string, errorRelPath: string, fullPath: string, configPath: string|null }|null}
+ */
+function findNearestErrorBoundary(baseDir, relativeFilePath, isDev = false) {
+  const chain = getDirectoryChain(relativeFilePath);
+  const cacheKey = `${baseDir}::${chain.join('>')}`;
+
+  if (!isDev && errorFileCache.has(cacheKey)) {
+    return errorFileCache.get(cacheKey);
+  }
+
+  const reversedChain = [...chain].reverse();
+
+  for (const dirSegment of reversedChain) {
+    const errorNjkName = '_error.njk';
+    const errorJsName = '_error.js';
+
+    const errorRelPath = dirSegment === ''
+      ? errorNjkName
+      : `${dirSegment}/${errorNjkName}`;
+
+    const fullPath = dirSegment === ''
+      ? path.join(baseDir, errorNjkName)
+      : path.join(baseDir, ...dirSegment.split('/'), errorNjkName);
+
+    const fullJsPath = dirSegment === ''
+      ? path.join(baseDir, errorJsName)
+      : path.join(baseDir, ...dirSegment.split('/'), errorJsName);
+
+    if (fs.existsSync(fullPath)) {
+      const result = {
+        dirSegment,
+        errorRelPath: errorRelPath.split(path.sep).join('/'),
+        fullPath,
+        configPath: fs.existsSync(fullJsPath) ? fullJsPath : null,
+      };
+
+      if (!isDev) {
+        errorFileCache.set(cacheKey, result);
+      }
+      return result;
+    }
+  }
+
+  if (!isDev) {
+    errorFileCache.set(cacheKey, null);
+  }
+  return null;
+}
+
+/**
+ * Discover the nearest _loading.njk loading/skeleton template in the directory hierarchy
+ * (from the file's directory segment climbing up to the root pages directory).
+ *
+ * @param {string} baseDir - Base pages directory
+ * @param {string} relativeFilePath - Relative file path (e.g. 'dashboard/billing/invoices.njk')
+ * @param {boolean} [isDev=false]
+ * @returns {{ dirSegment: string, loadingRelPath: string, fullPath: string }|null}
+ */
+function findNearestLoadingTemplate(baseDir, relativeFilePath, isDev = false) {
+  const chain = getDirectoryChain(relativeFilePath);
+  const cacheKey = `${baseDir}::${chain.join('>')}`;
+
+  if (!isDev && loadingFileCache.has(cacheKey)) {
+    return loadingFileCache.get(cacheKey);
+  }
+
+  const reversedChain = [...chain].reverse();
+
+  for (const dirSegment of reversedChain) {
+    const loadingNjkName = '_loading.njk';
+
+    const loadingRelPath = dirSegment === ''
+      ? loadingNjkName
+      : `${dirSegment}/${loadingNjkName}`;
+
+    const fullPath = dirSegment === ''
+      ? path.join(baseDir, loadingNjkName)
+      : path.join(baseDir, ...dirSegment.split('/'), loadingNjkName);
+
+    if (fs.existsSync(fullPath)) {
+      const result = {
+        dirSegment,
+        loadingRelPath: loadingRelPath.split(path.sep).join('/'),
+        fullPath,
+      };
+
+      if (!isDev) {
+        loadingFileCache.set(cacheKey, result);
+      }
+      return result;
+    }
+  }
+
+  if (!isDev) {
+    loadingFileCache.set(cacheKey, null);
+  }
+  return null;
+}
+
 function clearCascadingCaches() {
   middlewareFileCache.clear();
   layoutFileCache.clear();
+  errorFileCache.clear();
+  loadingFileCache.clear();
 }
 
 module.exports = {
@@ -374,5 +484,7 @@ module.exports = {
   findCascadingLayouts,
   executeCascadingLayoutLoads,
   applyCascadingLayouts,
+  findNearestErrorBoundary,
+  findNearestLoadingTemplate,
   clearCascadingCaches,
 };

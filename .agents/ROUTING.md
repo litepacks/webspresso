@@ -400,6 +400,39 @@ Pages under `pages/` automatically inherit ancestor layouts:
 </div>
 ```
 
+#### 3. Folder-Level Error Boundaries (`_error.njk` & `_error.js`)
+When an exception occurs during SSR lifecycle execution (in `load()`, template rendering, hooks, or nested layout loaders):
+- **Ancestral Discovery**: Webspresso searches up the directory hierarchy from the route's directory up to `pages/` for the nearest `_error.njk`.
+- **Isolated Layout Preservation**: `_error.njk` is automatically wrapped inside the surrounding ancestor `_layout.njk` chain, keeping the UI intact (e.g. an error in `/dashboard/billing/invoices` renders the error card inside the dashboard sidebar and header).
+- **Companion Loader (`_error.js`)**: Can export `load({ error, req, res, ctx, db })` to attach custom error data or report exceptions.
+- **Status Code Propagation**: HTTP status is set to `error.status || error.statusCode || 500` (e.g., throwing `NotFoundError` returns HTTP 404).
+- **Opt-Out**: Disable layout wrapping with `layout: false` in `_error.js` or frontmatter (`--- layout: false ---`).
+- **Fallback**: If no `_error.njk` exists in any ancestor directory, execution falls through to the global Express error boundary (`app.setErrorHandler` / 500 page).
+
+```html
+{# pages/dashboard/_error.njk #}
+<div class="p-6 bg-red-50 dark:bg-red-950/30 rounded-xl border border-red-200">
+  <h2 class="text-xl font-bold text-red-700">Error {{ error.status }}</h2>
+  <p class="text-red-600 mt-2">{{ error.message }}</p>
+  {% if supportEmail %}<p class="mt-4 text-sm">Need help? Email {{ supportEmail }}</p>{% endif %}
+</div>
+```
+
+#### 4. Folder-Level Loading Skeletons (`_loading.njk`)
+In SSR streaming mode (`stream: true` or `renderStream`):
+- **Automatic Discovery**: Discovers the nearest `_loading.njk` up the directory chain.
+- **Auto-Populate Slots**: Any empty `<div data-stream-target="slotName"></div>` in the page template is automatically populated with the `_loading.njk` skeleton HTML in the initial flushed shell chunk!
+- **Context Availability**: Exposed as `{{ loadingSkeleton | safe }}` and `{{ loadingHtml | safe }}` in the template context.
+- **Layout Integration**: Cascading `_layout.njk` templates automatically wrap the streaming shell.
+
+```html
+{# pages/dashboard/_loading.njk #}
+<div class="animate-pulse space-y-4">
+  <div class="h-8 bg-slate-200 dark:bg-slate-800 rounded w-1/4"></div>
+  <div class="h-32 bg-slate-200 dark:bg-slate-800 rounded"></div>
+</div>
+```
+
 ---
 
 ## 7. Summary Checklist for Agents
