@@ -49,6 +49,21 @@ const BUNDLED_AUTH_TEMPLATES = {
   </mj-body>
 </mjml>`,
   },
+  'auth-magic-link': {
+    mjml: `<mjml>
+  <mj-body background-color="#f4f4f5">
+    <mj-section background-color="#ffffff" padding="32px 24px">
+      <mj-column>
+        <mj-text font-size="20px" font-weight="600" color="#18181b">Your sign-in link</mj-text>
+        <mj-text color="#52525b">Hi {{name}},</mj-text>
+        <mj-text color="#52525b">Click the button below to securely sign in to your account. This link will expire in {{expiresMinutes}} minutes.</mj-text>
+        <mj-button background-color="#4f46e5" href="{{magicLinkUrl}}">Sign In</mj-button>
+        <mj-text color="#71717a" font-size="12px">If you did not request this link, you can safely ignore this email.</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>`,
+  },
 };
 
 /**

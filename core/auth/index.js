@@ -46,6 +46,12 @@ const {
   generateQrSvg,
   generateQrDataUri,
 } = require('./qrcode');
+const {
+  buildMagicLinkUrl,
+  formatMagicLinkHtml,
+  createMagicLinkVerifyMiddleware,
+  createMagicLinkRequestHandler,
+} = require('./magic-link');
 
 /**
  * Create authentication instance
@@ -73,6 +79,7 @@ function createAuth(config) {
  * @param {Object} [options.session] - Session config
  * @param {boolean} [options.rememberMe=true] - Enable remember me
  * @param {boolean} [options.authTokens=false] - Enable auth_tokens adapter (password reset / email verify)
+ * @param {boolean} [options.magicLink=false] - Enable magic link / passwordless auth tokens adapter
  * @param {Object|boolean} [options.jwt=false] - Enable JWT support or JWT config
  * @param {string} [options.verifiedField='email_verified_at'] - Verified timestamp column
  * @returns {AuthManager}
@@ -86,6 +93,7 @@ function quickAuth(options) {
     session = {},
     rememberMe = true,
     authTokens: enableAuthTokens = false,
+    magicLink = false,
     jwt = false,
     verifiedField = 'email_verified_at',
   } = options;
@@ -151,7 +159,7 @@ function quickAuth(options) {
     };
   }
 
-  if (enableAuthTokens) {
+  if (enableAuthTokens || magicLink) {
     config.authTokens = createKnexAuthTokensAdapter(db);
   }
 
@@ -254,6 +262,18 @@ module.exports = {
   createQrMatrix,
   generateQrSvg,
   generateQrDataUri,
+
+  // Magic Link / Passwordless Authentication
+  buildMagicLinkUrl,
+  formatMagicLinkHtml,
+  createMagicLinkVerifyMiddleware,
+  createMagicLinkRequestHandler,
+  magicLink: {
+    buildMagicLinkUrl,
+    formatMagicLinkHtml,
+    createMagicLinkVerifyMiddleware,
+    createMagicLinkRequestHandler,
+  },
 
   // Config
   DEFAULT_CONFIG,

@@ -3231,6 +3231,67 @@ export namespace totp {
   };
 }
 
+// --- Magic Link / Passwordless Authentication ---
+
+export interface BuildMagicLinkUrlOptions {
+  baseUrl?: string;
+  path?: string;
+  token: string;
+}
+
+export interface FormatMagicLinkHtmlOptions {
+  name?: string;
+  magicLinkUrl: string;
+  expiresMinutes?: number;
+}
+
+export interface MagicLinkVerifyMiddlewareOptions {
+  tokenParam?: string;
+  redirectTo?: string;
+  failureRedirect?: string;
+  markEmailVerified?: boolean;
+  jwt?: boolean;
+}
+
+export interface MagicLinkRequestOptions {
+  baseUrl?: string;
+  path?: string;
+  tokenTtlMs?: number;
+  hideUserNotFound?: boolean;
+  buildMagicLinkUrl?: (token: string) => string;
+}
+
+export interface MagicLinkRequestResult {
+  sent: boolean;
+  userFound: boolean;
+  expiresAt?: Date;
+  token?: string;
+  magicLinkUrl?: string;
+}
+
+export interface MagicLinkVerifyResult {
+  ok: true;
+  user: any;
+  userId: string | number;
+  accessToken?: string;
+  refreshToken?: string;
+}
+
+export function buildMagicLinkUrl(options: BuildMagicLinkUrlOptions): string;
+export function formatMagicLinkHtml(options: FormatMagicLinkHtmlOptions): string;
+export function createMagicLinkVerifyMiddleware(authManager: any, options?: MagicLinkVerifyMiddlewareOptions): (req: any, res: any, next: any) => Promise<any>;
+export function createMagicLinkRequestHandler(authManager: any, options?: MagicLinkRequestOptions): (req: any, res: any) => Promise<any>;
+
+export namespace magicLink {
+  export {
+    buildMagicLinkUrl,
+    formatMagicLinkHtml,
+    createMagicLinkVerifyMiddleware,
+    createMagicLinkRequestHandler,
+  };
+}
+
+
 
 
 

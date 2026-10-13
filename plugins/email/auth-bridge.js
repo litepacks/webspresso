@@ -26,6 +26,13 @@ const DEFAULT_AUTH_EMAILS = {
     template: 'auth-welcome',
     subject: 'Welcome',
   },
+  magicLink: {
+    enabled: true,
+    template: 'auth-magic-link',
+    subject: 'Your sign-in link',
+    path: '/auth/magic-link/verify',
+    tokenTtlMs: 15 * 60 * 1000,
+  },
   registerRoutes: true,
   routePrefix: '/api/auth',
 };
@@ -46,6 +53,7 @@ function wireAuthEmails(authManager, emailService, registry, config, db) {
     passwordReset: { ...DEFAULT_AUTH_EMAILS.passwordReset, ...config.passwordReset },
     emailVerification: { ...DEFAULT_AUTH_EMAILS.emailVerification, ...config.emailVerification },
     welcome: { ...DEFAULT_AUTH_EMAILS.welcome, ...config.welcome },
+    magicLink: { ...DEFAULT_AUTH_EMAILS.magicLink, ...config.magicLink },
   };
 
   registerBundledAuthTemplates(registry);
@@ -105,6 +113,23 @@ function wireAuthEmails(authManager, emailService, registry, config, db) {
         subject: merged.welcome.subject,
         data: {
           name: userDisplayName(user),
+          email: user[identifierField],
+        },
+      });
+    };
+  }
+
+  if (merged.magicLink?.enabled) {
+    authManager.notifications.magicLink = async (user, { token, magicLinkUrl, expiresMinutes }) => {
+      const url = magicLinkUrl || buildUrl(merged.magicLink.path, token);
+      await emailService.sendTemplate(merged.magicLink.template, {
+        to: user[identifierField],
+        subject: merged.magicLink.subject,
+        data: {
+          name: userDisplayName(user),
+          token,
+          magicLinkUrl: url,
+          expiresMinutes: expiresMinutes || 15,
           email: user[identifierField],
         },
       });
@@ -193,6 +218,41 @@ function registerAuthEmailRoutes(options) {
     }
   }
 
+  async function magicLinkRequestHandler(req, res) {
+    try {
+      const email = req.body?.email || req.body?.identifier;
+      if (email) {
+        await authManager.requestMagicLink(String(email), {
+          tokenTtlMs: authEmailsConfig.magicLink?.tokenTtlMs,
+          path: authEmailsConfig.magicLink?.path,
+          buildMagicLinkUrl: (token) => {
+            const pathSeg = authEmailsConfig.magicLink?.path || '/auth/magic-link/verify';
+            return `${base}${pathSeg}?token=${encodeURIComponent(token)}`;
+          },
+        });
+      }
+      res.json({ ok: true, message: 'If the account exists, a sign-in link has been sent.' });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+
+  async function magicLinkVerifyHandler(req, res) {
+    try {
+      const token = req.body?.token || req.query?.token;
+      if (!token) {
+        return res.status(400).json({ error: 'token is required' });
+      }
+      const { user } = await authManager.verifyMagicLink(String(token));
+      if (req.auth && typeof req.auth.login === 'function') {
+        await req.auth.login(user);
+      }
+      res.json({ ok: true, user });
+    } catch (err) {
+      res.status(err.status || 400).json({ error: err.message, code: err.code });
+    }
+  }
+
   const forgotMw = guest ? [guest, forgotPasswordHandler] : [forgotPasswordHandler];
   const resetMw = guest ? [guest, resetPasswordHandler] : [resetPasswordHandler];
   const resendMw = authMw ? [authMw, resendVerificationHandler] : [resendVerificationHandler];
@@ -201,6 +261,12 @@ function registerAuthEmailRoutes(options) {
   ctx.addRoute('post', `${prefix}/reset-password`, ...resetMw);
   ctx.addRoute('post', `${prefix}/verify-email`, verifyEmailHandler);
   ctx.addRoute('post', `${prefix}/resend-verification`, ...resendMw);
+
+  if (authEmailsConfig.magicLink?.enabled) {
+    const magicMw = guest ? [guest, magicLinkRequestHandler] : [magicLinkRequestHandler];
+    ctx.addRoute('post', `${prefix}/magic-link`, ...magicMw);
+    ctx.addRoute('post', `${prefix}/magic-link/verify`, magicLinkVerifyHandler);
+  }
 }
 
 module.exports = {

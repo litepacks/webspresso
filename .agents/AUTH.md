@@ -269,4 +269,115 @@ module.exports = {
 };
 ```
 
+---
+
+## 7. Magic Link & Passwordless Authentication
+
+Webspresso includes zero-dependency, cryptographically secure **Magic Link / Passwordless Authentication**:
+- **Single-Use Timed Tokens**: 32-byte cryptographically secure random tokens stored hashed (`SHA-256`) in the `auth_tokens` table (`type = 'magic_link'`) with a default 15-minute TTL.
+- **Anti-Enumeration Protection**: `requestMagicLink` returns `{ sent: true, userFound: false }` for unknown emails by default so attackers cannot probe user existence.
+- **Auto-Verification**: Successfully signing in via a magic link automatically marks `email_verified_at` if the user is not yet verified.
+- **Dual Session & JWT Support**: Seamlessly establishes web sessions (`req.auth.login`) and/or issues JWT access/refresh token pairs.
+- **Native Email Plugin Integration**: Built-in `auth-magic-link` MJML template, automated delivery via `plugins/email`'s `wireAuthEmails`, and pre-wired `/api/auth/magic-link` routes.
+
+### 7.1 Setup in `quickAuth`
+```javascript
+const { quickAuth } = require('webspresso/core/auth');
+
+const auth = quickAuth({
+  db,
+  userModel: 'User',
+  identifierField: 'email',
+  magicLink: true, // Automatically provisions Knex auth_tokens adapter
+});
+```
+
+### 7.2 Requesting a Magic Link (`pages/api/auth/magic-link.post.js`)
+```javascript
+const { defineApi } = require('webspresso');
+
+module.exports = defineApi({
+  schema: ({ z }) => ({
+    body: z.object({
+      email: z.string().email(),
+    }),
+  }),
+  async handler(req, res) {
+    const { email } = req.input.body;
+
+    // Dispatches email notification via plugins/email (if active)
+    await req.auth.requestMagicLink(email, {
+      tokenTtlMs: 15 * 60 * 1000, // 15 mins (default)
+      path: '/auth/magic-link/verify',
+    });
+
+    return res.json({
+      ok: true,
+      message: 'If an account exists with this email, a sign-in link has been sent.',
+    });
+  },
+});
+```
+
+### 7.3 Verifying & Logging In (`pages/api/auth/magic-link/verify.get.js`)
+```javascript
+const { defineApi } = require('webspresso');
+
+module.exports = defineApi({
+  schema: ({ z }) => ({
+    query: z.object({
+      token: z.string().min(1),
+    }),
+  }),
+  async handler(req, res) {
+    const { token } = req.input.query;
+
+    // Verifies token, consumes it, marks email verified, logs into session and/or generates JWTs
+    const result = await req.auth.loginWithMagicLink(token, {
+      remember: true,
+      jwt: false, // Set to true to receive accessToken and refreshToken
+    });
+
+    // For browser requests, redirect to dashboard:
+    if (req.accepts('html')) {
+      return res.redirect('/dashboard');
+    }
+
+    return res.json({ ok: true, user: result.user });
+  },
+});
+```
+
+### 7.4 Using Built-in Route Middlewares
+You can also mount Webspresso's pre-configured Express middlewares directly:
+```javascript
+const {
+  createMagicLinkRequestHandler,
+  createMagicLinkVerifyMiddleware,
+} = require('webspresso/core/auth');
+
+// Request link: POST /auth/magic-link
+app.post('/auth/magic-link', createMagicLinkRequestHandler(authManager));
+
+// Verify & Login: GET /auth/magic-link/verify
+app.get('/auth/magic-link/verify', createMagicLinkVerifyMiddleware(authManager, {
+  redirectTo: '/dashboard',
+  failureRedirect: '/login?error=invalid_magic_link',
+  jwt: false,
+}));
+```
+
+### 7.5 AuthManager Magic Link Events
+`AuthManager` extends `EventEmitter`, allowing you to hook into magic link lifecycle events:
+```javascript
+authManager.on('magicLink:requested', ({ userId, email, expiresAt }) => {
+  console.log(`Magic link requested for ${email}, expires at ${expiresAt}`);
+});
+
+authManager.on('magicLink:verified', ({ userId }) => {
+  console.log(`User ${userId} signed in via magic link`);
+});
+```
+
+
 

@@ -4,6 +4,7 @@
  * @module core/auth/manager
  */
 
+const EventEmitter = require('events');
 const { generateToken, hashToken } = require('./hash');
 const { PolicyManager } = require('./policy');
 const { signJwt, verifyJwt, decodeJwt } = require('./jwt');
@@ -67,7 +68,7 @@ const DEFAULT_CONFIG = {
 /**
  * AuthManager - Handles authentication operations
  */
-class AuthManager {
+class AuthManager extends EventEmitter {
   /**
    * Create AuthManager instance
    * @param {Object} config - Configuration
@@ -83,6 +84,7 @@ class AuthManager {
    * @param {Object} [config.routes] - Route configuration
    */
   constructor(config) {
+    super();
     this.validateConfig(config);
     
     this.config = {
@@ -106,6 +108,7 @@ class AuthManager {
       passwordReset: config.notifications?.passwordReset || null,
       emailVerification: config.notifications?.emailVerification || null,
       welcome: config.notifications?.welcome || null,
+      magicLink: config.notifications?.magicLink || null,
     };
 
     // TOTP & 2FA initialization
@@ -530,6 +533,45 @@ class AuthManager {
       authorize(action, policy = null, resource = null) {
         return self.policies.authorize(req.user, action, policy, resource);
       },
+
+      /**
+       * Request a magic link for passwordless login
+       * @param {string} identifier - User email or username
+       * @param {Object} [options]
+       * @returns {Promise<{ sent: boolean, expiresAt?: Date, token?: string, magicLinkUrl?: string, userFound: boolean }>}
+       */
+      requestMagicLink(identifier, options = {}) {
+        return self.requestMagicLink(identifier, options);
+      },
+
+      /**
+       * Verify magic link token
+       * @param {string} rawToken
+       * @param {Object} [options]
+       * @returns {Promise<{ ok: true, user: Object, userId: * }>}
+       */
+      verifyMagicLink(rawToken, options = {}) {
+        return self.verifyMagicLink(rawToken, options);
+      },
+
+      /**
+       * Verify magic link token and log user into current request session
+       * @param {string} rawToken
+       * @param {Object} [options]
+       * @returns {Promise<{ ok: true, user: Object, userId: *, accessToken?: string, refreshToken?: string }>}
+       */
+      async loginWithMagicLink(rawToken, options = {}) {
+        const result = await self.verifyMagicLink(rawToken, options);
+        await this.login(result.user, options.remember);
+
+        const response = { ...result };
+        if (options.jwt) {
+          response.accessToken = self.generateUserToken(result.user, options.jwtAccessOptions);
+          response.refreshToken = self.generateRefreshToken(result.user, options.jwtRefreshOptions);
+        }
+
+        return response;
+      },
     };
   }
 
@@ -785,6 +827,119 @@ class AuthManager {
     await consumeAuthToken(this.authTokens, verified.tokenHash);
 
     return { ok: true, userId: verified.userId };
+  }
+
+  /**
+   * Request magic link passwordless login — safe against user enumeration
+   * @param {string} identifier - Email or username
+   * @param {Object} [options]
+   * @param {number} [options.tokenTtlMs=900000] - Default 15 minutes (900,000ms)
+   * @param {Function} [options.buildMagicLinkUrl] - (rawToken) => string
+   * @param {string} [options.path='/auth/magic-link/verify']
+   * @param {boolean} [options.hideUserNotFound=true]
+   * @returns {Promise<{ sent: boolean, expiresAt?: Date, token?: string, magicLinkUrl?: string, userFound: boolean }>}
+   */
+  async requestMagicLink(identifier, options = {}) {
+    if (!this.authTokens) {
+      throw new Error('authTokens adapter is required for magic link authentication');
+    }
+
+    const user = await this.resolveUserByIdentifier(identifier);
+    if (!user) {
+      return {
+        sent: options.hideUserNotFound !== false,
+        userFound: false,
+      };
+    }
+
+    const tokenTtlMs = options.tokenTtlMs ?? 15 * 60 * 1000;
+    const { rawToken, expiresAt } = await createAuthToken(
+      this.authTokens,
+      TOKEN_TYPES.MAGIC_LINK,
+      user.id,
+      tokenTtlMs
+    );
+
+    const baseUrl = (options.baseUrl || this.config.baseUrl || process.env.BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+    const pathSegment = options.path || '/auth/magic-link/verify';
+    const cleanPath = pathSegment.startsWith('/') ? pathSegment : `/${pathSegment}`;
+    const sep = cleanPath.includes('?') ? '&' : '?';
+
+    const hasCustomUrl = typeof options.buildMagicLinkUrl === 'function' || Boolean(options.path) || Boolean(options.baseUrl);
+    const customMagicLinkUrl = typeof options.buildMagicLinkUrl === 'function'
+      ? options.buildMagicLinkUrl(rawToken)
+      : hasCustomUrl
+        ? `${baseUrl}${cleanPath}${sep}token=${encodeURIComponent(rawToken)}`
+        : null;
+
+    const defaultMagicLinkUrl = `${baseUrl}${cleanPath}${sep}token=${encodeURIComponent(rawToken)}`;
+
+    if (typeof this.notifications.magicLink === 'function') {
+      await this.notifications.magicLink(user, {
+        token: rawToken,
+        expiresAt,
+        magicLinkUrl: customMagicLinkUrl,
+        expiresMinutes: Math.round(tokenTtlMs / 60000),
+      });
+    }
+
+    this.emit('magicLink:requested', { userId: user.id, email: user.email, expiresAt });
+
+    return {
+      sent: true,
+      userFound: true,
+      expiresAt,
+      token: rawToken,
+      magicLinkUrl: customMagicLinkUrl || defaultMagicLinkUrl,
+    };
+  }
+
+  /**
+   * Verify magic link token and resolve user
+   * @param {string} rawToken
+   * @param {Object} [options]
+   * @param {boolean} [options.markEmailVerified=true]
+   * @param {boolean} [options.consumeAllForUser=true]
+   * @returns {Promise<{ ok: true, user: Object, userId: * }>}
+   */
+  async verifyMagicLink(rawToken, options = {}) {
+    if (!this.authTokens) {
+      throw new Error('authTokens adapter is required for magic link authentication');
+    }
+
+    const verified = await verifyAuthToken(
+      this.authTokens,
+      TOKEN_TYPES.MAGIC_LINK,
+      rawToken
+    );
+    if (!verified) {
+      throw new AuthenticationError('Invalid or expired magic link', 'INVALID_MAGIC_LINK');
+    }
+
+    const user = await this.findUserById(verified.userId);
+    if (!user) {
+      throw new AuthenticationError('User not found for magic link', 'USER_NOT_FOUND');
+    }
+
+    await consumeAuthToken(this.authTokens, verified.tokenHash);
+
+    if (options.consumeAllForUser !== false) {
+      await this.authTokens.deleteAllForUser(verified.userId, TOKEN_TYPES.MAGIC_LINK);
+    }
+
+    // Auto mark email verified if user has not verified it yet
+    if (options.markEmailVerified !== false && this.updateUser && this.verifiedField && !user[this.verifiedField]) {
+      try {
+        await this.updateUser(user.id, { [this.verifiedField]: new Date() });
+        user[this.verifiedField] = new Date();
+      } catch (e) {
+        // Continue even if update fails
+      }
+    }
+
+    this.emit('magicLink:verified', { userId: user.id });
+
+    return { ok: true, user, userId: verified.userId };
   }
 
   /**

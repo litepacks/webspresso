@@ -8,6 +8,7 @@ const { generateToken, hashToken, hash } = require('./hash');
 const TOKEN_TYPES = {
   PASSWORD_RESET: 'password_reset',
   EMAIL_VERIFY: 'email_verify',
+  MAGIC_LINK: 'magic_link',
 };
 
 /**
