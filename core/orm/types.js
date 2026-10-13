@@ -80,11 +80,16 @@
  */
 
 /**
+ * @typedef {boolean|'delete'|'restore'|'all'|string[]|{delete?: boolean, restore?: boolean}} RelationCascadeOption
+ */
+
+/**
  * @typedef {Object} RelationDefinition
  * @property {RelationType} type - Type of relation
- * @property {() => ModelDefinition} model - Lazy reference to related model
+ * @property {string|(() => ModelDefinition|string)} model - Related model reference (function or model name)
  * @property {string} foreignKey - Foreign key column name
  * @property {string} [localKey='id'] - Local key column name (for hasMany/hasOne)
+ * @property {RelationCascadeOption} [cascade=false] - Cascading delete and restore configuration
  */
 
 /**

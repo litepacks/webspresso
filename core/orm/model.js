@@ -83,7 +83,21 @@ function defineModel(options) {
       );
     }
 
-    normalizedRelations[relationName] = relation;
+    if (relation.cascade !== undefined && relation.cascade !== null) {
+      const validCascade = typeof relation.cascade === 'boolean' ||
+        typeof relation.cascade === 'string' ||
+        Array.isArray(relation.cascade) ||
+        (typeof relation.cascade === 'object' && relation.cascade !== null);
+      if (!validCascade) {
+        throw new Error(
+          `Invalid cascade option for relation "${relationName}" in model "${name}". Must be boolean, string, array, or object.`
+        );
+      }
+    }
+
+    normalizedRelations[relationName] = {
+      ...relation,
+    };
   }
 
   // Create model definition
@@ -277,6 +291,41 @@ function getRelationKeys(model, relationName) {
   };
 }
 
+/**
+ * Check if a relation has cascade enabled for a given operation ('delete' or 'restore')
+ * @param {import('./types').RelationDefinition} relation - Relation definition
+ * @param {'delete'|'restore'} operation - Operation to check
+ * @returns {boolean}
+ */
+function isCascadeEnabled(relation, operation) {
+  if (!relation || relation.cascade === undefined || relation.cascade === null) {
+    return false;
+  }
+  const { cascade } = relation;
+  if (cascade === true) {
+    return true;
+  }
+  if (cascade === false) {
+    return false;
+  }
+  const op = String(operation).toLowerCase();
+  if (typeof cascade === 'string') {
+    const c = cascade.toLowerCase();
+    return c === op || c === 'all';
+  }
+  if (Array.isArray(cascade)) {
+    return cascade.some(item => {
+      if (typeof item !== 'string') return false;
+      const c = item.toLowerCase();
+      return c === op || c === 'all';
+    });
+  }
+  if (typeof cascade === 'object' && cascade !== null) {
+    return Boolean(cascade[op]);
+  }
+  return false;
+}
+
 module.exports = {
   defineModel,
   getModel,
@@ -287,6 +336,7 @@ module.exports = {
   resolveModelName,
   resolveRelationModel,
   getRelationKeys,
+  isCascadeEnabled,
   // Export registry for testing
   _registry: modelRegistry,
 };

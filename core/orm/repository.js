@@ -6,10 +6,12 @@
 
 const { createQueryBuilder } = require('./query-builder');
 const { loadRelations } = require('./eager-loader');
+const { resolveRelationModel, isCascadeEnabled } = require('./model');
 const {
   applyInsertModifiers,
   applyUpdateModifiers,
   getSoftDeleteData,
+  getRestoreData,
   createScopeContext,
   applyScopes,
 } = require('./scopes');
@@ -458,14 +460,236 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
   }
 
   /**
-   * Delete a record by primary key (soft delete if enabled)
+   * Cascade soft-delete child records for cascading relations
+   * @param {import('./types').ModelDefinition} currentModel
+   * @param {Object} record
+   * @param {Date} deletedAt
+   * @param {Object} [options={}]
+   * @param {Set<string>} [visited=new Set()]
+   */
+  async function cascadeSoftDelete(currentModel, record, deletedAt, options = {}, visited = new Set()) {
+    const pkVal = record[currentModel.primaryKey];
+    if (pkVal === undefined || pkVal === null) return;
+    const visitKey = `${currentModel.name}:${pkVal}`;
+    if (visited.has(visitKey)) return;
+    visited.add(visitKey);
+
+    const activeKnex = getActiveKnex();
+
+    for (const [relationName, relation] of Object.entries(currentModel.relations || {})) {
+      if (!['hasMany', 'hasOne'].includes(relation.type)) continue;
+      if (!isCascadeEnabled(relation, 'delete')) continue;
+
+      let relatedModel;
+      try {
+        relatedModel = resolveRelationModel(relation);
+      } catch {
+        continue;
+      }
+      if (!relatedModel || !relatedModel.scopes.softDelete) continue;
+
+      const localKey = relation.localKey || currentModel.primaryKey;
+      const foreignKey = relation.foreignKey;
+      const parentVal = record[localKey];
+      if (parentVal === undefined || parentVal === null) continue;
+
+      let childQuery = activeKnex(relatedModel.table)
+        .where(foreignKey, parentVal)
+        .whereNull('deleted_at');
+
+      if (scopeContext && scopeContext.tenantId !== undefined && relatedModel.scopes.tenant) {
+        childQuery = childQuery.where(relatedModel.scopes.tenant, scopeContext.tenantId);
+      }
+
+      const children = await childQuery.select('*');
+      if (!children || children.length === 0) continue;
+
+      const childIds = children.map(c => c[relatedModel.primaryKey]);
+
+      await activeKnex(relatedModel.table)
+        .whereIn(relatedModel.primaryKey, childIds)
+        .update(getSoftDeleteData(deletedAt));
+
+      if (cacheLayer) {
+        cacheLayer.invalidateModelAll(relatedModel);
+      }
+
+      const hasDeeper = Object.values(relatedModel.relations || {}).some(
+        r => ['hasMany', 'hasOne'].includes(r.type) && isCascadeEnabled(r, 'delete')
+      );
+      if (hasDeeper) {
+        for (const child of children) {
+          await cascadeSoftDelete(relatedModel, child, deletedAt, options, visited);
+        }
+      }
+
+      if (ModelEvents.hasListeners(relatedModel.name, Hooks.AFTER_DELETE)) {
+        for (const child of children) {
+          const childCtx = createEventContext(relatedModel.name, 'delete', getHookTrx());
+          ModelEvents.emit(relatedModel.name, Hooks.AFTER_DELETE, child, childCtx);
+        }
+      }
+    }
+  }
+
+  /**
+   * Cascade hard-delete child records for cascading relations
+   * @param {import('./types').ModelDefinition} currentModel
+   * @param {Object} record
+   * @param {Object} [options={}]
+   * @param {Set<string>} [visited=new Set()]
+   */
+  async function cascadeHardDelete(currentModel, record, options = {}, visited = new Set()) {
+    const pkVal = record[currentModel.primaryKey];
+    if (pkVal === undefined || pkVal === null) return;
+    const visitKey = `${currentModel.name}:${pkVal}`;
+    if (visited.has(visitKey)) return;
+    visited.add(visitKey);
+
+    const activeKnex = getActiveKnex();
+
+    for (const [relationName, relation] of Object.entries(currentModel.relations || {})) {
+      if (!['hasMany', 'hasOne'].includes(relation.type)) continue;
+      if (!isCascadeEnabled(relation, 'delete')) continue;
+
+      let relatedModel;
+      try {
+        relatedModel = resolveRelationModel(relation);
+      } catch {
+        continue;
+      }
+      if (!relatedModel) continue;
+
+      const localKey = relation.localKey || currentModel.primaryKey;
+      const foreignKey = relation.foreignKey;
+      const parentVal = record[localKey];
+      if (parentVal === undefined || parentVal === null) continue;
+
+      let childQuery = activeKnex(relatedModel.table)
+        .where(foreignKey, parentVal);
+
+      if (scopeContext && scopeContext.tenantId !== undefined && relatedModel.scopes.tenant) {
+        childQuery = childQuery.where(relatedModel.scopes.tenant, scopeContext.tenantId);
+      }
+
+      const children = await childQuery.select('*');
+      if (!children || children.length === 0) continue;
+
+      // Delete deeper relations first to avoid FK constraint violations
+      const hasDeeper = Object.values(relatedModel.relations || {}).some(
+        r => ['hasMany', 'hasOne'].includes(r.type) && isCascadeEnabled(r, 'delete')
+      );
+      if (hasDeeper) {
+        for (const child of children) {
+          await cascadeHardDelete(relatedModel, child, options, visited);
+        }
+      }
+
+      const childIds = children.map(c => c[relatedModel.primaryKey]);
+      await activeKnex(relatedModel.table)
+        .whereIn(relatedModel.primaryKey, childIds)
+        .delete();
+
+      if (cacheLayer) {
+        cacheLayer.invalidateModelAll(relatedModel);
+      }
+
+      if (ModelEvents.hasListeners(relatedModel.name, Hooks.AFTER_DELETE)) {
+        for (const child of children) {
+          const childCtx = createEventContext(relatedModel.name, 'delete', getHookTrx());
+          ModelEvents.emit(relatedModel.name, Hooks.AFTER_DELETE, child, childCtx);
+        }
+      }
+    }
+  }
+
+  /**
+   * Cascade restore child records for cascading relations
+   * @param {import('./types').ModelDefinition} currentModel
+   * @param {Object} trashedRecord
+   * @param {Date|string|number} parentDeletedAt
+   * @param {Object} [options={}]
+   * @param {Set<string>} [visited=new Set()]
+   */
+  async function cascadeRestore(currentModel, trashedRecord, parentDeletedAt, options = {}, visited = new Set()) {
+    const pkVal = trashedRecord[currentModel.primaryKey];
+    if (pkVal === undefined || pkVal === null) return;
+    const visitKey = `${currentModel.name}:${pkVal}`;
+    if (visited.has(visitKey)) return;
+    visited.add(visitKey);
+
+    const activeKnex = getActiveKnex();
+
+    for (const [relationName, relation] of Object.entries(currentModel.relations || {})) {
+      if (!['hasMany', 'hasOne'].includes(relation.type)) continue;
+      if (!isCascadeEnabled(relation, 'restore')) continue;
+
+      let relatedModel;
+      try {
+        relatedModel = resolveRelationModel(relation);
+      } catch {
+        continue;
+      }
+      if (!relatedModel || !relatedModel.scopes.softDelete) continue;
+
+      const localKey = relation.localKey || currentModel.primaryKey;
+      const foreignKey = relation.foreignKey;
+      const parentVal = trashedRecord[localKey];
+      if (parentVal === undefined || parentVal === null) continue;
+
+      let childQuery = activeKnex(relatedModel.table)
+        .where(foreignKey, parentVal)
+        .whereNotNull('deleted_at');
+
+      if (scopeContext && scopeContext.tenantId !== undefined && relatedModel.scopes.tenant) {
+        childQuery = childQuery.where(relatedModel.scopes.tenant, scopeContext.tenantId);
+      }
+
+      // Selective restore by matching deletion timestamp
+      if (!options.allChildren && parentDeletedAt != null) {
+        childQuery = childQuery.where('deleted_at', parentDeletedAt);
+      }
+
+      const children = await childQuery.select('*');
+      if (!children || children.length === 0) continue;
+
+      const hasDeeper = Object.values(relatedModel.relations || {}).some(
+        r => ['hasMany', 'hasOne'].includes(r.type) && isCascadeEnabled(r, 'restore')
+      );
+      if (hasDeeper) {
+        for (const child of children) {
+          await cascadeRestore(relatedModel, child, child.deleted_at || parentDeletedAt, options, visited);
+        }
+      }
+
+      const childIds = children.map(c => c[relatedModel.primaryKey]);
+      await activeKnex(relatedModel.table)
+        .whereIn(relatedModel.primaryKey, childIds)
+        .update(getRestoreData());
+
+      if (cacheLayer) {
+        cacheLayer.invalidateModelAll(relatedModel);
+      }
+
+      if (ModelEvents.hasListeners(relatedModel.name, Hooks.AFTER_RESTORE)) {
+        for (const child of children) {
+          const childCtx = createEventContext(relatedModel.name, 'restore', getHookTrx());
+          ModelEvents.emit(relatedModel.name, Hooks.AFTER_RESTORE, { ...child, deleted_at: null }, childCtx);
+        }
+      }
+    }
+  }
+
+  /**
+   * Delete a record by primary key (soft delete if enabled, with relation cascading)
    * @param {number|string} id - Primary key value
+   * @param {Object} [options={}] - Delete options ({ cascade?: boolean, deletedAt?: Date })
    * @returns {Promise<boolean>}
    */
-  async function del(id) {
+  async function del(id, options = {}) {
     const ctx = createEventContext(model.name, 'delete', getHookTrx());
     
-    // Get the record before deletion for hooks
+    // Get the record before deletion for hooks and cascading
     const record = await findById(id);
     if (!record) {
       return false;
@@ -478,39 +702,76 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     }
 
     let success = false;
+    const deletedAt = (options && options.deletedAt instanceof Date) ? options.deletedAt : new Date();
 
     // Soft delete if enabled
     if (model.scopes.softDelete) {
       const updated = await baseQuery()
         .where(model.primaryKey, id)
-        .update(getSoftDeleteData());
+        .update(getSoftDeleteData(deletedAt));
       success = updated > 0;
+
+      if (success) {
+        if (cacheLayer) {
+          cacheLayer.invalidateModelAll(model);
+        }
+
+        if (!options || options.cascade !== false) {
+          await cascadeSoftDelete(model, record, deletedAt, options);
+        }
+
+        // Emit afterDelete
+        ModelEvents.emit(model.name, Hooks.AFTER_DELETE, record, ctx);
+      }
     } else {
       // Hard delete
+      // Cascade hard-delete child records first to satisfy FK constraints
+      if (!options || options.cascade !== false) {
+        await cascadeHardDelete(model, record, options);
+      }
+
       const deleted = await baseQuery()
         .where(model.primaryKey, id)
         .delete();
       success = deleted > 0;
-    }
 
-    if (success) {
-      // Emit afterDelete
-      ModelEvents.emit(model.name, Hooks.AFTER_DELETE, record, ctx);
+      if (success) {
+        if (cacheLayer) {
+          cacheLayer.invalidateModelAll(model);
+        }
+
+        // Emit afterDelete
+        ModelEvents.emit(model.name, Hooks.AFTER_DELETE, record, ctx);
+      }
     }
 
     return success;
   }
 
   /**
-   * Force delete a record (bypass soft delete)
+   * Force delete a record (bypass soft delete, cascading to related models)
    * @param {number|string} id - Primary key value
+   * @param {Object} [options={}] - Force delete options ({ cascade?: boolean })
    * @returns {Promise<boolean>}
    */
-  async function forceDelete(id) {
+  async function forceDelete(id, options = {}) {
+    const record = await getActiveKnex()(model.table)
+      .where(model.primaryKey, id)
+      .first();
+
+    if (!record) {
+      return false;
+    }
+
+    if (!options || options.cascade !== false) {
+      await cascadeHardDelete(model, record, options);
+    }
+
     // Use raw query to bypass soft delete scope
     const deleted = await getActiveKnex()(model.table)
       .where(model.primaryKey, id)
       .delete();
+
     if (cacheLayer && deleted > 0) {
       cacheLayer.invalidateModelAll(model);
     }
@@ -518,11 +779,12 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
   }
 
   /**
-   * Restore a soft-deleted record
+   * Restore a soft-deleted record (with selective cascading restore)
    * @param {number|string} id - Primary key value
+   * @param {Object} [options={}] - Restore options ({ cascade?: boolean, allChildren?: boolean })
    * @returns {Promise<Object|null>}
    */
-  async function restore(id) {
+  async function restore(id, options = {}) {
     if (!model.scopes.softDelete) {
       throw new Error(`Model "${model.name}" does not have soft delete enabled`);
     }
@@ -549,10 +811,18 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     const updated = await getActiveKnex()(model.table)
       .where(model.primaryKey, id)
       .whereNotNull('deleted_at')
-      .update({ deleted_at: null });
+      .update(getRestoreData());
 
     if (updated === 0) {
       return null;
+    }
+
+    if (cacheLayer) {
+      cacheLayer.invalidateModelAll(model);
+    }
+
+    if (!options || options.cascade !== false) {
+      await cascadeRestore(model, trashedRecord, trashedRecord.deleted_at, options);
     }
 
     const record = await findById(id, {}, false);

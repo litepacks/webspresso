@@ -745,11 +745,20 @@ export interface ScopeContext {
 
 export type RelationType = 'belongsTo' | 'hasMany' | 'hasOne';
 
+export type RelationCascadeOption =
+  | boolean
+  | 'delete'
+  | 'restore'
+  | 'all'
+  | ('delete' | 'restore' | 'all')[]
+  | { delete?: boolean; restore?: boolean };
+
 export interface RelationDefinition {
   type: RelationType;
-  model: () => ModelDefinition;
+  model: string | (() => ModelDefinition<any> | string);
   foreignKey: string;
   localKey?: string;
+  cascade?: RelationCascadeOption;
 }
 
 export interface AdminPermissions {
@@ -955,6 +964,8 @@ export function hasModel(name: string): boolean;
 
 export function clearRegistry(): void;
 
+export function isCascadeEnabled(relation: RelationDefinition, operation: 'delete' | 'restore'): boolean;
+
 // --- ORM: schema & columns ---
 
 /** zdb column helpers (id, string, timestamp, …) + `schema()` */
@@ -1040,9 +1051,9 @@ export interface Repository<T = Record<string, any>> {
   createMany(data: (Partial<T> | Record<string, unknown>)[]): Promise<T[]>;
   update(id: string | number, data: Partial<T> | Record<string, unknown>): Promise<T | null>;
   updateWhere(conditions: Partial<T> | Record<string, unknown>, data: Partial<T> | Record<string, unknown>): Promise<number>;
-  delete(id: string | number): Promise<boolean>;
-  forceDelete(id: string | number): Promise<boolean>;
-  restore(id: string | number): Promise<T | null>;
+  delete(id: string | number, options?: { cascade?: boolean; deletedAt?: Date }): Promise<boolean>;
+  forceDelete(id: string | number, options?: { cascade?: boolean }): Promise<boolean>;
+  restore(id: string | number, options?: { cascade?: boolean; allChildren?: boolean }): Promise<T | null>;
   query(): QueryBuilder<T>;
   raw(sql: string, bindings?: unknown[]): Promise<unknown>;
   count(conditions?: Partial<T> | Record<string, unknown>): Promise<number>;

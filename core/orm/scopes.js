@@ -142,10 +142,11 @@ function applyInsertNanoidPrimary(data, model) {
 
 /**
  * Get soft delete data (for UPDATE instead of DELETE)
+ * @param {Date|string|number} [date=new Date()] - Soft delete timestamp
  * @returns {Object} Soft delete update data
  */
-function getSoftDeleteData() {
-  return { deleted_at: new Date() };
+function getSoftDeleteData(date = new Date()) {
+  return { deleted_at: date instanceof Date ? date : new Date(date) };
 }
 
 /**

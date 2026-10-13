@@ -7,7 +7,7 @@
 const path = require('path');
 const fs = require('fs');
 const { createSchemaHelpers, extractColumnsFromSchema, getColumnMeta } = require('./schema-helpers');
-const { defineModel, getModel, getAllModels, hasModel, clearRegistry, resolveModelName } = require('./model');
+const { defineModel, getModel, getAllModels, hasModel, clearRegistry, resolveModelName, isCascadeEnabled } = require('./model');
 const { createRepository } = require('./repository');
 const { createMigrationManager } = require('./migrations');
 const { createSeeder } = require('./seeder');
@@ -358,6 +358,7 @@ module.exports = {
   getAllModels,
   hasModel,
   clearRegistry,
+  isCascadeEnabled,
   // Column utilities
   extractColumnsFromSchema,
   getColumnMeta,

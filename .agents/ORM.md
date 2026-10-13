@@ -311,4 +311,94 @@ const mixed = await articleRepo.query()
 | **PostgreSQL** | `'auto'` / `'fts'` | `to_tsvector @@ plainto_tsquery` / `websearch_to_tsquery` | Native Postgres tsvector search. Pass `{ rank: true }` to order by `ts_rank` relevance. |
 | **MySQL** | `'fts'` | `MATCH(...) AGAINST(? IN BOOLEAN MODE)` | Requires FULLTEXT index on table. |
 
+---
+
+## 9. Relational Cascading Soft-Delete & Selective Restore (`cascade: true`)
+
+Webspresso ORM supports automated relational cascade operations for `hasMany` and `hasOne` relationships. When a parent record is soft-deleted or restored, child records are synchronized automatically.
+
+### 9.1 Relation Configuration
+
+Configure `cascade` directly inside your model relations:
+
+```javascript
+defineModel({
+  name: 'Author',
+  table: 'authors',
+  schema: zdb.schema({
+    id: zdb.id(),
+    name: zdb.string(),
+    deleted_at: zdb.timestamp({ nullable: true }),
+  }),
+  relations: {
+    // 1. Full cascade (soft-delete, hard-delete, and restore)
+    posts: {
+      type: 'hasMany',
+      model: () => 'Post', // or () => Post
+      foreignKey: 'author_id',
+      cascade: true,
+    },
+    // 2. hasOne cascade
+    profile: {
+      type: 'hasOne',
+      model: () => 'Profile',
+      foreignKey: 'author_id',
+      cascade: true,
+    },
+    // 3. Delete-only cascade (child is deleted with parent, but NOT restored)
+    tokens: {
+      type: 'hasMany',
+      model: () => 'ApiToken',
+      foreignKey: 'author_id',
+      cascade: 'delete', // or { delete: true, restore: false }
+    },
+  },
+  scopes: {
+    softDelete: true,
+  },
+});
+```
+
+### 9.2 Cascade Deletion Behavior
+
+- **Soft Delete (`repo.delete(id)`)**:
+  When an Author is soft-deleted, all active child records in cascading relations (`hasMany`, `hasOne`) are soft-deleted with the **exact same `deleted_at` timestamp**.
+  Cascade is recursive: If `Post` also defines `comments` with `cascade: true`, all comments under those posts are cascaded automatically.
+- **Hard Delete (`repo.forceDelete(id)`)**:
+  When `forceDelete` is called (or when parent is a non-softDelete model), cascading child records are deleted **before** the parent to avoid foreign-key constraint violations (`FOREIGN KEY constraint failed`).
+- **Cache Invalidation**:
+  The ORM query cache for all affected related models is automatically invalidated.
+
+### 9.3 Selective Restore (Smart Timestamp Matching)
+
+A classic pitfall in soft-delete architectures is resurrecting child records that the user deliberately deleted prior to deleting the parent account:
+
+```
+T1 (10:00): User manually deletes Post #1 (deleted_at = 10:00).
+T2 (12:00): User account is soft-deleted (deleted_at = 12:00).
+            Post #2 and Post #3 receive deleted_at = 12:00.
+T3 (15:00): User account is restored.
+```
+
+By default, Webspresso ORM executes **selective restore**:
+- It restores only child records where `child.deleted_at === parent.deleted_at` (Post #2 and Post #3).
+- Post #1 remains soft-deleted because its `deleted_at` was `10:00`!
+
+```javascript
+// Default: Safe selective restore (protects previously deleted children)
+await authorRepo.restore(authorId);
+
+// Optional: Force restore ALL children regardless of when they were deleted
+await authorRepo.restore(authorId, { allChildren: true });
+
+// Optional: Bypass cascading for a specific operation
+await authorRepo.delete(authorId, { cascade: false });
+await authorRepo.restore(authorId, { cascade: false });
+```
+
+### 9.4 Cycle & Recursion Safety
+
+If your data model contains circular relations (e.g. `User.partner` <-> `Partner.user`), Webspresso ORM uses an internal visited set (`model:id`) to terminate recursion cleanly without stack overflows.
+
+
 

@@ -68,13 +68,16 @@ module.exports = defineModel({
   relations: {
     posts: {
       type: 'hasMany',
-      model: 'Post',
+      model: () => 'Post',
       foreignKey: 'userId',
+      cascade: true, // Cascades soft-delete, hard-delete, and selective restore
     },
   },
 
   // Soft delete support
-  softDelete: true,
+  scopes: {
+    softDelete: true,
+  },
 });
 ```
 
@@ -152,3 +155,55 @@ exports.down = function(knex) {
   return knex.schema.dropTableIfExists('users');
 };
 ```
+
+---
+
+## 5. Relational Cascading Soft-Delete & Selective Restore
+
+Webspresso ORM supports automatic relational cascading for `hasMany` and `hasOne` relations with `cascade: true`.
+
+```javascript
+// Model Definition
+defineModel({
+  name: 'User',
+  table: 'users',
+  schema: UserSchema,
+  relations: {
+    posts: {
+      type: 'hasMany',
+      model: () => 'Post',
+      foreignKey: 'user_id',
+      cascade: true,
+    },
+    profile: {
+      type: 'hasOne',
+      model: () => 'Profile',
+      foreignKey: 'user_id',
+      cascade: true,
+    },
+  },
+  scopes: { softDelete: true },
+});
+```
+
+### Soft-Delete Cascade
+When `userRepo.delete(userId)` is called, the user and all associated active `posts` and `profile` records are soft-deleted with the exact same `deleted_at` timestamp.
+
+### Selective Restore (Timestamp Matching)
+When `userRepo.restore(userId)` is called, only child records deleted in the same cascade deletion event are restored. Child records that were manually soft-deleted earlier remain safely deleted:
+
+```javascript
+// Restore parent and matching cascaded children
+await userRepo.restore(userId);
+
+// Force restore ALL children regardless of when they were deleted
+await userRepo.restore(userId, { allChildren: true });
+
+// Skip cascading for a specific call
+await userRepo.delete(userId, { cascade: false });
+await userRepo.restore(userId, { cascade: false });
+```
+
+### Permanent Hard-Delete (`forceDelete`)
+When `userRepo.forceDelete(userId)` is called, cascading child records are permanently deleted first to satisfy database foreign-key constraints before deleting the parent.
+
