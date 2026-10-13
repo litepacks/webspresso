@@ -2,21 +2,22 @@
 
 [![npm version](https://img.shields.io/npm/v/webspresso.svg?style=flat-square)](https://www.npmjs.com/package/webspresso)
 [![vulnerabilities](https://npmx.dev/api/registry/badge/vulnerabilities/webspresso?style=shieldsio)](https://npmx.dev/package/webspresso)
+[![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg?style=flat-square)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-A lightweight, zero-dependency-sprawl Express SSR framework featuring file-based routing, server-side Nunjucks rendering, an intuitive Knex-based ORM with ambient `AsyncLocalStorage` transactions, dual authentication (Session + JWT), zero-dependency streaming compression, graceful shutdown, and a customizable Mithril.js SPA Admin Panel.
+A batteries-included, full-stack Node.js framework combining Next.js/Nuxt-style file-based routing, server-rendered Nunjucks streaming, a Knex-based ORM with ambient transactions, zero-dependency dual authentication, background queues, and a customizable Mithril.js SPA Admin Panel.
 
 ---
 
-## ⚡ Quick Start (3 Minutes)
+## ⚡ Quick Start
 
-Scaffold a new project with interactive database and styling setup:
+Create a new Webspresso project in seconds:
 
 ```bash
-# Create a new project interactively
+# Scaffold a new application interactively
 npx webspresso new my-app --install
 
-# Navigate and start development server
+# Start development server with live reload
 cd my-app
 npm run dev
 ```
@@ -25,26 +26,112 @@ Open **`http://localhost:3000`** in your browser.
 
 ---
 
-## ✨ Why Webspresso?
+## 🌟 Core Capabilities
 
-- **Zero-Dependency Sprawl**: Core framework features (Dual Auth, JWT signing, Error handling, Streaming Compression, Graceful Shutdown, Template Helpers) rely strictly on native Node.js standard modules (`crypto`, `path`, `fs`, `events`, `zlib`, `async_hooks`) without bloated dependency trees.
-- **File-Based Routing & API Suffixes**: Pages and APIs automatically map to clean URLs with dynamic params (`[id]`), wildcards (`[...slug]`), and method suffixes (`.get.js`, `.post.js`, `.delete.js`, `.patch.js`, `.put.js`).
-- **Feature Modules (`defineModule`)**: Domain-driven modular organization for large projects (`modules/{name}/pages`, `api`, `services`, `middleware`).
-- **Modern Page & API Helpers (`definePage`, `defineApi`)**: Declarative Zod request schemas, unified execution context, and automatic JSON response serialization.
-- **Server Data Prefetching (`load()`)**: Page routes export `async function load({ req, res, db, ctx })` to fetch data server-side before template compilation.
-- **Services Layer**: File-based auto-discovery in `services/` with declarative Zod validation, role/predicate authorization guards, and memoization.
-- **Ambient Transactions**: Knex database transactions automatically bind to `AsyncLocalStorage` (`core/orm/transaction.js`). Scoped repositories seamlessly participate in active transactions without manual `trx` passing.
-- **Mithril.js Admin Panel SPA**: Built-in, isolated single-page admin panel mounted at `/_admin` with auto-layout wrapping for custom pages, widgets, and field renderers.
-- **TypeScript First-Class Support**: Shipped with complete [`index.d.ts`](index.d.ts) type definitions for IDE autocompletion and type checking.
+| Layer | Capabilities |
+| :--- | :--- |
+| **Routing & SSR** | 100% file-based routing (`pages/`), method suffixes (`.get.js`, `.post.js`), nested layouts (`_layout.njk`), directory-level error boundaries (`_error.njk`), loading skeletons (`_loading.njk`), and out-of-order chunked response streaming (`res.renderStream`). |
+| **Database & ORM** | Built-in Knex ORM with `defineModel`, `zdb` schema builder, Repository pattern (`db.getRepository('Model')`), relations (`belongsTo`, `hasMany`), cascade soft-delete & restore, and ambient transactions via `AsyncLocalStorage`. |
+| **Dual Auth & Sessions** | Stateful cookies for SSR + stateless HS256 JWT rotation for APIs, magic links, active device management & remote session revocation, CSRF protection, and zero external auth dependencies. |
+| **Services & Queues** | File-based auto-discovery in `services/` with declarative Zod validation, role-based access guards, and ACID transaction propagation. Background worker queues in `jobs/`. |
+| **Admin Panel SPA** | Integrated Mithril.js single-page admin panel mounted at `/_admin` with auto-layout wrapping, CRUD views, custom dashboard widgets, and custom field renderers. |
+| **Plugin Ecosystem** | 20+ official plugins: Polar.sh billing, Webhooks dispatcher with HMAC signatures, Realtime (WebSocket/SSE), Site Analytics, API Keys, File Manager, CSV/Excel generation, and more. |
+| **DevOps & Production** | Built-in streaming zlib compression (`brotli`/`gzip`), socket connection draining & graceful shutdown, `webspresso deploy:check` production readiness auditor, and Docker scaffolding. |
 
 ---
 
-## 🛠️ Minimal Example
+## 🛠️ Code at a Glance
 
-### 1. Server Entry Point (`server.js`)
+### 1. File-Based Page Route (`pages/notes.njk` + `pages/notes.js`)
+
+Companion `.js` loaders fetch data server-side before template rendering:
+
+```html
+<!-- pages/notes.njk -->
+{% extends "views/layout.njk" %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto py-8">
+  <h1 class="text-2xl font-bold mb-4">My Notes</h1>
+  <ul class="space-y-2">
+    {% for note in notes %}
+      <li class="p-4 bg-white rounded border shadow-sm">{{ note.title }}</li>
+    {% else %}
+      <p class="text-slate-500">No notes yet.</p>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}
+```
+
+```javascript
+// pages/notes.js
+module.exports = {
+  async load({ req, db }) {
+    const notes = await db.getRepository('Note').find({
+      userId: req.user?.id,
+    });
+    return { notes };
+  },
+};
+```
+
+### 2. Method-Suffixed API Route (`pages/api/notes.post.js`)
+
+Export `{ schema, middleware, handler }` or `defineApi()` with declarative Zod validation:
+
+```javascript
+// pages/api/notes.post.js
+const { defineApi } = require('webspresso');
+
+module.exports = defineApi({
+  schema: ({ z }) => ({
+    body: z.object({
+      title: z.string().min(1, 'Title is required').max(200),
+      content: z.string().min(1),
+    }),
+  }),
+  middleware: ['auth'], // Built-in session or JWT guard
+  async handler(req, res) {
+    // req.input.body is validated and typed
+    const note = await req.db.getRepository('Note').create({
+      ...req.input.body,
+      userId: req.user.id,
+    });
+    return res.status(201).json(note);
+  },
+});
+```
+
+### 3. ORM Model Definition (`models/Note.js`)
+
+Define models with `defineModel` and the expressive `zdb` schema builder:
+
+```javascript
+// models/Note.js
+const { defineModel, zdb } = require('webspresso');
+
+module.exports = defineModel({
+  name: 'Note',
+  table: 'notes',
+  schema: {
+    id: zdb.id(),
+    title: zdb.string(200),
+    content: zdb.text(),
+    userId: zdb.integer(),
+    ...zdb.timestamps(),
+    ...zdb.softDeletes(),
+  },
+  relations: {
+    user: { type: 'belongsTo', model: 'User', foreignKey: 'userId' },
+  },
+});
+```
+
+### 4. Application Server (`server.js`)
+
 ```javascript
 const path = require('path');
-require('./config/load-env');
 const { createApp, createDatabase } = require('webspresso');
 
 const db = createDatabase(require('./webspresso.db'));
@@ -54,103 +141,68 @@ const { app } = createApp({
   pagesDir: path.join(__dirname, 'pages'),
   viewsDir: path.join(__dirname, 'views'),
   server: {
-    shutdown: { enabled: true, timeout: 10000 },
     compression: true,
+    shutdown: { enabled: true, timeout: 10000 },
   },
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server listening at http://localhost:${PORT}`);
+  console.log(`Server running at http://localhost:${PORT}`);
 });
 ```
 
-### 2. Server-Rendered Page (`pages/index.njk` + `pages/index.js`)
-```html
-<!-- pages/index.njk -->
-{% extends "views/layout.njk" %}
+---
 
-{% block content %}
-<div class="max-w-4xl mx-auto py-12 px-4">
-  <h1 class="text-3xl font-bold mb-4">{{ title }}</h1>
-  <p class="text-slate-600">Welcome, {{ user.name or "Guest" }}!</p>
-</div>
-{% endblock %}
-```
+## 🧰 Essential CLI Commands
 
-```javascript
-// pages/index.js
-const { definePage } = require('webspresso');
+```bash
+# Development & Builds
+npx webspresso dev                 # Start dev server with watch & live reload
+npx webspresso build               # Compile production assets
+npx webspresso start               # Run production server
 
-module.exports = definePage({
-  async load({ req, ctx }) {
-    return {
-      title: 'Home Page',
-      user: req.user || null,
-    };
-  },
-});
-```
+# Database & Migrations
+npx webspresso db:migrate          # Run pending database migrations
+npx webspresso db:rollback         # Roll back latest migration batch
+npx webspresso db:status           # Inspect migration status
+npx webspresso seed                # Run seed files
 
-### 3. Validated JSON API Endpoint (`pages/api/greet.post.js`)
-```javascript
-const { defineApi, z } = require('webspresso');
+# Code Generation
+npx webspresso page <path>         # Scaffold a new SSR page + loader
+npx webspresso api <path>          # Scaffold a new method-suffixed API route
+npx webspresso make:model <name>   # Generate a new ORM model
+npx webspresso make:job <name>     # Generate a background queue job
 
-module.exports = defineApi({
-  schema: {
-    body: z.object({
-      name: z.string().min(2),
-    }),
-  },
-
-  async handler(req, res, ctx) {
-    // req.input is typed and validated by Zod
-    const result = await ctx.service('user.greet', req.input.body);
-    return result; // Automatically serialized as JSON (HTTP 200)
-  },
-});
+# DevOps & Production Readiness
+npx webspresso doctor              # Run project health & configuration check
+npx webspresso deploy:check        # Pre-flight production readiness inspection
+npx webspresso add:docker          # Scaffold Dockerfile & docker-compose.yml
+npx webspresso add:tailwind        # Configure TailwindCSS integration
 ```
 
 ---
 
 ## 📚 Documentation
 
-The complete Webspresso documentation is organized into 5 focused pillars:
+Detailed topic guides are available in the repository:
 
-### 🚀 Getting Started
-- **[Installation Guide](docs/getting-started/installation.md)** — Node.js 20 LTS prerequisites, CLI setup, and TypeScript.
-- **[Creating Your First App](docs/getting-started/first-app.md)** — Step-by-step walkthrough building an SSR page, API endpoint, and service.
-- **[Project Structure](docs/getting-started/project-structure.md)** — Anatomy of `pages/`, `views/`, `services/`, `models/`, and `config/`.
-- **[Deployment & Production](docs/getting-started/deployment.md)** — Production configuration, Docker, PM2, and Nginx.
-
-### 📖 Task Guides ("How do I...?")
-- **[File-Based Routing](docs/guides/routing.md)** — Static routes, dynamic params (`[id]`), and catch-all wildcards.
-- **[SSR & Templates](docs/guides/ssr-and-templates.md)** — Nunjucks layouts, `load()` loaders, `fsy` helper catalog, and chunked streaming.
-- **[Services Layer](docs/guides/services.md)** — Defining services, Zod validation, auth role guards, and ACID transactions.
-- **[Database & ORM](docs/guides/database-and-orm.md)** — Model definitions (`defineModel`), `zdb` schema builder, and Knex migrations.
-- **[Dual Authentication](docs/guides/authentication.md)** — Stateful Session cookies for SSR and stateless JWT rotation for REST APIs.
-- **[Admin Panel Customization](docs/guides/admin-panel.md)** — Custom Mithril.js SPA pages, KPI widgets, and custom field renderers.
-
-### 🧠 Concepts & Architecture ("How does it work and why?")
-- **[System Architecture](docs/concepts/architecture.md)** — Layered architecture, subsystem boundaries, and design principles.
-- **[Request Lifecycle](docs/concepts/request-lifecycle.md)** — End-to-end trace from TCP socket to template render and response stream.
-- **[Service Execution Pipeline](docs/concepts/service-execution-pipeline.md)** — Sanitization, Zod validation, auth guards, ambient transactions, and caching.
-- **[Ambient Transaction Propagation](docs/concepts/transaction-propagation.md)** — How `AsyncLocalStorage` manages ACID database transactions across nested services.
-
-### 📚 API Reference ("What is the exact contract?")
-- **[`createApp()` Configuration](docs/reference/create-app.md)** — Full `CreateAppOptions` parameter reference.
-- **[CLI Reference](docs/reference/cli.md)** — Complete `webspresso` CLI command manual.
-- **[Service Definition Spec](docs/reference/service-definition.md)** — `defineService` options and `ServiceContext` properties.
-- **[Model Definition Spec](docs/reference/model-definition.md)** — `defineModel` options, `zdb` column types, and `Repository` query methods.
-- **[Exceptions Catalog](docs/reference/exceptions.md)** — Built-in framework exception classes and HTTP status codes.
+- **[Installation & First App](docs/getting-started/installation.md)** — Node.js requirements, setup, and first steps.
+- **[File-Based Routing & API Routes](.agents/ROUTING.md)** — Routing conventions, parameters, and cascading layouts.
+- **[SSR Streaming & Chunked Transfer](.agents/STREAMING.md)** — Out-of-order slots, `_loading.njk` skeletons, and TTFB optimization.
+- **[Database & ORM Guide](.agents/ORM.md)** — Repositories, relations, soft deletes, and ambient transactions.
+- **[Dual Authentication System](.agents/AUTH.md)** — Sessions, JWT rotation, magic links, and device management.
+- **[Plugin Ecosystem Reference](.agents/PLUGINS.md)** — Polar billing, webhooks, analytics, realtime, and more.
+- **[Admin Panel Customization](.agents/ADMIN.md)** — Extending the Mithril.js SPA admin panel.
+- **[Full TypeScript Reference](index.d.ts)** — Canonical framework types and signatures.
 
 ---
 
-## 🤖 For AI Coding Agents
+## 🤖 For AI Coding Assistants
 
-If you are an autonomous coding assistant or LLM working on a Webspresso codebase:
-- Read **[`AGENTS.md`](AGENTS.md)** for authoritative architectural guidelines, zero-regression policies, and critical signatures.
-- Consult **[`llms.txt`](llms.txt)** for a machine-readable sitemap of all documentation resources.
+If you are an autonomous coding agent working in a Webspresso codebase:
+- Read **[`AGENTS.md`](AGENTS.md)** for mandatory architectural rules, zero-regression policies, and code contracts.
+- Check **[`llms.txt`](llms.txt)** for a machine-readable directory map of all documentation.
 
 ---
 
