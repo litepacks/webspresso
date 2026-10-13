@@ -16,8 +16,10 @@
  * @returns {string}
  */
 function buildMagicLinkUrl(options = {}) {
-  const rawBase = options.baseUrl || process.env.BASE_URL || 'http://localhost:3000';
-  const baseUrl = rawBase.replace(/\/+$/, '');
+  let baseUrl = String(options.baseUrl || process.env.BASE_URL || 'http://localhost:3000');
+  while (baseUrl.endsWith('/')) {
+    baseUrl = baseUrl.slice(0, -1);
+  }
   const path = options.path || '/auth/magic-link/verify';
   const token = options.token;
 

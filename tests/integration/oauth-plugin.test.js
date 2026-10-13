@@ -22,6 +22,7 @@ describe('OAuth Plugin Integration Tests', () => {
         secret: 'session-secret',
         resave: false,
         saveUninitialized: true,
+        cookie: { secure: true },
       })
     );
 

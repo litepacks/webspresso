@@ -294,7 +294,13 @@ class AssetManager {
     }
 
     if (routePath) {
-      let cleanPath = String(routePath).trim().replace(/^\/+/, '').replace(/\/+$/, '');
+      let cleanPath = String(routePath).trim();
+      while (cleanPath.startsWith('/')) {
+        cleanPath = cleanPath.slice(1);
+      }
+      while (cleanPath.endsWith('/')) {
+        cleanPath = cleanPath.slice(0, -1);
+      }
       if (cleanPath) {
         candidates.add(cleanPath);
         if (cleanPath.includes(':')) {

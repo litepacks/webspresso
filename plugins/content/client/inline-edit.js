@@ -253,9 +253,9 @@
       return;
     }
     try {
-      var template = document.createElement('template');
-      template.innerHTML = htmlStr;
-      var content = template.content;
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(String(htmlStr), 'text/html');
+      var body = doc.body;
       var allowedTags = {
         p: 1, br: 1, b: 1, i: 1, strong: 1, em: 1, u: 1, s: 1, strike: 1,
         h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1, ul: 1, ol: 1, li: 1,
@@ -265,7 +265,7 @@
       var allowedAttrs = {
         href: 1, title: 1, target: 1, rel: 1, class: 1, id: 1, src: 1, alt: 1, width: 1, height: 1
       };
-      var allNodes = content.querySelectorAll('*');
+      var allNodes = body.querySelectorAll('*');
       for (var i = allNodes.length - 1; i >= 0; i--) {
         var node = allNodes[i];
         var tag = node.tagName.toLowerCase();
@@ -293,7 +293,9 @@
       }
 
       el.textContent = '';
-      el.appendChild(content.cloneNode(true));
+      while (body.firstChild) {
+        el.appendChild(body.firstChild);
+      }
     } catch (e) {
       el.textContent = htmlStr;
     }

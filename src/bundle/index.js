@@ -132,7 +132,8 @@ function expandGlob(pattern, cwd = process.cwd()) {
 
   const isRecursive = normalized.includes('**');
   const regexPattern = '^' + normalized
-    .replace(/\./g, '\\.')
+    .replace(/\\/g, '\\\\')
+    .replace(/[.+?^${}()|[\]]/g, '\\$&')
     .replace(/\*\*\//g, '(.+/)?')
     .replace(/\*\*/g, '.*')
     .replace(/\*/g, '[^/]*') + '$';

@@ -959,7 +959,10 @@ class AuthManager extends EventEmitter {
       tokenTtlMs
     );
 
-    const baseUrl = (options.baseUrl || this.config.baseUrl || process.env.BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+    let baseUrl = String(options.baseUrl || this.config.baseUrl || process.env.BASE_URL || 'http://localhost:3000');
+    while (baseUrl.endsWith('/')) {
+      baseUrl = baseUrl.slice(0, -1);
+    }
     const pathSegment = options.path || '/auth/magic-link/verify';
     const cleanPath = pathSegment.startsWith('/') ? pathSegment : `/${pathSegment}`;
     const sep = cleanPath.includes('?') ? '&' : '?';

@@ -76,7 +76,18 @@ function createCorsMiddleware(options = {}) {
       return config.origin(reqOrigin, callback);
     }
     if (config.origin === true) {
-      return callback(null, reqOrigin);
+      if (!reqOrigin || reqOrigin === 'null') {
+        return callback(null, false);
+      }
+      try {
+        const u = new URL(reqOrigin);
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+          return callback(null, false);
+        }
+        return callback(null, u.origin);
+      } catch {
+        return callback(null, false);
+      }
     }
     return callback(null, false);
   }
@@ -101,7 +112,7 @@ function createCorsMiddleware(options = {}) {
         return next(err);
       }
 
-      if (allowedOrigin && allowedOrigin !== '*') {
+      if (allowedOrigin && allowedOrigin !== '*' && allowedOrigin !== 'null') {
         res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
         res.setHeader('Vary', 'Origin');
         if (config.credentials) {

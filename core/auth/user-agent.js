@@ -121,12 +121,12 @@ function parseUserAgent(userAgent = '') {
   } else if (/Firefox\/(\d+)/i.test(ua) || /FxiOS\/(\d+)/i.test(ua)) {
     const match = ua.match(/(?:Firefox|FxiOS)\/(\d+)/i);
     browser = `Firefox ${match ? match[1] : ''}`.trim();
-  } else if (/Version\/(\d+).*Safari/i.test(ua)) {
+  } else if (/Safari/i.test(ua) && /Version\/(\d+)/i.test(ua)) {
     const match = ua.match(/Version\/(\d+)/i);
     browser = `Safari ${match ? match[1] : ''}`.trim();
   } else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) {
     browser = 'Safari';
-  } else if (/MSIE (\d+)|Trident.*rv:(\d+)/i.test(ua)) {
+  } else if (/MSIE (\d+)/i.test(ua) || (/Trident/i.test(ua) && /rv:(\d+)/i.test(ua))) {
     browser = 'Internet Explorer';
   } else if (isBot) {
     const botNameMatch = ua.match(/(googlebot|bingbot|duckduckbot|slurp|twitterbot|slackbot|curl|wget)/i);
@@ -134,7 +134,7 @@ function parseUserAgent(userAgent = '') {
   }
 
   // 4. Detect Device Category
-  const isTablet = /iPad|tablet|(android(?!.*mobile))/i.test(ua);
+  const isTablet = /iPad|tablet/i.test(ua) || (/android/i.test(ua) && !/mobile/i.test(ua));
   const isMobile = !isTablet && /mobile|iphone|ipod|android|blackberry|opera mini|windows phone/i.test(ua);
   const isDesktop = !isTablet && !isMobile && !isBot;
 
