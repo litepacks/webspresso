@@ -487,6 +487,23 @@ function adminPanelPlugin(options = {}) {
       // Query API routes (auth required)
       ctx.addRoute('get', `${adminPath}/api/models/:model/queries/:query`, requireAuth, apiHandlers.queryHandler);
 
+      // Inlines (Django Inlines-inspired)
+      ctx.addRoute('get', `${adminPath}/api/models/:model/records/:id/inlines/:inlineModel`, requireAuth, apiHandlers.inlineListHandler);
+      ctx.addRoute('post', `${adminPath}/api/models/:model/records/:id/inlines/:inlineModel`, requireAuth, apiHandlers.inlineCreateHandler);
+      ctx.addRoute('put', `${adminPath}/api/models/:model/records/:id/inlines/:inlineModel/:inlineId`, requireAuth, apiHandlers.inlineUpdateHandler);
+      ctx.addRoute('delete', `${adminPath}/api/models/:model/records/:id/inlines/:inlineModel/:inlineId`, requireAuth, apiHandlers.inlineDeleteHandler);
+
+      // List Editable (Django list_editable-inspired)
+      ctx.addRoute('patch', `${adminPath}/api/models/:model/records/:id/quick-edit`, requireAuth, apiHandlers.quickEditHandler);
+      ctx.addRoute('patch', `${adminPath}/api/models/:model/records/batch-edit`, requireAuth, apiHandlers.batchEditHandler);
+
+      // Date Hierarchy & Filter Facets (Django date_hierarchy & list_filter-inspired)
+      ctx.addRoute('get', `${adminPath}/api/models/:model/date-hierarchy`, requireAuth, apiHandlers.dateHierarchyHandler);
+      ctx.addRoute('get', `${adminPath}/api/models/:model/filter-facets`, requireAuth, apiHandlers.filterFacetsHandler);
+
+      // Model Actions (Django Actions-inspired)
+      ctx.addRoute('post', `${adminPath}/api/models/:model/actions/:actionId`, requireAuth, apiHandlers.modelActionHandler);
+
       // Data exchange (Excel export & CSV/XLSX import) routes
       const dataExchangeConfig = typeof dataExchangeOption === 'object' ? dataExchangeOption : { enabled: dataExchangeOption !== false };
       if (dataExchangeConfig.enabled !== false && !ctx.app?._dataExchangeRoutesRegistered) {

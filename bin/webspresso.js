@@ -26,6 +26,7 @@ const { registerCommand: registerDbRollback } = require('./commands/db-rollback'
 const { registerCommand: registerDbStatus } = require('./commands/db-status');
 const { registerCommand: registerDbMake } = require('./commands/db-make');
 const { registerCommand: registerDbScaffold } = require('./commands/db-scaffold');
+const { registerCommand: registerDbMakeMigrations } = require('./commands/db-makemigrations');
 const { registerCommand: registerSeed } = require('./commands/seed');
 const { registerCommand: registerAdminSetup } = require('./commands/admin-setup');
 const { registerCommand: registerAdminPassword } = require('./commands/admin-password');
@@ -49,6 +50,13 @@ const { registerCommand: registerOpenapi } = require('./commands/openapi');
 const { registerCommand: registerTypegen } = require('./commands/typegen');
 const { registerCommand: registerAddDocker } = require('./commands/add-docker');
 const { registerCommand: registerDeployCheck } = require('./commands/deploy-check');
+const { registerCommand: registerRun } = require('./commands/run');
+const { registerCommand: registerList } = require('./commands/list');
+const { registerCommand: registerMakeCommand } = require('./commands/make-command');
+const { registerCommand: registerMakePolicy } = require('./commands/make-policy');
+const { registerCommand: registerMakeFactory } = require('./commands/make-factory');
+const { registerCommand: registerMakeEvent } = require('./commands/make-event');
+const { registerCommand: registerMakeMail } = require('./commands/make-mail');
 
 registerNew(program);
 registerPage(program);
@@ -64,6 +72,7 @@ registerDbRollback(program);
 registerDbStatus(program);
 registerDbMake(program);
 registerDbScaffold(program);
+registerDbMakeMigrations(program);
 registerSeed(program);
 registerAdminSetup(program);
 registerAdminPassword(program);
@@ -84,8 +93,16 @@ registerAgentsInit(program);
 registerRoutes(program);
 registerMakeModel(program);
 registerMakeJob(program);
+registerMakeCommand(program);
+registerMakePolicy(program);
+registerMakeFactory(program);
+registerMakeEvent(program);
+registerMakeMail(program);
+registerRun(program);
+registerList(program);
 registerOpenapi(program);
 registerTypegen(program);
 
 // Parse arguments
 program.parse();
+

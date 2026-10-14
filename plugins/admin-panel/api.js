@@ -66,6 +66,14 @@ function createApiHandlers(options) {
     return getModel(modelName);
   }
 
+  // Helper to check if model has column (supports zdb and zod shapes)
+  function hasColumn(model, colName) {
+    if (!model || !colName) return false;
+    if (model.columns && typeof model.columns.has === 'function' && model.columns.has(colName)) return true;
+    if (model.schema?.shape && colName in model.schema.shape) return true;
+    return false;
+  }
+
   // Get AdminUser repository
   let AdminUserRepo = null;
   if (db && AdminUser) {
@@ -282,6 +290,10 @@ function createApiHandlers(options) {
             permissions: model.admin.permissions || null,
             displayField: model.admin.displayField || null,
             defaultSort: model.admin.defaultSort || null,
+            inlines: model.admin.inlines || null,
+            listEditable: model.admin.listEditable || null,
+            dateHierarchy: model.admin.dateHierarchy || null,
+            listFilter: model.admin.listFilter || null,
           });
         }
       }
@@ -375,6 +387,10 @@ function isColumnSortable(name, meta, model) {
         group: model.admin.group || null,
         columnsConfig: model.admin.columns || null,
         relationsConfig: model.admin.relations || null,
+        inlines: model.admin.inlines || null,
+        listEditable: model.admin.listEditable || null,
+        dateHierarchy: model.admin.dateHierarchy || null,
+        listFilter: model.admin.listFilter || null,
         actions: [
           ...(registry && typeof registry.getActionsForModel === 'function' ? registry.getActionsForModel(model.name) : []),
           ...(Array.isArray(model.admin.actions) ? model.admin.actions : []),
@@ -442,6 +458,37 @@ function isColumnSortable(name, meta, model) {
         } else if (trashed === 'include') {
           query = query.withTrashed();
           countQuery = countQuery.withTrashed();
+        }
+      }
+
+      // Date hierarchy filter (Django date_hierarchy-inspired)
+      const dateHierarchyCol = req.query.date_field || model.admin?.dateHierarchy;
+      if (dateHierarchyCol && hasColumn(model, dateHierarchyCol)) {
+        const { year, month, day, date_from, date_to } = req.query;
+        if (year) {
+          const yr = String(year);
+          if (month) {
+            const mo = String(month).padStart(2, '0');
+            if (day) {
+              const da = String(day).padStart(2, '0');
+              query = query.where(dateHierarchyCol, 'like', `${yr}-${mo}-${da}%`);
+              countQuery = countQuery.where(dateHierarchyCol, 'like', `${yr}-${mo}-${da}%`);
+            } else {
+              query = query.where(dateHierarchyCol, 'like', `${yr}-${mo}%`);
+              countQuery = countQuery.where(dateHierarchyCol, 'like', `${yr}-${mo}%`);
+            }
+          } else {
+            query = query.where(dateHierarchyCol, 'like', `${yr}%`);
+            countQuery = countQuery.where(dateHierarchyCol, 'like', `${yr}%`);
+          }
+        }
+        if (date_from) {
+          query = query.where(dateHierarchyCol, '>=', date_from);
+          countQuery = countQuery.where(dateHierarchyCol, '>=', date_from);
+        }
+        if (date_to) {
+          query = query.where(dateHierarchyCol, '<=', date_to);
+          countQuery = countQuery.where(dateHierarchyCol, '<=', date_to);
         }
       }
 
@@ -646,10 +693,69 @@ function isColumnSortable(name, meta, model) {
         await registry.runHooks('onRecordView', { model: model.name, id, record, req, user: req.session?.adminUser, db });
       }
 
-      res.json({ data: sanitizeForOutput(record, model) });
+      const sanitized = sanitizeForOutput(record, model);
+
+      // Auto-load inlines (Django Inlines-inspired)
+      if (model.admin?.inlines && Array.isArray(model.admin.inlines)) {
+        const inlinesData = {};
+        for (const inlineDef of model.admin.inlines) {
+          const targetModel = getModelFromDb(inlineDef.model);
+          if (targetModel) {
+            const targetRepo = db.getRepository(targetModel.name);
+            const fk = inlineDef.foreignKey || `${model.name.toLowerCase()}_id`;
+            const rows = await targetRepo.query().where(fk, id).find();
+            inlinesData[inlineDef.model] = sanitizeForOutput(rows, targetModel);
+          }
+        }
+        sanitized._inlines = inlinesData;
+      }
+
+      res.json({ data: sanitized });
     } catch (error) {
       const statusCode = error.statusCode || error.status || 500;
       res.status(statusCode).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Sync inline child records for a parent record (Django Inlines-inspired)
+   */
+  async function syncInlines(parentRecord, inlinesPayload, model) {
+    if (!model.admin?.inlines || !inlinesPayload || typeof inlinesPayload !== 'object') {
+      return;
+    }
+    for (const inlineDef of model.admin.inlines) {
+      const inlineModelName = inlineDef.model;
+      const items = inlinesPayload[inlineModelName];
+      if (!Array.isArray(items)) continue;
+
+      const targetModel = getModelFromDb(inlineModelName);
+      if (!targetModel) continue;
+
+      const targetRepo = db.getRepository(targetModel.name);
+      const fk = inlineDef.foreignKey || `${model.name.toLowerCase()}_id`;
+      const parentId = parentRecord[model.primaryKey || 'id'];
+
+      for (const item of items) {
+        if (!item || typeof item !== 'object') continue;
+        const itemId = item[targetModel.primaryKey || 'id'];
+
+        if (item._delete === true || item._destroy === true) {
+          if (itemId) {
+            await targetRepo.delete(itemId);
+          }
+        } else if (itemId) {
+          const cleanItem = { ...item };
+          delete cleanItem._delete;
+          delete cleanItem._destroy;
+          await targetRepo.update(itemId, cleanItem);
+        } else {
+          const cleanItem = { ...item, [fk]: parentId };
+          delete cleanItem._delete;
+          delete cleanItem._destroy;
+          await targetRepo.create(cleanItem);
+        }
+      }
     }
   }
 
@@ -717,8 +823,17 @@ function isColumnSortable(name, meta, model) {
         }
       }
 
+      const payload = { ...req.body };
+      const inlinesData = payload._inlines || payload.inlines;
+      delete payload._inlines;
+      delete payload.inlines;
+
       const repo = db.getRepository(model.name);
-      const record = await repo.create(req.body);
+      const record = await repo.create(payload);
+
+      if (inlinesData) {
+        await syncInlines(record, inlinesData, model);
+      }
 
       if (registry && typeof registry.runHooks === 'function') {
         await registry.runHooks('afterCreate', { model: model.name, record, data: req.body, req, user: req.session?.adminUser, db });
@@ -770,11 +885,20 @@ function isColumnSortable(name, meta, model) {
         }
       }
 
+      const payload = { ...req.body };
+      const inlinesData = payload._inlines || payload.inlines;
+      delete payload._inlines;
+      delete payload.inlines;
+
       const repo = db.getRepository(model.name);
-      const record = await repo.update(id, req.body);
+      const record = await repo.update(id, payload);
 
       if (!record) {
         return res.status(404).json({ error: 'Record not found' });
+      }
+
+      if (inlinesData) {
+        await syncInlines(record, inlinesData, model);
       }
 
       if (registry && typeof registry.runHooks === 'function') {
@@ -1074,6 +1198,379 @@ function isColumnSortable(name, meta, model) {
     }
   }
 
+
+
+  /**
+   * List inline records for a specific parent record (Django Inlines-inspired)
+   */
+  async function inlineListHandler(req, res) {
+    try {
+      const { model: modelName, id, inlineModel: inlineModelName } = req.params;
+      const model = getModelFromDb(modelName);
+      const inlineModel = getModelFromDb(inlineModelName);
+
+      if (!model || !inlineModel) {
+        return res.status(404).json({ error: 'Model or inline model not found' });
+      }
+
+      const inlineDef = (model.admin?.inlines || []).find(i => i.model === inlineModelName) || {};
+      const fk = inlineDef.foreignKey || `${model.name.toLowerCase()}_id`;
+
+      const repo = db.getRepository(inlineModel.name);
+      const records = await repo.query().where(fk, id).find();
+
+      res.json({ data: sanitizeForOutput(records, inlineModel) });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Create inline record for a specific parent record (Django Inlines-inspired)
+   */
+  async function inlineCreateHandler(req, res) {
+    try {
+      const { model: modelName, id, inlineModel: inlineModelName } = req.params;
+      const model = getModelFromDb(modelName);
+      const inlineModel = getModelFromDb(inlineModelName);
+
+      if (!model || !inlineModel) {
+        return res.status(404).json({ error: 'Model or inline model not found' });
+      }
+
+      const inlineDef = (model.admin?.inlines || []).find(i => i.model === inlineModelName) || {};
+      const fk = inlineDef.foreignKey || `${model.name.toLowerCase()}_id`;
+
+      const repo = db.getRepository(inlineModel.name);
+      const payload = { ...req.body, [fk]: id };
+      const record = await repo.create(payload);
+
+      res.status(201).json({ data: sanitizeForOutput(record, inlineModel) });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Update inline record
+   */
+  async function inlineUpdateHandler(req, res) {
+    try {
+      const { inlineModel: inlineModelName, inlineId } = req.params;
+      const inlineModel = getModelFromDb(inlineModelName);
+
+      if (!inlineModel) {
+        return res.status(404).json({ error: 'Inline model not found' });
+      }
+
+      const repo = db.getRepository(inlineModel.name);
+      const record = await repo.update(inlineId, req.body);
+
+      if (!record) {
+        return res.status(404).json({ error: 'Inline record not found' });
+      }
+
+      res.json({ data: sanitizeForOutput(record, inlineModel) });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Delete inline record
+   */
+  async function inlineDeleteHandler(req, res) {
+    try {
+      const { inlineModel: inlineModelName, inlineId } = req.params;
+      const inlineModel = getModelFromDb(inlineModelName);
+
+      if (!inlineModel) {
+        return res.status(404).json({ error: 'Inline model not found' });
+      }
+
+      const repo = db.getRepository(inlineModel.name);
+      await repo.delete(inlineId);
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Quick-edit a single record inline without full form submission (Django list_editable-inspired)
+   */
+  async function quickEditHandler(req, res) {
+    try {
+      const { model: modelName, id } = req.params;
+      const model = getModelFromDb(modelName);
+
+      if (!model || !model.admin || model.admin.enabled !== true) {
+        return res.status(404).json({ error: 'Model not found or not enabled' });
+      }
+      if (model.admin.readOnly === true || model.admin.permissions?.edit === false) {
+        return res.status(403).json({ error: `Editing is disabled for model "${model.name}"` });
+      }
+
+      const allowedCols = Array.isArray(model.admin.listEditable) ? model.admin.listEditable : null;
+      const updates = {};
+      for (const [k, v] of Object.entries(req.body)) {
+        if (allowedCols && !allowedCols.includes(k)) {
+          return res.status(400).json({ error: `Column "${k}" is not list-editable on model "${model.name}"` });
+        }
+        if (hasColumn(model, k)) {
+          updates[k] = v;
+        }
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: 'No valid editable fields provided' });
+      }
+
+      const repo = db.getRepository(model.name);
+      const record = await repo.update(id, updates);
+      if (!record) {
+        return res.status(404).json({ error: 'Record not found' });
+      }
+
+      res.json({ success: true, data: sanitizeForOutput(record, model) });
+    } catch (error) {
+      const fields = extractValidationErrors(error);
+      const statusCode = error.statusCode || error.status || 400;
+      res.status(statusCode).json({ error: error.message, ...(fields ? { fields } : {}) });
+    }
+  }
+
+  /**
+   * Batch edit multiple records inline (Django list_editable bulk save)
+   */
+  async function batchEditHandler(req, res) {
+    try {
+      const { model: modelName } = req.params;
+      const model = getModelFromDb(modelName);
+
+      if (!model || !model.admin || model.admin.enabled !== true) {
+        return res.status(404).json({ error: 'Model not found or not enabled' });
+      }
+      if (model.admin.readOnly === true || model.admin.permissions?.edit === false) {
+        return res.status(403).json({ error: `Editing is disabled for model "${model.name}"` });
+      }
+
+      const updates = req.body.updates;
+      if (!Array.isArray(updates) || updates.length === 0) {
+        return res.status(400).json({ error: 'Array of updates is required' });
+      }
+
+      const allowedCols = Array.isArray(model.admin.listEditable) ? model.admin.listEditable : null;
+      const repo = db.getRepository(model.name);
+      const results = [];
+
+      for (const item of updates) {
+        const { id, changes } = item;
+        if (!id || !changes || typeof changes !== 'object') continue;
+
+        const cleanChanges = {};
+        for (const [k, v] of Object.entries(changes)) {
+          if (allowedCols && !allowedCols.includes(k)) continue;
+          if (hasColumn(model, k)) {
+            cleanChanges[k] = v;
+          }
+        }
+
+        if (Object.keys(cleanChanges).length > 0) {
+          const updated = await repo.update(id, cleanChanges);
+          if (updated) {
+            results.push(sanitizeForOutput(updated, model));
+          }
+        }
+      }
+
+      res.json({ success: true, count: results.length, records: results });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Date hierarchy drilldown aggregation (Django date_hierarchy-inspired)
+   */
+  async function dateHierarchyHandler(req, res) {
+    try {
+      const { model: modelName } = req.params;
+      const model = getModelFromDb(modelName);
+
+      if (!model || !model.admin || model.admin.enabled !== true) {
+        return res.status(404).json({ error: 'Model not found or not enabled' });
+      }
+
+      const dateField = req.query.field || model.admin.dateHierarchy || 'created_at';
+      if (!hasColumn(model, dateField)) {
+        return res.status(400).json({ error: `Date field "${dateField}" does not exist on model "${model.name}"` });
+      }
+
+      const year = req.query.year ? parseInt(req.query.year) : null;
+      const month = req.query.month ? parseInt(req.query.month) : null;
+
+      const repo = db.getRepository(model.name);
+      let query = repo.query().whereNotNull(dateField);
+
+      // If drilldown to days
+      if (year && month) {
+        const prefix = `${year}-${String(month).padStart(2, '0')}`;
+        query = query.where(dateField, 'like', `${prefix}%`);
+        const rows = await query.select(dateField).find();
+
+        const counts = {};
+        for (const r of rows) {
+          const val = String(r[dateField]);
+          const dayMatch = val.match(/^\d{4}-\d{2}-(\d{2})/);
+          if (dayMatch) {
+            const d = parseInt(dayMatch[1]);
+            counts[d] = (counts[d] || 0) + 1;
+          }
+        }
+
+        const days = Object.entries(counts)
+          .map(([d, count]) => ({ day: parseInt(d), count }))
+          .sort((a, b) => a.day - b.day);
+
+        return res.json({ level: 'days', year, month, items: days });
+      }
+
+      // If drilldown to months
+      if (year) {
+        query = query.where(dateField, 'like', `${year}%`);
+        const rows = await query.select(dateField).find();
+
+        const counts = {};
+        for (const r of rows) {
+          const val = String(r[dateField]);
+          const match = val.match(/^\d{4}-(\d{2})/);
+          if (match) {
+            const m = parseInt(match[1]);
+            counts[m] = (counts[m] || 0) + 1;
+          }
+        }
+
+        const months = Object.entries(counts)
+          .map(([m, count]) => ({ month: parseInt(m), count }))
+          .sort((a, b) => a.month - b.month);
+
+        return res.json({ level: 'months', year, items: months });
+      }
+
+      // Top level: drilldown by year
+      const rows = await query.select(dateField).find();
+      const counts = {};
+      for (const r of rows) {
+        const val = String(r[dateField]);
+        const match = val.match(/^(\d{4})/);
+        if (match) {
+          const y = parseInt(match[1]);
+          counts[y] = (counts[y] || 0) + 1;
+        }
+      }
+
+      const years = Object.entries(counts)
+        .map(([y, count]) => ({ year: parseInt(y), count }))
+        .sort((a, b) => b.year - a.year);
+
+      return res.json({ level: 'years', field: dateField, items: years });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Filter facets aggregation for list_filter columns (Django list_filter-inspired)
+   */
+  async function filterFacetsHandler(req, res) {
+    try {
+      const { model: modelName } = req.params;
+      const model = getModelFromDb(modelName);
+
+      if (!model || !model.admin || model.admin.enabled !== true) {
+        return res.status(404).json({ error: 'Model not found or not enabled' });
+      }
+
+      const requestedFields = req.query.fields
+        ? req.query.fields.split(',').map(s => s.trim())
+        : (model.admin.listFilter || model.admin.filterable || []);
+
+      const repo = db.getRepository(model.name);
+      const facets = {};
+
+      for (const field of requestedFields) {
+        if (!hasColumn(model, field)) continue;
+        const rows = await repo.query().whereNotNull(field).select(field).find();
+        const counts = {};
+        for (const r of rows) {
+          const val = r[field];
+          const key = val === null || val === undefined ? '' : String(val);
+          counts[key] = (counts[key] || 0) + 1;
+        }
+        facets[field] = Object.entries(counts).map(([value, count]) => ({
+          value,
+          count,
+        })).sort((a, b) => b.count - a.count);
+      }
+
+      res.json({ facets });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Execute model action or bulk action (Django Actions-inspired)
+   */
+  async function modelActionHandler(req, res) {
+    try {
+      const { model: modelName, actionId } = req.params;
+      const model = getModelFromDb(modelName);
+
+      if (!model || !model.admin || model.admin.enabled !== true) {
+        return res.status(404).json({ error: 'Model not found or not enabled' });
+      }
+
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: 'Array of record ids is required' });
+      }
+
+      const modelActions = Array.isArray(model.admin.actions) ? model.admin.actions : [];
+      const modelBulkActions = Array.isArray(model.admin.bulkActions) ? model.admin.bulkActions : [];
+      const action = modelActions.find(a => a.id === actionId) || modelBulkActions.find(a => a.id === actionId);
+
+      const repo = db.getRepository(model.name);
+
+      if (action && typeof action.handler === 'function') {
+        const result = await action.handler({
+          ids,
+          model,
+          repo,
+          db,
+          req,
+          user: req.session?.adminUser,
+        });
+        return res.json({ success: true, ...(typeof result === 'object' ? result : { result }) });
+      }
+
+      if (registry && typeof registry.getBulkAction === 'function') {
+        const bulkAction = registry.getBulkAction(actionId);
+        if (bulkAction && typeof bulkAction.handler === 'function') {
+          const records = await repo.query().whereIn(model.primaryKey || 'id', ids).find();
+          const result = await bulkAction.handler(records, model.name, { db, req, user: req.session?.adminUser });
+          return res.json({ success: true, ...(typeof result === 'object' ? result : { result }) });
+        }
+      }
+
+      return res.status(404).json({ error: `Action "${actionId}" not found for model "${model.name}"` });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
   return {
     checkHandler,
     setupHandler,
@@ -1094,6 +1591,15 @@ function isColumnSortable(name, meta, model) {
     resetHandler,
     rateLimiter,
     resetLoginAttempts: (ip) => rateLimiter.reset(ip),
+    inlineListHandler,
+    inlineCreateHandler,
+    inlineUpdateHandler,
+    inlineDeleteHandler,
+    quickEditHandler,
+    batchEditHandler,
+    dateHierarchyHandler,
+    filterFacetsHandler,
+    modelActionHandler,
   };
 }
 

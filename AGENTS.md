@@ -17,6 +17,7 @@ When tasked with a feature or bugfix, **immediately consult the corresponding to
 | **Admin Panel (Page, Widget, Action, UI)** | [`.agents/ADMIN.md`](.agents/ADMIN.md) | `plugins/admin-panel/` |
 | **Authentication (Session / JWT / Guard)** | [`.agents/AUTH.md`](.agents/AUTH.md) | `core/auth/` |
 | **Background Jobs & Worker Queue** | [`.agents/QUEUE.md`](.agents/QUEUE.md) | `jobs/` |
+| **Decoupled Events & Signals** | [`.agents/EVENTS.md`](.agents/EVENTS.md) | `core/events/`, `listeners/` |
 | **API Signatures & Types Verification** | [`index.d.ts`](index.d.ts) | **Canonical Ground Truth** |
 
 ---

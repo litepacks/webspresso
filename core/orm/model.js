@@ -138,6 +138,10 @@ function defineModel(options) {
       bulkActions: Array.isArray(admin.bulkActions) ? admin.bulkActions : null,
       hooks: typeof admin.hooks === 'object' && admin.hooks !== null ? admin.hooks : null,
       relations: typeof admin.relations === 'object' && admin.relations !== null ? admin.relations : null,
+      inlines: Array.isArray(admin.inlines) ? admin.inlines : null,
+      listEditable: Array.isArray(admin.listEditable) ? admin.listEditable : null,
+      dateHierarchy: typeof admin.dateHierarchy === 'string' ? admin.dateHierarchy : null,
+      listFilter: Array.isArray(admin.listFilter) ? admin.listFilter : (Array.isArray(admin.filterable) ? admin.filterable : null),
     },
     rest: {
       enabled: rest.enabled === true,

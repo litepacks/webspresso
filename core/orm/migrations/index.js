@@ -167,11 +167,27 @@ function createMigrationManager(knex, config = {}) {
     },
 
     /**
-     * Unlock stuck migrations
-     * @returns {Promise<void>}
+     * Compare models with live database schema
+     * @param {Object} [options={}]
+     * @returns {Promise<{ hasChanges: boolean, changes: Array<Object> }>}
      */
-    async unlock() {
-      await knex.migrate.forceFreeMigrationsLock(migrationConfig);
+    async diff(options = {}) {
+      const { diffSchema } = require('./diff');
+      return diffSchema({ knex, ...options });
+    },
+
+    /**
+     * Auto-generate migrations from schema diffs (Django-inspired makemigrations)
+     * @param {Object} [options={}]
+     * @returns {Promise<{ hasChanges: boolean, created: Array<Object>, skipped: Array<Object> }>}
+     */
+    async makeMigrations(options = {}) {
+      const { makeMigrations } = require('./diff');
+      return makeMigrations({
+        knex,
+        migrationDir: directory,
+        ...options,
+      });
     },
   };
 }
@@ -201,5 +217,7 @@ exports.down = function(knex) {
 module.exports = {
   createMigrationManager,
   getDefaultMigrationTemplate,
+  diffSchema: require('./diff').diffSchema,
+  makeMigrations: require('./diff').makeMigrations,
 };
 

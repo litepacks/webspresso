@@ -17,6 +17,7 @@ When tasked with a feature or bugfix, **immediately consult the corresponding to
 | **Admin Panel (Page, Widget, Action, UI)** | [`.agents/ADMIN.md`](ADMIN.md) | `plugins/admin-panel/` |
 | **Authentication (Session / JWT / Guard)** | [`.agents/AUTH.md`](AUTH.md) | `core/auth/` |
 | **Background Jobs & Worker Queue** | [`.agents/QUEUE.md`](QUEUE.md) | `jobs/` |
+| **Decoupled Events & Signals** | [`.agents/EVENTS.md`](EVENTS.md) | `core/events/`, `listeners/` |
 | **API Signatures & Types Verification** | [`index.d.ts`](../index.d.ts) | **Canonical Ground Truth** |
 
 ---
@@ -54,6 +55,7 @@ This `.agents/` customization root is organized into modular topic guides:
 16. **[Background Job Queue](.agents/QUEUE.md)** — In-Memory, Knex Database, and Distributed Redis queue adapters, job auto-discovery (`jobs/`), retries, and graceful draining.
 17. **[SSR Streaming & Chunked Transfer](.agents/STREAMING.md)** — Native HTTP chunked streaming (`res.renderStream()`), deferred data loader slots (`defer: { key: promise }`), and TTFB optimization.
 18. **Polar billing production checklist** — [docs/guides/polar-production-checklist.md](../docs/guides/polar-production-checklist.md) (env, webhooks, rate limits, external tier hooks, CSP). Plugin reference: [PLUGINS.md § polarPlugin](PLUGINS.md).
+19. **[Decoupled Events & Signals Architecture](.agents/EVENTS.md)** — Zero-dependency enterprise event dispatcher (`core/events`), sync/async/parallel/serial/waterfall dispatch, wildcard listeners (`order.*`), Django-style `Signal` and sender filtering, queue bridging, and listener auto-discovery.
 
 ---
 

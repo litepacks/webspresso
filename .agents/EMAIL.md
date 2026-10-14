@@ -102,11 +102,92 @@ emailApi.registerTemplate('notification', '<mjml><mj-body>...</mj-body></mjml>')
 const isReady = await emailApi.verifyConnection();
 const logs = await emailApi.queryLogs({ status: 'sent', limit: 20 });
 await emailApi.purgeLogs({ olderThan: '30d' });
+
+// 6. In-memory outbox inspection & clearing (memory backend / tests)
+const outbox = emailApi.getOutbox();
+const lastSent = emailApi.lastMessage();
+emailApi.clearOutbox();
 ```
 
 ---
 
-## 5. Auth Email Bridge (`authEmails`)
+## 5. Declarative `Mailable` Classes (AdonisJS-style)
+
+Define structured, reusable, object-oriented emails by extending `Mailable`:
+
+```javascript
+import { Mailable } from 'webspresso';
+
+export class WelcomeEmail extends Mailable {
+  constructor(user) {
+    super();
+    this.user = user;
+  }
+
+  build() {
+    this.to(this.user.email, this.user.name)
+      .from('team@myapp.com', 'Acme Team')
+      .subject(`Welcome to Acme, ${this.user.name}!`)
+      .view('welcome', { user: this.user }) // references registered template
+      .attach({
+        filename: 'welcome-guide.pdf',
+        content: Buffer.from('...'),
+      });
+  }
+}
+
+// In route handlers or services:
+await req.mailer.send(new WelcomeEmail(user));
+// Or via email API:
+await emailApi.send(new WelcomeEmail(user));
+```
+
+### Fluent Mailable Methods
+
+- `to(address, name?)`, `cc(address, name?)`, `bcc(address, name?)`, `replyTo(address, name?)`, `from(address, name?)`
+- `subject(title)`
+- `view(templateName, data?)` or `template(templateName)`
+- `html(htmlContent)`, `text(textContent)`
+- `attach({ filename, content, path, contentType })`
+- `header(name, value)`
+- `prepare()` and `build()` lifecycle hooks
+- `toMessage()` serializes the definition into a message payload
+
+---
+
+## 6. Pluggable Transports (Django-style Backends)
+
+Configure backends via `backend`: `'smtp' | 'memory' | 'console' | 'file'`:
+
+```javascript
+const email = emailPlugin({
+  backend: process.env.NODE_ENV === 'production' ? 'smtp' : 'memory',
+  fileDir: './storage/emails', // when backend: 'file'
+  devInbox: true, // enables developer inbox web UI
+});
+```
+
+- **`MemoryTransport`**: Stores messages in an in-memory inspectable outbox (`mailer.getOutbox()`). Automatically chosen in test environments.
+- **`ConsoleTransport`**: Pretty-prints sent emails to stdout/logger for zero-setup terminal debugging.
+- **`FileTransport`**: Writes JSON/EML email files to a local directory for disk-based inspection.
+- **`NodemailerTransport`**: Delivers real emails via SMTP or custom transport in production.
+
+---
+
+## 7. Developer Mail Preview & Dev Inbox (`/_webspresso/mail-preview`)
+
+When `devInbox: true` or running in `development` mode, Webspresso automatically mounts a local inbox viewer:
+
+- **Web UI Route**: `GET /_webspresso/mail-preview` (responsive inbox viewer with desktop, tablet, and mobile viewport switcher)
+- **JSON List Route**: `GET /_webspresso/mail-preview/api/messages`
+- **Single Message Route**: `GET /_webspresso/mail-preview/api/messages/:id`
+- **Iframe HTML View**: `GET /_webspresso/mail-preview/api/messages/:id/html`
+- **Clear Inbox Route**: `POST /_webspresso/mail-preview/api/clear`
+- **Template Preview**: `POST /_webspresso/mail-preview/api/preview`
+
+---
+
+## 8. Auth Email Bridge (`authEmails`)
 
 Automatically wires password reset and email verification flows with `AuthManager`:
 
@@ -131,7 +212,7 @@ const email = emailPlugin({
 
 ---
 
-## 6. Admin Panel UI & Database Logs
+## 9. Admin Panel UI & Database Logs
 
 When `includeAdminPage: true` and `adminPanelPlugin` are present, an interactive Email Management module is mounted at `/_admin/email`:
 
@@ -139,3 +220,4 @@ When `includeAdminPage: true` and `adminPanelPlugin` are present, an interactive
 - **Test Sender**: Send test emails directly from the Admin Panel to verify SMTP configuration.
 - **Audit Logs Inspector**: Filter sent email logs by status (`sent`, `failed`), view error tracebacks, and purge historic logs.
 - **Database Schema**: Log entries are stored in `email_logs` table (`id`, `to_email`, `subject`, `template_name`, `status`, `error`, `created_at`).
+

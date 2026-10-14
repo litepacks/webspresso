@@ -564,6 +564,149 @@ function createHelpers(ctx) {
     t,
 
     /**
+     * Get old input value from previous request (AdonisJS & Laravel-inspired)
+     * @param {string} [name] - Field name
+     * @param {any} [defaultValue=null] - Default fallback value
+     * @returns {any}
+     */
+    old(name, defaultValue = null) {
+      if (!name) return (req && typeof req.old === 'function') ? req.old() : (req?.__flash?.old || {});
+      if (req && typeof req.old === 'function') {
+        return req.old(name, defaultValue);
+      }
+      const oldVals = req?.__flash?.old || {};
+      return oldVals[name] !== undefined ? oldVals[name] : defaultValue;
+    },
+
+    /**
+     * Get first validation error message for a specific field or general form
+     * @param {string} [field='_form']
+     * @returns {string|null}
+     */
+    error(field = '_form') {
+      const errors = req?.__flash?.errors || {};
+      const list = errors[field];
+      if (Array.isArray(list) && list.length > 0) return list[0];
+      if (typeof list === 'string') return list;
+      return null;
+    },
+
+    /**
+     * Get all validation error messages for a field
+     * @param {string} [field]
+     * @returns {string[]|Record<string, string[]>}
+     */
+    errors(field) {
+      const errs = req?.__flash?.errors || {};
+      if (!field) return errs;
+      const list = errs[field];
+      if (Array.isArray(list)) return list;
+      if (typeof list === 'string') return [list];
+      return [];
+    },
+
+    /**
+     * Check if a field or the form has any validation errors
+     * @param {string} [field]
+     * @returns {boolean}
+     */
+    hasError(field) {
+      const errs = req?.__flash?.errors || {};
+      if (!field) return Object.keys(errs).length > 0;
+      return Boolean(errs[field] && (Array.isArray(errs[field]) ? errs[field].length > 0 : true));
+    },
+
+    /**
+     * Get all validation errors dictionary
+     * @returns {Record<string, string[]>}
+     */
+    allErrors() {
+      return req?.__flash?.errors || {};
+    },
+
+    /**
+     * Get flash message by key (e.g. 'success', 'error', 'info')
+     * @param {string} [key]
+     * @returns {any}
+     */
+    flash(key) {
+      if (!req) return null;
+      if (typeof req.flash === 'function') {
+        return key ? req.flash(key) : req.flash();
+      }
+      const data = req.__flash || {};
+      return key ? data[key] : data;
+    },
+
+    /**
+     * Check if a flash message exists for a key
+     * @param {string} [key]
+     * @returns {boolean}
+     */
+    hasFlash(key) {
+      const data = (req && typeof req.flash === 'function') ? req.flash() : (req?.__flash || {});
+      return key ? (data[key] !== undefined && data[key] !== null) : Object.keys(data).length > 0;
+    },
+
+    /**
+     * Generate CSRF hidden input or token string
+     * @param {boolean} [asInput=true]
+     * @returns {string}
+     */
+    csrf(asInput = true) {
+      const token = req?.csrfToken ? req.csrfToken() : (req?.session?._csrf || req?.__csrfToken || '');
+      if (!asInput) return token;
+      return token ? `<input type="hidden" name="_csrf" value="${token}">` : '';
+    },
+
+    /**
+     * Render an accessible HTML form field (Django-inspired)
+     * @param {string} name
+     * @param {Object} [options={}]
+     * @returns {string} HTML string
+     */
+    field(name, options = {}) {
+      const { renderField } = require('../core/forms/form-builder');
+      return renderField(name, options, { req, res });
+    },
+
+    /**
+     * Render a complete HTML form from an ORM model definition (Django ModelForm-inspired)
+     * @param {Object} modelOrRepo
+     * @param {Object} [options={}]
+     * @returns {string} HTML string
+     */
+    formFor(modelOrRepo, options = {}) {
+      const { renderFormFor } = require('../core/forms/form-builder');
+      return renderFormFor(modelOrRepo, options, { req, res });
+    },
+
+    /**
+     * Check authorization for current user (AdonisJS Bouncer & Laravel Can-inspired)
+     * @param {string|Function} actionOrPolicy - e.g. 'Post.update' or 'admin'
+     * @param {...any} args - Resource or additional arguments
+     * @returns {boolean}
+     */
+    can(actionOrPolicy, ...args) {
+      if (req && req.bouncer && typeof req.bouncer.allows === 'function') {
+        return req.bouncer.allows(actionOrPolicy, ...args);
+      }
+      const { createBouncer } = require('../core/auth/bouncer');
+      const user = req?.user || req?.auth?.user || null;
+      return createBouncer(user).allows(actionOrPolicy, ...args);
+    },
+
+    /**
+     * Check if current user cannot perform action
+     * @param {string|Function} actionOrPolicy
+     * @param {...any} args
+     * @returns {boolean}
+     */
+    cannot(actionOrPolicy, ...args) {
+      return !this.can(actionOrPolicy, ...args);
+    },
+
+    /**
      * Generate URL for switching to a target locale with current query parameters preserved
      * @param {string} targetLocale - Locale code to switch to (e.g. 'en', 'tr')
      * @param {string} [customPath] - Optional custom path (defaults to current req.path)

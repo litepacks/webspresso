@@ -509,6 +509,8 @@ export function getAppContext(): {
   db: DatabaseInstance | null;
   shutdownManager: ShutdownManager | null;
   serviceRegistry: ServiceRegistry | null;
+  events?: any;
+  mailer?: Mailer | null;
 };
 
 export function getDb(): DatabaseInstance;
@@ -523,12 +525,18 @@ export function getServiceRegistry(): ServiceRegistry | null;
 
 export function hasServiceRegistry(): boolean;
 
+export function getMailer(): Mailer | null;
+
+export function hasMailer(): boolean;
+
 export function resetAppContext(): void;
 
 export function setAppContext(partial: {
   db?: DatabaseInstance | null;
   shutdownManager?: ShutdownManager | null;
   serviceRegistry?: ServiceRegistry | null;
+  events?: any;
+  mailer?: Mailer | null;
 }): void;
 
 // --- File router ---
@@ -671,6 +679,125 @@ export function loadNjkRouteTemplate(
 };
 
 export function clearNjkFrontmatterCaches(): void;
+
+// --- Forms & Flash subsystem (AdonisJS & Django-inspired) ---
+
+export interface FlashMessages {
+  old?: Record<string, any>;
+  errors?: Record<string, string[]>;
+  [key: string]: any;
+}
+
+export function createFlashMiddleware(options?: { cookieName?: string }): import('express').RequestHandler;
+
+export function normalizeErrors(errors: any): Record<string, string[]>;
+
+export interface FieldRenderOptions {
+  label?: string;
+  type?: string;
+  placeholder?: string;
+  required?: boolean;
+  disabled?: boolean;
+  readonly?: boolean;
+  className?: string;
+  wrapperClass?: string;
+  errorClass?: string;
+  showError?: boolean;
+  rows?: number;
+  selectOptions?: (string | { label: string; value: any })[];
+  helpText?: string;
+  value?: any;
+  default?: any;
+  attributes?: Record<string, string>;
+}
+
+export function renderField(name: string, options?: FieldRenderOptions, ctx?: { req?: any; res?: any }): string;
+
+export interface FormForOptions {
+  action?: string;
+  method?: string;
+  exclude?: string[];
+  include?: string[];
+  submitLabel?: string;
+  csrf?: boolean;
+  formClass?: string;
+}
+
+export function renderFormFor(modelOrRepo: any, options?: FormForOptions, ctx?: { req?: any; res?: any }): string;
+
+// --- Authorization & Bouncer (AdonisJS Bouncer & Django Permissions-inspired) ---
+
+export class Bouncer {
+  constructor(user?: any, policyManager?: any);
+  user: any;
+  forUser(user: any): Bouncer;
+  allows(actionOrPolicy: string | Function, ...args: any[]): boolean;
+  denies(actionOrPolicy: string | Function, ...args: any[]): boolean;
+  authorize(actionOrPolicy: string | Function, ...args: any[]): boolean;
+}
+
+export function createBouncer(user?: any, policyManager?: any): Bouncer;
+
+export function createBouncerMiddleware(options?: { policyManager?: any }): import('express').RequestHandler;
+
+export function definePolicy(name: string, rules: Record<string, (user: any, ...args: any[]) => boolean | Promise<boolean>>): void;
+
+export function defineGate(name: string, callback: (user: any, ...args: any[]) => boolean | Promise<boolean>): void;
+
+export function can(user: any, action: string, policy?: string | null, resource?: any): boolean;
+
+export function cannot(user: any, action: string, policy?: string | null, resource?: any): boolean;
+
+export function authorize(user: any, action: string, policy?: string | null, resource?: any): void;
+
+// --- Decoupled Events & Signals (AdonisJS Events & Django Signals-inspired) ---
+
+export interface EventListenerOptions {
+  sender?: any;
+  priority?: number;
+  once?: boolean;
+}
+
+export class EventDispatcher {
+  constructor(options?: { queue?: any; maxListeners?: number; logger?: any });
+  on(event: string, handler: Function, options?: EventListenerOptions): () => void;
+  once(event: string, handler: Function, options?: EventListenerOptions): () => void;
+  off(event: string, handler: Function): this;
+  onAny(handler: (eventName: string, data: any, meta: any) => any, options?: { priority?: number; once?: boolean }): () => void;
+  emit(eventOrInstance: string | object, data?: any, options?: { sender?: any }): boolean;
+  emitAsync(eventOrInstance: string | object, data?: any, options?: { sender?: any }): Promise<Array<{ status: 'fulfilled' | 'rejected'; value?: any; reason?: any }>>;
+  emitParallel(eventOrInstance: string | object, data?: any, options?: { sender?: any }): Promise<Array<{ status: 'fulfilled' | 'rejected'; value?: any; reason?: any }>>;
+  emitSerial(eventOrInstance: string | object, data?: any, options?: { sender?: any }): Promise<any[]>;
+  emitWaterfall(eventOrInstance: string | object, initialData: any, options?: { sender?: any }): Promise<any>;
+  listenAndQueue(event: string, jobName: string, queueOptions?: Record<string, unknown>): () => void;
+  bridgeOrm(modelEvents?: any): () => void;
+  setQueue(queueManager: any): this;
+  eventNames(): string[];
+  listenerCount(event?: string): number;
+  removeAllListeners(event?: string): this;
+  clear(): void;
+}
+
+export function createEventDispatcher(options?: { queue?: any; maxListeners?: number; logger?: any }): EventDispatcher;
+
+export const events: EventDispatcher;
+
+export class Signal {
+  constructor(name: string, dispatcher: EventDispatcher);
+  name: string;
+  dispatcher: EventDispatcher;
+  connect(receiver: Function, options?: EventListenerOptions): () => void;
+  disconnect(receiver: Function): this;
+  send(data?: any, options?: { sender?: any }): boolean;
+  sendAsync(data?: any, options?: { sender?: any }): Promise<Array<{ status: 'fulfilled' | 'rejected'; value?: any; reason?: any }>>;
+  sendSerial(data?: any, options?: { sender?: any }): Promise<any[]>;
+}
+
+export function defineSignal(name: string, dispatcher?: EventDispatcher): Signal;
+
+export function defineListener(event: string | string[], handler: Function, options?: EventListenerOptions): { event: string | string[]; handle: Function; [key: string]: any };
+
+export function loadListeners(dirPath: string, dispatcher: EventDispatcher, options?: { logger?: any }): Array<{ file: string; event: string; handler: Function }>;
 
 // --- Helpers / assets ---
 
@@ -1160,6 +1287,8 @@ export interface MigrationManager {
   getConfig(): MigrationConfig & { directory: string; tableName: string };
   hasTable(): Promise<boolean>;
   unlock(): Promise<void>;
+  diff(options?: { models?: ModelDefinition<any>[]; includeDrops?: boolean }): Promise<{ hasChanges: boolean; changes: Array<any> }>;
+  makeMigrations(options?: { modelsDir?: string; dryRun?: boolean; includeDrops?: boolean; name?: string }): Promise<{ hasChanges: boolean; created: Array<any>; skipped: Array<any> }>;
 }
 
 export interface WebspressoModels {
@@ -1225,6 +1354,30 @@ export function createMemoryCacheProvider(options?: OrmMemoryCacheOptions): {
   clear(): void;
   getSizeStats(): { entries: number; tags: number };
 };
+
+// --- ORM: Model Factory & Seeding (AdonisJS Lucid-inspired) ---
+
+export interface FactoryBuilder<T = Record<string, any>> {
+  count(n: number): FactoryBuilder<T>;
+  state(...stateNames: string[]): FactoryBuilder<T>;
+  apply(...stateNames: string[]): FactoryBuilder<T>;
+  merge(overrides: Partial<T>): FactoryBuilder<T>;
+  make(overrides?: Partial<T>): T | T[];
+  create(options: { db?: DatabaseInstance | Repository<T>; merge?: Partial<T> } | DatabaseInstance | Repository<T>): Promise<T | T[]>;
+}
+
+export function defineFactory<T = Record<string, any>>(
+  modelName: string,
+  definitionFn: (ctx: { faker: any; index: number }) => Partial<T>
+): FactoryBuilder<T> & {
+  state(name: string, handler: ((ctx: { faker: any; index: number; current: Partial<T> }) => Partial<T>) | Partial<T>): FactoryBuilder<T>;
+  registerState(name: string, handler: ((ctx: { faker: any; index: number; current: Partial<T> }) => Partial<T>) | Partial<T>): FactoryBuilder<T>;
+};
+
+// --- ORM: Schema Diff & Makemigrations (Django-inspired) ---
+
+export function diffSchema(options: { knex: Knex; models?: ModelDefinition<any>[]; includeDrops?: boolean }): Promise<{ hasChanges: boolean; changes: Array<any> }>;
+export function makeMigrations(options: { knex: Knex; modelsDir?: string; migrationDir?: string; dryRun?: boolean; includeDrops?: boolean; name?: string }): Promise<{ hasChanges: boolean; created: Array<any>; skipped: Array<any> }>;
 
 // --- ORM: nanoid / zod ---
 
@@ -1567,10 +1720,72 @@ export function emailPlugin(options?: EmailPluginOptions): WebspressoPlugin & {
     isTransportReady(): boolean;
     loadFromManifest(chunks: any): void;
     emailPluginOptionsFromManifest(manifest: any): any;
+    mailer?: Mailer;
+    Mailable?: typeof Mailable;
+    getOutbox?(): any[];
+    clearOutbox?(): void;
+    lastMessage?(): any;
   };
   dispose?(): void;
   shutdown?(): void;
 };
+
+export class Mailable {
+  constructor();
+  to(recipient: string | string[] | any, name?: string): this;
+  from(address: string, name?: string): this;
+  replyTo(address: string): this;
+  cc(recipient: string | string[]): this;
+  bcc(recipient: string | string[]): this;
+  subject(subj: string): this;
+  template(tplName: string): this;
+  html(htmlContent: string): this;
+  text(textContent: string): this;
+  mjml(mjmlContent: string): this;
+  view(templateOrData: string | Record<string, unknown>, data?: Record<string, unknown>): this;
+  data(keyOrObj: string | Record<string, unknown>, value?: any): this;
+  attach(attachment: any): this;
+  header(key: string, value: string): this;
+  prepare(): void;
+  build(): void;
+  toMessage(): Record<string, any>;
+}
+
+export class Mailer {
+  constructor(options?: any);
+  send(mailableOrOptions: Mailable | Record<string, any>): Promise<any>;
+  preview(mailableOrOptions: Mailable | Record<string, any>): Promise<any>;
+  getOutbox(): any[];
+  clearOutbox(): void;
+  lastMessage(): any;
+  verify(): Promise<any>;
+}
+
+export function createMailer(options?: any): Mailer;
+
+export class MemoryTransport {
+  outbox: any[];
+  constructor(options?: any);
+  sendMail(mailOptions: any): Promise<any>;
+  getOutbox(): any[];
+  clearOutbox(): void;
+  lastMessage(): any;
+  findById(id: string): any;
+  verify(): Promise<boolean>;
+}
+
+export class ConsoleTransport {
+  constructor(options?: any);
+  sendMail(mailOptions: any): Promise<any>;
+  verify(): Promise<boolean>;
+}
+
+export class FileTransport {
+  dir: string;
+  constructor(options?: any);
+  sendMail(mailOptions: any): Promise<any>;
+  verify(): Promise<boolean>;
+}
 
 export function recaptchaPlugin(options?: Record<string, unknown>): WebspressoPlugin;
 
@@ -3421,4 +3636,55 @@ export namespace sessions {
     createRevokeSessionHandler,
   };
 }
+
+// Custom Management Commands (Django & Adonis Ace-inspired)
+export interface CommandOption {
+  flags: string;
+  description?: string;
+  defaultValue?: any;
+}
+
+export interface CommandExecutionContext {
+  db: any;
+  queue: any;
+  services: any;
+  mailer: any;
+  events: any;
+  logger: any;
+  args: string[];
+  flags: Record<string, any>;
+}
+
+export interface CommandDefinition {
+  name: string;
+  description?: string;
+  options?: CommandOption[];
+  handle: (ctx: CommandExecutionContext) => Promise<any> | any;
+}
+
+export interface CommandRegistry {
+  register(cmd: CommandDefinition): CommandDefinition;
+  reload(): void;
+  has(name: string): boolean;
+  get(name: string): CommandDefinition | null;
+  list(): CommandDefinition[];
+  names(): string[];
+  readonly commandsDir: string;
+}
+
+export function defineCommand(definition: CommandDefinition): CommandDefinition;
+export function createCommandRegistry(options?: { commandsDir?: string; autoLoad?: boolean }): CommandRegistry;
+export function executeCommand(
+  commandDef: CommandDefinition,
+  executionOptions?: Partial<CommandExecutionContext>
+): Promise<{ success: boolean; result?: any; error?: Error; durationMs: number }>;
+
+export namespace commands {
+  export {
+    defineCommand,
+    createCommandRegistry,
+    executeCommand,
+  };
+}
+
 

@@ -400,5 +400,64 @@ await authorRepo.restore(authorId, { cascade: false });
 
 If your data model contains circular relations (e.g. `User.partner` <-> `Partner.user`), Webspresso ORM uses an internal visited set (`model:id`) to terminate recursion cleanly without stack overflows.
 
+---
+
+## 10. Django-inspired Auto-Migrations (`db:makemigrations`)
+
+Webspresso supports automatic schema diffing against your live database, similar to Django's `makemigrations`. It inspects your `models/*.js` definitions, checks the current database schema, and automatically generates required Knex migration files (`createTable` or `alterTable` with `dropColumn` rollbacks):
+
+```bash
+# Preview changes without writing files
+npx webspresso db:makemigrations --dry-run
+
+# Detect model changes and generate migration file
+npx webspresso db:makemigrations
+
+# Custom migration name
+npx webspresso db:makemigrations --name add_profile_fields
+
+# Apply migrations
+npx webspresso db:migrate
+```
+
+Programmatic usage via `db.migrate`:
+```javascript
+// Check diff
+const diff = await db.migrate.diff();
+if (diff.hasChanges) {
+  console.log(diff.changes);
+}
+
+// Generate files
+const result = await db.migrate.makeMigrations();
+```
+
+---
+
+## 11. AdonisJS-inspired Model Factories (`defineFactory`)
+
+For unit testing, integration tests, and dev database seeding, Webspresso provides declarative Model Factories inspired by AdonisJS Lucid:
+
+```javascript
+import { defineFactory } from 'webspresso';
+
+export const UserFactory = defineFactory('User', ({ faker, index }) => ({
+  name: faker.person.fullName(),
+  email: faker.internet.email(),
+  role: 'user',
+  isActive: true,
+}))
+  .state('admin', () => ({ role: 'admin' }))
+  .state('suspended', () => ({ isActive: false }));
+
+// In-memory object generation (No DB hit)
+const fakeUser = UserFactory.make({ name: 'Custom Name' });
+const fakeUsers = UserFactory.count(5).make();
+
+// Database persistence via Repository
+const user = await UserFactory.create({ db });
+const admins = await UserFactory.count(3).apply('admin').create({ db });
+```
+
 
 

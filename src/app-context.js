@@ -3,23 +3,25 @@
  * @module src/app-context
  */
 
-/** @type {{ db: object|null, shutdownManager: object|null, serviceRegistry: object|null }} */
+/** @type {{ db: object|null, shutdownManager: object|null, serviceRegistry: object|null, events: object|null, mailer: object|null }} */
 let context = {
   db: null,
   shutdownManager: null,
   serviceRegistry: null,
+  events: null,
+  mailer: null,
 };
 
 /**
  * Merge into the current context (typically called once from createApp).
- * @param {{ db?: object|null, shutdownManager?: object|null, serviceRegistry?: object|null }} partial
+ * @param {{ db?: object|null, shutdownManager?: object|null, serviceRegistry?: object|null, events?: object|null, mailer?: object|null }} partial
  */
 function setAppContext(partial) {
   context = { ...context, ...partial };
 }
 
 /**
- * @returns {{ db: object|null, shutdownManager: object|null, serviceRegistry: object|null }}
+ * @returns {{ db: object|null, shutdownManager: object|null, serviceRegistry: object|null, events: object|null, mailer: object|null }}
  */
 function getAppContext() {
   return context;
@@ -78,14 +80,44 @@ function hasServiceRegistry() {
 }
 
 /**
- * Clear context (e.g. between tests).
+ * Get the registered EventDispatcher instance
+ * @returns {object|null}
  */
-function resetAppContext() {
-  context = { db: null, shutdownManager: null, serviceRegistry: null };
+function getEvents() {
+  return context.events;
 }
 
 /**
- * Express middleware: sets `req.db` and `req.service` from registered app context.
+ * Check if an EventDispatcher is registered
+ * @returns {boolean}
+ */
+function hasEvents() {
+  return context.events != null;
+}
+
+/**
+ * Clear context (e.g. between tests).
+ */
+function resetAppContext() {
+  context = { db: null, shutdownManager: null, serviceRegistry: null, events: null, mailer: null };
+}
+
+/**
+ * @returns {object|null}
+ */
+function getMailer() {
+  return context.mailer;
+}
+
+/**
+ * @returns {boolean}
+ */
+function hasMailer() {
+  return context.mailer != null;
+}
+
+/**
+ * Express middleware: sets `req.db`, `req.service`, `req.events`, and `req.mailer` from registered app context.
  * File-based `pages/api/*` routes attach this automatically; use in `setupRoutes`
  * for manually registered handlers that need `req.db` and `req.service`.
  * @type {import('express').RequestHandler}
@@ -94,9 +126,15 @@ function attachDbMiddleware(req, res, next) {
   if (context.db != null) {
     req.db = context.db;
   }
+  if (context.events != null) {
+    req.events = context.events;
+  }
+  if (context.mailer != null) {
+    req.mailer = context.mailer;
+  }
   if (context.serviceRegistry != null) {
     req.service = (name, input, opts) =>
-      context.serviceRegistry.call(name, input, req.context || { req, res, db: context.db }, opts);
+      context.serviceRegistry.call(name, input, req.context || { req, res, db: context.db, events: context.events, mailer: context.mailer }, opts);
   }
   next();
 }
@@ -110,6 +148,10 @@ module.exports = {
   hasShutdownManager,
   getServiceRegistry,
   hasServiceRegistry,
+  getEvents,
+  hasEvents,
+  getMailer,
+  hasMailer,
   resetAppContext,
   attachDbMiddleware,
 };

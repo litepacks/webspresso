@@ -354,3 +354,84 @@ npx webspresso deploy:check --json
 3. **Container Hardening**: Ensures `Dockerfile` runs as a non-root `USER`, configures a `HEALTHCHECK`, and uses multi-stage caching.
 4. **Database & Migrations**: Audits for pending unapplied migrations and warns against ephemeral SQLite storage.
 5. **Server Optimizations**: Validates HTTP compression (`compression: true`), graceful shutdown, and health check endpoints.
+
+---
+
+## 18. Custom Management Commands (`run`, `command:run`, `defineCommand`) [Django manage.py & Adonis Ace]
+
+Create and execute isolated management scripts, background cron tasks, data migrations, or maintenance routines with full framework dependency injection (`db`, `queue`, `services`, `mailer`, `events`, `logger`, `args`, `flags`):
+
+```bash
+# List all custom management commands in commands/
+npx webspresso run
+
+# Execute a custom command with positional arguments and options
+npx webspresso run sync-stripe --dry-run --limit 100
+```
+
+### Defining a Custom Command (`commands/<name>.js`):
+
+```javascript
+const { defineCommand } = require('webspresso');
+
+module.exports = defineCommand({
+  name: 'sync-stripe',
+  description: 'Synchronize customer subscriptions from Stripe',
+  options: [
+    { flags: '-d, --dry-run', description: 'Simulate without committing changes', defaultValue: false },
+    { flags: '-l, --limit <count>', description: 'Maximum customers to sync', defaultValue: 100 },
+  ],
+  handle: async ({ db, queue, services, mailer, events, logger, args, flags }) => {
+    logger.log('Starting sync, dryRun:', flags.dryRun);
+
+    const userRepo = db.getRepository('User');
+    const users = await userRepo.find({ active: true });
+
+    // Events, mailer, and background jobs are fully accessible:
+    events.emit('stripe:sync-started', { count: users.length });
+
+    return { synced: users.length };
+  },
+});
+```
+
+---
+
+## 19. Command Palette Index (`list`, `commands`)
+
+Print an organized catalog of all built-in commands (scaffolding, database, server, developer tools) alongside all auto-discovered custom commands in your project:
+
+```bash
+npx webspresso list
+# or
+npx webspresso commands
+```
+
+---
+
+## 20. Advanced Scaffolding Generators (`make:*`) [Adonis Ace style]
+
+Rapidly generate boilerplate code following Webspresso architectural conventions:
+
+```bash
+# 1. Custom Management Command
+npx webspresso make:command users:cleanup --desc "Purge unverified user accounts"
+# Outputs: commands/users/cleanup.js
+
+# 2. Authorization Policy (Bouncer)
+npx webspresso make:policy Article
+# Outputs: policies/article.policy.js
+
+# 3. Model Factory (Testing & Seeding)
+npx webspresso make:factory Product
+# Outputs: factories/product.factory.js
+
+# 4. Decoupled Event Listener
+npx webspresso make:event order:completed
+# Outputs: listeners/order-completed.js
+
+# 5. Declarative Mailable Class
+npx webspresso make:mail Welcome
+# Outputs: emails/WelcomeEmail.js
+```
+

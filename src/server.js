@@ -29,6 +29,8 @@ const { mountDiscoveredRoutes } = require('./routing/mount-discovered-routes');
 const { discoverModuleDetails } = require('./modules/module-discovery');
 const { ShutdownManager, NodeHttpAdapter } = require('../core/shutdown');
 const { createCompressionMiddleware } = require('../core/compression');
+const { createFlashMiddleware } = require('../core/forms/flash');
+const { createBouncerMiddleware } = require('../core/auth/bouncer');
 const {
   createDevProfilerMiddleware,
   attachProfilerToKnex,
@@ -564,10 +566,40 @@ function createApp(options = {}) {
     }
   }
 
-  setAppContext({ db: options.db ?? null, shutdownManager, serviceRegistry });
+  // Events Subsystem (AdonisJS Events & Django Signals-inspired)
+  const { createEventDispatcher, loadListeners } = require('../core/events');
+  const eventDispatcher = options.events || createEventDispatcher({
+    queue: options.queue || null,
+    logger: logging ? console : null,
+  });
+
+  // Auto-bridge ORM lifecycle events (ModelEvents) to app.events ('model:created', etc.)
+  if (options.db) {
+    const { ModelEvents } = require('../core/orm/events');
+    eventDispatcher.bridgeOrm(ModelEvents);
+  }
+
+  // Auto-discover listeners from listeners/ or options.listenersDir
+  const listenersDirOption = options.listenersDir ?? options.listeners?.dir;
+  const resolvedListenersDir = listenersDirOption
+    ? path.resolve(listenersDirOption)
+    : (fs.existsSync(path.join(rootDir, 'listeners'))
+      ? path.join(rootDir, 'listeners')
+      : null);
+  if (resolvedListenersDir) {
+    loadListeners(resolvedListenersDir, eventDispatcher, { logger: logging ? console : null });
+  }
+
+  shutdownManager.onShutdown(() => eventDispatcher.clear());
+
+  setAppContext({ db: options.db ?? null, shutdownManager, serviceRegistry, events: eventDispatcher });
   
   const app = express();
   app.serviceRegistry = serviceRegistry;
+  app.events = eventDispatcher;
+  if (options.queue) {
+    app.queue = options.queue;
+  }
 
   // Unified Request Context & Lifecycle Initializer middleware
   const { renderStream } = require('../core/ssr/stream');
@@ -596,14 +628,20 @@ function createApp(options = {}) {
     req.id = reqId;
     res.setHeader('X-Request-Id', reqId);
 
-    // 3. Request DB, Services, and Context
+    // 3. Request DB, Services, Queue, Events, and Context
     if (options.db) {
       req.db = options.db;
     }
+    if (options.queue) {
+      req.queue = options.queue;
+    }
+    req.events = eventDispatcher;
     req.context = {
       req,
       res,
       db: options.db ?? null,
+      queue: options.queue ?? null,
+      events: eventDispatcher,
       app,
       serviceRegistry,
       ...(req.context || {}),
@@ -1041,6 +1079,11 @@ function createApp(options = {}) {
   // JSON body parser for API routes
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+
+  // Cookie parser & Flash messages (AdonisJS & Django-inspired old input and errors)
+  const cookieParser = require('cookie-parser');
+  app.use(cookieParser());
+  app.use(createFlashMiddleware());
   
   // Ensure default empty object for body on mutating requests if not populated
   // and halt processing if request has timed out (after body parsers)
@@ -1063,6 +1106,9 @@ function createApp(options = {}) {
     middlewares.guest = authMiddleware.guest;
     middlewares.jwt = authMiddleware.jwt;
   }
+
+  // Bouncer authorization middleware (AdonisJS Bouncer & Django Permissions-inspired)
+  app.use(createBouncerMiddleware());
 
   // Under Vitest, shared API fixtures use `fixtureRequireAuth`; default no-op unless overridden.
   const runsUnderVitest = process.env.VITEST === 'true' || process.env.VITEST_WORKER_ID !== undefined;
@@ -1210,7 +1256,7 @@ function createApp(options = {}) {
   }
 
   // Register plugins (sync) — middlewares is the same object later passed to mountPages
-  const pluginContext = { app, nunjucksEnv, options, middlewares, shutdownManager };
+  const pluginContext = { app, nunjucksEnv, options, middlewares, shutdownManager, events: eventDispatcher };
   pluginManager.registerSync(plugins, pluginContext);
   
   // Request logging & query profiling middleware
@@ -1745,7 +1791,7 @@ function createApp(options = {}) {
     });
   };
   
-  return { app, nunjucksEnv, pluginManager, authMiddleware, shutdownManager };
+  return { app, nunjucksEnv, pluginManager, authMiddleware, shutdownManager, events: eventDispatcher };
 }
 
 // Export for use as library

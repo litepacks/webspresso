@@ -386,4 +386,10 @@ module.exports = {
   buildSearchClause: require('./search').buildSearchClause,
   tokenizeSearchTerm: require('./search').tokenizeSearchTerm,
   detectDialect: require('./search').detectDialect,
+  // Model Factory & Seeding (AdonisJS Lucid-inspired)
+  defineFactory: require('./factory').defineFactory,
+  FactoryBuilder: require('./factory').FactoryBuilder,
+  // Schema Diff & Makemigrations (Django-inspired)
+  diffSchema: require('./migrations/diff').diffSchema,
+  makeMigrations: require('./migrations/diff').makeMigrations,
 };

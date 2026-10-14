@@ -435,7 +435,70 @@ In SSR streaming mode (`stream: true` or `renderStream`):
 
 ---
 
-## 7. Summary Checklist for Agents
+## 7. Form Handling, Flash Messages & Old Input (AdonisJS & Django-inspired)
+
+For classic SSR forms (POST-Redirect-GET), Webspresso provides built-in flash data propagation and Django-style ModelForm rendering helpers.
+
+### 7.1 Redirect with Old Input & Validation Errors
+In your form submission handler (API or custom POST action):
+```javascript
+// pages/api/auth/register.post.js
+module.exports = {
+  handler: async (req, res) => {
+    const { email, password } = req.body;
+    
+    if (!email.includes('@')) {
+      return res
+        .withInput() // Preserves req.body (sanitizes sensitive fields like password)
+        .withErrors({ email: 'Please enter a valid email address' })
+        .withFlash('warning', 'Please review the highlighted errors')
+        .redirect('/register');
+    }
+
+    await req.service('user.create', { email, password });
+    return res.withFlash('success', 'Account created! Please log in.').redirect('/login');
+  }
+};
+```
+
+### 7.2 Nunjucks Template Helpers (`fsy`)
+In your Nunjucks templates (`pages/*.njk`):
+```html
+{% if fsy.hasFlash('success') %}
+  <div class="alert alert-success">{{ fsy.flash('success') }}</div>
+{% endif %}
+
+<form method="POST" action="/api/auth/register">
+  {{ fsy.csrf() | safe }}
+
+  <!-- Manual field with old value and inline error -->
+  <div class="mb-3">
+    <label class="form-label">Email</label>
+    <input type="email" name="email" 
+           value="{{ fsy.old('email') }}" 
+           class="form-control {% if fsy.hasError('email') %}is-invalid{% endif %}">
+    {% if fsy.hasError('email') %}
+      <div class="invalid-feedback">{{ fsy.error('email') }}</div>
+    {% endif %}
+  </div>
+
+  <!-- Or use the Django-inspired field helper (one-liner) -->
+  {{ fsy.field('email', { type: 'email', placeholder: 'you@example.com' }) | safe }}
+
+  <button type="submit" class="btn btn-primary">Register</button>
+</form>
+```
+
+### 7.3 Django ModelForm Helper (`fsy.formFor`)
+Generate an entire HTML form from an ORM model definition with automatic widgets and validation error mapping:
+```html
+{# Automatically excludes id, created_at, updated_at and generates appropriate widgets #}
+{{ fsy.formFor(req.db.getRepository('Article'), { action: '/articles', submitLabel: 'Publish' }) | safe }}
+```
+
+---
+
+## 8. Summary Checklist for Agents
 
 When a user asks to add or modify endpoints:
 1. Identify the URL and method (e.g. `POST /api/auth/register` or `POST /auth/login`).

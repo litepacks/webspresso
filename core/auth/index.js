@@ -225,6 +225,16 @@ module.exports = {
   // Classes
   AuthManager,
   PolicyManager,
+  Bouncer: require('./bouncer').Bouncer,
+  createBouncer: require('./bouncer').createBouncer,
+  createBouncerMiddleware: require('./bouncer').createBouncerMiddleware,
+
+  // Policies & Authorization (AdonisJS Bouncer & Django Permissions-inspired)
+  definePolicy: require('./policy').definePolicy,
+  defineGate: require('./policy').defineGate,
+  can: require('./policy').can,
+  cannot: require('./policy').cannot,
+  authorize: require('./policy').authorize,
   
   // Errors
   AuthenticationError,

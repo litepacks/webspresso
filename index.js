@@ -191,6 +191,31 @@ module.exports = {
   RouteTable,
   mountDiscoveredRoutes,
   resolveMiddlewares: require('./src/routing/middleware-resolver').resolveMiddlewares,
+
+  // Forms & Flash subsystem (AdonisJS & Django-inspired)
+  createFlashMiddleware: require('./core/forms').createFlashMiddleware,
+  normalizeErrors: require('./core/forms').normalizeErrors,
+  renderField: require('./core/forms').renderField,
+  renderFormFor: require('./core/forms').renderFormFor,
+
+  // Authorization & Policies (AdonisJS Bouncer & Django Permissions-inspired)
+  Bouncer: require('./core/auth/bouncer').Bouncer,
+  createBouncer: require('./core/auth/bouncer').createBouncer,
+  createBouncerMiddleware: require('./core/auth/bouncer').createBouncerMiddleware,
+  definePolicy: require('./core/auth/policy').definePolicy,
+  defineGate: require('./core/auth/policy').defineGate,
+  can: require('./core/auth/policy').can,
+  cannot: require('./core/auth/policy').cannot,
+  authorize: require('./core/auth/policy').authorize,
+
+  // Decoupled Events & Signals (AdonisJS Events & Django Signals-inspired)
+  EventDispatcher: require('./core/events').EventDispatcher,
+  createEventDispatcher: require('./core/events').createEventDispatcher,
+  events: require('./core/events').events,
+  Signal: require('./core/events').Signal,
+  defineSignal: require('./core/events').defineSignal,
+  defineListener: require('./core/events').defineListener,
+  loadListeners: require('./core/events').loadListeners,
 };
 
 // Define lazy getters for plugins and heavy core subsystems
@@ -276,5 +301,20 @@ Object.defineProperties(module.exports, {
   // Webhooks plugin
   webhooks: { get: () => require('./plugins/webhooks'), enumerable: true, configurable: true },
   webhooksPlugin: { get: () => require('./plugins/webhooks').webhooksPlugin, enumerable: true, configurable: true },
+
+  // Mail & Mailable (AdonisJS & Django-inspired)
+  mail: { get: () => require('./core/mail'), enumerable: true, configurable: true },
+  Mailable: { get: () => require('./core/mail').Mailable, enumerable: true, configurable: true },
+  createMailer: { get: () => require('./core/mail').createMailer, enumerable: true, configurable: true },
+  Mailer: { get: () => require('./core/mail').Mailer, enumerable: true, configurable: true },
+  MemoryTransport: { get: () => require('./core/mail').MemoryTransport, enumerable: true, configurable: true },
+  ConsoleTransport: { get: () => require('./core/mail').ConsoleTransport, enumerable: true, configurable: true },
+  FileTransport: { get: () => require('./core/mail').FileTransport, enumerable: true, configurable: true },
+
+  // Commands & CLI (Django manage.py & Adonis Ace-inspired)
+  commands: { get: () => require('./core/commands'), enumerable: true, configurable: true },
+  defineCommand: { get: () => require('./core/commands').defineCommand, enumerable: true, configurable: true },
+  createCommandRegistry: { get: () => require('./core/commands').createCommandRegistry, enumerable: true, configurable: true },
+  executeCommand: { get: () => require('./core/commands').executeCommand, enumerable: true, configurable: true },
 });
 

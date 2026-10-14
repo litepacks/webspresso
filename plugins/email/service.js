@@ -62,6 +62,10 @@ function createEmailService(options) {
       throw new Error('Email transport is not configured');
     }
 
+    const payload = (sendOptions && typeof sendOptions.toMessage === 'function')
+      ? sendOptions.toMessage()
+      : sendOptions;
+
     const {
       to,
       cc,
@@ -75,7 +79,7 @@ function createEmailService(options) {
       text,
       data = {},
       attachments,
-    } = sendOptions;
+    } = payload;
 
     if (!to) {
       throw new Error('Email "to" is required');
@@ -160,28 +164,32 @@ function createEmailService(options) {
    * @param {Object} [data={}]
    */
   async function preview(nameOrOptions, data = {}) {
-    if (typeof nameOrOptions === 'string') {
-      const entry = registry.get(nameOrOptions);
+    const target = (nameOrOptions && typeof nameOrOptions.toMessage === 'function')
+      ? nameOrOptions.toMessage()
+      : nameOrOptions;
+
+    if (typeof target === 'string') {
+      const entry = registry.get(target);
       if (!entry) {
-        throw new Error(`Unknown email template: ${nameOrOptions}`);
+        throw new Error(`Unknown email template: ${target}`);
       }
       return renderSource(entry.source, data);
     }
 
-    if (nameOrOptions.template) {
-      const entry = registry.get(nameOrOptions.template);
+    if (target.template) {
+      const entry = registry.get(target.template);
       if (!entry) {
-        throw new Error(`Unknown email template: ${nameOrOptions.template}`);
+        throw new Error(`Unknown email template: ${target.template}`);
       }
-      return renderSource(entry.source, nameOrOptions.data || data);
+      return renderSource(entry.source, target.data || data);
     }
 
-    if (nameOrOptions.mjml) {
-      return renderSource({ mjml: nameOrOptions.mjml }, nameOrOptions.data || data);
+    if (target.mjml) {
+      return renderSource({ mjml: target.mjml }, target.data || data);
     }
 
-    if (nameOrOptions.html) {
-      return renderSource({ html: nameOrOptions.html }, nameOrOptions.data || data);
+    if (target.html) {
+      return renderSource({ html: target.html }, target.data || data);
     }
 
     throw new Error('preview requires template id, mjml, or html');
@@ -236,6 +244,9 @@ function createEmailService(options) {
     queryLogs,
     getTransport: () => transport,
     isTransportReady: () => !!transport,
+    getOutbox: () => (transport && typeof transport.getOutbox === 'function' ? transport.getOutbox() : []),
+    clearOutbox: () => (transport && typeof transport.clearOutbox === 'function' ? transport.clearOutbox() : undefined),
+    lastMessage: () => (transport && typeof transport.lastMessage === 'function' ? transport.lastMessage() : null),
   };
 }
 

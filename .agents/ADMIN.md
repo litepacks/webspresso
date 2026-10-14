@@ -46,6 +46,31 @@ export default defineModel({
     sortableColumns: ['name', 'price'], // Optional whitelist of sortable columns
     sortable: true,          // Set false to disable table sorting completely
     readOnly: false,         // Disable create/edit/delete actions
+    
+    // Django Admin-inspired Features:
+    inlines: [               // Parent-child relational editing (Tabular/Stacked)
+      {
+        model: 'ProductVariant',
+        foreignKey: 'product_id',
+        fields: ['sku', 'price', 'inventory'],
+        title: 'Variants',
+      },
+    ],
+    listEditable: ['price', 'status'], // Direct table row quick-edit without opening edit form
+    dateHierarchy: 'created_at',        // Period drilldown navigation (Years -> Months -> Days)
+    listFilter: ['status'],             // Faceted filtering with record counts per value
+    actions: [                          // Declarative model-level bulk operations
+      {
+        id: 'mark-active',
+        label: 'Mark as Active',
+        handler: async ({ ids, repo, db, req, user }) => {
+          for (const id of ids) {
+            await repo.update(id, { status: 'active' });
+          }
+          return { updated: ids.length };
+        },
+      },
+    ],
   },
 });
 ```
@@ -68,12 +93,30 @@ Column sortability can be configured per-column:
 The Admin SPA communicates with the backend via JSON REST endpoints:
 
 - `GET /_admin/api/models` — List all models exposed to admin with schemas & metadata.
-- `GET /_admin/api/models/:modelName/records` — List paginated records (query params: `page`, `limit`, `search`, `filter`, `sort`).
-- `GET /_admin/api/models/:modelName/records/:id` — Retrieve single record details.
-- `POST /_admin/api/models/:modelName/records` — Create new record.
-- `PUT /_admin/api/models/:modelName/records/:id` — Update existing record.
+- `GET /_admin/api/models/:modelName/records` — List paginated records (query params: `page`, `limit`, `search`, `filter`, `sort`, `year`, `month`, `day`).
+- `GET /_admin/api/models/:modelName/records/:id` — Retrieve single record details (auto-loads `_inlines` if defined).
+- `POST /_admin/api/models/:modelName/records` — Create new record (syncs `_inlines` automatically).
+- `PUT /_admin/api/models/:modelName/records/:id` — Update existing record (syncs `_inlines` updates, additions, and deletions with `_delete: true`).
 - `DELETE /_admin/api/models/:modelName/records/:id` — Delete record (soft or hard delete).
 - `POST /_admin/api/models/:modelName/records/:id/restore` — Restore soft-deleted record.
+
+### Inline Model Relational Endpoints (Django Inlines)
+- `GET /_admin/api/models/:model/records/:id/inlines/:inlineModel` — List child items belonging to parent record.
+- `POST /_admin/api/models/:model/records/:id/inlines/:inlineModel` — Create a child item attached to parent.
+- `PUT /_admin/api/models/:model/records/:id/inlines/:inlineModel/:inlineId` — Update specific child item.
+- `DELETE /_admin/api/models/:model/records/:id/inlines/:inlineModel/:inlineId` — Delete child item.
+
+### Fast Inline & Batch Editing (Django `list_editable`)
+- `PATCH /_admin/api/models/:model/records/:id/quick-edit` — Quickly update allowed `listEditable` columns for a single row without full form submission.
+- `PATCH /_admin/api/models/:model/records/batch-edit` — Save multiple table row edits simultaneously (`{ updates: [{ id, changes }] }`).
+
+### Date Hierarchy & Faceted Filters (Django `date_hierarchy` & `list_filter`)
+- `GET /_admin/api/models/:model/date-hierarchy` — Drilldown periods with counts (`?year=...&month=...`).
+- `GET /_admin/api/models/:model/filter-facets` — Retrieve distinct values with record counts for `listFilter` columns.
+
+### Model Actions (Django Actions)
+- `POST /_admin/api/models/:model/actions/:actionId` — Execute declarative action on selected record IDs (`{ ids: [...] }`).
+
 
 ---
 

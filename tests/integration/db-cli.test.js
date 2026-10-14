@@ -12,6 +12,7 @@ const { registerCommand: registerDbRollback } = require('../../bin/commands/db-r
 const { registerCommand: registerDbStatus } = require('../../bin/commands/db-status');
 const { registerCommand: registerDbMake } = require('../../bin/commands/db-make');
 const { registerCommand: registerDbScaffold } = require('../../bin/commands/db-scaffold');
+const { registerCommand: registerDbMakeMigrations } = require('../../bin/commands/db-makemigrations');
 
 describe('Database CLI Commands', () => {
   const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-test-project-'));
@@ -28,6 +29,7 @@ describe('Database CLI Commands', () => {
     registerDbStatus(program);
     registerDbMake(program);
     registerDbScaffold(program);
+    registerDbMakeMigrations(program);
 
     const logs = [];
     const origLog = console.log;
@@ -205,6 +207,30 @@ exports.down = function(knex) {
         result.includes('Done') ||
         result.includes('Rolling back')
       ).toBe(true);
+    });
+  });
+
+  describe('db:makemigrations', () => {
+    it('should detect model schema changes and generate migration', async () => {
+      // First run with dry-run
+      const dryResult = await runCliInProcess(['db:makemigrations', '--config', configFile, '--dry-run']);
+      expect(dryResult).toContain('users');
+      expect(dryResult).toContain('Dry-run mode');
+
+      // Now generate real migration
+      const realResult = await runCliInProcess(['db:makemigrations', '--config', configFile]);
+      expect(realResult).toContain('Generated');
+      expect(realResult).toContain('users');
+
+      // Verify migration file exists on disk
+      const files = fs.readdirSync(migrationsDir);
+      const generatedMigration = files.find((f) => f.includes('users_table'));
+      expect(generatedMigration).toBeDefined();
+
+      // Clean up
+      if (generatedMigration) {
+        fs.unlinkSync(path.join(migrationsDir, generatedMigration));
+      }
     });
   });
 });

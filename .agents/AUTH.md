@@ -514,5 +514,68 @@ auth.on('sessions:revoked_all', ({ userId, count }) => {
 });
 ```
 
+---
+
+## 9. Authorization & Policies (AdonisJS Bouncer & Django Permissions-inspired)
+
+Webspresso provides an authorization layer combining AdonisJS Bouncer policies/gates with Django-style permission matrices and superuser bypass:
+
+### 9.1 Defining Policies & Gates
+Define domain policies and simple gates using `definePolicy` and `defineGate`:
+
+```javascript
+const { definePolicy, defineGate } = require('webspresso');
+
+// 1. Resource Policy
+definePolicy('Post', {
+  view: (user, post) => true,
+  update: (user, post) => user && (user.id === post.user_id || user.role === 'admin'),
+  delete: (user, post) => user && user.role === 'admin',
+});
+
+// 2. Named Gate
+defineGate('admin-only', (user) => Boolean(user && user.role === 'admin'));
+```
+
+### 9.2 Request Bouncer (`req.bouncer`)
+Incoming requests automatically receive `req.bouncer` bound to `req.user`:
+
+```javascript
+// Inside API Route or Loader:
+if (req.bouncer.allows('Post.update', post)) {
+  // Authorized
+}
+
+if (req.bouncer.denies('admin-only')) {
+  // Denied
+}
+
+// Throws ForbiddenError (403) or UnauthorizedError (401) on failure:
+req.bouncer.authorize('Post.update', post);
+
+// Inline rule check:
+req.bouncer.authorize((user) => user.isVip);
+```
+
+### 9.3 Django Permissions Matrix & Superuser Bypass
+Users with permissions arrays or superuser flags are evaluated automatically:
+- `user.permissions = ['post.create', 'post.update']`
+- Wildcards: `user.permissions = ['post.*']` or `['*']`
+- Django Superuser: `user.isSuperuser = true` or `user.is_superuser = true` automatically bypasses all permission checks.
+- Custom methods: `user.hasPerm(perm, resource)` or `user.hasPermission(...)`.
+
+### 9.4 Nunjucks Template Helpers (`fsy.can`, `fsy.cannot`)
+Check permissions directly in `.njk` templates:
+
+```jinja
+{% if fsy.can('Post.update', post) %}
+  <a href="/posts/{{ post.id }}/edit" class="btn">Edit Post</a>
+{% endif %}
+
+{% if fsy.cannot('admin-only') %}
+  <p class="text-muted">Admin access required</p>
+{% endif %}
+```
+
 
 

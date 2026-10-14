@@ -11,6 +11,9 @@ const { generateEmailLogsMigration } = require('./migration-template');
 const { purgeEmailLogs } = require('./purge');
 const { wireAuthEmails, registerAuthEmailRoutes } = require('./auth-bridge');
 const { emailPluginOptionsFromManifest } = require('./manifest');
+const { Mailable } = require('../../core/mail/mailable');
+const { createMailer } = require('../../core/mail/mailer');
+const { setAppContext } = require('../../src/app-context');
 
 /**
  * @param {Object} options
@@ -173,6 +176,17 @@ function emailPlugin(options = {}) {
     tableName,
   });
 
+  const mailer = {
+    send: (opts) => emailService.send(opts),
+    sendTemplate: (name, opts) => emailService.sendTemplate(name, opts),
+    preview: (opts, data) => emailService.preview(opts, data),
+    getOutbox: () => emailService.getOutbox(),
+    clearOutbox: () => emailService.clearOutbox(),
+    lastMessage: () => emailService.lastMessage(),
+    verify: () => emailService.verifyConnection(),
+    getTransport: () => emailService.getTransport(),
+  };
+
   let wiredAuthEmailsConfig = null;
 
   return {
@@ -182,9 +196,14 @@ function emailPlugin(options = {}) {
     dependencies: includeAdminPage ? { 'admin-panel': '*' } : {},
 
     api: {
+      mailer,
+      Mailable,
       send: (opts) => emailService.send(opts),
       sendTemplate: (name, opts) => emailService.sendTemplate(name, opts),
       preview: (nameOrOpts, data) => emailService.preview(nameOrOpts, data),
+      getOutbox: () => emailService.getOutbox(),
+      clearOutbox: () => emailService.clearOutbox(),
+      lastMessage: () => emailService.lastMessage(),
       registerTemplate: (id, source) => registry.register(id, source),
       listTemplates: () => registry.list(),
       verifyConnection: () => emailService.verifyConnection(),
@@ -219,6 +238,18 @@ function emailPlugin(options = {}) {
     },
 
     register(ctx) {
+      setAppContext({ mailer });
+      if (ctx.app) {
+        ctx.app.mailer = mailer;
+        if (typeof ctx.app.use === 'function') {
+          ctx.app.use((req, res, next) => {
+            req.mailer = mailer;
+            next();
+          });
+        }
+      }
+      ctx.mailer = mailer;
+
       if (ctx.app && ctx.app.serviceRegistry) {
         const { createMailServices } = require('../../src/services/builtins/mail');
         const mailServices = createMailServices({
@@ -269,6 +300,21 @@ function emailPlugin(options = {}) {
         });
       } else if (authEmails?.enabled && !authManager) {
         console.warn('[email] authEmails.enabled but no auth manager found — pass auth to createApp or emailPlugin');
+      }
+
+      // Mount Dev Mail Preview & Inbox
+      const enableDevInbox = options.devInbox !== false && (process.env.NODE_ENV !== 'production' || options.devInbox === true);
+      if (enableDevInbox && typeof ctx.addRoute === 'function') {
+        const { createMailPreviewHandlers } = require('./preview-handler');
+        const previewPath = options.previewPath || '/_webspresso/mail-preview';
+        const previewHandlers = createMailPreviewHandlers({ mailer, basePath: previewPath });
+
+        ctx.addRoute('get', previewPath, previewHandlers.indexHandler);
+        ctx.addRoute('get', `${previewPath}/api/messages`, previewHandlers.listMessagesHandler);
+        ctx.addRoute('get', `${previewPath}/api/messages/:id`, previewHandlers.getMessageHandler);
+        ctx.addRoute('get', `${previewPath}/api/messages/:id/html`, previewHandlers.getMessageHtmlHandler);
+        ctx.addRoute('post', `${previewPath}/api/clear`, previewHandlers.clearMessagesHandler);
+        ctx.addRoute('post', `${previewPath}/api/preview`, previewHandlers.previewHandler);
       }
 
       if (!includeAdminPage) return;
@@ -324,6 +370,8 @@ function emailPlugin(options = {}) {
 
 module.exports = emailPlugin;
 module.exports.emailPlugin = emailPlugin;
+module.exports.Mailable = Mailable;
+module.exports.createMailer = createMailer;
 module.exports.generateEmailLogsMigration = generateEmailLogsMigration;
 module.exports.purgeEmailLogs = purgeEmailLogs;
 module.exports.emailPluginOptionsFromManifest = emailPluginOptionsFromManifest;
