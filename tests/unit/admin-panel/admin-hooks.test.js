@@ -4,6 +4,7 @@
  * beforeDelete, afterDelete, beforeRestore, afterRestore, onRecordView, onDashboardLoad.
  */
 
+const path = require('path');
 const { createDatabase, defineModel, zdb, hasModel } = require('../../../core/orm');
 const { createApp } = require('../../../index');
 const supertest = require('supertest');
@@ -23,7 +24,7 @@ describe('Admin Panel Lifecycle Hooks (Admin Hooks DX)', () => {
     db = createDatabase({
       client: 'better-sqlite3',
       connection: ':memory:',
-      models: './tests/fixtures/models-empty',
+      models: path.join(__dirname, '../../fixtures/models-empty'),
     });
 
     if (!hasModel('HookTestProduct')) {
@@ -148,9 +149,10 @@ describe('Admin Panel Lifecycle Hooks (Admin Hooks DX)', () => {
     });
 
     const result = createApp({
-      pagesDir: './tests/fixtures/empty-pages',
-      viewsDir: './tests/fixtures/views',
-      publicDir: './public',
+      rootDir: path.join(__dirname, '../../..'),
+      pagesDir: path.join(__dirname, '../../fixtures/empty-pages'),
+      viewsDir: path.join(__dirname, '../../fixtures/views'),
+      publicDir: path.join(__dirname, '../../../public'),
       db,
       plugins: [pluginInstance],
     });
@@ -312,5 +314,11 @@ describe('Admin Panel Lifecycle Hooks (Admin Hooks DX)', () => {
       expect(hookLog.some((h) => h.hook === 'model.beforeCreate')).toBe(false);
       expect(hookLog.some((h) => h.hook === 'model.afterCreate')).toBe(false);
     });
+  });
+
+  afterAll(async () => {
+    if (db?.knex?.destroy) {
+      await db.knex.destroy();
+    }
   });
 });

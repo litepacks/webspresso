@@ -19,6 +19,10 @@ const layoutFileCache = new Map();
 const errorFileCache = new Map();
 const loadingFileCache = new Map();
 
+function shouldBypassCache(isDev) {
+  return !!isDev;
+}
+
 /**
  * Returns ancestor directory segments from root down to file's directory.
  * E.g., 'dashboard/settings/profile.njk' -> ['', 'dashboard', 'dashboard/settings']
@@ -79,7 +83,7 @@ function findCascadingMiddlewareFiles(baseDir, relativeFilePath, isDev = false) 
   const chain = getDirectoryChain(relativeFilePath);
   const cacheKey = `${baseDir}::${chain.join('>')}`;
 
-  if (!isDev && middlewareFileCache.has(cacheKey)) {
+  if (!shouldBypassCache(isDev) && middlewareFileCache.has(cacheKey)) {
     return middlewareFileCache.get(cacheKey);
   }
 
@@ -94,7 +98,7 @@ function findCascadingMiddlewareFiles(baseDir, relativeFilePath, isDev = false) 
     }
   }
 
-  if (!isDev) {
+  if (!shouldBypassCache(isDev)) {
     middlewareFileCache.set(cacheKey, existingFiles);
   }
 
@@ -244,7 +248,7 @@ function findCascadingLayouts(baseDir, relativeFilePath, isDev = false) {
   const chain = getDirectoryChain(relativeFilePath);
   const cacheKey = `${baseDir}::${chain.join('>')}`;
 
-  if (!isDev && layoutFileCache.has(cacheKey)) {
+  if (!shouldBypassCache(isDev) && layoutFileCache.has(cacheKey)) {
     return layoutFileCache.get(cacheKey);
   }
 
@@ -275,7 +279,7 @@ function findCascadingLayouts(baseDir, relativeFilePath, isDev = false) {
     }
   }
 
-  if (!isDev) {
+  if (!shouldBypassCache(isDev)) {
     layoutFileCache.set(cacheKey, layouts);
   }
 
@@ -374,7 +378,7 @@ function findNearestErrorBoundary(baseDir, relativeFilePath, isDev = false) {
   const chain = getDirectoryChain(relativeFilePath);
   const cacheKey = `${baseDir}::${chain.join('>')}`;
 
-  if (!isDev && errorFileCache.has(cacheKey)) {
+  if (!shouldBypassCache(isDev) && errorFileCache.has(cacheKey)) {
     return errorFileCache.get(cacheKey);
   }
 
@@ -404,14 +408,14 @@ function findNearestErrorBoundary(baseDir, relativeFilePath, isDev = false) {
         configPath: fs.existsSync(fullJsPath) ? fullJsPath : null,
       };
 
-      if (!isDev) {
+      if (!shouldBypassCache(isDev)) {
         errorFileCache.set(cacheKey, result);
       }
       return result;
     }
   }
 
-  if (!isDev) {
+  if (!shouldBypassCache(isDev)) {
     errorFileCache.set(cacheKey, null);
   }
   return null;
@@ -430,7 +434,7 @@ function findNearestLoadingTemplate(baseDir, relativeFilePath, isDev = false) {
   const chain = getDirectoryChain(relativeFilePath);
   const cacheKey = `${baseDir}::${chain.join('>')}`;
 
-  if (!isDev && loadingFileCache.has(cacheKey)) {
+  if (!shouldBypassCache(isDev) && loadingFileCache.has(cacheKey)) {
     return loadingFileCache.get(cacheKey);
   }
 
@@ -454,14 +458,14 @@ function findNearestLoadingTemplate(baseDir, relativeFilePath, isDev = false) {
         fullPath,
       };
 
-      if (!isDev) {
+      if (!shouldBypassCache(isDev)) {
         loadingFileCache.set(cacheKey, result);
       }
       return result;
     }
   }
 
-  if (!isDev) {
+  if (!shouldBypassCache(isDev)) {
     loadingFileCache.set(cacheKey, null);
   }
   return null;

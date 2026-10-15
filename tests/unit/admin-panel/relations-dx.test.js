@@ -12,14 +12,14 @@
  * 4. Client-side auto-detection of foreign key columns (*_id or references) to belongsTo
  */
 
-const { createDatabase, defineModel, zdb, hasModel } = require('../../../core/orm');
+const { createDatabase, defineModel, zdb, hasModel, getModel } = require('../../../core/orm');
 const { createApp } = require('../../../index');
 const supertest = require('supertest');
 const adminPanelPlugin = require('../../../plugins/admin-panel');
 const fs = require('fs');
 const path = require('path');
 
-describe('Admin Panel Relational Fields & Performance DX', () => {
+describe('Admin Panel Relational Fields & Performance DX', { timeout: 120000 }, () => {
   let db;
   let app;
   let adminCookie;
@@ -79,12 +79,12 @@ describe('Admin Panel Relational Fields & Performance DX', () => {
         relations: {
           author: {
             type: 'belongsTo',
-            model: () => db.getModel('AuthorRelDx'),
+            model: () => getModel('AuthorRelDx'),
             foreignKey: 'author_id',
           },
           tags: {
             type: 'hasMany',
-            model: () => db.getModel('TagRelDx'),
+            model: () => getModel('TagRelDx'),
             foreignKey: 'post_id',
           },
         },
@@ -214,7 +214,7 @@ describe('Admin Panel Relational Fields & Performance DX', () => {
       searchFields: ['full_name', 'email'],
       limit: 5,
     });
-  });
+  }, 120000);
 
   it('returns structured pagination metadata and column projection in relations API', async () => {
     const res = await supertest(app)

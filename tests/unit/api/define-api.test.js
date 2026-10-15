@@ -65,7 +65,7 @@ describe('defineApi & API Loader', () => {
       }),
     };
 
-    const handler = createApiHandler(descriptor, {});
+    const handler = createApiHandler(descriptor, { isDev: false });
     app.post('/api/items', handler);
 
     // Valid request
@@ -115,7 +115,7 @@ describe('defineApi & API Loader', () => {
       }),
     };
 
-    const handler = createApiHandler(descriptor, {});
+    const handler = createApiHandler(descriptor, { isDev: false });
     app.get('/api/error-test', handler);
 
     // Error middleware
@@ -154,7 +154,7 @@ describe('defineApi & API Loader', () => {
       }),
     };
 
-    const handler = createApiHandler(descriptor, {});
+    const handler = createApiHandler(descriptor, { isDev: false });
     app.get('/api/fail', handler);
 
     app.use((err, req, res, next) => {
@@ -227,7 +227,7 @@ describe('defineApi & API Loader', () => {
       }),
     };
 
-    const handler = createApiHandler(descriptor, {});
+    const handler = createApiHandler(descriptor, { isDev: false });
     app.get('/api/query-test/:category', handler);
 
     const res = await request(app)
@@ -262,7 +262,7 @@ describe('defineApi & API Loader', () => {
       },
     };
 
-    const handler = createApiHandler(descriptor, {});
+    const handler = createApiHandler(descriptor, { isDev: false });
     app.get('/api/invalid-handler', handler);
 
     app.use((err, req, res, next) => {
@@ -306,6 +306,7 @@ describe('defineApi & API Loader', () => {
     };
 
     const handler = createApiHandler(descriptor, {
+      isDev: false,
       db: mockDb,
       serviceRegistry: mockServiceRegistry,
     });
@@ -330,7 +331,7 @@ describe('defineApi & API Loader', () => {
       source: 'src/api/esm-api.get.js',
     };
 
-    const handler = createApiHandler(descriptor, {});
+    const handler = createApiHandler(descriptor, { isDev: false });
     app.get('/api/esm-api', handler);
 
     const res = await request(app).get('/api/esm-api');
@@ -361,7 +362,7 @@ describe('defineApi & API Loader', () => {
       }),
     };
 
-    const handler = createApiHandler(descriptor, {});
+    const handler = createApiHandler(descriptor, { isDev: false });
     app.get('/api/void-handler', handler);
 
     const res = await request(app).get('/api/void-handler');
@@ -392,7 +393,7 @@ describe('defineApi & API Loader', () => {
       }),
     };
 
-    const handler = createApiHandler(descriptor, {});
+    const handler = createApiHandler(descriptor, { isDev: false });
     app.get('/api/string-err', handler);
 
     app.use((err, req, res, next) => {
@@ -433,7 +434,7 @@ describe('defineApi & API Loader', () => {
       }),
     };
 
-    const handler = createApiHandler(descriptor, {});
+    const handler = createApiHandler(descriptor, { isDev: false });
     app.post('/api/custom-schema-err', handler);
 
     app.use((err, req, res, next) => {
@@ -475,7 +476,7 @@ describe('defineApi & API Loader', () => {
     };
 
     let caughtErr;
-    const handler = createApiHandler(descriptor, {});
+    const handler = createApiHandler(descriptor, { isDev: false });
     app.use((req, res, next) => {
       req.id = 'api-req-789';
       next();
@@ -525,7 +526,7 @@ describe('defineApi & API Loader', () => {
       }),
     };
 
-    const handler = createApiHandler(descriptor, { serviceRegistry: null });
+    const handler = createApiHandler(descriptor, { isDev: false, serviceRegistry: null });
     app.get('/api/ctx-bindings', handler);
 
     const res = await request(app).get('/api/ctx-bindings');

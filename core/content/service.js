@@ -81,7 +81,10 @@ function createContentService(db, options = {}) {
     const cached = cache.get(key);
     if (cached) return cached;
 
-    const row = await TypeRepo().findById(id);
+    let row = await TypeRepo().findById(id);
+    if (!row && typeof id === 'string' && /^\d+$/.test(id)) {
+      row = await TypeRepo().findById(parseInt(id, 10));
+    }
     cacheTypeRow(row);
     return row;
   }
@@ -281,7 +284,10 @@ function createContentService(db, options = {}) {
     const cached = cache.get(key);
     if (cached) return cached;
 
-    const entry = await EntryRepo().findById(id);
+    let entry = await EntryRepo().findById(id);
+    if (!entry && typeof id === 'string' && /^\d+$/.test(id)) {
+      entry = await EntryRepo().findById(parseInt(id, 10));
+    }
     if (!entry) return null;
 
     const type = await getTypeById(entry.content_type_id);

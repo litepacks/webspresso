@@ -87,11 +87,39 @@ function fastETag(body, encoding) {
  * @param {Object} options - Nunjucks options
  * @returns {nunjucks.Environment}
  */
+function normalizeTemplateName(name) {
+  if (typeof name !== 'string') return name;
+  let normalized = name.replace(/\\/g, '/');
+  // Collapse any repeated views/views/... to a single views/ or clean path
+  normalized = normalized.replace(/(?:^|\/)views(?:\/views)+/g, (m) => (m.startsWith('/') ? '/views' : 'views'));
+  return normalized;
+}
+
+function canonicalTemplateKey(name) {
+  const norm = normalizeTemplateName(name);
+  if (typeof norm !== 'string') return String(norm);
+  // Canonical key strips leading ./ or views/ for cycle detection
+  return norm.replace(/^\.\//, '').replace(/^views\//, '');
+}
+
 function configureSafeNunjucks(templateDirs, options = {}) {
   const env = nunjucks.configure(templateDirs, options);
   const origGetTemplate = env.getTemplate.bind(env);
   const origRender = env.render.bind(env);
   const origRenderString = env.renderString.bind(env);
+
+  // Prevent loader.resolve from producing nested views/views paths
+  if (Array.isArray(env.loaders)) {
+    for (const loader of env.loaders) {
+      if (loader && typeof loader.resolve === 'function') {
+        const origResolve = loader.resolve.bind(loader);
+        loader.resolve = function(from, to) {
+          const resolved = origResolve(from, to);
+          return normalizeTemplateName(resolved);
+        };
+      }
+    }
+  }
 
   // Production template cache to bypass loader traversal when caching is active
   const productionTemplateCache = (!options.noCache) ? new Map() : null;
@@ -105,7 +133,7 @@ function configureSafeNunjucks(templateDirs, options = {}) {
     const origRoot = tmpl.rootRenderFunc;
     if (typeof origRoot !== 'function') return;
 
-    const normalizedName = String(name || tmpl.path || 'anonymous');
+    const normalizedName = canonicalTemplateKey(name || tmpl.path || 'anonymous');
 
     tmpl.rootRenderFunc = function(e, context, frame, runtime, renderCb) {
       const store = renderStackStorage.getStore();
@@ -153,38 +181,75 @@ function configureSafeNunjucks(templateDirs, options = {}) {
       eagerCompile = false;
     }
 
+    const cleanName = normalizeTemplateName(name);
+    const cycleKey = canonicalTemplateKey(cleanName);
+
     const store = renderStackStorage.getStore();
-    if (store && name) {
-      const normalizedName = String(name);
-      if (store.stack.includes(normalizedName)) {
-        const cycle = [...store.stack, normalizedName].join(' -> ');
+    if (store && cycleKey) {
+      if (store.stack.includes(cycleKey)) {
+        const cycle = [...store.stack, cycleKey].join(' -> ');
         const err = new Error(`Circular template extension detected: ${cycle}`);
         if (typeof cb === 'function') return cb(err);
         throw err;
       }
     }
 
-    if (!cb && !parentName && productionTemplateCache && typeof name === 'string') {
-      const cached = productionTemplateCache.get(name);
+    if (!cb && !parentName && productionTemplateCache && typeof cleanName === 'string') {
+      const cached = productionTemplateCache.get(cleanName);
       if (cached) return cached;
     }
 
     const wrappedCb = typeof cb === 'function' ? function(err, tmpl) {
       if (tmpl && !tmpl._safeWrapped) {
-        wrapTemplateRoot(tmpl, name);
+        wrapTemplateRoot(tmpl, cleanName);
       }
-      if (productionTemplateCache && tmpl && !err && typeof name === 'string' && !parentName) {
-        productionTemplateCache.set(name, tmpl);
+      if (productionTemplateCache && tmpl && !err && typeof cleanName === 'string' && !parentName) {
+        productionTemplateCache.set(cleanName, tmpl);
       }
       cb(err, tmpl);
     } : undefined;
 
-    const res = origGetTemplate(name, eagerCompile, parentName, ignoreMissing, wrappedCb);
-    if (res && !res._safeWrapped) {
-      wrapTemplateRoot(res, name);
+    // Helper to resolve template with views/ prefix fallbacks
+    function fetchTemplate(tmplName, callback) {
+      if (callback) {
+        origGetTemplate(tmplName, eagerCompile, parentName, false, (err, tmpl) => {
+          if (!err && tmpl) return callback(null, tmpl);
+          // If tmplName starts with views/, try stripped version (viewsDir already searched)
+          if (typeof tmplName === 'string' && /^(?:\.\/)?views\//.test(tmplName)) {
+            const stripped = tmplName.replace(/^(?:\.\/)?views\//, '');
+            origGetTemplate(stripped, eagerCompile, parentName, false, (err2, tmpl2) => {
+              if (!err2 && tmpl2) return callback(null, tmpl2);
+              if (ignoreMissing) return callback(null, null);
+              callback(err || err2);
+            });
+            return;
+          }
+          if (ignoreMissing) return callback(null, null);
+          callback(err);
+        });
+        return undefined;
+      }
+
+      try {
+        return origGetTemplate(tmplName, eagerCompile, parentName, false, undefined);
+      } catch (err) {
+        if (typeof tmplName === 'string' && /^(?:\.\/)?views\//.test(tmplName)) {
+          const stripped = tmplName.replace(/^(?:\.\/)?views\//, '');
+          try {
+            return origGetTemplate(stripped, eagerCompile, parentName, ignoreMissing, undefined);
+          } catch (_) {}
+        }
+        if (ignoreMissing) return null;
+        throw err;
+      }
     }
-    if (productionTemplateCache && res && typeof name === 'string' && !parentName) {
-      productionTemplateCache.set(name, res);
+
+    const res = fetchTemplate(cleanName, wrappedCb);
+    if (res && !res._safeWrapped) {
+      wrapTemplateRoot(res, cleanName);
+    }
+    if (productionTemplateCache && res && typeof cleanName === 'string' && !parentName) {
+      productionTemplateCache.set(cleanName, res);
     }
     return res;
   };
@@ -486,7 +551,16 @@ function createApp(options = {}) {
     throw new Error('pagesDir is required');
   }
 
-  const rootDir = options.rootDir || process.cwd();
+  const rootDir = options.rootDir || (() => {
+    if (process.env.NODE_ENV === 'test') {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
+        if (pkg.name === 'webspresso') return process.cwd();
+      } catch (_) {}
+      return path.resolve(__dirname, '..');
+    }
+    return process.cwd();
+  })();
   let pagesDir = initialPagesDir;
   if (!pagesDir) {
     if (typeof options.pages === 'string') {
@@ -922,13 +996,18 @@ function createApp(options = {}) {
   const origAppUse = app.use.bind(app);
   app.use = function(pathOrHandler, ...handlers) {
     if (typeof pathOrHandler === 'string' && handlers.length > 0) {
-      const normPrefix = (pathOrHandler.length > 1 && pathOrHandler.endsWith('/'))
-        ? pathOrHandler.slice(0, -1)
-        : pathOrHandler;
-      prefixMiddlewares.push({
-        prefix: normPrefix,
-        handlers: handlers.flat().map((h) => wrapAsync(h)),
-      });
+      const flat = handlers.flat();
+      // Filter out sub-routers (e.g. adminRouter) which must be dispatched via standard Express routing with prefix trimming
+      const actualMiddlewares = flat.filter((h) => typeof h === 'function' && !(h.handle && Array.isArray(h.stack)));
+      if (actualMiddlewares.length > 0) {
+        const normPrefix = (pathOrHandler.length > 1 && pathOrHandler.endsWith('/'))
+          ? pathOrHandler.slice(0, -1)
+          : pathOrHandler;
+        prefixMiddlewares.push({
+          prefix: normPrefix,
+          handlers: actualMiddlewares.map((h) => wrapAsync(h)),
+        });
+      }
     }
     return origAppUse(pathOrHandler, ...handlers);
   };

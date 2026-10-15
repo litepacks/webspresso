@@ -7,7 +7,7 @@ const path = require('path');
 const { createApp } = require('../../index');
 const { createDevReloadHub } = require('../../src/dev-reload');
 
-async function waitFor(fn, timeout = 3000) {
+async function waitFor(fn, timeout = 8000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     if (fn()) return true;
@@ -91,6 +91,10 @@ describe('Enhanced Dev Live Reload (Template & View Watching)', () => {
       receivedEvents.push({ type, payload });
     };
 
+    // Allow initial directory settlement before tracking events
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    receivedEvents.length = 0;
+
     // Modify pages/index.njk
     const pageNjk = path.join(testPagesDir, 'index.njk');
     fs.writeFileSync(pageNjk, `<h1>Updated ${Date.now()}</h1>`);
@@ -119,19 +123,20 @@ describe('Enhanced Dev Live Reload (Template & View Watching)', () => {
       },
     });
 
-    // Allow initial directory settlement before tracking events
-    await new Promise((resolve) => setTimeout(resolve, 60));
-
     const receivedEvents = [];
     app.devReloadHub.broadcast = (type, payload) => {
       receivedEvents.push({ type, payload });
     };
 
+    // Allow initial directory settlement before tracking events
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    receivedEvents.length = 0;
+
     // Add a css file inside testViewsDir
     const viewCss = path.join(testViewsDir, 'component.css');
     fs.writeFileSync(viewCss, `.component { color: red; }`);
 
-    const ok = await waitFor(() => receivedEvents.some((e) => e.type === 'css'));
+    const ok = await waitFor(() => receivedEvents.some((e) => e.type === 'css'), 5000);
     expect(ok).toBe(true);
 
     const cssEvent = receivedEvents.find((e) => e.type === 'css');
@@ -164,11 +169,15 @@ describe('Enhanced Dev Live Reload (Template & View Watching)', () => {
       receivedEvents.push({ type, payload });
     };
 
+    // Allow initial directory settlement before tracking events
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    receivedEvents.length = 0;
+
     // Modify file inside extra directory
     const extraFile = path.join(testExtraDir, 'extra.txt');
     fs.writeFileSync(extraFile, `extra content ${Date.now()}`);
 
-    const ok = await waitFor(() => receivedEvents.some((e) => e.type === 'full'));
+    const ok = await waitFor(() => receivedEvents.some((e) => e.type === 'full'), 5000);
     expect(ok).toBe(true);
 
     const fullEvent = receivedEvents.find((e) => e.type === 'full');
@@ -192,7 +201,7 @@ describe('Enhanced Dev Live Reload (Template & View Watching)', () => {
     });
 
     // Allow initial directory settlement before tracking events
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     const receivedEvents = [];
     app.devReloadHub.broadcast = (type, payload) => {

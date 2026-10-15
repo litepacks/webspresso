@@ -154,11 +154,13 @@ describe('helpers.js', () => {
 
     describe('fullUrl', () => {
       it('should build full URL', () => {
-        expect(helpers.fullUrl('/about')).toBe('http://localhost:3001/about');
+        const base = process.env.BASE_URL || 'http://localhost:3001';
+        expect(helpers.fullUrl('/about')).toBe(`${base}/about`);
       });
 
       it('should include query parameters', () => {
-        expect(helpers.fullUrl('/tools', { page: 1 })).toBe('http://localhost:3001/tools?page=1');
+        const base = process.env.BASE_URL || 'http://localhost:3001';
+        expect(helpers.fullUrl('/tools', { page: 1 })).toBe(`${base}/tools?page=1`);
       });
     });
 
@@ -209,7 +211,8 @@ describe('helpers.js', () => {
 
     describe('canonical', () => {
       it('should return canonical URL without query', () => {
-        expect(helpers.canonical()).toBe('http://localhost:3001/tools/test');
+        const base = process.env.BASE_URL || 'http://localhost:3001';
+        expect(helpers.canonical()).toBe(`${base}/tools/test`);
       });
     });
 

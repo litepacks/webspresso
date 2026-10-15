@@ -44,7 +44,21 @@ function createAuthMiddleware(authManager) {
   /**
    * Cookie parser middleware (needed for signed cookies / remember me)
    */
-  const cookieMiddleware = cookieParser(config.session.secret);
+  const baseCookieMiddleware = cookieParser(config.session?.secret);
+  const cookieMiddleware = (req, res, next) => {
+    if (!req.cookies) {
+      return baseCookieMiddleware(req, res, next);
+    }
+    if (config.session?.secret) {
+      if (!req.secret) {
+        req.secret = config.session.secret;
+      }
+      if (!req.signedCookies || Object.keys(req.signedCookies).length === 0) {
+        req.signedCookies = cookieParser.signedCookies(req.cookies, config.session.secret);
+      }
+    }
+    next();
+  };
 
   /**
    * Authenticate middleware

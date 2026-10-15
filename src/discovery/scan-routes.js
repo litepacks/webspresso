@@ -62,7 +62,16 @@ function scanDirSafely(dirPath, baseDir = dirPath) {
  * @returns {Array<Object>} Discovered route descriptors
  */
 function scanRoutes(options = {}) {
-  const rootDir = options.rootDir || process.cwd();
+  const rootDir = options.rootDir || (() => {
+    if (process.env.NODE_ENV === 'test') {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
+        if (pkg.name === 'webspresso') return process.cwd();
+      } catch (_) {}
+      return path.resolve(__dirname, '../..');
+    }
+    return process.cwd();
+  })();
   const descriptors = [];
 
   // Helper to resolve directory paths

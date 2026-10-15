@@ -5,16 +5,32 @@
 
 const path = require('path');
 
-// Set up environment variables for testing
+// Set up environment variables for testing with per-worker isolated ports
+const workerId = Number(process.env.VITEST_POOL_ID || process.env.VITEST_WORKER_ID || 0);
+const testPort = String(3001 + workerId * 100);
+
 process.env.NODE_ENV = 'test';
-process.env.PORT = '3001';
+process.env.PORT = testPort;
 process.env.DEFAULT_LOCALE = 'en';
 process.env.SUPPORTED_LOCALES = 'en,de';
-process.env.BASE_URL = 'http://localhost:3001';
+process.env.BASE_URL = `http://localhost:${testPort}`;
+
+const origCwd = process.cwd();
 
 if (typeof afterEach === 'function') {
   afterEach(() => {
     process.env.NODE_ENV = 'test';
+    process.env.PORT = testPort;
+    process.env.BASE_URL = `http://localhost:${testPort}`;
+    if (process.cwd() !== origCwd) {
+      try {
+        process.chdir(origCwd);
+      } catch (_) {}
+    }
+    try {
+      const { clearCascadingCaches } = require('../src/routing/cascading');
+      clearCascadingCaches();
+    } catch (_) {}
   });
 }
 

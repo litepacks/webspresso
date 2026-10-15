@@ -388,6 +388,52 @@ describe.sequential('Webspresso HTTP Response Compression', () => {
       const decompressed = zlib.gunzipSync(res.body).toString('utf8');
       expect(decompressed).toBe(veryLargeText);
     });
+
+    it('32. streams large JS files with res.sendFile handling backpressure and drain', async () => {
+      const fs = require('fs');
+      const tempJsPath = path.resolve(__dirname, '../fixtures/temp-comp-large.js');
+      const largeJsContent = 'console.log("Webspresso Streaming JS");\n'.repeat(3000); // ~120 KB
+      fs.writeFileSync(tempJsPath, largeJsContent);
+
+      try {
+        const app = express();
+        app.use(createCompressionMiddleware({ threshold: 1024 }));
+        app.get('/bundle.js', (req, res) => {
+          res.sendFile(tempJsPath);
+        });
+
+        const res = await getRaw(app, '/bundle.js', { 'accept-encoding': 'gzip' });
+        expect(res.statusCode).toBe(200);
+        expect(res.headers['content-encoding']).toBe('gzip');
+        expect(res.headers['content-type']).toMatch(/javascript/);
+        expect(res.headers['content-length']).toBeUndefined();
+
+        const decompressed = zlib.gunzipSync(res.body).toString('utf8');
+        expect(decompressed).toBe(largeJsContent);
+      } finally {
+        try { fs.unlinkSync(tempJsPath); } catch (_) {}
+      }
+    });
+
+    it('33. cleanly strips Content-Length and compresses when writeHead specifies Content-Length', async () => {
+      const app = express();
+      app.use(createCompressionMiddleware({ threshold: 100 }));
+      const payload = 'const x = 123;\n'.repeat(100);
+      app.get('/write-head.js', (req, res) => {
+        res.writeHead(200, {
+          'Content-Type': 'application/javascript',
+          'Content-Length': Buffer.byteLength(payload),
+        });
+        res.end(payload);
+      });
+
+      const res = await getRaw(app, '/write-head.js', { 'accept-encoding': 'gzip' });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-encoding']).toBe('gzip');
+      expect(res.headers['content-length']).toBeUndefined();
+      const decompressed = zlib.gunzipSync(res.body).toString('utf8');
+      expect(decompressed).toBe(payload);
+    });
   });
 
   describe('createApp({ server: { compression: true } }) Integration', () => {
@@ -416,3 +462,4 @@ describe.sequential('Webspresso HTTP Response Compression', () => {
     });
   });
 });
+

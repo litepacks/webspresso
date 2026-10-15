@@ -155,9 +155,21 @@ function createCompressionMiddleware(options = {}) {
       res.setHeader('Content-Encoding', encoding);
       res.removeHeader('Content-Length');
 
-      // Pipe compression stream chunks directly into underlying socket/response
+      // Pipe compression stream chunks directly into underlying socket/response with backpressure
       compressStream.on('data', (chunk) => {
-        origWrite.call(res, chunk);
+        if (origWrite.call(res, chunk) === false) {
+          compressStream.pause();
+        }
+      });
+
+      res.on('drain', () => {
+        if (compressStream && compressStream.resume) {
+          compressStream.resume();
+        }
+      });
+
+      compressStream.on('drain', () => {
+        res.emit('drain');
       });
 
       compressStream.on('end', () => {
@@ -173,13 +185,30 @@ function createCompressionMiddleware(options = {}) {
     res.writeHead = function(statusCode, ...args) {
       if (res.headersSent) return res;
 
+      let headersIndex = -1;
       if (typeof args[0] === 'object' && args[0] !== null) {
-        for (const [k, v] of Object.entries(args[0])) {
+        headersIndex = 0;
+      } else if (typeof args[1] === 'object' && args[1] !== null) {
+        headersIndex = 1;
+      }
+
+      if (headersIndex !== -1) {
+        for (const [k, v] of Object.entries(args[headersIndex])) {
           res.setHeader(k, v);
         }
-      } else if (typeof args[1] === 'object' && args[1] !== null) {
-        for (const [k, v] of Object.entries(args[1])) {
-          res.setHeader(k, v);
+      }
+
+      if (!decided) {
+        let expectedLength = res.getHeader('content-length');
+        if (expectedLength !== undefined && expectedLength !== null) {
+          expectedLength = parseInt(expectedLength, 10);
+        }
+        if (typeof expectedLength === 'number' && !isNaN(expectedLength) && expectedLength < threshold) {
+          decided = true;
+          isCompressing = false;
+        } else if (shouldCompress(expectedLength)) {
+          decided = true;
+          startCompression();
         }
       }
 
@@ -190,6 +219,19 @@ function createCompressionMiddleware(options = {}) {
         }
         res.removeHeader('Content-Length');
         appendVary(res, 'Accept-Encoding');
+
+        if (headersIndex !== -1) {
+          const cleanedHeaders = {};
+          for (const [k, v] of Object.entries(args[headersIndex])) {
+            if (k.toLowerCase() !== 'content-length') {
+              cleanedHeaders[k] = v;
+            }
+          }
+          if (encoding) {
+            cleanedHeaders['Content-Encoding'] = encoding;
+          }
+          args[headersIndex] = cleanedHeaders;
+        }
       }
 
       return origWriteHead.call(res, statusCode, ...args);

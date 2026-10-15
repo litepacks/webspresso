@@ -4,24 +4,25 @@
  * @vitest-environment node
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../src/server.js';
 import { createDatabase, defineModel, zdb, hasModel } from '../../index.js';
 import { adminPanelPlugin, dashboardPlugin } from '../../plugins/index.js';
-import { clearRegistry } from '../../core/orm/model.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 describe('Multiple Plugins Integration', () => {
   let app;
   let db;
 
   beforeAll(async () => {
-    clearRegistry();
-
     db = createDatabase({
       client: 'better-sqlite3',
       connection: ':memory:',
-      models: './tests/fixtures/models-empty',
+      models: path.join(__dirname, '../fixtures/models-empty'),
     });
 
     if (!hasModel('TestModel')) {
@@ -66,9 +67,10 @@ describe('Multiple Plugins Integration', () => {
     });
 
     const result = createApp({
-      pagesDir: './tests/fixtures/empty-pages',
-      viewsDir: './tests/fixtures/views',
-      publicDir: './public',
+      rootDir: path.join(__dirname, '../..'),
+      pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
+      viewsDir: path.join(__dirname, '../fixtures/views'),
+      publicDir: path.join(__dirname, '../../public'),
       plugins: [
         dashboardPlugin({
           path: '/_webspresso',
@@ -85,10 +87,9 @@ describe('Multiple Plugins Integration', () => {
   });
 
   afterAll(async () => {
-    if (db) {
-      await db.destroy();
+    if (db?.knex?.destroy) {
+      await db.knex.destroy();
     }
-    clearRegistry();
   });
 
   beforeEach(async () => {

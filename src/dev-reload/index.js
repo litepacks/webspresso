@@ -475,12 +475,20 @@ function createDevReloadHub(config = {}) {
 
     const recursiveSuccess = addWatcher(absDir, true);
     if (!recursiveSuccess) {
+      const visited = new Set();
       function walkAndWatch(currentDir) {
+        try {
+          const real = fs.realpathSync(currentDir);
+          if (visited.has(real)) return;
+          visited.add(real);
+        } catch (_) {
+          return;
+        }
         addWatcher(currentDir, false);
         try {
           const entries = fs.readdirSync(currentDir, { withFileTypes: true });
           for (const entry of entries) {
-            if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+            if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules' && !entry.isSymbolicLink()) {
               walkAndWatch(path.join(currentDir, entry.name));
             }
           }

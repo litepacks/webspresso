@@ -13,45 +13,43 @@ describe('Admin Panel Column Sorting (3-State & Configuration)', () => {
   let adminCookie;
 
   beforeAll(async () => {
+    const productModel = defineModel({
+      name: 'ProductSortTest',
+      table: 'product_sort_tests',
+      schema: zdb.schema({
+        id: zdb.id(),
+        name: zdb.string().config({ sortable: true }),
+        price: zdb.float(),
+        details: zdb.json(), // default non-sortable
+        secret_notes: zdb.text().config({ sortable: false }), // explicitly non-sortable
+        created_at: zdb.timestamp({ auto: 'create' }),
+      }),
+      admin: {
+        enabled: true,
+      },
+    });
+
+    const limitedModel = defineModel({
+      name: 'LimitedModelSortTest',
+      table: 'limited_model_sort_tests',
+      schema: zdb.schema({
+        id: zdb.id(),
+        title: zdb.string(),
+        code: zdb.string(),
+      }),
+      admin: {
+        enabled: true,
+        sortableColumns: ['title'], // Only title is sortable
+      },
+    });
+
     db = createDatabase({
       client: 'better-sqlite3',
       connection: ':memory:',
       models: './tests/fixtures/models-empty',
     });
-
-    if (!hasModel('ProductSortTest')) {
-      defineModel({
-        name: 'ProductSortTest',
-        table: 'product_sort_tests',
-        schema: zdb.schema({
-          id: zdb.id(),
-          name: zdb.string().config({ sortable: true }),
-          price: zdb.float(),
-          details: zdb.json(), // default non-sortable
-          secret_notes: zdb.text().config({ sortable: false }), // explicitly non-sortable
-          created_at: zdb.timestamp({ auto: 'create' }),
-        }),
-        admin: {
-          enabled: true,
-        },
-      });
-    }
-
-    if (!hasModel('LimitedModelSortTest')) {
-      defineModel({
-        name: 'LimitedModelSortTest',
-        table: 'limited_model_sort_tests',
-        schema: zdb.schema({
-          id: zdb.id(),
-          title: zdb.string(),
-          code: zdb.string(),
-        }),
-        admin: {
-          enabled: true,
-          sortableColumns: ['title'], // Only title is sortable
-        },
-      });
-    }
+    db.registerModel(productModel);
+    db.registerModel(limitedModel);
 
     await db.knex.schema.createTable('admin_users', (table) => {
       table.bigIncrements('id');

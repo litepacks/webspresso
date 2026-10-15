@@ -556,6 +556,161 @@ describe('Schema Helpers', () => {
 
       expect(meta.validations.step).toBe(0.01);
     });
+
+    it('should cover all SchemaBuilder validation methods', () => {
+      const b1 = zdb.string()
+        .length(10)
+        .minLength(5)
+        .maxLength(20)
+        .url()
+        .includes('foo')
+        .startsWith('bar')
+        .endsWith('baz')
+        .nonempty()
+        .optional();
+
+      const finalized1 = b1._finalize();
+      expect(b1._finalize()).toBe(finalized1); // test already finalized branch
+
+      const meta1 = getColumnMeta(finalized1);
+      expect(meta1.validations.length).toBe(10);
+      expect(meta1.validations.minLength).toBe(5);
+      expect(meta1.validations.maxLength).toBe(20);
+      expect(meta1.validations.url).toBe(true);
+      expect(meta1.validations.includes).toBe('foo');
+      expect(meta1.validations.startsWith).toBe('bar');
+      expect(meta1.validations.endsWith).toBe('baz');
+      expect(meta1.validations.nonempty).toBe(true);
+
+      const bNum = zdb.float()
+        .positive()
+        .negative()
+        .int();
+      const metaNum = getColumnMeta(bNum._finalize());
+      expect(metaNum.validations.positive).toBe(true);
+      expect(metaNum.validations.negative).toBe(true);
+      expect(metaNum.validations.int).toBe(true);
+
+      // nonempty with object/array
+      const bArr = zdb.array(z.string()).nonempty();
+      const metaArr = getColumnMeta(bArr._finalize());
+      expect(metaArr.validations.nonempty).toBe(true);
+    });
+
+    it('should cover all config UI options', () => {
+      const b = zdb.text().config({
+        hint: 'Some hint',
+        inputType: 'textarea',
+        hidden: true,
+        readonly: true,
+        width: '50%',
+        rows: 5,
+        sortable: false,
+      });
+      const meta = getColumnMeta(b._finalize());
+      expect(meta.ui.hint).toBe('Some hint');
+      expect(meta.ui.inputType).toBe('textarea');
+      expect(meta.ui.hidden).toBe(true);
+      expect(meta.ui.readonly).toBe(true);
+      expect(meta.ui.width).toBe('50%');
+      expect(meta.ui.rows).toBe(5);
+      expect(meta.ui.sortable).toBe(false);
+    });
+
+    it('should test proxy handler and unknown method error', () => {
+      const b = zdb.string();
+      expect(() => b._proxyMethod('nonExistentMethodXYZ', [])).toThrow(/Method nonExistentMethodXYZ is not available/);
+    });
+
+    it('should cover all column types: files, bigint, float, date, datetime, timestamp, json, array, enum, foreign keys', () => {
+      const sFiles = zdb.files({ nullable: true })._finalize();
+      expect(getColumnMeta(sFiles).type).toBe('files');
+      expect(getColumnMeta(sFiles).nullable).toBe(true);
+
+      const sBig = zdb.bigint({ nullable: true })._finalize();
+      expect(getColumnMeta(sBig).type).toBe('bigint');
+
+      const sFloat = zdb.float({ nullable: true })._finalize();
+      expect(getColumnMeta(sFloat).type).toBe('float');
+
+      const sDate = zdb.date({ nullable: true })._finalize();
+      expect(getColumnMeta(sDate).type).toBe('date');
+
+      const sDateTime = zdb.datetime({ nullable: true })._finalize();
+      expect(getColumnMeta(sDateTime).type).toBe('datetime');
+
+      const sTs = zdb.timestamp({ auto: 'create' })._finalize();
+      expect(getColumnMeta(sTs).type).toBe('timestamp');
+      expect(getColumnMeta(sTs).auto).toBe('create');
+
+      const sJson = zdb.json({ nullable: true })._finalize();
+      expect(getColumnMeta(sJson).type).toBe('json');
+
+      // array with first arg options
+      const sArrOpts = zdb.array({ nullable: true })._finalize();
+      expect(getColumnMeta(sArrOpts).type).toBe('array');
+
+      // enum with default
+      const sEnum = zdb.enum(['a', 'b'], { default: 'a', nullable: true })._finalize();
+      expect(getColumnMeta(sEnum).default).toBe('a');
+      expect(getColumnMeta(sEnum).nullable).toBe(true);
+
+      // foreign keys
+      const sFk = zdb.foreignKey('users', { nullable: true, referenceColumn: 'user_id' })._finalize();
+      expect(getColumnMeta(sFk).references).toBe('users');
+      expect(getColumnMeta(sFk).referenceColumn).toBe('user_id');
+
+      const sFkUuid = zdb.foreignUuid('users', { nullable: true })._finalize();
+      expect(getColumnMeta(sFkUuid).type).toBe('uuid');
+
+      const sFkNano = zdb.foreignNanoid('users', { nullable: true, maxLength: 16 })._finalize();
+      expect(getColumnMeta(sFkNano).type).toBe('nanoid');
+      expect(getColumnMeta(sFkNano).maxLength).toBe(16);
+    });
+
+    it('should preprocess boolean correctly for 0, 1, "0", "1", "false", "true"', () => {
+      const boolBuilder = zdb.boolean({ default: false, nullable: true });
+      const schema = boolBuilder._finalize();
+
+      expect(schema.parse(0)).toBe(false);
+      expect(schema.parse(1)).toBe(true);
+      expect(schema.parse('0')).toBe(false);
+      expect(schema.parse('1')).toBe(true);
+      expect(schema.parse('false')).toBe(false);
+      expect(schema.parse('true')).toBe(true);
+      expect(schema.parse(false)).toBe(false);
+      expect(schema.parse(true)).toBe(true);
+    });
+
+    it('should test decodeColumnMeta caching and hasColumnMeta with _wdbMeta', () => {
+      const meta = { type: 'string' };
+      const encoded = encodeColumnMeta(meta);
+      // first call sets cache
+      expect(decodeColumnMeta(encoded)).toEqual(meta);
+      // second call hits cache
+      expect(decodeColumnMeta(encoded)).toEqual(meta);
+
+      const fakeSchema = { _wdbMeta: { type: 'custom' } };
+      expect(hasColumnMeta(fakeSchema)).toBe(true);
+      expect(getColumnMeta(fakeSchema)).toEqual({ type: 'custom' });
+    });
+
+    it('should test extractColumnsFromSchema edge cases', () => {
+      expect(extractColumnsFromSchema(null).size).toBe(0);
+      expect(extractColumnsFromSchema({}).size).toBe(0);
+
+      const schema = zdb.schema({
+        unfinalized: zdb.string().min(2),
+        plain: z.string(),
+      });
+      // First call computes
+      const cols1 = extractColumnsFromSchema(schema);
+      expect(cols1.has('unfinalized')).toBe(true);
+      // Second call hits weakmap cache
+      const cols2 = extractColumnsFromSchema(schema);
+      expect(cols2).toBe(cols1);
+    });
   });
 });
+
 

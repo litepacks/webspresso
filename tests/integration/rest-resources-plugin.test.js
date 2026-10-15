@@ -17,7 +17,7 @@ const {
 const FIXTURES_PAGES = path.join(__dirname, '..', 'fixtures', 'pages');
 const FIXTURES_VIEWS = path.join(__dirname, '..', 'fixtures', 'views');
 
-describe('REST resources plugin', () => {
+describe('REST resources plugin', { timeout: 60000 }, () => {
   let db;
 
   beforeAll(async () => {

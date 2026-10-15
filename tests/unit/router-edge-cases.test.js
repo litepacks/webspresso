@@ -98,21 +98,26 @@ describe('Router & Error Edge Cases', () => {
   });
 
   it('should return JSON error response when client prefers JSON even with custom 404/500 template defined', async () => {
+    const customPages = path.join(tempDir, 'custom-pages');
+    const customViews = path.join(tempDir, 'custom-views');
+    fs.mkdirSync(customPages, { recursive: true });
+    fs.mkdirSync(customViews, { recursive: true });
+
     fs.writeFileSync(
-      path.join(viewsDir, '404.njk'),
+      path.join(customViews, '404.njk'),
       '<h1>Custom 404 HTML</h1>'
     );
     fs.writeFileSync(
-      path.join(viewsDir, '500.njk'),
+      path.join(customViews, '500.njk'),
       '<h1>Custom 500 HTML</h1>'
     );
     fs.writeFileSync(
-      path.join(pagesDir, 'crash.js'),
+      path.join(customPages, 'crash.js'),
       'module.exports = { load: async () => { throw new Error("Kaboom"); } };'
     );
-    fs.writeFileSync(path.join(pagesDir, 'crash.njk'), '<h1>Never</h1>');
+    fs.writeFileSync(path.join(customPages, 'crash.njk'), '<h1>Never</h1>');
 
-    const { app } = createApp({ pagesDir, viewsDir });
+    const { app } = createApp({ pagesDir: customPages, viewsDir: customViews });
 
     // 1. Missing page with Accept: application/json
     const res404Json = await request(app)

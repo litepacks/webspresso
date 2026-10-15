@@ -10,7 +10,7 @@ const FIXTURES_PATH = path.join(__dirname, '..', 'fixtures');
 const PAGES_DIR = path.join(FIXTURES_PATH, 'pages');
 const VIEWS_DIR = path.join(FIXTURES_PATH, 'views');
 
-describe('SSR Routes Integration', () => {
+describe.sequential('SSR Routes Integration', () => {
   let app;
 
   beforeAll(() => {

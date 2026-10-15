@@ -103,20 +103,23 @@ describe('Dev Live & Hot Reload (SSE CSS Hot Reload)', () => {
 
       expect(app.devReloadHub.getClientsCount()).toBe(1);
 
+      const waitForMessage = async (predicate, timeoutMs = 2000) => {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          if (messages.some(predicate)) return true;
+          await new Promise((r) => setTimeout(r, 20));
+        }
+        return false;
+      };
+
       // Broadcast CSS hot reload
       app.broadcastDevReload('css', { file: 'style.css' });
-
-      // Wait a moment for chunk delivery
-      await new Promise((resolve) => setTimeout(resolve, 80));
-
-      const hasCssEvent = messages.some((m) => m.includes('reload') && m.includes('"type":"css"') && m.includes('style.css'));
+      const hasCssEvent = await waitForMessage((m) => m.includes('reload') && m.includes('"type":"css"') && m.includes('style.css'));
       expect(hasCssEvent).toBe(true);
 
       // Broadcast full reload
       app.broadcastDevReload('full');
-      await new Promise((resolve) => setTimeout(resolve, 80));
-
-      const hasFullEvent = messages.some((m) => m.includes('reload') && m.includes('"type":"full"'));
+      const hasFullEvent = await waitForMessage((m) => m.includes('reload') && m.includes('"type":"full"'));
       expect(hasFullEvent).toBe(true);
 
       sseReq.destroy();
@@ -133,7 +136,7 @@ describe('Dev Live & Hot Reload (SSE CSS Hot Reload)', () => {
       pagesDir: './tests/fixtures/empty-pages',
       devReload: { enabled: true, autoInject: true },
       setupRoutes: (expressApp) => {
-        expressApp.get('/test-page', (req, res) => {
+        expressApp.get('/test-dev-reload-auto-inject-page', (req, res) => {
           res.setHeader('Content-Type', 'text/html');
           res.send('<!DOCTYPE html><html><head><title>Test</title></head><body><h1>Hello</h1></body></html>');
         });
@@ -150,7 +153,7 @@ describe('Dev Live & Hot Reload (SSE CSS Hot Reload)', () => {
     });
 
     // 1. HTML route should have script injected
-    const pageRes = await supertest(app).get('/test-page');
+    const pageRes = await supertest(app).get('/test-dev-reload-auto-inject-page');
     expect(pageRes.status).toBe(200);
     expect(pageRes.text).toContain('<script defer src="/__webspresso/dev-reload.js"></script>\n</body>');
 
@@ -208,12 +211,18 @@ describe('Dev Live & Hot Reload (SSE CSS Hot Reload)', () => {
       return origBroadcast(type, payload);
     };
 
+    // Wait for fs.watch (FSEvents on macOS) to bind
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
     // Modify the CSS file in tempPublicDir/css/style.css
     const targetFile = path.join(tempPublicDir, 'css', 'style.css');
     fs.writeFileSync(targetFile, `/* updated ${Date.now()} */`);
 
     // Wait for debounce and fs.watch notification
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    for (let i = 0; i < 40; i++) {
+      if (receivedEvents.length > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
 
     expect(receivedEvents.length).toBeGreaterThan(0);
     const cssEvent = receivedEvents.find((e) => e.type === 'css');

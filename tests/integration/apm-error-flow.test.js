@@ -21,6 +21,7 @@ describe('APM / unified error flow (integration)', () => {
 
   it('calls global onError for API route errors and returns JSON 500', async () => {
     const { app } = createApp({
+      rootDir: path.join(__dirname, '../..'),
       pagesDir: APM_PAGES,
       viewsDir: VIEWS_DIR,
       logging: false,
@@ -43,6 +44,7 @@ describe('APM / unified error flow (integration)', () => {
 
   it('calls global onError for SSR load() errors and returns default HTML 500', async () => {
     const { app } = createApp({
+      rootDir: path.join(__dirname, '../..'),
       pagesDir: APM_PAGES,
       viewsDir: VIEWS_DIR,
       logging: false,
@@ -65,6 +67,7 @@ describe('APM / unified error flow (integration)', () => {
 
   it('skips serverError Nunjucks template for /api and still returns JSON', async () => {
     const { app } = createApp({
+      rootDir: path.join(__dirname, '../..'),
       pagesDir: APM_PAGES,
       viewsDir: VIEWS_DIR,
       errorPages: { serverError: 'errors/integration-500.njk' },
@@ -84,6 +87,7 @@ describe('APM / unified error flow (integration)', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const { app } = createApp({
+        rootDir: path.join(__dirname, '../..'),
         pagesDir: BAD_HOOK_PAGES,
         viewsDir: VIEWS_DIR,
         logging: false,

@@ -12,9 +12,11 @@ describe('Error Pages', () => {
   const pagesDir = path.join(__dirname, '../fixtures/pages');
   const viewsDir = path.join(__dirname, '../fixtures/views');
 
+  const rootDir = path.join(__dirname, '../..');
+
   describe('Default Error Pages', () => {
     it('should return default 404 page for unknown routes', async () => {
-      const { app } = createApp({ pagesDir, viewsDir });
+      const { app } = createApp({ rootDir, pagesDir, viewsDir });
       
       const res = await request(app).get('/unknown-route-xyz');
       
@@ -24,7 +26,7 @@ describe('Error Pages', () => {
     });
 
     it('should return JSON 404 for API-like requests', async () => {
-      const { app } = createApp({ pagesDir, viewsDir });
+      const { app } = createApp({ rootDir, pagesDir, viewsDir });
       
       const res = await request(app)
         .get('/unknown-route')
@@ -118,6 +120,7 @@ describe('Error Pages', () => {
 
     it('should use custom 404 template', async () => {
       const { app } = createApp({
+        rootDir,
         pagesDir,
         viewsDir: errorViewsDir,
         errorPages: {

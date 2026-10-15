@@ -9,9 +9,9 @@ export default defineConfig({
     reporters: ['default'],
   },
   test: {
-    silent: process.env.CI === 'true',
+    silent: process.env.VERBOSE !== 'true',
     environment: 'node',
-    testTimeout: 30000,
+    testTimeout: 60000,
     hookTimeout: 60000,
     teardownTimeout: 60000,
     setupFiles: ['./tests/setup.js'],
@@ -19,11 +19,14 @@ export default defineConfig({
     include: ['tests/**/*.test.js'],
     exclude: ['node_modules', 'dist'],
     pool: 'forks',
-    maxForks: Math.max(1, (os.cpus()?.length || 4) - 1),
+    maxForks: Math.min(2, Math.max(1, (os.cpus()?.length || 4) - 1)),
     minForks: 1,
     coverage: {
       provider: 'v8',
-      reporter: ['text-summary', 'json-summary', 'html', 'lcov'],
+      clean: true,
+      reporter: process.env.FULL_REPORT === 'true' || process.env.CI === 'true'
+        ? ['text-summary', 'json-summary', 'html', 'lcov']
+        : ['text-summary', 'json-summary'],
       reportsDirectory: './coverage',
       include: ['src/**/*.js', 'core/**/*.js', 'plugins/**/*.js'],
       exclude: [

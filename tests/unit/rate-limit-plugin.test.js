@@ -54,6 +54,7 @@ describe('rateLimitPlugin', () => {
   it('returns 429 after limit exceeded on API route', async () => {
     const rlPages = path.join(__dirname, '../fixtures/rate-limit-pages');
     const { app } = createApp({
+      rootDir: path.join(__dirname, '../..'),
       pagesDir: rlPages,
       viewsDir,
       logging: false,

@@ -82,7 +82,7 @@ function createApiHandler(descriptor, context) {
     options: appOptions = {},
   } = context;
 
-  const isDev = process.env.NODE_ENV === 'development';
+  const isDev = context.isDev !== undefined ? context.isDev : (appOptions.isDev !== undefined ? appOptions.isDev : process.env.NODE_ENV === 'development');
   let cachedMiddlewares = null;
   let cachedApiDef = null;
   let cachedHandlerFn = null;

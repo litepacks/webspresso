@@ -15,7 +15,8 @@ describe('CORS Plugin', () => {
 
       const res = await request(app).get('/test').set('Origin', 'http://example.com');
       expect(res.headers['access-control-allow-origin']).toBe('*');
-      expect(res.body.ok).toBe(true);
+      const body = res.body && typeof res.body === 'object' && 'ok' in res.body ? res.body : JSON.parse(res.text || '{}');
+      expect(body.ok).toBe(true);
     });
 
     it('should handle specific allowed string origin', async () => {

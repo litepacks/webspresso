@@ -348,6 +348,7 @@ describe.sequential('redirectPlugin', () => {
 
   it('does not register middleware when all rules are invalid', async () => {
     const { app } = createApp({
+      rootDir: path.join(__dirname, '../..'),
       pagesDir: FIXTURES_PAGES,
       viewsDir: FIXTURES_VIEWS,
       plugins: [

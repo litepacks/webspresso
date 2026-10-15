@@ -60,7 +60,7 @@ describe('definePage & Page Loader', () => {
       }),
     };
 
-    const handler = createPageHandler(descriptor, {});
+    const handler = createPageHandler(descriptor, { isDev: false });
     app.get('/welcome', handler);
 
     const res = await request(app).get('/welcome?name=Ahmet');
@@ -93,7 +93,7 @@ describe('definePage & Page Loader', () => {
       }),
     };
 
-    const handler = createPageHandler(descriptor, {});
+    const handler = createPageHandler(descriptor, { isDev: false });
     app.get('/old-path', handler);
 
     const res = await request(app).get('/old-path');
@@ -125,7 +125,7 @@ describe('definePage & Page Loader', () => {
       }),
     };
 
-    const handler = createPageHandler(descriptor, {});
+    const handler = createPageHandler(descriptor, { isDev: false });
     app.get('/error-page', handler);
 
     app.use((err, req, res, next) => {
@@ -164,7 +164,7 @@ describe('definePage & Page Loader', () => {
       }),
     };
 
-    const handler = createPageHandler(descriptor, {});
+    const handler = createPageHandler(descriptor, { isDev: false });
     app.get('/mw-fail', handler);
 
     app.use((err, req, res, next) => {
@@ -268,7 +268,7 @@ describe('definePage & Page Loader', () => {
       }),
     };
 
-    const handler = createPageHandler(descriptor, {});
+    const handler = createPageHandler(descriptor, { isDev: false });
     app.get('/json-page', handler);
 
     const res = await request(app).get('/json-page');
@@ -308,7 +308,7 @@ describe('definePage & Page Loader', () => {
       }),
     };
 
-    const handler = createPageHandler(descriptor, { serviceRegistry: mockServiceRegistry });
+    const handler = createPageHandler(descriptor, { isDev: false, serviceRegistry: mockServiceRegistry });
     app.get('/service-page', handler);
 
     const res = await request(app).get('/service-page');
@@ -341,7 +341,7 @@ describe('definePage & Page Loader', () => {
       }),
     };
 
-    const handler = createPageHandler(descriptor, {});
+    const handler = createPageHandler(descriptor, { isDev: false });
     app.get('/dev-trace-page', handler);
 
     app.use((err, req, res, next) => {
@@ -377,7 +377,7 @@ describe('definePage & Page Loader', () => {
       source: 'src/pages/esm-page.js',
     };
 
-    const handler = createPageHandler(descriptor, {});
+    const handler = createPageHandler(descriptor, { isDev: false });
     app.get('/esm-page', handler);
 
     const res = await request(app).get('/esm-page');
@@ -412,7 +412,7 @@ describe('definePage & Page Loader', () => {
       }),
     };
 
-    const handler = createPageHandler(descriptor, {});
+    const handler = createPageHandler(descriptor, { isDev: false });
     app.get('/early-resp-page', handler);
 
     const res = await request(app).get('/early-resp-page');
@@ -445,7 +445,7 @@ describe('definePage & Page Loader', () => {
       }),
     };
 
-    const handler = createPageHandler(descriptor, {});
+    const handler = createPageHandler(descriptor, { isDev: false });
     app.get('/no-svc', handler);
 
     const res = await request(app).get('/no-svc');
@@ -477,7 +477,7 @@ describe('definePage & Page Loader', () => {
       }),
     };
 
-    const handler = createPageHandler(descriptor, {});
+    const handler = createPageHandler(descriptor, { isDev: false });
     app.get('/primitive-err', handler);
 
     app.use((err, req, res, next) => {
@@ -512,7 +512,7 @@ describe('definePage & Page Loader', () => {
       }),
     };
 
-    const handler = createPageHandler(descriptor, {});
+    const handler = createPageHandler(descriptor, { isDev: false });
     app.get('/num-page', handler);
 
     const res = await request(app).get('/num-page');
@@ -550,7 +550,7 @@ describe('definePage & Page Loader', () => {
     };
 
     let caughtErr;
-    const handler = createPageHandler(descriptor, {});
+    const handler = createPageHandler(descriptor, { isDev: false });
     app.use((req, res, next) => {
       req.id = 'req-123';
       next();

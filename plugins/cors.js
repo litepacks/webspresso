@@ -63,13 +63,13 @@ function createCorsMiddleware(options = {}) {
         if (typeof item === 'string' && item === reqOrigin) {
           return callback(null, reqOrigin);
         }
-        if (item instanceof RegExp && item.test(reqOrigin)) {
+        if ((item instanceof RegExp || Object.prototype.toString.call(item) === '[object RegExp]' || item?.constructor?.name === 'RegExp') && item.test(reqOrigin)) {
           return callback(null, reqOrigin);
         }
       }
       return callback(null, false);
     }
-    if (config.origin instanceof RegExp) {
+    if (config.origin instanceof RegExp || Object.prototype.toString.call(config.origin) === '[object RegExp]' || config.origin?.constructor?.name === 'RegExp') {
       return callback(null, config.origin.test(reqOrigin) ? reqOrigin : false);
     }
     if (typeof config.origin === 'function') {

@@ -92,7 +92,7 @@ function compileRule(rule, pluginOpts) {
     };
   }
 
-  if (rule.from instanceof RegExp) {
+  if (rule.from instanceof RegExp || Object.prototype.toString.call(rule.from) === '[object RegExp]' || rule.from?.constructor?.name === 'RegExp') {
     return {
       kind: 'regex',
       from: rule.from,

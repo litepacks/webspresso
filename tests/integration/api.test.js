@@ -15,6 +15,7 @@ describe.sequential('API Routes Integration', () => {
 
   beforeAll(() => {
     const result = createApp({
+      rootDir: path.join(__dirname, '../..'),
       pagesDir: PAGES_DIR,
       viewsDir: VIEWS_DIR
     });
@@ -183,6 +184,7 @@ describe.sequential('API Routes Integration', () => {
 
     beforeAll(() => {
       const result = createApp({
+        rootDir: path.join(__dirname, '../..'),
         pagesDir: PAGES_DIR,
         viewsDir: VIEWS_DIR,
         middlewares: {
@@ -238,6 +240,7 @@ describe.sequential('API Routes Integration', () => {
     beforeAll(() => {
       const fakeDb = { __fixtureMarker: true };
       const result = createApp({
+        rootDir: path.join(__dirname, '../..'),
         pagesDir: PAGES_DIR,
         viewsDir: VIEWS_DIR,
         db: fakeDb,
