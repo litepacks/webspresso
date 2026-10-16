@@ -289,4 +289,107 @@ describe('On-Demand / Lazy Plugins (lazyPlugin)', () => {
     await shutdownManager.close('test');
     expect(disposer).toHaveBeenCalledTimes(1);
   });
+
+  describe('Lazy Plugin Deep Proxy, Lifecycle Hooks & Services Scenarios', () => {
+    it('initializes lazy plugin with name, handles empty prefixes, and supports idempotent hydration', () => {
+      let initCount = 0;
+      const targetPlugin = {
+        name: 'test-target',
+        version: '1.2.3',
+        register: vi.fn(),
+      };
+      const factory = vi.fn(() => {
+        initCount++;
+        return targetPlugin;
+      });
+
+      const lazy = lazyPlugin(factory, { name: 'test-target' });
+      expect(lazy.name).toBe('test-target');
+      expect(lazy.version).toBe('1.0.0');
+      expect(lazy.isHydrated).toBe(false);
+
+      // Hydrate manually returns realPlugin
+      const p1 = lazy.hydrate();
+      const p2 = lazy.hydrate();
+      expect(p1).toBe(p2);
+      expect(p1).toBe(targetPlugin);
+      expect(initCount).toBe(1);
+      expect(lazy.isHydrated).toBe(true);
+    });
+
+    it('forwards lifecycle hooks to target plugin if defined', async () => {
+      const onRoutesReadyMock = vi.fn();
+      const targetPlugin = {
+        name: 'hooked-plugin',
+        onRoutesReady: onRoutesReadyMock,
+      };
+
+      const lazy = lazyPlugin(() => targetPlugin, { name: 'hooked-plugin' });
+      const mockCtx = { app: {}, routes: [] };
+
+      // Before hydration: onRoutesReady should buffer or prepare
+      lazy.onRoutesReady(mockCtx);
+      expect(onRoutesReadyMock).not.toHaveBeenCalled();
+
+      // Trigger hydration
+      lazy.hydrate();
+      expect(onRoutesReadyMock).toHaveBeenCalledWith(
+        expect.objectContaining({ app: mockCtx.app, routes: mockCtx.routes })
+      );
+    });
+
+    it('handles lazy service proxies, helper proxies, and event triggers', async () => {
+      let hydratedBy = null;
+      const registeredServices = new Map();
+      const registeredHelpers = new Map();
+      const eventHandlers = new Map();
+
+      const mockCtx = {
+        app: {
+          events: {
+            on: (event, fn) => eventHandlers.set(event, fn),
+          },
+          serviceRegistry: {
+            has: (name) => registeredServices.has(name),
+            register: (name, def) => registeredServices.set(name, def),
+            get: (name) => registeredServices.get(name),
+          },
+        },
+        addHelper: (name, fn) => registeredHelpers.set(name, fn),
+      };
+
+      const target = {
+        name: 'rich-plugin',
+        register: () => {
+          hydratedBy = 'triggered';
+        },
+      };
+
+      const lazy = lazyPlugin(() => target, {
+        name: 'rich-plugin',
+        services: ['lazyService'],
+        helpers: ['lazyHelper'],
+        events: ['lazy:trigger'],
+      });
+
+      lazy.register(mockCtx);
+
+      // 1. Service proxy invocation triggers hydration
+      const svcDef = registeredServices.get('lazyService');
+      expect(svcDef).toBeDefined();
+      expect(typeof svcDef.handler).toBe('function');
+      await svcDef.handler('input1', {});
+      expect(hydratedBy).toBe('triggered');
+
+      // 2. Helper proxy invocation
+      const helperFn = registeredHelpers.get('lazyHelper');
+      expect(typeof helperFn).toBe('function');
+
+      // 3. Event handler trigger
+      const eventFn = eventHandlers.get('lazy:trigger');
+      expect(typeof eventFn).toBe('function');
+      eventFn();
+      expect(lazy.isHydrated).toBe(true);
+    });
+  });
 });

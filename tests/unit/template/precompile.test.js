@@ -190,4 +190,122 @@ title: Home Page
     expect(fs.existsSync(compiledPath)).toBe(true);
     expect(logs.some((l) => l.includes('Precompiled Nunjucks templates'))).toBe(true);
   });
+
+  describe('PrecompiledLoader & AOT Runtime Scenarios', () => {
+    it('handles missing directories gracefully returning zero templates', () => {
+      const nonExistentDir = path.join(tempDir, 'does-not-exist-' + Date.now());
+      const res = precompileTemplates({
+        rootDir: nonExistentDir,
+        viewsDir: path.join(nonExistentDir, 'views'),
+        pagesDir: path.join(nonExistentDir, 'pages'),
+        outFile: path.join(nonExistentDir, 'out.js'),
+      });
+      expect(res.templateCount).toBe(0);
+      expect(res.bundle.templates).toEqual({});
+    });
+
+    it('returns null when loading a non-existent precompiled bundle', () => {
+      const loaded = loadPrecompiledTemplates({
+        rootDir: tempDir,
+        bundlePath: path.join(tempDir, 'does-not-exist.js'),
+      });
+      expect(loaded).toBeNull();
+    });
+
+    it('skips unparseable or erroring templates without crashing the compilation process', () => {
+      const brokenDir = path.join(tempDir, 'broken-templates');
+      fs.mkdirSync(brokenDir, { recursive: true });
+      fs.writeFileSync(path.join(brokenDir, 'bad.njk'), '{% if unclosed %}Broken');
+      fs.writeFileSync(path.join(brokenDir, 'good.njk'), '<p>Good</p>');
+
+      const res = precompileTemplates({
+        rootDir: tempDir,
+        viewsDir: brokenDir,
+        pagesDir: path.join(tempDir, 'pages-empty'),
+        outFile: path.join(tempDir, 'broken-out.js'),
+      });
+
+      expect(res.templateCount).toBe(1);
+      expect(res.bundle.templates['good.njk']).toBeDefined();
+      expect(res.bundle.templates['bad.njk']).toBeUndefined();
+    });
+
+    it('handles outDir option, ignores hidden dirs (.hidden and node_modules), and hydrates frontmatter', () => {
+      const viewsDir = path.join(tempDir, 'views-outdir');
+      const hiddenDir = path.join(viewsDir, '.hidden');
+      const nodeModulesDir = path.join(viewsDir, 'node_modules');
+      fs.mkdirSync(hiddenDir, { recursive: true });
+      fs.mkdirSync(nodeModulesDir, { recursive: true });
+      fs.writeFileSync(path.join(hiddenDir, 'skip.njk'), 'skip');
+      fs.writeFileSync(path.join(nodeModulesDir, 'skip.njk'), 'skip');
+      fs.writeFileSync(
+        path.join(viewsDir, 'card.njk'),
+        '---\ntitle: Card Title\n---\n<div class="card">{{ title }}</div>'
+      );
+
+      const outDir = path.join(tempDir, 'custom-out');
+      const res = precompileTemplates({
+        rootDir: tempDir,
+        viewsDir,
+        outDir,
+      });
+
+      expect(res.templateCount).toBeGreaterThanOrEqual(1);
+      expect(fs.existsSync(path.join(outDir, 'templates.compiled.js'))).toBe(true);
+
+      const loaded = loadPrecompiledTemplates({
+        rootDir: tempDir,
+        bundlePath: path.join(outDir, 'templates.compiled.js'),
+      });
+      expect(loaded).toBeDefined();
+      expect(loaded.templateCount).toBeGreaterThanOrEqual(1);
+
+      // Verify custom getSource resolution
+      const src1 = loaded.loader.getSource('card.njk');
+      expect(src1).toBeDefined();
+      expect(src1.path).toBe('card.njk');
+
+      const src2 = loaded.loader.getSource('views/card.njk');
+      expect(src2).toBeDefined();
+
+      const src3 = loaded.loader.getSource('nonexistent.njk');
+      expect(src3).toBeFalsy();
+    });
+
+    it('handles evaluate errors in bundle.templates and corrupted bundle objects gracefully', () => {
+      const badBundlePath = path.join(tempDir, 'bad-bundle.js');
+      fs.writeFileSync(
+        badBundlePath,
+        `module.exports = {
+          version: 1,
+          templates: {
+            broken: 'throw new Error("Syntax broken")',
+            valid: 'return function() { return "ok"; }'
+          },
+          frontmatter: {
+            'views/broken.njk': { metaPatch: {} }
+          }
+        };`
+      );
+
+      const loaded = loadPrecompiledTemplates({
+        rootDir: tempDir,
+        bundlePath: badBundlePath,
+      });
+
+      expect(loaded).toBeDefined();
+      expect(loaded.templateCount).toBe(1);
+      expect(loaded.loader.getSource('valid')).toBeDefined();
+      expect(loaded.loader.getSource('broken')).toBeFalsy();
+
+      // Corrupted bundle with non-object templates
+      const corruptedPath = path.join(tempDir, 'corrupted-bundle.js');
+      fs.writeFileSync(corruptedPath, 'module.exports = { templates: null };');
+      const corrupted = loadPrecompiledTemplates({
+        rootDir: tempDir,
+        bundlePath: corruptedPath,
+      });
+      expect(corrupted).toBeNull();
+    });
+  });
 });

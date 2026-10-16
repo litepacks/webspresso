@@ -361,5 +361,84 @@ describe('API Validation i18n & Error Translation', () => {
       expect(res.body.greeting).toBe('Hoş geldiniz');
       expect(res.body.locale).toBe('tr');
     });
+
+    describe('getTranslatorForRequest & translateSingleIssue Edge Cases', () => {
+      it('handles getTranslatorForRequest with pre-existing req.t and req.locale', () => {
+        const mockT = (key) => key;
+        const req = { t: mockT, locale: 'de' };
+        const result = getTranslatorForRequest(req);
+        expect(result.locale).toBe('de');
+        expect(result.t).toBe(mockT);
+      });
+
+      it('handles getTranslatorForRequest when req is null/undefined', () => {
+        const result = getTranslatorForRequest(null);
+        expect(result.locale).toBe(process.env.DEFAULT_LOCALE || 'en');
+        expect(typeof result.t).toBe('function');
+      });
+
+      it('handles getTranslatorForRequest caching in production mode', () => {
+        const pagesDir = path.join(tempDir, 'pages');
+        const routeDir = path.join(pagesDir, 'api');
+
+        // First call (cache miss)
+        const res1 = getTranslatorForRequest(
+          { locale: 'tr', headers: {} },
+          { pagesDir, routeDir, isDev: false }
+        );
+        expect(res1.locale).toBe('tr');
+
+        // Second call (cache hit)
+        const res2 = getTranslatorForRequest(
+          { locale: 'tr', headers: {} },
+          { pagesDir, routeDir, isDev: false }
+        );
+        expect(res2.locale).toBe('tr');
+      });
+
+      it('handles translateSingleIssue edge cases (null, non-object, missing path)', () => {
+        expect(translateSingleIssue(null, () => '')).toBeNull();
+        expect(translateSingleIssue('string-issue', () => '')).toBe('string-issue');
+
+        const nonArrayPath = { code: 'custom', path: null, message: 'Custom msg' };
+        const res = translateSingleIssue(nonArrayPath, (k) => k);
+        expect(res.message).toBe('Custom msg');
+      });
+
+      it('handles translateSingleIssue with maximum and limit parameters', () => {
+        const translations = {
+          validation: {
+            too_big: 'En fazla {{ max }} olmalıdır (limit: {{ limit }})',
+          },
+        };
+        const t = createTranslator(translations, { locale: 'tr' });
+
+        const issue = {
+          code: 'too_big',
+          maximum: 100,
+          path: ['count'],
+          message: 'Number must be <= 100',
+        };
+
+        const res = translateSingleIssue(issue, t);
+        expect(res.message).toBe('En fazla 100 olmalıdır (limit: 100)');
+      });
+
+      it('handles translateValidationIssues with options.req and fallback when no translator', () => {
+        const issues = [{ code: 'invalid_type', path: ['name'], message: 'Required' }];
+
+        // Pre-set translator on req
+        const customReq = {
+          t: createTranslator({ validation: { required: 'Özel Çeviri' } }, { locale: 'tr' }),
+          locale: 'tr',
+        };
+        const translated1 = translateValidationIssues(issues, { req: customReq });
+        expect(translated1[0].message).toBe('Özel Çeviri');
+
+        // Fallback when no translator resolved
+        const translated2 = translateValidationIssues(issues, {});
+        expect(translated2[0].message).toBe('Required');
+      });
+    });
   });
 });

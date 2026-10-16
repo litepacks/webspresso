@@ -584,4 +584,99 @@ describe('Magic Link Authentication (core/auth/magic-link)', () => {
       expect(result.token).toBeDefined();
     });
   });
+
+  describe('Magic Link Helper Edge Cases & JWT Verification Scenarios', () => {
+    it('exercises buildMagicLinkUrl throwing without token and formatting query strings', () => {
+      expect(() => buildMagicLinkUrl({})).toThrow('Token is required');
+
+      const url1 = buildMagicLinkUrl({
+        baseUrl: 'https://example.com/',
+        path: '/verify',
+        token: 'secret123',
+      });
+      expect(url1).toBe('https://example.com/verify?token=secret123');
+
+      const url2 = buildMagicLinkUrl({
+        baseUrl: 'https://example.com',
+        path: 'verify?source=email',
+        token: 'secret123',
+      });
+      expect(url2).toBe('https://example.com/verify?source=email&token=secret123');
+    });
+
+    it('exercises formatMagicLinkHtml default values and custom parameters', () => {
+      const html1 = formatMagicLinkHtml({ magicLinkUrl: 'https://example.com' });
+      expect(html1).toContain('Hello there,');
+      expect(html1).toContain('15 minutes');
+
+      const html2 = formatMagicLinkHtml({
+        name: 'Alice',
+        magicLinkUrl: 'https://example.com',
+        expiresMinutes: 45,
+      });
+      expect(html2).toContain('Hello Alice,');
+      expect(html2).toContain('45 minutes');
+    });
+
+    it('exercises createMagicLinkVerifyMiddleware with jwt: true and html redirects', async () => {
+      const mockAuthManager = {
+        verifyMagicLink: vi.fn().mockResolvedValue({ user: { id: 1, email: 'alice@example.com' } }),
+        generateUserToken: vi.fn(() => 'access-token-123'),
+        generateRefreshToken: vi.fn(() => 'refresh-token-456'),
+      };
+
+      const middleware = createMagicLinkVerifyMiddleware(mockAuthManager, {
+        jwt: true,
+        redirectTo: '/dashboard',
+        failureRedirect: '/auth/login',
+      });
+
+      // HTML GET request redirects
+      let redirectedUrl = null;
+      const resHtml = {
+        redirect: (u) => { redirectedUrl = u; },
+      };
+      await middleware(
+        {
+          query: { token: 'valid-token' },
+          method: 'GET',
+          accepts: (t) => t === 'html',
+          auth: { login: vi.fn() },
+        },
+        resHtml,
+        () => {}
+      );
+      expect(redirectedUrl).toBe('/dashboard');
+
+      // JSON POST request returns JWT tokens and user
+      let jsonPayload = null;
+      let statusCode = null;
+      const resJson = {
+        statusCode: 200,
+        status(s) {
+          this.statusCode = s;
+          statusCode = s;
+          return this;
+        },
+        json(j) {
+          jsonPayload = j;
+          return this;
+        },
+      };
+
+      await middleware(
+        {
+          query: { token: 'valid-token' },
+          method: 'POST',
+          auth: { login: vi.fn() },
+        },
+        resJson,
+        () => {}
+      );
+      expect(statusCode).toBe(200);
+      expect(jsonPayload.ok).toBe(true);
+      expect(jsonPayload.accessToken).toBe('access-token-123');
+      expect(jsonPayload.refreshToken).toBe('refresh-token-456');
+    });
+  });
 });

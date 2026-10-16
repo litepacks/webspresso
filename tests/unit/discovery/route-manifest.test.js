@@ -220,4 +220,69 @@ describe('AOT Route Manifest (Production Manifest & Zero-Scan Boot)', () => {
     expect(fs.existsSync(manifestPath)).toBe(true);
     expect(logs.some((l) => l.includes('AOT route manifest generated'))).toBe(true);
   });
+
+  describe('Route Manifest Edge Cases & Direct Path Scenarios', () => {
+    it('generateRouteManifest handles custom manifestPath and formats JSON', () => {
+      const customPath = path.join(tempDir, 'custom-manifest.json');
+      const res = generateRouteManifest({
+        rootDir: tempDir,
+        outFile: customPath,
+      });
+
+      expect(res.manifestPath).toBe(customPath);
+      expect(fs.existsSync(customPath)).toBe(true);
+      const content = fs.readFileSync(customPath, 'utf8');
+      expect(content).toContain('"version": 1');
+    });
+
+    it('loadRouteManifest returns null for non-existent, invalid, or corrupted manifests', () => {
+      // 1. Non-existent file
+      expect(
+        loadRouteManifest({ manifestPath: path.join(tempDir, 'does-not-exist.json') })
+      ).toBeNull();
+
+      // 2. Corrupted JSON file
+      const corruptedPath = path.join(tempDir, 'corrupted.json');
+      fs.writeFileSync(corruptedPath, 'NOT_VALID_JSON{[');
+      expect(loadRouteManifest({ manifestPath: corruptedPath })).toBeNull();
+
+      // 3. Valid JSON but invalid manifest structure (missing routes array)
+      const invalidPath = path.join(tempDir, 'invalid-structure.json');
+      fs.writeFileSync(invalidPath, JSON.stringify({ version: 1, routes: null }));
+      expect(loadRouteManifest({ manifestPath: invalidPath })).toBeNull();
+    });
+
+    it('loadRouteManifest supports string path argument and handles missing optional fields', () => {
+      const manifestPath = path.join(tempDir, 'string-arg-manifest.json');
+      fs.writeFileSync(
+        manifestPath,
+        JSON.stringify({
+          version: 1,
+          routes: [
+            {
+              type: 'api',
+              method: 'get',
+              path: '/api/test',
+              target: 'discovered',
+              source: 'pages/api/test.get.js',
+            },
+            {
+              type: 'page',
+              method: 'get',
+              path: '/ignored-target',
+              target: 'other',
+            },
+          ],
+        })
+      );
+
+      // Call directly with string path
+      const result = loadRouteManifest(manifestPath);
+      expect(result).toBeDefined();
+      expect(result.descriptors.length).toBe(1);
+      expect(result.descriptors[0].path).toBe('/api/test');
+      expect(result.descriptors.scannedPagesFiles).toEqual([]);
+      expect(result.descriptors.scannedPagesDir).toBeDefined();
+    });
+  });
 });

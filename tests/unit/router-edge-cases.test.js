@@ -134,4 +134,59 @@ describe.sequential('Router & Error Edge Cases', () => {
     expect(res500Ajax.body).toHaveProperty('error', 'Internal Server Error');
     expect(res500Ajax.body).toHaveProperty('status', 500);
   });
+
+  it('supports route groups (parentheses), multi-level dynamic brackets, and catch-all routes', async () => {
+    const complexPages = path.join(tempDir, 'complex-pages');
+    fs.mkdirSync(path.join(complexPages, '(marketing)'), { recursive: true });
+    fs.mkdirSync(path.join(complexPages, 'catalog', '[category]'), { recursive: true });
+    fs.mkdirSync(path.join(complexPages, 'docs', '[...slug]'), { recursive: true });
+
+    // 1. Route group (marketing) -> /about
+    fs.writeFileSync(
+      path.join(complexPages, '(marketing)', 'about.njk'),
+      '<h1>About Marketing</h1>'
+    );
+
+    // 2. Bracket parameter -> /catalog/:category/:id
+    fs.writeFileSync(
+      path.join(complexPages, 'catalog', '[category]', '[id].js'),
+      `module.exports = {
+        load: async (req) => ({ category: req.params.category, id: req.params.id })
+      };`
+    );
+    fs.writeFileSync(
+      path.join(complexPages, 'catalog', '[category]', '[id].njk'),
+      '<p>Item {{ category }} - {{ id }}</p>'
+    );
+
+    // 3. Catch-all route -> /docs/*
+    fs.writeFileSync(
+      path.join(complexPages, 'docs', '[...slug]', 'index.js'),
+      `module.exports = {
+        load: async (req) => ({ slug: req.params[0] || req.params.slug })
+      };`
+    );
+    fs.writeFileSync(
+      path.join(complexPages, 'docs', '[...slug]', 'index.njk'),
+      '<h1>Docs: {{ slug }}</h1>'
+    );
+
+    const { app } = createApp({ pagesDir: complexPages, viewsDir });
+
+    // Test route group URL
+    const resGroup = await request(app).get('/about');
+    expect(resGroup.status).toBe(200);
+    expect(resGroup.text).toContain('About Marketing');
+
+    // Test dynamic parameters
+    const resParams = await request(app).get('/catalog/electronics/macbook-pro');
+    expect(resParams.status).toBe(200);
+    expect(resParams.text).toContain('Item electronics - macbook-pro');
+
+    // Test catch-all route
+    const resCatchAll = await request(app).get('/docs/installation/guide');
+    expect(resCatchAll.status).toBe(200);
+    expect(resCatchAll.text).toContain('Docs: installation/guide');
+  });
 });
+

@@ -199,7 +199,7 @@ function csrfPlugin(options = {}) {
 
         if (!submitted || !safeCompare(submitted, csrfTokenValue)) {
           res.status(errorStatus);
-          if (req.accepts('html') && !req.path.startsWith('/api')) {
+          if (typeof req.accepts === 'function' && req.accepts('html') && !req.path.startsWith('/api')) {
             return res.send(`<h1>${errorStatus} Forbidden</h1><p>${errorMessage}</p>`);
           } else {
             return res.json({ error: errorMessage });
