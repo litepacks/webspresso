@@ -177,6 +177,22 @@ class QueryBuilder {
   }
 
   /**
+   * Add a WHERE NOT clause (col != val or multiple columns)
+   * @param {string|Object} column - Column name or object of { col: val }
+   * @param {*} [value] - Value to compare against
+   * @returns {this}
+   */
+  whereNot(column, value) {
+    if (typeof column === 'object' && column !== null) {
+      for (const [col, val] of Object.entries(column)) {
+        this.where(col, '!=', val);
+      }
+      return this;
+    }
+    return this.where(column, '!=', value);
+  }
+
+  /**
    * Add a WHERE NOT IN clause
    * @param {string} column - Column name
    * @param {Array} values - Values array
