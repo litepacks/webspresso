@@ -346,6 +346,194 @@ describe('OAuth 2.0 Core Module', () => {
           })
         ).rejects.toThrow(/provider mismatch/i);
       });
+
+      it('should handle callback validation errors and PKCE disabled authorization URL', async () => {
+        // Missing state
+        await expect(client.handleCallback('google', { code: '123' })).rejects.toMatchObject({
+          code: 'INVALID_STATE',
+        });
+
+        // Missing code
+        const { state } = client.getAuthorizationUrl('google');
+        await expect(client.handleCallback('google', { state })).rejects.toMatchObject({
+          code: 'MISSING_CODE',
+        });
+
+        // PKCE disabled
+        const noPkceAuth = client.getAuthorizationUrl('google', { pkce: false, scopes: 'email profile' });
+        expect(noPkceAuth.codeVerifier).toBeUndefined();
+        const parsedUrl = new URL(noPkceAuth.url);
+        expect(parsedUrl.searchParams.has('code_challenge')).toBe(false);
+        expect(parsedUrl.searchParams.get('scope')).toBe('email profile');
+
+        // Extra params appended
+        const extraAuth = client.getAuthorizationUrl('google', {
+          extraParams: { prompt: 'select_account', login_hint: 'user@example.com' },
+        });
+        const extraUrl = new URL(extraAuth.url);
+        expect(extraUrl.searchParams.get('login_hint')).toBe('user@example.com');
+      });
+
+      it('should handle token exchange edge cases (form-urlencoded, network error, OAuth errors)', async () => {
+        // Missing code
+        await expect(client.exchangeCode('google', { redirectUri: 'http://loc' })).rejects.toMatchObject({
+          code: 'MISSING_CODE',
+        });
+
+        // Missing redirectUri with no default
+        const bareClient = createOAuthClient({
+          secret: 'sec',
+          providers: { custom: { clientId: 'cid', clientSecret: 'cs', tokenUrl: 'http://test' } },
+        });
+        await expect(bareClient.exchangeCode('custom', { code: '123' })).rejects.toMatchObject({
+          code: 'MISSING_REDIRECT_URI',
+        });
+
+        // Network failure
+        global.fetch = vi.fn().mockRejectedValueOnce(new Error('Connection timeout'));
+        await expect(
+          client.exchangeCode('google', { code: 'c123', redirectUri: 'http://loc' })
+        ).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
+
+        // Non-JSON form-urlencoded token response
+        global.fetch = vi.fn().mockResolvedValueOnce({
+          ok: true,
+          headers: new Headers({ 'content-type': 'application/x-www-form-urlencoded' }),
+          text: async () => 'access_token=token_abc&token_type=bearer&expires_in=3600',
+        });
+        const urlEncodedTokens = await client.exchangeCode('google', { code: 'c123', redirectUri: 'http://loc' });
+        expect(urlEncodedTokens.access_token).toBe('token_abc');
+
+        // OAuth error response with error_description
+        global.fetch = vi.fn().mockResolvedValueOnce({
+          ok: false,
+          status: 400,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ error: 'invalid_grant', error_description: 'Code has expired' }),
+        });
+        await expect(
+          client.exchangeCode('google', { code: 'c123', redirectUri: 'http://loc' })
+        ).rejects.toMatchObject({ code: 'TOKEN_EXCHANGE_FAILED' });
+      });
+
+      it('should handle user profile fetch edge cases and default normalizer', async () => {
+        // Missing access token
+        await expect(client.fetchUserProfile('google', {})).rejects.toMatchObject({
+          code: 'MISSING_TOKEN',
+        });
+
+        // Network error on profile fetch
+        global.fetch = vi.fn().mockRejectedValueOnce(new Error('DNS resolution failed'));
+        await expect(
+          client.fetchUserProfile('google', { access_token: 'valid-token' })
+        ).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
+
+        // HTTP error response on profile fetch
+        global.fetch = vi.fn().mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          text: async () => 'Unauthorized token',
+        });
+        await expect(
+          client.fetchUserProfile('google', { access_token: 'bad-token' })
+        ).rejects.toMatchObject({ code: 'USER_FETCH_FAILED' });
+
+        // Provider without custom normalizeProfile
+        const simpleClient = createOAuthClient({
+          secret: 'sec',
+          providers: {
+            generic: {
+              clientId: 'cid',
+              clientSecret: 'cs',
+              userInfoUrl: 'https://api.generic.com/user',
+            },
+          },
+        });
+        global.fetch = vi.fn().mockResolvedValueOnce({
+          ok: true,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ id: 'usr_789', email: 'gen@example.com', name: 'Generic User' }),
+        });
+        const genericProfile = await simpleClient.fetchUserProfile('generic', { access_token: 'g-token' });
+        expect(genericProfile.id).toBe('usr_789');
+        expect(genericProfile.email).toBe('gen@example.com');
+      });
+
+      it('exercises default provider profile normalizers and GitHub fetchExtra edge cases', async () => {
+        // Google normalizeProfile variations
+        const googleNormalizer = DEFAULT_PROVIDERS.google.normalizeProfile;
+        const normalizedGoogle = googleNormalizer({
+          sub: 'g-sub',
+          email: 'g@test.com',
+          email_verified: 'true',
+          given_name: 'Alex',
+          family_name: 'Smith',
+        });
+        expect(normalizedGoogle.name).toBe('Alex Smith');
+        expect(normalizedGoogle.emailVerified).toBe(true);
+
+        const normalizedGoogleFallback = googleNormalizer({
+          id: 'g-id',
+          email: 'solo@test.com',
+        });
+        expect(normalizedGoogleFallback.name).toBe('solo@test.com');
+        expect(normalizedGoogleFallback.emailVerified).toBe(false);
+
+        // GitHub fetchExtra error fallback
+        const ghFetchExtra = DEFAULT_PROVIDERS.github.fetchExtra;
+        global.fetch = vi.fn().mockRejectedValueOnce(new Error('Network error'));
+        const extraResultErr = await ghFetchExtra({ access_token: 'tok' });
+        expect(extraResultErr).toBeNull();
+
+        global.fetch = vi.fn().mockResolvedValueOnce({ ok: false, status: 500 });
+        const extraResult500 = await ghFetchExtra({ access_token: 'tok' });
+        expect(extraResult500).toBeNull();
+
+        // GitHub normalizeProfile variations
+        const ghNormalizer = DEFAULT_PROVIDERS.github.normalizeProfile;
+        const ghNormNoExtra = ghNormalizer({ id: 99, login: 'dev', email: 'dev@test.com' });
+        expect(ghNormNoExtra.id).toBe('99');
+        expect(ghNormNoExtra.username).toBe('dev');
+        expect(ghNormNoExtra.email).toBe('dev@test.com');
+        expect(ghNormNoExtra.emailVerified).toBe(true);
+      });
+    });
+
+    describe('State token verification edge cases', () => {
+      it('rejects missing secret in createSignedState', () => {
+        expect(() => createSignedState({ foo: 'bar' }, null)).toThrow(/secret is required/i);
+      });
+
+      it('rejects invalid state parameters in verifySignedState', () => {
+        expect(() => verifySignedState(null, 'sec')).toThrow(/invalid or missing/i);
+        expect(() => verifySignedState(12345, 'sec')).toThrow(/invalid or missing/i);
+        expect(() => verifySignedState('no-dot-token', 'sec')).toThrow(/malformed/i);
+        expect(() => verifySignedState('a.b.c', 'sec')).toThrow(/malformed/i);
+
+        // Invalid JSON body
+        const badBody = Buffer.from('not-a-json', 'utf8').toString('base64url');
+        const hmac = crypto.createHmac('sha256', 'sec').update(badBody).digest('base64url');
+        expect(() => verifySignedState(`${badBody}.${hmac}`, 'sec')).toThrow(/failed to parse/i);
+
+        // Expired state
+        const expiredPayload = { timestamp: Date.now() - 100000 };
+        const expBody = Buffer.from(JSON.stringify(expiredPayload), 'utf8').toString('base64url');
+        const expSig = crypto.createHmac('sha256', 'sec').update(expBody).digest('base64url');
+        expect(() => verifySignedState(`${expBody}.${expSig}`, 'sec', 5000)).toThrow(/expired/i);
+      });
+
+      it('exercises provider registration and query edge cases', () => {
+        const client = createOAuthClient({});
+        expect(client.getProviderNames()).toEqual([]);
+
+        expect(() => client.getProvider('nonexistent')).toThrow(/not registered/i);
+
+        client.registerProvider('custom', { clientId: null });
+        expect(() => client.getProvider('custom')).toThrow(/requires clientid and clientsecret/i);
+
+        client.registerProvider('custom', { clientId: 'cid', clientSecret: 'cs' });
+        expect(() => client.getAuthorizationUrl('custom')).toThrow(/redirecturi is required/i);
+      });
     });
   });
 });

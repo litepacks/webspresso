@@ -7,6 +7,8 @@ const {
   mountPages,
   filePathToRoute,
   extractMethodFromFilename,
+  isRouteGroupSegment,
+  stripRouteGroups,
   scanDirectory,
   loadI18n,
   createTranslator,
@@ -17,6 +19,7 @@ const {
   applyPageAssetsToTemplateData,
   translatorCache,
   clearTranslatorCache,
+  translateValidationIssues,
 } = require('../../src/file-router');
 
 describe('file-router.js', () => {
@@ -382,6 +385,153 @@ describe('file-router.js', () => {
       
       expect(calls.some(c => c.includes('contains uppercase letters'))).toBe(true);
       expect(calls.some(c => c.includes('Dynamic route collision'))).toBe(true);
+    });
+  });
+
+  describe('Route Groups & Path Resolution', () => {
+    it('isRouteGroupSegment identifies valid route groups', () => {
+      expect(isRouteGroupSegment('(marketing)')).toBe(true);
+      expect(isRouteGroupSegment('(auth)')).toBe(true);
+      expect(isRouteGroupSegment('(dashboard)')).toBe(true);
+      expect(isRouteGroupSegment('()')).toBe(false);
+      expect(isRouteGroupSegment('(a')).toBe(false);
+      expect(isRouteGroupSegment('a)')).toBe(false);
+      expect(isRouteGroupSegment('about')).toBe(false);
+      expect(isRouteGroupSegment(null)).toBe(false);
+      expect(isRouteGroupSegment(undefined)).toBe(false);
+      expect(isRouteGroupSegment(123)).toBe(false);
+    });
+
+    it('stripRouteGroups removes group segments from paths', () => {
+      expect(stripRouteGroups('(marketing)/about')).toBe('about');
+      expect(stripRouteGroups('/(auth)/login')).toBe('/login');
+      expect(stripRouteGroups('/(marketing)/(v1)/pricing')).toBe('/pricing');
+      expect(stripRouteGroups('(marketing)/index')).toBe('index');
+      expect(stripRouteGroups('/(marketing)')).toBe('/');
+      expect(stripRouteGroups('plain/route')).toBe('plain/route');
+      expect(stripRouteGroups('')).toBe('');
+      expect(stripRouteGroups(null)).toBeNull();
+    });
+
+    it('filePathToRoute strips route groups across pages and API paths', () => {
+      expect(filePathToRoute('(marketing)/about.njk', '.njk')).toBe('/about');
+      expect(filePathToRoute('(auth)/login/index.njk', '.njk')).toBe('/login');
+      expect(filePathToRoute('(marketing)/index.njk', '.njk')).toBe('/');
+      expect(filePathToRoute('(admin)/(settings)/profile.njk', '.njk')).toBe('/profile');
+      expect(filePathToRoute('api/(v1)/users.js', '.js')).toBe('/api/users');
+    });
+  });
+
+  describe('Route Registration Order & Meta', () => {
+    it('computes routeRegistrationMeta tiers and segment counts', () => {
+      const staticMeta = routeRegistrationMeta('/api/users/profile');
+      expect(staticMeta.tier).toBe(0);
+      expect(staticMeta.literalSegCount).toBe(3);
+      expect(staticMeta.paramSegCount).toBe(0);
+      expect(staticMeta.depth).toBe(3);
+
+      const paramMeta = routeRegistrationMeta('/api/users/:id');
+      expect(paramMeta.tier).toBe(1);
+      expect(paramMeta.literalSegCount).toBe(2);
+      expect(paramMeta.paramSegCount).toBe(1);
+
+      const starMeta = routeRegistrationMeta('/docs/*rest');
+      expect(starMeta.tier).toBe(2);
+    });
+
+    it('orders static routes before dynamic and dynamic before wildcards', () => {
+      const routes = [
+        { routePath: '/docs/*rest' },
+        { routePath: '/users/:id' },
+        { routePath: '/users/me' },
+        { routePath: '/users' },
+      ];
+
+      routes.sort(compareRouteRegistrationOrder);
+
+      expect(routes[0].routePath).toBe('/users/me'); // Static specific
+      expect(routes[1].routePath).toBe('/users');    // Static
+      expect(routes[2].routePath).toBe('/users/:id'); // Dynamic (tier 1)
+      expect(routes[3].routePath).toBe('/docs/*rest'); // Wildcard (tier 2)
+    });
+  });
+
+  describe('applyPageAssetsToTemplateData with Auto Discovery', () => {
+    it('discovers route css and js via assetManager without duplicates', () => {
+      const mockAssetManager = {
+        getRouteAssetCandidates: vi.fn().mockReturnValue(['about', 'about/index']),
+        hasPageCss: vi.fn((c) => c === 'about'),
+        pageCssUrl: vi.fn((c) => `/assets/pages/${c}.css`),
+        hasPageJs: vi.fn((c) => c === 'about'),
+        pageJsUrl: vi.fn((c) => `/assets/pages/${c}.js`),
+      };
+
+      const result = applyPageAssetsToTemplateData(
+        { enabled: true, stylesheets: true, scripts: true, auto: true },
+        { title: 'About' },
+        { file: 'about.njk', routePath: '/about' },
+        mockAssetManager
+      );
+
+      expect(result.pageAssets).toBe(true);
+      expect(result.pageHead.stylesheets).toContain('/assets/pages/about.css');
+      expect(result.pageHead.scripts).toEqual([{ src: '/assets/pages/about.js', defer: true }]);
+    });
+  });
+
+  describe('Locale Detection & Translator', () => {
+    it('detects locale from query, accept-language header, or fallback', () => {
+      const supported = new Set(['en', 'tr']);
+
+      // Query parameter
+      expect(detectLocale({ query: { lang: 'tr' } }, supported)).toBe('tr');
+
+      // Accept-language header
+      expect(
+        detectLocale(
+          { headers: { 'accept-language': 'tr-TR,tr;q=0.9,en;q=0.8' } },
+          supported
+        )
+      ).toBe('tr');
+
+      // Fallback to default
+      expect(detectLocale({ headers: {} }, supported, 'en')).toBe('en');
+    });
+
+    it('creates a translator that resolves nested keys, double-brace parameters, and pluralization', () => {
+      const translations = {
+        nav: { home: 'Anasayfa' },
+        welcome: 'Hello {{name}}, you have {{count}} messages',
+        items: {
+          zero: 'No items',
+          one: '1 item',
+          other: '{{count}} items',
+        },
+      };
+
+      const t = createTranslator(translations, { locale: 'en' });
+      expect(t('nav.home')).toBe('Anasayfa');
+      expect(t('welcome', { name: 'Alice', count: 5 })).toBe('Hello Alice, you have 5 messages');
+      expect(t('items', { count: 0 })).toBe('No items');
+      expect(t('items', { count: 1 })).toBe('1 item');
+      expect(t('items', { count: 42 })).toBe('42 items');
+      expect(t('missing.key', 'Fallback value')).toBe('Fallback value');
+
+      // Number and currency helpers
+      expect(typeof t.formatNumber(1234)).toBe('string');
+      expect(typeof t.formatCurrency(50, 'USD')).toBe('string');
+      expect(typeof t.formatDate(new Date())).toBe('string');
+    });
+
+    it('translates validation issues into user-friendly messages', () => {
+      const t = (key) => (key === 'validation.required' ? 'Zorunlu alan' : key);
+      const issues = [
+        { path: ['email'], message: 'Required', code: 'invalid_type', received: 'undefined' },
+      ];
+
+      const translated = translateValidationIssues(issues, t);
+      expect(translated).toBeDefined();
+      expect(Array.isArray(translated)).toBe(true);
     });
   });
 });
