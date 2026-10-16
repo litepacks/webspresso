@@ -612,7 +612,7 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
             next(new Error('Timeout Error'));
           });
           a.get('/test-aborted-socket', (req, res, next) => {
-            req.socket = { destroyed: true };
+            req.aborted = true;
             next(new RequestAbortedError('Socket destroyed'));
           });
           a.get('/test-http-custom-headers', (req, res, next) => {

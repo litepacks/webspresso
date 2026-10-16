@@ -1,4 +1,4 @@
-const { createRecaptchaMiddleware } = require('../../plugins/recaptcha/middleware');
+const { createRecaptchaMiddleware } = require('../../../plugins/recaptcha/middleware');
 
 describe('reCAPTCHA Express Middleware (plugins/recaptcha/middleware)', () => {
   afterEach(() => {

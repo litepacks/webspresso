@@ -2,13 +2,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import fs from 'fs';
 import request from 'supertest';
-import { createApp, defineApi } from '../../index';
+import { createApp, defineApi } from '../../../index';
 import {
   translateSingleIssue,
   translateValidationIssues,
   getTranslatorForRequest,
-} from '../../src/api/validation-i18n';
-import { createTranslator } from '../../src/file-router';
+} from '../../../src/api/validation-i18n';
+import { createTranslator } from '../../../src/file-router';
 
 describe('API Validation i18n & Error Translation', () => {
   describe('translateSingleIssue Unit Tests', () => {
@@ -186,7 +186,7 @@ describe('API Validation i18n & Error Translation', () => {
   });
 
   describe('Full HTTP Integration with createApp & defineApi', () => {
-    const tempDir = path.join(__dirname, '../fixtures/temp-api-i18n-test');
+    const tempDir = path.join(__dirname, '../../fixtures/temp-api-i18n-test');
     let origSupported;
 
     beforeEach(() => {
@@ -231,7 +231,7 @@ describe('API Validation i18n & Error Translation', () => {
       fs.writeFileSync(
         path.join(tempDir, 'pages', 'api', 'register.post.js'),
         `
-        const { defineApi } = require('${path.resolve(__dirname, '../../index')}');
+        const { defineApi } = require('${path.resolve(__dirname, '../../../index')}');
 
         module.exports = defineApi({
           schema: ({ z }) => ({

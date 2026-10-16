@@ -5,7 +5,7 @@ const {
   recaptchaScriptTag,
   recaptchaV2WidgetHtml,
   recaptchaV3ExecuteScript,
-} = require('../../plugins/recaptcha/helpers');
+} = require('../../../plugins/recaptcha/helpers');
 
 describe('recaptcha helpers', () => {
   it('recaptchaScriptTag adds render query when given', () => {

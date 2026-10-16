@@ -143,9 +143,10 @@ function generateRouteManifest(options = {}) {
  * @returns {{ manifest: Object, descriptors: Array<Object> }|null}
  */
 function loadRouteManifest(options = {}) {
-  const rootDir = options.rootDir ? path.resolve(options.rootDir) : process.cwd();
-  const manifestPath = options.manifestPath
-    ? path.resolve(options.manifestPath)
+  const opts = typeof options === 'string' ? { manifestPath: options } : options;
+  const rootDir = opts.rootDir ? path.resolve(opts.rootDir) : process.cwd();
+  const manifestPath = opts.manifestPath
+    ? path.resolve(opts.manifestPath)
     : path.join(rootDir, DEFAULT_MANIFEST_REL_PATH);
 
   if (!fs.existsSync(manifestPath)) {
