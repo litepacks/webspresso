@@ -4,8 +4,6 @@
  */
 
 const os = require('os');
-const { z } = require('zod');
-const { cleanExpiredTokens, createKnexAuthTokensAdapter } = require('../../../core/auth/tokens');
 
 /**
  * Format memory usage bytes into human-readable MB
@@ -29,7 +27,7 @@ function createSystemServices(options = {}) {
 
   return {
     'system.health': {
-      schema: z.object({
+      schema: ({ z }) => z.object({
         detailed: z.boolean().default(false),
       }),
       async handler(input, ctx) {
@@ -81,7 +79,7 @@ function createSystemServices(options = {}) {
     },
 
     'system.cleanup': {
-      schema: z.object({
+      schema: ({ z }) => z.object({
         olderThanDays: z.number().int().positive().default(90),
         purgeAuthTokens: z.boolean().default(true),
         purgeAuditLogs: z.boolean().default(true),
@@ -138,7 +136,7 @@ function createSystemServices(options = {}) {
     },
 
     'system.cache-flush': {
-      schema: z.object({
+      schema: ({ z }) => z.object({
         scope: z.enum(['all', 'orm', 'services']).default('all'),
         model: z.string().optional(),
       }),
@@ -182,7 +180,7 @@ function createSystemServices(options = {}) {
     },
 
     'system.info': {
-      schema: z.object({}),
+      schema: ({ z }) => z.object({}),
       auth: 'admin',
       async handler(input, ctx) {
         const activeDb = ctx.db || db;

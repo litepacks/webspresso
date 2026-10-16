@@ -6,9 +6,11 @@
  * @module src/api/api-loader
  */
 
+const path = require('path');
 const { ZodError } = require('zod');
 const { z: zForApi } = require('../../core/validation');
 const { resolveMiddlewares } = require('../file-router');
+const { translateValidationIssues, getTranslatorForRequest } = require('./validation-i18n');
 
 /**
  * Compiles a schema definition from an API module
@@ -147,9 +149,17 @@ function createApiHandler(descriptor, context) {
           validateRequestInput(req, compiledSchema);
         } catch (err) {
           if (err instanceof ZodError || err.name === 'ZodError' || Array.isArray(err?.issues)) {
+            const pagesDir = context.pagesDir || appOptions.pagesDir || 'pages';
+            const routeDir = descriptor.file ? path.dirname(descriptor.file) : '';
+            const translatedIssues = translateValidationIssues(err.issues, {
+              req,
+              pagesDir,
+              routeDir,
+              isDev,
+            });
             return res.status(400).json({
               error: 'Validation Error',
-              issues: err.issues,
+              issues: translatedIssues,
             });
           }
           throw err;
@@ -185,6 +195,10 @@ function createApiHandler(descriptor, context) {
       }
 
       // 5. Execute handler
+      const pagesDir = context.pagesDir || appOptions.pagesDir || 'pages';
+      const routeDir = descriptor.file ? path.dirname(descriptor.file) : '';
+      const tr = getTranslatorForRequest(req, { pagesDir, routeDir, isDev });
+
       const apiCtx = {
         req,
         res,
@@ -192,6 +206,8 @@ function createApiHandler(descriptor, context) {
         query: req.query || {},
         body: req.body || {},
         input: req.input,
+        locale: tr.locale,
+        t: tr.t,
         service: (name, input, opts) =>
           serviceRegistry ? serviceRegistry.call(name, input, { req, res, db }, opts) : null,
         module: descriptor.module || null,

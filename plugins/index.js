@@ -61,6 +61,8 @@ module.exports = {
   get createApiKeyMiddleware() { return require('./api-key').createApiKeyMiddleware; },
   get webhooksPlugin() { return require('./webhooks').webhooksPlugin; },
   get WebhookDispatcher() { return require('./webhooks').WebhookDispatcher; },
+  get lazyPlugin() { return require('./lazy').lazyPlugin; },
+  get defineLazyPlugin() { return require('./lazy').defineLazyPlugin; },
 };
 
 

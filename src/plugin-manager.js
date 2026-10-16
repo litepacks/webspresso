@@ -669,6 +669,18 @@ class PluginManager {
    * Get a plugin's API by name
    */
   getPluginAPI(name) {
+    const plugin = this.plugins.get(name);
+    if (plugin && plugin.isLazy && typeof plugin.hydrate === 'function' && !plugin.isHydrated) {
+      const real = plugin.hydrate();
+      if (real && real.api) {
+        const boundAPI = {};
+        for (const [key, value] of Object.entries(real.api)) {
+          boundAPI[key] = typeof value === 'function' ? value.bind(real) : value;
+        }
+        this.pluginAPIs.set(name, boundAPI);
+      }
+      return this.pluginAPIs.get(name) || (real && real.api) || plugin.api;
+    }
     return this.pluginAPIs.get(name);
   }
 

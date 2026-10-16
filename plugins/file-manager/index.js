@@ -44,7 +44,20 @@ function fileManagerPlugin(options = {}) {
     permissions = null,
     security: securityOpts = { validateMagicBytes: true, sanitizeSvg: true },
     includePage = true,
+    lazy: lazyOption,
   } = options;
+
+  if (lazyOption) {
+    const { lazyPlugin } = require('../lazy');
+    const lazyOpts = typeof lazyOption === 'object' ? lazyOption : {};
+    return lazyPlugin(() => fileManagerPlugin({ ...options, lazy: false }), {
+      name: 'file-manager',
+      prefix: apiPrefix,
+      services: ['file-manager.list', 'file-manager.upload', 'file-manager.delete', 'file-manager.create-folder'],
+      dependencies: { 'admin-panel': '*' },
+      ...lazyOpts,
+    });
+  }
 
   const resolvedBaseDir = path.resolve(baseDir);
 

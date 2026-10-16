@@ -125,12 +125,12 @@ class ServiceRegistry {
    * @param {Object|Function} definition - Service definition or handler function
    * @returns {ServiceRegistry}
    */
-  register(name, definition) {
+  register(name, definition, options = {}) {
     if (!name || typeof name !== 'string') {
       throw new WebspressoError('Service name must be a non-empty string');
     }
 
-    if (this.services.has(name)) {
+    if (this.services.has(name) && !options.overwrite) {
       throw new ConfigurationError(`Duplicate service registered: ${name}`);
     }
 
@@ -168,6 +168,16 @@ class ServiceRegistry {
 
     this.services.set(name, serviceDef);
     return this;
+  }
+
+  /**
+   * Unregister a service by name
+   * @param {string} name - Service name
+   * @returns {boolean} Whether service was found and removed
+   */
+  unregister(name) {
+    if (!name || typeof name !== 'string') return false;
+    return this.services.delete(name);
   }
 
   /**

@@ -49,8 +49,25 @@ function applySchema(req, compiledSchema) {
   }
 }
 
+let _translateValidationIssues = null;
+function getTranslateValidationIssues() {
+  if (!_translateValidationIssues) {
+    try {
+      _translateValidationIssues = require('../src/api/validation-i18n').translateValidationIssues;
+    } catch {
+      _translateValidationIssues = (issues) => issues;
+    }
+  }
+  return _translateValidationIssues;
+}
+
+function translateValidationIssues(issues, options) {
+  return getTranslateValidationIssues()(issues, options);
+}
+
 module.exports = {
-  applySchema
+  applySchema,
+  translateValidationIssues,
 };
 
 

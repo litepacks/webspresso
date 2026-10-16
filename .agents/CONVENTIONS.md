@@ -44,3 +44,7 @@
    - **ALWAYS** use published `package.json` export paths: `require('webspresso/core/auth')`, `require('webspresso/core/orm')`, `require('webspresso/plugins/polar/src/webhooks')`.
    - **NEVER** rely on deep relative paths from `node_modules/webspresso/...` or append `/index.js` unless documenting a pre-0.0.95 workaround.
    - Smoke test: `tests/unit/package-exports.test.js`.
+14. **Tailwind CSS v4 Standard (NO v3 PostCSS Boilerplate)**:
+   - **ALWAYS** prefer Tailwind CSS v4 using `npx webspresso add tailwind --v4` (powered by Oxide and `@tailwindcss/cli`).
+   - **ALWAYS** use CSS-first `@import "tailwindcss";` in `src/input.css` and compile to `public/css/style.css`.
+   - **NEVER** create redundant `tailwind.config.js` or `postcss.config.js` files unless custom legacy PostCSS plugins are specifically required.

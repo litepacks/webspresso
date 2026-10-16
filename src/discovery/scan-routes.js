@@ -13,28 +13,46 @@ const { discoverModuleDetails } = require('../modules/module-discovery');
 
 const SUPPORTED_EXTENSIONS = new Set(['.js', '.njk']);
 
+function getGenericSegment(name) {
+  if (name.startsWith('[') && name.endsWith(']')) {
+    const inner = name.slice(1, -1);
+    if (inner.startsWith('...')) return '*';
+    return ':param';
+  }
+  return name;
+}
+
 /**
  * Safely scans a directory recursively for route files
  * @param {string} dirPath - Absolute directory path
  * @param {string} [baseDir=dirPath] - Base directory for computing relative paths
+ * @param {boolean} [checkWarnings=false] - Whether to perform route collision & case-sensitivity checks
  * @returns {Array<{ absolutePath: string, relativePath: string }>}
  */
-function scanDirSafely(dirPath, baseDir = dirPath) {
+function scanDirSafely(dirPath, baseDir = dirPath, checkWarnings = false) {
   const results = [];
   if (!fs.existsSync(dirPath)) return results;
 
   try {
     const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    const kept = checkWarnings ? [] : null;
 
     for (const entry of entries) {
       const name = entry.name;
-      if (isPrivateOrIgnored(name)) continue;
+      if (name === 'locales' || isPrivateOrIgnored(name)) continue;
 
       const fullPath = path.join(dirPath, name);
       const relPath = path.relative(baseDir, fullPath);
 
+      if (checkWarnings && name !== name.toLowerCase()) {
+        console.warn(`[webspresso] WARNING: Path "pages/${relPath.split(path.sep).join('/')}" contains uppercase letters. Use lowercase to avoid routing issues on case-sensitive filesystems.`);
+      }
+
       if (entry.isDirectory()) {
-        results.push(...scanDirSafely(fullPath, baseDir));
+        results.push(...scanDirSafely(fullPath, baseDir, checkWarnings));
+        if (checkWarnings && !relPath.startsWith('api') && relPath !== 'api') {
+          kept.push({ name, isDir: true, original: name });
+        }
       } else if (entry.isFile()) {
         const ext = path.extname(name);
         if (SUPPORTED_EXTENSIONS.has(ext)) {
@@ -42,6 +60,30 @@ function scanDirSafely(dirPath, baseDir = dirPath) {
             absolutePath: fullPath,
             relativePath: relPath,
           });
+          if (checkWarnings) {
+            const base = path.basename(name, ext);
+            kept.push({ name: base, isDir: false, original: name });
+          }
+        }
+      }
+    }
+
+    if (checkWarnings && kept && kept.length > 1) {
+      const groups = new Map();
+      for (const item of kept) {
+        const normalized = getGenericSegment(item.name);
+        if (!groups.has(normalized)) {
+          groups.set(normalized, []);
+        }
+        groups.get(normalized).push(item);
+      }
+
+      for (const [norm, items] of groups.entries()) {
+        if (items.length > 1) {
+          const namesList = items.map((item) => `"${item.original}"`).join(' and ');
+          const relDir = path.relative(baseDir, dirPath);
+          const dirLabel = relDir ? `pages/${relDir.split(path.sep).join('/')}` : 'pages';
+          console.warn(`[webspresso] WARNING: Dynamic route collision in "${dirLabel}": ${namesList} resolve to the same segment "${norm}" and will conflict at runtime.`);
         }
       }
     }
@@ -93,8 +135,11 @@ function scanRoutes(options = {}) {
       : resolveDirCandidate(['src/pages', 'pages']);
 
     if (pagesDir && fs.existsSync(pagesDir)) {
-      const files = scanDirSafely(pagesDir);
+      const files = scanDirSafely(pagesDir, pagesDir, true);
       const filesSet = new Set(files.map((f) => f.absolutePath));
+
+      descriptors.scannedPagesDir = path.resolve(pagesDir);
+      descriptors.scannedPagesFiles = files.map((f) => f.relativePath);
 
       for (const { absolutePath, relativePath } of files) {
         // Skip .njk templates (handled by classic Nunjucks mountPages)
@@ -268,7 +313,28 @@ function scanRoutes(options = {}) {
   return descriptors;
 }
 
+/**
+ * Unified discovery of application routes (pages, api, modules) and compilation into a RouteTable
+ * @param {Object} options
+ * @returns {{ descriptors: Array<Object>, routeTable: import('../routing/route-table').RouteTable, scannedPagesFiles: Array<string>, scannedPagesDir: string|null }}
+ */
+function discoverAppRoutes(options = {}) {
+  const { compileRouteTable } = require('../routing/route-table');
+  const descriptors = scanRoutes(options);
+  const routeTable = compileRouteTable(descriptors, {
+    explicitRoutes: options.routes || [],
+    isDev: options.isDev,
+  });
+  return {
+    descriptors,
+    routeTable,
+    scannedPagesFiles: descriptors.scannedPagesFiles || [],
+    scannedPagesDir: descriptors.scannedPagesDir || null,
+  };
+}
+
 module.exports = {
   scanRoutes,
   scanDirSafely,
+  discoverAppRoutes,
 };

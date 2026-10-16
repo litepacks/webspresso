@@ -85,10 +85,10 @@ module.exports = definePage({
 {% extends "layout.njk" %}
 
 {% block content %}
-<div class="product-page">
-  <h1>{{ product.name }}</h1>
-  <p class="price">{{ fsy.formatCurrency(product.price) }}</p>
-  <p>{{ product.description }}</p>
+<div class="max-w-4xl mx-auto p-6 bg-white dark:bg-gray-900 rounded-xl shadow-sm">
+  <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ product.name }}</h1>
+  <p class="text-lg font-semibold text-emerald-600 mt-2">{{ fsy.formatCurrency(product.price) }}</p>
+  <p class="text-gray-600 dark:text-gray-300 mt-4 leading-relaxed">{{ product.description }}</p>
 </div>
 {% endblock %}
 ```

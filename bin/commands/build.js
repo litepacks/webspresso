@@ -15,6 +15,8 @@ function registerCommand(program) {
     .description('Build production assets (Tailwind CSS and esbuild JS with manifest.json)')
     .option('--no-css', 'Skip CSS build')
     .option('--no-js', 'Skip JS bundle build')
+    .option('--no-routes', 'Skip generating AOT route manifest')
+    .option('--no-templates', 'Skip precompiling Nunjucks templates')
     .option('--no-hash', 'Disable content hashing in asset filenames')
     .action(async (options = {}) => {
       const cwd = process.cwd();
@@ -33,6 +35,8 @@ function registerCommand(program) {
 
       let cssBuilt = false;
       let jsBuilt = false;
+      let routesBuilt = false;
+      let routeCount = 0;
 
       // 1. Build CSS (Tailwind)
       if (options.css !== false) {
@@ -90,9 +94,39 @@ function registerCommand(program) {
         }
       }
 
+      // 3. Build AOT Route Manifest (.webspresso/routes.manifest.json)
+      if (options.routes !== false) {
+        try {
+          const { generateRouteManifest } = require('../../src/discovery/route-manifest');
+          const result = generateRouteManifest({ rootDir: cwd });
+          routesBuilt = true;
+          routeCount = result.routeCount;
+          console.log(`🗺️  AOT route manifest generated (${result.routeCount} routes) at: ${path.relative(cwd, result.manifestPath)}`);
+        } catch (err) {
+          console.error('❌ Route manifest generation failed:', err.message);
+        }
+      }
+
+      // 4. Precompile Nunjucks Templates (.webspresso/templates.compiled.js)
+      let templatesBuilt = false;
+      let templateCount = 0;
+      if (options.templates !== false) {
+        try {
+          const { precompileTemplates } = require('../../src/template/precompile');
+          const result = precompileTemplates({ rootDir: cwd });
+          templatesBuilt = true;
+          templateCount = result.templateCount;
+          console.log(`📑 Precompiled Nunjucks templates (${result.templateCount} templates) at: ${path.relative(cwd, result.manifestPath)}`);
+        } catch (err) {
+          console.error('❌ Template precompilation failed:', err.message);
+        }
+      }
+
       console.log('\n✨ Asset build complete!\n');
       if (cssBuilt) console.log('  ✓ CSS: public/css/style.css');
       if (jsBuilt) console.log('  ✓ JS: public/dist/ & manifest.json');
+      if (routesBuilt) console.log(`  ✓ Routes: .webspresso/routes.manifest.json (${routeCount} routes)`);
+      if (templatesBuilt) console.log(`  ✓ Templates: .webspresso/templates.compiled.js (${templateCount} templates)`);
     });
 }
 

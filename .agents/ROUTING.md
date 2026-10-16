@@ -119,6 +119,73 @@ module.exports = {
 > [!IMPORTANT]
 > **NEVER use raw Knex queries** like `req.db('notes')` in route handlers. **ALWAYS use repositories**: `req.db.getRepository('Note')`. This guarantees schema validation, lifecycle hooks, soft deletes, and query caching are respected.
 
+### 2.1 Smart API Validation i18n & Error Translation
+
+Webspresso features built-in **Smart Dual-Layer Auto-Translation** for Zod schema validation errors with **zero runtime overhead on valid requests**.
+
+#### How It Works:
+1. **Explicit Custom Keys**: Define dictionary translation keys directly inside Zod schemas (e.g. `z.string({ message: 'auth.email_required' })` or `z.string().min(5, 'auth.password_min')`).
+2. **Dynamic Fallbacks**: If no explicit key is matched, the engine falls back to convention-based candidate keys:
+   - `validation.fields.<field>.<code/type>` (e.g., `validation.fields.email.invalid_string`)
+   - `validation.<code/type>` (e.g., `validation.too_small`, `validation.required`, `validation.invalid_string.email`)
+   - `zod.<code/type>`
+3. **Parameter Interpolation**: Dynamic schema parameters (e.g. `{{ min }}`, `{{ max }}`, `{{ expected }}`, `{{ received }}`) are automatically interpolated into translated messages or inline custom template strings.
+4. **Context Injection**: `apiCtx` provides `{ locale, t, service, db, sse }` to route handlers for immediate localized responses.
+
+#### Example Usage:
+
+```json
+// pages/locales/tr.json
+{
+  "auth": {
+    "email_required": "Lütfen geçerli bir e-posta adresi giriniz"
+  },
+  "validation": {
+    "required": "Bu alan zorunludur",
+    "too_small": "En az {{ min }} karakter olmalıdır"
+  }
+}
+```
+
+```javascript
+// pages/api/auth/register.post.js
+'use strict';
+const { defineApi } = require('webspresso');
+
+module.exports = defineApi({
+  schema: ({ z }) => ({
+    body: z.object({
+      // Explicit dictionary translation key
+      email: z.string({ message: 'auth.email_required' }).email(),
+      // Automatic fallback to validation.too_small with {{ min }} interpolation
+      password: z.string().min(8),
+    }),
+  }),
+  handler: async (req, res, { t, locale }) => {
+    // req.locale and t() are injected into handler context
+    return res.status(201).json({
+      success: true,
+      message: t('auth.registered_success', { email: req.input.body.email }),
+    });
+  },
+});
+```
+
+Client requests sending `Accept-Language: tr` or query param `?lang=tr` will automatically receive fully localized validation errors in the 400 Bad Request response:
+```json
+{
+  "error": "Validation failed",
+  "issues": [
+    {
+      "field": "password",
+      "code": "too_small",
+      "key": "validation.too_small",
+      "message": "En az 8 karakter olmalıdır"
+    }
+  ]
+}
+```
+
 ---
 
 ## 3. Dynamic Route Parameters (`[param]`)
@@ -326,7 +393,37 @@ const routeList = app.routes.list();
 // ]
 ```
 
-### 6.5 Server-Sent Events (SSE) Streaming (`res.sse`)
+### 6.5 Cold Start & High-Performance Routing Architecture
+
+Webspresso incorporates multi-tier optimizations to ensure sub-millisecond cold starts in production and instant dev-server boot times:
+
+#### 1. Single-Pass Unified Route Discovery (`discoverAppRoutes`)
+Instead of performing multiple independent directory traversals, `discoverAppRoutes(rootDir, options)` discovers Page routes, API routes, and Route Groups in a single traversal pass:
+```javascript
+const { discoverAppRoutes } = require('webspresso');
+
+const { routeTable, pageRoutes, apiRoutes } = discoverAppRoutes(__dirname);
+```
+Passing `discoveredRoutes` to `createApp({ discoveredRoutes })` skips internal discovery completely.
+
+#### 2. Dev-Mode On-Demand (JIT) Route Evaluation (`lazyRoutes: true`)
+In development (`NODE_ENV !== 'production'`), `lazyRoutes: true` is enabled by default:
+- Route paths and HTTP methods are registered immediately with lightweight proxy handlers.
+- Route handler modules (`pages/**/*.js` / `pages/api/**/*.js`) are required and evaluated **on-demand on the first incoming HTTP request**.
+- Result: Dev server boots in ~15ms even in applications with hundreds of routes.
+- Can be explicitly controlled via `createApp({ lazyRoutes: false })` to force eager evaluation.
+
+#### 3. Production Ahead-of-Time (AOT) Route Manifest (`routes.manifest.json`)
+For maximum production performance, compile your route table during the build step:
+```bash
+npx webspresso build
+```
+This generates `.webspresso/routes.manifest.json`. When `createApp({ routesManifest: true })` is used (or when `.webspresso/routes.manifest.json` exists in `NODE_ENV === 'production'`), Webspresso:
+- Bypasses filesystem directory scanning (`pages/`) entirely.
+- Bypasses regex path compilation and route sorting at boot.
+- Instantly binds pre-sorted routes from the manifest.
+
+### 6.6 Server-Sent Events (SSE) Streaming (`res.sse`)
 For real-time event streaming and LLM token outputs, use the native `res.sse()` helper (or `{ sse }` from `ctx`):
 
 ```javascript
@@ -352,7 +449,7 @@ module.exports = defineApi({
 });
 ```
 
-### 6.6 Cascading Middleware (`_middleware.js`) & Nested Layouts (`_layout.njk`)
+### 6.7 Cascading Middleware (`_middleware.js`) & Nested Layouts (`_layout.njk`)
 
 Webspresso supports folder-level cascading middleware inheritance and nested layouts across directory trees:
 

@@ -22,8 +22,10 @@ build/
 .output/
 .cache/
 .vite/
+.webspresso/
 *.tsbuildinfo
 *.tgz
+public/css/style.css
 
 # Logs & PIDs
 logs/

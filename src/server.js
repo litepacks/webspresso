@@ -24,6 +24,8 @@ const { registerClearHook } = require('./njk-frontmatter');
 const { createPluginManager } = require('./plugin-manager');
 const { createServiceRegistry } = require('./services');
 const { scanRoutes } = require('./discovery/scan-routes');
+const { loadRouteManifest } = require('./discovery/route-manifest');
+const { loadPrecompiledTemplates } = require('./template/precompile');
 const { compileRouteTable } = require('./routing/route-table');
 const { mountDiscoveredRoutes } = require('./routing/mount-discovered-routes');
 const { discoverModuleDetails } = require('./modules/module-discovery');
@@ -106,6 +108,13 @@ function canonicalTemplateKey(name) {
 
 function configureSafeNunjucks(templateDirs, options = {}) {
   const env = nunjucks.configure(templateDirs, options);
+  if (options.precompiledLoader && Array.isArray(env.loaders)) {
+    options.precompiledLoader.cache = options.precompiledLoader.cache || {};
+    env.loaders.unshift(options.precompiledLoader);
+    if (typeof env._initLoaders === 'function') {
+      env._initLoaders();
+    }
+  }
   const origGetTemplate = env.getTemplate.bind(env);
   const origRender = env.render.bind(env);
   const origRenderString = env.renderString.bind(env);
@@ -699,6 +708,7 @@ function createApp(options = {}) {
   
   const app = express();
   app.serviceRegistry = serviceRegistry;
+  app.pluginManager = pluginManager;
   app.events = eventDispatcher;
   if (options.queue) {
     app.queue = options.queue;
@@ -1286,12 +1296,29 @@ function createApp(options = {}) {
     templateDirs.push(path.join(rootDir, 'pages'));
   }
   
+  // Load precompiled Nunjucks templates if enabled or available
+  let precompiledResult = null;
+  const usePrecompiled = options.precompiledTemplates === true ||
+    (typeof options.precompiledTemplates === 'string') ||
+    (options.precompiledTemplates !== false && !isDev);
+
+  if (usePrecompiled) {
+    precompiledResult = loadPrecompiledTemplates({
+      rootDir,
+      bundlePath: typeof options.precompiledTemplates === 'string' ? options.precompiledTemplates : undefined,
+    });
+    if (precompiledResult) {
+      app.precompiledTemplates = precompiledResult.bundle;
+    }
+  }
+
   const nunjucksOpts = options.nunjucks || {};
   const nunjucksEnv = configureSafeNunjucks(templateDirs, {
     autoescape: true,
     express: app,
     watch: isDev && !isTest,
     noCache: nunjucksOpts.noCache ?? (isDev || isTest),
+    precompiledLoader: precompiledResult ? precompiledResult.loader : null,
     ...nunjucksOpts,
   });
 
@@ -1381,13 +1408,35 @@ function createApp(options = {}) {
     app.use(profilerMiddleware);
   }
   
-  // 1. Scan and compile discovered routes (src/pages, src/api, modules/*)
-  const discoveredDescriptors = scanRoutes({
-    rootDir,
-    pages: options.pages !== undefined ? options.pages : (options.pagesDir ? { dir: options.pagesDir } : true),
-    api: options.api,
-    modules: options.modules,
-  });
+  // 1. Scan and compile discovered routes (AOT route manifest or disk scan)
+  let discoveredDescriptors = null;
+  let loadedManifest = null;
+
+  // In production (or when explicitly requested/enabled via options.routesManifest), attempt loading AOT manifest
+  const useManifest = options.routesManifest === true ||
+    (typeof options.routesManifest === 'string') ||
+    (options.routesManifest !== false && !isDev);
+
+  if (useManifest) {
+    const manifestResult = loadRouteManifest({
+      rootDir,
+      manifestPath: typeof options.routesManifest === 'string' ? options.routesManifest : undefined,
+    });
+    if (manifestResult) {
+      discoveredDescriptors = manifestResult.descriptors;
+      loadedManifest = manifestResult.manifest;
+      app.routesManifest = loadedManifest;
+    }
+  }
+
+  if (!discoveredDescriptors) {
+    discoveredDescriptors = scanRoutes({
+      rootDir,
+      pages: options.pages !== undefined ? options.pages : (options.pagesDir ? { dir: options.pagesDir } : true),
+      api: options.api,
+      modules: options.modules,
+    });
+  }
 
   const routeTable = compileRouteTable(discoveredDescriptors, {
     explicitRoutes: options.routes || [],
@@ -1495,12 +1544,18 @@ function createApp(options = {}) {
     options,
   });
 
-  // 2. Mount classic file-based routes for backwards compatibility
+  // 2. Mount classic file-based routes for backwards compatibility (reuses pre-scanned files from discovery)
   let classicRouteMeta = [];
   let registerDynamicFileRoutes = () => {};
   if (pagesDir && fs.existsSync(path.resolve(pagesDir))) {
+    const resolvedPagesDir = path.resolve(pagesDir);
+    const scannedFiles = (discoveredDescriptors && discoveredDescriptors.scannedPagesDir === resolvedPagesDir)
+      ? discoveredDescriptors.scannedPagesFiles
+      : null;
+
     const classicMount = mountPages(app, {
       pagesDir,
+      scannedFiles,
       nunjucks: nunjucksEnv,
       middlewares,
       pluginManager,

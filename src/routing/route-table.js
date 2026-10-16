@@ -63,7 +63,7 @@ function compareRouteOrder(a, b) {
   if (ma.literalSegCount !== mb.literalSegCount) return mb.literalSegCount - ma.literalSegCount;
   if (ma.depth !== mb.depth) return mb.depth - ma.depth;
   if (ma.paramSegCount !== mb.paramSegCount) return ma.paramSegCount - mb.paramSegCount;
-  return ma.routePath.localeCompare(mb.routePath);
+  return ma.routePath < mb.routePath ? -1 : (ma.routePath > mb.routePath ? 1 : 0);
 }
 
 /**

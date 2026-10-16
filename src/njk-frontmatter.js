@@ -4,7 +4,14 @@
  */
 
 const fs = require('fs');
-const { parse } = require('yaml');
+
+let _yamlParse = null;
+function getYamlParse() {
+  if (!_yamlParse) {
+    _yamlParse = require('yaml').parse;
+  }
+  return _yamlParse;
+}
 
 const FRONTMATTER_BLOCK = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
 
@@ -43,6 +50,7 @@ function parseNjkFrontmatter(content) {
     return { body, fm: {}, hasDelimiter: true };
   }
   try {
+    const parse = getYamlParse();
     const fm = parse(yamlText);
     return {
       body,
@@ -171,6 +179,13 @@ function clearNjkFrontmatterCaches() {
   }
 }
 
+function seedProdRouteCache(entries) {
+  if (!entries || typeof entries !== 'object') return;
+  for (const [absPath, val] of Object.entries(entries)) {
+    prodRouteCache.set(absPath, val);
+  }
+}
+
 module.exports = {
   parseNjkFrontmatter,
   frontmatterToPatches,
@@ -178,4 +193,5 @@ module.exports = {
   clearNjkFrontmatterCaches,
   registerClearHook,
   extractFrontmatterBlock,
+  seedProdRouteCache,
 };

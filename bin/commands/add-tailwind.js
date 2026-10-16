@@ -171,6 +171,16 @@ module.exports = {
       // Create placeholder CSS
       fs.writeFileSync('public/css/style.css', '/* Run npm run build:css */\n');
       console.log('✅ Created public/css/style.css');
+
+      // Ensure public/css/style.css is in .gitignore
+      if (fs.existsSync('.gitignore')) {
+        let gitignore = fs.readFileSync('.gitignore', 'utf-8');
+        if (!gitignore.includes('public/css/style.css')) {
+          gitignore = gitignore.trimEnd() + '\npublic/css/style.css\n';
+          fs.writeFileSync('.gitignore', gitignore);
+          console.log('✅ Added public/css/style.css to .gitignore');
+        }
+      }
       
       // Try to build CSS if tailwindcss / @tailwindcss/cli is already installed
       const tailwindBin = path.join(process.cwd(), 'node_modules', '.bin', 'tailwindcss');

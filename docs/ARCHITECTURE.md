@@ -11,7 +11,7 @@ description: C4-style architecture reference for Webspresso subsystems, built-in
 
 | Meta | Value |
 |------|--------|
-| Last reviewed | 2026-08-10 |
+| Last reviewed | 2026-10-16 |
 | Package version | 0.0.84 |
 | Primary runtime | Node.js ≥ 18 (HTTP server process) |
 | Secondary runtime | Optional in-process application kernel (no HTTP) |
@@ -128,7 +128,11 @@ C4Container
 | Component | Responsibility |
 |-----------|----------------|
 | `createApp` | Assemble Express app, plugins, routes, error pages, and graceful shutdown |
+| `discoverAppRoutes` | Single-pass unified route scanner discovering pages, APIs, and route groups in one traversal |
 | File router | `pages/**/*.njk` / `pages/**/*.js` → SSR; `pages/api/*.{method}.js` / `src/api/*.{method}.js` → API |
+| JIT Route Evaluation | Dev-mode on-demand module evaluation (`lazyRoutes: true`) loading route handlers on first HTTP request |
+| AOT Route Manifest | Build-time route serialization (`webspresso build` -> `routes.manifest.json`) bypassing runtime directory scanning |
+| AOT Templates | Build-time Nunjucks precompilation (`precompileTemplates` -> `templates.compiled.js`) avoiding runtime parsing |
 | `definePage` | Pure JS and companion page route definitions (`load`, `head`, `render`, `middleware`) |
 | `defineApi` | Declarative JSON API endpoint definitions with Zod `schema`, `middleware`, and auto JSON serialization |
 | `defineModule` | Feature domain encapsulation (`modules/<name>/` with isolated `pages/`, `api/`, `services/`, and `middleware/`) |
@@ -236,6 +240,7 @@ Plugins declare `name`, `version`, optional `dependencies`, and lifecycle hooks 
 | `xlsxPlugin` | Data / Export | Excel XLSX generation, streaming export (`res.xlsx`), and parsing |
 | `csvPlugin` | Data / Export | RFC 4180 CSV generation, formula sanitization, streaming writer (`res.csv`), and parsing |
 | `dashboardPlugin` | Dev | Route browser at `/_webspresso` |
+| `lazyPlugin` | Performance | On-demand plugin hydration wrapper deferring setup until first request |
 
 **Package root re-exports** a subset; full list: `require('webspresso/plugins')`.
 
@@ -244,7 +249,7 @@ Plugins declare `name`, `version`, optional `dependencies`, and lifecycle hooks 
 | Group | Commands |
 |-------|----------|
 | **Scaffold** | `new`, `page`, `api`, `add tailwind` |
-| **Server** | `dev`, `start` |
+| **Server / Build** | `dev`, `start`, `build` |
 | **Database** | `db:migrate`, `db:rollback`, `db:status`, `db:make`, `db:scaffold`, `seed`, `polar:migrate` |
 | **Admin** | `admin:setup`, `admin:password`, `admin:list` |
 | **Ops** | `doctor`, `upgrade`, `audit:prune`, `orm:map`, `favicon:generate` |
@@ -353,11 +358,11 @@ Incoming HTTP request
 
 | Import | Exports (high level) |
 |--------|----------------------|
-| `webspresso` | `createApp`, `definePage`, `defineApi`, `defineModule`, `scanRoutes`, `compileRouteTable`, `RouteTable`, router utils, ORM, kernel, selected plugins |
-| `webspresso/plugins` | All built-in plugins (`xlsxPlugin`, `csvPlugin`, `realtimePlugin`, `fileManagerPlugin`, `adminPanelPlugin`, etc.) |
+| `webspresso` | `createApp`, `definePage`, `defineApi`, `defineModule`, `scanRoutes`, `discoverAppRoutes`, `generateRouteManifest`, `precompileTemplates`, `loadPrecompiledTemplates`, `compileRouteTable`, `RouteTable`, router utils, ORM, kernel, selected plugins |
+| `webspresso/plugins` | All built-in plugins (`xlsxPlugin`, `csvPlugin`, `realtimePlugin`, `fileManagerPlugin`, `adminPanelPlugin`, `lazyPlugin`, `defineLazyPlugin`, etc.) |
 | `webspresso/core/auth` | Site auth (`createAuth`, `quickAuth`, hash, middleware) |
 | `webspresso/core/orm` | ORM submodules |
-| `webspresso/build/*` | Build/runtime manifests (when present in distribution) |
+| `webspresso/build/*` | Build/runtime manifests (`routes.manifest.json`, `templates.compiled.js`) |
 
 ---
 
@@ -378,6 +383,7 @@ Incoming HTTP request
 
 | Date | Change |
 |------|--------|
+| 2026-10-16 | Cold-start & AOT optimizations: single-pass `discoverAppRoutes`, dev-mode JIT route evaluation (`lazyRoutes`), AOT route manifest (`routes.manifest.json`), template precompilation (`templates.compiled.js`), and on-demand lazy plugins (`lazyPlugin`, `adminPanelPlugin({ lazy: true })`). |
 | 2026-09-15 | Module file discovery (`defineModule`), modern Page & API loaders (`definePage`, `defineApi`), `RouteTable` deterministic compilation & introspection, request correlation IDs (`req.id`, `X-Request-Id`), and enhanced error tracing |
 | 2026-06-25 | `contentPlugin` — schema-driven CMS (content types, entries, public API, admin inline edit) |
 | 2026-06-17 | `db:scaffold` CLI — generate create-table migrations from all `models/*.js` |

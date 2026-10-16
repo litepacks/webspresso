@@ -58,13 +58,21 @@ const {
 const { definePage } = require('./src/pages/define-page');
 const { defineApi } = require('./src/api/define-api');
 const { defineModule } = require('./src/modules/define-module');
-const { scanRoutes } = require('./src/discovery/scan-routes');
+const { scanRoutes, discoverAppRoutes } = require('./src/discovery/scan-routes');
+const { generateRouteManifest, loadRouteManifest } = require('./src/discovery/route-manifest');
+const { precompileTemplates, loadPrecompiledTemplates } = require('./src/template/precompile');
 const { parseFileRoute } = require('./src/discovery/file-route-parser');
 const { compileRouteTable, RouteTable } = require('./src/routing/route-table');
 const { mountDiscoveredRoutes } = require('./src/routing/mount-discovered-routes');
 
-// ORM exports (lazy loaded)
-const orm = require('./core/orm');
+// Lazy-loaded ORM accessor
+let _orm = null;
+function getOrm() {
+  if (!_orm) {
+    _orm = require('./core/orm');
+  }
+  return _orm;
+}
 
 // Lazy-loaded built-in plugins
 const plugins = require('./plugins');
@@ -99,12 +107,6 @@ module.exports = {
   discoverServices: require('./src/services').discoverServices,
   filePathToServiceName: require('./src/services').filePathToServiceName,
   toCamelCase: require('./src/services').toCamelCase,
-  createAuthServices: require('./src/services').createAuthServices,
-  createMailServices: require('./src/services').createMailServices,
-  createMediaServices: require('./src/services').createMediaServices,
-  createFileManagerServices: require('./src/services').createFileManagerServices,
-  createSystemServices: require('./src/services').createSystemServices,
-  createExchangeServices: require('./src/services').createExchangeServices,
   validateServiceInput: require('./src/services').validateServiceInput,
   executeService: require('./src/services').executeService,
 
@@ -171,12 +173,6 @@ module.exports = {
   createPluginManager,
   getPluginManager,
   resetPluginManager,
-  
-  // ORM
-  ...orm,
-
-  // Direct zdb export (for convenience)
-  zdb: orm.zdb,
 
   // Discovery, Pages, API, Modules & Routing primitives
   definePage,
@@ -186,11 +182,18 @@ module.exports = {
   defineModule,
   module: defineModule,
   scanRoutes,
+  discoverAppRoutes,
+  generateRouteManifest,
+  loadRouteManifest,
+  precompileTemplates,
+  loadPrecompiledTemplates,
   parseFileRoute,
   compileRouteTable,
   RouteTable,
   mountDiscoveredRoutes,
   resolveMiddlewares: require('./src/routing/middleware-resolver').resolveMiddlewares,
+  translateValidationIssues: require('./src/api/validation-i18n').translateValidationIssues,
+  getTranslatorForRequest: require('./src/api/validation-i18n').getTranslatorForRequest,
 
   // Forms & Flash subsystem (AdonisJS & Django-inspired)
   createFlashMiddleware: require('./core/forms').createFlashMiddleware,
@@ -218,9 +221,61 @@ module.exports = {
   loadListeners: require('./core/events').loadListeners,
 };
 
-// Define lazy getters for plugins and heavy core subsystems
+// Define lazy getters for plugins, ORM, and heavy core subsystems
 Object.defineProperties(module.exports, {
   ...Object.getOwnPropertyDescriptors(plugins),
+
+  // Built-in Services Creators (lazy loaded)
+  createAuthServices: { get: () => require('./src/services').createAuthServices, enumerable: true, configurable: true },
+  createMailServices: { get: () => require('./src/services').createMailServices, enumerable: true, configurable: true },
+  createMediaServices: { get: () => require('./src/services').createMediaServices, enumerable: true, configurable: true },
+  createFileManagerServices: { get: () => require('./src/services').createFileManagerServices, enumerable: true, configurable: true },
+  createSystemServices: { get: () => require('./src/services').createSystemServices, enumerable: true, configurable: true },
+  createExchangeServices: { get: () => require('./src/services').createExchangeServices, enumerable: true, configurable: true },
+
+  // ORM & Database Layer (lazy loaded)
+  orm: { get: () => getOrm(), enumerable: true, configurable: true },
+  createDatabase: { get: () => getOrm().createDatabase, enumerable: true, configurable: true },
+  createInMemoryDatabase: { get: () => getOrm().createInMemoryDatabase, enumerable: true, configurable: true },
+  defineModel: { get: () => getOrm().defineModel, enumerable: true, configurable: true },
+  zdb: { get: () => getOrm().zdb, enumerable: true, configurable: true },
+  BaseRepository: { get: () => getOrm().BaseRepository, enumerable: true, configurable: true },
+  Repository: { get: () => getOrm().Repository, enumerable: true, configurable: true },
+  createRepository: { get: () => getOrm().createRepository, enumerable: true, configurable: true },
+  getModel: { get: () => getOrm().getModel, enumerable: true, configurable: true },
+  getAllModels: { get: () => getOrm().getAllModels, enumerable: true, configurable: true },
+  hasModel: { get: () => getOrm().hasModel, enumerable: true, configurable: true },
+  clearRegistry: { get: () => getOrm().clearRegistry, enumerable: true, configurable: true },
+  isCascadeEnabled: { get: () => getOrm().isCascadeEnabled, enumerable: true, configurable: true },
+  extractColumnsFromSchema: { get: () => getOrm().extractColumnsFromSchema, enumerable: true, configurable: true },
+  getColumnMeta: { get: () => getOrm().getColumnMeta, enumerable: true, configurable: true },
+  generateNanoid: { get: () => getOrm().generateNanoid, enumerable: true, configurable: true },
+  zodNanoid: { get: () => getOrm().zodNanoid, enumerable: true, configurable: true },
+  extendZ: { get: () => getOrm().extendZ, enumerable: true, configurable: true },
+  omitHiddenColumns: { get: () => getOrm().omitHiddenColumns, enumerable: true, configurable: true },
+  sanitizeForOutput: { get: () => getOrm().sanitizeForOutput, enumerable: true, configurable: true },
+  ModelEvents: { get: () => getOrm().ModelEvents, enumerable: true, configurable: true },
+  Hooks: { get: () => getOrm().Hooks, enumerable: true, configurable: true },
+  HookCancellationError: { get: () => getOrm().HookCancellationError, enumerable: true, configurable: true },
+  createEventContext: { get: () => getOrm().createEventContext, enumerable: true, configurable: true },
+  getTransactionContext: { get: () => getOrm().getTransactionContext, enumerable: true, configurable: true },
+  createTransactionContext: { get: () => getOrm().createTransactionContext, enumerable: true, configurable: true },
+  runTransaction: { get: () => getOrm().runTransaction, enumerable: true, configurable: true },
+  createSchemaHelpers: { get: () => getOrm().createSchemaHelpers, enumerable: true, configurable: true },
+  loadRelations: { get: () => getOrm().loadRelations, enumerable: true, configurable: true },
+  loadRelation: { get: () => getOrm().loadRelation, enumerable: true, configurable: true },
+  parseRelationTree: { get: () => getOrm().parseRelationTree, enumerable: true, configurable: true },
+  QueryComplexityError: { get: () => getOrm().QueryComplexityError, enumerable: true, configurable: true },
+  validateQueryComplexity: { get: () => getOrm().validateQueryComplexity, enumerable: true, configurable: true },
+  resolveQueryLimits: { get: () => getOrm().resolveQueryLimits, enumerable: true, configurable: true },
+  DEFAULT_QUERY_LIMITS: { get: () => getOrm().DEFAULT_QUERY_LIMITS, enumerable: true, configurable: true },
+  buildSearchClause: { get: () => getOrm().buildSearchClause, enumerable: true, configurable: true },
+  tokenizeSearchTerm: { get: () => getOrm().tokenizeSearchTerm, enumerable: true, configurable: true },
+  detectDialect: { get: () => getOrm().detectDialect, enumerable: true, configurable: true },
+  defineFactory: { get: () => getOrm().defineFactory, enumerable: true, configurable: true },
+  FactoryBuilder: { get: () => getOrm().FactoryBuilder, enumerable: true, configurable: true },
+  diffSchema: { get: () => getOrm().diffSchema, enumerable: true, configurable: true },
+  makeMigrations: { get: () => getOrm().makeMigrations, enumerable: true, configurable: true },
 
   // Cascading Middleware & Layouts
   cascading: { get: () => require('./src/routing/cascading'), enumerable: true, configurable: true },

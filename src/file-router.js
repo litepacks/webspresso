@@ -5,9 +5,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { ZodError } = require('zod');
 const { compileSchema, invalidateSchema } = require('../core/compileSchema');
 const { applySchema } = require('../core/applySchema');
+const { translateValidationIssues, getTranslatorForRequest } = require('./api/validation-i18n');
 const { createHelpers, getAssetManager } = require('./helpers');
 const {
   loadNjkRouteTemplate,
@@ -494,15 +494,15 @@ function routeRegistrationMeta(routePath) {
  * @param {{ routePath: string }} b
  */
 function compareRouteRegistrationOrder(a, b) {
-  const ma = routeRegistrationMeta(a.routePath);
-  const mb = routeRegistrationMeta(b.routePath);
+  const ma = a._regMeta || (a._regMeta = routeRegistrationMeta(a.routePath));
+  const mb = b._regMeta || (b._regMeta = routeRegistrationMeta(b.routePath));
   if (ma.tier !== mb.tier) return ma.tier - mb.tier;
   if (ma.literalSegCount !== mb.literalSegCount) {
     return mb.literalSegCount - ma.literalSegCount;
   }
   if (ma.depth !== mb.depth) return mb.depth - ma.depth;
   if (ma.paramSegCount !== mb.paramSegCount) return ma.paramSegCount - mb.paramSegCount;
-  return ma.routePath.localeCompare(mb.routePath);
+  return ma.routePath < mb.routePath ? -1 : (ma.routePath > mb.routePath ? 1 : 0);
 }
 
 /**
@@ -1133,86 +1133,92 @@ function mountPages(app, options) {
   // Get absolute path to pages directory
   const absolutePagesDir = path.resolve(pagesDir);
 
-  // Routing and file-system checks at startup
-  function checkRoutesAtStartup() {
-    function getGenericSegment(name) {
-      if (name.startsWith('[') && name.endsWith(']')) {
-        const inner = name.slice(1, -1);
-        if (inner.startsWith('...')) return '*';
-        return ':param';
-      }
-      return name;
+  // Single-pass directory scanner with startup collision & case-sensitivity checks (0 statSync calls)
+  function getGenericSegment(name) {
+    if (name.startsWith('[') && name.endsWith(']')) {
+      const inner = name.slice(1, -1);
+      if (inner.startsWith('...')) return '*';
+      return ':param';
     }
-
-    function checkDir(dirPath, relativeDir = '', isApi = false) {
-      if (!fs.existsSync(dirPath)) return;
-      const children = fs.readdirSync(dirPath);
-      const kept = [];
-
-      for (const child of children) {
-        if (child.startsWith('_') || child === 'locales') continue;
-        const fullPath = path.join(dirPath, child);
-        const relPath = relativeDir ? path.join(relativeDir, child) : child;
-        const stats = fs.statSync(fullPath);
-
-        // 1. Check case-sensitivity issues
-        if (child !== child.toLowerCase()) {
-          console.warn(`[webspresso] WARNING: Path "pages/${relPath.split(path.sep).join('/')}" contains uppercase letters. Use lowercase to avoid routing issues on case-sensitive filesystems.`);
-        }
-
-        if (stats.isDirectory()) {
-          if (child === 'api' && relativeDir === '') {
-            checkDir(fullPath, relPath, true);
-          } else {
-            checkDir(fullPath, relPath, isApi);
-            if (!isApi) {
-              kept.push({ name: child, isDir: true, original: child });
-            }
-          }
-        } else {
-          const ext = path.extname(child);
-          if (isApi) {
-            if (ext === '.js') {
-              const base = path.basename(child, ext);
-              kept.push({ name: base, isDir: false, original: child });
-            }
-          } else {
-            if (ext === '.njk') {
-              const base = path.basename(child, ext);
-              kept.push({ name: base, isDir: false, original: child });
-            }
-          }
-        }
-      }
-
-      // 2. Check dynamic route collisions
-      const groups = new Map();
-      for (const item of kept) {
-        const normalized = getGenericSegment(item.name);
-        if (!groups.has(normalized)) {
-          groups.set(normalized, []);
-        }
-        groups.get(normalized).push(item);
-      }
-
-      for (const [norm, items] of groups.entries()) {
-        if (items.length > 1) {
-          const namesList = items.map(item => `"${item.original}"`).join(' and ');
-          console.warn(`[webspresso] WARNING: Dynamic route collision in "pages/${relativeDir.split(path.sep).join('/')}": ${namesList} resolve to the same segment "${norm}" and will conflict at runtime.`);
-        }
-      }
-    }
-
-    checkDir(absolutePagesDir, '');
+    return name;
   }
 
-  checkRoutesAtStartup();
-  
+  function scanAndCheckDir(dirPath, relativeDir = '', isApi = false) {
+    if (!fs.existsSync(dirPath)) return [];
+    let children;
+    try {
+      children = fs.readdirSync(dirPath, { withFileTypes: true });
+    } catch (_) {
+      return [];
+    }
+    const kept = [];
+    const files = [];
+
+    for (const entry of children) {
+      const child = entry.name;
+      if (child.startsWith('_') || child === 'locales') continue;
+      const fullPath = path.join(dirPath, child);
+      const relPath = relativeDir ? path.join(relativeDir, child) : child;
+
+      // 1. Check case-sensitivity issues
+      if (child !== child.toLowerCase()) {
+        console.warn(`[webspresso] WARNING: Path "pages/${relPath.split(path.sep).join('/')}" contains uppercase letters. Use lowercase to avoid routing issues on case-sensitive filesystems.`);
+      }
+
+      if (entry.isDirectory()) {
+        if (child === 'api' && relativeDir === '') {
+          files.push(...scanAndCheckDir(fullPath, relPath, true));
+        } else {
+          files.push(...scanAndCheckDir(fullPath, relPath, isApi));
+          if (!isApi) {
+            kept.push({ name: child, isDir: true, original: child });
+          }
+        }
+      } else if (entry.isFile()) {
+        files.push(relPath);
+        const ext = path.extname(child);
+        if (isApi) {
+          if (ext === '.js') {
+            const base = path.basename(child, ext);
+            kept.push({ name: base, isDir: false, original: child });
+          }
+        } else {
+          if (ext === '.njk') {
+            const base = path.basename(child, ext);
+            kept.push({ name: base, isDir: false, original: child });
+          }
+        }
+      }
+    }
+
+    // 2. Check dynamic route collisions
+    const groups = new Map();
+    for (const item of kept) {
+      const normalized = getGenericSegment(item.name);
+      if (!groups.has(normalized)) {
+        groups.set(normalized, []);
+      }
+      groups.get(normalized).push(item);
+    }
+
+    for (const [norm, items] of groups.entries()) {
+      if (items.length > 1) {
+        const namesList = items.map(item => `"${item.original}"`).join(' and ');
+        console.warn(`[webspresso] WARNING: Dynamic route collision in "pages/${relativeDir.split(path.sep).join('/')}": ${namesList} resolve to the same segment "${norm}" and will conflict at runtime.`);
+      }
+    }
+
+    return files;
+  }
+
   // Load global hooks
   const globalHooks = loadGlobalHooks(absolutePagesDir, isDev);
   
-  // Scan for files
-  const files = scanDirectory(absolutePagesDir);
+  // Single-pass scan for files and checks (bypassed if pre-scanned files provided by discovery phase)
+  const files = (Array.isArray(options.scannedFiles) && options.scannedFiles.length >= 0)
+    ? options.scannedFiles
+    : scanAndCheckDir(absolutePagesDir, '');
+  const filesSet = new Set(files);
   
   // Separate SSR pages and API routes
   const ssrRoutes = [];
@@ -1239,7 +1245,9 @@ function mountPages(app, options) {
     } else if (ext === '.njk') {
       // SSR page
       const routePath = filePathToRoute(file, '.njk');
-      const configPath = path.join(absolutePagesDir, file.replace('.njk', '.js'));
+      const configRel = file.replace(/\.njk$/, '.js');
+      const hasCompanionConfig = filesSet.has(configRel);
+      const configPath = path.join(absolutePagesDir, configRel);
       const routeDir = path.dirname(path.join(absolutePagesDir, file));
       
       ssrRoutes.push({
@@ -1247,6 +1255,7 @@ function mountPages(app, options) {
         routePath,
         fullPath: path.join(absolutePagesDir, file),
         configPath,
+        hasCompanionConfig,
         routeDir
       });
     }
@@ -1280,21 +1289,27 @@ function mountPages(app, options) {
       if (options.skipExistingRoutes && options.skipExistingRoutes.has(route.method || 'GET', route.routePath)) {
         continue;
       }
-      const handler = require(route.fullPath);
-      const handlerFn = typeof handler === 'function' ? handler : handler.default || handler.handler;
-      const routeMiddleware = handler.middleware;
-
-      const preResolvedMw = routeMiddleware
-        ? resolveMiddlewares(routeMiddleware, middlewares)
-        : EMPTY_ARRAY;
-    
-      if (typeof handlerFn !== 'function') {
-        console.warn(`API route ${route.file} does not export a function`);
-        continue;
-      }
-
+      let handlerFn = null;
+      let preResolvedMw = null;
       let preCompiledSchema = null;
+
+      // In production, eager-load to compile schemas & fail fast at startup
       if (!isDev) {
+        let handler;
+        try {
+          handler = require(route.fullPath);
+        } catch (loadErr) {
+          console.error(`Failed to load API route ${route.file}:`, loadErr);
+          continue;
+        }
+        handlerFn = typeof handler === 'function' ? handler : handler.default || handler.handler;
+        if (typeof handlerFn !== 'function') {
+          console.warn(`API route ${route.file} does not export a function`);
+          continue;
+        }
+        preResolvedMw = handler.middleware
+          ? resolveMiddlewares(handler.middleware, middlewares)
+          : EMPTY_ARRAY;
         try {
           preCompiledSchema = compileSchema(route.fullPath, handler);
         } catch (schemaErr) {
@@ -1329,10 +1344,28 @@ function mountPages(app, options) {
             if (require.cache[require.resolve(route.fullPath)]) {
               delete require.cache[require.resolve(route.fullPath)];
             }
-            const currentHandler = require(route.fullPath);
+            let currentHandler;
+            try {
+              currentHandler = require(route.fullPath);
+            } catch (err) {
+              console.error(`Failed to load API route ${route.file}:`, err);
+              return res.status(500).json({ error: 'Internal Server Error', message: `Failed to load API route: ${err.message}` });
+            }
             fn = typeof currentHandler === 'function' 
               ? currentHandler 
               : currentHandler.default || currentHandler.handler;
+
+            if (typeof fn !== 'function') {
+              console.warn(`API route ${route.file} does not export a function`);
+              return res.status(500).json({ error: 'Internal Server Error', message: `Route ${route.file} does not export a valid handler function` });
+            }
+
+            // Stateful middlewares (e.g. rate limiters) must be resolved once and preserved across requests
+            if (preResolvedMw === null) {
+              preResolvedMw = currentHandler.middleware
+                ? resolveMiddlewares(currentHandler.middleware, middlewares)
+                : EMPTY_ARRAY;
+            }
 
             invalidateSchema(route.fullPath);
             try {
@@ -1344,13 +1377,21 @@ function mountPages(app, options) {
             }
           }
 
+          const routeMw = preResolvedMw || EMPTY_ARRAY;
+
           try {
             applySchema(req, compiledSchema);
           } catch (err) {
-            if (err instanceof ZodError) {
+            if (err && (err.name === 'ZodError' || Array.isArray(err.issues))) {
+              const translatedIssues = translateValidationIssues(err.issues, {
+                req,
+                pagesDir: absolutePagesDir,
+                routeDir: route.routeDir || (route.fullPath ? path.dirname(route.fullPath) : ''),
+                isDev,
+              });
               return res.status(400).json({
                 error: 'Validation Error',
-                issues: err.issues,
+                issues: translatedIssues,
               });
             }
             throw err;
@@ -1363,11 +1404,18 @@ function mountPages(app, options) {
             if (res.headersSent) return;
           }
 
-          // Run middleware if defined (resolved at route registration — required for stateful middleware like express-rate-limit)
-          if (preResolvedMw.length) {
-            await runMiddlewareChain(preResolvedMw, req, res);
+          // Run middleware if defined
+          if (routeMw.length) {
+            await runMiddlewareChain(routeMw, req, res);
             if (res.headersSent) return;
           }
+
+          const tr = getTranslatorForRequest(req, {
+            pagesDir: absolutePagesDir,
+            routeDir: route.routeDir || (route.fullPath ? path.dirname(route.fullPath) : ''),
+            isDev,
+          });
+
           const apiCtx = Object.assign((err) => next(err), {
             req,
             res,
@@ -1376,6 +1424,8 @@ function mountPages(app, options) {
             query: req.query || {},
             body: req.body || {},
             input: req.input,
+            locale: tr.locale,
+            t: tr.t,
             service: req.service,
             db,
             sse: res.sse,
@@ -1404,10 +1454,12 @@ function mountPages(app, options) {
       if (options.skipExistingRoutes && options.skipExistingRoutes.has('GET', route.routePath)) {
         continue;
       }
-      const mountConfig = loadRouteConfig(route.configPath, isDev);
-      const preResolvedPageMw = mountConfig?.middleware
+      const mountConfig = (!isDev && route.hasCompanionConfig)
+        ? loadRouteConfig(route.configPath, false)
+        : null;
+      let preResolvedPageMw = mountConfig?.middleware
         ? resolveMiddlewares(mountConfig.middleware, middlewares)
-        : EMPTY_ARRAY;
+        : (!isDev ? EMPTY_ARRAY : null);
       const staticRouteHooks = mountConfig?.hooks || EMPTY_OBJECT;
 
       app.get(route.routePath, async (req, res, next) => {
@@ -1455,8 +1507,16 @@ function mountPages(app, options) {
           }
           
           // Load route config
-          const config = isDev ? loadRouteConfig(route.configPath, true) : mountConfig;
+          const config = isDev
+            ? (route.hasCompanionConfig ? loadRouteConfig(route.configPath, true) : null)
+            : mountConfig;
           const routeHooks = isDev ? (config?.hooks || EMPTY_OBJECT) : staticRouteHooks;
+          if (preResolvedPageMw === null) {
+            preResolvedPageMw = config?.middleware
+              ? resolveMiddlewares(config.middleware, middlewares)
+              : EMPTY_ARRAY;
+          }
+          const pageMw = preResolvedPageMw;
         
         // Create context with plugin helpers merged
         const baseHelpers = createHelpers({ req, res, locale, t });
@@ -1521,9 +1581,9 @@ function mountPages(app, options) {
           if (res.headersSent) return;
         }
 
-        // Run route middleware (chain fixed at route registration; edit middleware in dev → restart)
-        if (preResolvedPageMw.length) {
-          await runMiddlewareChain(preResolvedPageMw, req, res);
+        // Run route middleware
+        if (pageMw.length) {
+          await runMiddlewareChain(pageMw, req, res);
           if (res.headersSent) return;
         }
         
@@ -1758,5 +1818,7 @@ module.exports = {
   clearCompiledStringTemplateCache,
   translatorCache,
   clearTranslatorCache,
+  translateValidationIssues,
+  getTranslatorForRequest,
 };
 

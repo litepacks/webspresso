@@ -23,6 +23,12 @@
   - Discovered routes are compiled and sorted in deterministic priority order: Static $\to$ Deep Dynamic $\to$ Shallow Dynamic $\to$ Catch-All (`*`).
   - Detects `METHOD + PATH` collision conflicts at startup and throws descriptive errors.
   - Inspectable via `app.routes.list()` for CLI tools, documentation generation, and debugging.
+- **High-Performance Architecture & Cold-Start Optimization**:
+  - **Single-Pass Unified Route Discovery (`discoverAppRoutes`)**: Discovers Page routes, API routes, and Route Groups in a single filesystem traversal pass, avoiding redundant tree walks during startup.
+  - **Dev-Mode On-Demand (JIT) Route Evaluation (`lazyRoutes: true`)**: In development (`NODE_ENV !== 'production'`), route handler modules (`pages/**/*.js`) are loaded on first incoming HTTP request instead of eager-evaluating all routes at boot, reducing dev boot time to ~15ms on large projects.
+  - **AOT Route Manifest (`webspresso build` & `routesManifest`)**: Production builds generate `.webspresso/routes.manifest.json`. When present (or configured via `createApp({ routesManifest: true })`), zero directory scanning or route sorting occurs at runtime.
+  - **AOT Nunjucks Template Precompilation (`precompileTemplates` & `precompiledTemplates`)**: `webspresso build` compiles all `.njk` templates in `pages/` and `views/` into `.webspresso/templates.compiled.js`. In production, templates execute without runtime parser/AST generation or disk reads.
+  - **On-Demand Lazy Plugins (`lazyPlugin`, `defineLazyPlugin`)**: Heavy plugins (e.g. `adminPanelPlugin({ lazy: true })`, `fileManagerPlugin({ lazy: true })`) mount Express proxy routers and hydrate in memory only when a matching HTTP request or service call arrives.
 - **Templating & Helpers**: Nunjucks (`.njk`) templates rendered with layouts (e.g. `views/layout.njk`). Access helpers via `fsy` object in templates.
 - **Asset Management & Cache-Busting (`assets`, `AssetManager`, `fsy`)**:
   - Configured via `createApp({ assets: { version, manifestPath, prefix, publicDir } })` or `configureAssets()`.
@@ -115,6 +121,11 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 | `restResourcePlugin` | ORM / REST API | Auto RESTful CRUD endpoints from models with eager loading & sanitization |
 | `xlsxPlugin` | Excel / Export | Excel spreadsheet generation, parsing, ORM streaming export (`res.xlsx`), and services |
 | `csvPlugin` | CSV / Export | RFC 4180 CSV generator, parser, Excel UTF-8 BOM, streaming writer (`res.csv`), and services |
+| `lazyPlugin` | Core / Performance | On-demand plugin hydration wrapper deferring plugin setup until first request/call |
+
+- **On-Demand Lazy Plugins (`lazyPlugin`, `defineLazyPlugin`)**:
+  - Wrap any plugin via `lazyPlugin(() => heavyPlugin(), { prefix: '/path', services: ['service.name'] })`.
+  - Built-in shorthand support on resource-heavy plugins: `adminPanelPlugin({ db, lazy: true })` and `fileManagerPlugin({ lazy: true })`.
 
 ---
 

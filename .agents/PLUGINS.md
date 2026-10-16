@@ -151,8 +151,9 @@ Outgoing Webhook Dispatcher and Management Plugin with zero external dependencie
 
 ### 2.4 `adminPanelPlugin` (`plugins/admin-panel`)
 Mithril.js SPA Admin Panel mounted at `/_admin`.
-- **Options**: `{ path: '/_admin', db, title: 'Webspresso Admin' }`
+- **Options**: `{ path: '/_admin', db, title: 'Webspresso Admin', lazy: false }`
 - **Features**: Auto CRUD screens for ORM models, user staff auth, custom page registration, widgets, field renderers.
+- **On-Demand Hydration (`lazy: true`)**: When set to `true`, the admin panel plugin wraps itself with `lazyPlugin()`, deferring route mounting and internal setup until the first HTTP request hits `/_admin`.
 
 ### 2.3 `contentPlugin` (`plugins/content`)
 Schema-driven headless CMS & inline content editing.
@@ -168,11 +169,12 @@ Multipart file upload manager with local / cloud storage providers.
 
 ### 2.5 `fileManagerPlugin` (`plugins/file-manager`)
 Filesystem-first media library, directory explorer, and modal asset picker for Admin Panel.
-- **Options**: `{ baseDir: './public/uploads', publicBasePath: '/uploads', apiPrefix: '/files', pageTitle: 'File Manager', maxUploadBytes: 10485760, allowedExtensions, allowedMimeTypes, includePage: true }`
+- **Options**: `{ baseDir: './public/uploads', publicBasePath: '/uploads', apiPrefix: '/files', pageTitle: 'File Manager', maxUploadBytes: 10485760, allowedExtensions, allowedMimeTypes, includePage: true, lazy: false }`
 - **Features**:
   - Directory tree navigation (breadcrumbs), safe subfolder creation (`mkdir`), item rename, delete, and move.
   - Path traversal attack protection (`resolveSafePath`).
   - Grid (thumbnail gallery) & List (table) view modes.
+  - On-demand hydration via `lazy: true`.
   - Search by filename and type filter (Images, Documents, Videos, Audio, Archives, Code).
   - Media preview modal with copy URL and direct playback/preview.
   - "Choose from Media Library" modal picker integrated with `FileUploadField` and `zdb.file()` form fields.
@@ -662,7 +664,31 @@ Zero-dependency OAuth 2.0 & Social Login plugin supporting Google, GitHub, and c
   - `fsy.oauthUrl('google')` ➔ `"/auth/google"`
   - `fsy.oauthUrl('github', { returnTo: '/dashboard' })` ➔ `"/auth/github?returnTo=%2Fdashboard"`
 
+### 2.20 `lazyPlugin` / `defineLazyPlugin` (`plugins/lazy`)
+Zero-dependency on-demand plugin hydration wrapper that defers heavy plugin initialization, route mounting, and service registration until the first matching HTTP request or service invocation.
+- **Why**: Drastically slashes application cold start time and peak memory footprint when mounting heavy modules (such as admin panels, media libraries, documentation portals, or internal diagnostic tools) that are not needed on every server startup.
+- **Usage**:
+  ```javascript
+  const { lazyPlugin, adminPanelPlugin, fileManagerPlugin } = require('webspresso/plugins');
 
+  // Option 1: Using built-in lazy option
+  adminPanelPlugin({ db, lazy: true });
+  fileManagerPlugin({ lazy: true });
 
-
-
+  // Option 2: Wrapping custom or 3rd-party plugins
+  const heavyPlugin = lazyPlugin(
+    () => require('./my-heavy-plugin')({ config: 123 }),
+    {
+      name: 'my-heavy-plugin',
+      prefix: '/heavy',            // Hydrates when request path starts with /heavy
+      services: ['heavy.process'],  // Hydrates when ctx.service('heavy.process') is called
+      helpers: ['heavyHelper'],     // Hydrates when fsy.heavyHelper() is evaluated
+      events: ['heavy.*'],          // Hydrates when matching event is dispatched
+      onHydrate: (plugin) => console.log('Plugin hydrated!'),
+    }
+  );
+  ```
+- **How It Works**:
+  - Mounts a lightweight Express router proxy at `prefix`.
+  - Stubs placeholder services into `ServiceRegistry` and proxy helpers into Nunjucks context.
+  - Intercepts incoming requests/calls, executes the plugin factory function, runs `register(ctx)` and `onRoutesReady(ctx)`, replaces proxies seamlessly with the real router/services, and forwards the initial call with zero dropped requests.

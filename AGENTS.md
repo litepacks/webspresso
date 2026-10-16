@@ -58,6 +58,12 @@ Every coding agent working on Webspresso **MUST** follow this 4-step execution d
 - **Graceful Shutdown & Lifecycle Management**: Configured via `createApp({ server: { shutdown: { enabled: true, mode: 'graceful'|'force', timeout: 10000 } } })`. Socket connection tracking, request draining with `Connection: close`, and reverse-order plugin disposer cleanup.
 - **HTTP Response Compression**: Zero-dependency streaming zlib compression configured via `createApp({ server: { compression: true } })` with Brotli (`br`), Gzip (`gzip`), Deflate (`deflate`), threshold buffering (1 KB), and route-level opt-out (`res.compress(false)`).
 - **Custom Error & 404 Pages**: Configured via `createApp({ errorPages: { notFound, serverError, timeout } })`. Supports template paths (e.g. `notFound: '404.njk'`) or custom handler functions, passing `{ fsy, locale, isDev, url, method }` to templates.
+- **Cold Start & High-Performance Optimizations**:
+  - Unified single-pass route scanner (`discoverAppRoutes`).
+  - Dev-mode on-demand (JIT) route evaluation (`lazyRoutes: true`, dev boot ~15ms).
+  - Ahead-of-time (AOT) route table manifest (`webspresso build` -> `.webspresso/routes.manifest.json`).
+  - Ahead-of-time (AOT) Nunjucks template precompilation (`webspresso build` -> `.webspresso/templates.compiled.js`).
+  - On-demand lazy plugin hydration (`lazyPlugin`, `adminPanelPlugin({ lazy: true })`, `fileManagerPlugin({ lazy: true })`).
 - **Middleware & Hooks**: Route lifecycle hooks can be declared per-page or globally via `pages/_hooks.js`.
 - **API Endpoints & Routing Architecture**:
   - ⚠️ **CRITICAL ANTI-PATTERN: NEVER create a `routes/` or `src/routes/` directory. NEVER use `express.Router()`, `app.get()`, or `app.post()` for application endpoints.**

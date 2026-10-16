@@ -55,7 +55,19 @@ function adminPanelPlugin(options = {}) {
     richTextSanitize = true,
     dataExchange: dataExchangeOption = true,
     loginRateLimit,
+    lazy: lazyOption,
   } = options;
+
+  if (lazyOption) {
+    const { lazyPlugin } = require('../lazy');
+    const lazyOpts = typeof lazyOption === 'object' ? lazyOption : {};
+    return lazyPlugin(() => adminPanelPlugin({ ...options, lazy: false }), {
+      name: 'admin-panel',
+      prefix: adminPath,
+      services: ['exchange.export', 'exchange.import'],
+      ...lazyOpts,
+    });
+  }
 
   const adminUsersConfig = typeof adminUsersOption === 'object' ? adminUsersOption : { enabled: adminUsersOption !== false };
 

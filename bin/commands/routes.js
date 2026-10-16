@@ -19,9 +19,17 @@ function registerCommand(program) {
     .option('-a, --api', 'Filter to only API endpoints')
     .option('-p, --pages', 'Filter to only SSR page routes')
     .option('-j, --json', 'Output routes as JSON')
+    .option('-m, --manifest', 'Generate or update .webspresso/routes.manifest.json')
     .option('--root <dir>', 'Root directory of the project', process.cwd())
     .action((options) => {
       const rootDir = path.resolve(options.root || process.cwd());
+
+      if (options.manifest) {
+        const { generateRouteManifest } = require('../../src/discovery/route-manifest');
+        const result = generateRouteManifest({ rootDir });
+        console.log(`✅ AOT route manifest written to: ${path.relative(rootDir, result.manifestPath)} (${result.routeCount} routes)`);
+        return;
+      }
 
       const descriptors = scanRoutes({
         rootDir,

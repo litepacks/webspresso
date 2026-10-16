@@ -42,8 +42,40 @@ webspresso start            # Start production server
 webspresso doctor           # Run system sanity checks
 webspresso db:migrate       # Run pending Knex migrations
 webspresso db:seed          # Run database seeders
+webspresso add:tailwind     # Add Tailwind CSS v4 (Oxide engine, zero-config)
 webspresso agents:init      # Scaffold AI Agent rules and skills
 ```
+
+---
+
+## 🎨 Tailwind CSS v4 Integration
+
+Webspresso natively supports **Tailwind CSS v4** (Oxide engine, LightningCSS, zero-config CSS-first architecture).
+
+### Setup & Commands
+```bash
+# Add Tailwind CSS v4 (recommended, zero-config CSS-first)
+npx webspresso add tailwind --v4
+
+# Or upgrade an existing Tailwind v3 project to v4
+npx webspresso add tailwind --upgrade
+```
+
+### Architecture & Conventions
+- **CSS-First Directives**: `src/input.css` uses modern v4 `@import`:
+  ```css
+  @import "tailwindcss";
+  ```
+- **Zero Configuration**: No `tailwind.config.js`, `postcss.config.js`, or `autoprefixer` required.
+- **Compiled Output**: Compiles into `public/css/style.css` via `@tailwindcss/cli`.
+- **Scripts in `package.json`**:
+  - `"build:css"`: `@tailwindcss/cli -i ./src/input.css -o ./public/css/style.css --minify`
+  - `"watch:css"`: `@tailwindcss/cli -i ./src/input.css -o ./public/css/style.css --watch`
+  - `"dev"`: Automatically runs CSS watcher alongside the server: `npm run watch:css & node --watch server.js`
+- **Template Integration**: Link stylesheet in Nunjucks layouts (`views/layout.njk`):
+  ```nunjucks
+  <link rel="stylesheet" href="{{ fsy.asset('/css/style.css') }}">
+  ```
 
 ---
 

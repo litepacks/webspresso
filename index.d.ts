@@ -68,6 +68,14 @@ export interface CreateAppOptions {
   compression?: boolean | CompressionOptions;
   /** Shutdown and lifecycle configuration */
   shutdown?: ShutdownOptions;
+  /**
+   * Ahead-Of-Time (AOT) route manifest: boolean to enable/disable loading, or explicit path to manifest JSON file
+   */
+  routesManifest?: boolean | string;
+  /**
+   * Precompiled Nunjucks templates: boolean to enable/disable loading, or explicit path to compiled bundle file
+   */
+  precompiledTemplates?: boolean | string;
   /** Development tooling and DX options */
   dev?: {
     banner?: boolean;
@@ -656,6 +664,25 @@ export function detectLocale(
   supportedLocales: string[],
   defaultLocale: string
 ): string;
+
+export interface TranslateValidationIssuesOptions {
+  req?: Request;
+  t?: Translator;
+  locale?: string;
+  pagesDir?: string;
+  routeDir?: string;
+  isDev?: boolean;
+}
+
+export function translateValidationIssues<T = unknown>(
+  issues: T[],
+  options?: TranslateValidationIssuesOptions
+): T[];
+
+export function getTranslatorForRequest(
+  req?: Request,
+  options?: { pagesDir?: string; routeDir?: string; isDev?: boolean }
+): { t: Translator; locale: string };
 
 export function parseNjkFrontmatter(content: string): {
   body: string;
@@ -1561,8 +1588,37 @@ export interface AdminPanelPluginOptions {
     windowMs?: number;
     blockDurationMs?: number;
   };
+  /** Lazy / On-Demand mount: defers plugin initialization until first request to adminPath or service execution */
+  lazy?: boolean | LazyPluginOptions;
   [key: string]: unknown;
 }
+
+export interface LazyPluginOptions {
+  name?: string;
+  prefix?: string | string[];
+  services?: string[];
+  helpers?: string[];
+  events?: string[];
+  dependencies?: Record<string, string> | string[];
+  csp?: Record<string, string[]>;
+  onHydrate?: (realPlugin: WebspressoPlugin) => void;
+}
+
+export interface LazyPlugin extends WebspressoPlugin {
+  isLazy: true;
+  readonly isHydrated: boolean;
+  hydrate(): WebspressoPlugin;
+}
+
+export function lazyPlugin(
+  pluginFactory: (() => WebspressoPlugin) | WebspressoPlugin,
+  lazyOptions?: LazyPluginOptions
+): LazyPlugin;
+
+export function defineLazyPlugin(
+  pluginFactory: (() => WebspressoPlugin) | WebspressoPlugin,
+  lazyOptions?: LazyPluginOptions
+): LazyPlugin;
 
 export function adminPanelPlugin(options?: AdminPanelPluginOptions): WebspressoPlugin;
 
@@ -3142,11 +3198,14 @@ export interface ApiContext<TBody = any, TParams = Record<string, string>, TQuer
   query: TQuery;
   body: TBody;
   input: { body?: TBody; params?: TParams; query?: TQuery; headers?: Record<string, string> };
+  locale: string;
+  t: Translator;
   service: WebspressoServiceCaller;
   module: string | null;
   config: Record<string, unknown>;
   logger: Console;
   db: unknown;
+  sse?: (sourceOrOptions?: any, maybeOptions?: any) => any;
 }
 
 export interface DefineApiOptions<TResult = any, TBody = any, TParams = Record<string, string>, TQuery = Record<string, string>> {
@@ -3213,7 +3272,21 @@ export function scanRoutes(options?: {
   pages?: boolean | { dir?: string; prefix?: string };
   api?: boolean | { dir?: string; prefix?: string };
   modules?: boolean | { dir?: string };
-}): RouteDescriptor[];
+}): RouteDescriptor[] & { scannedPagesFiles?: string[]; scannedPagesDir?: string | null };
+
+export function discoverAppRoutes(options?: {
+  rootDir?: string;
+  pages?: boolean | { dir?: string; prefix?: string };
+  api?: boolean | { dir?: string; prefix?: string };
+  modules?: boolean | { dir?: string };
+  routes?: Array<{ method?: string; path: string }>;
+  isDev?: boolean;
+}): {
+  descriptors: RouteDescriptor[];
+  routeTable: RouteTable;
+  scannedPagesFiles: string[];
+  scannedPagesDir: string | null;
+};
 
 export function parseFileRoute(
   relativePath: string,
@@ -3224,6 +3297,88 @@ export function compileRouteTable(
   descriptors?: RouteDescriptor[],
   options?: { explicitRoutes?: Array<{ method?: string; path: string }>; isDev?: boolean }
 ): RouteTable;
+
+export function generateRouteManifest(options?: {
+  rootDir?: string;
+  pages?: boolean | string | { dir?: string; prefix?: string };
+  api?: boolean | string | { dir?: string; prefix?: string };
+  modules?: boolean | { dir?: string };
+  pagesDir?: string;
+  outDir?: string;
+  outFile?: string;
+  silent?: boolean;
+}): {
+  manifest: {
+    version: number;
+    generatedAt: string;
+    pagesDirRel: string;
+    scannedPagesFiles: string[];
+    routes: Array<{
+      type: 'page' | 'api';
+      method: string;
+      path: string;
+      source: string;
+      module?: string | null;
+      moduleConfig?: { name?: string } | null;
+    }>;
+  };
+  manifestPath: string;
+  routeCount: number;
+  scannedFilesCount: number;
+};
+
+export function loadRouteManifest(options?: {
+  rootDir?: string;
+  manifestPath?: string;
+}): {
+  manifest: {
+    version: number;
+    generatedAt: string;
+    pagesDirRel: string;
+    scannedPagesFiles: string[];
+    routes: Array<{
+      type: 'page' | 'api';
+      method: string;
+      path: string;
+      source: string;
+      module?: string | null;
+      moduleConfig?: { name?: string } | null;
+    }>;
+  };
+  descriptors: RouteDescriptor[] & { scannedPagesFiles?: string[]; scannedPagesDir?: string | null };
+} | null;
+
+export function precompileTemplates(options?: {
+  rootDir?: string;
+  viewsDir?: string;
+  pagesDir?: string;
+  outDir?: string;
+  outFile?: string;
+  env?: any;
+}): {
+  templateCount: number;
+  manifestPath: string;
+  bundle: {
+    version: number;
+    generatedAt: string;
+    templates: Record<string, string>;
+    frontmatter: Record<string, any>;
+  };
+};
+
+export function loadPrecompiledTemplates(options?: {
+  rootDir?: string;
+  bundlePath?: string;
+}): {
+  loader: any;
+  templateCount: number;
+  bundle: {
+    version: number;
+    generatedAt: string;
+    templates: Record<string, string>;
+    frontmatter: Record<string, any>;
+  };
+} | null;
 
 export interface GenerateTypesOptions {
   /** Root directory of the project (default: process.cwd()) */
