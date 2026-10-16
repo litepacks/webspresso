@@ -3,6 +3,7 @@ import os from 'os';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  cacheDir: process.env.TMPDIR ? `${process.env.TMPDIR}/.vite` : './node_modules/.vite',
   benchmark: {
     include: ['benchmarks/**/*.bench.mjs'],
     exclude: ['node_modules', 'dist'],
@@ -19,7 +20,7 @@ export default defineConfig({
     include: ['tests/**/*.test.js'],
     exclude: ['node_modules', 'dist'],
     pool: 'forks',
-    maxForks: Math.min(2, Math.max(1, (os.cpus()?.length || 4) - 1)),
+    maxForks: Math.max(1, (os.cpus()?.length || 4) - 1),
     minForks: 1,
     coverage: {
       provider: 'v8',

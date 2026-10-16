@@ -22,7 +22,6 @@ describe('content plugin API', () => {
 
   afterEach(async () => {
     if (db) await db.destroy();
-    clearRegistry();
   });
 
   it('rejects admin API without auth', async () => {

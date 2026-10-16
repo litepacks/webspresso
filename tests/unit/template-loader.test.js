@@ -90,4 +90,35 @@ describe('Nunjucks Template Loader & Extension Guard', () => {
     expect(res.text).toContain('[VIEWS LAYOUT]');
     expect(res.text).not.toContain('[PAGES LAYOUT]');
   });
+
+  it('should not produce /views/views/ loop when templates inside viewsDir include using views/ prefix', async () => {
+    fs.mkdirSync(path.join(viewsDir, 'partials'), { recursive: true });
+    fs.writeFileSync(path.join(viewsDir, 'partials', 'header.njk'), '<header>App Header</header>');
+    fs.writeFileSync(
+      path.join(viewsDir, 'layout.njk'),
+      '{% include "views/partials/header.njk" %}\n<main>{% block content %}{% endblock %}</main>'
+    );
+    fs.writeFileSync(
+      path.join(pagesDir, 'dashboard.njk'),
+      '{% extends "views/layout.njk" %}\n{% block content %}<h1>Dashboard</h1>{% endblock %}'
+    );
+
+    const { nunjucksEnv } = createApp({
+      pagesDir,
+      viewsDir,
+      nunjucks: { watch: true, noCache: true },
+    });
+
+    // Multiple render passes simulating watch re-evaluation
+    const output1 = nunjucksEnv.render('dashboard.njk');
+    expect(output1).toContain('<header>App Header</header>');
+    expect(output1).toContain('<h1>Dashboard</h1>');
+
+    const output2 = nunjucksEnv.render('dashboard.njk');
+    expect(output2).toContain('<header>App Header</header>');
+
+    // Directly rendering views/layout.njk should also work without /views/views
+    const output3 = nunjucksEnv.render('views/layout.njk');
+    expect(output3).toContain('<header>App Header</header>');
+  });
 });

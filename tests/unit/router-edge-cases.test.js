@@ -4,7 +4,7 @@ const os = require('os');
 const request = require('supertest');
 const { createApp } = require('../../src/server');
 
-describe('Router & Error Edge Cases', () => {
+describe.sequential('Router & Error Edge Cases', () => {
   let tempDir;
   let pagesDir;
   let viewsDir;

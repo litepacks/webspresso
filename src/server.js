@@ -91,7 +91,9 @@ function normalizeTemplateName(name) {
   if (typeof name !== 'string') return name;
   let normalized = name.replace(/\\/g, '/');
   // Collapse any repeated views/views/... to a single views/ or clean path
-  normalized = normalized.replace(/(?:^|\/)views(?:\/views)+/g, (m) => (m.startsWith('/') ? '/views' : 'views'));
+  while (/(?:^|\/)views\/(?:\.\/)?views(?:\/|$)/.test(normalized)) {
+    normalized = normalized.replace(/((?:^|\/)views)\/(?:\.\/)?views(?=\/|$)/g, '$1');
+  }
   return normalized;
 }
 
@@ -108,13 +110,40 @@ function configureSafeNunjucks(templateDirs, options = {}) {
   const origRender = env.render.bind(env);
   const origRenderString = env.renderString.bind(env);
 
-  // Prevent loader.resolve from producing nested views/views paths
+  // Prevent loader.getSource and loader.resolve from producing or failing on nested views/views paths
   if (Array.isArray(env.loaders)) {
     for (const loader of env.loaders) {
+      if (loader && typeof loader.getSource === 'function') {
+        const origGetSource = loader.getSource.bind(loader);
+        loader.getSource = function(name) {
+          const clean = normalizeTemplateName(name);
+          let res = origGetSource(clean);
+          if (res) return res;
+          // If clean starts with views/ or ./views/, try stripping it since viewsDir is already in searchPaths
+          if (typeof clean === 'string' && /^(?:\.\/)?views\//.test(clean)) {
+            const stripped = clean.replace(/^(?:\.\/)?views\//, '');
+            res = origGetSource(stripped);
+            if (res) {
+              if (loader.pathsToNames && res.path) {
+                loader.pathsToNames[res.path] = clean;
+              }
+              return res;
+            }
+          }
+          return null;
+        };
+      }
       if (loader && typeof loader.resolve === 'function') {
         const origResolve = loader.resolve.bind(loader);
         loader.resolve = function(from, to) {
-          const resolved = origResolve(from, to);
+          const cleanFrom = normalizeTemplateName(from);
+          const cleanTo = normalizeTemplateName(to);
+          let effectiveTo = cleanTo;
+          // If to starts with views/ and from already has views in its path, don't duplicate views
+          if (/^(?:\.\/)?views\//.test(effectiveTo) && (cleanFrom.includes('/views/') || cleanFrom.startsWith('views/') || cleanFrom.endsWith('/views'))) {
+            effectiveTo = effectiveTo.replace(/^(?:\.\/)?views\//, './');
+          }
+          const resolved = origResolve(cleanFrom, effectiveTo);
           return normalizeTemplateName(resolved);
         };
       }

@@ -73,8 +73,6 @@ export async function createAdminUsersTable(knex) {
  * @param {boolean} [options.inlineEdit=true]
  */
 export async function createContentTestApp(options = {}) {
-  clearRegistry();
-
   const db = createDatabase({
     client: 'better-sqlite3',
     connection: ':memory:',

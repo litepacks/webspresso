@@ -9,9 +9,8 @@ import { createRequire } from 'node:module';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../src/server.js';
-import { createDatabase, defineModel, zdb, hasModel } from '../../core/orm/index.js';
+import { createDatabase, defineModel, zdb, hasModel, getModel } from '../../core/orm/index.js';
 import { adminPanelPlugin } from '../../plugins/admin-panel/index.js';
-import { clearRegistry } from '../../core/orm/model.js';
 
 const require = createRequire(import.meta.url);
 const { isRichTextEmpty } = require('../../plugins/admin-panel/lib/is-rich-text-empty.js');
@@ -22,8 +21,6 @@ describe.sequential('Admin Panel Integration', () => {
   let server;
 
   beforeAll(async () => {
-    clearRegistry();
-
     // Create in-memory database (skip auto-loading models)
     db = createDatabase({
       client: 'better-sqlite3',
@@ -31,9 +28,12 @@ describe.sequential('Admin Panel Integration', () => {
       models: './tests/fixtures/models-empty', // Non-existent dir to skip auto-loading
     });
 
-    // Create a test model (only if not already defined)
-    if (!hasModel('TestModel')) {
-      const TestModel = defineModel({
+    // Create a test model (or get existing if defined)
+    let TestModel;
+    if (hasModel('TestModel')) {
+      TestModel = getModel('TestModel');
+    } else {
+      TestModel = defineModel({
         name: 'TestModel',
         table: 'test_models',
         schema: zdb.schema({
@@ -51,8 +51,8 @@ describe.sequential('Admin Panel Integration', () => {
           icon: '🧪',
         },
       });
-      db.registerModel(TestModel);
     }
+    db.registerModel(TestModel);
 
     // Create tables manually for in-memory database
     await db.knex.schema.createTable('test_models', (table) => {
@@ -107,7 +107,6 @@ describe.sequential('Admin Panel Integration', () => {
     if (db) {
       await db.destroy();
     }
-    clearRegistry();
   });
 
   describe('Custom Field Renderers', () => {

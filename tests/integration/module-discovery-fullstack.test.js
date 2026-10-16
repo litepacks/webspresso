@@ -3,7 +3,7 @@ import request from 'supertest';
 import path from 'path';
 import { createApp } from '../../index';
 
-describe('Module & File Discovery Fullstack Integration', () => {
+describe.sequential('Module & File Discovery Fullstack Integration', () => {
   let app;
   const fixtureRoot = path.resolve(__dirname, '../fixtures/fullstack');
 

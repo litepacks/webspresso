@@ -434,6 +434,56 @@ describe.sequential('Webspresso HTTP Response Compression', () => {
       const decompressed = zlib.gunzipSync(res.body).toString('utf8');
       expect(decompressed).toBe(payload);
     });
+
+    it('34. does not compress text/event-stream SSE responses even if requested', async () => {
+      const app = express();
+      app.use(createCompressionMiddleware({ threshold: 10 }));
+      app.get('/sse', (req, res) => {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.write('data: hello\n\n');
+        res.end();
+      });
+
+      const res = await getRaw(app, '/sse', { 'accept-encoding': 'gzip, br' });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-encoding']).toBeUndefined();
+      expect(res.body.toString('utf8')).toBe('data: hello\n\n');
+    });
+
+    it('35. strips Content-Length if setHeader is called after compression started', async () => {
+      const app = express();
+      app.use(createCompressionMiddleware({ threshold: 50 }));
+      const payload = 'console.log("compressed script");\n'.repeat(20);
+      app.get('/script.js', (req, res) => {
+        res.setHeader('Content-Type', 'application/javascript');
+        res.write(payload.slice(0, 100));
+        res.setHeader('Content-Length', String(Buffer.byteLength(payload)));
+        res.end(payload.slice(100));
+      });
+
+      const res = await getRaw(app, '/script.js', { 'accept-encoding': 'gzip' });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-encoding']).toBe('gzip');
+      expect(res.headers['content-length']).toBeUndefined();
+      const decompressed = zlib.gunzipSync(res.body).toString('utf8');
+      expect(decompressed).toBe(payload);
+    });
+
+    it('36. streams large JS files (150 KB) without hanging on socket backpressure', async () => {
+      const app = express();
+      app.use(createCompressionMiddleware({ threshold: 1024 }));
+      const largeJs = 'function test() { return 42; }\n'.repeat(5000); // ~155 KB
+      app.get('/huge.js', (req, res) => {
+        res.setHeader('Content-Type', 'application/javascript');
+        res.send(largeJs);
+      });
+
+      const res = await getRaw(app, '/huge.js', { 'accept-encoding': 'gzip' });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-encoding']).toBe('gzip');
+      const decompressed = zlib.gunzipSync(res.body).toString('utf8');
+      expect(decompressed).toBe(largeJs);
+    });
   });
 
   describe('createApp({ server: { compression: true } }) Integration', () => {

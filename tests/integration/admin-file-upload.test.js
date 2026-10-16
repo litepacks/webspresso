@@ -3,15 +3,14 @@
  * @vitest-environment node
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import { createApp } from '../../src/server.js';
-import { createDatabase, defineModel, zdb } from '../../index.js';
+import { createDatabase, defineModel, zdb, hasModel, getModel } from '../../index.js';
 import { adminPanelPlugin, uploadPlugin } from '../../plugins/index.js';
-import { clearRegistry } from '../../core/orm/model.js';
 import { getFieldRenderer } from '../../plugins/admin-panel/field-renderers/index.js';
 
 describe.sequential('Admin file upload fields', () => {
@@ -43,8 +42,6 @@ describe.sequential('Admin file upload fields', () => {
   }
 
   beforeAll(async () => {
-    clearRegistry();
-
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-admin-file-'));
     const destDir = path.join(tmpDir, 'public', 'uploads');
     await fs.mkdir(destDir, { recursive: true });
@@ -59,9 +56,11 @@ describe.sequential('Admin file upload fields', () => {
       models: './tests/fixtures/models-empty',
     });
 
-    const MediaAsset = defineModel({
-      name: modelName,
-      table: tableName,
+    const MediaAsset = hasModel(modelName)
+      ? getModel(modelName)
+      : defineModel({
+          name: modelName,
+          table: tableName,
       schema: zdb.schema({
         id: zdb.id(),
         title: zdb.string(),
@@ -126,7 +125,6 @@ describe.sequential('Admin file upload fields', () => {
 
   afterAll(async () => {
     if (db) await db.destroy();
-    clearRegistry();
     if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -166,7 +164,6 @@ describe.sequential('Admin file upload fields', () => {
   });
 
   it('resolves file field renderers for schema and customFields', () => {
-    clearRegistry();
     const schemaRenderer = getFieldRenderer({ name: 'cover_url', type: 'file' });
     const customRenderer = getFieldRenderer({
       name: 'attachment',

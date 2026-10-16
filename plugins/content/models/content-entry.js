@@ -19,10 +19,11 @@ const ContentEntrySchema = zdb.schema({
   updated_at: zdb.timestamp({ auto: 'update' }),
 });
 
-/**
- * @returns {import('../../../core/orm/types').ModelDefinition}
- */
 function createContentEntryModel() {
+  const { hasModel, getModel } = require('../../../core/orm/model');
+  if (hasModel('ContentEntry')) {
+    return getModel('ContentEntry');
+  }
   return defineModel({
     name: 'ContentEntry',
     table: 'content_entries',

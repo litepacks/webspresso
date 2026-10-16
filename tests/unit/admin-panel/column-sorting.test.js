@@ -2,7 +2,7 @@
  * Unit tests for Admin Panel 3-state Column Sorting and per-column/per-model configurations
  */
 
-const { createDatabase, defineModel, zdb, hasModel } = require('../../../core/orm');
+const { createDatabase, defineModel, getModel, zdb, hasModel } = require('../../../core/orm');
 const { createApp } = require('../../../index');
 const supertest = require('supertest');
 const adminPanelPlugin = require('../../../plugins/admin-panel');
@@ -13,35 +13,39 @@ describe('Admin Panel Column Sorting (3-State & Configuration)', () => {
   let adminCookie;
 
   beforeAll(async () => {
-    const productModel = defineModel({
-      name: 'ProductSortTest',
-      table: 'product_sort_tests',
-      schema: zdb.schema({
-        id: zdb.id(),
-        name: zdb.string().config({ sortable: true }),
-        price: zdb.float(),
-        details: zdb.json(), // default non-sortable
-        secret_notes: zdb.text().config({ sortable: false }), // explicitly non-sortable
-        created_at: zdb.timestamp({ auto: 'create' }),
-      }),
-      admin: {
-        enabled: true,
-      },
-    });
+    const productModel = hasModel('ProductSortTest')
+      ? getModel('ProductSortTest')
+      : defineModel({
+          name: 'ProductSortTest',
+          table: 'product_sort_tests',
+          schema: zdb.schema({
+            id: zdb.id(),
+            name: zdb.string().config({ sortable: true }),
+            price: zdb.float(),
+            details: zdb.json(), // default non-sortable
+            secret_notes: zdb.text().config({ sortable: false }), // explicitly non-sortable
+            created_at: zdb.timestamp({ auto: 'create' }),
+          }),
+          admin: {
+            enabled: true,
+          },
+        });
 
-    const limitedModel = defineModel({
-      name: 'LimitedModelSortTest',
-      table: 'limited_model_sort_tests',
-      schema: zdb.schema({
-        id: zdb.id(),
-        title: zdb.string(),
-        code: zdb.string(),
-      }),
-      admin: {
-        enabled: true,
-        sortableColumns: ['title'], // Only title is sortable
-      },
-    });
+    const limitedModel = hasModel('LimitedModelSortTest')
+      ? getModel('LimitedModelSortTest')
+      : defineModel({
+          name: 'LimitedModelSortTest',
+          table: 'limited_model_sort_tests',
+          schema: zdb.schema({
+            id: zdb.id(),
+            title: zdb.string(),
+            code: zdb.string(),
+          }),
+          admin: {
+            enabled: true,
+            sortableColumns: ['title'], // Only title is sortable
+          },
+        });
 
     db = createDatabase({
       client: 'better-sqlite3',

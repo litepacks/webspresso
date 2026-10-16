@@ -151,6 +151,8 @@ title: New
 b`,
           'utf8'
         );
+        const nextTime = new Date(Date.now() + 2000);
+        fs.utimesSync(fp, nextTime, nextTime);
 
         const b = loadNjkRouteTemplate(fp, true);
         expect(b.metaPatch.title).toBe('New');

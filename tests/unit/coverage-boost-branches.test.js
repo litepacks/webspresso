@@ -1857,5 +1857,217 @@ describe('Coverage Boost: Admin Panel Advanced Filtering and Permissions', () =>
   });
 });
 
+describe('Coverage Boost: File Manager Core & Security Branches', () => {
+  it('covers resolveSafePath, sanitizeName, getFileType, getMimeType, buildBreadcrumbs, and security checks', async () => {
+    const {
+      resolveSafePath,
+      sanitizeName,
+      getFileType,
+      getMimeType,
+      buildBreadcrumbs,
+    } = await import('../../../plugins/file-manager/core.js');
+
+    const {
+      validateSafeExtension,
+      validateMagicBytes,
+      sanitizeSvgContent,
+    } = await import('../../../plugins/file-manager/security.js');
+
+    const os = await import('os');
+    const path = await import('path');
+    const tmp = os.tmpdir();
+
+    // 1. resolveSafePath
+    expect(() => resolveSafePath(null)).toThrow('Invalid base directory');
+    expect(() => resolveSafePath('')).toThrow('Invalid base directory');
+    expect(resolveSafePath(tmp)).toBe(path.resolve(tmp));
+    expect(resolveSafePath(tmp, '')).toBe(path.resolve(tmp));
+    expect(() => resolveSafePath(tmp, 123)).toThrow('Path must be a string');
+    expect(() => resolveSafePath(tmp, 'file\0.txt')).toThrow('Null byte detected');
+    expect(() => resolveSafePath(tmp, '%00file.txt')).toThrow('Null byte detected');
+    expect(() => resolveSafePath(tmp, '../secret')).toThrow('Directory traversal attempt detected');
+    expect(() => resolveSafePath(tmp, './subdir')).toThrow('Directory traversal attempt detected');
+    expect(resolveSafePath(tmp, 'uploads/file.png')).toBe(path.resolve(tmp, 'uploads/file.png'));
+
+    // 2. sanitizeName
+    expect(() => sanitizeName(null)).toThrow('Name is required');
+    expect(() => sanitizeName(123)).toThrow('Name is required');
+    expect(() => sanitizeName('   ')).toThrow('Invalid file or directory name');
+    expect(() => sanitizeName('.')).toThrow('Invalid file or directory name');
+    expect(() => sanitizeName('..')).toThrow('Invalid file or directory name');
+    expect(() => sanitizeName('folder/file')).toThrow('cannot contain path separators');
+    expect(() => sanitizeName('folder\\file')).toThrow('cannot contain path separators');
+    expect(() => sanitizeName('.hidden')).toThrow('Dotfiles are not allowed');
+    expect(sanitizeName('  Valid_File-123.jpg  ')).toBe('Valid_File-123.jpg');
+
+    // 3. getFileType
+    expect(getFileType('jpg')).toBe('image');
+    expect(getFileType('.PNG')).toBe('image');
+    expect(getFileType('pdf')).toBe('document');
+    expect(getFileType('txt')).toBe('text');
+    expect(getFileType('json')).toBe('code');
+    expect(getFileType('mp3')).toBe('audio');
+    expect(getFileType('mp4')).toBe('video');
+    expect(getFileType('zip')).toBe('archive');
+    expect(getFileType('unknown_xyz')).toBe('other');
+    expect(getFileType(null)).toBe('other');
+
+    // 4. getMimeType
+    expect(getMimeType('jpg')).toBe('image/jpeg');
+    expect(getMimeType('.png')).toBe('image/png');
+    expect(getMimeType('txt')).toBe('text/plain');
+    expect(getMimeType('unknown')).toBe('application/octet-stream');
+    expect(getMimeType(null)).toBe('application/octet-stream');
+
+    // 5. buildBreadcrumbs
+    expect(buildBreadcrumbs('')).toEqual([{ name: 'Root', path: '' }]);
+    expect(buildBreadcrumbs(null)).toEqual([{ name: 'Root', path: '' }]);
+    const bc = buildBreadcrumbs('uploads/images/2026');
+    expect(bc).toHaveLength(4);
+    expect(bc[1]).toEqual({ name: 'uploads', path: 'uploads' });
+    expect(bc[3]).toEqual({ name: '2026', path: 'uploads/images/2026' });
+
+    // 6. validateSafeExtension
+    expect(() => validateSafeExtension(null)).toThrow('Filename is required');
+    expect(() => validateSafeExtension('')).toThrow('Filename is required');
+    expect(() => validateSafeExtension('.')).toThrow('Filename must have a valid extension');
+    expect(() => validateSafeExtension('script.php')).toThrow('Dangerous extension');
+    expect(() => validateSafeExtension('payload.php.jpg')).toThrow('Dangerous extension or double-extension detected');
+    expect(validateSafeExtension('photo.JPG')).toBe('jpg');
+
+    // 7. validateMagicBytes
+    expect(() => validateMagicBytes(null, 'jpg')).toThrow('Valid buffer is required');
+    expect(() => validateMagicBytes('not-a-buffer', 'jpg')).toThrow('Valid buffer is required');
+    expect(validateMagicBytes(Buffer.from([0xff, 0xd8, 0xff, 0x00]), 'jpg')).toBe(true);
+    expect(() => validateMagicBytes(Buffer.from([0x00, 0x00]), 'jpg')).toThrow('File signature mismatch');
+    expect(validateMagicBytes(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), 'png')).toBe(true);
+    expect(validateMagicBytes(Buffer.from([0x47, 0x49, 0x46, 0x38, 0x37, 0x61]), 'gif')).toBe(true);
+    expect(validateMagicBytes(Buffer.from('RIFF0000WEBP'), 'webp')).toBe(true);
+    expect(validateMagicBytes(Buffer.from('plain text'), 'txt')).toBe(true);
+
+    // 8. sanitizeSvgContent
+    const rawSvg = '<svg><script>alert("xss")</script><circle cx="5" cy="5" r="5"/></svg>';
+    const cleanSvg = sanitizeSvgContent(rawSvg);
+    expect(cleanSvg.toString('utf8')).not.toContain('<script>');
+    expect(cleanSvg.toString('utf8')).toContain('<circle');
+  });
+});
+
+describe('Coverage Boost: User Management Module Registration & Actions', () => {
+  it('covers registerUserManagement, actions, bulk actions, and hooks', async () => {
+    const {
+      registerUserManagement,
+      generateRandomPassword,
+    } = await import('../../../plugins/admin-panel/modules/user-management.js');
+
+    // 1. generateRandomPassword
+    const pwd = generateRandomPassword(16);
+    expect(pwd).toHaveLength(16);
+
+    const registeredActions = new Map();
+    const registeredBulkActions = new Map();
+    const registeredWidgets = new Map();
+    const registeredHooks = new Map();
+
+    const mockRegistry = {
+      enableUserManagement: vi.fn(),
+      registerMenuGroup: vi.fn(),
+      registerMenuItem: vi.fn(),
+      registerAction: vi.fn((id, def) => registeredActions.set(id, def)),
+      registerBulkAction: vi.fn((id, def) => registeredBulkActions.set(id, def)),
+      registerWidget: vi.fn((id, def) => registeredWidgets.set(id, def)),
+      registerHook: vi.fn((name, fn) => registeredHooks.set(name, fn)),
+    };
+
+    const mockRepo = {
+      model: {
+        columns: new Map([
+          ['id', { type: 'id' }],
+          ['active', { type: 'boolean' }],
+          ['role', { type: 'string' }],
+          ['created_at', { type: 'timestamp' }],
+        ]),
+        table: 'users',
+      },
+      count: vi.fn().mockResolvedValue(5),
+      query: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnThis(),
+        count: vi.fn().mockResolvedValue(2),
+      }),
+      update: vi.fn().mockResolvedValue({ id: 1, active: true }),
+      delete: vi.fn().mockResolvedValue(true),
+    };
+
+    const mockDb = {
+      getRepository: vi.fn().mockReturnValue(mockRepo),
+      knex: {
+        client: { config: { client: 'sqlite3' } },
+        schema: {
+          hasColumn: vi.fn().mockResolvedValue(true),
+        },
+      },
+    };
+
+    // 2. registerUserManagement with auth and custom config
+    const resReg = registerUserManagement({
+      registry: mockRegistry,
+      db: mockDb,
+      auth: { rememberTokens: {} },
+      config: { modelName: 'AppUser', passwordMinLength: 10 },
+    });
+    expect(resReg.modelName).toBe('AppUser');
+
+    // 3. Widget dataLoader
+    const statsWidget = registeredWidgets.get('user-stats');
+    expect(statsWidget).toBeDefined();
+    const statsData = await statsWidget.dataLoader({ db: mockDb });
+    expect(statsData.total).toBe(5);
+
+    // 4. Single actions: activate, deactivate, reset-password
+    const actAction = registeredActions.get('user-activate');
+    expect(actAction.visible({ active: false })).toBe(true);
+    expect(actAction.visible({ active: true })).toBe(false);
+    const actRes = await actAction.handler({ id: 1 }, 'AppUser', { db: mockDb });
+    expect(actRes.message).toBe('User activated');
+
+    const deactAction = registeredActions.get('user-deactivate');
+    expect(deactAction.visible({ active: true })).toBe(true);
+    const deactRes = await deactAction.handler({ id: 1 }, { name: 'AppUser' }, { db: mockDb });
+    expect(deactRes.message).toBe('User deactivated');
+
+    const resetAction = registeredActions.get('user-reset-password');
+    const resetRes = await resetAction.handler({ id: 1 }, 'AppUser', { db: mockDb });
+    expect(resetRes.newPassword).toBeDefined();
+
+    // 5. Bulk actions: activate, deactivate, delete
+    const bulkAct = registeredBulkActions.get('users-activate');
+    const bulkActRes = await bulkAct.handler([{ id: 1 }, { id: 2 }], 'AppUser', { db: mockDb });
+    expect(bulkActRes.message).toContain('2 users activated');
+
+    const bulkDeact = registeredBulkActions.get('users-deactivate');
+    const bulkDeactRes = await bulkDeact.handler([{ id: 1 }], 'AppUser', { db: mockDb });
+    expect(bulkDeactRes.message).toContain('1 users deactivated');
+
+    const bulkDel = registeredBulkActions.get('users-delete');
+    const bulkDelRes = await bulkDel.handler([{ id: 1 }], 'AppUser', { db: mockDb });
+    expect(bulkDelRes.message).toContain('1 users deleted');
+
+    // 6. Hooks: beforeCreate and beforeUpdate
+    const beforeCreate = registeredHooks.get('beforeCreate');
+    const createCtx = { model: 'AppUser', data: { password: 'plainpassword' } };
+    await beforeCreate(createCtx);
+    expect(createCtx.data.password).not.toBe('plainpassword');
+
+    const beforeUpdate = registeredHooks.get('beforeUpdate');
+    const updateCtx1 = { model: 'AppUser', data: { password: '$2b$10$alreadyhashed' } };
+    await beforeUpdate(updateCtx1);
+    expect(updateCtx1.data.password).toBe('$2b$10$alreadyhashed');
+
+    const updateCtx2 = { model: 'AppUser', data: { password: 'newsecret' } };
+    await beforeUpdate(updateCtx2);
+    expect(updateCtx2.data.password).not.toBe('newsecret');
+  });
+});
+
 
 

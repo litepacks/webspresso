@@ -6,9 +6,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../src/server.js';
-import { createDatabase, defineModel, zdb, hasModel } from '../../index.js';
+import { createDatabase, defineModel, zdb, hasModel, getModel } from '../../index.js';
 import { adminPanelPlugin, dataExchangePlugin } from '../../plugins/index.js';
-import { clearRegistry } from '../../core/orm/model.js';
 import ExcelJS from 'exceljs';
 import { z } from 'zod';
 
@@ -17,33 +16,31 @@ describe.sequential('Data exchange plugin', () => {
   let db;
 
   beforeEach(async () => {
-    clearRegistry();
-
     db = createDatabase({
       client: 'better-sqlite3',
       connection: ':memory:',
       models: './tests/fixtures/models-empty',
     });
 
-    if (!hasModel('TestModel')) {
-      const TestModel = defineModel({
-        name: 'TestModel',
-        table: 'test_models',
-        schema: zdb.schema({
-          id: zdb.id(),
-          name: zdb.string(),
-          email: zdb.string(),
-          active: zdb.boolean({ default: true }),
-          created_at: zdb.timestamp({ auto: 'create' }),
-          updated_at: zdb.timestamp({ auto: 'update' }),
-        }),
-        admin: {
-          enabled: true,
-          label: 'Test Models',
-        },
-      });
-      db.registerModel(TestModel);
-    }
+    const TestModel = hasModel('TestModel')
+      ? getModel('TestModel')
+      : defineModel({
+          name: 'TestModel',
+          table: 'test_models',
+          schema: zdb.schema({
+            id: zdb.id(),
+            name: zdb.string(),
+            email: zdb.string(),
+            active: zdb.boolean({ default: true }),
+            created_at: zdb.timestamp({ auto: 'create' }),
+            updated_at: zdb.timestamp({ auto: 'update' }),
+          }),
+          admin: {
+            enabled: true,
+            label: 'Test Models',
+          },
+        });
+    db.registerModel(TestModel);
 
     await db.knex.schema.createTable('test_models', (table) => {
       table.bigIncrements('id');
@@ -81,15 +78,17 @@ describe.sequential('Data exchange plugin', () => {
 
   afterEach(async () => {
     if (db) await db.destroy();
-    clearRegistry();
   });
 
   async function loginCookie() {
-    await request(app).post('/_admin/api/auth/setup').send({
+    const setupRes = await request(app).post('/_admin/api/auth/setup').send({
       email: 'admin@example.com',
       password: 'password123',
       name: 'Admin',
     });
+    if (setupRes.headers['set-cookie']) {
+      return setupRes.headers['set-cookie'];
+    }
     const loginRes = await request(app).post('/_admin/api/auth/login').send({
       email: 'admin@example.com',
       password: 'password123',
@@ -197,28 +196,26 @@ describe.sequential('Data exchange export with soft delete', () => {
   let db;
 
   beforeEach(async () => {
-    clearRegistry();
-
     db = createDatabase({
       client: 'better-sqlite3',
       connection: ':memory:',
       models: './tests/fixtures/models-empty',
     });
 
-    if (!hasModel('SoftThing')) {
-      const SoftThing = defineModel({
-        name: 'SoftThing',
-        table: 'soft_things',
-        schema: zdb.schema({
-          id: zdb.id(),
-          name: zdb.string(),
-          deleted_at: zdb.timestamp({ nullable: true }),
-        }),
-        admin: { enabled: true, label: 'Soft' },
-        scopes: { softDelete: true },
-      });
-      db.registerModel(SoftThing);
-    }
+    const SoftThing = hasModel('SoftThing')
+      ? getModel('SoftThing')
+      : defineModel({
+          name: 'SoftThing',
+          table: 'soft_things',
+          schema: zdb.schema({
+            id: zdb.id(),
+            name: zdb.string(),
+            deleted_at: zdb.timestamp({ nullable: true }),
+          }),
+          admin: { enabled: true, label: 'Soft' },
+          scopes: { softDelete: true },
+        });
+    db.registerModel(SoftThing);
 
     await db.knex.schema.createTable('soft_things', (table) => {
       table.bigIncrements('id');
@@ -253,15 +250,17 @@ describe.sequential('Data exchange export with soft delete', () => {
 
   afterEach(async () => {
     if (db) await db.destroy();
-    clearRegistry();
   });
 
   async function loginCookie() {
-    await request(app).post('/_admin/api/auth/setup').send({
+    const setupRes = await request(app).post('/_admin/api/auth/setup').send({
       email: 'admin@example.com',
       password: 'password123',
       name: 'Admin',
     });
+    if (setupRes.headers['set-cookie']) {
+      return setupRes.headers['set-cookie'];
+    }
     const loginRes = await request(app).post('/_admin/api/auth/login').send({
       email: 'admin@example.com',
       password: 'password123',
@@ -316,28 +315,28 @@ describe.sequential('Admin panel built-in data exchange', () => {
   let db;
 
   beforeEach(async () => {
-    clearRegistry();
-
     db = createDatabase({
       client: 'better-sqlite3',
       connection: ':memory:',
       models: './tests/fixtures/models-empty',
     });
 
-    const Product = defineModel({
-      name: 'Product',
-      table: 'products',
-      schema: z.object({
-        id: zdb.id(),
-        firstName: z.string(),
-        stockCount: z.number(),
-        active: z.boolean().default(true),
-      }),
-      admin: {
-        enabled: true,
-        label: 'Products',
-      },
-    });
+    const Product = hasModel('Product')
+      ? getModel('Product')
+      : defineModel({
+          name: 'Product',
+          table: 'products',
+          schema: z.object({
+            id: zdb.id(),
+            firstName: z.string(),
+            stockCount: z.number(),
+            active: z.boolean().default(true),
+          }),
+          admin: {
+            enabled: true,
+            label: 'Products',
+          },
+        });
     db.registerModel(Product);
 
     await db.knex.schema.createTable('products', (table) => {
@@ -374,15 +373,17 @@ describe.sequential('Admin panel built-in data exchange', () => {
 
   afterEach(async () => {
     if (db) await db.destroy();
-    clearRegistry();
   });
 
   async function loginCookie() {
-    await request(app).post('/_admin/api/auth/setup').send({
+    const setupRes = await request(app).post('/_admin/api/auth/setup').send({
       email: 'admin@example.com',
       password: 'password123',
       name: 'Admin',
     });
+    if (setupRes.headers['set-cookie']) {
+      return setupRes.headers['set-cookie'];
+    }
     const loginRes = await request(app).post('/_admin/api/auth/login').send({
       email: 'admin@example.com',
       password: 'password123',

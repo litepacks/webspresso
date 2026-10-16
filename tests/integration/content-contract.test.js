@@ -36,7 +36,6 @@ describe.sequential('content plugin API contracts', () => {
 
   afterEach(async () => {
     if (db) await db.destroy();
-    clearRegistry();
   });
 
   describe('error envelope', () => {

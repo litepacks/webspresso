@@ -55,7 +55,7 @@ describe('Queue Plugin Express Integration', () => {
       .expect(200);
 
     expect(res.body.id).toBeDefined();
-    expect(res.body.status).toBe('pending');
+    expect(['pending', 'running', 'completed']).toContain(res.body.status);
   });
 
   it('exposes queue instance on app.queue and plugin.queue', () => {

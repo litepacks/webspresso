@@ -11,7 +11,6 @@ import os from 'node:os';
 import { createApp } from '../../src/server.js';
 import { createDatabase } from '../../index.js';
 import { adminPanelPlugin, fileManagerPlugin } from '../../plugins/index.js';
-import { clearRegistry } from '../../core/orm/model.js';
 
 describe.sequential('Admin File Manager Plugin Integration', () => {
   let app;
@@ -22,7 +21,6 @@ describe.sequential('Admin File Manager Plugin Integration', () => {
   let sharedCookie;
 
   beforeAll(async () => {
-    clearRegistry();
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-admin-fm-'));
     uploadDir = path.join(tmpDir, 'public', 'uploads');
     await fs.mkdir(uploadDir, { recursive: true });
@@ -69,12 +67,21 @@ describe.sequential('Admin File Manager Plugin Integration', () => {
         password: 'password123',
         name: 'Admin User',
       });
-    sharedCookie = setupRes.headers['set-cookie'];
+    if (setupRes.headers['set-cookie']) {
+      sharedCookie = setupRes.headers['set-cookie'];
+    } else {
+      const loginRes = await request(app)
+        .post('/_admin/api/auth/login')
+        .send({
+          email: 'admin@example.com',
+          password: 'password123',
+        });
+      sharedCookie = loginRes.headers['set-cookie'];
+    }
   });
 
   afterAll(async () => {
     if (db) await db.destroy();
-    clearRegistry();
     if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
   });
 

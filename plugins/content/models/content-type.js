@@ -17,10 +17,11 @@ const ContentTypeSchema = zdb.schema({
   updated_at: zdb.timestamp({ auto: 'update' }),
 });
 
-/**
- * @returns {import('../../../core/orm/types').ModelDefinition}
- */
 function createContentTypeModel() {
+  const { hasModel, getModel } = require('../../../core/orm/model');
+  if (hasModel('ContentType')) {
+    return getModel('ContentType');
+  }
   return defineModel({
     name: 'ContentType',
     table: 'content_types',

@@ -1,12 +1,11 @@
 /**
  * HTTP Compression Middleware
  * Provides threshold-based streaming response compression for Webspresso applications.
+ * Backed by the official Express compression package with native Brotli (br), Gzip, and Deflate support.
  * @module core/compression/middleware
  */
 
-const { selectEncoding, getDefaultSupportedEncodings } = require('./negotiate');
-const { isCompressible } = require('./compressible');
-const { createCompressionStream } = require('./compression-stream');
+const compression = require('compression');
 
 /**
  * Safely append a field to the HTTP Vary header
@@ -31,6 +30,15 @@ function appendVary(res, field) {
 }
 
 /**
+ * Response helper to opt-out of compression for a specific route
+ * @param {boolean} [enable=true]
+ */
+function resCompress(enable = true) {
+  this._noCompression = !enable;
+  return this;
+}
+
+/**
  * Create Webspresso HTTP Response Compression Middleware
  * @param {Object} [options]
  * @param {number} [options.threshold=1024] - Minimum response size in bytes to apply compression
@@ -42,313 +50,47 @@ function appendVary(res, field) {
  * @param {Object} [options.deflate] - Custom Deflate options
  * @returns {import('express').RequestHandler}
  */
-function resCompress(enable = true) {
-  this._noCompression = !enable;
-  return this;
-}
-
 function createCompressionMiddleware(options = {}) {
   const threshold = typeof options.threshold === 'number' && options.threshold >= 0 ? options.threshold : 1024;
-  const supportedEncodings = Array.isArray(options.encodings) && options.encodings.length > 0
-    ? options.encodings
-    : getDefaultSupportedEncodings();
-
   const customFilter = typeof options.filter === 'function' ? options.filter : null;
+
+  const comp = compression({
+    threshold,
+    brotli: options.brotli,
+    level: options.level,
+    filter: (req, res) => {
+      // Respect Webspresso opt-out flags
+      if (res._noCompression || res.locals?.compress === false || res.shouldCompress === false) {
+        return false;
+      }
+      // Never compress server-sent event streams
+      const contentType = res.getHeader('Content-Type');
+      if (contentType && String(contentType).toLowerCase().includes('text/event-stream')) {
+        return false;
+      }
+      if (customFilter) {
+        return customFilter(req, res);
+      }
+      return compression.filter(req, res);
+    },
+    ...options,
+  });
 
   return function compressionMiddleware(req, res, next) {
     // Expose opt-out API on response object
     res._noCompression = false;
     res.compress = resCompress;
 
-    // Skip compression for HEAD requests
-    if (req.method === 'HEAD') {
-      return next();
-    }
-
-    const acceptEncoding = req.headers['accept-encoding'];
-    if (!acceptEncoding) {
-      return next();
-    }
-
-    let selectedEncoding = null;
-    let checkedEncoding = false;
-
-    function getSelectedEncoding() {
-      if (!checkedEncoding) {
-        checkedEncoding = true;
-        selectedEncoding = selectEncoding(acceptEncoding, supportedEncodings);
-      }
-      return selectedEncoding;
-    }
-
-    // Original methods to wrap (store references without .bind() allocation)
-    const origWrite = res.write;
-    const origEnd = res.end;
-    const origWriteHead = res.writeHead;
-
-    let compressStream = null;
-    let isCompressing = false;
-    let headersSent = false;
-    let bufferedChunks = [];
-    let bufferedLength = 0;
-    let decided = false;
-
-    /**
-     * Check if response should be compressed
-     * @param {number} [expectedLength]
-     * @returns {boolean}
-     */
-    function shouldCompress(expectedLength) {
-      if (res._noCompression || res.locals?.compress === false || res.shouldCompress === false) {
-        return false;
-      }
-
-      // Check status codes that must not have a body
-      const statusCode = res.statusCode || 200;
-      if (statusCode === 204 || statusCode === 304 || statusCode === 205 || statusCode < 200) {
-        return false;
-      }
-
-      // If response already has a Content-Encoding, do not double-compress
-      if (res.getHeader('Content-Encoding')) {
-        return false;
-      }
-
-      // Check Content-Type compressibility
-      const contentType = res.getHeader('Content-Type');
-      if (!contentType || !isCompressible(contentType)) {
-        return false;
-      }
-
-      // Check threshold if length is known
-      if (typeof expectedLength === 'number' && expectedLength < threshold) {
-        return false;
-      }
-
-      // Custom filter hook
-      if (customFilter && !customFilter(req, res)) {
-        return false;
-      }
-
-      // Check if client supports any available encoding
-      const encoding = getSelectedEncoding();
-      if (!encoding || encoding === 'identity') {
-        return false;
-      }
-
-      return true;
-    }
-
-    /**
-     * Initialize compression stream and headers
-     */
-    function startCompression() {
-      const encoding = getSelectedEncoding();
-      compressStream = createCompressionStream(encoding, options);
-      if (!compressStream) {
-        isCompressing = false;
-        return;
-      }
-
-      isCompressing = true;
-      appendVary(res, 'Accept-Encoding');
-      res.setHeader('Content-Encoding', encoding);
-      res.removeHeader('Content-Length');
-
-      // Pipe compression stream chunks directly into underlying socket/response with backpressure
-      compressStream.on('data', (chunk) => {
-        if (origWrite.call(res, chunk) === false) {
-          compressStream.pause();
-        }
-      });
-
-      res.on('drain', () => {
-        if (compressStream && compressStream.resume) {
-          compressStream.resume();
-        }
-      });
-
-      compressStream.on('drain', () => {
-        res.emit('drain');
-      });
-
-      compressStream.on('end', () => {
-        origEnd.call(res);
-      });
-
-      compressStream.on('error', (err) => {
-        origEnd.call(res);
-      });
-    }
-
-    // Wrap writeHead
-    res.writeHead = function(statusCode, ...args) {
-      if (res.headersSent) return res;
-
-      let headersIndex = -1;
-      if (typeof args[0] === 'object' && args[0] !== null) {
-        headersIndex = 0;
-      } else if (typeof args[1] === 'object' && args[1] !== null) {
-        headersIndex = 1;
-      }
-
-      if (headersIndex !== -1) {
-        for (const [k, v] of Object.entries(args[headersIndex])) {
-          res.setHeader(k, v);
-        }
-      }
-
-      if (!decided) {
-        let expectedLength = res.getHeader('content-length');
-        if (expectedLength !== undefined && expectedLength !== null) {
-          expectedLength = parseInt(expectedLength, 10);
-        }
-        if (typeof expectedLength === 'number' && !isNaN(expectedLength) && expectedLength < threshold) {
-          decided = true;
-          isCompressing = false;
-        } else if (shouldCompress(expectedLength)) {
-          decided = true;
-          startCompression();
-        }
-      }
-
-      if (isCompressing) {
-        const encoding = getSelectedEncoding();
-        if (encoding) {
-          res.setHeader('Content-Encoding', encoding);
-        }
-        res.removeHeader('Content-Length');
-        appendVary(res, 'Accept-Encoding');
-
-        if (headersIndex !== -1) {
-          const cleanedHeaders = {};
-          for (const [k, v] of Object.entries(args[headersIndex])) {
-            if (k.toLowerCase() !== 'content-length') {
-              cleanedHeaders[k] = v;
-            }
-          }
-          if (encoding) {
-            cleanedHeaders['Content-Encoding'] = encoding;
-          }
-          args[headersIndex] = cleanedHeaders;
-        }
-      }
-
-      return origWriteHead.call(res, statusCode, ...args);
-    };
-
-    // Wrap write
-    res.write = function(chunk, encoding, callback) {
-      if (typeof encoding === 'function') {
-        callback = encoding;
-        encoding = undefined;
-      }
-
-      if (!chunk) {
-        return true;
-      }
-
-      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding);
-
-      if (!decided) {
-        bufferedChunks.push(buf);
-        bufferedLength += buf.length;
-
-        // If buffered size exceeds threshold, decide to start compression immediately
-        if (bufferedLength >= threshold) {
-          decided = true;
-          if (shouldCompress()) {
-            startCompression();
-            // Flush buffered chunks through compressor
-            for (const b of bufferedChunks) {
-              compressStream.write(b);
-            }
-            bufferedChunks = [];
-          } else {
-            // Send buffered chunks uncompressed
-            for (const b of bufferedChunks) {
-              origWrite.call(res, b);
-            }
-            bufferedChunks = [];
-          }
-        }
-        if (typeof callback === 'function') callback();
-        return true;
-      }
-
-      if (isCompressing && compressStream) {
-        return compressStream.write(buf, callback);
-      }
-
-      return origWrite.call(res, buf, callback);
-    };
-
-    // Wrap end
-    res.end = function(chunk, encoding, callback) {
-      if (typeof chunk === 'function') {
-        callback = chunk;
-        chunk = null;
-      } else if (typeof encoding === 'function') {
-        callback = encoding;
-        encoding = undefined;
-      }
-
-      if (chunk) {
-        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding);
-        if (!decided) {
-          bufferedChunks.push(buf);
-          bufferedLength += buf.length;
-        } else if (isCompressing && compressStream) {
-          compressStream.write(buf);
-        } else {
-          origWrite.call(res, buf);
-        }
-      }
-
-      if (!decided) {
-        decided = true;
-        // Check if total length satisfies threshold and compressibility
-        if (shouldCompress(bufferedLength)) {
-          startCompression();
-          if (bufferedChunks.length === 1) {
-            if (typeof callback === 'function') {
-              compressStream.once('end', callback);
-            }
-            const singleBuf = bufferedChunks[0];
-            bufferedChunks = [];
-            compressStream.end(singleBuf);
-            return res;
-          }
-          for (const b of bufferedChunks) {
-            compressStream.write(b);
-          }
-          bufferedChunks = [];
-        } else {
-          // Output uncompressed
-          if (shouldCompress(Infinity) && bufferedLength < threshold) {
-            // Ensure Vary is set if content was compressible but just below threshold
-            appendVary(res, 'Accept-Encoding');
-          }
-          for (const b of bufferedChunks) {
-            origWrite.call(res, b);
-          }
-          bufferedChunks = [];
-          return origEnd.call(res, callback);
-        }
-      }
-
-      if (isCompressing && compressStream) {
-        if (typeof callback === 'function') {
-          compressStream.once('end', callback);
-        }
-        compressStream.end();
+    // Prevent Content-Length header mismatch if setHeader is invoked after compression starts
+    const origSetHeader = res.setHeader;
+    res.setHeader = function(field, val) {
+      if (res.getHeader('Content-Encoding') && typeof field === 'string' && field.toLowerCase() === 'content-length') {
         return res;
       }
-
-      return origEnd.call(res, callback);
+      return origSetHeader.call(res, field, val);
     };
 
-    next();
+    return comp(req, res, next);
   };
 }
 
