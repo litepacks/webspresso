@@ -55,6 +55,7 @@ function createCompressionMiddleware(options = {}) {
   const customFilter = typeof options.filter === 'function' ? options.filter : null;
 
   const comp = compression({
+    ...options,
     threshold,
     brotli: options.brotli,
     level: options.level,
@@ -73,7 +74,6 @@ function createCompressionMiddleware(options = {}) {
       }
       return compression.filter(req, res);
     },
-    ...options,
   });
 
   return function compressionMiddleware(req, res, next) {
