@@ -235,7 +235,7 @@ describe('ORM Model Options & Automatic Timestamps / SoftDelete', () => {
     // 3. Find
     const found = await repo.findById(task.id);
     expect(found).not.toBeNull();
-    expect(found.title).toBe('Buy Groceries');
+    expect(found.title).toBe('Buy Organic Groceries');
 
     // 4. Soft Delete
     const deleted = await repo.delete(task.id);
