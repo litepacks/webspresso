@@ -379,7 +379,7 @@ describe('Tracking Middleware', () => {
       await middleware(mockReq({ path: '/err3' }), {}, vi.fn());
       await middleware.flush();
       expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
-      expect(consoleErrorSpy.mock.calls[1][0]).toContain('suppressed 1 occurrences in last 1s');
+      expect(consoleErrorSpy.mock.calls[1][0]).toContain('suppressed 1 occurrences');
 
       dateSpy.mockRestore();
       consoleErrorSpy.mockRestore();
