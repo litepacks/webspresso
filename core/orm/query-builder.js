@@ -78,11 +78,11 @@ class QueryBuilder {
   where(columnOrConditions, operatorOrValue, value) {
     // Object form: where({ column: value, ... })
     if (typeof columnOrConditions === 'object' && columnOrConditions !== null) {
-      for (const [col, val] of Object.entries(columnOrConditions)) {
+      for (const col of Object.keys(columnOrConditions)) {
         this.state.wheres.push({
           column: col,
           operator: '=',
-          value: val,
+          value: columnOrConditions[col],
           boolean: 'and',
         });
       }
@@ -493,27 +493,37 @@ class QueryBuilder {
    * @returns {Promise<Object|null>}
    */
   async first() {
-    const ctx = createEventContext(this.model.name, 'find', this._hookTrx());
+    const shouldEmit = (
+      ModelEvents.hasListeners(this.model.name, Hooks.BEFORE_FIND) ||
+      ModelEvents.hasListeners(this.model.name, Hooks.AFTER_FIND)
+    );
+    const ctx = shouldEmit ? createEventContext(this.model.name, 'find', this._hookTrx()) : null;
     const self = this;
 
     async function loadFromDb() {
-      await ModelEvents.emitAsync(self.model.name, Hooks.BEFORE_FIND, {}, ctx);
-      if (ctx.isCancelled) {
-        throw new HookCancellationError(ctx.cancelReason, self.model.name, Hooks.BEFORE_FIND);
+      if (shouldEmit) {
+        await ModelEvents.emitAsync(self.model.name, Hooks.BEFORE_FIND, {}, ctx);
+        if (ctx.isCancelled) {
+          throw new HookCancellationError(ctx.cancelReason, self.model.name, Hooks.BEFORE_FIND);
+        }
       }
 
       const qb = self.toKnex().first();
       const result = await qb;
       if (!result) return null;
 
-      deserializeJsonFields(result, self.jsonColumns);
+      if (self.jsonColumns.size > 0) {
+        deserializeJsonFields(result, self.jsonColumns);
+      }
 
       const withs = self.getWiths();
       if (withs.length > 0) {
         await loadRelations([result], ensureArray(withs), self.model, self.getActiveKnex(), self.scopeContext);
       }
 
-      ModelEvents.emit(self.model.name, Hooks.AFTER_FIND, result, ctx);
+      if (shouldEmit) {
+        ModelEvents.emit(self.model.name, Hooks.AFTER_FIND, result, ctx);
+      }
       return result;
     }
 
@@ -559,19 +569,27 @@ class QueryBuilder {
    * @returns {Promise<Object[]>}
    */
   async list() {
-    const ctx = createEventContext(this.model.name, 'find', this._hookTrx());
+    const shouldEmit = (
+      ModelEvents.hasListeners(this.model.name, Hooks.BEFORE_FIND) ||
+      ModelEvents.hasListeners(this.model.name, Hooks.AFTER_FIND)
+    );
+    const ctx = shouldEmit ? createEventContext(this.model.name, 'find', this._hookTrx()) : null;
     const self = this;
 
     async function loadFromDb() {
-      await ModelEvents.emitAsync(self.model.name, Hooks.BEFORE_FIND, {}, ctx);
-      if (ctx.isCancelled) {
-        throw new HookCancellationError(ctx.cancelReason, self.model.name, Hooks.BEFORE_FIND);
+      if (shouldEmit) {
+        await ModelEvents.emitAsync(self.model.name, Hooks.BEFORE_FIND, {}, ctx);
+        if (ctx.isCancelled) {
+          throw new HookCancellationError(ctx.cancelReason, self.model.name, Hooks.BEFORE_FIND);
+        }
       }
 
       const results = await self.toKnex();
 
-      for (const record of results) {
-        deserializeJsonFields(record, self.jsonColumns);
+      if (self.jsonColumns.size > 0) {
+        for (const record of results) {
+          deserializeJsonFields(record, self.jsonColumns);
+        }
       }
 
       const withs = self.getWiths();
@@ -579,8 +597,10 @@ class QueryBuilder {
         await loadRelations(results, ensureArray(withs), self.model, self.getActiveKnex(), self.scopeContext);
       }
 
-      for (const record of results) {
-        ModelEvents.emit(self.model.name, Hooks.AFTER_FIND, record, ctx);
+      if (shouldEmit) {
+        for (const record of results) {
+          ModelEvents.emit(self.model.name, Hooks.AFTER_FIND, record, ctx);
+        }
       }
       return results;
     }
@@ -692,13 +712,19 @@ class QueryBuilder {
     perPage = validated.perPage;
     page = Math.max(1, parseInt(page, 10) || 1);
 
-    const ctx = createEventContext(this.model.name, 'find', this._hookTrx());
+    const shouldEmit = (
+      ModelEvents.hasListeners(this.model.name, Hooks.BEFORE_FIND) ||
+      ModelEvents.hasListeners(this.model.name, Hooks.AFTER_FIND)
+    );
+    const ctx = shouldEmit ? createEventContext(this.model.name, 'find', this._hookTrx()) : null;
     const self = this;
 
     async function loadFromDb() {
-      await ModelEvents.emitAsync(self.model.name, Hooks.BEFORE_FIND, {}, ctx);
-      if (ctx.isCancelled) {
-        throw new HookCancellationError(ctx.cancelReason, self.model.name, Hooks.BEFORE_FIND);
+      if (shouldEmit) {
+        await ModelEvents.emitAsync(self.model.name, Hooks.BEFORE_FIND, {}, ctx);
+        if (ctx.isCancelled) {
+          throw new HookCancellationError(ctx.cancelReason, self.model.name, Hooks.BEFORE_FIND);
+        }
       }
 
       const base = self.toKnex({ includeLimitOffset: false });
@@ -709,8 +735,10 @@ class QueryBuilder {
       const offset = (page - 1) * perPage;
       const data = await base.clone().limit(perPage).offset(offset);
 
-      for (const record of data) {
-        deserializeJsonFields(record, self.jsonColumns);
+      if (self.jsonColumns.size > 0) {
+        for (const record of data) {
+          deserializeJsonFields(record, self.jsonColumns);
+        }
       }
 
       const withs = self.getWiths();
@@ -718,8 +746,10 @@ class QueryBuilder {
         await loadRelations(data, ensureArray(withs), self.model, self.getActiveKnex(), self.scopeContext);
       }
 
-      for (const record of data) {
-        ModelEvents.emit(self.model.name, Hooks.AFTER_FIND, record, ctx);
+      if (shouldEmit) {
+        for (const record of data) {
+          ModelEvents.emit(self.model.name, Hooks.AFTER_FIND, record, ctx);
+        }
       }
 
       return {

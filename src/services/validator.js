@@ -8,12 +8,17 @@ const { ValidationError } = require('../../core/errors');
 const { z: zForServices, sanitizeInput, hasDangerousKeys } = require('../../core/validation');
 const z = zForServices;
 
+const descriptorCache = new Map();
+
 /**
  * Compile a concise type string descriptor into a Zod schema
  * @param {string} typeName - Type name descriptor (e.g. 'number', 'string', 'email', 'string?')
  * @returns {z.ZodTypeAny}
  */
 function descriptorToZod(typeName) {
+  const cached = descriptorCache.get(typeName);
+  if (cached) return cached;
+
   const isOptional = typeName.endsWith('?');
   const baseType = isOptional ? typeName.slice(0, -1).toLowerCase() : typeName.toLowerCase();
 
@@ -60,7 +65,11 @@ function descriptorToZod(typeName) {
       break;
   }
 
-  return isOptional ? schema.optional() : schema;
+  const finalSchema = isOptional ? schema.optional() : schema;
+  if (descriptorCache.size < 200) {
+    descriptorCache.set(typeName, finalSchema);
+  }
+  return finalSchema;
 }
 
 const compiledSchemaCache = new WeakMap();

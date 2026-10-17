@@ -95,7 +95,7 @@ function createApiHandler(descriptor, context) {
       // 1. Reload module in development
       if (isDev) {
         try {
-          const resolvedPath = require.resolve(descriptor.file);
+          const resolvedPath = descriptor._resolvedPath || (descriptor._resolvedPath = require.resolve(descriptor.file));
           if (require.cache[resolvedPath]) {
             delete require.cache[resolvedPath];
             cachedMiddlewares = null;
