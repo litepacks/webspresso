@@ -4,6 +4,8 @@
  * @module plugins/site-analytics/client-error-handler
  */
 
+const { formatDbError } = require('./tracking');
+
 const DEFAULT_TABLE = 'analytics_client_errors';
 
 /**
@@ -71,7 +73,7 @@ function createErrorReportHandler(options) {
 
       res.status(202).json({ ok: true });
     } catch (e) {
-      console.error('[site-analytics] Client error report failed:', e.message);
+      console.error('[site-analytics] Client error report failed:', formatDbError(e));
       res.status(500).json({ error: 'Report failed' });
     }
   };

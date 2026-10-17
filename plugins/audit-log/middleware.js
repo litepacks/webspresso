@@ -95,11 +95,9 @@ function createAuditMiddleware(options) {
           metadata: metadata || null,
         };
 
-        knex(tableName).insert(row).catch((err) => {
-          console.warn('[audit-log] Failed to insert audit row:', err.message);
-        });
+        knex(tableName).insert(row).catch(logAuditError);
       } catch (e) {
-        console.warn('[audit-log] finish handler error:', e.message);
+        logAuditError(e, 'finish handler error');
       }
     });
 
@@ -107,9 +105,46 @@ function createAuditMiddleware(options) {
   };
 }
 
+let lastAuditWarnTime = 0;
+let suppressedAuditErrors = 0;
+
+/**
+ * Format and sanitize DB errors to prevent leaking raw SQL queries
+ * @param {Error|Object|string} e
+ * @returns {string}
+ */
+function formatDbError(e) {
+  if (!e) return 'Unknown error';
+  let msg;
+  if (typeof e.message === 'string' && e.message.includes(' - ')) {
+    msg = e.message.split(' - ').pop().trim();
+  } else {
+    msg = String(e.code || e.message || 'Database error');
+  }
+  return msg.replace(/[\r\n]+/g, ' ').trim().slice(0, 150);
+}
+
+function logAuditError(err, prefix = 'Failed to insert audit row') {
+  const now = Date.now();
+  const formatted = formatDbError(err);
+  if (lastAuditWarnTime === 0 || now - lastAuditWarnTime >= 60000) {
+    const elapsedSec = lastAuditWarnTime > 0 ? Math.round((now - lastAuditWarnTime) / 1000) : 0;
+    if (suppressedAuditErrors > 0) {
+      console.warn(`[audit-log] ${prefix} (suppressed ${suppressedAuditErrors} occurrences in last ${elapsedSec}s): ${formatted}`);
+    } else {
+      console.warn(`[audit-log] ${prefix}: ${formatted}`);
+    }
+    lastAuditWarnTime = now;
+    suppressedAuditErrors = 0;
+  } else {
+    suppressedAuditErrors++;
+  }
+}
+
 module.exports = {
   createAuditMiddleware,
   stringifyId,
   extractResourceIdFromJsonBody,
   buildMetadata,
+  formatDbError,
 };

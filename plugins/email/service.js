@@ -30,6 +30,37 @@ function createEmailService(options) {
     console.warn('[email]', err.message);
   }
 
+  let lastEmailLogWarnTime = 0;
+  let suppressedEmailLogErrors = 0;
+
+  function formatDbError(e) {
+    if (!e) return 'Unknown error';
+    let msg;
+    if (typeof e.message === 'string' && e.message.includes(' - ')) {
+      msg = e.message.split(' - ').pop().trim();
+    } else {
+      msg = String(e.code || e.message || 'Database error');
+    }
+    return msg.replace(/[\r\n]+/g, ' ').trim().slice(0, 150);
+  }
+
+  function logEmailError(err) {
+    const now = Date.now();
+    const formatted = formatDbError(err);
+    if (lastEmailLogWarnTime === 0 || now - lastEmailLogWarnTime >= 60000) {
+      const elapsedSec = lastEmailLogWarnTime > 0 ? Math.round((now - lastEmailLogWarnTime) / 1000) : 0;
+      if (suppressedEmailLogErrors > 0) {
+        console.warn(`[email] Failed to write email log (suppressed ${suppressedEmailLogErrors} occurrences in last ${elapsedSec}s): ${formatted}`);
+      } else {
+        console.warn('[email] Failed to write email log:', formatted);
+      }
+      lastEmailLogWarnTime = now;
+      suppressedEmailLogErrors = 0;
+    } else {
+      suppressedEmailLogErrors++;
+    }
+  }
+
   /**
    * @param {Object} row
    */
@@ -49,7 +80,7 @@ function createEmailService(options) {
         created_at: new Date(),
       });
     } catch (err) {
-      console.warn('[email] Failed to write email log:', err.message);
+      logEmailError(err);
     }
   }
 

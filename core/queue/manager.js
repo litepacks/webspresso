@@ -527,6 +527,11 @@ class QueueManager extends EventEmitter {
       }
     } catch (err) {
       this.emit('error', err);
+      // Back off polling interval on database or adapter error to avoid tight spin-loop
+      this._currentPollInterval = Math.min(
+        this.maxPollInterval,
+        Math.round(this._currentPollInterval * 2)
+      );
       this._scheduleNextTick(this._currentPollInterval);
       return;
     }
