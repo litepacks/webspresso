@@ -11,20 +11,7 @@ const { buildOpenApiDocument } = require('../core/openapi/build-from-api-routes'
 
 const PKG = require(path.join(__dirname, '..', 'package.json'));
 
-/**
- * HTML Escaping
- * @param {string} str
- * @returns {string}
- */
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+const { escapeHtml } = require('../core/utils/html');
 
 /**
  * Generates Swagger UI HTML page

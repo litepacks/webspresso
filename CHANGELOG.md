@@ -24,6 +24,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Frontend Admin Panel Fetch & Abort Architecture (`plugins/admin-panel/`)**: Introduced client-side `fetchWithTimeout` to SPA parts, upgraded `api.request`, `downloadDataExchangeXlsx`, single/multiple file uploads, and data exchange imports with configurable timeouts (30s–60s) and `AbortController` support. Exposed `window.Admin.fetch` and `window.__ADMIN_COMPONENTS__.fetchWithTimeout` for companion plugins (`file-manager`, `schema-explorer`, `orm-cache-admin`).
 - **Audit Log Middleware Fix (`plugins/audit-log/middleware.js`)**: Fixed `ReferenceError: metadata is not defined` regression when constructing SQLite metadata payload.
 
+#### Shared Timing-Attack Resistant `safeCompare` (`core/utils/crypto.js`, `core/utils/safe-compare.js`)
+- **Unified Cryptographic Constant-Time Comparison**: Created zero-dependency `safeCompare` in `core/utils/crypto.js` using `crypto.timingSafeEqual` with dummy comparison protection on length mismatches to completely prevent timing leaks. Supports both strings and Buffers, and safely handles null/undefined/non-string inputs without throwing. Exported across `core/utils/crypto`, `core/utils/safe-compare`, `utils.safeCompare` in `src/helpers.js`, root framework export in `index.js`, and TypeScript types in `index.d.ts`.
+- **Framework-Wide Deduplication**: Replaced redundant, fragmented `timingSafeEqual` and `safeCompare` implementations across `plugins/csrf`, `plugins/basic-auth`, `plugins/api-key`, `plugins/webhooks`, `plugins/mcp`, `plugins/polar`, `core/auth/totp`, `core/auth/oauth`, and `core/auth/jwt`.
+
+#### Shared HTML Escaping & Sanitization (`core/utils/html.js`, `core/utils/escape-html.js`)
+- **High-Performance Escaper & Unescaper**: Created zero-dependency `escapeHtml` and `unescapeHtml` in `core/utils/html.js` featuring regex test fast-path and single-pass replacement for `&`, `<`, `>`, `"`, and `'`. Exported across `core/utils/html`, `core/utils/escape-html`, `utils.escapeHtml` / `utils.unescapeHtml` in `src/helpers.js`, root framework export in `index.js`, and typed in `index.d.ts`.
+- **Framework-Wide Deduplication**: Unified duplicate HTML escaping routines across `core/errors/middleware.js`, `core/forms/form-builder.js`, `core/content/renderer.js`, `plugins/swagger.js`, `plugins/recaptcha/helpers.js`, and `bin/utils/orm-map-html.js`.
+
+#### Universal Query Filtering Engine (`core/orm/query-filters.js`)
+- **Single Source of Truth for Model Query Filters**: Extracted and centralized operator parsing (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `like`, `ilike`, `in`, `between`, `null`, `not_null`) and multi-value splitting into `core/orm/query-filters.js`.
+- **Deduplicated Admin Panel & REST Resources**: Replaced redundant `applyColumnFilters` and `buildFilteredQuery` implementations in `plugins/rest-resources/index.js` and `plugins/admin-panel/core/api-extensions.js` with the unified engine, ensuring identical SQL semantics, search term matching, and reserved query parameter skipping.
+
+#### Universal Client IP Resolution (`core/utils/ip.js`, `core/utils/get-client-ip.js`)
+- **Proxy-Aware Client IP Extraction**: Created zero-dependency `getClientIp(req, fallback)` in `core/utils/ip.js` with comprehensive fallback chains: `x-forwarded-for` (handling comma-separated strings and arrays with whitespace trimming), `x-real-ip`, `req.ip`, `req.connection.remoteAddress`, `req.socket.remoteAddress`, and customizable fallbacks.
+- **Framework-Wide Deduplication**: Deduplicated client IP resolution across `core/auth/user-agent.js`, `plugins/site-analytics/tracking.js`, `plugins/admin-panel/lib/login-rate-limiter.js`, `plugins/recaptcha/verify.js`, and `plugins/audit-log/middleware.js`. Exported across `core/utils/ip`, `core/utils/get-client-ip`, `utils.getClientIp` in `src/helpers.js`, root framework export in `index.js`, and TypeScript declarations in `index.d.ts`.
+
 #### Plugin Resilience, Security & Crash Defenses (`plugins/`)
 - **Webhooks Unhandled Process Crash Defense (`plugins/webhooks/dispatcher.js`)**: Guarded `this.emit('error', err)` with `this.listenerCount('error') > 0` before emitting unhandled errors on `EventEmitter`, preventing unhandled exception process exits. Marked retry timers with `timer.unref()`.
 - **Webhooks SSRF & URL Protocol Validation (`plugins/webhooks/sender.js`)**: Enforced strict `http:` and `https:` URL protocol validation, blocking dangerous pseudo-schemes (`file:`, `javascript:`) and unhandled connection hangs.

@@ -627,15 +627,7 @@ class AssetManager {
    * Escape HTML special characters
    */
   escapeHtml(str) {
-    if (!str || typeof str !== 'string' || !/[&"'<>]/.test(str)) {
-      return str;
-    }
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+    return require('../core/utils/html').escapeHtml(str);
   }
 }
 
@@ -2208,6 +2200,22 @@ const utils = {
 
   fetchWithTimeout(url, options) {
     return require('../core/utils/fetch').fetchWithTimeout(url, options);
+  },
+
+  safeCompare(a, b) {
+    return require('../core/utils/crypto').safeCompare(a, b);
+  },
+
+  escapeHtml(value) {
+    return require('../core/utils/html').escapeHtml(value);
+  },
+
+  unescapeHtml(value) {
+    return require('../core/utils/html').unescapeHtml(value);
+  },
+
+  getClientIp(req, fallback) {
+    return require('../core/utils/ip').getClientIp(req, fallback);
   }
 };
 

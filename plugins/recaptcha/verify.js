@@ -4,6 +4,7 @@
  */
 
 const { fetchWithTimeout } = require('../../core/utils/fetch');
+const { getClientIp } = require('../../core/utils/ip');
 
 const SITEVERIFY_URL = 'https://www.google.com/recaptcha/api/siteverify';
 
@@ -153,18 +154,7 @@ async function verifyRecaptcha(options = {}) {
  * @returns {string|undefined}
  */
 function getRemoteIp(req) {
-  if (!req) return undefined;
-  const xf = req.headers && req.headers['x-forwarded-for'];
-  if (typeof xf === 'string' && xf.length) {
-    return xf.split(',')[0].trim();
-  }
-  if (req.ip) {
-    return req.ip;
-  }
-  if (req.socket && req.socket.remoteAddress) {
-    return req.socket.remoteAddress;
-  }
-  return undefined;
+  return getClientIp(req, undefined);
 }
 
 module.exports = {

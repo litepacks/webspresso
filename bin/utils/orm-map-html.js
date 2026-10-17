@@ -4,6 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { escapeHtml } = require('../../core/utils/html');
 
 /**
  * @param {object} snapshot - { generatedAt, models }
@@ -661,14 +662,7 @@ function buildOrmMapHtml(snapshot, mermaidSource, meta = {}) {
 `;
 }
 
-function escapeHtml(s) {
-  if (s == null) return '';
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+
 
 /**
  * Optional: read package name from cwd/package.json

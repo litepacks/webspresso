@@ -17,27 +17,7 @@
  * @property {boolean} isBot
  */
 
-/**
- * Extract client IP address handling proxies
- * @param {Object} req - Express / Node.js HTTP request
- * @returns {string}
- */
-function getClientIp(req) {
-  if (!req) return '127.0.0.1';
-
-  const forwarded = req.headers?.['x-forwarded-for'];
-  if (forwarded) {
-    const ips = typeof forwarded === 'string' ? forwarded.split(',') : forwarded;
-    const first = Array.isArray(ips) ? ips[0] : ips;
-    if (first) return first.trim();
-  }
-
-  return req.headers?.['x-real-ip'] ||
-    req.ip ||
-    req.connection?.remoteAddress ||
-    req.socket?.remoteAddress ||
-    '127.0.0.1';
-}
+const { getClientIp } = require('../utils/ip');
 
 /**
  * Parse raw User-Agent header string into structured device info

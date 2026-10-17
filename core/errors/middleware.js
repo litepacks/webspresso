@@ -5,6 +5,7 @@
 
 const { normalizeError, toErrorResponseObject } = require('./normalize');
 const { RequestAbortedError } = require('./domain');
+const { escapeHtml } = require('../utils/html');
 
 /**
  * Check if the request prefers a JSON error response
@@ -60,14 +61,7 @@ function renderDefaultErrorHtml(err, isDev) {
 </html>`;
 }
 
-function escapeHtml(str) {
-  return String(str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+
 
 /**
  * Create Webspresso Central Error Handler Middleware

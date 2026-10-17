@@ -15,21 +15,7 @@ const NOOP = () => {};
 const EMPTY_OBJECT = Object.freeze({});
 const ignoreRegexCache = new Map();
 
-/**
- * Compare two strings in constant time to prevent timing attacks
- * @param {string} a
- * @param {string} b
- * @returns {boolean}
- */
-function safeCompare(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string') return false;
-  if (a.length !== b.length) return false;
-  try {
-    return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-  } catch (err) {
-    return false;
-  }
-}
+const { safeCompare } = require('../../core/utils/crypto');
 
 /**
  * Check if the request path matches any ignore patterns
@@ -241,3 +227,5 @@ function csrfPlugin(options = {}) {
 
 module.exports = csrfPlugin;
 module.exports.csrfPlugin = csrfPlugin;
+module.exports.safeCompare = safeCompare;
+csrfPlugin.safeCompare = safeCompare;

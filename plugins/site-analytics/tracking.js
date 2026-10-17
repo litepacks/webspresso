@@ -5,6 +5,7 @@
  */
 
 const crypto = require('crypto');
+const { getClientIp: resolveClientIp } = require('../../core/utils/ip');
 const { detectBot } = require('./bot-patterns');
 const { detectCountry } = require('./geo');
 
@@ -82,13 +83,7 @@ function quickHash(str) {
  * Get client IP from request, handling proxies
  */
 function getClientIp(req) {
-  if (!req) return '';
-  const headers = req.headers || {};
-  const forwarded = headers['x-forwarded-for'];
-  if (forwarded) {
-    return String(forwarded).split(',')[0].trim();
-  }
-  return headers['x-real-ip'] || req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '';
+  return resolveClientIp(req, '');
 }
 
 /**

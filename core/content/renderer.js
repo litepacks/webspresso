@@ -3,19 +3,7 @@
  * @module core/content/renderer
  */
 
-/**
- * Escape HTML for text nodes (not for rich-text which uses | safe separately).
- * @param {unknown} value
- * @returns {string}
- */
-function escapeHtml(value) {
-  if (value === null || value === undefined) return '';
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+const { escapeHtml } = require('../utils/html');
 
 /**
  * @param {unknown} value

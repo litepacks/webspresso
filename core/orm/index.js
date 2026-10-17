@@ -392,4 +392,9 @@ module.exports = {
   // Schema Diff & Makemigrations (Django-inspired)
   diffSchema: require('./migrations/diff').diffSchema,
   makeMigrations: require('./migrations/diff').makeMigrations,
+  // Universal Query Filters (REST Resources & Admin Panel)
+  buildFilteredQuery: require('./query-filters').buildFilteredQuery,
+  applyColumnFilters: require('./query-filters').applyColumnFilters,
+  applyFilterCondition: require('./query-filters').applyFilterCondition,
+  queryFilters: require('./query-filters'),
 };

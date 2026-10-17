@@ -72,13 +72,7 @@ function recaptchaV3ExecuteScript(opts = {}) {
   return hidden + script;
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
+const { escapeHtml } = require('../../core/utils/html');
 
 function escapeJsInline(s) {
   return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");

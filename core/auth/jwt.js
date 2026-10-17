@@ -5,6 +5,7 @@
  */
 
 const crypto = require('crypto');
+const { safeCompare } = require('../utils/crypto');
 
 const HS256_HEADER_BASE64URL = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9';
 
@@ -170,12 +171,7 @@ function verifyJwt(token, secret, options = {}) {
     .update(signingInput)
     .digest();
 
-  const actualSignatureBuf = Buffer.from(encodedSignature, 'base64url');
-
-  if (
-    expectedSignatureBuf.length !== actualSignatureBuf.length ||
-    !crypto.timingSafeEqual(expectedSignatureBuf, actualSignatureBuf)
-  ) {
+  if (!safeCompare(expectedSignatureBuf, actualSignatureBuf)) {
     throw new Error('Invalid JWT signature');
   }
 

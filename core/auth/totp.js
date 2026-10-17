@@ -163,20 +163,8 @@ function generateHotp(secret, counter, options = {}) {
   return token;
 }
 
-/**
- * Timing-safe token equality check
- * @param {string} a
- * @param {string} b
- * @returns {boolean}
- */
-function timingSafeTokenCompare(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string') return false;
-  if (a.length !== b.length) return false;
-
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  return crypto.timingSafeEqual(bufA, bufB);
-}
+const { safeCompare } = require('../utils/crypto');
+const timingSafeTokenCompare = safeCompare;
 
 /**
  * Verify HOTP token against counter
@@ -412,7 +400,7 @@ function verifyRecoveryCode(code, hashedCodes = []) {
       continue;
     }
     const candidateBuf = Buffer.from(candidateHash, 'hex');
-    if (crypto.timingSafeEqual(targetBuf, candidateBuf)) {
+    if (safeCompare(targetBuf, candidateBuf)) {
       matchedIndex = i;
       break;
     }

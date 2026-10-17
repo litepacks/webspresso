@@ -4,32 +4,7 @@
  * @module plugins/basic-auth
  */
 
-const crypto = require('crypto');
-
-/**
- * Compare two strings in constant time to prevent timing attacks.
- * Uses dummy buffer comparison if lengths differ to avoid leaking length via response timing.
- * 
- * @param {string} a
- * @param {string} b
- * @returns {boolean}
- */
-function safeCompare(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string') {
-    return false;
-  }
-
-  const bufA = Buffer.from(a, 'utf8');
-  const bufB = Buffer.from(b, 'utf8');
-
-  if (bufA.length !== bufB.length) {
-    // Perform dummy timing-safe comparison with itself to preserve constant execution time
-    crypto.timingSafeEqual(bufA, bufA);
-    return false;
-  }
-
-  return crypto.timingSafeEqual(bufA, bufB);
-}
+const { safeCompare } = require('../../core/utils/crypto');
 
 /**
  * Parse an HTTP Authorization header for Basic credentials.

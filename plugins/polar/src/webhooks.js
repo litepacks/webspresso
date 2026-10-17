@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { safeCompare } = require('../../../core/utils/crypto');
 const { syncPolarBillingForUser, applyPolarProSubscription } = require('./sync');
 const {
   collectPolarMetadata,
@@ -46,14 +47,8 @@ function verifyPolarWebhook(rawPayload, headers, secret) {
 
   for (const candidate of candidates) {
     for (const exp of expectedList) {
-      try {
-        const a = Buffer.from(candidate);
-        const b = Buffer.from(exp);
-        if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
-          return true;
-        }
-      } catch {
-        // continue
+      if (safeCompare(candidate, exp)) {
+        return true;
       }
     }
   }

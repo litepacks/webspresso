@@ -7,6 +7,7 @@
 const os = require('os');
 const https = require('https');
 const { sanitizeForOutput } = require('../../../core/orm/utils');
+const { buildFilteredQuery } = require('../../../core/orm/query-filters');
 
 function getWebspressoVersion() {
   try {
@@ -115,82 +116,7 @@ function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-/**
- * Build query with filters applied
- * @param {Object} repo - Repository instance
- * @param {Object} filters - Filter object from frontend
- * @param {Object} [options] - Options
- * @param {boolean} [options.onlyTrashed] - For soft delete: only trashed records
- * @returns {Object} Query builder with filters applied
- */
-function buildFilteredQuery(repo, filters, options = {}) {
-  let query = repo.query();
-  if (options.onlyTrashed) {
-    query = query.onlyTrashed();
-  }
-  
-  if (!filters || Object.keys(filters).length === 0) {
-    return query;
-  }
-  
-  for (const [column, filter] of Object.entries(filters)) {
-    if (!filter) continue;
 
-    const op = filter.op || filter.operator || 'contains';
-
-    if (op === 'is_null') {
-      query = query.whereNull(column);
-      continue;
-    }
-    if (op === 'is_not_null') {
-      query = query.whereNotNull(column);
-      continue;
-    }
-
-    if (filter.value === '' && !filter.from && !filter.to) continue;
-
-    switch (op) {
-      case 'contains':
-        query = query.where(column, 'like', `%${filter.value}%`);
-        break;
-      case 'equals':
-        query = query.where(column, '=', filter.value);
-        break;
-      case 'starts_with':
-        query = query.where(column, 'like', `${filter.value}%`);
-        break;
-      case 'ends_with':
-        query = query.where(column, 'like', `%${filter.value}`);
-        break;
-      case 'eq':
-        query = query.where(column, '=', filter.value);
-        break;
-      case 'gt':
-        query = query.where(column, '>', filter.value);
-        break;
-      case 'gte':
-        query = query.where(column, '>=', filter.value);
-        break;
-      case 'lt':
-        query = query.where(column, '<', filter.value);
-        break;
-      case 'lte':
-        query = query.where(column, '<=', filter.value);
-        break;
-      case 'between':
-        if (filter.from) query = query.where(column, '>=', filter.from);
-        if (filter.to) query = query.where(column, '<=', filter.to);
-        break;
-      case 'in':
-        if (Array.isArray(filter.value) && filter.value.length > 0) {
-          query = query.whereIn(column, filter.value);
-        }
-        break;
-    }
-  }
-  
-  return query;
-}
 
 /**
  * Get all record IDs matching filters (for selectAll mode)

@@ -7,6 +7,7 @@
 
 const crypto = require('crypto');
 const { fetchWithTimeout } = require('../utils/fetch');
+const { safeCompare } = require('../utils/crypto');
 
 /**
  * Custom error class for OAuth operations
@@ -171,10 +172,7 @@ function verifySignedState(stateString, secret, maxAgeMs = 10 * 60 * 1000) {
     .update(body)
     .digest('base64url');
 
-  const bufA = Buffer.from(signature);
-  const bufB = Buffer.from(expectedSignature);
-
-  if (bufA.length !== bufB.length || !crypto.timingSafeEqual(bufA, bufB)) {
+  if (!safeCompare(signature, expectedSignature)) {
     throw new OAuthError('OAuth state signature verification failed', 'INVALID_STATE');
   }
 

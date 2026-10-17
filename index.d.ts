@@ -835,6 +835,10 @@ export interface FetchWithTimeoutOptions extends RequestInit {
 }
 
 export function fetchWithTimeout(url: string | URL | Request, options?: FetchWithTimeoutOptions): Promise<Response>;
+export function safeCompare(a: string | Buffer | null | undefined, b: string | Buffer | null | undefined): boolean;
+export function escapeHtml(value: unknown): string;
+export function unescapeHtml(value: unknown): string;
+export function getClientIp<T = string>(req?: any, fallback?: T): string | T;
 
 export const utils: Record<string, unknown>;
 
@@ -3793,7 +3797,7 @@ export class SessionManager {
 }
 
 export function parseUserAgent(userAgent?: string): DeviceInfo;
-export function getClientIp(req?: any): string;
+export function getClientIp<T = string>(req?: any, fallback?: T): string | T;
 export function createUserSessionsTable(knex: any): Promise<void>;
 export function dropUserSessionsTable(knex: any): Promise<void>;
 export function createKnexSessionTracker(db: any, options?: { tableName?: string }): SessionTracker;

@@ -4,6 +4,7 @@
  */
 
 const { parseAdminModelAudit } = require('./parse');
+const { getClientIp } = require('../../core/utils/ip');
 
 function stringifyId(val) {
   if (val === undefined || val === null) {
@@ -98,7 +99,7 @@ function createAuditMiddleware(options) {
           resource_id: resourceId,
           http_method: req.method,
           path: pathStr,
-          ip: req.ip || (req.connection && req.connection.remoteAddress) || null,
+          ip: getClientIp(req, null),
           user_agent: req.get && req.get('user-agent') ? req.get('user-agent').slice(0, 2000) : null,
           metadata: metadataVal,
         };

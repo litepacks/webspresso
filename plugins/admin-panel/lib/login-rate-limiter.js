@@ -1,5 +1,7 @@
 'use strict';
 
+const { getClientIp } = require('../../../core/utils/ip');
+
 /**
  * In-memory brute-force rate limiter for admin login.
  * Zero external dependencies.
@@ -20,19 +22,7 @@ class LoginRateLimiter {
   }
 
   getClientIp(req) {
-    if (!req) return '127.0.0.1';
-    if (req.ip) return String(req.ip);
-    if (req.headers && req.headers['x-forwarded-for']) {
-      const forwarded = String(req.headers['x-forwarded-for']).split(',')[0].trim();
-      if (forwarded) return forwarded;
-    }
-    if (req.connection && req.connection.remoteAddress) {
-      return String(req.connection.remoteAddress);
-    }
-    if (req.socket && req.socket.remoteAddress) {
-      return String(req.socket.remoteAddress);
-    }
-    return '127.0.0.1';
+    return getClientIp(req);
   }
 
   isBlocked(req) {

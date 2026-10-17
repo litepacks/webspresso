@@ -4,15 +4,7 @@
  * @module core/forms/form-builder
  */
 
-function escapeHtml(str) {
-  if (str === null || str === undefined) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+const { escapeHtml } = require('../utils/html');
 
 /**
  * Render a single form field with label, input, and validation error message

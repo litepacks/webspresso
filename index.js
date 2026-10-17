@@ -220,8 +220,11 @@ module.exports = {
   defineListener: require('./core/events').defineListener,
   loadListeners: require('./core/events').loadListeners,
 
-  // Shared Fetch Utilities
+  // Shared Fetch, Crypto & HTML Utilities
   fetchWithTimeout: require('./core/utils/fetch').fetchWithTimeout,
+  safeCompare: require('./core/utils/crypto').safeCompare,
+  escapeHtml: require('./core/utils/html').escapeHtml,
+  unescapeHtml: require('./core/utils/html').unescapeHtml,
 };
 
 // Define lazy getters for plugins, ORM, and heavy core subsystems
@@ -322,6 +325,10 @@ Object.defineProperties(module.exports, {
   generateQrDataUri: { get: () => require('./core/auth/qrcode').generateQrDataUri, enumerable: true, configurable: true },
   createAuthMiddleware: { get: () => require('./core/auth').createAuthMiddleware, enumerable: true, configurable: true },
   setupAuthMiddleware: { get: () => require('./core/auth').setupAuthMiddleware, enumerable: true, configurable: true },
+  getClientIp: { get: () => require('./core/utils/ip').getClientIp, enumerable: true, configurable: true },
+  parseUserAgent: { get: () => require('./core/auth').parseUserAgent, enumerable: true, configurable: true },
+  sessions: { get: () => require('./core/auth').sessions, enumerable: true, configurable: true },
+  SessionManager: { get: () => require('./core/auth').SessionManager, enumerable: true, configurable: true },
 
   // Validation
   z: { get: () => require('./core/validation').z, enumerable: true, configurable: true },

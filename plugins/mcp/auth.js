@@ -6,19 +6,7 @@
 
 const crypto = require('crypto');
 
-/**
- * Constant-time string comparison to avoid timing attacks
- * @param {string} a
- * @param {string} b
- * @returns {boolean}
- */
-function safeEqual(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string') return false;
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) return false;
-  return crypto.timingSafeEqual(bufA, bufB);
-}
+const { safeCompare: safeEqual } = require('../../core/utils/crypto');
 
 /**
  * Check if incoming request is from localhost
