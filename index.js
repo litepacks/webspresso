@@ -219,6 +219,9 @@ module.exports = {
   defineSignal: require('./core/events').defineSignal,
   defineListener: require('./core/events').defineListener,
   loadListeners: require('./core/events').loadListeners,
+
+  // Shared Fetch Utilities
+  fetchWithTimeout: require('./core/utils/fetch').fetchWithTimeout,
 };
 
 // Define lazy getters for plugins, ORM, and heavy core subsystems
@@ -371,8 +374,5 @@ Object.defineProperties(module.exports, {
   defineCommand: { get: () => require('./core/commands').defineCommand, enumerable: true, configurable: true },
   createCommandRegistry: { get: () => require('./core/commands').createCommandRegistry, enumerable: true, configurable: true },
   executeCommand: { get: () => require('./core/commands').executeCommand, enumerable: true, configurable: true },
-
-  // Shared Fetch Utilities
-  fetchWithTimeout: { get: () => require('./core/utils/fetch').fetchWithTimeout, enumerable: true, configurable: true },
 });
 

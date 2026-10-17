@@ -7,6 +7,18 @@
  */
 async function fetchWithTimeout(url, options = {}) {
   const { timeout = 30000, signal, ...fetchOptions } = options;
+
+  if (signal && signal.aborted) {
+    const reason = (signal.reason !== undefined && signal.reason !== null)
+      ? signal.reason
+      : new Error('This operation was aborted');
+    throw reason;
+  }
+
+  if (typeof AbortController === 'undefined') {
+    return fetch(url, { ...fetchOptions, signal });
+  }
+
   const controller = new AbortController();
   let timer = null;
   let callerSignalListener = null;
@@ -21,14 +33,10 @@ async function fetchWithTimeout(url, options = {}) {
   }
 
   if (signal) {
-    if (signal.aborted) {
+    callerSignalListener = () => {
       controller.abort(signal.reason);
-    } else {
-      callerSignalListener = () => {
-        controller.abort(signal.reason);
-      };
-      signal.addEventListener('abort', callerSignalListener, { once: true });
-    }
+    };
+    signal.addEventListener('abort', callerSignalListener, { once: true });
   }
 
   try {
