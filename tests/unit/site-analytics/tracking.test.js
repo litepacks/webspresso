@@ -349,27 +349,39 @@ describe('Tracking Middleware', () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       knex.__chainable.insert = vi.fn().mockRejectedValue(new Error('SQLITE_BUSY: locked'));
 
-      // Use short 20ms log interval for testing
+      let currentTime = 100000;
+      const dateSpy = vi.spyOn(Date, 'now').mockImplementation(() => currentTime);
+
       const middleware = createTrackingMiddleware(trackingOpts({
         batchSize: 1,
-        flushIntervalMs: 5,
-        errorLogIntervalMs: 20,
+        flushIntervalMs: 500,
+        errorLogIntervalMs: 1000,
         maxRetries: 10,
       }));
 
-      // Trigger 1st error (should log immediately)
+      // Trigger 1st error at t=100000 (should log immediately)
       await middleware(mockReq({ path: '/err1' }), {}, vi.fn());
-      await new Promise(r => setTimeout(r, 8));
+      await middleware.flush();
       expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
       expect(consoleErrorSpy.mock.calls[0][0]).toContain('[site-analytics] Batch insert failed: SQLITE_BUSY: locked');
 
-      // Trigger 2nd error within window (should be suppressed)
+      // Trigger 2nd error within window at t=100100 (should be suppressed)
+      currentTime += 100;
       middleware.resetState();
       // Manually simulate subsequent failure within suppression window
       await middleware(mockReq({ path: '/err2' }), {}, vi.fn());
-      await new Promise(r => setTimeout(r, 5));
+      await middleware.flush();
       expect(consoleErrorSpy).toHaveBeenCalledTimes(1); // Still 1
 
+      // Trigger 3rd error after window at t=101500 (should log and report suppressed occurrences)
+      currentTime += 1400; // 1500ms > 1000ms window
+      middleware.resetState();
+      await middleware(mockReq({ path: '/err3' }), {}, vi.fn());
+      await middleware.flush();
+      expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+      expect(consoleErrorSpy.mock.calls[1][0]).toContain('suppressed 1 occurrences in last 1s');
+
+      dateSpy.mockRestore();
       consoleErrorSpy.mockRestore();
       middleware.stop();
     });
@@ -380,13 +392,13 @@ describe('Tracking Middleware', () => {
 
       const middleware = createTrackingMiddleware(trackingOpts({
         batchSize: 1,
-        flushIntervalMs: 1,
+        flushIntervalMs: 500, // Cooldown prevents automatic retry racing during step-by-step assertions
         maxRetries: 3,
       }));
 
       // Add item and fail retry 1
       await middleware(mockReq({ path: '/retry-page' }), {}, vi.fn());
-      await new Promise(r => setTimeout(r, 5));
+      await middleware.flush();
       expect(middleware.getQueue().length).toBe(1);
       expect(middleware.getQueue()[0]._retries).toBe(1);
 
@@ -413,16 +425,16 @@ describe('Tracking Middleware', () => {
         .mockRejectedValueOnce(new Error('Temporary glitch'))
         .mockResolvedValueOnce([1]);
 
-      const middleware = createTrackingMiddleware(trackingOpts({ batchSize: 1 }));
+      const middleware = createTrackingMiddleware(trackingOpts({ batchSize: 1, flushIntervalMs: 500 }));
       await middleware(mockReq({ path: '/glitch' }), {}, vi.fn());
-      await new Promise(r => setTimeout(r, 10));
+      await middleware.flush();
 
       expect(middleware.getFailureCount()).toBe(1);
 
       // Reset timer to allow retry flush immediately
       middleware.resetState();
       await middleware(mockReq({ path: '/recovered' }), {}, vi.fn());
-      await new Promise(r => setTimeout(r, 10));
+      await middleware.flush();
 
       expect(middleware.getFailureCount()).toBe(0);
       expect(middleware.getNextAllowedFlushTime()).toBe(0);

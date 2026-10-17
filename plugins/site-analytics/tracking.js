@@ -125,6 +125,7 @@ function createTrackingMiddleware(options) {
   let failureCount = 0;
   let nextAllowedFlushTime = 0;
   let isFlushing = false;
+  let flushPromise = null;
   let flushTimeout = null;
 
   // Log throttling state
@@ -211,7 +212,8 @@ function createTrackingMiddleware(options) {
   }
 
   async function flushQueue() {
-    if (isFlushing || queue.length === 0) return;
+    if (flushPromise) return flushPromise;
+    if (queue.length === 0) return;
 
     const now = Date.now();
     if (now < nextAllowedFlushTime) {
@@ -220,53 +222,58 @@ function createTrackingMiddleware(options) {
     }
 
     isFlushing = true;
-    const batch = queue.splice(0, queue.length);
+    flushPromise = (async () => {
+      const batch = queue.splice(0, queue.length);
 
-    try {
-      await ensureTable();
-      const dbBatch = batch.map(({ _retries, ...row }) => ({
-        ...row,
-        created_at: knex.fn.now(),
-      }));
-      await knex(tableName).insert(dbBatch);
+      try {
+        await ensureTable();
+        const dbBatch = batch.map(({ _retries, ...row }) => ({
+          ...row,
+          created_at: knex.fn.now(),
+        }));
+        await knex(tableName).insert(dbBatch);
 
-      // Successfully inserted: reset circuit breaker & failure counters
-      failureCount = 0;
-      nextAllowedFlushTime = 0;
-      lastErrorLogTime = 0;
-      suppressedErrorCount = 0;
-    } catch (e) {
-      failureCount++;
-      const backoffDelay = Math.min(flushIntervalMs * Math.pow(2, failureCount), maxBackoffMs);
-      nextAllowedFlushTime = Date.now() + backoffDelay;
+        // Successfully inserted: reset circuit breaker & failure counters
+        failureCount = 0;
+        nextAllowedFlushTime = 0;
+        lastErrorLogTime = 0;
+        suppressedErrorCount = 0;
+      } catch (e) {
+        failureCount++;
+        const backoffDelay = Math.min(flushIntervalMs * Math.pow(2, failureCount), maxBackoffMs);
+        nextAllowedFlushTime = Date.now() + backoffDelay;
 
-      // Rate-limited sanitized logging (no raw SQL query leakage)
-      logError(e, 'Batch insert failed');
+        // Rate-limited sanitized logging (no raw SQL query leakage)
+        logError(e, 'Batch insert failed');
 
-      // Schedule next attempt respecting backoff
-      scheduleFlush(backoffDelay);
+        // Schedule next attempt respecting backoff
+        scheduleFlush(backoffDelay);
 
-      // Drop policy: If fatal/permanent error (disk full, corrupted DB, etc.), drop entire batch
-      if (!isPermanentDbError(e)) {
-        const retryable = [];
-        for (const item of batch) {
-          item._retries = (item._retries || 0) + 1;
-          if (item._retries < maxRetries) {
-            retryable.push(item);
+        // Drop policy: If fatal/permanent error (disk full, corrupted DB, etc.), drop entire batch
+        if (!isPermanentDbError(e)) {
+          const retryable = [];
+          for (const item of batch) {
+            item._retries = (item._retries || 0) + 1;
+            if (item._retries < maxRetries) {
+              retryable.push(item);
+            }
+          }
+
+          // Re-queue items that haven't exceeded retry limits, respecting maxQueueSize
+          if (retryable.length > 0) {
+            const available = Math.max(0, maxQueueSize - queue.length);
+            if (available > 0) {
+              queue.unshift(...retryable.slice(0, available));
+            }
           }
         }
-
-        // Re-queue items that haven't exceeded retry limits, respecting maxQueueSize
-        if (retryable.length > 0) {
-          const available = Math.max(0, maxQueueSize - queue.length);
-          if (available > 0) {
-            queue.unshift(...retryable.slice(0, available));
-          }
-        }
+      } finally {
+        isFlushing = false;
+        flushPromise = null;
       }
-    } finally {
-      isFlushing = false;
-    }
+    })();
+
+    return flushPromise;
   }
 
   function scheduleFlush(customDelay) {
@@ -357,12 +364,19 @@ function createTrackingMiddleware(options) {
   trackingMiddleware.getQueue = () => queue;
   trackingMiddleware.getFailureCount = () => failureCount;
   trackingMiddleware.getNextAllowedFlushTime = () => nextAllowedFlushTime;
-  trackingMiddleware.resetState = () => {
+  trackingMiddleware.resetState = (opts = {}) => {
     failureCount = 0;
     nextAllowedFlushTime = 0;
-    lastErrorLogTime = 0;
-    suppressedErrorCount = 0;
+    const resetLogs = typeof opts === 'boolean' ? opts : !!opts.resetLogs;
+    if (resetLogs) {
+      lastErrorLogTime = 0;
+      suppressedErrorCount = 0;
+    }
     queue.length = 0;
+    if (flushTimeout) {
+      clearTimeout(flushTimeout);
+      flushTimeout = null;
+    }
   };
   trackingMiddleware.stop = () => {
     if (flushTimeout) {
