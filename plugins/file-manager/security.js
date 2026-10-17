@@ -25,6 +25,16 @@ const DANGEROUS_EXTENSIONS = new Set([
 ]);
 
 /**
+ * Common safe extensions allowed when passed as raw extensions (without filename dot)
+ */
+const COMMON_SAFE_EXTENSIONS = new Set([
+  'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'avif', 'bmp', 'ico', 'tiff',
+  'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'rtf',
+  'txt', 'csv', 'md', 'json', 'xml', 'html', 'css', 'js', 'ts', 'jsx', 'tsx',
+  'sql', 'yaml', 'yml', 'zip', 'tar', 'gz', 'mp3', 'wav', 'mp4', 'mov', 'webm',
+]);
+
+/**
  * Known magic numbers table for high-speed signature verification.
  * Only validates when extension matches known binary format.
  */
@@ -129,6 +139,9 @@ function validateSafeExtension(filename) {
   }
 
   if (parts.length < 2 && !cleanName.startsWith('.')) {
+    if (COMMON_SAFE_EXTENSIONS.has(parts[0])) {
+      return parts[0];
+    }
     throw new ValidationError('Filename must have a valid extension');
   }
 
