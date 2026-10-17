@@ -22,13 +22,19 @@ function hasDangerousKeys(obj) {
     return false;
   }
   if (Array.isArray(obj)) {
-    return obj.some(item => hasDangerousKeys(item));
+    const len = obj.length;
+    for (let i = 0; i < len; i++) {
+      if (hasDangerousKeys(obj[i])) return true;
+    }
+    return false;
   }
-  for (const key of Object.keys(obj)) {
+  for (const key in obj) {
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
     if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
       return true;
     }
-    if (typeof obj[key] === 'object' && obj[key] !== null && hasDangerousKeys(obj[key])) {
+    const val = obj[key];
+    if (val !== null && typeof val === 'object' && hasDangerousKeys(val)) {
       return true;
     }
   }

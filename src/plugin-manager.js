@@ -7,20 +7,29 @@
  * Simple semver comparison utilities
  * (Lightweight alternative to full semver package)
  */
+const semverCache = new Map();
+
 const semver = {
   /**
    * Parse version string to components
    */
   parse(version) {
     if (!version) return null;
+    const cached = semverCache.get(version);
+    if (cached !== undefined) return cached;
     const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/);
-    if (!match) return null;
-    return {
+    if (!match) {
+      if (semverCache.size < 200) semverCache.set(version, null);
+      return null;
+    }
+    const parsed = {
       major: parseInt(match[1], 10),
       minor: parseInt(match[2], 10),
       patch: parseInt(match[3], 10),
       prerelease: match[4] || null
     };
+    if (semverCache.size < 200) semverCache.set(version, parsed);
+    return parsed;
   },
 
   /**
@@ -93,21 +102,29 @@ const semver = {
   }
 };
 
+const patternRegexCache = new Map();
+
 /**
  * Simple glob/minimatch pattern matching
  */
 function matchPattern(path, pattern) {
   if (pattern === '*' || pattern === '**') return true;
   
-  // Convert glob to regex
-  const regexPattern = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // Escape special regex chars
-    .replace(/\*\*/g, '{{GLOBSTAR}}')       // Temp placeholder for **
-    .replace(/\*/g, '[^/]*')                // * matches anything except /
-    .replace(/\{\{GLOBSTAR\}\}/g, '.*')     // ** matches everything
-    .replace(/\?/g, '.');                   // ? matches single char
+  let regex = patternRegexCache.get(pattern);
+  if (!regex) {
+    // Convert glob to regex
+    const regexPattern = pattern
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // Escape special regex chars
+      .replace(/\*\*/g, '{{GLOBSTAR}}')       // Temp placeholder for **
+      .replace(/\*/g, '[^/]*')                // * matches anything except /
+      .replace(/\{\{GLOBSTAR\}\}/g, '.*')     // ** matches everything
+      .replace(/\?/g, '.');                   // ? matches single char
 
-  const regex = new RegExp(`^${regexPattern}$`);
+    regex = new RegExp(`^${regexPattern}$`);
+    if (patternRegexCache.size < 500) {
+      patternRegexCache.set(pattern, regex);
+    }
+  }
   return regex.test(path);
 }
 
@@ -206,6 +223,12 @@ class PluginManager {
    * Resolve dependency order using topological sort
    */
   _resolveDependencyOrder(plugins) {
+    if (!plugins || plugins.length === 0) return [];
+    if (plugins.length === 1) {
+      const p = plugins[0];
+      return p && p.name ? [p] : [];
+    }
+
     const graph = new Map();
     const pluginMap = new Map();
 
@@ -228,6 +251,7 @@ class PluginManager {
 
     // Topological sort (Kahn's algorithm)
     const sorted = [];
+    const sortedNames = new Set();
     const noIncoming = [];
 
     // Find nodes with no dependencies
@@ -243,12 +267,13 @@ class PluginManager {
     while (noIncoming.length > 0) {
       const name = noIncoming.shift();
       sorted.push(pluginMap.get(name));
+      sortedNames.add(name);
 
       // Remove this node from all dependencies
       for (const [n, deps] of graph) {
         if (deps.has(name)) {
           deps.delete(name);
-          if (deps.size === 0 && !sorted.find(p => p.name === n)) {
+          if (deps.size === 0 && !sortedNames.has(n)) {
             noIncoming.push(n);
           }
         }
@@ -257,7 +282,7 @@ class PluginManager {
 
     // Check for cycles - warn and exclude circular plugins
     if (sorted.length !== pluginMap.size) {
-      const remaining = Array.from(pluginMap.keys()).filter(name => !sorted.find(p => p.name === name));
+      const remaining = Array.from(pluginMap.keys()).filter(name => !sortedNames.has(name));
       console.warn(
         `[plugin-manager] Circular dependency detected. Skipping plugins: ${remaining.join(', ')}`
       );

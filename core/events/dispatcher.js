@@ -12,10 +12,14 @@ const EventEmitter = require('events');
  * @param {string} pattern
  * @returns {RegExp}
  */
+const patternRegexCache = new Map();
+
 function patternToRegExp(pattern) {
   if (pattern === '*' || pattern === '**') {
     return /^.*$/;
   }
+  const cached = patternRegexCache.get(pattern);
+  if (cached !== undefined) return cached;
 
   const escaped = pattern
     .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape regex special chars except *
@@ -23,7 +27,11 @@ function patternToRegExp(pattern) {
     .replace(/\*/g, '[^.]+')
     .replace(/___DOUBLE_STAR___/g, '.*');
 
-  return new RegExp(`^${escaped}$`);
+  const reg = new RegExp(`^${escaped}$`);
+  if (patternRegexCache.size < 500) {
+    patternRegexCache.set(pattern, reg);
+  }
+  return reg;
 }
 
 /**
@@ -193,8 +201,9 @@ class EventDispatcher extends EventEmitter {
     // 1. Exact listeners
     if (this.exactListeners.has(event)) {
       const list = this.exactListeners.get(event);
-      const toKeep = [];
-      for (const item of list) {
+      let hasOnce = false;
+      for (let i = 0; i < list.length; i++) {
+        const item = list[i];
         if (matchesSender(item.sender, sender)) {
           matched.push({
             priority: item.priority,
@@ -207,53 +216,67 @@ class EventDispatcher extends EventEmitter {
             once: item.once,
           });
         }
-        if (!item.once) {
-          toKeep.push(item);
+        if (item.once) {
+          hasOnce = true;
         }
       }
-      this.exactListeners.set(event, toKeep);
+      if (hasOnce) {
+        this.exactListeners.set(event, list.filter((l) => !l.once));
+      }
     }
 
     // 2. Wildcard listeners
-    const remainingWildcards = [];
-    for (const item of this.wildcardListeners) {
-      if (item.regex.test(event) && matchesSender(item.sender, sender)) {
+    if (this.wildcardListeners.length > 0) {
+      let hasOnce = false;
+      for (let i = 0; i < this.wildcardListeners.length; i++) {
+        const item = this.wildcardListeners[i];
+        if (item.regex.test(event) && matchesSender(item.sender, sender)) {
+          matched.push({
+            priority: item.priority,
+            handler: item.handler,
+            isAny: false,
+            remove: () => {
+              this.wildcardListeners = this.wildcardListeners.filter((l) => l.id !== item.id);
+            },
+            once: item.once,
+          });
+          if (item.once) {
+            hasOnce = true;
+          }
+        }
+      }
+      if (hasOnce) {
+        this.wildcardListeners = this.wildcardListeners.filter((l) => !l.once);
+      }
+    }
+
+    // 3. Any listeners
+    if (this.anyListeners.length > 0) {
+      let hasOnce = false;
+      for (let i = 0; i < this.anyListeners.length; i++) {
+        const item = this.anyListeners[i];
         matched.push({
           priority: item.priority,
           handler: item.handler,
-          isAny: false,
+          isAny: true,
           remove: () => {
-            this.wildcardListeners = this.wildcardListeners.filter((l) => l.id !== item.id);
+            this.anyListeners = this.anyListeners.filter((l) => l.id !== item.id);
           },
           once: item.once,
         });
+        if (item.once) {
+          hasOnce = true;
+        }
       }
-      if (!item.once) {
-        remainingWildcards.push(item);
-      }
-    }
-    this.wildcardListeners = remainingWildcards;
-
-    // 3. Any listeners
-    const remainingAny = [];
-    for (const item of this.anyListeners) {
-      matched.push({
-        priority: item.priority,
-        handler: item.handler,
-        isAny: true,
-        remove: () => {
-          this.anyListeners = this.anyListeners.filter((l) => l.id !== item.id);
-        },
-        once: item.once,
-      });
-      if (!item.once) {
-        remainingAny.push(item);
+      if (hasOnce) {
+        this.anyListeners = this.anyListeners.filter((l) => !l.once);
       }
     }
-    this.anyListeners = remainingAny;
 
     // Sort by priority descending (higher numbers first)
-    matched.sort((a, b) => b.priority - a.priority);
+    if (matched.length > 1) {
+      matched.sort((a, b) => b.priority - a.priority);
+    }
 
     return matched;
   }

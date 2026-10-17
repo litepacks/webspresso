@@ -6,18 +6,17 @@
 
 const crypto = require('crypto');
 
+const HS256_HEADER_BASE64URL = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9';
+
 /**
  * Base64URL encode string or Buffer
  * @param {string|Buffer} input
  * @returns {string}
  */
 function base64UrlEncode(input) {
-  const buf = Buffer.isBuffer(input) ? input : Buffer.from(input, 'utf8');
-  return buf
-    .toString('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
+  return Buffer.isBuffer(input)
+    ? input.toString('base64url')
+    : Buffer.from(String(input), 'utf8').toString('base64url');
 }
 
 /**
@@ -26,11 +25,7 @@ function base64UrlEncode(input) {
  * @returns {string}
  */
 function base64UrlDecode(input) {
-  let base64 = input.replace(/-/g, '+').replace(/_/g, '/');
-  while (base64.length % 4 !== 0) {
-    base64 += '=';
-  }
-  return Buffer.from(base64, 'base64').toString('utf8');
+  return Buffer.from(String(input), 'base64url').toString('utf8');
 }
 
 /**
@@ -110,16 +105,14 @@ function signJwt(payload, secret, options = {}) {
     ...payload,
   };
 
-  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedHeader = algorithm === 'HS256' ? HS256_HEADER_BASE64URL : base64UrlEncode(JSON.stringify(header));
   const encodedPayload = base64UrlEncode(JSON.stringify(fullPayload));
 
   const signingInput = `${encodedHeader}.${encodedPayload}`;
-  const signature = crypto
+  const encodedSignature = crypto
     .createHmac('sha256', secret)
     .update(signingInput)
-    .digest();
-
-  const encodedSignature = base64UrlEncode(signature);
+    .digest('base64url');
 
   return `${signingInput}.${encodedSignature}`;
 }
@@ -177,7 +170,7 @@ function verifyJwt(token, secret, options = {}) {
     .update(signingInput)
     .digest();
 
-  const actualSignatureBuf = Buffer.from(encodedSignature.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+  const actualSignatureBuf = Buffer.from(encodedSignature, 'base64url');
 
   if (
     expectedSignatureBuf.length !== actualSignatureBuf.length ||

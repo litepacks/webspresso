@@ -63,6 +63,8 @@ function descriptorToZod(typeName) {
   return isOptional ? schema.optional() : schema;
 }
 
+const compiledSchemaCache = new WeakMap();
+
 /**
  * Compile service schema definition into an executable validator
  * @param {Function|Object|null} rawSchema - Schema definition
@@ -71,50 +73,64 @@ function descriptorToZod(typeName) {
 function compileServiceSchema(rawSchema) {
   if (!rawSchema) return null;
 
-  // If already a Zod schema
-  if (rawSchema instanceof z.ZodType || typeof rawSchema.safeParse === 'function') {
-    return rawSchema;
+  if (typeof rawSchema === 'object' || typeof rawSchema === 'function') {
+    const cached = compiledSchemaCache.get(rawSchema);
+    if (cached !== undefined) {
+      return cached;
+    }
   }
 
-  // If function: check if ({ z }) schema compiler or custom validator function
-  if (typeof rawSchema === 'function') {
+  let compiled = null;
+
+  // If already a Zod schema
+  if (rawSchema instanceof z.ZodType || typeof rawSchema.safeParse === 'function') {
+    compiled = rawSchema;
+  } else if (typeof rawSchema === 'function') {
+    // If function: check if ({ z }) schema compiler or custom validator function
     try {
-      const compiled = rawSchema({ z: zForServices });
-      if (compiled && (compiled instanceof z.ZodType || typeof compiled.safeParse === 'function')) {
-        return compiled;
+      const res = rawSchema({ z: zForServices });
+      if (res && (res instanceof z.ZodType || typeof res.safeParse === 'function')) {
+        compiled = res;
       }
     } catch (e) {
       // If invoking with { z } throws, treat as a direct validator function
     }
-    return rawSchema;
-  }
-
-  // If object descriptor: { id: 'number', name: 'string', email: 'email' }
-  if (typeof rawSchema === 'object' && rawSchema !== null) {
+    if (!compiled) {
+      compiled = rawSchema;
+    }
+  } else if (typeof rawSchema === 'object' && rawSchema !== null) {
+    // If object descriptor: { id: 'number', name: 'string', email: 'email' }
     const keys = Object.keys(rawSchema);
     if (keys.length === 0) {
-      return null;
-    }
-    const shape = {};
-    for (const [key, val] of Object.entries(rawSchema)) {
-      if (typeof val === 'string') {
-        shape[key] = descriptorToZod(val);
-      } else if (val instanceof z.ZodType || (val && typeof val.safeParse === 'function')) {
-        shape[key] = val;
-      } else if (typeof val === 'object' && val !== null) {
-        const isOpt = val.optional === true || val.required === false;
-        let base = val.type ? descriptorToZod(String(val.type)) : z.any();
-        shape[key] = isOpt ? base.optional() : base;
-      } else if (typeof val === 'function') {
-        shape[key] = z.custom(val);
-      } else {
-        shape[key] = z.any();
+      compiled = null;
+    } else {
+      const shape = {};
+      for (const [key, val] of Object.entries(rawSchema)) {
+        if (typeof val === 'string') {
+          shape[key] = descriptorToZod(val);
+        } else if (val instanceof z.ZodType || (val && typeof val.safeParse === 'function')) {
+          shape[key] = val;
+        } else if (typeof val === 'object' && val !== null) {
+          const isOpt = val.optional === true || val.required === false;
+          let base = val.type ? descriptorToZod(String(val.type)) : z.any();
+          shape[key] = isOpt ? base.optional() : base;
+        } else if (typeof val === 'function') {
+          shape[key] = z.custom(val);
+        } else {
+          shape[key] = z.any();
+        }
       }
+      compiled = z.object(shape);
     }
-    return z.object(shape);
+  } else {
+    compiled = rawSchema;
   }
 
-  return rawSchema;
+  if (typeof rawSchema === 'object' || typeof rawSchema === 'function') {
+    compiledSchemaCache.set(rawSchema, compiled);
+  }
+
+  return compiled;
 }
 
 /**

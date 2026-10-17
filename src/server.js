@@ -54,6 +54,19 @@ const {
 // Async storage for tracking template render call stacks (circular extends guard)
 const renderStackStorage = new AsyncLocalStorage();
 
+let isWebspressoPackageCache = null;
+function checkIsWebspressoPackage() {
+  if (isWebspressoPackageCache === null) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
+      isWebspressoPackageCache = Boolean(pkg && pkg.name === 'webspresso');
+    } catch (_) {
+      isWebspressoPackageCache = false;
+    }
+  }
+  return isWebspressoPackageCache;
+}
+
 /**
  * Fast hardware-accelerated Weak ETag generator using native zlib.crc32
  * Up to 13x faster than Express default SHA-1, zero external dependencies.
@@ -91,6 +104,7 @@ function fastETag(body, encoding) {
  */
 function normalizeTemplateName(name) {
   if (typeof name !== 'string') return name;
+  if (!name.includes('\\') && !name.includes('views')) return name;
   let normalized = name.replace(/\\/g, '/');
   // Collapse any repeated views/views/... to a single views/ or clean path
   while (/(?:^|\/)views\/(?:\.\/)?views(?:\/|$)/.test(normalized)) {
@@ -102,6 +116,7 @@ function normalizeTemplateName(name) {
 function canonicalTemplateKey(name) {
   const norm = normalizeTemplateName(name);
   if (typeof norm !== 'string') return String(norm);
+  if (!norm.startsWith('.') && !norm.startsWith('views/')) return norm;
   // Canonical key strips leading ./ or views/ for cycle detection
   return norm.replace(/^\.\//, '').replace(/^views\//, '');
 }
@@ -591,10 +606,7 @@ function createApp(options = {}) {
 
   const rootDir = options.rootDir || (() => {
     if (process.env.NODE_ENV === 'test') {
-      try {
-        const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
-        if (pkg.name === 'webspresso') return process.cwd();
-      } catch (_) {}
+      if (checkIsWebspressoPackage()) return process.cwd();
       return path.resolve(__dirname, '..');
     }
     return process.cwd();
@@ -875,9 +887,13 @@ function createApp(options = {}) {
     for (let i = 0; i < paramNames.length; i++) {
       const val = match[i + 1];
       if (val !== undefined) {
-        try {
-          params[paramNames[i]] = decodeURIComponent(val);
-        } catch (_) {
+        if (typeof val === 'string' && val.includes('%')) {
+          try {
+            params[paramNames[i]] = decodeURIComponent(val);
+          } catch (_) {
+            params[paramNames[i]] = val;
+          }
+        } else {
           params[paramNames[i]] = val;
         }
       }

@@ -46,38 +46,56 @@ function getClientIp(req) {
  * @param {string} [userAgent='']
  * @returns {DeviceInfo}
  */
+const MAX_UA_CACHE = 512;
+const uaCache = new Map();
+
+const EMPTY_DEVICE_INFO = Object.freeze({
+  browser: 'Unknown',
+  os: 'Unknown',
+  device: 'unknown',
+  isMobile: false,
+  isTablet: false,
+  isDesktop: false,
+  isBot: false,
+});
+
+const BOT_PATTERN = /googlebot|bingbot|yandex|baiduspider|duckduckbot|slurp|twitterbot|facebookexternalhit|rogerbot|linkedinbot|embedly|quora link preview|showyoubot|outbrain|pinterest\/|slackbot|vkshare|w3c_validator|whatsapp|curl|wget|postman/i;
+
+/**
+ * Parse raw User-Agent header string into structured device info
+ * Zero external dependencies — pure regex extraction
+ * 
+ * @param {string} [userAgent='']
+ * @returns {DeviceInfo}
+ */
 function parseUserAgent(userAgent = '') {
   const ua = String(userAgent || '').trim();
 
   if (!ua) {
-    return {
-      browser: 'Unknown',
-      os: 'Unknown',
-      device: 'unknown',
-      isMobile: false,
-      isTablet: false,
-      isDesktop: false,
-      isBot: false,
-    };
+    return { ...EMPTY_DEVICE_INFO };
+  }
+
+  const cached = uaCache.get(ua);
+  if (cached) {
+    return { ...cached };
   }
 
   // 1. Detect Bots / Crawlers
-  const botPattern = /googlebot|bingbot|yandex|baiduspider|duckduckbot|slurp|twitterbot|facebookexternalhit|rogerbot|linkedinbot|embedly|quora link preview|showyoubot|outbrain|pinterest\/|slackbot|vkshare|w3c_validator|whatsapp|curl|wget|postman/i;
-  const isBot = botPattern.test(ua);
+  const isBot = BOT_PATTERN.test(ua);
 
   // 2. Detect Operating System
   let os = 'Unknown';
+  let match;
   if (/iPad/i.test(ua)) {
-    const match = ua.match(/OS ([\d_\.]+)/i);
+    match = ua.match(/OS ([\d_\.]+)/i);
     os = match ? `iPadOS ${match[1].replace(/_/g, '.')}` : 'iPadOS';
   } else if (/iPhone|iPod/i.test(ua)) {
-    const match = ua.match(/OS ([\d_\.]+)/i);
+    match = ua.match(/OS ([\d_\.]+)/i);
     os = match ? `iOS ${match[1].replace(/_/g, '.')}` : 'iOS';
-  } else if (/Android/i.test(ua)) {
-    const match = ua.match(/Android (\d+(\.\d+)?)/i);
-    os = match ? `Android ${match[1]}` : 'Android';
+  } else if ((match = ua.match(/Android (\d+(\.\d+)?)/i))) {
+    os = `Android ${match[1]}`;
   } else if (/Macintosh|Mac OS X/i.test(ua)) {
-    const match = ua.match(/Mac OS X ([\d_\.]+)/i);
+    match = ua.match(/Mac OS X ([\d_\.]+)/i);
     if (match) {
       const ver = match[1].replace(/_/g, '.');
       os = `macOS ${ver}`;
@@ -100,30 +118,22 @@ function parseUserAgent(userAgent = '') {
 
   // 3. Detect Browser
   let browser = 'Unknown';
-  if (/Edg(e|A|iOS)?\/(\d+)/i.test(ua)) {
-    const match = ua.match(/Edg(e|A|iOS)?\/(\d+)/i);
-    browser = `Edge ${match ? match[2] : ''}`.trim();
-  } else if (/OPR\/(\d+)/i.test(ua)) {
-    const match = ua.match(/OPR\/(\d+)/i);
-    browser = `Opera ${match ? match[1] : ''}`.trim();
-  } else if (/SamsungBrowser\/(\d+)/i.test(ua)) {
-    const match = ua.match(/SamsungBrowser\/(\d+)/i);
-    browser = `Samsung Internet ${match ? match[1] : ''}`.trim();
-  } else if (/Brave\/(\d+)/i.test(ua)) {
-    const match = ua.match(/Brave\/(\d+)/i);
-    browser = `Brave ${match ? match[1] : ''}`.trim();
-  } else if (/Vivaldi\/(\d+)/i.test(ua)) {
-    const match = ua.match(/Vivaldi\/(\d+)/i);
-    browser = `Vivaldi ${match ? match[1] : ''}`.trim();
-  } else if (/Chrome\/(\d+)/i.test(ua) && !/Chromium/i.test(ua)) {
-    const match = ua.match(/Chrome\/(\d+)/i);
-    browser = `Chrome ${match ? match[1] : ''}`.trim();
-  } else if (/Firefox\/(\d+)/i.test(ua) || /FxiOS\/(\d+)/i.test(ua)) {
-    const match = ua.match(/(?:Firefox|FxiOS)\/(\d+)/i);
-    browser = `Firefox ${match ? match[1] : ''}`.trim();
-  } else if (/Safari/i.test(ua) && /Version\/(\d+)/i.test(ua)) {
-    const match = ua.match(/Version\/(\d+)/i);
-    browser = `Safari ${match ? match[1] : ''}`.trim();
+  if ((match = ua.match(/Edg(e|A|iOS)?\/(\d+)/i))) {
+    browser = `Edge ${match[2] || ''}`.trim();
+  } else if ((match = ua.match(/OPR\/(\d+)/i))) {
+    browser = `Opera ${match[1] || ''}`.trim();
+  } else if ((match = ua.match(/SamsungBrowser\/(\d+)/i))) {
+    browser = `Samsung Internet ${match[1] || ''}`.trim();
+  } else if ((match = ua.match(/Brave\/(\d+)/i))) {
+    browser = `Brave ${match[1] || ''}`.trim();
+  } else if ((match = ua.match(/Vivaldi\/(\d+)/i))) {
+    browser = `Vivaldi ${match[1] || ''}`.trim();
+  } else if (!/Chromium/i.test(ua) && (match = ua.match(/Chrome\/(\d+)/i))) {
+    browser = `Chrome ${match[1] || ''}`.trim();
+  } else if ((match = ua.match(/(?:Firefox|FxiOS)\/(\d+)/i))) {
+    browser = `Firefox ${match[1] || ''}`.trim();
+  } else if ((match = ua.match(/Version\/(\d+)/i)) && /Safari/i.test(ua)) {
+    browser = `Safari ${match[1] || ''}`.trim();
   } else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) {
     browser = 'Safari';
   } else if (/MSIE (\d+)/i.test(ua) || (/Trident/i.test(ua) && /rv:(\d+)/i.test(ua))) {
@@ -144,7 +154,7 @@ function parseUserAgent(userAgent = '') {
   else if (isMobile) device = 'mobile';
   else if (isDesktop) device = 'desktop';
 
-  return {
+  const result = {
     browser,
     os,
     device,
@@ -153,9 +163,18 @@ function parseUserAgent(userAgent = '') {
     isDesktop,
     isBot,
   };
+
+  if (uaCache.size >= MAX_UA_CACHE) {
+    const oldestKey = uaCache.keys().next().value;
+    uaCache.delete(oldestKey);
+  }
+  uaCache.set(ua, result);
+
+  return { ...result };
 }
 
 module.exports = {
   getClientIp,
   parseUserAgent,
 };
+

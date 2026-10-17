@@ -6,19 +6,24 @@
  * @module src/routing/route-table
  */
 
+const routeSortMetaCache = new Map();
+
 /**
  * Computes route sorting priority metadata
  * @param {string} routePath
  * @returns {{ tier: number, literalSegCount: number, paramSegCount: number, depth: number, routePath: string }}
  */
 function getRouteSortMeta(routePath) {
+  const cached = routeSortMetaCache.get(routePath);
+  if (cached !== undefined) return cached;
+
   let hasStar = false;
   let hasColon = false;
   let depth = 0;
   let literalSegCount = 0;
   let paramSegCount = 0;
 
-  const clean = routePath.split('?')[0];
+  const clean = routePath.includes('?') ? routePath.split('?')[0] : routePath;
   const segments = clean.split('/').filter(Boolean);
 
   for (const seg of segments) {
@@ -40,13 +45,18 @@ function getRouteSortMeta(routePath) {
   if (hasStar) tier = 2;
   else if (hasColon) tier = 1;
 
-  return {
+  const meta = {
     tier,
     literalSegCount,
     paramSegCount,
     depth,
     routePath,
   };
+
+  if (routeSortMetaCache.size < 1000) {
+    routeSortMetaCache.set(routePath, meta);
+  }
+  return meta;
 }
 
 /**
@@ -56,8 +66,8 @@ function getRouteSortMeta(routePath) {
  * @returns {number}
  */
 function compareRouteOrder(a, b) {
-  const ma = a._sortMeta || getRouteSortMeta(a.path);
-  const mb = b._sortMeta || getRouteSortMeta(b.path);
+  const ma = a._sortMeta || (a._sortMeta = getRouteSortMeta(a.path));
+  const mb = b._sortMeta || (b._sortMeta = getRouteSortMeta(b.path));
 
   if (ma.tier !== mb.tier) return ma.tier - mb.tier;
   if (ma.literalSegCount !== mb.literalSegCount) return mb.literalSegCount - ma.literalSegCount;

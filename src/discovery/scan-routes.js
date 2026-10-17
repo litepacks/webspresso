@@ -94,6 +94,19 @@ function scanDirSafely(dirPath, baseDir = dirPath, checkWarnings = false) {
   return results;
 }
 
+let isWebspressoPackageCache = null;
+function checkIsWebspressoPackage() {
+  if (isWebspressoPackageCache === null) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
+      isWebspressoPackageCache = Boolean(pkg && pkg.name === 'webspresso');
+    } catch (_) {
+      isWebspressoPackageCache = false;
+    }
+  }
+  return isWebspressoPackageCache;
+}
+
 /**
  * Scans configured pages, api, and module directories
  * @param {Object} options
@@ -106,10 +119,7 @@ function scanDirSafely(dirPath, baseDir = dirPath, checkWarnings = false) {
 function scanRoutes(options = {}) {
   const rootDir = options.rootDir || (() => {
     if (process.env.NODE_ENV === 'test') {
-      try {
-        const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
-        if (pkg.name === 'webspresso') return process.cwd();
-      } catch (_) {}
+      if (checkIsWebspressoPackage()) return process.cwd();
       return path.resolve(__dirname, '../..');
     }
     return process.cwd();
