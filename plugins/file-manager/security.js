@@ -118,9 +118,8 @@ function validateSafeExtension(filename) {
     throw new ValidationError('Filename must have a valid extension');
   }
 
-  // Check all dotted segments against dangerous extensions to block double extensions (e.g. payload.php.jpg)
-  for (let i = 1; i < parts.length; i++) {
-    const segment = parts[i];
+  // Check all segments against dangerous extensions to block double extensions and dangerous dotfiles (e.g. .env, payload.php.jpg)
+  for (const segment of parts) {
     if (DANGEROUS_EXTENSIONS.has(segment)) {
       throw new SecurityError(
         `Dangerous extension or double-extension detected: .${segment}`,
@@ -129,11 +128,11 @@ function validateSafeExtension(filename) {
     }
   }
 
-  const finalExt = parts[parts.length - 1];
-  if (DANGEROUS_EXTENSIONS.has(finalExt)) {
-    throw new SecurityError(`File type .${finalExt} is forbidden for upload`, 403);
+  if (parts.length < 2 && !cleanName.startsWith('.')) {
+    throw new ValidationError('Filename must have a valid extension');
   }
 
+  const finalExt = parts[parts.length - 1];
   return finalExt;
 }
 

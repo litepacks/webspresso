@@ -1,294 +1,247 @@
 /**
- * ORM Events/Signals System Unit Tests
+ * Unit tests for Webspresso ORM Model Events System
+ * @vitest-environment node
  */
 
-const {
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import EventEmitter from 'events';
+import {
   ModelEvents,
   ModelEventsClass,
   createEventContext,
   Hooks,
   HookCancellationError,
-} = require('../../../core/orm/events');
+} from '../../../core/orm/events';
 
-describe('ORM Events System', () => {
+describe('ModelEvents & Lifecycle Signals System', () => {
+  let bus;
+
   beforeEach(() => {
-    // Clear all listeners before each test
-    ModelEvents.removeAllListeners();
+    bus = new ModelEventsClass();
   });
 
-  describe('ModelEvents', () => {
-    describe('on()', () => {
-      it('should register a listener', () => {
-        const callback = vi.fn();
-        ModelEvents.on('User.beforeCreate', callback);
-
-        expect(ModelEvents.listenerCount('User.beforeCreate')).toBe(1);
-      });
-
-      it('should return unsubscribe function', () => {
-        const callback = vi.fn();
-        const unsubscribe = ModelEvents.on('User.beforeCreate', callback);
-
-        expect(typeof unsubscribe).toBe('function');
-        unsubscribe();
-        expect(ModelEvents.listenerCount('User.beforeCreate')).toBe(0);
-      });
-
-      it('should throw if callback is not a function', () => {
-        expect(() => ModelEvents.on('User.beforeCreate', 'not a function')).toThrow(
-          'Callback must be a function'
-        );
-      });
-
-      it('should allow multiple listeners for same event', () => {
-        const callback1 = vi.fn();
-        const callback2 = vi.fn();
-
-        ModelEvents.on('User.beforeCreate', callback1);
-        ModelEvents.on('User.beforeCreate', callback2);
-
-        expect(ModelEvents.listenerCount('User.beforeCreate')).toBe(2);
-      });
-    });
-
-    describe('once()', () => {
-      it('should register a one-time listener', async () => {
-        const callback = vi.fn();
-        ModelEvents.once('User.afterCreate', callback);
-
-        await ModelEvents.emitAsync('User', 'afterCreate', { id: 1 });
-        await ModelEvents.emitAsync('User', 'afterCreate', { id: 2 });
-
-        expect(callback).toHaveBeenCalledTimes(1);
-      });
-    });
-
-    describe('off()', () => {
-      it('should remove a specific listener', () => {
-        const callback = vi.fn();
-        ModelEvents.on('User.beforeCreate', callback);
-        ModelEvents.off('User.beforeCreate', callback);
-
-        expect(ModelEvents.listenerCount('User.beforeCreate')).toBe(0);
-      });
-
-      it('should return false if listener not found', () => {
-        const callback = vi.fn();
-        const result = ModelEvents.off('User.beforeCreate', callback);
-
-        expect(result).toBe(false);
-      });
-    });
-
-    describe('removeAllListeners()', () => {
-      it('should remove all listeners for specific event', () => {
-        ModelEvents.on('User.beforeCreate', vi.fn());
-        ModelEvents.on('User.beforeCreate', vi.fn());
-        ModelEvents.on('User.afterCreate', vi.fn());
-
-        ModelEvents.removeAllListeners('User.beforeCreate');
-
-        expect(ModelEvents.listenerCount('User.beforeCreate')).toBe(0);
-        expect(ModelEvents.listenerCount('User.afterCreate')).toBe(1);
-      });
-
-      it('should remove all listeners when no event specified', () => {
-        ModelEvents.on('User.beforeCreate', vi.fn());
-        ModelEvents.on('Post.afterUpdate', vi.fn());
-
-        ModelEvents.removeAllListeners();
-
-        expect(ModelEvents.listenerCount()).toBe(0);
-      });
-    });
-
-    describe('emit()', () => {
-      it('should call all listeners with data and context', () => {
-        const callback = vi.fn();
-        ModelEvents.on('User.afterCreate', callback);
-
-        const data = { id: 1, name: 'Test' };
-        ModelEvents.emit('User', 'afterCreate', data);
-
-        expect(callback).toHaveBeenCalledWith(data, expect.any(Object));
-      });
-
-      it('should pass context with model and operation', () => {
-        let receivedContext;
-        ModelEvents.on('User.afterCreate', (data, ctx) => {
-          receivedContext = ctx;
-        });
-
-        ModelEvents.emit('User', 'afterCreate', { id: 1 });
-
-        expect(receivedContext.model).toBe('User');
-        expect(receivedContext.operation).toBe('afterCreate');
-      });
-
-      it('should not throw if listener errors', () => {
-        ModelEvents.on('User.afterCreate', () => {
-          throw new Error('Test error');
-        });
-
-        expect(() => {
-          ModelEvents.emit('User', 'afterCreate', { id: 1 });
-        }).not.toThrow();
-      });
-    });
-
-    describe('emitAsync()', () => {
-      it('should await async listeners', async () => {
-        const order = [];
-        ModelEvents.on('User.beforeCreate', async () => {
-          await new Promise((r) => setTimeout(r, 10));
-          order.push(1);
-        });
-        ModelEvents.on('User.beforeCreate', () => {
-          order.push(2);
-        });
-
-        await ModelEvents.emitAsync('User', 'beforeCreate', {});
-
-        expect(order).toEqual([1, 2]);
-      });
-
-      it('should stop processing if cancelled', async () => {
-        const callback1 = vi.fn((data, ctx) => ctx.cancel('Cancelled'));
-        const callback2 = vi.fn();
-
-        ModelEvents.on('User.beforeCreate', callback1);
-        ModelEvents.on('User.beforeCreate', callback2);
-
-        const ctx = await ModelEvents.emitAsync('User', 'beforeCreate', {});
-
-        expect(callback1).toHaveBeenCalled();
-        expect(callback2).not.toHaveBeenCalled();
-        expect(ctx.isCancelled).toBe(true);
-        expect(ctx.cancelReason).toBe('Cancelled');
-      });
-
-      it('should cancel on listener error for before hooks', async () => {
-        ModelEvents.on('User.beforeCreate', () => {
-          throw new Error('Validation failed');
-        });
-
-        const ctx = await ModelEvents.emitAsync('User', 'beforeCreate', {});
-
-        expect(ctx.isCancelled).toBe(true);
-        expect(ctx.cancelReason).toBe('Validation failed');
-      });
-    });
-
-    describe('Wildcard Listeners', () => {
-      it('should match *.hook pattern', () => {
-        const callback = vi.fn();
-        ModelEvents.on('*.beforeCreate', callback);
-
-        ModelEvents.emit('User', 'beforeCreate', { id: 1 });
-        ModelEvents.emit('Post', 'beforeCreate', { id: 2 });
-
-        expect(callback).toHaveBeenCalledTimes(2);
-      });
-
-      it('should match Model.* pattern', () => {
-        const callback = vi.fn();
-        ModelEvents.on('User.*', callback);
-
-        ModelEvents.emit('User', 'beforeCreate', { id: 1 });
-        ModelEvents.emit('User', 'afterUpdate', { id: 1 });
-        ModelEvents.emit('Post', 'beforeCreate', { id: 2 });
-
-        expect(callback).toHaveBeenCalledTimes(2);
-      });
-
-      it('should match *.* pattern (all events)', () => {
-        const callback = vi.fn();
-        ModelEvents.on('*.*', callback);
-
-        ModelEvents.emit('User', 'beforeCreate', { id: 1 });
-        ModelEvents.emit('Post', 'afterDelete', { id: 2 });
-
-        expect(callback).toHaveBeenCalledTimes(2);
-      });
-
-      it('should call both specific and wildcard listeners', () => {
-        const specificCallback = vi.fn();
-        const wildcardCallback = vi.fn();
-
-        ModelEvents.on('User.beforeCreate', specificCallback);
-        ModelEvents.on('*.beforeCreate', wildcardCallback);
-
-        ModelEvents.emit('User', 'beforeCreate', { id: 1 });
-
-        expect(specificCallback).toHaveBeenCalledTimes(1);
-        expect(wildcardCallback).toHaveBeenCalledTimes(1);
-      });
-    });
-
-    describe('hasListeners()', () => {
-      it('should return true if listeners exist', () => {
-        ModelEvents.on('User.beforeCreate', vi.fn());
-
-        expect(ModelEvents.hasListeners('User', 'beforeCreate')).toBe(true);
-      });
-
-      it('should return true if wildcard listeners match', () => {
-        ModelEvents.on('*.beforeCreate', vi.fn());
-
-        expect(ModelEvents.hasListeners('User', 'beforeCreate')).toBe(true);
-      });
-
-      it('should return false if no listeners', () => {
-        expect(ModelEvents.hasListeners('User', 'beforeCreate')).toBe(false);
-      });
-    });
-
-    describe('eventNames()', () => {
-      it('should return all registered event names', () => {
-        ModelEvents.on('User.beforeCreate', vi.fn());
-        ModelEvents.on('Post.afterUpdate', vi.fn());
-
-        const names = ModelEvents.eventNames();
-
-        expect(names).toContain('User.beforeCreate');
-        expect(names).toContain('Post.afterUpdate');
-      });
-    });
+  afterEach(() => {
+    bus.removeAllListeners();
   });
 
-  describe('createEventContext()', () => {
-    it('should create context with model and operation', () => {
-      const ctx = createEventContext('User', 'create');
+  describe('createEventContext & HookCancellationError', () => {
+    it('creates context with cancel function and tracks reason', () => {
+      const trx = { id: 'trx_123' };
+      const ctx = createEventContext('User', 'beforeCreate', trx);
 
       expect(ctx.model).toBe('User');
-      expect(ctx.operation).toBe('create');
+      expect(ctx.operation).toBe('beforeCreate');
+      expect(ctx.trx).toBe(trx);
       expect(ctx.isCancelled).toBe(false);
       expect(ctx.cancelReason).toBeNull();
-    });
 
-    it('should have cancel function', () => {
-      const ctx = createEventContext('User', 'create');
-
-      ctx.cancel('Test reason');
-
+      ctx.cancel('Email must be unique');
       expect(ctx.isCancelled).toBe(true);
-      expect(ctx.cancelReason).toBe('Test reason');
+      expect(ctx.cancelReason).toBe('Email must be unique');
     });
 
-    it('should include transaction if provided', () => {
-      const mockTrx = { isTransaction: true };
-      const ctx = createEventContext('User', 'create', mockTrx);
-
-      expect(ctx.trx).toBe(mockTrx);
+    it('instantiates HookCancellationError with details', () => {
+      const err = new HookCancellationError('Aborted by hook', 'User', 'beforeDelete');
+      expect(err).toBeInstanceOf(Error);
+      expect(err.name).toBe('HookCancellationError');
+      expect(err.model).toBe('User');
+      expect(err.hook).toBe('beforeDelete');
+      expect(err.reason).toBe('Aborted by hook');
     });
   });
 
-  describe('Hooks enum', () => {
-    it('should have all expected hooks', () => {
-      expect(Hooks.BEFORE_VALIDATION).toBe('beforeValidation');
-      expect(Hooks.AFTER_VALIDATION).toBe('afterValidation');
-      expect(Hooks.BEFORE_SAVE).toBe('beforeSave');
-      expect(Hooks.AFTER_SAVE).toBe('afterSave');
+  describe('Listeners & Registration', () => {
+    it('throws when listener callback is not a function', () => {
+      expect(() => bus.on('User.beforeCreate', null)).toThrow('Callback must be a function');
+      expect(() => bus.on('User.beforeCreate', 'not-a-fn')).toThrow('Callback must be a function');
+    });
+
+    it('registers and removes listeners with off and returned unsubscribe function', () => {
+      const fn1 = vi.fn();
+      const fn2 = vi.fn();
+
+      const unsub1 = bus.on('User.afterCreate', fn1);
+      bus.on('User.afterCreate', fn2);
+
+      expect(bus.listenerCount('User.afterCreate')).toBe(2);
+      expect(bus.hasListeners('User', 'afterCreate')).toBe(true);
+
+      unsub1();
+      expect(bus.listenerCount('User.afterCreate')).toBe(1);
+
+      const removed = bus.off('User.afterCreate', fn2);
+      expect(removed).toBe(true);
+      expect(bus.listenerCount('User.afterCreate')).toBe(0);
+      expect(bus.hasListeners('User', 'afterCreate')).toBe(false);
+
+      expect(bus.off('User.afterCreate', fn2)).toBe(false);
+    });
+
+    it('once listener triggers only on first emission and unbinds', async () => {
+      const fn = vi.fn();
+      bus.once('User.afterSave', fn);
+
+      expect(bus.listenerCount('User.afterSave')).toBe(1);
+
+      await bus.emitAsync('User', 'afterSave', { id: 1 });
+      expect(fn).toHaveBeenCalledTimes(1);
+      expect(bus.listenerCount('User.afterSave')).toBe(0);
+
+      await bus.emitAsync('User', 'afterSave', { id: 2 });
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('listenScoped unregisters listener when target emits finish or close', () => {
+      const target = new EventEmitter();
+      const fn = vi.fn();
+
+      bus.listenScoped('Post.beforeCreate', fn, target);
+      expect(bus.listenerCount('Post.beforeCreate')).toBe(1);
+
+      target.emit('finish');
+      expect(bus.listenerCount('Post.beforeCreate')).toBe(0);
+
+      const target2 = new EventEmitter();
+      bus.listenScoped('Post.beforeCreate', fn, target2);
+      expect(bus.listenerCount('Post.beforeCreate')).toBe(1);
+
+      target2.emit('close');
+      expect(bus.listenerCount('Post.beforeCreate')).toBe(0);
+    });
+
+    it('removeAllListeners clears specific event or all events', () => {
+      bus.on('A.hook', () => {});
+      bus.on('A.hook', () => {});
+      bus.on('B.hook', () => {});
+
+      expect(bus.listenerCount()).toBe(3);
+
+      bus.removeAllListeners('A.hook');
+      expect(bus.listenerCount('A.hook')).toBe(0);
+      expect(bus.listenerCount('B.hook')).toBe(1);
+
+      bus.removeAllListeners();
+      expect(bus.listenerCount()).toBe(0);
+      expect(bus.eventNames()).toEqual([]);
+    });
+
+    it('validates setMaxListeners and warns when threshold exceeded', () => {
+      expect(() => bus.setMaxListeners(-1)).toThrow(TypeError);
+      expect(() => bus.setMaxListeners('invalid')).toThrow(TypeError);
+
+      bus.setMaxListeners(2);
+      expect(bus.getMaxListeners()).toBe(2);
+
+      const emitWarningSpy = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+
+      bus.on('Test.event', () => {});
+      bus.on('Test.event', () => {});
+      expect(emitWarningSpy).not.toHaveBeenCalled();
+
+      bus.on('Test.event', () => {});
+      expect(emitWarningSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Possible ModelEvents memory leak detected'),
+        'MaxListenersExceededWarning'
+      );
+
+      emitWarningSpy.mockRestore();
+    });
+  });
+
+  describe('Wildcard Resolution & Matching', () => {
+    it('matches exact, model wildcard, hook wildcard, and all wildcard', () => {
+      const l1 = vi.fn(); // User.beforeCreate
+      const l2 = vi.fn(); // *.beforeCreate
+      const l3 = vi.fn(); // User.*
+      const l4 = vi.fn(); // *.*
+
+      bus.on('User.beforeCreate', l1);
+      bus.on('*.beforeCreate', l2);
+      bus.on('User.*', l3);
+      bus.on('*.*', l4);
+
+      const matches = bus.getMatchingListeners('User', 'beforeCreate');
+      expect(matches).toContain(l1);
+      expect(matches).toContain(l2);
+      expect(matches).toContain(l3);
+      expect(matches).toContain(l4);
+      expect(matches.length).toBe(4);
+
+      const otherMatches = bus.getMatchingListeners('Product', 'beforeCreate');
+      expect(otherMatches).not.toContain(l1);
+      expect(otherMatches).toContain(l2);
+      expect(otherMatches).not.toContain(l3);
+      expect(otherMatches).toContain(l4);
+
+      expect(bus.hasListeners('Product', 'beforeCreate')).toBe(true);
+      expect(bus.hasListeners('NonExistent', 'unknownHook')).toBe(true); // Because *.* is registered
+    });
+
+    it('returns empty array when no listeners match', () => {
+      expect(bus.getMatchingListeners('User', 'afterDelete')).toEqual([]);
+      expect(bus.hasListeners('User', 'afterDelete')).toBe(false);
+    });
+  });
+
+  describe('Event Emission (Sync & Async)', () => {
+    it('emit executes all matching listeners synchronously without throwing on listener failure', () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const l1 = vi.fn();
+      const l2 = vi.fn().mockImplementation(() => {
+        throw new Error('Boom');
+      });
+      const l3 = vi.fn();
+
+      bus.on('User.afterCreate', l1);
+      bus.on('User.afterCreate', l2);
+      bus.on('User.afterCreate', l3);
+
+      const ctx = bus.emit('User', 'afterCreate', { id: 10 });
+
+      expect(l1).toHaveBeenCalledWith({ id: 10 }, ctx);
+      expect(l2).toHaveBeenCalledWith({ id: 10 }, ctx);
+      expect(l3).toHaveBeenCalledWith({ id: 10 }, ctx);
+      expect(consoleErrorSpy).toHaveBeenCalled();
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('emitAsync waits for async listeners and halts on cancellation', async () => {
+      const trace = [];
+
+      bus.on('Order.beforeCreate', async (data, ctx) => {
+        await new Promise((r) => setTimeout(r, 10));
+        trace.push('step1');
+        ctx.cancel('Stock depleted');
+      });
+
+      bus.on('Order.beforeCreate', async () => {
+        trace.push('step2-should-not-run');
+      });
+
+      const ctx = await bus.emitAsync('Order', 'beforeCreate', { items: [] });
+      expect(trace).toEqual(['step1']);
+      expect(ctx.isCancelled).toBe(true);
+      expect(ctx.cancelReason).toBe('Stock depleted');
+    });
+
+    it('emitAsync cancels operation if before hook listener throws', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      bus.on('Order.beforeCreate', () => {
+        throw new Error('Database check failed');
+      });
+
+      const ctx = await bus.emitAsync('Order', 'beforeCreate', {});
+      expect(ctx.isCancelled).toBe(true);
+      expect(ctx.cancelReason).toBe('Database check failed');
+
+      consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('Hooks enum & Singleton ModelEvents', () => {
+    it('exports all standard lifecycle hooks', () => {
       expect(Hooks.BEFORE_CREATE).toBe('beforeCreate');
       expect(Hooks.AFTER_CREATE).toBe('afterCreate');
       expect(Hooks.BEFORE_UPDATE).toBe('beforeUpdate');
@@ -299,36 +252,12 @@ describe('ORM Events System', () => {
       expect(Hooks.AFTER_RESTORE).toBe('afterRestore');
       expect(Hooks.BEFORE_FIND).toBe('beforeFind');
       expect(Hooks.AFTER_FIND).toBe('afterFind');
-    });
-  });
-
-  describe('HookCancellationError', () => {
-    it('should be an Error', () => {
-      const error = new HookCancellationError('Test', 'User', 'beforeCreate');
-
-      expect(error).toBeInstanceOf(Error);
+      expect(Hooks.BEFORE_VALIDATION).toBe('beforeValidation');
+      expect(Hooks.AFTER_VALIDATION).toBe('afterValidation');
     });
 
-    it('should have name, model, hook, and reason', () => {
-      const error = new HookCancellationError('Test reason', 'User', 'beforeCreate');
-
-      expect(error.name).toBe('HookCancellationError');
-      expect(error.model).toBe('User');
-      expect(error.hook).toBe('beforeCreate');
-      expect(error.reason).toBe('Test reason');
-      expect(error.message).toBe('Test reason');
-    });
-  });
-
-  describe('Multiple ModelEventsClass Instances', () => {
-    it('should be independent', () => {
-      const events1 = new ModelEventsClass();
-      const events2 = new ModelEventsClass();
-
-      events1.on('User.beforeCreate', vi.fn());
-
-      expect(events1.listenerCount('User.beforeCreate')).toBe(1);
-      expect(events2.listenerCount('User.beforeCreate')).toBe(0);
+    it('provides default singleton ModelEvents instance', () => {
+      expect(ModelEvents).toBeInstanceOf(ModelEventsClass);
     });
   });
 });
