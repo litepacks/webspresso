@@ -42,7 +42,7 @@ class QueryBuilder {
   constructor(model, knex, initialContext, cacheLayer = null) {
     this.model = model;
     this.knex = knex;
-    this.scopeContext = initialContext || createScopeContext();
+    this.scopeContext = initialContext ? { ...initialContext } : createScopeContext();
     this.cacheLayer = cacheLayer;
     this.jsonColumns = getJsonColumns(model);
 

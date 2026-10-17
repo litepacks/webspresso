@@ -48,7 +48,7 @@ function getPartialSchema(model) {
  * @returns {import('./types').Repository}
  */
 function createRepository(model, knex, initialContext, cacheLayer = null) {
-  const scopeContext = initialContext || createScopeContext();
+  const scopeContext = initialContext ? { ...initialContext } : createScopeContext();
   const jsonColumns = getJsonColumns(model);
   const hasJson = jsonColumns.size > 0;
 
@@ -863,7 +863,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    * @returns {import('./query-builder').QueryBuilder}
    */
   function query() {
-    return createQueryBuilder(model, getActiveKnex(), scopeContext, cacheLayer);
+    return createQueryBuilder(model, getActiveKnex(), { ...scopeContext }, cacheLayer);
   }
 
   /**
