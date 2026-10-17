@@ -105,6 +105,7 @@ function defineModel(options) {
     name,
     table,
     schema: normalizedSchema,
+    _partialSchema: typeof normalizedSchema?.partial === 'function' ? normalizedSchema.partial() : normalizedSchema,
     primaryKey,
     relations: normalizedRelations,
     scopes: {

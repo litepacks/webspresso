@@ -21,6 +21,25 @@ dayjs.extend(customParseFormat);
 // Cache for isPath regex patterns
 const isPathRegexCache = new Map();
 
+// Caches for manifest files and filesystem existence checks
+const manifestFileCache = new Map();
+const diskExistenceCache = new Map();
+
+function cachedExistsSync(filePath) {
+  const cached = diskExistenceCache.get(filePath);
+  if (cached !== undefined) return cached;
+  let exists = false;
+  try {
+    exists = fs.existsSync(filePath);
+  } catch (_) {
+    exists = false;
+  }
+  if (diskExistenceCache.size < 2000) {
+    diskExistenceCache.set(filePath, exists);
+  }
+  return exists;
+}
+
 /**
  * Asset Manager - handles asset paths, versioning, and manifest
  */
@@ -34,6 +53,12 @@ class AssetManager {
     this.version = options.version || null;
     this.prefix = options.prefix || '';
     
+    // Per-instance fast-path caches
+    this._resolveCache = new Map();
+    this._hasJsCache = new Map();
+    this._hasCssCache = new Map();
+    this._lookupIndex = null;
+    
     // Auto-detect manifest if not explicitly provided
     if (!this.manifestPath) {
       const candidates = [
@@ -42,7 +67,7 @@ class AssetManager {
         path.join(this.publicDir, '.vite', 'manifest.json'),
       ];
       for (const candidate of candidates) {
-        if (fs.existsSync(candidate)) {
+        if (cachedExistsSync(candidate)) {
           this.manifestPath = candidate;
           break;
         }
@@ -54,6 +79,25 @@ class AssetManager {
       this.loadManifest();
     }
   }
+
+  /**
+   * Pre-build lookup index for fast O(1) fallback matching
+   */
+  _buildLookupIndex() {
+    if (!this.manifest || typeof this.manifest !== 'object') {
+      this._lookupIndex = null;
+      return;
+    }
+    const idx = new Map();
+    for (const [key, val] of Object.entries(this.manifest)) {
+      idx.set(key, val);
+      const base = path.basename(key);
+      if (!idx.has(base)) {
+        idx.set(base, val);
+      }
+    }
+    this._lookupIndex = idx;
+  }
   
   /**
    * Load asset manifest file (Vite, Webpack, etc.)
@@ -62,12 +106,35 @@ class AssetManager {
     try {
       const fullPath = path.resolve(this.manifestPath);
       if (fs.existsSync(fullPath)) {
-        const content = fs.readFileSync(fullPath, 'utf-8');
-        this.manifest = JSON.parse(content);
+        try {
+          const stats = fs.statSync(fullPath);
+          const cached = manifestFileCache.get(fullPath);
+          if (cached && cached.mtimeMs === stats.mtimeMs && cached.size === stats.size) {
+            this.manifest = cached.manifest;
+            this._lookupIndex = cached.lookupIndex;
+            return;
+          }
+          const content = fs.readFileSync(fullPath, 'utf-8');
+          this.manifest = JSON.parse(content);
+          this._buildLookupIndex();
+          manifestFileCache.set(fullPath, {
+            mtimeMs: stats.mtimeMs,
+            size: stats.size,
+            manifest: this.manifest,
+            lookupIndex: this._lookupIndex,
+          });
+          return;
+        } catch (_) {
+          const content = fs.readFileSync(fullPath, 'utf-8');
+          this.manifest = JSON.parse(content);
+          this._buildLookupIndex();
+          return;
+        }
       }
     } catch (err) {
       console.warn('Failed to load asset manifest:', err.message);
       this.manifest = null;
+      this._lookupIndex = null;
     }
   }
   
@@ -77,6 +144,9 @@ class AssetManager {
    * @returns {string}
    */
   resolve(assetPath) {
+    const cached = this._resolveCache.get(assetPath);
+    if (cached !== undefined) return cached;
+
     // Remove leading slash for manifest lookup
     const lookupPath = assetPath.replace(/^\//, '');
     
@@ -85,7 +155,12 @@ class AssetManager {
       // 1. Direct match with lookupPath or assetPath
       let entry = this.manifest[lookupPath] || this.manifest[assetPath];
 
-      // 2. Flexible fallback: match by basename or trailing path
+      // 2. Fast lookup index match
+      if (!entry && this._lookupIndex) {
+        entry = this._lookupIndex.get(lookupPath) || this._lookupIndex.get(path.basename(lookupPath));
+      }
+
+      // 3. Flexible fallback: match by basename or trailing path
       if (!entry) {
         const baseName = path.basename(lookupPath);
         for (const [key, val] of Object.entries(this.manifest)) {
@@ -102,14 +177,20 @@ class AssetManager {
       }
 
       if (entry) {
+        let result;
         // Webpack string format (e.g. "/dist/app.xyz789.js")
         if (typeof entry === 'string') {
-          return this.prefix + entry;
-        }
-        // Vite / esbuild metafile format (e.g. { file: "assets/app-xyz789.js" })
-        if (entry.file) {
+          result = this.prefix + entry;
+        } else if (entry.file) {
+          // Vite / esbuild metafile format (e.g. { file: "assets/app-xyz789.js" })
           const file = entry.file.startsWith('/') ? entry.file : '/' + entry.file;
-          return this.prefix ? (this.prefix + file).replace(/\/+/g, '/') : file;
+          result = this.prefix ? (this.prefix + file).replace(/\/+/g, '/') : file;
+        }
+        if (result !== undefined) {
+          if (this._resolveCache.size < 2000) {
+            this._resolveCache.set(assetPath, result);
+          }
+          return result;
         }
       }
     }
@@ -123,6 +204,9 @@ class AssetManager {
       finalPath += `${separator}v=${this.version}`;
     }
     
+    if (this._resolveCache.size < 2000) {
+      this._resolveCache.set(assetPath, finalPath);
+    }
     return finalPath;
   }
   
@@ -325,6 +409,9 @@ class AssetManager {
    */
   hasPageJs(name) {
     if (!name || typeof name !== 'string') return false;
+    const cached = this._hasJsCache.get(name);
+    if (cached !== undefined) return cached;
+
     let clean = String(name).trim().replace(/^\/+/, '');
     if (clean.startsWith('pages/')) clean = clean.slice(6);
     if (clean.startsWith('dist/pages/')) clean = clean.slice(11);
@@ -343,6 +430,7 @@ class AssetManager {
         this.manifest['src/client/' + pagePath] ||
         this.manifest['client/' + pagePath]
       ) {
+        if (this._hasJsCache.size < 500) this._hasJsCache.set(name, true);
         return true;
       }
     }
@@ -369,13 +457,13 @@ class AssetManager {
     ];
 
     for (const p of diskChecks) {
-      try {
-        if (fs.existsSync(p)) {
-          return true;
-        }
-      } catch (_) {}
+      if (cachedExistsSync(p)) {
+        if (this._hasJsCache.size < 500) this._hasJsCache.set(name, true);
+        return true;
+      }
     }
 
+    if (this._hasJsCache.size < 500) this._hasJsCache.set(name, false);
     return false;
   }
 
@@ -386,6 +474,9 @@ class AssetManager {
    */
   hasPageCss(name) {
     if (!name || typeof name !== 'string') return false;
+    const cached = this._hasCssCache.get(name);
+    if (cached !== undefined) return cached;
+
     let clean = String(name).trim().replace(/^\/+/, '');
     if (clean.startsWith('pages/')) clean = clean.slice(6);
     if (clean.startsWith('dist/pages/')) clean = clean.slice(11);
@@ -404,6 +495,7 @@ class AssetManager {
         this.manifest['src/client/' + pagePath] ||
         this.manifest['client/' + pagePath]
       ) {
+        if (this._hasCssCache.size < 500) this._hasCssCache.set(name, true);
         return true;
       }
     }
@@ -426,13 +518,13 @@ class AssetManager {
     ];
 
     for (const p of diskChecks) {
-      try {
-        if (fs.existsSync(p)) {
-          return true;
-        }
-      } catch (_) {}
+      if (cachedExistsSync(p)) {
+        if (this._hasCssCache.size < 500) this._hasCssCache.set(name, true);
+        return true;
+      }
     }
 
+    if (this._hasCssCache.size < 500) this._hasCssCache.set(name, false);
     return false;
   }
 
@@ -507,16 +599,25 @@ class AssetManager {
    * Build HTML attributes string
    */
   buildAttributes(attrs) {
-    return Object.entries(attrs)
-      .filter(([k, v]) => v !== undefined && v !== null && v !== false && /^[a-zA-Z0-9_\-:]+$/.test(k))
-      .map(([k, v]) => v === true ? k : `${k}="${this.escapeHtml(String(v))}"`)
-      .join(' ');
+    if (!attrs || typeof attrs !== 'object') return '';
+    let result = '';
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === undefined || v === null || v === false || !/^[a-zA-Z0-9_\-:]+$/.test(k)) {
+        continue;
+      }
+      if (result) result += ' ';
+      result += v === true ? k : `${k}="${this.escapeHtml(String(v))}"`;
+    }
+    return result;
   }
   
   /**
    * Escape HTML special characters
    */
   escapeHtml(str) {
+    if (!str || typeof str !== 'string' || !/[&"'<>]/.test(str)) {
+      return str;
+    }
     return str
       .replace(/&/g, '&amp;')
       .replace(/"/g, '&quot;')

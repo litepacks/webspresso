@@ -190,6 +190,10 @@ const translatorCache = new Map();
 
 function clearTranslatorCache() {
   translatorCache.clear();
+  intlNumberFormatCache.clear();
+  intlDateTimeFormatCache.clear();
+  intlRelativeTimeFormatCache.clear();
+  filePathToRouteCache.clear();
 }
 
 // Cache for route configs in production
@@ -214,6 +218,48 @@ const methodFromFilenameCache = new Map();
 
 // Cache for translation param replacement regexes
 const paramRegexCache = new Map();
+
+// Caches for file-to-route resolution and Intl formatters
+const filePathToRouteCache = new Map();
+const intlNumberFormatCache = new Map();
+const intlDateTimeFormatCache = new Map();
+const intlRelativeTimeFormatCache = new Map();
+
+function getCachedNumberFormat(locale, opts) {
+  const key = opts ? `${locale}::${JSON.stringify(opts)}` : locale;
+  let fmt = intlNumberFormatCache.get(key);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat(locale, opts);
+    if (intlNumberFormatCache.size < 500) {
+      intlNumberFormatCache.set(key, fmt);
+    }
+  }
+  return fmt;
+}
+
+function getCachedDateTimeFormat(locale, opts) {
+  const key = opts ? `${locale}::${JSON.stringify(opts)}` : locale;
+  let fmt = intlDateTimeFormatCache.get(key);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(locale, opts);
+    if (intlDateTimeFormatCache.size < 500) {
+      intlDateTimeFormatCache.set(key, fmt);
+    }
+  }
+  return fmt;
+}
+
+function getCachedRelativeTimeFormat(locale, opts) {
+  const key = opts ? `${locale}::${JSON.stringify(opts)}` : locale;
+  let fmt = intlRelativeTimeFormatCache.get(key);
+  if (!fmt) {
+    fmt = new Intl.RelativeTimeFormat(locale, opts);
+    if (intlRelativeTimeFormatCache.size < 500) {
+      intlRelativeTimeFormatCache.set(key, fmt);
+    }
+  }
+  return fmt;
+}
 
 const MAX_LOCALE_LEN = 16;
 
@@ -404,6 +450,12 @@ function isApiRouteFile(file) {
  * @returns {string} Express route pattern
  */
 function filePathToRoute(filePath, ext) {
+  const cacheKey = filePath + '::' + ext;
+  const cached = filePathToRouteCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   // Remove extension
   let route = filePath.replace(ext, '');
   
@@ -429,6 +481,10 @@ function filePathToRoute(filePath, ext) {
     route = '/' + route;
   }
   
+  if (filePathToRouteCache.size < 5000) {
+    filePathToRouteCache.set(cacheKey, route);
+  }
+
   return route;
 }
 
@@ -886,8 +942,8 @@ function createTranslator(translations = {}, options = EMPTY_OBJECT) {
       return value;
     }
 
-    // Replace params like {{name}} in the translation
-    if (interpolationParams && interpolationParams !== EMPTY_OBJECT && Object.keys(interpolationParams).length > 0) {
+    // Replace params like {{name}} in the translation (skip if no placeholders in template)
+    if (value.includes('{{') && interpolationParams && interpolationParams !== EMPTY_OBJECT && Object.keys(interpolationParams).length > 0) {
       for (const [paramKey, paramValue] of Object.entries(interpolationParams)) {
         let regex = paramRegexCache.get(paramKey);
         if (regex === undefined) {
@@ -911,7 +967,7 @@ function createTranslator(translations = {}, options = EMPTY_OBJECT) {
   t.number = function formatNumber(num, numOpts) {
     if (num === null || num === undefined || Number.isNaN(Number(num))) return '';
     try {
-      return new Intl.NumberFormat(locale, numOpts).format(Number(num));
+      return getCachedNumberFormat(locale, numOpts).format(Number(num));
     } catch {
       return String(num);
     }
@@ -921,7 +977,7 @@ function createTranslator(translations = {}, options = EMPTY_OBJECT) {
   t.currency = function formatCurrency(amount, currency = 'USD', currOpts = {}) {
     if (amount === null || amount === undefined || Number.isNaN(Number(amount))) return '';
     try {
-      return new Intl.NumberFormat(locale, { style: 'currency', currency, ...currOpts }).format(Number(amount));
+      return getCachedNumberFormat(locale, { style: 'currency', currency, ...currOpts }).format(Number(amount));
     } catch {
       return `${amount} ${currency}`;
     }
@@ -933,7 +989,7 @@ function createTranslator(translations = {}, options = EMPTY_OBJECT) {
     try {
       const d = date instanceof Date ? date : new Date(date);
       if (Number.isNaN(d.getTime())) return '';
-      return new Intl.DateTimeFormat(locale, dateOpts).format(d);
+      return getCachedDateTimeFormat(locale, dateOpts).format(d);
     } catch {
       return String(date);
     }
@@ -943,7 +999,7 @@ function createTranslator(translations = {}, options = EMPTY_OBJECT) {
   t.relativeTime = function formatRelativeTime(val, unit = 'day', relOpts = { numeric: 'auto' }) {
     if (val === null || val === undefined || Number.isNaN(Number(val))) return '';
     try {
-      return new Intl.RelativeTimeFormat(locale, relOpts).format(Number(val), unit);
+      return getCachedRelativeTimeFormat(locale, relOpts).format(Number(val), unit);
     } catch {
       return `${val} ${unit}`;
     }

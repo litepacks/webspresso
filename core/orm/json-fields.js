@@ -9,13 +9,19 @@
  * @returns {Set<string>} Set of JSON column names
  */
 function getJsonColumns(model) {
+  if (model && model._jsonColumns) {
+    return model._jsonColumns;
+  }
   const jsonCols = new Set();
-  if (model.columns) {
+  if (model && model.columns) {
     for (const [name, meta] of model.columns) {
       if (meta.type === 'json' || meta.type === 'array' || meta.type === 'files') {
         jsonCols.add(name);
       }
     }
+  }
+  if (model) {
+    model._jsonColumns = jsonCols;
   }
   return jsonCols;
 }

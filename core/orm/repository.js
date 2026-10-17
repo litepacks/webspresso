@@ -21,6 +21,24 @@ const { getJsonColumns, serializeJsonFields, deserializeJsonFields } = require('
 const { getAmbientTransaction } = require('./transaction');
 
 /**
+ * Get or cache partial schema for model
+ * @param {import('./types').ModelDefinition} model
+ * @returns {import('zod').ZodTypeAny}
+ */
+function getPartialSchema(model) {
+  if (model && model._partialSchema) {
+    return model._partialSchema;
+  }
+  const partial = (model && model.schema && typeof model.schema.partial === 'function')
+    ? model.schema.partial()
+    : model?.schema;
+  if (model) {
+    model._partialSchema = partial;
+  }
+  return partial;
+}
+
+/**
  * Create a repository for a model
  * @param {import('./types').ModelDefinition} model - Model definition
  * @param {import('knex').Knex|import('knex').Knex.Transaction} knex - Knex instance
@@ -302,7 +320,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     }
 
     // Validate with Zod schema (partial for insert - allows auto fields to be missing)
-    const validated = model.schema.partial().parse(workingData);
+    const validated = getPartialSchema(model).parse(workingData);
 
     // Emit afterValidation
     ModelEvents.emit(model.name, Hooks.AFTER_VALIDATION, validated, ctx);
@@ -381,7 +399,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     }
 
     // Validate with Zod schema (partial for update)
-    const validated = model.schema.partial().parse(workingData);
+    const validated = getPartialSchema(model).parse(workingData);
 
     // Emit afterValidation
     ModelEvents.emit(model.name, Hooks.AFTER_VALIDATION, validated, ctx);
@@ -438,7 +456,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    */
   async function updateWhere(conditions, data) {
     // Validate with Zod schema (partial for update)
-    const validated = model.schema.partial().parse(data);
+    const validated = getPartialSchema(model).parse(data);
 
     // Apply update modifiers (timestamps)
     let updateData = applyUpdateModifiers(validated, model);

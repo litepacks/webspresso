@@ -1,6 +1,7 @@
 // import { vitestDoctorPlugin } from 'vitest-doctor';
 import os from 'os';
 import { defineConfig } from 'vitest/config';
+import { softscopeVitest } from 'softscope/vitest';
 
 export default defineConfig({
   cacheDir: process.env.TMPDIR ? `${process.env.TMPDIR}/.vite` : './node_modules/.vite',
@@ -9,6 +10,7 @@ export default defineConfig({
     exclude: ['node_modules', 'dist'],
     reporters: ['default'],
   },
+  plugins: [softscopeVitest({ json: 'softscope-report.json' })],
   test: {
     silent: process.env.VERBOSE !== 'true',
     environment: 'node',
