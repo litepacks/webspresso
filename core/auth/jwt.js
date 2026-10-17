@@ -171,6 +171,8 @@ function verifyJwt(token, secret, options = {}) {
     .update(signingInput)
     .digest();
 
+  const actualSignatureBuf = Buffer.from(encodedSignature, 'base64url');
+
   if (!safeCompare(expectedSignatureBuf, actualSignatureBuf)) {
     throw new Error('Invalid JWT signature');
   }

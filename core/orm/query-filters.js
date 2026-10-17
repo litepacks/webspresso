@@ -290,11 +290,14 @@ function buildFilteredQuery(repoOrQuery, filters, options = {}) {
     const meta = columns && typeof columns.get === 'function' ? columns.get(column) : null;
 
     if (typeof filter === 'object' && !Array.isArray(filter)) {
-      const op = filter.op || filter.operator || 'contains';
-      if (normalizeOperator(op) === 'between') {
-        applyFilterCondition([query], column, op, filter, meta);
+      const rawOp = filter.op || filter.operator;
+      const normOp = rawOp ? normalizeOperator(rawOp) : null;
+      if (normOp === 'is_null' || normOp === 'is_not_null') {
+        applyFilterCondition([query], column, normOp, filter.value !== undefined ? filter.value : true, meta);
+      } else if (normOp === 'between') {
+        applyFilterCondition([query], column, rawOp, filter, meta);
       } else if (filter.value !== undefined) {
-        applyFilterCondition([query], column, op, filter.value, meta);
+        applyFilterCondition([query], column, rawOp || 'contains', filter.value, meta);
       } else {
         for (const [nestedOp, nestedVal] of Object.entries(filter)) {
           applyFilterCondition([query], column, nestedOp, nestedVal, meta);
@@ -340,7 +343,11 @@ function applyColumnFilters(query, countQuery, model, reqOrQuery) {
       const meta = hasColumns ? model.columns.get(col) : null;
 
       if (colFilter && typeof colFilter === 'object' && !Array.isArray(colFilter)) {
-        if (colFilter.op !== undefined && colFilter.value !== undefined) {
+        const rawColOp = colFilter.op || colFilter.operator;
+        const normColOp = rawColOp ? normalizeOperator(rawColOp) : null;
+        if (normColOp === 'is_null' || normColOp === 'is_not_null') {
+          applyFilterCondition(targets, col, normColOp, colFilter.value !== undefined ? colFilter.value : true, meta);
+        } else if (colFilter.op !== undefined && colFilter.value !== undefined) {
           applyFilterCondition(targets, col, colFilter.op, colFilter.value, meta);
         } else if (colFilter.from !== undefined || colFilter.to !== undefined) {
           applyFilterCondition(targets, col, colFilter.op || 'between', colFilter, meta);

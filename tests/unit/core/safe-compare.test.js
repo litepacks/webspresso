@@ -53,6 +53,9 @@ describe('Zero-Dependency safeCompare Utility (core/utils/crypto)', () => {
     expect(safeCompare(bufA, bufB)).toBe(true);
     expect(safeCompare(bufA, bufC)).toBe(false);
     expect(safeCompare(bufA, bufShort)).toBe(false);
+    expect(safeCompare(bufShort, bufA)).toBe(false);
+    expect(safeCompare(Buffer.alloc(0), bufA)).toBe(false);
+    expect(safeCompare(bufA, Buffer.alloc(0))).toBe(false);
 
     // Empty buffers
     expect(safeCompare(Buffer.alloc(0), Buffer.alloc(0))).toBe(true);

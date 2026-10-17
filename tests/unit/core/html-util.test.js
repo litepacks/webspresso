@@ -53,6 +53,9 @@ describe('Zero-Dependency HTML Utilities (core/utils/html)', () => {
     expect(unescapeHtml('')).toBe('');
     expect(unescapeHtml(null)).toBe('');
     expect(unescapeHtml(undefined)).toBe('');
+    expect(unescapeHtml(12345)).toBe('12345');
+    expect(unescapeHtml(0)).toBe('0');
+    expect(unescapeHtml(false)).toBe('false');
   });
 
   it('works seamlessly through utils and webspresso exports', () => {
