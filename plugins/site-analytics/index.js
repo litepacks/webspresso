@@ -140,6 +140,8 @@ function siteAnalyticsPlugin(options = {}) {
     }
   }
 
+  let trackingMiddleware = null;
+
   return {
     name: 'site-analytics',
     version: '1.0.0',
@@ -177,13 +179,17 @@ function siteAnalyticsPlugin(options = {}) {
     register(ctx) {
       const knex = db.knex || db;
 
-      const trackingMiddleware = createTrackingMiddleware({
+      trackingMiddleware = createTrackingMiddleware({
         knex,
         excludePaths,
         trackBots,
         tableName,
         batchSize: options.batchSize ?? 20,
         flushIntervalMs: options.flushIntervalMs ?? 3000,
+        maxRetries: options.maxRetries ?? 3,
+        maxBackoffMs: options.maxBackoffMs ?? 60000,
+        maxQueueSize: options.maxQueueSize ?? 5000,
+        errorLogIntervalMs: options.errorLogIntervalMs ?? 60000,
       });
 
       ctx.app.use(trackingMiddleware);
@@ -199,15 +205,18 @@ function siteAnalyticsPlugin(options = {}) {
 
       return () => {
         stopCleanup();
+        if (trackingMiddleware && trackingMiddleware.stop) trackingMiddleware.stop();
       };
     },
 
     dispose() {
       stopCleanup();
+      if (trackingMiddleware && trackingMiddleware.stop) trackingMiddleware.stop();
     },
 
     shutdown() {
       stopCleanup();
+      if (trackingMiddleware && trackingMiddleware.stop) trackingMiddleware.stop();
     },
 
     onRoutesReady(ctx) {
