@@ -114,15 +114,17 @@ function fileManagerPlugin(options = {}) {
       // so window.__openFileManagerPicker is available across all admin pages (models, records, rich-text)
       if (typeof adminApi.getRegistry === 'function') {
         const registry = adminApi.getRegistry();
-        registry.configure({
-          fileManager: {
-            enabled: true,
-            apiPrefix,
-            publicBasePath,
-            pageTitle,
-          },
-        });
-        registry.registerClientComponent('files', componentCode);
+        if (registry) {
+          registry.configure({
+            fileManager: {
+              enabled: true,
+              apiPrefix,
+              publicBasePath,
+              pageTitle,
+            },
+          });
+          registry.registerClientComponent('files', componentCode);
+        }
       }
 
       adminApi.registerModule({
