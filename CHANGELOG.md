@@ -7,7 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.103] - 2026-10-17
+
 ### Added
+
+#### Declarative Model Options & Schema Helpers (`core/orm`)
+- **Declarative Timestamps & Soft Deletes**: Added `timestamps: true` (or custom `{ createdAt, updatedAt }`), `softDelete: true` / `softDeletes: true` (and `options: { timestamps, softDelete }`) to `defineModel()`. Automatically injects columns and Zod definitions without manual schema spreading.
+- **Backward-Compatible Helpers**: Added `...zdb.timestamps()`, `...zdb.softDeletes()`, `zdb.softDelete()`, and `zdb.timestamps().createdAt` helpers in `core/orm/schema-helpers`.
+- **Plain Object Schemas**: Supported plain object schemas (`schema: { id: zdb.id(), ... }`) alongside functional schemas in `defineModel()`.
+
+### Fixed
+
+#### ORM Query Builder & Repository Scope Isolation
+- **Scope Context Immutability**: Cloned `scopeContext` in `QueryBuilder` constructor and `createRepository.query()` to prevent chained scope modifiers (e.g. `.onlyTrashed()`) from mutating repository state or affecting subsequent operations like `repo.restore()`.
+- **Strict Schema Validation**: Tightened ORM model validation to require non-empty schema definitions and reject missing/invalid schemas early.
+
+#### Plugin Resilience & Security
+- **Site Analytics Circuit Breaker**: Prevented raw SQL log floods, added exponential backoff, circuit breaker, and retry drop policy in tracking batch flush.
+- **Error Sanitization & Rate Limiting**: Added SQL error sanitization and rate limiting in audit-log, email, client-error-handler, and queue polling backoff.
+- **File Manager Extension Validation**: Supported standalone safe extensions in `validateSafeExtension`.
+
+### Performance
+
+- **SoftScope Hot Path Optimizations**: Optimized hot paths across JWT handling, user-agent parsing, route table lookups, event dispatching, and plugin resolution.
+- **Query Builder & Compression**: Optimized query-builder event guards, JSON deserialization, API loader resolution, and compression encoding negotiation.
+
 
 #### Lightweight Reusable Services Layer (`src/services`, `ctx.service`, `req.service`)
 - **Auto-Discovery & File Naming**: Recursively scans `services/` directory and converts file paths into dot-separated service identifiers (e.g. `services/user/get.js` → `user.get`, `services/post/publish.js` → `post.publish`, `services/user/profile/get.js` → `user.profile.get`).
