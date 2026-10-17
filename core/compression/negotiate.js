@@ -69,6 +69,9 @@ function parseAcceptEncoding(header) {
   return results;
 }
 
+const DEFAULT_SUPPORTED_ENCODINGS = Object.freeze(getDefaultSupportedEncodings());
+const DEFAULT_SUPPORTED_STRING = DEFAULT_SUPPORTED_ENCODINGS.join(',');
+
 const selectEncodingCache = new Map();
 const MAX_ENCODING_CACHE_SIZE = 128;
 
@@ -83,15 +86,19 @@ function selectEncoding(acceptEncoding, supportedEncodings) {
     return 'identity';
   }
 
-  const supported = Array.isArray(supportedEncodings) && supportedEncodings.length > 0
-    ? supportedEncodings.map(e => e.toLowerCase()).filter(e => e !== 'br' || supportsBrotli())
-    : getDefaultSupportedEncodings();
+  const isDefault = !supportedEncodings || !Array.isArray(supportedEncodings) || supportedEncodings.length === 0;
+  const cacheKey = isDefault
+    ? `${acceptEncoding}|${DEFAULT_SUPPORTED_STRING}`
+    : `${acceptEncoding}|${supportedEncodings.join(',')}`;
 
-  const cacheKey = `${acceptEncoding}|${supported.join(',')}`;
   const cached = selectEncodingCache.get(cacheKey);
   if (cached !== undefined) {
     return cached;
   }
+
+  const supported = isDefault
+    ? DEFAULT_SUPPORTED_ENCODINGS
+    : supportedEncodings.map(e => e.toLowerCase()).filter(e => e !== 'br' || supportsBrotli());
 
   const clientPreferences = parseAcceptEncoding(acceptEncoding);
   if (clientPreferences.length === 0) {

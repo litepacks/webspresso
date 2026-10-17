@@ -220,8 +220,11 @@ class AssetManager {
   /**
    * Generate CSS link tag
    */
-  css(href, attributes = {}) {
+  css(href, attributes) {
     const resolvedHref = this.resolve(href);
+    if (!attributes || Object.keys(attributes).length === 0) {
+      return `<link rel="stylesheet" href="${this.escapeHtml(resolvedHref)}">`;
+    }
     const attrs = this.buildAttributes({
       rel: 'stylesheet',
       href: resolvedHref,
@@ -233,8 +236,11 @@ class AssetManager {
   /**
    * Generate JS script tag
    */
-  js(src, attributes = {}) {
+  js(src, attributes) {
     const resolvedSrc = this.resolve(src);
+    if (!attributes || Object.keys(attributes).length === 0) {
+      return `<script src="${this.escapeHtml(resolvedSrc)}"></script>`;
+    }
     const attrs = this.buildAttributes({
       src: resolvedSrc,
       ...attributes
@@ -245,8 +251,11 @@ class AssetManager {
   /**
    * Generate image tag
    */
-  img(src, alt = '', attributes = {}) {
+  img(src, alt = '', attributes) {
     const resolvedSrc = this.resolve(src);
+    if (!attributes || Object.keys(attributes).length === 0) {
+      return `<img src="${this.escapeHtml(resolvedSrc)}" alt="${this.escapeHtml(alt)}">`;
+    }
     const attrs = this.buildAttributes({
       src: resolvedSrc,
       alt,
@@ -601,7 +610,10 @@ class AssetManager {
   buildAttributes(attrs) {
     if (!attrs || typeof attrs !== 'object') return '';
     let result = '';
-    for (const [k, v] of Object.entries(attrs)) {
+    const keys = Object.keys(attrs);
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      const v = attrs[k];
       if (v === undefined || v === null || v === false || !/^[a-zA-Z0-9_\-:]+$/.test(k)) {
         continue;
       }
