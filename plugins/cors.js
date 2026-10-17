@@ -105,7 +105,7 @@ function createCorsMiddleware(options = {}) {
       return next();
     }
 
-    const reqOrigin = req.headers.origin;
+    const reqOrigin = req.headers?.origin;
 
     isOriginAllowed(reqOrigin, (err, allowedOrigin) => {
       if (err) {
@@ -134,7 +134,7 @@ function createCorsMiddleware(options = {}) {
           }
           if (allowedHeadersStr) {
             res.setHeader('Access-Control-Allow-Headers', allowedHeadersStr);
-          } else if (req.headers['access-control-request-headers']) {
+          } else if (req.headers?.['access-control-request-headers']) {
             res.setHeader('Access-Control-Allow-Headers', req.headers['access-control-request-headers']);
           }
           if (config.maxAge) {

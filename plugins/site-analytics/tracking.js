@@ -82,17 +82,19 @@ function quickHash(str) {
  * Get client IP from request, handling proxies
  */
 function getClientIp(req) {
-  const forwarded = req.headers['x-forwarded-for'];
+  if (!req) return '';
+  const headers = req.headers || {};
+  const forwarded = headers['x-forwarded-for'];
   if (forwarded) {
-    return forwarded.split(',')[0].trim();
+    return String(forwarded).split(',')[0].trim();
   }
-  return req.headers['x-real-ip'] || req.ip || req.connection?.remoteAddress || '';
+  return headers['x-real-ip'] || req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '';
 }
 
 /**
  * Create tracking middleware
- * @param {Object} options
- * @param {Object} options.knex - Knex instance
+ * @param {Object} [options={}]
+ * @param {Object} [options.knex] - Knex instance
  * @param {string[]} [options.excludePaths] - Paths to exclude from tracking
  * @param {boolean} [options.trackBots=true] - Whether to record bot visits
  * @param {string} [options.tableName='analytics_page_views'] - DB table name
@@ -103,7 +105,8 @@ function getClientIp(req) {
  * @param {number} [options.maxQueueSize=5000] - Queue memory cap to prevent OOM
  * @param {number} [options.errorLogIntervalMs=60000] - Rate limit window for batch failure logs
  */
-function createTrackingMiddleware(options) {
+function createTrackingMiddleware(options = {}) {
+  const opts = options || {};
   const {
     knex,
     excludePaths = [],
@@ -115,7 +118,7 @@ function createTrackingMiddleware(options) {
     maxBackoffMs = 60000,
     maxQueueSize = 5000,
     errorLogIntervalMs = 60000,
-  } = options;
+  } = opts;
 
   const allExcludes = [...DEFAULT_EXCLUDE, ...excludePaths];
   let tableReady = false;
@@ -213,7 +216,7 @@ function createTrackingMiddleware(options) {
 
   async function flushQueue() {
     if (flushPromise) return flushPromise;
-    if (queue.length === 0) return;
+    if (queue.length === 0 || !knex) return;
 
     const now = Date.now();
     if (now < nextAllowedFlushTime) {
@@ -299,16 +302,17 @@ function createTrackingMiddleware(options) {
   if (periodicFlushInterval.unref) periodicFlushInterval.unref();
 
   async function trackingMiddleware(req, res, next) {
-    next();
+    if (typeof next === 'function') next();
 
-    if (req.method !== 'GET') return;
+    if (!req || req.method !== 'GET') return;
 
-    const path = req.path;
-    if (STATIC_EXT.test(path)) return;
+    const path = req.path || req.url || '';
+    if (!path || STATIC_EXT.test(path)) return;
     if (allExcludes.some(prefix => path.startsWith(prefix))) return;
 
     try {
-      const userAgent = req.headers['user-agent'] || '';
+      const headers = req.headers || {};
+      const userAgent = headers['user-agent'] || '';
       const ip = getClientIp(req);
       const { isBot, botName } = detectBot(userAgent);
 
@@ -329,7 +333,7 @@ function createTrackingMiddleware(options) {
         : getSessionId(visitorId);
 
       const country = detectCountry(req);
-      const referrer = req.headers['referer'] || req.headers['referrer'] || null;
+      const referrer = headers['referer'] || headers['referrer'] || null;
 
       if (queue.length < maxQueueSize) {
         queue.push({
@@ -385,6 +389,10 @@ function createTrackingMiddleware(options) {
     }
     clearInterval(sessionCleanupInterval);
     clearInterval(periodicFlushInterval);
+    if (queue.length > 0 && knex) {
+      return flushQueue().catch(() => {});
+    }
+    return Promise.resolve();
   };
 
   return trackingMiddleware;

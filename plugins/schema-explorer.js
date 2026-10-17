@@ -59,6 +59,25 @@ function schemaExplorerPlugin(options = {}) {
 
   const pageTitle = title || adminTitle || menuLabel;
 
+  let cachedGraph = null;
+  let cachedGraphTime = 0;
+  const GRAPH_CACHE_TTL = 5000; // 5 seconds in dev, infinite in prod
+
+  function getEnrichedGraph() {
+    const isProd = process.env.NODE_ENV === 'production';
+    const now = Date.now();
+    if (cachedGraph && (isProd || (now - cachedGraphTime) < GRAPH_CACHE_TTL)) {
+      return cachedGraph;
+    }
+    const rawModels = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
+    const relationships = extractAllRelationships(rawModels);
+    const enriched = enrichModelsWithGraph(rawModels, relationships);
+    const mermaid = generateMermaidErDiagram(rawModels, relationships);
+    cachedGraph = { rawModels, relationships, enriched, mermaid };
+    cachedGraphTime = now;
+    return cachedGraph;
+  }
+
   return {
     name: 'schema-explorer',
     version: '1.0.0',
@@ -66,6 +85,14 @@ function schemaExplorerPlugin(options = {}) {
 
     // Expose API for other plugins & programmatic consumption
     api: {
+      /**
+       * Invalidate schema explorer cache
+       */
+      invalidateCache() {
+        cachedGraph = null;
+        cachedGraphTime = 0;
+      },
+
       /**
        * Get all models metadata
        * @returns {Object[]}
@@ -79,9 +106,7 @@ function schemaExplorerPlugin(options = {}) {
        * @returns {Object[]}
        */
       getEnrichedModels() {
-        const raw = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
-        const rels = extractAllRelationships(raw);
-        return enrichModelsWithGraph(raw, rels);
+        return getEnrichedGraph().enriched;
       },
 
       /**
@@ -109,8 +134,7 @@ function schemaExplorerPlugin(options = {}) {
        * @returns {Object[]}
        */
       getRelationships() {
-        const raw = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
-        return extractAllRelationships(raw);
+        return getEnrichedGraph().relationships;
       },
 
       /**
@@ -118,9 +142,7 @@ function schemaExplorerPlugin(options = {}) {
        * @returns {string}
        */
       getMermaid() {
-        const raw = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
-        const rels = extractAllRelationships(raw);
-        return generateMermaidErDiagram(raw, rels);
+        return getEnrichedGraph().mermaid;
       },
 
       extractAllRelationships,
@@ -250,21 +272,17 @@ function schemaExplorerPlugin(options = {}) {
                   method: 'get',
                   path: '',
                   handler: (req, res) => {
-                    const rawModels = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
-                    const relationships = extractAllRelationships(rawModels);
-                    const models = enrichModelsWithGraph(rawModels, relationships);
-                    const mermaid = generateMermaidErDiagram(rawModels, relationships);
-
+                    const graph = getEnrichedGraph();
                     res.json({
                       meta: {
                         version: '1.0.0',
                         generatedAt: new Date().toISOString(),
-                        modelCount: models.length,
-                        relationCount: relationships.length,
+                        modelCount: graph.enriched.length,
+                        relationCount: graph.relationships.length,
                       },
-                      models,
-                      relationships,
-                      mermaid,
+                      models: graph.enriched,
+                      relationships: graph.relationships,
+                      mermaid: graph.mermaid,
                     });
                   },
                 },
@@ -272,19 +290,14 @@ function schemaExplorerPlugin(options = {}) {
                   method: 'get',
                   path: '/relations',
                   handler: (req, res) => {
-                    const rawModels = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
-                    const relationships = extractAllRelationships(rawModels);
-                    res.json({ relationships });
+                    res.json({ relationships: getEnrichedGraph().relationships });
                   },
                 },
                 {
                   method: 'get',
                   path: '/mermaid',
                   handler: (req, res) => {
-                    const rawModels = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
-                    const relationships = extractAllRelationships(rawModels);
-                    const mermaid = generateMermaidErDiagram(rawModels, relationships);
-                    res.json({ mermaid });
+                    res.json({ mermaid: getEnrichedGraph().mermaid });
                   },
                 },
                 {
@@ -298,10 +311,8 @@ function schemaExplorerPlugin(options = {}) {
                       return res.status(404).json({ error: `Model "${modelName}" not found` });
                     }
 
-                    const rawModels = serializeAllModels({ exclude, includeColumns, includeRelations, includeScopes });
-                    const relationships = extractAllRelationships(rawModels);
-                    const models = enrichModelsWithGraph(rawModels, relationships);
-                    const found = models.find(m => m.name === modelName);
+                    const graph = getEnrichedGraph();
+                    const found = graph.enriched.find(m => m.name === modelName);
 
                     res.json({ model: found });
                   },

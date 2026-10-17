@@ -258,10 +258,15 @@ function swaggerPlugin(options = {}) {
 
       const server = serverUrl || process.env.BASE_URL || 'http://localhost:3000';
 
+      let cachedDoc = null;
+
       // 1. OpenAPI 3 JSON Endpoint
       ctx.addRoute('get', jsonPath, (req, res) => {
         if (forbid(req, res)) return;
         try {
+          if (cachedDoc && process.env.NODE_ENV === 'production') {
+            return res.json(cachedDoc);
+          }
           const doc = buildOpenApiDocument({
             routes: ctx.routes || [],
             pagesDir: ctx.options.pagesDir,
@@ -274,6 +279,9 @@ function swaggerPlugin(options = {}) {
             },
             servers: [{ url: server.replace(/\/$/, '') }],
           });
+          if (process.env.NODE_ENV === 'production') {
+            cachedDoc = doc;
+          }
           res.json(doc);
         } catch (err) {
           console.warn('[swagger] OpenAPI generation failed:', err.message);

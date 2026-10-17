@@ -52,6 +52,7 @@ function mcpPlugin(options = {}) {
   } = options;
 
   let serverInstance = null;
+  let sseTransport = null;
 
   return {
     name: 'mcp',
@@ -63,6 +64,19 @@ function mcpPlugin(options = {}) {
       registerTool: (tool) => serverInstance && serverInstance.registerTool(tool),
       registerResource: (res) => serverInstance && serverInstance.registerResource(res),
       registerPrompt: (prompt) => serverInstance && serverInstance.registerPrompt(prompt),
+      closeTransport: () => sseTransport && sseTransport.close && sseTransport.close(),
+    },
+
+    dispose() {
+      if (sseTransport && typeof sseTransport.close === 'function') {
+        sseTransport.close();
+      }
+    },
+
+    shutdown() {
+      if (sseTransport && typeof sseTransport.close === 'function') {
+        sseTransport.close();
+      }
     },
 
     register(ctx) {
@@ -180,12 +194,20 @@ function mcpPlugin(options = {}) {
       const authMiddleware =
         auth.token || auth.localhostOnly || auth.verify ? createMcpAuthMiddleware(auth) : null;
 
-      mountSseTransport({
+      sseTransport = mountSseTransport({
         app,
         server: serverInstance,
         path,
         authMiddleware,
       });
+
+      if (typeof ctx.onDispose === 'function') {
+        ctx.onDispose(() => {
+          if (sseTransport && typeof sseTransport.close === 'function') {
+            sseTransport.close();
+          }
+        });
+      }
     },
   };
 }

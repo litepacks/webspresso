@@ -32,7 +32,8 @@ const { signPayload } = require('./crypto');
  *   timestamp: number
  * }>}
  */
-async function sendWebhook(options) {
+async function sendWebhook(options = {}) {
+  const opts = options || {};
   const {
     url,
     event,
@@ -43,7 +44,7 @@ async function sendWebhook(options) {
     timeoutMs = 10000,
     wrapPayload = true,
     maxResponseBodyLength = 2048,
-  } = options;
+  } = opts;
 
   if (!url || typeof url !== 'string') {
     return {
@@ -52,6 +53,32 @@ async function sendWebhook(options) {
       responseBody: '',
       durationMs: 0,
       error: 'Invalid webhook URL: destination URL is required.',
+      deliveryId,
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return {
+        success: false,
+        statusCode: 0,
+        responseBody: '',
+        durationMs: 0,
+        error: `Invalid webhook URL protocol: "${parsedUrl.protocol}". Only http: and https: are supported.`,
+        deliveryId,
+        timestamp: Math.floor(Date.now() / 1000),
+      };
+    }
+  } catch (err) {
+    return {
+      success: false,
+      statusCode: 0,
+      responseBody: '',
+      durationMs: 0,
+      error: 'Invalid webhook URL: destination URL is malformed.',
       deliveryId,
       timestamp: Math.floor(Date.now() / 1000),
     };
@@ -116,6 +143,9 @@ async function sendWebhook(options) {
     timeoutId = setTimeout(() => {
       controller.abort();
     }, timeoutMs);
+    if (timeoutId && timeoutId.unref) {
+      timeoutId.unref();
+    }
 
     const response = await fetch(url, {
       method: 'POST',

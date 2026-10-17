@@ -115,13 +115,21 @@ async function login(adminUserRepo, email, password, compare) {
  */
 async function logout(req, res) {
   return new Promise((resolve, reject) => {
-    req.session.destroy((err) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
+    if (!req || !req.session) {
+      return resolve();
+    }
+    if (typeof req.session.destroy === 'function') {
+      req.session.destroy((err) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    } else {
+      delete req.session.adminUser;
+      resolve();
+    }
   });
 }
 

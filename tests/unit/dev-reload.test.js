@@ -244,4 +244,54 @@ describe('Dev Live & Hot Reload (SSE CSS Hot Reload)', () => {
     app.devReloadHub.close();
     expect(app.devReloadHub.getClientsCount()).toBe(0);
   });
+
+  it('app.close() with active SSE dev-reload client resolves immediately without timeout', async () => {
+    const { app } = createApp({
+      pagesDir: './tests/fixtures/empty-pages',
+      publicDir: tempPublicDir,
+      devReload: true,
+      shutdown: { enabled: true, mode: 'graceful', timeout: 5000 },
+    });
+
+    const server = http.createServer(app);
+    app.server = server;
+    const { NodeHttpAdapter } = require('../../core/shutdown');
+    app.shutdownManager.registerAdapter(new NodeHttpAdapter(server));
+
+    await new Promise((resolve) => server.listen(0, resolve));
+    const port = server.address().port;
+
+    let connectedResolve;
+    const connectedPromise = new Promise((resolve) => {
+      connectedResolve = resolve;
+    });
+
+    const sseReq = http.request(
+      {
+        hostname: '127.0.0.1',
+        port,
+        path: '/__webspresso/dev-reload',
+        method: 'GET',
+      },
+      (res) => {
+        res.on('data', (chunk) => {
+          if (chunk.toString().includes('connected')) {
+            connectedResolve();
+          }
+        });
+      }
+    );
+    sseReq.end();
+
+    await connectedPromise;
+    expect(app.devReloadHub.getClientsCount()).toBe(1);
+
+    const start = Date.now();
+    await app.close();
+    const elapsed = Date.now() - start;
+
+    // Must close fast (e.g. < 500ms), NOT wait for the 5000ms graceful timeout!
+    expect(elapsed).toBeLessThan(1000);
+    expect(app.devReloadHub.getClientsCount()).toBe(0);
+  });
 });

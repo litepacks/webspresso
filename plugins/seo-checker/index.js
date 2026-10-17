@@ -50,12 +50,15 @@ function seoCheckerPlugin(options = {}) {
       // Inject panel styles into head
       ctx.injectHead(generatePanelStyles(), { priority: 100 });
 
+      const safeSettings = JSON.stringify(mergedSettings).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+      const safeChecks = JSON.stringify(checkDefinitions).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+
       // Inject panel HTML and analyzer script into body
       ctx.injectBody(`
         ${generatePanelHtml(checkDefinitions)}
         <script>
-          window.__SEO_CHECKER_SETTINGS__ = ${JSON.stringify(mergedSettings)};
-          window.__SEO_CHECKER_CHECKS__ = ${JSON.stringify(checkDefinitions)};
+          window.__SEO_CHECKER_SETTINGS__ = ${safeSettings};
+          window.__SEO_CHECKER_CHECKS__ = ${safeChecks};
         </script>
         <script>${analyzerScript}</script>
       `);

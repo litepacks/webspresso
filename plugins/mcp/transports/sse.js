@@ -150,7 +150,16 @@ function mountSseTransport(options) {
     }
   });
 
-  return { sessions };
+  const close = () => {
+    for (const [id, session] of sessions.entries()) {
+      try {
+        session.res.end();
+      } catch {}
+    }
+    sessions.clear();
+  };
+
+  return { sessions, close };
 }
 
 module.exports = {

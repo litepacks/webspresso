@@ -69,6 +69,7 @@ function parseBasicAuthHeader(header) {
  * @returns {{ username: string, password: string } | null}
  */
 function extractCredentials(req) {
+  if (!req || !req.headers) return null;
   const header = req.headers.authorization || req.headers.Authorization;
   return parseBasicAuthHeader(header);
 }

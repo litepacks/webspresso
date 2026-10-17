@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.104] - 2026-10-17
+
+### Fixed
+
+#### Dev Live Reload & Graceful Shutdown Integration (`core/shutdown`, `src/dev-reload`, `src/server.js`, `bin/commands/dev.js`)
+- **Deadlock Elimination in `ShutdownManager`**: Executed plugin disposers (e.g. `devReloadHub`, SSE transports, WebSocket clients, queue workers) *before* awaiting HTTP server connection draining (`adapter.close()`). This completely eliminates circular deadlocks where the HTTP server hung for 10,000ms waiting for active SSE streams to close while the disposer closing those streams was waiting for the server to finish closing.
+- **Fast Development Shutdown Mode**: In development mode (`isDev`), `ShutdownManager` now defaults to `mode: 'force'` and a `1000ms` timeout (unless explicitly overridden by user options), eliminating port-locking (`EADDRINUSE`) and ensuring instant restarts during `node --watch`.
+- **Client Runtime Safe Reload (`safeReload`)**: The browser-side `CLIENT_RUNTIME_SCRIPT` now executes a background `HEAD` ping to verify that the dev server is fully up and listening before triggering full page reload. This prevents the browser from showing Chrome's ugly `ERR_CONNECTION_REFUSED` ("This site can't be reached") screen during watch restarts.
+- **Adaptive Reconnect & Auto-Reload on Server Restart**: Reduced dev reload SSE reconnection delay from a static 2000ms to an adaptive 150ms-300ms window, and automatically triggers a page reload as soon as the dev server comes back online.
+- **Optimized Watch Directories in CLI (`bin/commands/dev.js`)**: Removed `views/` from `node --watch` (Nunjucks template changes are already live-reloaded in-memory via SSE with zero server restarts) and added `services/` and `config/` to watch paths for reliable server-side JS restarts.
+
+#### Plugin Resilience, Security & Crash Defenses (`plugins/`)
+- **Webhooks Unhandled Process Crash Defense (`plugins/webhooks/dispatcher.js`)**: Guarded `this.emit('error', err)` with `this.listenerCount('error') > 0` before emitting unhandled errors on `EventEmitter`, preventing unhandled exception process exits. Marked retry timers with `timer.unref()`.
+- **Webhooks SSRF & URL Protocol Validation (`plugins/webhooks/sender.js`)**: Enforced strict `http:` and `https:` URL protocol validation, blocking dangerous pseudo-schemes (`file:`, `javascript:`) and unhandled connection hangs.
+- **File Manager Windows Path Separator Fix (`plugins/file-manager/core.js`)**: Fixed Windows backslash bug where `.replace(/\\/g, '')` was stripping path separators instead of converting them to `/`.
+- **File Manager URI Decoding Error Handling (`plugins/file-manager/core.js`)**: Wrapped `decodeURIComponent` in try/catch to throw clean `ValidationError(400)` instead of uncaught 500 `URIError`.
+- **Admin Panel Login Rate Limiter OOM Defense (`plugins/admin-panel/lib/login-rate-limiter.js`)**: Bounded `attempts` map with a 5,000-item hard ceiling and FIFO eviction to prevent Out-Of-Memory (OOM) under distributed IP brute-force attacks.
+- **Admin Panel Logout Session Guard (`plugins/admin-panel/auth.js`)**: Guarded `logout(req, res)` against undefined `req.session` or missing `destroy` method.
+- **SEO Checker XSS Defense (`plugins/seo-checker/index.js`)**: Escaped `<` and `>` in injected JSON script tags (`\u003c` / `\u003e`) to prevent script boundary breakout and XSS vulnerabilities.
+- **Audit Log SQLite Metadata Serialization (`plugins/audit-log/`)**: Ensured JSON metadata is properly stringified on SQLite in middleware and safely parsed in `listHandler`.
+- **External Request Timeout Defenses (`plugins/polar/src/api.js`, `plugins/recaptcha/verify.js`)**: Added 15s and 10s request timeouts using `AbortSignal.timeout()` to prevent hanging sockets during third-party API outages.
+- **Header Null Checks (`plugins/basic-auth/index.js`, `plugins/cors.js`)**: Added defensive guards against undefined `req.headers`.
+- **MCP SSE Transport Lifecycle (`plugins/mcp/`)**: Added `close()` method to `mountSseTransport` and wired up `dispose(ctx)` and `onDispose` hooks for clean SSE connection termination on shutdown.
+
+### Performance
+
+#### SoftScope Profiling & Cache Optimizations
+- **Webhook Matcher RegExp Cache (`plugins/webhooks/matcher.js`)**: Added a 1,000-item bounded RegExp cache (`Map`) avoiding regex recompilation on every match, boosting `matchEvent` throughput to 489k ops/sec.
+- **File Manager Storage Usage Cache (`plugins/file-manager/core.js`)**: Added a 15-second TTL cache for `calculateStorageUsage` with automatic invalidation on uploads, deletes, and renames, eliminating recursive disk walks on every upload.
+- **Sitemap XML String Caching (`plugins/sitemap.js`)**: Pre-rendered and cached sitemap XML string (`cachedXml`) with automatic invalidation, avoiding re-serialization of thousands of XML nodes per request.
+- **Swagger OpenAPI Document Caching (`plugins/swagger.js`)**: Added `cachedDoc` in production for `openapi.json` to eliminate repeated route scanning and Zod schema conversions.
+- **Schema Explorer Graph Memoization (`plugins/schema-explorer.js`)**: Memoized `getEnrichedGraph()` and added `api.invalidateCache()`.
+- **Redirect Rule O(1) Map Lookup (`plugins/redirect/index.js`)**: Added $O(1)$ Map lookup for string redirect rules and fixed null options crash caught during SoftScope fuzzing.
+
 ## [0.0.103] - 2026-10-17
 
 ### Added

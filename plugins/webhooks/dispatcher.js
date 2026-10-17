@@ -461,9 +461,14 @@ class WebhookDispatcher extends EventEmitter {
             attempt: attempt + 1,
             autoRetry: true,
           }).catch((err) => {
-            this.emit('error', err);
+            if (this.listenerCount('error') > 0) {
+              this.emit('error', err);
+            } else {
+              console.error('[webhooks] Delivery retry failed:', err?.message || err);
+            }
           });
         }, delayMs);
+        if (timer.unref) timer.unref();
         this._activeTimers.add(timer);
       }
     } else {

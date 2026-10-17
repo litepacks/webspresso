@@ -48,6 +48,25 @@ function normalizeEvents(events) {
   return ['*'];
 }
 
+const regexCache = new Map();
+const MAX_REGEX_CACHE = 1000;
+
+function getPatternRegex(pattern) {
+  let cached = regexCache.get(pattern);
+  if (!cached) {
+    if (regexCache.size >= MAX_REGEX_CACHE) {
+      const first = regexCache.keys().next().value;
+      if (first !== undefined) regexCache.delete(first);
+    }
+    const escaped = pattern
+      .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // escape regex specials except *
+      .replace(/\*/g, '.*');
+    cached = new RegExp(`^${escaped}$`, 'i');
+    regexCache.set(pattern, cached);
+  }
+  return cached;
+}
+
 /**
  * Test whether an event pattern matches an actual event name
  * 
@@ -56,12 +75,15 @@ function normalizeEvents(events) {
  * @returns {boolean}
  */
 function matchEvent(pattern, eventName) {
-  if (!pattern || !eventName) {
+  if (typeof pattern !== 'string' || typeof eventName !== 'string') {
     return false;
   }
 
   const p = pattern.trim();
   const e = eventName.trim();
+  if (!p || !e) {
+    return false;
+  }
 
   // 1. Wildcard matches all
   if (p === '*') {
@@ -73,15 +95,8 @@ function matchEvent(pattern, eventName) {
     return true;
   }
 
-  // 3. Glob / Wildcard conversion
-  // Convert 'user.*' to regular expression '^user\.[^.]+$' or '^user\..+$'
-  // Support prefix, middle, or suffix wildcards safely
-  const escaped = p
-    .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // escape regex specials except *
-    .replace(/\*/g, '.*');
-
-  const regex = new RegExp(`^${escaped}$`, 'i');
-  return regex.test(e);
+  // 3. Glob / Wildcard conversion with bounded cache
+  return getPatternRegex(p).test(e);
 }
 
 /**

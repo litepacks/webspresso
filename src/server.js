@@ -642,8 +642,8 @@ function createApp(options = {}) {
 
   const shutdownConfig = {
     enabled: true,
-    mode: 'graceful',
-    timeout: 10_000,
+    mode: isDev ? 'force' : 'graceful',
+    timeout: isDev ? 1000 : 10_000,
     ...(options.shutdown || options.server?.shutdown || {}),
   };
 

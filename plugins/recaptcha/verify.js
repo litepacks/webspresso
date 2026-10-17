@@ -20,7 +20,8 @@ const SITEVERIFY_URL = 'https://www.google.com/recaptcha/api/siteverify';
  * @param {VerifyOptions} options
  * @returns {Promise<{ success: boolean, score?: number, action?: string, hostname?: string, challenge_ts?: string, errorCodes?: string[], raw: object }>}
  */
-async function verifyRecaptcha(options) {
+async function verifyRecaptcha(options = {}) {
+  const opts = options || {};
   const {
     secret,
     token,
@@ -28,7 +29,8 @@ async function verifyRecaptcha(options) {
     version = 'v2',
     minScore = 0.5,
     expectedAction,
-  } = options;
+    timeoutMs = 10000,
+  } = opts;
 
   if (!secret || typeof secret !== 'string') {
     throw new Error('recaptcha: secret is required');
@@ -49,13 +51,28 @@ async function verifyRecaptcha(options) {
     body.set('remoteip', remoteIp);
   }
 
-  const res = await fetch(SITEVERIFY_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: body.toString(),
-  });
+  const signal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+    ? AbortSignal.timeout(timeoutMs)
+    : undefined;
+
+  let res;
+  try {
+    res = await fetch(SITEVERIFY_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: body.toString(),
+      signal,
+    });
+  } catch (netErr) {
+    const isTimeout = netErr.name === 'AbortError' || netErr.name === 'TimeoutError';
+    return {
+      success: false,
+      errorCodes: [isTimeout ? 'timeout' : 'network-error'],
+      raw: {},
+    };
+  }
 
   if (!res.ok) {
     return {
@@ -66,8 +83,17 @@ async function verifyRecaptcha(options) {
   }
 
   /** @type {Record<string, unknown>} */
-  const raw = await res.json();
-  const googleSuccess = raw.success === true;
+  let raw;
+  try {
+    raw = await res.json();
+  } catch (jsonErr) {
+    return {
+      success: false,
+      errorCodes: ['invalid-json-response'],
+      raw: {},
+    };
+  }
+  const googleSuccess = raw && raw.success === true;
 
   if (!googleSuccess) {
     return {

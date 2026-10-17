@@ -111,6 +111,18 @@ class LoginRateLimiter {
         this.attempts.delete(ip);
       }
     }
+
+    // Hard ceiling to prevent unbounded memory growth under distributed IP attacks
+    const MAX_ENTRIES = 5000;
+    if (this.attempts.size > MAX_ENTRIES) {
+      const excess = this.attempts.size - MAX_ENTRIES;
+      let count = 0;
+      for (const ip of this.attempts.keys()) {
+        this.attempts.delete(ip);
+        count++;
+        if (count >= excess) break;
+      }
+    }
   }
 }
 

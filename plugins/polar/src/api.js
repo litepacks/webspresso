@@ -12,12 +12,16 @@ function getPolarApiBase(sandbox) {
  * @param {string} opts.accessToken
  * @param {boolean} [opts.sandbox=false]
  */
-async function polarApiRequest(path, { method = 'GET', body, accessToken, sandbox = false } = {}) {
+async function polarApiRequest(path, { method = 'GET', body, accessToken, sandbox = false, timeoutMs = 15000 } = {}) {
   if (!accessToken) {
     throw new Error('POLAR_ACCESS_TOKEN is not configured');
   }
 
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const signal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+    ? AbortSignal.timeout(timeoutMs)
+    : undefined;
+
   const res = await fetch(`${getPolarApiBase(sandbox)}${normalizedPath}`, {
     method,
     headers: {
@@ -26,6 +30,7 @@ async function polarApiRequest(path, { method = 'GET', body, accessToken, sandbo
       Accept: 'application/json',
     },
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
 
   const raw = await res.text();

@@ -206,7 +206,21 @@ class ShutdownManager {
 
       this._log('info', `Starting ${modeLabel} shutdown (reason: ${reason})`);
 
-      // 1. Close HTTP server adapters
+      // 1. Run plugin disposers in reverse registration order (terminates SSE streams, WebSockets, devReload clients, and workers)
+      if (this._disposers.length > 0) {
+        this._log('info', `Disposing ${this._disposers.length} plugins`);
+        // Reverse array to tear down dependencies in reverse order
+        const reverseDisposers = this._disposers.slice().reverse();
+        for (const { name, fn } of reverseDisposers) {
+          try {
+            await fn();
+          } catch (err) {
+            this._log('error', `Error in plugin disposer "${name}":`, err);
+          }
+        }
+      }
+
+      // 2. Close HTTP server adapters (gracefully drain in-flight HTTP requests)
       if (this._adapters.length > 0) {
         this._log('info', 'Closing HTTP server');
 
@@ -270,7 +284,7 @@ class ShutdownManager {
         }
       }
 
-      // 2. Run application shutdown hooks (app.onShutdown)
+      // 3. Run application shutdown hooks (app.onShutdown)
       if (this._hooks.length > 0) {
         this._log('info', `Running ${this._hooks.length} shutdown hooks`);
         for (const hook of this._hooks) {
@@ -278,20 +292,6 @@ class ShutdownManager {
             await hook();
           } catch (err) {
             this._log('error', 'Error in shutdown hook:', err);
-          }
-        }
-      }
-
-      // 3. Run plugin disposers in reverse registration order
-      if (this._disposers.length > 0) {
-        this._log('info', `Disposing ${this._disposers.length} plugins`);
-        // Reverse array to tear down dependencies in reverse order
-        const reverseDisposers = this._disposers.slice().reverse();
-        for (const { name, fn } of reverseDisposers) {
-          try {
-            await fn();
-          } catch (err) {
-            this._log('error', `Error in plugin disposer "${name}":`, err);
           }
         }
       }

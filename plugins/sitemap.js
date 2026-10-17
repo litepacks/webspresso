@@ -157,8 +157,9 @@ function sitemapPlugin(options = {}) {
   const dynamicExclusions = [...exclude];
   const registeredSources = [...dynamicSources];
   
-  // Cached URLs (for dynamic sources)
+  // Cached URLs and pre-rendered XML (for dynamic sources)
   let cachedUrls = null;
+  let cachedXml = null;
   let cacheTime = null;
   const cacheMaxAge = options.cacheMaxAge || 5 * 60 * 1000; // 5 minutes default
   
@@ -326,7 +327,8 @@ function sitemapPlugin(options = {}) {
        */
       addUrl(path, opts = {}) {
         dynamicUrls.push({ path, ...opts });
-        cachedUrls = null; // Invalidate cache
+        cachedUrls = null;
+        cachedXml = null;
       },
       
       /**
@@ -335,7 +337,8 @@ function sitemapPlugin(options = {}) {
        */
       exclude(pattern) {
         dynamicExclusions.push(pattern);
-        cachedUrls = null; // Invalidate cache
+        cachedUrls = null;
+        cachedXml = null;
       },
       
       /**
@@ -347,7 +350,8 @@ function sitemapPlugin(options = {}) {
           throw new Error('urlPattern is required for dynamic source');
         }
         registeredSources.push(source);
-        cachedUrls = null; // Invalidate cache
+        cachedUrls = null;
+        cachedXml = null;
       },
       
       /**
@@ -369,6 +373,7 @@ function sitemapPlugin(options = {}) {
        */
       invalidateCache() {
         cachedUrls = null;
+        cachedXml = null;
         cacheTime = null;
       }
     },
@@ -384,28 +389,26 @@ function sitemapPlugin(options = {}) {
         try {
           // Check cache
           const now = Date.now();
-          if (cachedUrls && cacheTime && (now - cacheTime) < cacheMaxAge) {
+          if (cachedXml && cacheTime && (now - cacheTime) < cacheMaxAge) {
             res.type('application/xml');
-            return res.send(generateSitemapXml(cachedUrls, { 
-              hostname, 
-              defaultChangefreq: changefreq, 
-              defaultPriority: priority 
-            }));
+            return res.send(cachedXml);
           }
           
           // Build URLs
           const urls = await buildAllUrls(ctx.routes, dbInstance);
-          
-          // Cache results
-          cachedUrls = urls;
-          cacheTime = now;
-          
-          res.type('application/xml');
-          res.send(generateSitemapXml(urls, { 
+          const xml = generateSitemapXml(urls, { 
             hostname, 
             defaultChangefreq: changefreq, 
             defaultPriority: priority 
-          }));
+          });
+          
+          // Cache results
+          cachedUrls = urls;
+          cachedXml = xml;
+          cacheTime = now;
+          
+          res.type('application/xml');
+          res.send(xml);
         } catch (err) {
           console.error('Sitemap generation error:', err);
           res.status(500).send('Error generating sitemap');

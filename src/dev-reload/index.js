@@ -15,6 +15,8 @@ const CLIENT_RUNTIME_SCRIPT = `(function() {
 
   var es = null;
   var reconnectTimer = null;
+  var wasConnected = false;
+  var reconnectDelay = 200;
 
   function reloadCss(targetFile) {
     var links = document.querySelectorAll('link[rel="stylesheet"]');
@@ -166,12 +168,52 @@ const CLIENT_RUNTIME_SCRIPT = `(function() {
     document.addEventListener('keydown', onKeyDown);
   }
 
+  function safeReload(reason) {
+    clearOverlay();
+    var reasonMsg = reason ? ' (' + reason + ')' : '';
+    console.log('[Webspresso] 🔄 Reloading page' + reasonMsg + '...');
+
+    // Ping server with lightweight HEAD request to make sure it is ready before full reload.
+    // This prevents browser "This site can't be reached" (ERR_CONNECTION_REFUSED) screens
+    // when the dev server is in the middle of restarting.
+    function pingAndReload() {
+      if (typeof window.fetch !== 'function') {
+        window.location.reload();
+        return;
+      }
+
+      fetch(window.location.href, { method: 'HEAD', cache: 'no-store' })
+        .then(function(res) {
+          if (res.ok || res.status < 500) {
+            window.location.reload();
+          } else {
+            setTimeout(pingAndReload, 150);
+          }
+        })
+        .catch(function() {
+          setTimeout(pingAndReload, 150);
+        });
+    }
+
+    setTimeout(pingAndReload, 30);
+  }
+
   function connect() {
     if (es) {
       try { es.close(); } catch (_) {}
     }
 
     es = new window.EventSource('${SSE_ENDPOINT_PATH}');
+
+    es.addEventListener('open', function() {
+      reconnectDelay = 200;
+      if (wasConnected) {
+        console.log('[Webspresso] 🔄 Dev server reconnected, reloading page...');
+        safeReload('server reconnected');
+        return;
+      }
+      wasConnected = true;
+    });
 
     es.addEventListener('reload', function(e) {
       try {
@@ -180,10 +222,7 @@ const CLIENT_RUNTIME_SCRIPT = `(function() {
           clearOverlay();
           reloadCss(data.file);
         } else if (data.type === 'full') {
-          clearOverlay();
-          var reasonMsg = data.reason ? ' (' + data.reason + ')' : '';
-          console.log('[Webspresso] 🔄 Reloading page' + reasonMsg + '...');
-          window.location.reload();
+          safeReload(data.reason);
         } else if (data.type === 'error') {
           showOverlay(data);
         } else if (data.type === 'clear-error') {
@@ -195,12 +234,14 @@ const CLIENT_RUNTIME_SCRIPT = `(function() {
     });
 
     es.onerror = function() {
-      es.close();
+      try { es.close(); } catch (_) {}
       if (!reconnectTimer) {
+        var delay = reconnectDelay;
+        reconnectDelay = Math.min(reconnectDelay * 1.5, 1500);
         reconnectTimer = setTimeout(function() {
           reconnectTimer = null;
           connect();
-        }, 2000);
+        }, delay);
       }
     };
   }

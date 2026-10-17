@@ -13,8 +13,9 @@ const { spawn } = require('child_process');
 function buildWatchArgs() {
   const args = ['--watch'];
   
-  // Add watch paths for common directories
-  const watchPaths = ['pages', 'models', 'views'];
+  // Add watch paths for server-side code directories (services, models, config, pages)
+  // Note: views contains Nunjucks templates which are live-reloaded in-memory by devReloadHub
+  const watchPaths = ['pages', 'models', 'services', 'config'];
   
   for (const dir of watchPaths) {
     if (fs.existsSync(dir)) {

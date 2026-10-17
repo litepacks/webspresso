@@ -137,7 +137,12 @@ function resolveSafePath(baseDir, relPath = '') {
   }
 
   // Prevent URL decoded traversal attempts
-  const decodedPath = decodeURIComponent(relPath);
+  let decodedPath;
+  try {
+    decodedPath = decodeURIComponent(relPath);
+  } catch (err) {
+    throw new ValidationError('Malformed URI path sequence', 400);
+  }
   if (decodedPath.includes('\0')) {
     throw new SecurityError('Null byte detected in path', 400);
   }
@@ -237,7 +242,7 @@ function buildBreadcrumbs(relPath) {
  */
 async function listFiles(baseDir, relPath = '', options = {}) {
   const targetDir = resolveSafePath(baseDir, relPath);
-  const normalizedRel = path.relative(path.resolve(baseDir), targetDir).replace(/\\/g, '');
+  const normalizedRel = path.relative(path.resolve(baseDir), targetDir).replace(/\\/g, '/');
   const publicBase = normalizePublicBase(options.publicBasePath);
 
   let dirents;
@@ -456,6 +461,7 @@ async function deleteItem(baseDir, itemRelPath) {
     await fs.unlink(targetFullPath);
   }
 
+  invalidateStorageCache(baseDir);
   return { success: true, path: itemRelPath };
 }
 
@@ -487,12 +493,33 @@ async function moveItem(baseDir, sourceRelPath, destDirRelPath) {
   return { success: true, oldPath: sourceRelPath, newPath: newRelPath };
 }
 
+const storageCache = new Map();
+const STORAGE_CACHE_TTL = 15000; // 15 seconds
+
+function invalidateStorageCache(baseDir) {
+  if (baseDir) {
+    storageCache.delete(path.resolve(baseDir));
+  } else {
+    storageCache.clear();
+  }
+}
+
 /**
  * Calculate total disk usage in bytes under baseDir
  * @param {string} baseDir
+ * @param {Object} [options]
+ * @param {boolean} [options.forceRefresh=false]
  * @returns {Promise<number>}
  */
-async function calculateStorageUsage(baseDir) {
+async function calculateStorageUsage(baseDir, options = {}) {
+  const resolvedBase = path.resolve(baseDir);
+  const now = Date.now();
+  const cached = storageCache.get(resolvedBase);
+
+  if (!options.forceRefresh && cached && (now - cached.timestamp) < STORAGE_CACHE_TTL) {
+    return cached.bytes;
+  }
+
   let totalBytes = 0;
   async function scan(dir) {
     try {
@@ -509,7 +536,8 @@ async function calculateStorageUsage(baseDir) {
       }
     } catch (e) {}
   }
-  await scan(path.resolve(baseDir));
+  await scan(resolvedBase);
+  storageCache.set(resolvedBase, { bytes: totalBytes, timestamp: now });
   return totalBytes;
 }
 
@@ -568,6 +596,7 @@ async function saveUploadedFile(baseDir, targetDirRelPath, buffer, originalName,
   resolveSafePath(baseDir, path.relative(baseDir, targetPath));
 
   await fs.writeFile(targetPath, finalBuffer);
+  invalidateStorageCache(baseDir);
 
   const relFilePath = path.relative(path.resolve(baseDir), targetPath).replace(/\\/g, '/');
   const publicBase = normalizePublicBase(publicBasePath);
@@ -598,4 +627,5 @@ module.exports = {
   moveItem,
   saveUploadedFile,
   calculateStorageUsage,
+  invalidateStorageCache,
 };

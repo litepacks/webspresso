@@ -66,8 +66,18 @@ function createAuditLogHandlers(options) {
         .offset((page - 1) * perPage)
         .limit(perPage);
 
+      const normalizedRows = rows.map((r) => {
+        let parsedMetadata = r.metadata;
+        if (typeof parsedMetadata === 'string') {
+          try {
+            parsedMetadata = JSON.parse(parsedMetadata);
+          } catch {}
+        }
+        return { ...r, metadata: parsedMetadata };
+      });
+
       res.json({
-        data: rows,
+        data: normalizedRows,
         meta: { page, perPage, total },
       });
     } catch (err) {

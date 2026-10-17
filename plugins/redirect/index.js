@@ -151,6 +151,7 @@ function methodMatches(compiled, method) {
  * @returns {{ name: string, version: string, description: string, register: Function }}
  */
 function redirectPlugin(options = {}) {
+  const opts = options || {};
   const {
     rules = [],
     defaultStatus = 302,
@@ -158,7 +159,7 @@ function redirectPlugin(options = {}) {
     allowExternal = false,
     trailingSlash = false,
     defaultMethods = ['GET', 'HEAD'],
-  } = options;
+  } = opts;
 
   const pluginOpts = {
     defaultStatus: REDIRECT_STATUSES.has(Number(defaultStatus)) ? Number(defaultStatus) : 302,
@@ -169,16 +170,63 @@ function redirectPlugin(options = {}) {
   };
 
   const compiled = [];
-  for (const rule of rules) {
+  const stringRulesMap = new Map();
+  let hasRegexRules = false;
+
+  const ruleList = Array.isArray(rules) ? rules : [];
+  for (const rule of ruleList) {
     const c = compileRule(rule, pluginOpts);
-    if (c) compiled.push(c);
+    if (!c) continue;
+    compiled.push(c);
+    if (c.kind === 'string') {
+      const keys = [c.fromNorm];
+      if (!c.trailing) {
+        const alt = c.fromRaw.replace(/\/$/, '') || '/';
+        if (!keys.includes(alt)) keys.push(alt);
+      }
+      for (const k of keys) {
+        let list = stringRulesMap.get(k);
+        if (!list) {
+          list = [];
+          stringRulesMap.set(k, list);
+        }
+        list.push(c);
+      }
+    } else {
+      hasRegexRules = true;
+    }
   }
 
   function redirectMiddleware(req, res, next) {
+    if (!req) return next();
     const rawPath = req.path || '/';
     const pathForMatch = normalizePathForTrailingSlash(pluginOpts.trailingSlash, rawPath);
     const method = req.method || 'GET';
 
+    // Fast O(1) path when all configured rules are string based
+    if (!hasRegexRules) {
+      const candidates = stringRulesMap.get(pathForMatch) || (!pluginOpts.trailingSlash ? stringRulesMap.get(rawPath.replace(/\/$/, '') || '/') : null);
+      if (candidates) {
+        for (const c of candidates) {
+          if (!methodMatches(c, method)) continue;
+          if (!pathMatches(c, pathForMatch, rawPath)) continue;
+
+          let location = c.to;
+          if (pluginOpts.preserveQuery && !location.includes('?')) {
+            const full = req.originalUrl || req.url || '';
+            const qi = full.indexOf('?');
+            if (qi !== -1) {
+              location += full.slice(qi);
+            }
+          }
+          res.redirect(c.status, location);
+          return;
+        }
+      }
+      return next();
+    }
+
+    // Linear path when regex rules are present to preserve definition order
     for (const c of compiled) {
       if (!methodMatches(c, method)) continue;
       if (!pathMatches(c, pathForMatch, rawPath)) continue;

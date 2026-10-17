@@ -80,7 +80,14 @@ function createAuditMiddleware(options) {
           resourceId = extractResourceIdFromJsonBody(lastJsonBody, action) || resourceId;
         }
 
-        const metadata = buildMetadata(action, req);
+        let metadataVal = metadata || null;
+        if (metadataVal && typeof metadataVal === 'object') {
+          const clientName = knex?.client?.config?.client || '';
+          if (typeof clientName === 'string' && clientName.includes('sqlite')) {
+            metadataVal = JSON.stringify(metadataVal);
+          }
+        }
+
         const pathStr = (req.originalUrl || req.url || req.path || '').slice(0, 2000);
         const row = {
           actor_id: actor.id != null ? Number(actor.id) : null,
@@ -92,7 +99,7 @@ function createAuditMiddleware(options) {
           path: pathStr,
           ip: req.ip || (req.connection && req.connection.remoteAddress) || null,
           user_agent: req.get && req.get('user-agent') ? req.get('user-agent').slice(0, 2000) : null,
-          metadata: metadata || null,
+          metadata: metadataVal,
         };
 
         knex(tableName).insert(row).catch(logAuditError);
