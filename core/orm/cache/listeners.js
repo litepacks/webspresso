@@ -5,7 +5,7 @@
  */
 
 const { ModelEvents, Hooks } = require('../events');
-const { getModel } = require('../model');
+const modelModule = require('../model');
 
 /** @type {Set<import('./layer').OrmCacheLayer>} */
 const layers = new Set();
@@ -27,7 +27,7 @@ function registerOrmCacheListeners(cacheLayer) {
    */
   function handleMutation(record, ctx, op) {
     const modelName = ctx.model;
-    const model = getModel(modelName);
+    const model = modelModule.getModel(modelName);
     if (!model) return;
 
     for (const layer of layers) {
@@ -68,7 +68,17 @@ function unregisterOrmCacheListeners(cacheLayer) {
   }
 }
 
+function _resetForTesting() {
+  for (const unsub of unsubs) {
+    if (typeof unsub === 'function') unsub();
+  }
+  unsubs = [];
+  layers.clear();
+  hooked = false;
+}
+
 module.exports = {
   registerOrmCacheListeners,
   unregisterOrmCacheListeners,
+  _resetForTesting,
 };

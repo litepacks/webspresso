@@ -2,7 +2,7 @@
  * ORM column → OpenAPI schema fragments (shared by schema-explorer and swagger plugin)
  */
 
-const { getAllModels } = require('../orm/model');
+const modelModule = require('../orm/model');
 
 /**
  * Generate OpenAPI 3 components.schemas from registered ORM models
@@ -10,8 +10,7 @@ const { getAllModels } = require('../orm/model');
  * @returns {Record<string, object>}
  */
 function generateOrmOpenApiSchemas(options = {}) {
-  const { exclude = [] } = options;
-  const models = getAllModels();
+  const { exclude = [], models = modelModule.getAllModels() } = options;
   const schemas = {};
 
   for (const [name, model] of models) {

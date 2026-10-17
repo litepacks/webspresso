@@ -5,7 +5,7 @@
  */
 
 const zlib = require('zlib');
-const { supportsBrotli } = require('./negotiate');
+const negotiate = require('./negotiate');
 
 /**
  * Create a zlib compression transform stream based on encoding
@@ -23,7 +23,7 @@ function createCompressionStream(encoding, options = {}) {
 
   switch (enc) {
     case 'br': {
-      if (!supportsBrotli()) {
+      if (options.supportsBrotli === false || !negotiate.supportsBrotli()) {
         return null;
       }
       const brotliOpts = { ...(options.brotli || {}) };

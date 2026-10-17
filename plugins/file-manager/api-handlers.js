@@ -4,15 +4,7 @@
  */
 
 const multer = require('multer');
-const {
-  listFiles,
-  createDirectory,
-  renameItem,
-  deleteItem,
-  moveItem,
-  saveUploadedFile,
-  calculateStorageUsage,
-} = require('./core');
+const core = require('./core');
 
 /**
  * Create Multer middleware for in-memory upload parsing
@@ -71,7 +63,7 @@ function createFileManagerApiHandlers(options = {}) {
   const permissions = options.permissions || null;
   const securityOpts = options.security || {};
 
-  const parseUpload = createUploadMiddleware(maxUploadBytes);
+  const parseUpload = options.uploadMiddleware || createUploadMiddleware(maxUploadBytes);
 
   return {
     async list(req, res) {
@@ -88,7 +80,7 @@ function createFileManagerApiHandlers(options = {}) {
         const page = req.query.page ? parseInt(req.query.page, 10) : undefined;
         const perPage = req.query.perPage ? parseInt(req.query.perPage, 10) : undefined;
 
-        const result = await listFiles(baseDir, relPath, {
+        const result = await core.listFiles(baseDir, relPath, {
           search,
           type,
           sort,
@@ -115,7 +107,7 @@ function createFileManagerApiHandlers(options = {}) {
         if (!name) {
           return res.status(400).json({ success: false, error: 'Directory name is required' });
         }
-        const result = await createDirectory(baseDir, relPath, name);
+        const result = await core.createDirectory(baseDir, relPath, name);
         return res.status(201).json({ success: true, data: result });
       } catch (err) {
         const status = err.statusCode || err.status || 400;
@@ -133,7 +125,7 @@ function createFileManagerApiHandlers(options = {}) {
         if (!itemPath || !newName) {
           return res.status(400).json({ success: false, error: 'Path and newName are required' });
         }
-        const result = await renameItem(baseDir, itemPath, newName);
+        const result = await core.renameItem(baseDir, itemPath, newName);
         return res.json({ success: true, data: result });
       } catch (err) {
         const status = err.statusCode || err.status || 400;
@@ -151,7 +143,7 @@ function createFileManagerApiHandlers(options = {}) {
         if (!source) {
           return res.status(400).json({ success: false, error: 'Source path is required' });
         }
-        const result = await moveItem(baseDir, source, destination);
+        const result = await core.moveItem(baseDir, source, destination);
         return res.json({ success: true, data: result });
       } catch (err) {
         const status = err.statusCode || err.status || 400;
@@ -169,7 +161,7 @@ function createFileManagerApiHandlers(options = {}) {
         if (!itemPath) {
           return res.status(400).json({ success: false, error: 'Path is required' });
         }
-        const result = await deleteItem(baseDir, itemPath);
+        const result = await core.deleteItem(baseDir, itemPath);
         return res.json({ success: true, data: result });
       } catch (err) {
         const status = err.statusCode || err.status || 400;
@@ -199,7 +191,7 @@ function createFileManagerApiHandlers(options = {}) {
 
         // Storage Quota Check
         if (maxTotalStorageBytes && typeof maxTotalStorageBytes === 'number') {
-          const currentUsage = await calculateStorageUsage(baseDir);
+          const currentUsage = await core.calculateStorageUsage(baseDir);
           const incomingBytes = files.reduce((acc, f) => acc + (f.size || f.buffer?.length || 0), 0);
           if (currentUsage + incomingBytes > maxTotalStorageBytes) {
             return res.status(507).json({
@@ -229,7 +221,7 @@ function createFileManagerApiHandlers(options = {}) {
         try {
           const uploaded = [];
           for (const file of files) {
-            const saved = await saveUploadedFile(
+            const saved = await core.saveUploadedFile(
               baseDir,
               targetRelPath,
               file.buffer,
@@ -257,5 +249,6 @@ function createFileManagerApiHandlers(options = {}) {
 
 module.exports = {
   createFileManagerApiHandlers,
+  createUploadMiddleware,
   isActionAllowed,
 };
