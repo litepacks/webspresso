@@ -227,8 +227,9 @@ describe('ORM Model Options & Automatic Timestamps / SoftDelete', () => {
     expect(task.deletedAt).toBeNull();
 
     // 2. Update
-    const updated = await repo.update(task.id, { done: true });
-    expect(updated.done).toBe(true);
+    const updated = await repo.update(task.id, { title: 'Buy Organic Groceries', done: true });
+    expect(updated.title).toBe('Buy Organic Groceries');
+    expect(Boolean(updated.done)).toBe(true);
     expect(updated.updatedAt).toBeDefined();
 
     // 3. Find

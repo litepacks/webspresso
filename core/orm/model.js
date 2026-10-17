@@ -49,8 +49,8 @@ function defineModel(options) {
   if (!table || typeof table !== 'string') {
     throw new Error('Model table is required and must be a string');
   }
-  if (!schema || typeof schema !== 'object') {
-    throw new Error('Model schema is required and must be a Zod schema or schema definition object');
+  if (!schema || typeof schema !== 'object' || (typeof schema.parse !== 'function' && Object.keys(schema).length === 0)) {
+    throw new Error('Model schema is required and must be a Zod schema');
   }
 
   // Resolve timestamps and softDelete options (from top-level flags, nested options, or scopes)
