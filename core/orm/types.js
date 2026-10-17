@@ -151,11 +151,22 @@
 // ============================================================================
 
 /**
+ * @typedef {Object} ModelConfigOptions
+ * @property {boolean|{createdAt?: string, updatedAt?: string, snakeCase?: boolean}} [timestamps=false] - Auto timestamps
+ * @property {boolean|{deletedAt?: string, snakeCase?: boolean}} [softDelete=false] - Soft delete support
+ * @property {boolean|{deletedAt?: string, snakeCase?: boolean}} [softDeletes=false] - Soft delete support alias
+ */
+
+/**
  * @typedef {Object} ModelOptions
  * @property {string} name - Model name (e.g., 'User')
  * @property {string} table - Database table name (e.g., 'users')
- * @property {import('zod').ZodObject} schema - Zod schema for validation
+ * @property {import('zod').ZodObject|Record<string, any>} schema - Zod schema or plain object schema shape
  * @property {string} [primaryKey='id'] - Primary key column name
+ * @property {boolean|{createdAt?: string, updatedAt?: string, snakeCase?: boolean}} [timestamps] - Auto timestamps (injects createdAt/updatedAt)
+ * @property {boolean|{deletedAt?: string, snakeCase?: boolean}} [softDelete] - Soft delete support (injects deletedAt)
+ * @property {boolean|{deletedAt?: string, snakeCase?: boolean}} [softDeletes] - Soft delete support alias
+ * @property {ModelConfigOptions} [options] - Additional model options (e.g. timestamps, softDelete)
  * @property {RelationsMap} [relations={}] - Relation definitions
  * @property {ScopeOptions} [scopes={}] - Scope options
  * @property {AdminMetadata} [admin] - Admin panel metadata

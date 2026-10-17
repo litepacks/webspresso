@@ -12,6 +12,7 @@ const {
   applyUpdateModifiers,
   getSoftDeleteData,
   getRestoreData,
+  getSoftDeleteColumn,
   createScopeContext,
   applyScopes,
 } = require('./scopes');
@@ -511,9 +512,10 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
       const parentVal = record[localKey];
       if (parentVal === undefined || parentVal === null) continue;
 
+      const deletedCol = getSoftDeleteColumn(relatedModel);
       let childQuery = activeKnex(relatedModel.table)
         .where(foreignKey, parentVal)
-        .whereNull('deleted_at');
+        .whereNull(deletedCol);
 
       if (scopeContext && scopeContext.tenantId !== undefined && relatedModel.scopes.tenant) {
         childQuery = childQuery.where(relatedModel.scopes.tenant, scopeContext.tenantId);
@@ -526,7 +528,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
 
       await activeKnex(relatedModel.table)
         .whereIn(relatedModel.primaryKey, childIds)
-        .update(getSoftDeleteData(deletedAt));
+        .update(getSoftDeleteData(deletedAt, relatedModel));
 
       if (cacheLayer) {
         cacheLayer.invalidateModelAll(relatedModel);
@@ -655,9 +657,10 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
       const parentVal = trashedRecord[localKey];
       if (parentVal === undefined || parentVal === null) continue;
 
+      const deletedCol = getSoftDeleteColumn(relatedModel);
       let childQuery = activeKnex(relatedModel.table)
         .where(foreignKey, parentVal)
-        .whereNotNull('deleted_at');
+        .whereNotNull(deletedCol);
 
       if (scopeContext && scopeContext.tenantId !== undefined && relatedModel.scopes.tenant) {
         childQuery = childQuery.where(relatedModel.scopes.tenant, scopeContext.tenantId);
@@ -665,7 +668,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
 
       // Selective restore by matching deletion timestamp
       if (!options.allChildren && parentDeletedAt != null) {
-        childQuery = childQuery.where('deleted_at', parentDeletedAt);
+        childQuery = childQuery.where(deletedCol, parentDeletedAt);
       }
 
       const children = await childQuery.select('*');
@@ -676,14 +679,15 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
       );
       if (hasDeeper) {
         for (const child of children) {
-          await cascadeRestore(relatedModel, child, child.deleted_at || parentDeletedAt, options, visited);
+          const childDeletedAt = child[deletedCol] || child.deleted_at || parentDeletedAt;
+          await cascadeRestore(relatedModel, child, childDeletedAt, options, visited);
         }
       }
 
       const childIds = children.map(c => c[relatedModel.primaryKey]);
       await activeKnex(relatedModel.table)
         .whereIn(relatedModel.primaryKey, childIds)
-        .update(getRestoreData());
+        .update(getRestoreData(relatedModel));
 
       if (cacheLayer) {
         cacheLayer.invalidateModelAll(relatedModel);
@@ -692,7 +696,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
       if (ModelEvents.hasListeners(relatedModel.name, Hooks.AFTER_RESTORE)) {
         for (const child of children) {
           const childCtx = createEventContext(relatedModel.name, 'restore', getHookTrx());
-          ModelEvents.emit(relatedModel.name, Hooks.AFTER_RESTORE, { ...child, deleted_at: null }, childCtx);
+          ModelEvents.emit(relatedModel.name, Hooks.AFTER_RESTORE, { ...child, [deletedCol]: null, deleted_at: null }, childCtx);
         }
       }
     }
@@ -726,7 +730,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     if (model.scopes.softDelete) {
       const updated = await baseQuery()
         .where(model.primaryKey, id)
-        .update(getSoftDeleteData(deletedAt));
+        .update(getSoftDeleteData(deletedAt, model));
       success = updated > 0;
 
       if (success) {
@@ -809,10 +813,12 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
 
     const ctx = createEventContext(model.name, 'restore', getHookTrx());
 
+    const deletedCol = getSoftDeleteColumn(model);
+
     // Get the trashed record for hooks (bypass soft delete scope)
     const trashedRecord = await getActiveKnex()(model.table)
       .where(model.primaryKey, id)
-      .whereNotNull('deleted_at')
+      .whereNotNull(deletedCol)
       .first();
 
     if (!trashedRecord) {
@@ -828,8 +834,8 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     // Update directly without scopes (to find trashed record)
     const updated = await getActiveKnex()(model.table)
       .where(model.primaryKey, id)
-      .whereNotNull('deleted_at')
-      .update(getRestoreData());
+      .whereNotNull(deletedCol)
+      .update(getRestoreData(model));
 
     if (updated === 0) {
       return null;
@@ -840,7 +846,8 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     }
 
     if (!options || options.cascade !== false) {
-      await cascadeRestore(model, trashedRecord, trashedRecord.deleted_at, options);
+      const parentDeletedAt = trashedRecord[deletedCol] || trashedRecord.deleted_at;
+      await cascadeRestore(model, trashedRecord, parentDeletedAt, options);
     }
 
     const record = await findById(id, {}, false);

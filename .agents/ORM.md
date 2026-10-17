@@ -51,7 +51,9 @@ import { defineModel, zdb } from 'webspresso';
 export default defineModel({
   name: 'Product',
   table: 'products',
-  schema: zdb.schema({
+  timestamps: true, // auto-injects createdAt & updatedAt into schema & scopes
+  softDelete: true, // auto-injects deletedAt & manages soft-delete scope
+  schema: {
     id: zdb.id(),
     name: zdb.string().min(2),
     slug: zdb.string().unique(),
@@ -61,9 +63,7 @@ export default defineModel({
     metadata: zdb.json({ optional: true }),
     category_id: zdb.integer(),
     active: zdb.boolean({ default: true }),
-    created_at: zdb.timestamp({ auto: 'create' }),
-    updated_at: zdb.timestamp({ auto: 'update' }),
-  }),
+  },
   relations: {
     category: { type: 'belongsTo', model: 'Category', foreignKey: 'category_id' },
     reviews: { type: 'hasMany', model: 'Review', foreignKey: 'product_id' },
@@ -81,6 +81,13 @@ export default defineModel({
 });
 ```
 
+### Automatic Timestamps & Soft Deletes (`timestamps`, `softDelete`)
+Instead of manually defining boilerplate timestamp and soft delete columns in `schema`, configure them declaratively:
+- **Top-level / Options:** `timestamps: true` (or `options: { timestamps: true }`) automatically injects `createdAt` and `updatedAt` into the Zod schema, validation rules, column map, and Knex migrations.
+- **Soft Deletes:** `softDelete: true` (or `softDeletes: true`) automatically injects `deletedAt` (nullable/optional) into the schema and activates the repository `whereNull('deletedAt')` soft-delete scope.
+- **Custom column names & snake_case:** `timestamps: { snakeCase: true }` or `timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }`, `softDelete: { deletedAt: 'deleted_at' }`.
+- **Explicit Schema Spread:** `...zdb.timestamps()` and `...zdb.softDeletes()` are also supported for explicit schema definitions.
+
 ### Supported `zdb` Data Types
 - `zdb.id()` — Primary key (BigInt / Auto-increment)
 - `zdb.string({ max, unique, optional, sortable })` — String / VarChar
@@ -90,6 +97,8 @@ export default defineModel({
 - `zdb.file()` — File asset URL / upload path (non-sortable by default)
 - `zdb.json()` — Serialized JSON column (non-sortable by default)
 - `zdb.timestamp({ auto, sortable })` — Timestamp (`auto: 'create'` / `auto: 'update'`)
+- `zdb.timestamps({ snakeCase })` — Timestamp pair (`createdAt`, `updatedAt`)
+- `zdb.softDelete()`, `zdb.softDeletes({ snakeCase })` — Soft delete timestamp (`deletedAt`)
 
 *Note: All `zdb` types support chainable `.config({ sortable: boolean })` or options object `{ sortable: boolean }`.*
 

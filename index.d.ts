@@ -1072,11 +1072,20 @@ export type InferModel<T> = T extends ModelDefinition<infer TModel>
 export type InferModelCreate<T> = Partial<InferModel<T>> & Record<string, any>;
 export type InferModelUpdate<T> = Partial<InferModel<T>>;
 
-export interface ModelOptions<TSchema extends ZodObject<any> = ZodObject<Record<string, ZodTypeAny>>> {
+export interface ModelOptions<TSchema = ZodObject<Record<string, ZodTypeAny>>> {
   name: string;
   table: string;
-  schema: TSchema;
+  schema: TSchema | Record<string, any>;
   primaryKey?: string;
+  timestamps?: boolean | { createdAt?: string; updatedAt?: string; snakeCase?: boolean };
+  softDelete?: boolean | { deletedAt?: string; snakeCase?: boolean };
+  softDeletes?: boolean | { deletedAt?: string; snakeCase?: boolean };
+  options?: {
+    timestamps?: boolean | { createdAt?: string; updatedAt?: string; snakeCase?: boolean };
+    softDelete?: boolean | { deletedAt?: string; snakeCase?: boolean };
+    softDeletes?: boolean | { deletedAt?: string; snakeCase?: boolean };
+    [key: string]: unknown;
+  };
   relations?: Record<string, RelationDefinition>;
   scopes?: ScopeOptions;
   admin?: AdminMetadata;
@@ -1104,6 +1113,11 @@ export interface ModelDefinition<TModel = Record<string, any>> {
     timestamps: boolean;
     tenant: string | null;
   };
+  options?: {
+    timestamps?: boolean | { createdAt?: string; updatedAt?: string; snakeCase?: boolean };
+    softDelete?: boolean | { deletedAt?: string; snakeCase?: boolean };
+    [key: string]: unknown;
+  };
   columns: Map<string, unknown>;
   admin: {
     enabled: boolean;
@@ -1129,9 +1143,9 @@ export interface ModelDefinition<TModel = Record<string, any>> {
   cache?: boolean | 'auto' | 'smart' | { strategy: 'auto' | 'smart' };
 }
 
-export function defineModel<TSchema extends ZodObject<any>>(
+export function defineModel<TSchema = ZodObject<any>>(
   options: ModelOptions<TSchema>
-): ModelDefinition<import('zod').z.infer<TSchema>>;
+): ModelDefinition<any>;
 
 export function getModel<T = Record<string, any>>(name: string): ModelDefinition<T> | undefined;
 
@@ -1147,7 +1161,10 @@ export function isCascadeEnabled(relation: RelationDefinition, operation: 'delet
 
 /** zdb column helpers (id, string, timestamp, …) + `schema()` */
 export type Zdb = Record<string, any> & {
-  schema(shape: Record<string, ZodTypeAny>): ZodObject<Record<string, ZodTypeAny>>;
+  schema(shape: Record<string, any>): ZodObject<Record<string, ZodTypeAny>>;
+  timestamps(options?: { snakeCase?: boolean; createdAt?: string; updatedAt?: string }): Record<string, any>;
+  softDelete(options?: Record<string, any>): any;
+  softDeletes(options?: { snakeCase?: boolean; deletedAt?: string }): Record<string, any>;
 };
 
 export const zdb: Zdb;

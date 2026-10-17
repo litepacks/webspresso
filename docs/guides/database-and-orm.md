@@ -53,16 +53,16 @@ const { defineModel, zdb } = require('webspresso');
 module.exports = defineModel({
   name: 'User',
   table: 'users',
+  timestamps: true, // Auto-injects createdAt & updatedAt into schema, validations & query hooks
+  softDelete: true, // Auto-injects deletedAt & enables automatic soft-delete scoping
 
-  schema: zdb.schema({
+  schema: {
     id: zdb.id(),
     email: zdb.string({ unique: true }),
     name: zdb.string(),
     role: zdb.enum(['admin', 'editor', 'member'], { default: 'member' }),
     active: zdb.boolean({ default: true }),
-    createdAt: zdb.datetime({ autoNowAdd: true }),
-    updatedAt: zdb.datetime({ autoNow: true }),
-  }),
+  },
 
   // Model relations
   relations: {
@@ -73,13 +73,12 @@ module.exports = defineModel({
       cascade: true, // Cascades soft-delete, hard-delete, and selective restore
     },
   },
-
-  // Soft delete support
-  scopes: {
-    softDelete: true,
-  },
 });
 ```
+
+> **Tip:** You can declare `timestamps: true` and `softDelete: true` at the model level (or inside `options: { timestamps: true, softDelete: true }`). Webspresso automatically injects `createdAt`, `updatedAt`, and `deletedAt` into your model's Zod schema, column definitions, migrations, and repository scopes.
+>
+> If you prefer explicit schema declarations or snake_case column names, you can also use `...zdb.timestamps()` and `...zdb.softDeletes()`, or pass options: `{ timestamps: { snakeCase: true } }`.
 
 ---
 

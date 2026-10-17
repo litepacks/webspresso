@@ -4,9 +4,11 @@
  * @module core/orm/model
  */
 
+const z = require('zod');
 const { trimUrlPathSlashes } = require('../url-path-normalize');
-const { extractColumnsFromSchema } = require('./schema-helpers');
+const { createSchemaHelpers, extractColumnsFromSchema } = require('./schema-helpers');
 const { ModelEvents, Hooks } = require('./events');
+const zdb = z ? createSchemaHelpers(z) : null;
 
 /**
  * Global model registry
@@ -34,6 +36,10 @@ function defineModel(options) {
     queryLimits = {},
     cache: cacheOption,
     searchable,
+    timestamps: timestampsOpt,
+    softDelete: softDeleteOpt,
+    softDeletes: softDeletesOpt,
+    options: nestedOptions = {},
   } = options;
 
   // Validate required fields
@@ -43,15 +49,94 @@ function defineModel(options) {
   if (!table || typeof table !== 'string') {
     throw new Error('Model table is required and must be a string');
   }
-  if (!schema || typeof schema.parse !== 'function') {
-    throw new Error('Model schema is required and must be a Zod schema');
+  if (!schema || typeof schema !== 'object') {
+    throw new Error('Model schema is required and must be a Zod schema or schema definition object');
   }
 
-  let normalizedSchema = schema;
-  if (schema && schema.shape) {
-    for (const [key, val] of Object.entries(schema.shape)) {
+  // Resolve timestamps and softDelete options (from top-level flags, nested options, or scopes)
+  const timestampsConfig = timestampsOpt !== undefined
+    ? timestampsOpt
+    : (nestedOptions.timestamps !== undefined ? nestedOptions.timestamps : scopes.timestamps);
+
+  const softDeleteConfig = softDeleteOpt !== undefined
+    ? softDeleteOpt
+    : (softDeletesOpt !== undefined
+        ? softDeletesOpt
+        : (nestedOptions.softDelete !== undefined
+            ? nestedOptions.softDelete
+            : (nestedOptions.softDeletes !== undefined
+                ? nestedOptions.softDeletes
+                : scopes.softDelete)));
+
+  const isPlainObject = typeof schema.parse !== 'function';
+  const injectedFields = {};
+
+  if (timestampsConfig) {
+    const isSnake = typeof timestampsConfig === 'object'
+      ? Boolean(timestampsConfig.snakeCase || timestampsConfig.format === 'snake')
+      : (timestampsConfig === 'snake');
+    const createdCol = (typeof timestampsConfig === 'object' && timestampsConfig.createdAt)
+      || (isSnake ? 'created_at' : 'createdAt');
+    const updatedCol = (typeof timestampsConfig === 'object' && timestampsConfig.updatedAt)
+      || (isSnake ? 'updated_at' : 'updatedAt');
+
+    const hasCreated = isPlainObject
+      ? (schema[createdCol] !== undefined || schema.created_at !== undefined || schema.createdAt !== undefined)
+      : (schema.shape && (schema.shape[createdCol] !== undefined || schema.shape.created_at !== undefined || schema.shape.createdAt !== undefined));
+    const hasUpdated = isPlainObject
+      ? (schema[updatedCol] !== undefined || schema.updated_at !== undefined || schema.updatedAt !== undefined)
+      : (schema.shape && (schema.shape[updatedCol] !== undefined || schema.shape.updated_at !== undefined || schema.shape.updatedAt !== undefined));
+
+    if (!hasCreated && zdb) {
+      injectedFields[createdCol] = zdb.timestamp({ auto: 'create' });
+    }
+    if (!hasUpdated && zdb) {
+      injectedFields[updatedCol] = zdb.timestamp({ auto: 'update' });
+    }
+  }
+
+  if (softDeleteConfig) {
+    const isSnake = typeof softDeleteConfig === 'object'
+      ? Boolean(softDeleteConfig.snakeCase || softDeleteConfig.format === 'snake')
+      : (softDeleteConfig === 'snake');
+    const deletedCol = (typeof softDeleteConfig === 'object' && softDeleteConfig.deletedAt)
+      || (isSnake ? 'deleted_at' : 'deletedAt');
+
+    const hasDeleted = isPlainObject
+      ? (schema[deletedCol] !== undefined || schema.deleted_at !== undefined || schema.deletedAt !== undefined)
+      : (schema.shape && (schema.shape[deletedCol] !== undefined || schema.shape.deleted_at !== undefined || schema.shape.deletedAt !== undefined));
+
+    if (!hasDeleted && zdb) {
+      injectedFields[deletedCol] = zdb.softDelete();
+    }
+  }
+
+  let normalizedSchema;
+  if (isPlainObject) {
+    if (!zdb) {
+      throw new Error('Zod is required to compile schema object');
+    }
+    normalizedSchema = zdb.schema({
+      ...schema,
+      ...injectedFields,
+    });
+  } else {
+    normalizedSchema = schema;
+    if (Object.keys(injectedFields).length > 0 && typeof normalizedSchema.extend === 'function') {
+      const finalizedInjected = {};
+      for (const [key, field] of Object.entries(injectedFields)) {
+        finalizedInjected[key] = (field && typeof field._finalize === 'function')
+          ? field._finalize()
+          : field;
+      }
+      normalizedSchema = normalizedSchema.extend(finalizedInjected);
+    }
+  }
+
+  if (normalizedSchema && normalizedSchema.shape) {
+    for (const [key, val] of Object.entries(normalizedSchema.shape)) {
       if (val && typeof val._finalize === 'function') {
-        schema.shape[key] = val._finalize();
+        normalizedSchema.shape[key] = val._finalize();
       }
     }
   }
@@ -109,9 +194,14 @@ function defineModel(options) {
     primaryKey,
     relations: normalizedRelations,
     scopes: {
-      softDelete: scopes.softDelete || false,
-      timestamps: scopes.timestamps || false,
+      softDelete: Boolean(softDeleteConfig),
+      timestamps: Boolean(timestampsConfig),
       tenant: scopes.tenant || null,
+    },
+    options: {
+      timestamps: timestampsConfig || false,
+      softDelete: softDeleteConfig || false,
+      ...nestedOptions,
     },
     columns,
     admin: {

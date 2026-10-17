@@ -115,13 +115,13 @@ const { defineModel, zdb } = require('webspresso');
 module.exports = defineModel({
   name: 'Note',
   table: 'notes',
+  timestamps: true, // auto-injects createdAt & updatedAt into schema & scopes
+  softDelete: true, // auto-injects deletedAt & enables soft-delete scope
   schema: {
     id: zdb.id(),
     title: zdb.string(200),
     content: zdb.text(),
     userId: zdb.integer(),
-    ...zdb.timestamps(),
-    ...zdb.softDeletes(),
   },
   relations: {
     user: { type: 'belongsTo', model: 'User', foreignKey: 'userId' },

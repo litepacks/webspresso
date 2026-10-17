@@ -21,8 +21,10 @@ module.exports = defineModel({
   name: 'Product',
   table: 'products',
   primaryKey: 'id',
+  timestamps: true, // auto-injects createdAt & updatedAt into schema & scopes
+  softDelete: true, // auto-injects deletedAt & enables soft-delete scope
   
-  schema: zdb.object({
+  schema: {
     id: zdb.id(),
     name: zdb.string().min(1).max(255),
     slug: zdb.string().unique(),
@@ -30,10 +32,7 @@ module.exports = defineModel({
     in_stock: zdb.boolean().default(true),
     metadata: zdb.json().optional(),
     user_id: zdb.foreignKey('users.id'),
-    created_at: zdb.timestamp().autoCreate(),
-    updated_at: zdb.timestamp().autoUpdate(),
-    deleted_at: zdb.timestamp().nullable(),
-  }),
+  },
 
   relations: {
     user: {

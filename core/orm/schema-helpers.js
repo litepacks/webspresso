@@ -778,6 +778,55 @@ function createSchemaHelpers(z) {
         ...rest,
       }, z);
     },
+
+    /**
+     * Timestamp pair columns (createdAt and updatedAt)
+     * @param {Object} [options={}]
+     * @param {boolean} [options.snakeCase=false] - Use snake_case (created_at, updated_at)
+     * @param {string} [options.createdAt] - Custom created column name
+     * @param {string} [options.updatedAt] - Custom updated column name
+     * @returns {{ [key: string]: SchemaBuilder }}
+     */
+    timestamps(options = {}) {
+      const isSnake = options.snakeCase || options.format === 'snake';
+      const createdKey = options.createdAt || (isSnake ? 'created_at' : 'createdAt');
+      const updatedKey = options.updatedAt || (isSnake ? 'updated_at' : 'updatedAt');
+
+      return {
+        [createdKey]: helpers.timestamp({ auto: 'create', ...options }),
+        [updatedKey]: helpers.timestamp({ auto: 'update', ...options }),
+      };
+    },
+
+    /**
+     * Soft delete column helper (returns a single SchemaBuilder for deletedAt/deleted_at)
+     * @param {Partial<import('./types').ColumnMeta>} [options={}]
+     * @returns {SchemaBuilder}
+     */
+    softDelete(options = {}) {
+      return helpers.timestamp({
+        nullable: true,
+        ...options,
+      });
+    },
+
+    /**
+     * Soft delete field object (returns { deletedAt: SchemaBuilder } or { deleted_at: SchemaBuilder })
+     * @param {Object} [options={}]
+     * @param {boolean} [options.snakeCase=false] - Use snake_case (deleted_at)
+     * @param {string} [options.deletedAt] - Custom deleted column name
+     * @returns {{ [key: string]: SchemaBuilder }}
+     */
+    softDeletes(options = {}) {
+      const isSnake = options.snakeCase || options.format === 'snake';
+      const deletedKey = options.deletedAt || (isSnake ? 'deleted_at' : 'deletedAt');
+      return {
+        [deletedKey]: helpers.timestamp({
+          nullable: true,
+          ...options,
+        }),
+      };
+    },
   };
 
   return helpers;

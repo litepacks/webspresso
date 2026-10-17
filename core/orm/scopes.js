@@ -7,6 +7,15 @@
 const { generateNanoid } = require('./utils/nanoid');
 
 /**
+ * Determine the soft delete column name for a model
+ * @param {import('./types').ModelDefinition} model - Model definition
+ * @returns {string} Column name ('deletedAt' or 'deleted_at')
+ */
+function getSoftDeleteColumn(model) {
+  return (model && model.columns && model.columns.has('deletedAt')) ? 'deletedAt' : 'deleted_at';
+}
+
+/**
  * Apply soft delete scope to a query builder
  * @param {import('knex').Knex.QueryBuilder} qb - Knex query builder
  * @param {import('./types').ScopeContext} context - Scope context
@@ -18,9 +27,11 @@ function applySoftDeleteScope(qb, context, model) {
     return qb;
   }
 
+  const deletedCol = getSoftDeleteColumn(model);
+
   // If onlyTrashed is set, only return deleted records
   if (context.onlyTrashed) {
-    return qb.whereNotNull('deleted_at');
+    return qb.whereNotNull(deletedCol);
   }
 
   // If withTrashed is set, return all records (no filter)
@@ -29,7 +40,7 @@ function applySoftDeleteScope(qb, context, model) {
   }
 
   // Default: only return non-deleted records
-  return qb.whereNull('deleted_at');
+  return qb.whereNull(deletedCol);
 }
 
 /**
@@ -74,10 +85,13 @@ function applyInsertTimestamps(data, model) {
   }
 
   const now = new Date();
+  const createdCol = (model.columns && model.columns.has('createdAt')) ? 'createdAt' : 'created_at';
+  const updatedCol = (model.columns && model.columns.has('updatedAt')) ? 'updatedAt' : 'updated_at';
+
   return {
     ...data,
-    created_at: data.created_at || now,
-    updated_at: data.updated_at || now,
+    [createdCol]: data[createdCol] !== undefined ? data[createdCol] : (data.createdAt || data.created_at || now),
+    [updatedCol]: data[updatedCol] !== undefined ? data[updatedCol] : (data.updatedAt || data.updated_at || now),
   };
 }
 
@@ -92,9 +106,11 @@ function applyUpdateTimestamps(data, model) {
     return data;
   }
 
+  const updatedCol = (model.columns && model.columns.has('updatedAt')) ? 'updatedAt' : 'updated_at';
+
   return {
     ...data,
-    updated_at: new Date(),
+    [updatedCol]: new Date(),
   };
 }
 
@@ -143,18 +159,32 @@ function applyInsertNanoidPrimary(data, model) {
 /**
  * Get soft delete data (for UPDATE instead of DELETE)
  * @param {Date|string|number} [date=new Date()] - Soft delete timestamp
+ * @param {string|import('./types').ModelDefinition} [colOrModel='deleted_at'] - Column name or model definition
  * @returns {Object} Soft delete update data
  */
-function getSoftDeleteData(date = new Date()) {
-  return { deleted_at: date instanceof Date ? date : new Date(date) };
+function getSoftDeleteData(date = new Date(), colOrModel = 'deleted_at') {
+  let columnName = 'deleted_at';
+  if (typeof colOrModel === 'string') {
+    columnName = colOrModel;
+  } else if (colOrModel && typeof colOrModel === 'object') {
+    columnName = getSoftDeleteColumn(colOrModel);
+  }
+  return { [columnName]: date instanceof Date ? date : new Date(date) };
 }
 
 /**
  * Get restore data (to undo soft delete)
+ * @param {string|import('./types').ModelDefinition} [colOrModel='deleted_at'] - Column name or model definition
  * @returns {Object} Restore update data
  */
-function getRestoreData() {
-  return { deleted_at: null };
+function getRestoreData(colOrModel = 'deleted_at') {
+  let columnName = 'deleted_at';
+  if (typeof colOrModel === 'string') {
+    columnName = colOrModel;
+  } else if (colOrModel && typeof colOrModel === 'object') {
+    columnName = getSoftDeleteColumn(colOrModel);
+  }
+  return { [columnName]: null };
 }
 
 /**
@@ -207,6 +237,7 @@ module.exports = {
   applyUpdateModifiers,
   getSoftDeleteData,
   getRestoreData,
+  getSoftDeleteColumn,
   createScopeContext,
 };
 
