@@ -6,6 +6,7 @@
  */
 
 const crypto = require('crypto');
+const { fetchWithTimeout } = require('../utils/fetch');
 
 /**
  * Custom error class for OAuth operations
@@ -57,14 +58,17 @@ const DEFAULT_PROVIDERS = {
     userEmailsUrl: 'https://api.github.com/user/emails',
     defaultScopes: ['read:user', 'user:email'],
     defaultParams: {},
-    async fetchExtra(tokens) {
+    async fetchExtra(tokens, options = {}) {
       try {
-        const res = await fetch('https://api.github.com/user/emails', {
+        const timeout = typeof options?.timeout === 'number' ? options.timeout : 10000;
+        const res = await fetchWithTimeout('https://api.github.com/user/emails', {
           headers: {
             Authorization: `Bearer ${tokens.access_token}`,
             Accept: 'application/vnd.github.v3+json',
             'User-Agent': 'Webspresso-OAuth',
           },
+          timeout,
+          signal: options?.signal,
         });
         if (res.ok) {
           const emails = await res.json();
@@ -78,7 +82,7 @@ const DEFAULT_PROVIDERS = {
           }
         }
       } catch {
-        // Fallback gracefully if email endpoint is unreachable
+        // Fallback gracefully if email endpoint is unreachable or times out
       }
       return null;
     },
@@ -202,6 +206,9 @@ class OAuthClient {
   constructor(config = {}) {
     this.secret = config.secret || process.env.OAUTH_SECRET || process.env.SESSION_SECRET || 'webspresso-oauth-secret';
     this.stateTtlMs = config.stateTtlMs || 10 * 60 * 1000;
+    this.timeout = typeof (config.timeout || config.requestTimeout) === 'number'
+      ? (config.timeout || config.requestTimeout)
+      : 10000;
     this.providers = {};
 
     if (config.providers) {
@@ -227,6 +234,7 @@ class OAuthClient {
       redirectUri: options.redirectUri || options.redirect_uri || builtin.redirectUri,
       scopes: options.scopes || options.scope || builtin.defaultScopes || [],
       params: { ...(builtin.defaultParams || {}), ...(options.params || {}) },
+      timeout: typeof options.timeout === 'number' ? options.timeout : (builtin.timeout || this.timeout || 10000),
     };
     return this;
   }
@@ -330,7 +338,7 @@ class OAuthClient {
    * @param {string} [params.codeVerifier]
    * @returns {Promise<Object>} Token response
    */
-  async exchangeCode(providerName, { code, redirectUri, codeVerifier }) {
+  async exchangeCode(providerName, { code, redirectUri, codeVerifier, timeout, signal } = {}) {
     const provider = this.getProvider(providerName);
 
     if (!code) {
@@ -354,9 +362,13 @@ class OAuthClient {
       bodyParams.set('code_verifier', codeVerifier);
     }
 
+    const requestTimeout = typeof timeout === 'number'
+      ? timeout
+      : (provider.timeout || this.timeout || 10000);
+
     let res;
     try {
-      res = await fetch(provider.tokenUrl, {
+      res = await fetchWithTimeout(provider.tokenUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -364,6 +376,8 @@ class OAuthClient {
           'User-Agent': 'Webspresso-OAuth',
         },
         body: bodyParams.toString(),
+        timeout: requestTimeout,
+        signal,
       });
     } catch (err) {
       throw new OAuthError(`Token exchange network request failed: ${err.message}`, 'NETWORK_ERROR', err);
@@ -398,7 +412,7 @@ class OAuthClient {
    * @param {Object} tokens - Tokens object returned from exchangeCode
    * @returns {Promise<Object>} Normalized user profile
    */
-  async fetchUserProfile(providerName, tokens) {
+  async fetchUserProfile(providerName, tokens, options = {}) {
     const provider = this.getProvider(providerName);
     const accessToken = tokens.access_token || tokens.accessToken;
 
@@ -406,19 +420,26 @@ class OAuthClient {
       throw new OAuthError('Missing access_token for user profile retrieval', 'MISSING_TOKEN');
     }
 
+    const requestTimeout = typeof options?.timeout === 'number'
+      ? options.timeout
+      : (provider.timeout || this.timeout || 10000);
+    const signal = options?.signal;
+
     let extraData = null;
     if (typeof provider.fetchExtra === 'function') {
-      extraData = await provider.fetchExtra(tokens);
+      extraData = await provider.fetchExtra(tokens, { timeout: requestTimeout, signal });
     }
 
     let res;
     try {
-      res = await fetch(provider.userInfoUrl, {
+      res = await fetchWithTimeout(provider.userInfoUrl, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           Accept: 'application/json',
           'User-Agent': 'Webspresso-OAuth',
         },
+        timeout: requestTimeout,
+        signal,
       });
     } catch (err) {
       throw new OAuthError(`User profile fetch failed: ${err.message}`, 'NETWORK_ERROR', err);
@@ -457,7 +478,7 @@ class OAuthClient {
    * @param {string} [params.redirectUri] - Redirect URI
    * @returns {Promise<{ provider: string, user: Object, tokens: Object, stateData: Object }>}
    */
-  async handleCallback(providerName, { code, state, redirectUri }) {
+  async handleCallback(providerName, { code, state, redirectUri, timeout, signal } = {}) {
     if (!state) {
       throw new OAuthError('Missing OAuth state in callback', 'INVALID_STATE');
     }
@@ -483,10 +504,15 @@ class OAuthClient {
       code,
       redirectUri: effectiveRedirectUri,
       codeVerifier,
+      timeout,
+      signal,
     });
 
     // Fetch normalized profile
-    const user = await this.fetchUserProfile(providerName, tokens);
+    const user = await this.fetchUserProfile(providerName, tokens, {
+      timeout,
+      signal,
+    });
 
     return {
       provider: providerName,

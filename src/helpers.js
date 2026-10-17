@@ -2204,6 +2204,10 @@ const utils = {
 
   pageAssets(nameOrAttrs, attrs) {
     return getAssetManager().pageAssets(nameOrAttrs, attrs);
+  },
+
+  fetchWithTimeout(url, options) {
+    return require('../core/utils/fetch').fetchWithTimeout(url, options);
   }
 };
 

@@ -8,12 +8,13 @@ function generateOrmCacheAdminComponent() {
 (function() {
 
 function ormCacheApi(method, path, body) {
-  var opts = { method: method, credentials: 'same-origin' };
+  var opts = { method: method, credentials: 'same-origin', timeout: 30000 };
   if (body !== undefined) {
     opts.headers = { 'Content-Type': 'application/json' };
     opts.body = JSON.stringify(body);
   }
-  return fetch('/_admin/api/orm-cache' + path, opts).then(function(r) {
+  var fetchFn = (typeof window !== 'undefined' && window.Admin && window.Admin.fetch) ? window.Admin.fetch : fetch;
+  return fetchFn('/_admin/api/orm-cache' + path, opts).then(function(r) {
     return r.json().then(function(j) {
       if (!r.ok) throw new Error(j.error || r.statusText);
       return j;

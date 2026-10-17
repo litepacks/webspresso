@@ -173,10 +173,12 @@ function generateFileManagerComponent(options = {}) {
 
       var uploadUrl = (window.__ADMIN_PATH__ || '/_admin') + '/api' + API + '/upload?path=' + encodeURIComponent(currentPath);
 
-      fetch(uploadUrl, {
+      var fetchFn = (typeof window !== 'undefined' && window.Admin && window.Admin.fetch) ? window.Admin.fetch : fetch;
+      fetchFn(uploadUrl, {
         method: 'POST',
         body: fd,
         credentials: 'include',
+        timeout: 60000,
       }).then(function(r) { return r.json(); }).then(function(res) {
         uploading = false;
         uploadStatus = '';

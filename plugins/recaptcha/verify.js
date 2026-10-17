@@ -3,6 +3,8 @@
  * @module plugins/recaptcha/verify
  */
 
+const { fetchWithTimeout } = require('../../core/utils/fetch');
+
 const SITEVERIFY_URL = 'https://www.google.com/recaptcha/api/siteverify';
 
 /**
@@ -51,22 +53,18 @@ async function verifyRecaptcha(options = {}) {
     body.set('remoteip', remoteIp);
   }
 
-  const signal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
-    ? AbortSignal.timeout(timeoutMs)
-    : undefined;
-
   let res;
   try {
-    res = await fetch(SITEVERIFY_URL, {
+    res = await fetchWithTimeout(SITEVERIFY_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: body.toString(),
-      signal,
+      timeout: timeoutMs,
     });
   } catch (netErr) {
-    const isTimeout = netErr.name === 'AbortError' || netErr.name === 'TimeoutError';
+    const isTimeout = netErr.name === 'AbortError' || netErr.name === 'TimeoutError' || netErr.code === 'ETIMEDOUT';
     return {
       success: false,
       errorCodes: [isTimeout ? 'timeout' : 'network-error'],

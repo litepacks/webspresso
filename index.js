@@ -371,5 +371,8 @@ Object.defineProperties(module.exports, {
   defineCommand: { get: () => require('./core/commands').defineCommand, enumerable: true, configurable: true },
   createCommandRegistry: { get: () => require('./core/commands').createCommandRegistry, enumerable: true, configurable: true },
   executeCommand: { get: () => require('./core/commands').executeCommand, enumerable: true, configurable: true },
+
+  // Shared Fetch Utilities
+  fetchWithTimeout: { get: () => require('./core/utils/fetch').fetchWithTimeout, enumerable: true, configurable: true },
 });
 

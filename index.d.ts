@@ -830,6 +830,12 @@ export function loadListeners(dirPath: string, dispatcher: EventDispatcher, opti
 
 export function createHelpers(context: Record<string, unknown>): Record<string, unknown>;
 
+export interface FetchWithTimeoutOptions extends RequestInit {
+  timeout?: number;
+}
+
+export function fetchWithTimeout(url: string | URL | Request, options?: FetchWithTimeoutOptions): Promise<Response>;
+
 export const utils: Record<string, unknown>;
 
 export class AssetManager {

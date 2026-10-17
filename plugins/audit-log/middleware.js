@@ -80,6 +80,7 @@ function createAuditMiddleware(options) {
           resourceId = extractResourceIdFromJsonBody(lastJsonBody, action) || resourceId;
         }
 
+        const metadata = buildMetadata(action, req);
         let metadataVal = metadata || null;
         if (metadataVal && typeof metadataVal === 'object') {
           const clientName = knex?.client?.config?.client || '';

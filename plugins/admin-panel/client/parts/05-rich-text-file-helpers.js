@@ -572,7 +572,8 @@ async function handleAdminFileUpload(file, onChange, meta, state) {
   var fd = new FormData();
   fd.append('file', file);
   try {
-    var res = await fetch(uploadUrl, { method: 'POST', body: fd, credentials: 'include' });
+    var fetchFn = (typeof fetchWithTimeout === 'function' ? fetchWithTimeout : fetch);
+    var res = await fetchFn(uploadUrl, { method: 'POST', body: fd, credentials: 'include', timeout: 60000 });
     var data = {};
     try { data = await res.json(); } catch (e2) { data = {}; }
     if (!res.ok) {
@@ -619,7 +620,8 @@ async function handleAdminMultipleFilesUpload(files, onChange, meta, state, curr
       var fd = new FormData();
       fd.append('file', file);
       try {
-        var res = await fetch(uploadUrl, { method: 'POST', body: fd, credentials: 'include' });
+        var fetchFn = (typeof fetchWithTimeout === 'function' ? fetchWithTimeout : fetch);
+        var res = await fetchFn(uploadUrl, { method: 'POST', body: fd, credentials: 'include', timeout: 60000 });
         var data = {};
         try { data = await res.json(); } catch (_) { data = {}; }
         if (res.ok && (data.url || data.publicUrl)) {

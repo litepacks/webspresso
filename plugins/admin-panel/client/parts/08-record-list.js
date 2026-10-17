@@ -316,10 +316,11 @@ const RecordList = {
               const fd = new FormData();
               fd.append('file', file);
               try {
-                const res = await fetch(
+                const fetchFn = (typeof fetchWithTimeout === 'function' ? fetchWithTimeout : fetch);
+                const res = await fetchFn(
                   adminPath + '/api/data-exchange/import/' + modelName +
                     '?mode=' + encodeURIComponent(mode) + '&upsertKey=' + encodeURIComponent(upsertKey),
-                  { method: 'POST', body: fd, credentials: 'include' }
+                  { method: 'POST', body: fd, credentials: 'include', timeout: 60000 }
                 );
                 const body = await res.json().catch(function () { return ({}); });
                 if (!res.ok) {

@@ -20,10 +20,12 @@ function generateSchemaExplorerAdminComponent(options = {}) {
 function getSchemaApi(method, path) {
   var adminPath = window.__ADMIN_PATH__ || '/_admin';
   var url = adminPath + '/api${apiPrefix}' + (path || '');
-  return fetch(url, {
+  var fetchFn = (typeof window !== 'undefined' && window.Admin && window.Admin.fetch) ? window.Admin.fetch : fetch;
+  return fetchFn(url, {
     method: method || 'GET',
     credentials: 'include',
-    headers: { 'Accept': 'application/json' }
+    headers: { 'Accept': 'application/json' },
+    timeout: 30000,
   }).then(function(res) {
     if (!res.ok) {
       return res.json().catch(function() { return { error: res.statusText }; }).then(function(err) {

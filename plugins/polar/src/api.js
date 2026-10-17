@@ -1,5 +1,7 @@
 'use strict';
 
+const { fetchWithTimeout } = require('../../../core/utils/fetch');
+
 function getPolarApiBase(sandbox) {
   return sandbox ? 'https://sandbox-api.polar.sh/v1' : 'https://api.polar.sh/v1';
 }
@@ -11,18 +13,17 @@ function getPolarApiBase(sandbox) {
  * @param {Object} [opts.body]
  * @param {string} opts.accessToken
  * @param {boolean} [opts.sandbox=false]
+ * @param {number} [opts.timeoutMs=15000]
+ * @param {AbortSignal} [opts.signal]
  */
-async function polarApiRequest(path, { method = 'GET', body, accessToken, sandbox = false, timeoutMs = 15000 } = {}) {
+async function polarApiRequest(path, { method = 'GET', body, accessToken, sandbox = false, timeoutMs = 15000, signal } = {}) {
   if (!accessToken) {
     throw new Error('POLAR_ACCESS_TOKEN is not configured');
   }
 
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const signal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
-    ? AbortSignal.timeout(timeoutMs)
-    : undefined;
 
-  const res = await fetch(`${getPolarApiBase(sandbox)}${normalizedPath}`, {
+  const res = await fetchWithTimeout(`${getPolarApiBase(sandbox)}${normalizedPath}`, {
     method,
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -30,6 +31,7 @@ async function polarApiRequest(path, { method = 'GET', body, accessToken, sandbo
       Accept: 'application/json',
     },
     body: body ? JSON.stringify(body) : undefined,
+    timeout: timeoutMs,
     signal,
   });
 

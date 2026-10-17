@@ -1,14 +1,74 @@
 
+/**
+ * Shared client-side fetch wrapper with AbortController, timeout, and signal composition.
+ * @param {string} url
+ * @param {RequestInit & { timeout?: number }} [options]
+ * @returns {Promise<Response>}
+ */
+async function fetchWithTimeout(url, options = {}) {
+  const { timeout = 30000, signal, ...fetchOptions } = options;
+  const controller = new AbortController();
+  let timer = null;
+  let callerSignalListener = null;
+
+  if (typeof timeout === 'number' && timeout > 0 && typeof setTimeout !== 'undefined') {
+    timer = setTimeout(() => {
+      const err = new Error('Request timed out after ' + timeout + 'ms');
+      err.name = 'TimeoutError';
+      err.code = 'ETIMEDOUT';
+      controller.abort(err);
+    }, timeout);
+  }
+
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+    } else {
+      callerSignalListener = () => {
+        controller.abort(signal.reason);
+      };
+      signal.addEventListener('abort', callerSignalListener, { once: true });
+    }
+  }
+
+  try {
+    return await fetch(url, {
+      ...fetchOptions,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (controller.signal.aborted && controller.signal.reason) {
+      const reason = controller.signal.reason;
+      if (reason instanceof Error && (reason.name === 'TimeoutError' || reason.code === 'ETIMEDOUT')) {
+        throw reason;
+      }
+    }
+    if (err && err.name === 'AbortError' && controller.signal.aborted && controller.signal.reason) {
+      throw controller.signal.reason;
+    }
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (signal && callerSignalListener) {
+      signal.removeEventListener('abort', callerSignalListener);
+    }
+  }
+}
+
 // API helper
 const api = {
+  fetch: fetchWithTimeout,
   async request(path, options = {}) {
     const adminPath = window.__ADMIN_PATH__ || '/_admin';
     const url = adminPath + '/api' + path;
-    const response = await fetch(url, {
-      ...options,
+    const { timeout = 30000, signal, ...fetchOpts } = options;
+    const response = await fetchWithTimeout(url, {
+      ...fetchOpts,
+      timeout,
+      signal,
       headers: {
         'Content-Type': 'application/json',
-        ...options.headers,
+        ...fetchOpts.headers,
       },
       credentials: 'include',
     });
@@ -28,20 +88,24 @@ const api = {
     return response.json();
   },
   
-  get(path) { return this.request(path, { method: 'GET' }); },
-  post(path, data) { return this.request(path, { method: 'POST', body: JSON.stringify(data) }); },
-  put(path, data) { return this.request(path, { method: 'PUT', body: JSON.stringify(data) }); },
-  delete(path) { return this.request(path, { method: 'DELETE' }); },
+  get(path, options) { return this.request(path, { ...options, method: 'GET' }); },
+  post(path, data, options) { return this.request(path, { ...options, method: 'POST', body: JSON.stringify(data) }); },
+  put(path, data, options) { return this.request(path, { ...options, method: 'PUT', body: JSON.stringify(data) }); },
+  delete(path, options) { return this.request(path, { ...options, method: 'DELETE' }); },
 };
 
 /** POST /data-exchange/export/:model — validates JSON errors vs .xlsx blob */
-async function downloadDataExchangeXlsx(modelName, payload) {
+async function downloadDataExchangeXlsx(modelName, payload, options = {}) {
   const adminPath = window.__ADMIN_PATH__ || '/_admin';
-  const res = await fetch(adminPath + '/api/data-exchange/export/' + modelName, {
+  const { timeout = 60000, signal, headers = {}, ...restOpts } = options;
+  const res = await fetchWithTimeout(adminPath + '/api/data-exchange/export/' + modelName, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(payload),
+    timeout,
+    signal,
+    ...restOpts,
   });
   const ct = (res.headers.get('content-type') || '').toLowerCase();
   if (!res.ok || ct.indexOf('spreadsheet') === -1) {

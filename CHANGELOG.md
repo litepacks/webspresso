@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Adaptive Reconnect & Auto-Reload on Server Restart**: Reduced dev reload SSE reconnection delay from a static 2000ms to an adaptive 150ms-300ms window, and automatically triggers a page reload as soon as the dev server comes back online.
 - **Optimized Watch Directories in CLI (`bin/commands/dev.js`)**: Removed `views/` from `node --watch` (Nunjucks template changes are already live-reloaded in-memory via SSE with zero server restarts) and added `services/` and `config/` to watch paths for reliable server-side JS restarts.
 
+#### Shared Fetch Utilities with Timeout & AbortController (`core/utils/fetch.js`, `core/auth/oauth.js`, `plugins/admin-panel`)
+- **Backend Zero-Dependency `fetchWithTimeout`**: Created a production-grade wrapper around native `fetch` featuring configurable timeouts (`options.timeout`), automatic `AbortController` integration, `timer.unref()` to keep the Node event loop clean, signal composition for caller-supplied `options.signal`, and semantic error formatting (`TimeoutError` / `ETIMEDOUT`). Exported across `core/utils/fetch`, `utils.fetchWithTimeout` in `src/helpers.js`, root framework export in `index.js`, and TypeScript types in `index.d.ts`.
+- **OAuth 2.0 Hanging Socket Defenses (`core/auth/oauth.js`)**: Replaced raw unprotected `fetch` calls in GitHub extra emails (`/user/emails`), token exchange (`provider.tokenUrl`), user profile retrieval (`provider.userInfoUrl`), and `handleCallback` with `fetchWithTimeout`, accepting custom `timeout` and `signal` options to eliminate hangs when identity providers stall.
+- **Frontend Admin Panel Fetch & Abort Architecture (`plugins/admin-panel/`)**: Introduced client-side `fetchWithTimeout` to SPA parts, upgraded `api.request`, `downloadDataExchangeXlsx`, single/multiple file uploads, and data exchange imports with configurable timeouts (30s–60s) and `AbortController` support. Exposed `window.Admin.fetch` and `window.__ADMIN_COMPONENTS__.fetchWithTimeout` for companion plugins (`file-manager`, `schema-explorer`, `orm-cache-admin`).
+- **Audit Log Middleware Fix (`plugins/audit-log/middleware.js`)**: Fixed `ReferenceError: metadata is not defined` regression when constructing SQLite metadata payload.
+
 #### Plugin Resilience, Security & Crash Defenses (`plugins/`)
 - **Webhooks Unhandled Process Crash Defense (`plugins/webhooks/dispatcher.js`)**: Guarded `this.emit('error', err)` with `this.listenerCount('error') > 0` before emitting unhandled errors on `EventEmitter`, preventing unhandled exception process exits. Marked retry timers with `timer.unref()`.
 - **Webhooks SSRF & URL Protocol Validation (`plugins/webhooks/sender.js`)**: Enforced strict `http:` and `https:` URL protocol validation, blocking dangerous pseudo-schemes (`file:`, `javascript:`) and unhandled connection hangs.
@@ -27,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Admin Panel Logout Session Guard (`plugins/admin-panel/auth.js`)**: Guarded `logout(req, res)` against undefined `req.session` or missing `destroy` method.
 - **SEO Checker XSS Defense (`plugins/seo-checker/index.js`)**: Escaped `<` and `>` in injected JSON script tags (`\u003c` / `\u003e`) to prevent script boundary breakout and XSS vulnerabilities.
 - **Audit Log SQLite Metadata Serialization (`plugins/audit-log/`)**: Ensured JSON metadata is properly stringified on SQLite in middleware and safely parsed in `listHandler`.
-- **External Request Timeout Defenses (`plugins/polar/src/api.js`, `plugins/recaptcha/verify.js`)**: Added 15s and 10s request timeouts using `AbortSignal.timeout()` to prevent hanging sockets during third-party API outages.
+- **External Request Timeout Defenses (`plugins/polar/src/api.js`, `plugins/recaptcha/verify.js`)**: Integrated shared `fetchWithTimeout` across polar and recaptcha plugins with 15s and 10s timeouts.
 - **Header Null Checks (`plugins/basic-auth/index.js`, `plugins/cors.js`)**: Added defensive guards against undefined `req.headers`.
 - **MCP SSE Transport Lifecycle (`plugins/mcp/`)**: Added `close()` method to `mountSseTransport` and wired up `dispose(ctx)` and `onDispose` hooks for clean SSE connection termination on shutdown.
 
