@@ -224,10 +224,6 @@ class PluginManager {
    */
   _resolveDependencyOrder(plugins) {
     if (!plugins || plugins.length === 0) return [];
-    if (plugins.length === 1) {
-      const p = plugins[0];
-      return p && p.name ? [p] : [];
-    }
 
     const graph = new Map();
     const pluginMap = new Map();

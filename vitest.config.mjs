@@ -3,6 +3,20 @@ import os from 'os';
 import { defineConfig } from 'vitest/config';
 import { softscopeVitest } from 'softscope/vitest';
 
+const isCoverage =
+  process.env.COVERAGE === 'true' ||
+  process.env.COVERAGE === '1' ||
+  process.env.SOFTSCOPE === 'false' ||
+  process.env.SOFTSCOPE === '0' ||
+  Boolean(process.env.npm_config_coverage) ||
+  Boolean(process.env.npm_lifecycle_event?.includes('coverage')) ||
+  process.argv.some(arg => arg.includes('coverage'));
+
+const plugins = [];
+if (!isCoverage) {
+  plugins.push(softscopeVitest({ json: 'softscope-report.json' }));
+}
+
 export default defineConfig({
   cacheDir: process.env.TMPDIR ? `${process.env.TMPDIR}/.vite` : './node_modules/.vite',
   benchmark: {
@@ -10,7 +24,7 @@ export default defineConfig({
     exclude: ['node_modules', 'dist'],
     reporters: ['default'],
   },
-  plugins: [softscopeVitest({ json: 'softscope-report.json' })],
+  plugins,
   test: {
     silent: process.env.VERBOSE !== 'true',
     environment: 'node',
