@@ -164,16 +164,16 @@ function dashboardPlugin(options = {}) {
       const config = {
         env: filterSensitiveEnv({
           NODE_ENV: process.env.NODE_ENV || 'development',
-          PORT: process.env.PORT || '3000',
-          BASE_URL: process.env.BASE_URL || 'http://localhost:3000',
+          PORT: process.env.PORT || '7331',
+          BASE_URL: process.env.BASE_URL || 'http://localhost:7331',
         }),
         i18n: {
           defaultLocale: process.env.DEFAULT_LOCALE || 'en',
           supportedLocales: (process.env.SUPPORTED_LOCALES || 'en').split(','),
         },
         server: {
-          port: process.env.PORT || '3000',
-          baseUrl: process.env.BASE_URL || 'http://localhost:3000',
+          port: process.env.PORT || '7331',
+          baseUrl: process.env.BASE_URL || 'http://localhost:7331',
         },
         database: {
           connected: hasDb(),
@@ -232,7 +232,7 @@ function dashboardPlugin(options = {}) {
       });
 
       // Log dashboard URL
-      console.log(`\n📊 Dashboard available at: http://localhost:${process.env.PORT || 3000}${dashboardPath}\n`);
+      console.log(`\n📊 Dashboard available at: http://localhost:${process.env.PORT || 7331}${dashboardPath}\n`);
     },
   };
 }

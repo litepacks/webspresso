@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const nunjucks = require('nunjucks');
 const { parseNjkFrontmatter, frontmatterToPatches, seedProdRouteCache } = require('../njk-frontmatter');
+const { walkDirectoryDetailed } = require('../../core/utils/fs');
 
 const DEFAULT_PRECOMPILED_REL_PATH = path.join('.webspresso', 'templates.compiled.js');
 
@@ -21,25 +22,13 @@ const DEFAULT_PRECOMPILED_REL_PATH = path.join('.webspresso', 'templates.compile
  * @returns {Array<{ absolutePath: string, relativePath: string }>}
  */
 function scanTemplateDir(dir, baseDir = dir) {
-  if (!fs.existsSync(dir)) return [];
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  const results = [];
-
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
-      results.push(...scanTemplateDir(full, baseDir));
-    } else if (entry.isFile()) {
-      const ext = path.extname(entry.name);
-      if (ext === '.njk' || ext === '.html') {
-        const rel = path.relative(baseDir, full).split(path.sep).join('/');
-        results.push({ absolutePath: full, relativePath: rel });
-      }
-    }
-  }
-
-  return results;
+  return walkDirectoryDetailed(dir, {
+    extensions: ['.njk', '.html'],
+    ignorePrefixes: ['.'],
+    ignoreNames: ['node_modules'],
+    ignoreTests: false,
+    baseDir,
+  });
 }
 
 /**

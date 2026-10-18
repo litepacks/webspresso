@@ -113,7 +113,7 @@ function createPageHandler(descriptor, context) {
       }
 
       // 3. Build Page Context
-      const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+      const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 7331}`;
       const locale = detectLocale(req);
       const fsy = createHelpers({ req, res, baseUrl, locale });
 

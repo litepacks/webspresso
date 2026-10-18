@@ -56,13 +56,13 @@ function detectDatabase(cwd, pkg = {}) {
  * Generate production-grade multi-stage Dockerfile
  * @param {Object} options
  * @param {string} [options.node='22-alpine']
- * @param {number} [options.port=3000]
+ * @param {number} [options.port=7331]
  * @param {boolean} [options.hasBuildScript=false]
  * @returns {string}
  */
 function generateDockerfile(options = {}) {
   const nodeImage = normalizeNodeVersion(options.node || '22-alpine');
-  const port = options.port || 3000;
+  const port = options.port || 7331;
   const isAlpine = nodeImage.includes('alpine');
 
   return `# ==========================================
@@ -198,7 +198,7 @@ public/uploads/*
  * @param {string} options.appName
  * @param {'postgres'|'mysql'|'sqlite'|'none'} options.db
  * @param {boolean} [options.redis=false]
- * @param {number} [options.port=3000]
+ * @param {number} [options.port=7331]
  * @returns {string}
  */
 function generateDockerCompose(options = {}) {
@@ -206,7 +206,7 @@ function generateDockerCompose(options = {}) {
     appName = 'webspresso-app',
     db = 'sqlite',
     redis = false,
-    port = 3000,
+    port = 7331,
   } = options;
 
   let dbService = '';
@@ -338,7 +338,7 @@ function registerCommand(program) {
     .option('-n, --node <version>', 'Node.js base image version (default: 22-alpine)', '22-alpine')
     .option('-d, --db <type>', 'Database service to configure: postgres, mysql, sqlite, none (auto-detected by default)')
     .option('-r, --redis', 'Include Redis service in docker-compose.yml', false)
-    .option('-p, --port <port>', 'Application container port (default: 3000)', '3000')
+    .option('-p, --port <port>', 'Application container port (default: 7331)', '7331')
     .option('-f, --force', 'Overwrite existing Dockerfile and docker-compose.yml without prompting', false)
     .action(async (...actionArgs) => {
       const cmd = actionArgs[actionArgs.length - 1];
@@ -363,7 +363,7 @@ function registerCommand(program) {
       }
 
       const appName = pkg.name ? pkg.name.replace(/[^a-zA-Z0-9_-]/g, '-') : 'webspresso-app';
-      const port = parseInt(options.port || '3000', 10) || 3000;
+      const port = parseInt(options.port || '7331', 10) || 7331;
       const dbType = options.db || detectDatabase(cwd, pkg);
       const isRedis = Boolean(options.redis);
       const nodeVersion = options.node || '22-alpine';

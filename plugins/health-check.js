@@ -4,6 +4,7 @@
 
 const pathMod = require('path');
 const PKG = require(pathMod.join(__dirname, '..', 'package.json'));
+const { ensureLeadingSlash } = require('../core/utils/url');
 
 /**
  * @param {Object} [options]
@@ -23,7 +24,7 @@ function healthCheckPlugin(options = {}) {
   } = options;
 
   const isEnabled = enabled !== undefined ? enabled : true;
-  const normalizedPath = routePath.startsWith('/') ? routePath : `/${routePath}`;
+  const normalizedPath = ensureLeadingSlash(routePath);
 
   return {
     name: 'health-check',

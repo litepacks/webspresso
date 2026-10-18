@@ -41,7 +41,7 @@ const { app } = createApp({
   },
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 7331;
 app.listen(PORT, () => {
   console.log(`Server listening at http://localhost:${PORT}`);
 });
@@ -188,8 +188,8 @@ Start the application with live reloading:
 npm run dev
 ```
 
-- Open **`http://localhost:3000`** in your browser to see your SSR page.
-- Test the API: **`curl http://localhost:3000/api/health`**.
+- Open **`http://localhost:7331`** in your browser to see your SSR page.
+- Test the API: **`curl http://localhost:7331/api/health`**.
 
 ---
 

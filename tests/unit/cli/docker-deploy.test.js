@@ -191,6 +191,15 @@ describe('DevOps & Docker CLI (add:docker & deploy:check)', () => {
       expect(compose).toContain('DATABASE_FILENAME=/app/data/app.sqlite');
       expect(compose).not.toContain('image: postgres');
     });
+
+    it('generateDockerCompose defaults to port 7331 when omitted', () => {
+      const compose = generateDockerCompose({
+        appName: 'default-port-app',
+      });
+
+      expect(compose).toContain('- PORT=7331');
+      expect(compose).toContain('"7331:7331"');
+    });
   });
 
   // ==========================================

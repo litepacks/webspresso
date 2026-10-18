@@ -5,6 +5,7 @@
  */
 
 const crypto = require('crypto');
+const { sha256 } = require('../utils/crypto');
 const { generateQrSvg, generateQrDataUri, createQrMatrix } = require('./qrcode');
 
 const RFC4648_BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -376,7 +377,7 @@ function hashRecoveryCode(code) {
     throw new TypeError('Recovery code must be a string');
   }
   const clean = code.toLowerCase().replace(/[\s-]/g, '');
-  return crypto.createHash('sha256').update(clean, 'utf8').digest('hex');
+  return sha256(clean);
 }
 
 /**

@@ -23,7 +23,7 @@ function registerCommand(program) {
     .option('--title <title>', 'OpenAPI specification title override')
     .option('--api-version <version>', 'OpenAPI specification version override')
     .option('--description <desc>', 'OpenAPI specification description override')
-    .option('--server <url>', 'Default server URL in spec', 'http://localhost:3000')
+    .option('--server <url>', 'Default server URL in spec', 'http://localhost:7331')
     .option('--include-orm', 'Include ORM model schemas in components', false)
     .option('--indent <spaces>', 'JSON indentation spaces', '2')
     .option('-p, --print', 'Print specification JSON to stdout', false)

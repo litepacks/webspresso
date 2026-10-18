@@ -94,7 +94,7 @@ function collectBannerSummary(context = {}) {
     db,
     serviceRegistry,
     pluginManager,
-    port = 3000,
+    port = 7331,
     host = 'localhost',
   } = context;
 

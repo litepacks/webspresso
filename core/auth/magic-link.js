@@ -6,6 +6,8 @@
 
 'use strict';
 
+const { stripTrailingSlash, ensureLeadingSlash } = require('../utils/url');
+
 /**
  * Construct full magic link verification URL
  * 
@@ -16,10 +18,7 @@
  * @returns {string}
  */
 function buildMagicLinkUrl(options = {}) {
-  let baseUrl = String(options.baseUrl || process.env.BASE_URL || 'http://localhost:3000');
-  while (baseUrl.endsWith('/')) {
-    baseUrl = baseUrl.slice(0, -1);
-  }
+  const baseUrl = stripTrailingSlash(options.baseUrl || process.env.BASE_URL || 'http://localhost:7331');
   const path = options.path || '/auth/magic-link/verify';
   const token = options.token;
 
@@ -27,7 +26,7 @@ function buildMagicLinkUrl(options = {}) {
     throw new Error('Token is required to build magic link URL');
   }
 
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const cleanPath = ensureLeadingSlash(path);
   const sep = cleanPath.includes('?') ? '&' : '?';
   return `${baseUrl}${cleanPath}${sep}token=${encodeURIComponent(token)}`;
 }

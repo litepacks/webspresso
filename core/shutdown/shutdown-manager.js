@@ -5,6 +5,8 @@
  * @module core/shutdown/shutdown-manager
  */
 
+const { parseDurationMs } = require('../utils/time');
+
 class ShutdownManager {
   /**
    * @param {Object} [options]
@@ -19,7 +21,7 @@ class ShutdownManager {
     this.options = {
       enabled: options.enabled !== false,
       mode: options.mode === 'force' ? 'force' : 'graceful',
-      timeout: typeof options.timeout === 'number' && options.timeout >= 0 ? options.timeout : 10_000,
+      timeout: options.timeout !== undefined ? parseDurationMs(options.timeout, 10_000) : 10_000,
       signals: Array.isArray(options.signals) ? options.signals : ['SIGINT', 'SIGTERM'],
       logger: options.logger === null ? null : (options.logger || console),
       exitOnSignal: options.exitOnSignal !== false,
@@ -57,8 +59,8 @@ class ShutdownManager {
   }
 
   set timeout(value) {
-    if (typeof value === 'number' && value >= 0) {
-      this.options.timeout = value;
+    if (value !== undefined && value !== null) {
+      this.options.timeout = parseDurationMs(value, this.options.timeout);
     }
   }
 

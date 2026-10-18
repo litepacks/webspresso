@@ -77,6 +77,16 @@ describe('src/dev/banner', () => {
       expect(summary.counts.plugins).toBe(2);
       expect(summary.models).toEqual(['User', 'Note']);
     });
+
+    it('defaults to port 7331 when port parameter is omitted', () => {
+      const summary = collectBannerSummary({
+        routeTable: sampleRoutes,
+      });
+
+      expect(summary.port).toBe(7331);
+      expect(summary.urls.local).toBe('http://localhost:7331');
+      expect(summary.urls.admin).toBe('http://localhost:7331/_admin');
+    });
   });
 
   describe('formatDevBanner & printDevBanner', () => {

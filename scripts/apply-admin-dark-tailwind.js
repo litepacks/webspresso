@@ -3,6 +3,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { escapeRegExp } = require('../core/utils/regex');
 
 const files = [
   'plugins/admin-panel/modules/menu.js',
@@ -44,9 +45,7 @@ const rules = [
   ['bg-white', 'bg-white dark:bg-slate-800'],
 ];
 
-function escapeRe(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+const escapeRe = escapeRegExp;
 
 function replaceToken(s, from, to) {
   if (/^(hover:|dark:|focus:|active:|group-hover:|sm:|md:|lg:|xl:)/.test(from)) {

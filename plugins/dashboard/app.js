@@ -363,11 +363,11 @@ const ConfigView = {
         m('.table-container', [
           m('.config-item', [
             m('.config-key', 'Port'),
-            m('.config-value', config.server?.port || '3000')
+            m('.config-value', config.server?.port || '7331')
           ]),
           m('.config-item', [
             m('.config-key', 'Base URL'),
-            m('.config-value', config.server?.baseUrl || 'http://localhost:3000')
+            m('.config-value', config.server?.baseUrl || 'http://localhost:7331')
           ])
         ])
       ])

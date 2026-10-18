@@ -32,6 +32,7 @@ const {
   resolveNamedMiddleware,
   resolveMiddlewares,
 } = require('./routing/middleware-resolver');
+const { escapeRegExp } = require('../core/utils/regex');
 
 const NOOP = () => {};
 const EMPTY_OBJECT = Object.freeze({});
@@ -372,9 +373,6 @@ function rewriteDynamicRouteMarkers(route) {
   return out;
 }
 
-function escapeRegExp(s) {
-  return String(s).replace(/[\\^$*+?.()|[\]{}]/g, '\\$&');
-}
 
 /**
  * Checks if a path segment is a route group, e.g. '(marketing)', '(auth)'.

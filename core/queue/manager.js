@@ -12,6 +12,8 @@ const { Job } = require('./job');
 const { MemoryQueueAdapter } = require('./adapters/memory');
 const { CronExpression, CRON_ALIASES } = require('./cron');
 const { TaskScheduler } = require('./scheduler');
+const { walkDirectoryDetailed } = require('../utils/fs');
+const { parseDurationMs } = require('../utils/time');
 
 class QueueManager extends EventEmitter {
   /**
@@ -152,6 +154,8 @@ class QueueManager extends EventEmitter {
         runAt = new Date(Date.now() + options.delay);
       } else if (options.delay instanceof Date) {
         runAt = options.delay;
+      } else if (typeof options.delay === 'string') {
+        runAt = new Date(Date.now() + parseDurationMs(options.delay, 0));
       }
     }
 
@@ -161,7 +165,7 @@ class QueueManager extends EventEmitter {
       runAt,
       priority: options.priority !== undefined ? options.priority : defaults.priority,
       maxAttempts: options.attempts !== undefined ? options.attempts : defaults.attempts,
-      timeout: options.timeout !== undefined ? options.timeout : defaults.timeout,
+      timeout: options.timeout !== undefined ? parseDurationMs(options.timeout, defaults.timeout) : defaults.timeout,
       backoff: options.backoff !== undefined ? options.backoff : defaults.backoff,
       onProgress: (j, percent, msg) => {
         this.emit('job:progress', j, percent, msg);
@@ -450,45 +454,44 @@ class QueueManager extends EventEmitter {
   loadJobsFromDirectory(dirPath) {
     if (!fs.existsSync(dirPath)) return;
 
-    const readRecursive = (curDir, basePrefix = '') => {
-      const entries = fs.readdirSync(curDir, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(curDir, entry.name);
-        if (entry.isDirectory()) {
-          readRecursive(fullPath, basePrefix ? `${basePrefix}.${entry.name}` : entry.name);
-        } else if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.cjs'))) {
-          const isCronFile = entry.name.endsWith('.cron.js') || entry.name.endsWith('.cron.cjs');
-          const nameWithoutExt = isCronFile
-            ? entry.name.replace(/\.cron\.(c)?js$/, '')
-            : entry.name.replace(/\.(c)?js$/, '');
-          const jobName = basePrefix ? `${basePrefix}.${nameWithoutExt}` : nameWithoutExt;
+    const files = walkDirectoryDetailed(dirPath, {
+      extensions: ['.js', '.cjs'],
+      ignorePrefixes: ['.', '_'],
+      ignoreTests: true,
+    });
 
-          try {
-            const mod = require(fullPath);
-            const handler = typeof mod === 'function' ? mod : (mod.handler || mod.default);
-            const options = mod.options || {};
+    for (const item of files) {
+      const relNormalized = item.relativePath.split(/[\/\\]/).join('.');
+      const isCronFile = item.name.endsWith('.cron.js') || item.name.endsWith('.cron.cjs');
+      const baseNameWithoutExt = isCronFile
+        ? item.name.replace(/\.cron\.(c)?js$/, '')
+        : item.name.replace(/\.(c)?js$/, '');
+      const jobName = isCronFile
+        ? relNormalized.replace(/\.cron\.(c)?js$/, '')
+        : relNormalized.replace(/\.(c)?js$/, '');
 
-            if (typeof handler === 'function') {
-              this.define(jobName, handler, options);
+      try {
+        const mod = require(item.absolutePath);
+        const handler = typeof mod === 'function' ? mod : (mod.handler || mod.default);
+        const options = mod.options || {};
 
-              const cronExpr = mod.cron || mod.schedule || (isCronFile ? (mod.expression || (CRON_ALIASES[`@${nameWithoutExt}`] ? `@${nameWithoutExt}` : null)) : null);
-              if (cronExpr) {
-                this.schedule(
-                  cronExpr,
-                  jobName,
-                  mod.data || {},
-                  { ...options, ...(mod.scheduleOptions || {}) }
-                );
-              }
-            }
-          } catch (err) {
-            console.error(`[QueueManager] Failed to load job from ${fullPath}:`, err.message);
+        if (typeof handler === 'function') {
+          this.define(jobName, handler, options);
+
+          const cronExpr = mod.cron || mod.schedule || (isCronFile ? (mod.expression || (CRON_ALIASES[`@${baseNameWithoutExt}`] ? `@${baseNameWithoutExt}` : null)) : null);
+          if (cronExpr) {
+            this.schedule(
+              cronExpr,
+              jobName,
+              mod.data || {},
+              { ...options, ...(mod.scheduleOptions || {}) }
+            );
           }
         }
+      } catch (err) {
+        console.error(`[QueueManager] Failed to load job from ${item.absolutePath}:`, err.message);
       }
-    };
-
-    readRecursive(dirPath);
+    }
   }
 
   /**

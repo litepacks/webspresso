@@ -11,6 +11,7 @@ const fs = require('fs/promises');
 const fsSync = require('fs');
 const path = require('path');
 const { normalizePublicBase } = require('./local-file-provider');
+const { safeJsonParse } = require('../../core/utils/json');
 
 /**
  * Format bytes into human readable string
@@ -137,10 +138,10 @@ async function extractDbFileReferences(db) {
         for (const [key, value] of Object.entries(row)) {
           // If value is a JSON string, try to parse
           if (typeof value === 'string' && (value.startsWith('{') || value.startsWith('['))) {
-            try {
-              const parsed = JSON.parse(value);
+            const parsed = safeJsonParse(value, null);
+            if (parsed) {
               scanValue(parsed);
-            } catch (e) {
+            } else {
               addStringReference(value);
             }
           } else {

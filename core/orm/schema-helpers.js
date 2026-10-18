@@ -4,6 +4,8 @@
  * @module core/orm/schema-helpers
  */
 
+const { safeJsonParse } = require('../utils/json');
+
 const METADATA_MARKER = '__wdb__';
 const metaWeakMap = new WeakMap();
 const metaStringCache = new Map();
@@ -28,17 +30,13 @@ function decodeColumnMeta(description) {
   const cached = metaStringCache.get(description);
   if (cached !== undefined) return cached;
 
-  try {
-    const parsed = JSON.parse(description);
-    if (parsed && parsed[METADATA_MARKER]) {
-      const meta = parsed.meta;
-      if (metaStringCache.size < 500) {
-        metaStringCache.set(description, meta);
-      }
-      return meta;
+  const parsed = safeJsonParse(description, null);
+  if (parsed && parsed[METADATA_MARKER]) {
+    const meta = parsed.meta;
+    if (metaStringCache.size < 500) {
+      metaStringCache.set(description, meta);
     }
-  } catch {
-    // Not our metadata, ignore
+    return meta;
   }
 
   if (metaStringCache.size < 500) {

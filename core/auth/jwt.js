@@ -5,60 +5,17 @@
  */
 
 const crypto = require('crypto');
-const { safeCompare } = require('../utils/crypto');
+const { safeCompare, hmacSha256, base64UrlEncode, base64UrlDecode } = require('../utils/crypto');
+const { parseDurationSec } = require('../utils/time');
 
 const HS256_HEADER_BASE64URL = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9';
-
-/**
- * Base64URL encode string or Buffer
- * @param {string|Buffer} input
- * @returns {string}
- */
-function base64UrlEncode(input) {
-  return Buffer.isBuffer(input)
-    ? input.toString('base64url')
-    : Buffer.from(String(input), 'utf8').toString('base64url');
-}
-
-/**
- * Base64URL decode string
- * @param {string} input
- * @returns {string}
- */
-function base64UrlDecode(input) {
-  return Buffer.from(String(input), 'base64url').toString('utf8');
-}
 
 /**
  * Parse duration string (e.g. '1h', '7d', '15m', '3600') into seconds
  * @param {string|number} duration
  * @returns {number} Seconds
  */
-function parseDuration(duration) {
-  if (typeof duration === 'number') {
-    return duration;
-  }
-  if (typeof duration !== 'string') {
-    return 3600; // Default 1 hour
-  }
-
-  const match = duration.trim().match(/^(\d+)\s*([smhd])?$/i);
-  if (!match) {
-    const parsed = parseInt(duration, 10);
-    return isNaN(parsed) ? 3600 : parsed;
-  }
-
-  const value = parseInt(match[1], 10);
-  const unit = (match[2] || 's').toLowerCase();
-
-  switch (unit) {
-    case 's': return value;
-    case 'm': return value * 60;
-    case 'h': return value * 3600;
-    case 'd': return value * 86400;
-    default: return value;
-  }
-}
+const parseDuration = parseDurationSec;
 
 /**
  * Sign payload to create HS256 JWT string
@@ -110,10 +67,7 @@ function signJwt(payload, secret, options = {}) {
   const encodedPayload = base64UrlEncode(JSON.stringify(fullPayload));
 
   const signingInput = `${encodedHeader}.${encodedPayload}`;
-  const encodedSignature = crypto
-    .createHmac('sha256', secret)
-    .update(signingInput)
-    .digest('base64url');
+  const encodedSignature = hmacSha256(signingInput, secret, 'base64url');
 
   return `${signingInput}.${encodedSignature}`;
 }
@@ -166,10 +120,7 @@ function verifyJwt(token, secret, options = {}) {
 
   // Re-compute signature
   const signingInput = `${encodedHeader}.${encodedPayload}`;
-  const expectedSignatureBuf = crypto
-    .createHmac('sha256', secret)
-    .update(signingInput)
-    .digest();
+  const expectedSignatureBuf = hmacSha256(signingInput, secret, 'buffer');
 
   const actualSignatureBuf = Buffer.from(encodedSignature, 'base64url');
 

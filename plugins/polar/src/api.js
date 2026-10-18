@@ -1,6 +1,7 @@
 'use strict';
 
 const { fetchWithTimeout } = require('../../../core/utils/fetch');
+const { ensureLeadingSlash } = require('../../../core/utils/url');
 
 function getPolarApiBase(sandbox) {
   return sandbox ? 'https://sandbox-api.polar.sh/v1' : 'https://api.polar.sh/v1';
@@ -21,7 +22,7 @@ async function polarApiRequest(path, { method = 'GET', body, accessToken, sandbo
     throw new Error('POLAR_ACCESS_TOKEN is not configured');
   }
 
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const normalizedPath = ensureLeadingSlash(path);
 
   const res = await fetchWithTimeout(`${getPolarApiBase(sandbox)}${normalizedPath}`, {
     method,

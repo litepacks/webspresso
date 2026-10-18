@@ -8,7 +8,7 @@
 
 const crypto = require('crypto');
 
-const { safeCompare } = require('../../core/utils/crypto');
+const { safeCompare, sha256, randomToken } = require('../../core/utils/crypto');
 
 /**
  * Hash a raw API key using SHA-256
@@ -20,7 +20,7 @@ function hashKey(rawKey) {
   if (typeof rawKey !== 'string' || rawKey.length === 0) {
     return '';
   }
-  return crypto.createHash('sha256').update(rawKey, 'utf8').digest('hex');
+  return sha256(rawKey);
 }
 
 /**
@@ -57,7 +57,7 @@ function generateKey(options = {}) {
   const prefix = typeof options.prefix === 'string' ? options.prefix : 'wsp_live_';
   const byteLength = typeof options.byteLength === 'number' && options.byteLength > 0 ? options.byteLength : 24;
 
-  const randomPart = crypto.randomBytes(byteLength).toString('base64url');
+  const randomPart = randomToken(byteLength, 'base64url');
   const key = `${prefix}${randomPart}`;
   const hash = hashKey(key);
   const hint = maskKey(key, prefix);

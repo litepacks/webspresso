@@ -4,6 +4,7 @@
  */
 
 const { purgeAuditLogs } = require('./purge');
+const { safeJsonParse } = require('../../core/utils/json');
 
 /**
  * @param {Object} options
@@ -66,15 +67,10 @@ function createAuditLogHandlers(options) {
         .offset((page - 1) * perPage)
         .limit(perPage);
 
-      const normalizedRows = rows.map((r) => {
-        let parsedMetadata = r.metadata;
-        if (typeof parsedMetadata === 'string') {
-          try {
-            parsedMetadata = JSON.parse(parsedMetadata);
-          } catch {}
-        }
-        return { ...r, metadata: parsedMetadata };
-      });
+      const normalizedRows = rows.map((r) => ({
+        ...r,
+        metadata: safeJsonParse(r.metadata, r.metadata),
+      }));
 
       res.json({
         data: normalizedRows,
@@ -110,12 +106,7 @@ function createAuditLogHandlers(options) {
       const lastModifiedEvent = rows.length > 0 ? rows[rows.length - 1] : null;
 
       const events = rows.map((r, index) => {
-        let parsedMetadata = r.metadata;
-        if (typeof parsedMetadata === 'string') {
-          try {
-            parsedMetadata = JSON.parse(parsedMetadata);
-          } catch {}
-        }
+        const parsedMetadata = safeJsonParse(r.metadata, r.metadata);
 
         const changedFields = Array.isArray(parsedMetadata?.changedFields)
           ? parsedMetadata.changedFields

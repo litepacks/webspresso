@@ -56,7 +56,7 @@ function startDevServer(projectPath, useTailwind) {
       stdio: 'inherit',
       shell: true,
       cwd: projectPath,
-      env: { ...process.env, PORT: process.env.PORT || '3000', NODE_ENV: 'development' }
+      env: { ...process.env, PORT: process.env.PORT || '7331', NODE_ENV: 'development' }
     });
     
     // Handle exit
@@ -77,7 +77,7 @@ function startDevServer(projectPath, useTailwind) {
       stdio: 'inherit',
       shell: true,
       cwd: projectPath,
-      env: { ...process.env, PORT: process.env.PORT || '3000', NODE_ENV: 'development' }
+      env: { ...process.env, PORT: process.env.PORT || '7331', NODE_ENV: 'development' }
     });
     
     server.on('exit', (code) => {

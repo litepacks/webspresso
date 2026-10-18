@@ -6,6 +6,8 @@
 const multer = require('multer');
 const path = require('path');
 const { createLocalFileProvider } = require('./local-file-provider');
+const { ensureLeadingSlash } = require('../../core/utils/url');
+const { ensureArray } = require('../../core/utils/object');
 
 /**
  * @typedef {import('express').Request} ExpressRequest
@@ -37,8 +39,7 @@ const { createLocalFileProvider } = require('./local-file-provider');
  * @returns {string}
  */
 function normalizeRoutePath(p) {
-  const s = (p || '/api/upload').trim();
-  return s.startsWith('/') ? s : `/${s}`;
+  return ensureLeadingSlash((p || '/api/upload').trim());
 }
 
 /**
@@ -118,7 +119,7 @@ function uploadPlugin(options = {}) {
       publicBasePath: local?.publicBasePath,
     });
 
-  const mw = (Array.isArray(middleware) ? middleware : [middleware]).filter(Boolean);
+  const mw = ensureArray(middleware).filter(Boolean);
   const parseMultipart = createMulterMiddleware(maxBytes, fieldName, multiple, maxFiles);
 
   return {

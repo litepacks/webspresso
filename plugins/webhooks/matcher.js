@@ -6,6 +6,9 @@
 
 'use strict';
 
+const { globToRegExp } = require('../../core/utils/regex');
+const { safeJsonParse } = require('../../core/utils/json');
+
 /**
  * Normalize an event filter into an array of strings
  * 
@@ -29,13 +32,9 @@ function normalizeEvents(events) {
 
     // If JSON array string like '["user.*", "order.created"]'
     if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) {
-          return parsed.map((e) => (typeof e === 'string' ? e.trim() : '')).filter(Boolean);
-        }
-      } catch (err) {
-        // Fall back to comma-separated
+      const parsed = safeJsonParse(trimmed, null);
+      if (Array.isArray(parsed)) {
+        return parsed.map((e) => (typeof e === 'string' ? e.trim() : '')).filter(Boolean);
       }
     }
 
@@ -58,10 +57,7 @@ function getPatternRegex(pattern) {
       const first = regexCache.keys().next().value;
       if (first !== undefined) regexCache.delete(first);
     }
-    const escaped = pattern
-      .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // escape regex specials except *
-      .replace(/\*/g, '.*');
-    cached = new RegExp(`^${escaped}$`, 'i');
+    cached = globToRegExp(pattern, { separator: null, flags: 'i' });
     regexCache.set(pattern, cached);
   }
   return cached;

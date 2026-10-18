@@ -4,6 +4,7 @@
  */
 
 const { matchPattern } = require('../src/plugin-manager');
+const { stripTrailingSlash } = require('../core/utils/url');
 
 /**
  * Escape XML special characters
@@ -140,7 +141,7 @@ function generateRobotsTxt(hostname, options = {}) {
  */
 function sitemapPlugin(options = {}) {
   const {
-    hostname = process.env.BASE_URL || 'http://localhost:3000',
+    hostname = process.env.BASE_URL || 'http://localhost:7331',
     exclude = ['/api/*'],
     changefreq = 'weekly',
     priority = 0.8,
@@ -229,7 +230,7 @@ function sitemapPlugin(options = {}) {
    */
   async function buildAllUrls(routes, dbInstance) {
     const urls = [];
-    const hostnameNormalized = hostname.replace(/\/$/, '');
+    const hostnameNormalized = stripTrailingSlash(hostname);
     
     // Filter static routes for sitemap
     const sitemapRoutes = routes

@@ -4,6 +4,8 @@
  */
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const { stripTrailingSlash, ensureTrailingSlash } = require('../../core/utils/url');
+const { ensureArray } = require('../../core/utils/object');
 
 /**
  * @param {string} to
@@ -32,10 +34,10 @@ function normalizePathForTrailingSlash(mode, path) {
   if (!path || mode === false || mode == null) return path;
   if (path === '/') return path;
   if (mode === 'strip') {
-    return path.endsWith('/') ? path.slice(0, -1) || '/' : path;
+    return stripTrailingSlash(path, { preserveRoot: true });
   }
   if (mode === 'add') {
-    return path.endsWith('/') ? path : `${path}/`;
+    return ensureTrailingSlash(path);
   }
   return path;
 }
@@ -119,8 +121,8 @@ function pathMatches(compiled, pathForMatch, rawPath) {
   if (compiled.kind === 'string') {
     if (pathForMatch === compiled.fromNorm) return true;
     if (!compiled.trailing) {
-      const a = rawPath.replace(/\/$/, '') || '/';
-      const b = compiled.fromRaw.replace(/\/$/, '') || '/';
+      const a = stripTrailingSlash(rawPath, { preserveRoot: true });
+      const b = stripTrailingSlash(compiled.fromRaw, { preserveRoot: true });
       if (a === b) return true;
     }
     return false;
@@ -173,7 +175,7 @@ function redirectPlugin(options = {}) {
   const stringRulesMap = new Map();
   let hasRegexRules = false;
 
-  const ruleList = Array.isArray(rules) ? rules : [];
+  const ruleList = ensureArray(rules);
   for (const rule of ruleList) {
     const c = compileRule(rule, pluginOpts);
     if (!c) continue;
@@ -181,7 +183,7 @@ function redirectPlugin(options = {}) {
     if (c.kind === 'string') {
       const keys = [c.fromNorm];
       if (!c.trailing) {
-        const alt = c.fromRaw.replace(/\/$/, '') || '/';
+        const alt = stripTrailingSlash(c.fromRaw, { preserveRoot: true });
         if (!keys.includes(alt)) keys.push(alt);
       }
       for (const k of keys) {
@@ -205,7 +207,7 @@ function redirectPlugin(options = {}) {
 
     // Fast O(1) path when all configured rules are string based
     if (!hasRegexRules) {
-      const candidates = stringRulesMap.get(pathForMatch) || (!pluginOpts.trailingSlash ? stringRulesMap.get(rawPath.replace(/\/$/, '') || '/') : null);
+      const candidates = stringRulesMap.get(pathForMatch) || (!pluginOpts.trailingSlash ? stringRulesMap.get(stripTrailingSlash(rawPath, { preserveRoot: true })) : null);
       if (candidates) {
         for (const c of candidates) {
           if (!methodMatches(c, method)) continue;

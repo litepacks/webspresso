@@ -3,14 +3,14 @@
  * @module plugins/audit-log/parse
  */
 
+const { escapeRegExp } = require('../../core/utils/regex');
+
 /**
  * Escape string for use in RegExp
  * @param {string} s
  * @returns {string}
  */
-function escapeRegex(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+const escapeRegex = escapeRegExp;
 
 /**
  * Parse mutation target from request path relative to admin base (no trailing slash).

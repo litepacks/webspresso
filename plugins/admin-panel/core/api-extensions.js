@@ -8,6 +8,7 @@ const os = require('os');
 const https = require('https');
 const { sanitizeForOutput } = require('../../../core/orm/utils');
 const { buildFilteredQuery } = require('../../../core/orm/query-filters');
+const { safeJsonParse } = require('../../../core/utils/json');
 
 function getWebspressoVersion() {
   try {
@@ -681,11 +682,7 @@ function createExtensionApiHandlers(options) {
       let filters = body.filters ?? req.query.filters;
       if (typeof selectAll === 'string') selectAll = selectAll === 'true';
       if (typeof filters === 'string') {
-        try {
-          filters = JSON.parse(filters);
-        } catch {
-          filters = undefined;
-        }
+        filters = safeJsonParse(filters, undefined);
       }
 
       // Support IDs from query string (GET) or body (POST)

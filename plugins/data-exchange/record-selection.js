@@ -4,6 +4,7 @@
  */
 
 const { buildFilteredQuery } = require('../admin-panel/core/api-extensions');
+const { safeJsonParse } = require('../../core/utils/json');
 
 /**
  * @param {import('../../core/orm/database').Database} db
@@ -17,11 +18,7 @@ async function resolveExportRecords(db, modelName, req) {
   let filters = body.filters ?? req.query.filters;
   if (typeof selectAll === 'string') selectAll = selectAll === 'true';
   if (typeof filters === 'string') {
-    try {
-      filters = JSON.parse(filters);
-    } catch {
-      filters = undefined;
-    }
+    filters = safeJsonParse(filters, undefined);
   }
 
   const trashedOnly =

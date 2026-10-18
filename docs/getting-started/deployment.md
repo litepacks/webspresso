@@ -15,7 +15,7 @@ In production, always set `NODE_ENV=production`:
 
 ```bash
 export NODE_ENV=production
-export PORT=3000
+export PORT=7331
 ```
 
 Ensure all variables declared in `config/env.schema.js` (e.g. `DATABASE_URL`, `SESSION_SECRET`, `BASE_URL`) are provided in your production environment or secret manager.
@@ -79,7 +79,7 @@ module.exports = {
       exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
-        PORT: 3000,
+        PORT: 7331,
       },
       kill_timeout: 12000, // Slightly higher than Webspresso shutdown timeout
       wait_ready: true,
@@ -117,7 +117,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=7331
 
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
@@ -130,7 +130,7 @@ COPY --from=builder /app/config ./config
 COPY --from=builder /app/server.js ./server.js
 COPY --from=builder /app/webspresso.db.js ./webspresso.db.js
 
-EXPOSE 3000
+EXPOSE 7331
 
 USER node
 
@@ -149,7 +149,7 @@ server {
     server_name example.com;
 
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:7331;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';

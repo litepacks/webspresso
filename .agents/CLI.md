@@ -313,7 +313,7 @@ Generate production-ready, security-hardened, multi-stage `Dockerfile`, `.docker
 npx webspresso add:docker
 
 # Customize Node.js version, database service, or container port
-npx webspresso add:docker --node 22-alpine --db postgres --redis --port 3000
+npx webspresso add:docker --node 22-alpine --db postgres --redis --port 7331
 
 # Overwrite existing files
 npx webspresso add:docker --force

@@ -4,7 +4,7 @@
  * @module plugins/site-analytics/tracking
  */
 
-const crypto = require('crypto');
+const { sha256 } = require('../../core/utils/crypto');
 const { getClientIp: resolveClientIp } = require('../../core/utils/ip');
 const { detectBot } = require('./bot-patterns');
 const { detectCountry } = require('./geo');
@@ -76,7 +76,7 @@ function isPermanentDbError(e) {
  * Hash a string with SHA-256 (truncated to 16 hex chars for compactness)
  */
 function quickHash(str) {
-  return crypto.createHash('sha256').update(str).digest('hex').slice(0, 16);
+  return sha256(str).slice(0, 16);
 }
 
 /**

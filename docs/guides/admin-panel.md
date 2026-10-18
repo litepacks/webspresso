@@ -35,7 +35,7 @@ const { app } = createApp({
 });
 ```
 
-Access the panel at **`http://localhost:3000/_admin`**.
+Access the panel at **`http://localhost:7331/_admin`**.
 
 ---
 

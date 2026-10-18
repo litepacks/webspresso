@@ -31,7 +31,7 @@ function registerCommand(program) {
   program
     .command('dev')
     .description('Start development server')
-    .option('-p, --port <port>', 'Port number', '3000')
+    .option('-p, --port <port>', 'Port number', '7331')
     .option('--no-css', 'Skip CSS watch (if Tailwind is set up)')
     .option('--no-js', 'Skip client JS watch (if esbuild / watch:js is set up)')
     .action((options) => {

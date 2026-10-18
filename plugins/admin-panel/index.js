@@ -608,7 +608,7 @@ function adminPanelPlugin(options = {}) {
       }
 
       // Log admin panel URL
-      console.log(`\n🔐 Admin Panel v2.0 available at: http://localhost:${process.env.PORT || 3000}${adminPath}\n`);
+      console.log(`\n🔐 Admin Panel v2.0 available at: http://localhost:${process.env.PORT || 7331}${adminPath}\n`);
     },
 
     /**

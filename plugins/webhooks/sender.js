@@ -8,6 +8,7 @@
 
 const crypto = require('crypto');
 const { signPayload } = require('./crypto');
+const { safeJsonParse } = require('../../core/utils/json');
 
 /**
  * Send a webhook HTTP request to a target endpoint
@@ -110,16 +111,10 @@ async function sendWebhook(options = {}) {
   }
 
   // Parse custom headers if stored as JSON string
-  let parsedCustomHeaders = {};
-  if (typeof customHeaders === 'string') {
-    try {
-      parsedCustomHeaders = JSON.parse(customHeaders);
-    } catch (e) {
-      parsedCustomHeaders = {};
-    }
-  } else if (typeof customHeaders === 'object' && customHeaders !== null) {
-    parsedCustomHeaders = customHeaders;
-  }
+  const parsedHeadersObj = safeJsonParse(customHeaders, {});
+  const parsedCustomHeaders = (parsedHeadersObj && typeof parsedHeadersObj === 'object' && !Array.isArray(parsedHeadersObj))
+    ? parsedHeadersObj
+    : {};
 
   const requestHeaders = {
     'content-type': 'application/json',

@@ -4,6 +4,7 @@
  */
 
 const { purgeEmailLogs } = require('./purge');
+const { safeJsonParse } = require('../../core/utils/json');
 
 /**
  * @param {Object} options
@@ -44,14 +45,7 @@ function createEmailApiHandlers(options) {
         return res.status(400).json({ error: 'to and subject are required' });
       }
 
-      let parsedData = data;
-      if (typeof data === 'string') {
-        try {
-          parsedData = JSON.parse(data);
-        } catch {
-          parsedData = {};
-        }
-      }
+      const parsedData = safeJsonParse(data, {}) || {};
 
       const result = await emailService.send({
         to,
@@ -59,7 +53,7 @@ function createEmailApiHandlers(options) {
         template,
         mjml,
         html,
-        data: parsedData || {},
+        data: parsedData,
       });
 
       res.json({ ok: true, ...result });
@@ -73,17 +67,10 @@ function createEmailApiHandlers(options) {
       const body = req.body || {};
       const { template, mjml, html, data } = body;
 
-      let parsedData = data;
-      if (typeof data === 'string') {
-        try {
-          parsedData = JSON.parse(data);
-        } catch {
-          parsedData = {};
-        }
-      }
+      const parsedData = safeJsonParse(data, {}) || {};
 
       const result = await emailService.preview(
-        template ? { template, data: parsedData || {} } : { mjml, html, data: parsedData || {} }
+        template ? { template, data: parsedData } : { mjml, html, data: parsedData }
       );
 
       res.json(result);

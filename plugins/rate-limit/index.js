@@ -3,6 +3,8 @@
  * @module plugins/rate-limit
  */
 
+const { ensureArray } = require('../../core/utils/object');
+
 const PLUGIN_ONLY_KEYS = new Set(['global', 'globalOverrides', 'globalSkipPaths']);
 
 const DEFAULT_BASE = {
@@ -95,7 +97,7 @@ function combineSkip(userSkip, builtin) {
  * @returns {import('express').RequestHandler}
  */
 function createDefaultGlobalSkip(extraPathPrefixes = []) {
-  const extras = (Array.isArray(extraPathPrefixes) ? extraPathPrefixes : []).filter(Boolean);
+  const extras = ensureArray(extraPathPrefixes).filter(Boolean);
   /** @type {string[]} */
   const prefixes = [
     '/__webspresso/client-runtime',

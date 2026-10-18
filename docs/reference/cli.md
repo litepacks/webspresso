@@ -27,7 +27,7 @@ Starts the development server with live template and code reloading.
 
 | Option / Flag | Description |
 | :--- | :--- |
-| `-p, --port <number>` | Override listening port (default `3000` or `process.env.PORT`). |
+| `-p, --port <number>` | Override listening port (default `7331` or `process.env.PORT`). |
 | `-H, --host <string>` | Bind host address (default `'localhost'`). |
 
 ### `webspresso start`
@@ -84,7 +84,7 @@ Generates a production-ready, multi-stage `Dockerfile`, `.dockerignore`, `docker
 | `-n, --node <version>` | Node.js base image version (default: `22-alpine`). |
 | `-d, --db <type>` | Database service: `postgres`, `mysql`, `sqlite`, `none` (auto-detected). |
 | `-r, --redis` | Include Redis container in `docker-compose.yml`. |
-| `-p, --port <port>` | Application container port (default: `3000`). |
+| `-p, --port <port>` | Application container port (default: `7331`). |
 | `-f, --force` | Overwrite existing files without prompting. |
 
 ### `webspresso deploy:check` (alias: `check:deploy`)

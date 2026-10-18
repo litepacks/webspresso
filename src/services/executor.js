@@ -17,6 +17,7 @@ const {
   runWithAmbientTransaction,
   hasAmbientTransaction,
 } = require('../../core/orm/transaction');
+const { ensureArray } = require('../../core/utils/object');
 
 const SERVICE_CALL_STACK_SYMBOL = Symbol.for('webspresso.service.call_stack');
 
@@ -93,7 +94,7 @@ async function checkServiceAuth(serviceDef, ctx, options = {}) {
     if (!user) {
       throw new UnauthorizedError(`Authentication required to execute service '${serviceDef.name}'`);
     }
-    const roles = Array.isArray(user.roles) ? user.roles : (user.role ? [user.role] : []);
+    const roles = ensureArray(user.roles || user.role);
     if (!roles.includes(authRequirement)) {
       throw new ForbiddenError(
         `Insufficient permissions to execute service '${serviceDef.name}' (required role: '${authRequirement}')`
@@ -107,7 +108,7 @@ async function checkServiceAuth(serviceDef, ctx, options = {}) {
     if (!user) {
       throw new UnauthorizedError(`Authentication required to execute service '${serviceDef.name}'`);
     }
-    const roles = Array.isArray(user.roles) ? user.roles : (user.role ? [user.role] : []);
+    const roles = ensureArray(user.roles || user.role);
     const hasAny = authRequirement.some(r => roles.includes(r));
     if (!hasAny) {
       throw new ForbiddenError(

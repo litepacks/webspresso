@@ -13,6 +13,7 @@
  */
 
 const express = require('express');
+const { ensureArray } = require('../core/utils/object');
 
 /**
  * Wraps a plugin definition or factory function into an on-demand lazy plugin.
@@ -43,9 +44,7 @@ function lazyPlugin(pluginFactory, lazyOptions = {}) {
     (typeof pluginFactory === 'object' && pluginFactory ? pluginFactory.name : null) ||
     'anonymous-lazy-plugin';
 
-  const rawPrefixes = lazyOptions.prefix
-    ? (Array.isArray(lazyOptions.prefix) ? lazyOptions.prefix : [lazyOptions.prefix])
-    : [];
+  const rawPrefixes = ensureArray(lazyOptions.prefix);
   // Normalize prefixes: ensure leading slash, remove trailing slash (except root '/')
   const prefixes = rawPrefixes.map(p => {
     let norm = String(p).trim();
@@ -54,9 +53,9 @@ function lazyPlugin(pluginFactory, lazyOptions = {}) {
     return norm;
   });
 
-  const lazyServices = Array.isArray(lazyOptions.services) ? lazyOptions.services : [];
-  const lazyHelpers = Array.isArray(lazyOptions.helpers) ? lazyOptions.helpers : [];
-  const lazyEvents = Array.isArray(lazyOptions.events) ? lazyOptions.events : [];
+  const lazyServices = ensureArray(lazyOptions.services);
+  const lazyHelpers = ensureArray(lazyOptions.helpers);
+  const lazyEvents = ensureArray(lazyOptions.events);
 
   function hydrate() {
     if (isHydrated) return realPlugin;

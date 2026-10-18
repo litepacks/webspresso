@@ -836,9 +836,79 @@ export interface FetchWithTimeoutOptions extends RequestInit {
 
 export function fetchWithTimeout(url: string | URL | Request, options?: FetchWithTimeoutOptions): Promise<Response>;
 export function safeCompare(a: string | Buffer | null | undefined, b: string | Buffer | null | undefined): boolean;
+export function sha256(data: string | Buffer | unknown, encoding?: import('crypto').BinaryToTextEncoding | 'buffer'): string | Buffer;
+export function hmacSha256(data: string | Buffer | unknown, secret: string | Buffer, encoding?: import('crypto').BinaryToTextEncoding | 'buffer'): string | Buffer;
+export function randomToken(byteLength?: number, encoding?: import('crypto').BinaryToTextEncoding | 'buffer'): string | Buffer;
+export function randomId(prefix?: string, byteLength?: number, encoding?: import('crypto').BinaryToTextEncoding): string;
+export function randomTimestampedId(prefix?: string, byteLength?: number, encoding?: import('crypto').BinaryToTextEncoding): string;
+export function base64UrlEncode(input: string | Buffer | unknown): string;
+export function base64UrlDecode(input: string): string;
 export function escapeHtml(value: unknown): string;
 export function unescapeHtml(value: unknown): string;
 export function getClientIp<T = string>(req?: any, fallback?: T): string | T;
+
+export interface WalkDirectoryOptions {
+  extensions?: string[] | Set<string> | null;
+  recursive?: boolean;
+  ignoreTests?: boolean;
+  ignorePrefixes?: string[];
+  ignoreNames?: string[];
+  filter?: (fullPath: string, dirent: import('fs').Dirent) => boolean;
+  baseDir?: string;
+  detailed?: boolean;
+}
+
+export interface WalkDirectoryItem {
+  absolutePath: string;
+  relativePath: string;
+  name: string;
+  ext: string;
+}
+
+export function walkDirectory(dir: string, options?: WalkDirectoryOptions & { detailed?: false }): string[];
+export function walkDirectory(dir: string, options: WalkDirectoryOptions & { detailed: true }): WalkDirectoryItem[];
+export function walkDirectory(dir: string, options?: WalkDirectoryOptions): string[] | WalkDirectoryItem[];
+export function walkDirectoryDetailed(dir: string, options?: WalkDirectoryOptions): WalkDirectoryItem[];
+
+export interface StripTrailingSlashOptions {
+  preserveRoot?: boolean;
+}
+
+export function stripTrailingSlash(input: string | unknown, options?: StripTrailingSlashOptions): string;
+export function ensureLeadingSlash(input: string | unknown): string;
+export function ensureTrailingSlash(input: string | unknown): string;
+export function stripLeadingSlash(input: string | unknown): string;
+export function joinUrl(base: string, ...paths: string[]): string;
+
+export interface GlobToRegExpOptions {
+  separator?: '/' | '.' | null;
+  exact?: boolean;
+  flags?: string;
+}
+
+export function escapeRegExp(str: string | unknown): string;
+export function escapeRegex(str: string | unknown): string;
+export function globToRegExp(pattern: string, options?: GlobToRegExpOptions): RegExp;
+
+export function parseDurationSec(duration: string | number | unknown, defaultSec?: number): number;
+export function parseDuration(duration: string | number | unknown, defaultSec?: number): number;
+export function parseDurationMs(ttl: string | number | boolean | unknown, defaultMs?: number): number;
+export function sleep(ms: number): Promise<void>;
+
+export function safeJsonParse<T = unknown>(input: string | unknown, fallback?: T, reviver?: (this: any, key: string, value: any) => any): any | T;
+export function safeJsonStringify(value: unknown, space?: string | number | null, fallback?: string): string;
+export function isValidJson(str: string | unknown): boolean;
+
+export function toSnakeCase(str: string | unknown): string;
+export function snakeToCamel(str: string | unknown): string;
+export function camelToSnake(str: string | unknown): string;
+export function toKebabCase(str: string | unknown): string;
+export function toPascalCase(str: string | unknown): string;
+
+export function ensureArray<T>(value: T | T[] | null | undefined): T[];
+export function pick<T extends object, K extends keyof T>(obj: T | null | undefined, keys: K[] | K): Pick<T, K>;
+export function omit<T extends object, K extends keyof T>(obj: T | null | undefined, keys: K[] | K): Omit<T, K>;
+export function deepClone<T>(obj: T): T;
 
 export const utils: Record<string, unknown>;
 

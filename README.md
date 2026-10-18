@@ -22,7 +22,7 @@ cd my-app
 npm run dev
 ```
 
-Open **`http://localhost:3000`** in your browser.
+Open **`http://localhost:7331`** in your browser.
 
 ---
 
@@ -147,7 +147,7 @@ const { app } = createApp({
   },
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 7331;
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });

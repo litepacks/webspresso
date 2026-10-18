@@ -4,36 +4,14 @@
  * @module src/services/memoize
  */
 
+const { parseDurationMs } = require('../../core/utils/time');
+
 /**
  * Parse TTL duration into milliseconds
  * @param {string|number|boolean} ttl - Duration string ('5s', '1m', '5m', '1h', '1d'), ms number, or boolean
  * @returns {number} Milliseconds
  */
-function parseTtlMs(ttl) {
-  if (typeof ttl === 'number') {
-    return ttl > 0 ? ttl : 60_000;
-  }
-  if (ttl === true || !ttl) {
-    return 60_000; // Default 1 minute
-  }
-  if (typeof ttl === 'string') {
-    const match = ttl.trim().match(/^(\d+)\s*([smhd])?$/i);
-    if (match) {
-      const val = parseInt(match[1], 10);
-      const unit = (match[2] || 's').toLowerCase();
-      switch (unit) {
-        case 's': return val * 1_000;
-        case 'm': return val * 60_000;
-        case 'h': return val * 3_600_000;
-        case 'd': return val * 86_400_000;
-        default: return val * 1_000;
-      }
-    }
-    const num = parseInt(ttl, 10);
-    return !Number.isNaN(num) && num > 0 ? num : 60_000;
-  }
-  return 60_000;
-}
+const parseTtlMs = parseDurationMs;
 
 /**
  * Safely deep clone an object or array to prevent cache mutation

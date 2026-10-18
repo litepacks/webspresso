@@ -12,6 +12,7 @@ const { buildOpenApiDocument } = require('../core/openapi/build-from-api-routes'
 const PKG = require(path.join(__dirname, '..', 'package.json'));
 
 const { escapeHtml } = require('../core/utils/html');
+const { stripTrailingSlash } = require('../core/utils/url');
 
 /**
  * Generates Swagger UI HTML page
@@ -180,7 +181,7 @@ function generateApiDocsAdminComponent({ uiPath, jsonPath, title }) {
  * @param {string} [options.title] - OpenAPI info.title
  * @param {string} [options.version] - OpenAPI info.version
  * @param {string} [options.description] - OpenAPI info.description
- * @param {string} [options.serverUrl] - Override servers[0].url (default: BASE_URL or http://localhost:3000)
+ * @param {string} [options.serverUrl] - Override servers[0].url (default: BASE_URL or http://localhost:7331)
  * @param {string} [options.theme='default'] - Theme for Scalar UI
  * @param {boolean} [options.darkMode=true] - Dark mode default for Scalar UI
  * @param {boolean} [options.admin=true] - Auto-register in Admin Panel if admin-panel plugin is present
@@ -243,7 +244,7 @@ function swaggerPlugin(options = {}) {
         return false;
       };
 
-      const server = serverUrl || process.env.BASE_URL || 'http://localhost:3000';
+      const server = serverUrl || process.env.BASE_URL || 'http://localhost:7331';
 
       let cachedDoc = null;
 
@@ -264,7 +265,7 @@ function swaggerPlugin(options = {}) {
               version: docVersion,
               description: docDescription,
             },
-            servers: [{ url: server.replace(/\/$/, '') }],
+            servers: [{ url: stripTrailingSlash(server) }],
           });
           if (process.env.NODE_ENV === 'production') {
             cachedDoc = doc;

@@ -7,6 +7,8 @@
  * Simple semver comparison utilities
  * (Lightweight alternative to full semver package)
  */
+const { globToRegExp } = require('../core/utils/regex');
+
 const semverCache = new Map();
 
 const semver = {
@@ -112,15 +114,7 @@ function matchPattern(path, pattern) {
   
   let regex = patternRegexCache.get(pattern);
   if (!regex) {
-    // Convert glob to regex
-    const regexPattern = pattern
-      .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // Escape special regex chars
-      .replace(/\*\*/g, '{{GLOBSTAR}}')       // Temp placeholder for **
-      .replace(/\*/g, '[^/]*')                // * matches anything except /
-      .replace(/\{\{GLOBSTAR\}\}/g, '.*')     // ** matches everything
-      .replace(/\?/g, '.');                   // ? matches single char
-
-    regex = new RegExp(`^${regexPattern}$`);
+    regex = globToRegExp(pattern, { separator: '/' });
     if (patternRegexCache.size < 500) {
       patternRegexCache.set(pattern, regex);
     }

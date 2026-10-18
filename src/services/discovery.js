@@ -8,21 +8,10 @@ const fs = require('fs');
 const path = require('path');
 const { trimUrlPathSlashes } = require('../../core/url-path-normalize');
 
-const VALID_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
+const { walkDirectoryDetailed } = require('../../core/utils/fs');
+const { toCamelCase } = require('../../core/utils/string');
 
-/**
- * Convert kebab-case or snake_case segment to camelCase
- * @param {string} str
- * @returns {string}
- */
-function toCamelCase(str) {
-  if (!str) return '';
-  const parts = str.split(/[-_]+/);
-  return parts.map((part, index) => {
-    if (!part) return '';
-    return index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1);
-  }).join('');
-}
+const VALID_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 
 /**
  * Check if a file should be included as a service
@@ -105,36 +94,26 @@ function discoverServices(servicesDir) {
     return [];
   }
 
+  const items = walkDirectoryDetailed(servicesDir, {
+    extensions: VALID_EXTENSIONS,
+    ignorePrefixes: ['.', '_'],
+    ignoreNames: ['node_modules'],
+    ignoreTests: true,
+  });
+
   const results = [];
-
-  function scan(currentDir, relativePrefix = '') {
-    const entries = fs.readdirSync(currentDir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      if (entry.name.startsWith('.') || entry.name.startsWith('_') || entry.name === 'node_modules') {
-        continue;
-      }
-
-      const fullPath = path.join(currentDir, entry.name);
-      const relPath = relativePrefix ? path.join(relativePrefix, entry.name) : entry.name;
-
-      if (entry.isDirectory()) {
-        scan(fullPath, relPath);
-      } else if (entry.isFile() && isValidServiceFile(entry.name)) {
-        const { name, aliases } = filePathToServiceName(relPath);
-        if (name) {
-          results.push({
-            name,
-            aliases,
-            filePath: fullPath,
-            relativePath: relPath.replace(/\\/g, '/'),
-          });
-        }
-      }
+  for (const item of items) {
+    const { name, aliases } = filePathToServiceName(item.relativePath);
+    if (name) {
+      results.push({
+        name,
+        aliases,
+        filePath: item.absolutePath,
+        relativePath: item.relativePath,
+      });
     }
   }
 
-  scan(path.resolve(servicesDir));
   return results;
 }
 

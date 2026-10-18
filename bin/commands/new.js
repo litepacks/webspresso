@@ -312,10 +312,10 @@ module.exports = { loadEnv };
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.coerce.number().int().positive().default(3000),
+  PORT: z.coerce.number().int().positive().default(7331),
   DEFAULT_LOCALE: z.string().min(1).default('en'),
   SUPPORTED_LOCALES: z.string().min(1).default('en,de'),
-  BASE_URL: z.string().url().default('http://localhost:3000'),
+  BASE_URL: z.string().url().default('http://localhost:7331'),
   DATABASE_URL: z.string().optional(),
 });
 
@@ -382,11 +382,11 @@ app.listen(env.PORT, () => {
       
       // Create .env.example (see config/load-env.js for merge order)
       let envExample = `# Copy to .env and adjust. Optional overrides: .env.local, .env.<NODE_ENV>, .env.<NODE_ENV>.local
-PORT=3000
+PORT=7331
 NODE_ENV=development
 DEFAULT_LOCALE=en
 SUPPORTED_LOCALES=en,de
-BASE_URL=http://localhost:3000
+BASE_URL=http://localhost:7331
 `;
       
       if (useDatabase && databaseType) {
@@ -645,7 +645,7 @@ cp .env.example .env
 npm run dev
 \`\`\`
 
-Visit http://localhost:3000
+Visit http://localhost:7331
 
 ## Configuration
 

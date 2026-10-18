@@ -11,13 +11,13 @@
  * @module core/utils/fetch
  */
 
-'use strict';
+const { parseDurationMs } = require('./time');
 
 /**
  * Executes a fetch request with timeout and abort controller support.
  *
  * @param {string | URL | Request} url - Target URL or Request instance
- * @param {RequestInit & { timeout?: number }} [options] - Standard RequestInit plus optional timeout (ms)
+ * @param {RequestInit & { timeout?: number | string }} [options] - Standard RequestInit plus optional timeout (ms or '5s')
  * @returns {Promise<Response>}
  */
 async function fetchWithTimeout(url, options = {}) {
@@ -38,13 +38,14 @@ async function fetchWithTimeout(url, options = {}) {
   let timer = null;
   let callerSignalListener = null;
 
-  if (typeof timeout === 'number' && timeout > 0) {
+  const timeoutMs = timeout !== undefined ? parseDurationMs(timeout, 10000) : 10000;
+  if (typeof timeoutMs === 'number' && timeoutMs > 0) {
     timer = setTimeout(() => {
-      const err = new Error(`Request timed out after ${timeout}ms`);
+      const err = new Error(`Request timed out after ${timeoutMs}ms`);
       err.name = 'TimeoutError';
       err.code = 'ETIMEDOUT';
       controller.abort(err);
-    }, timeout);
+    }, timeoutMs);
     if (timer && typeof timer.unref === 'function') {
       timer.unref();
     }

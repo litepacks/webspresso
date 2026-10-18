@@ -6,6 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { walkDirectory } = require('../../core/utils/fs');
 
 /**
  * Scan a directory for JS files and require them
@@ -13,27 +14,27 @@ const path = require('path');
  * @returns {Array<Object>}
  */
 function scanModuleDir(dirPath) {
-  if (!fs.existsSync(dirPath)) return [];
-  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  const files = walkDirectory(dirPath, {
+    recursive: false,
+    extensions: ['.js', '.cjs'],
+    ignorePrefixes: ['_', '.'],
+    ignoreTests: true,
+  });
   const items = [];
 
-  for (const entry of entries) {
-    if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.cjs'))) {
-      if (entry.name.startsWith('_') || entry.name.startsWith('.')) continue;
-      const fullPath = path.join(dirPath, entry.name);
-      try {
-        const mod = require(fullPath);
-        if (mod && typeof mod === 'object') {
-          // If mod doesn't have a name, default to filename without extension
-          if (!mod.name && !mod.uri) {
-            const baseName = path.basename(entry.name, path.extname(entry.name));
-            mod.name = baseName;
-          }
-          items.push(mod);
+  for (const fullPath of files) {
+    try {
+      const mod = require(fullPath);
+      if (mod && typeof mod === 'object') {
+        // If mod doesn't have a name, default to filename without extension
+        if (!mod.name && !mod.uri) {
+          const baseName = path.basename(fullPath, path.extname(fullPath));
+          mod.name = baseName;
         }
-      } catch (err) {
-        console.warn(`[mcp-discovery] Failed to load module at ${fullPath}:`, err.message);
+        items.push(mod);
       }
+    } catch (err) {
+      console.warn(`[mcp-discovery] Failed to load module at ${fullPath}:`, err.message);
     }
   }
 

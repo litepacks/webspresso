@@ -4,6 +4,8 @@
  * @module core/auth/hash
  */
 
+const { sha256, randomToken } = require('../utils/crypto');
+
 let bcrypt = null;
 let bcryptChecked = false;
 function getBcrypt() {
@@ -96,8 +98,7 @@ function needsRehash(hashedPassword, rounds = DEFAULT_ROUNDS) {
  * @returns {string} Hex-encoded random token
  */
 function generateToken(length = 32) {
-  const crypto = require('crypto');
-  return crypto.randomBytes(length).toString('hex');
+  return randomToken(length, 'hex');
 }
 
 /**
@@ -111,9 +112,9 @@ function generateToken(length = 32) {
  * @returns {string} Hex-encoded SHA-256 digest
  */
 function hashToken(token) {
-  const crypto = require('crypto');
+  if (!token) return '';
   // CodeQL [js/insufficient-password-hash] False positive: token is a 256-bit random string, not a user password
-  return crypto.createHash('sha256').update(String(token)).digest('hex');
+  return sha256(String(token));
 }
 
 module.exports = {

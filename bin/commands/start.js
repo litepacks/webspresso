@@ -10,7 +10,7 @@ function registerCommand(program) {
   program
     .command('start')
     .description('Start production server')
-    .option('-p, --port <port>', 'Port number', '3000')
+    .option('-p, --port <port>', 'Port number', '7331')
     .action((options) => {
       if (!fs.existsSync('server.js')) {
         console.error('❌ server.js not found! Make sure you are in a Webspresso project.');

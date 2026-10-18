@@ -3,7 +3,7 @@
  * @module core/orm/cache/fingerprint
  */
 
-const crypto = require('crypto');
+const { sha256 } = require('../../utils/crypto');
 
 /**
  * @param {*} v
@@ -94,7 +94,7 @@ function hashKey(model, scopeContext, parts) {
     ...parts,
   });
   const json = JSON.stringify(payload);
-  return crypto.createHash('sha256').update(json).digest('hex').slice(0, 40);
+  return sha256(json).slice(0, 40);
 }
 
 module.exports = {

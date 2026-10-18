@@ -17,4 +17,4 @@ npm run dev
 npx webspresso dev
 ```
 
-Open **`http://localhost:3000`** in your browser.
+Open **`http://localhost:7331`** in your browser.

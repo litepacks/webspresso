@@ -11,6 +11,7 @@ const relativeTime = require('dayjs/plugin/relativeTime');
 const utc = require('dayjs/plugin/utc');
 const timezone = require('dayjs/plugin/timezone');
 const customParseFormat = require('dayjs/plugin/customParseFormat');
+const { globToRegExp } = require('../core/utils/regex');
 
 // Extend dayjs with plugins
 dayjs.extend(relativeTime);
@@ -659,7 +660,7 @@ function getAssetManager() {
  * @returns {Object} fsy helper object
  */
 function createHelpers(ctx) {
-  const { req, res, baseUrl = process.env.BASE_URL || 'http://localhost:3000', locale = 'en', t = null } = ctx || {};
+  const { req, res, baseUrl = process.env.BASE_URL || 'http://localhost:7331', locale = 'en', t = null } = ctx || {};
 
   return {
     /** Active request locale */
@@ -1025,7 +1026,7 @@ function createHelpers(ctx) {
       if (pattern.includes('*')) {
         let regex = isPathRegexCache.get(pattern);
         if (regex === undefined) {
-          regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+          regex = globToRegExp(pattern, { separator: null });
           if (isPathRegexCache.size < 500) {
             isPathRegexCache.set(pattern, regex);
           }
@@ -2206,6 +2207,30 @@ const utils = {
     return require('../core/utils/crypto').safeCompare(a, b);
   },
 
+  sha256(data, encoding) {
+    return require('../core/utils/crypto').sha256(data, encoding);
+  },
+
+  hmacSha256(data, secret, encoding) {
+    return require('../core/utils/crypto').hmacSha256(data, secret, encoding);
+  },
+
+  randomToken(byteLength, encoding) {
+    return require('../core/utils/crypto').randomToken(byteLength, encoding);
+  },
+
+  randomId(prefix, byteLength, encoding) {
+    return require('../core/utils/crypto').randomId(prefix, byteLength, encoding);
+  },
+
+  base64UrlEncode(input) {
+    return require('../core/utils/crypto').base64UrlEncode(input);
+  },
+
+  base64UrlDecode(input) {
+    return require('../core/utils/crypto').base64UrlDecode(input);
+  },
+
   escapeHtml(value) {
     return require('../core/utils/html').escapeHtml(value);
   },
@@ -2214,8 +2239,120 @@ const utils = {
     return require('../core/utils/html').unescapeHtml(value);
   },
 
+  walkDirectory(dir, options) {
+    return require('../core/utils/fs').walkDirectory(dir, options);
+  },
+
+  walkDirectoryDetailed(dir, options) {
+    return require('../core/utils/fs').walkDirectoryDetailed(dir, options);
+  },
+
   getClientIp(req, fallback) {
     return require('../core/utils/ip').getClientIp(req, fallback);
+  },
+
+  stripTrailingSlash(input, options) {
+    return require('../core/utils/url').stripTrailingSlash(input, options);
+  },
+
+  ensureLeadingSlash(input) {
+    return require('../core/utils/url').ensureLeadingSlash(input);
+  },
+
+  ensureTrailingSlash(input) {
+    return require('../core/utils/url').ensureTrailingSlash(input);
+  },
+
+  stripLeadingSlash(input) {
+    return require('../core/utils/url').stripLeadingSlash(input);
+  },
+
+  joinUrl(base, ...paths) {
+    return require('../core/utils/url').joinUrl(base, ...paths);
+  },
+
+  escapeRegExp(str) {
+    return require('../core/utils/regex').escapeRegExp(str);
+  },
+
+  escapeRegex(str) {
+    return require('../core/utils/regex').escapeRegExp(str);
+  },
+
+  globToRegExp(pattern, options) {
+    return require('../core/utils/regex').globToRegExp(pattern, options);
+  },
+
+  parseDurationSec(duration, defaultSec) {
+    return require('../core/utils/time').parseDurationSec(duration, defaultSec);
+  },
+
+  parseDuration(duration, defaultSec) {
+    return require('../core/utils/time').parseDurationSec(duration, defaultSec);
+  },
+
+  parseDurationMs(ttl, defaultMs) {
+    return require('../core/utils/time').parseDurationMs(ttl, defaultMs);
+  },
+
+  parseTtlMs(ttl, defaultMs) {
+    return require('../core/utils/time').parseDurationMs(ttl, defaultMs);
+  },
+
+  sleep(ms) {
+    return require('../core/utils/time').sleep(ms);
+  },
+
+  safeJsonParse(input, fallback, reviver) {
+    return require('../core/utils/json').safeJsonParse(input, fallback, reviver);
+  },
+
+  safeJsonStringify(value, space, fallback) {
+    return require('../core/utils/json').safeJsonStringify(value, space, fallback);
+  },
+
+  isValidJson(str) {
+    return require('../core/utils/json').isValidJson(str);
+  },
+
+  toCamelCase(str) {
+    return require('../core/utils/string').toCamelCase(str);
+  },
+
+  snakeToCamel(str) {
+    return require('../core/utils/string').snakeToCamel(str);
+  },
+
+  toSnakeCase(str) {
+    return require('../core/utils/string').toSnakeCase(str);
+  },
+
+  camelToSnake(str) {
+    return require('../core/utils/string').camelToSnake(str);
+  },
+
+  toKebabCase(str) {
+    return require('../core/utils/string').toKebabCase(str);
+  },
+
+  toPascalCase(str) {
+    return require('../core/utils/string').toPascalCase(str);
+  },
+
+  ensureArray(value) {
+    return require('../core/utils/object').ensureArray(value);
+  },
+
+  pick(obj, keys) {
+    return require('../core/utils/object').pick(obj, keys);
+  },
+
+  omit(obj, keys) {
+    return require('../core/utils/object').omit(obj, keys);
+  },
+
+  deepClone(obj) {
+    return require('../core/utils/object').deepClone(obj);
   }
 };
 

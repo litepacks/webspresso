@@ -3,6 +3,8 @@
  * @module core/orm/json-fields
  */
 
+const { safeJsonParse } = require('../utils/json');
+
 /**
  * Get JSON column names from model
  * @param {import('./types').ModelDefinition} model - Model definition
@@ -57,13 +59,7 @@ function deserializeJsonFields(record, jsonColumns) {
 
   for (const col of jsonColumns) {
     if (col in record && record[col] !== null && record[col] !== undefined) {
-      if (typeof record[col] === 'string') {
-        try {
-          record[col] = JSON.parse(record[col]);
-        } catch {
-          // If parsing fails, keep the original string value
-        }
-      }
+      record[col] = safeJsonParse(record[col], record[col]);
     }
   }
   return record;

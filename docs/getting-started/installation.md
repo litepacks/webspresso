@@ -52,7 +52,7 @@ cd my-app
 npm run dev
 ```
 
-Your application is now running at **`http://localhost:3000`**.
+Your application is now running at **`http://localhost:7331`**.
 
 ---
 

@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { defineCommand } = require('./define-command');
+const { walkDirectory } = require('../utils/fs');
 
 /**
  * Recursively find command files in directory
@@ -16,26 +17,11 @@ const { defineCommand } = require('./define-command');
  * @returns {string[]}
  */
 function findCommandFiles(dir) {
-  if (!fs.existsSync(dir)) return [];
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  const files = [];
-
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...findCommandFiles(fullPath));
-    } else if (
-      entry.isFile() &&
-      entry.name.endsWith('.js') &&
-      !entry.name.startsWith('_') &&
-      !entry.name.endsWith('.test.js') &&
-      !entry.name.endsWith('.spec.js')
-    ) {
-      files.push(fullPath);
-    }
-  }
-
-  return files;
+  return walkDirectory(dir, {
+    extensions: ['.js'],
+    ignorePrefixes: ['_', '.'],
+    ignoreTests: true,
+  });
 }
 
 /**

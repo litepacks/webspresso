@@ -4,9 +4,7 @@
  * @module plugins/webhooks/crypto
  */
 
-'use strict';
-
-const crypto = require('crypto');
+const { safeCompare, hmacSha256, randomId } = require('../../core/utils/crypto');
 
 /**
  * Generate a cryptographically secure webhook signing secret
@@ -16,11 +14,8 @@ const crypto = require('crypto');
  * @returns {string} E.g. 'whsec_e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934c'
  */
 function generateSecret(prefix = 'whsec_', byteLength = 24) {
-  const bytes = crypto.randomBytes(byteLength).toString('hex');
-  return `${prefix || ''}${bytes}`;
+  return randomId(prefix, byteLength, 'hex');
 }
-
-const { safeCompare } = require('../../core/utils/crypto');
 
 /**
  * Sign a webhook payload using HMAC-SHA256
@@ -42,12 +37,12 @@ function signPayload(payload, secret, options = {}) {
     : Math.floor(Date.now() / 1000);
 
   // 1. Direct payload HMAC-SHA256 (compatible with GitHub / standard webhooks)
-  const hex = crypto.createHmac('sha256', secret).update(payloadStr, 'utf8').digest('hex');
+  const hex = hmacSha256(payloadStr, secret, 'hex');
   const signature = `sha256=${hex}`;
 
   // 2. Timestamped HMAC-SHA256 (compatible with Stripe / Svix / Slack)
   const toSign = `${timestamp}.${payloadStr}`;
-  const timestampedHex = crypto.createHmac('sha256', secret).update(toSign, 'utf8').digest('hex');
+  const timestampedHex = hmacSha256(toSign, secret, 'hex');
   const timestampedSignature = `t=${timestamp},v1=${timestampedHex}`;
 
   return {
@@ -104,7 +99,7 @@ function verifySignature(payload, signatureHeader, secret, options = {}) {
     }
 
     const toSign = `${timestamp}.${payloadStr}`;
-    const expectedHex = crypto.createHmac('sha256', secret).update(toSign, 'utf8').digest('hex');
+    const expectedHex = hmacSha256(toSign, secret, 'hex');
 
     return signatures.some((sig) => safeCompare(sig, expectedHex));
   }
@@ -115,7 +110,7 @@ function verifySignature(payload, signatureHeader, secret, options = {}) {
     receivedHex = receivedHex.slice(7);
   }
 
-  const expectedHex = crypto.createHmac('sha256', secret).update(payloadStr, 'utf8').digest('hex');
+  const expectedHex = hmacSha256(payloadStr, secret, 'hex');
   return safeCompare(receivedHex, expectedHex);
 }
 

@@ -6,6 +6,7 @@
  */
 
 const EventEmitter = require('events');
+const { globToRegExp } = require('../utils/regex');
 
 /**
  * Convert a glob/wildcard pattern (e.g. 'order.*', 'order.**', '*') into a RegExp
@@ -21,13 +22,7 @@ function patternToRegExp(pattern) {
   const cached = patternRegexCache.get(pattern);
   if (cached !== undefined) return cached;
 
-  const escaped = pattern
-    .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape regex special chars except *
-    .replace(/\*\*/g, '___DOUBLE_STAR___')
-    .replace(/\*/g, '[^.]+')
-    .replace(/___DOUBLE_STAR___/g, '.*');
-
-  const reg = new RegExp(`^${escaped}$`);
+  const reg = globToRegExp(pattern, { separator: '.' });
   if (patternRegexCache.size < 500) {
     patternRegexCache.set(pattern, reg);
   }

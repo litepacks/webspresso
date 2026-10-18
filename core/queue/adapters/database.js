@@ -6,6 +6,7 @@
 'use strict';
 
 const { Job } = require('../job');
+const { safeJsonParse } = require('../../utils/json');
 
 class DatabaseQueueAdapter {
   /**
@@ -379,14 +380,9 @@ class DatabaseQueueAdapter {
    * @private
    */
   _rowToJob(row) {
-    let data = {};
-    try { data = JSON.parse(row.data); } catch {}
-
-    let backoff = { type: 'exponential', delay: 1000 };
-    try { if (row.backoff) backoff = JSON.parse(row.backoff); } catch {}
-
-    let result = null;
-    try { if (row.result) result = JSON.parse(row.result); } catch {}
+    const data = safeJsonParse(row.data, {});
+    const backoff = safeJsonParse(row.backoff, { type: 'exponential', delay: 1000 }) || { type: 'exponential', delay: 1000 };
+    const result = safeJsonParse(row.result, null);
 
     return new Job({
       id: row.id,

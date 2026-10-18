@@ -8,9 +8,11 @@
 
 const EventEmitter = require('events');
 const crypto = require('crypto');
+const { randomTimestampedId } = require('../../core/utils/crypto');
 const { generateSecret } = require('./crypto');
 const { matchesAnyEvent, normalizeEvents } = require('./matcher');
 const { sendWebhook } = require('./sender');
+const { safeJsonParse } = require('../../core/utils/json');
 
 /**
  * Generate a standard unique delivery identifier
@@ -20,7 +22,7 @@ function generateDeliveryId() {
   if (typeof crypto.randomUUID === 'function') {
     return `dlv_${crypto.randomUUID().replace(/-/g, '')}`;
   }
-  return `dlv_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
+  return randomTimestampedId('dlv', 8);
 }
 
 class WebhookDispatcher extends EventEmitter {
@@ -527,12 +529,7 @@ class WebhookDispatcher extends EventEmitter {
       throw new Error(`Target endpoint #${delivery.endpoint_id} no longer exists.`);
     }
 
-    let parsedPayload = delivery.payload;
-    try {
-      parsedPayload = JSON.parse(delivery.payload);
-    } catch (e) {
-      // Keep string if not json
-    }
+    const parsedPayload = safeJsonParse(delivery.payload, delivery.payload);
 
     const nextAttempt = (delivery.attempt || 1) + 1;
     return this.executeDelivery({

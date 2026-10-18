@@ -26,7 +26,7 @@ describe('SSR Helpers: createHelpers & isPath', () => {
     get: (h) => (h === 'user-agent' ? 'Mozilla/5.0' : null),
   };
   const dummyRes = {};
-  const ctx = { req: dummyReq, res: dummyRes, locale: 'en', baseUrl: 'http://localhost:3000' };
+  const ctx = { req: dummyReq, res: dummyRes, locale: 'en', baseUrl: 'http://localhost:7331' };
 
   bench('createHelpers (allocation per request)', () => {
     createHelpers(ctx);

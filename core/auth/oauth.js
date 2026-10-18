@@ -7,7 +7,7 @@
 
 const crypto = require('crypto');
 const { fetchWithTimeout } = require('../utils/fetch');
-const { safeCompare } = require('../utils/crypto');
+const { safeCompare, sha256, hmacSha256, base64UrlEncode, base64UrlDecode, randomToken } = require('../utils/crypto');
 
 /**
  * Custom error class for OAuth operations
@@ -110,11 +110,8 @@ const DEFAULT_PROVIDERS = {
  * @returns {{ codeVerifier: string, codeChallenge: string, codeChallengeMethod: 'S256' }}
  */
 function generatePKCE() {
-  const codeVerifier = crypto.randomBytes(32).toString('base64url');
-  const codeChallenge = crypto
-    .createHash('sha256')
-    .update(codeVerifier)
-    .digest('base64url');
+  const codeVerifier = randomToken(32, 'base64url');
+  const codeChallenge = sha256(codeVerifier, 'base64url');
 
   return {
     codeVerifier,
@@ -137,14 +134,11 @@ function createSignedState(payload, secret) {
   const dataWithMeta = {
     ...payload,
     timestamp: Date.now(),
-    nonce: crypto.randomBytes(16).toString('hex'),
+    nonce: randomToken(16, 'hex'),
   };
 
-  const body = Buffer.from(JSON.stringify(dataWithMeta), 'utf8').toString('base64url');
-  const signature = crypto
-    .createHmac('sha256', secret)
-    .update(body)
-    .digest('base64url');
+  const body = base64UrlEncode(JSON.stringify(dataWithMeta));
+  const signature = hmacSha256(body, secret, 'base64url');
 
   return `${body}.${signature}`;
 }
@@ -167,10 +161,7 @@ function verifySignedState(stateString, secret, maxAgeMs = 10 * 60 * 1000) {
   }
 
   const [body, signature] = parts;
-  const expectedSignature = crypto
-    .createHmac('sha256', secret)
-    .update(body)
-    .digest('base64url');
+  const expectedSignature = hmacSha256(body, secret, 'base64url');
 
   if (!safeCompare(signature, expectedSignature)) {
     throw new OAuthError('OAuth state signature verification failed', 'INVALID_STATE');
@@ -178,7 +169,7 @@ function verifySignedState(stateString, secret, maxAgeMs = 10 * 60 * 1000) {
 
   let payload;
   try {
-    const jsonStr = Buffer.from(body, 'base64url').toString('utf8');
+    const jsonStr = base64UrlDecode(body);
     payload = JSON.parse(jsonStr);
   } catch {
     throw new OAuthError('Failed to parse OAuth state payload', 'INVALID_STATE');

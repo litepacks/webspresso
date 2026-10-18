@@ -11,7 +11,7 @@ const { app } = createApp({
   },
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 7331;
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Basic SSR example listening at http://localhost:${PORT}`);

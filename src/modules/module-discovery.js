@@ -9,15 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { scanDirSafely, isPrivateOrIgnored } = require('../discovery/file-route-parser');
-
-/**
- * Converts a file path to camelCase or dot-separated identifier
- * @param {string} str
- * @returns {string}
- */
-function toCamelCase(str) {
-  return str.replace(/[-_](\w)/g, (_, c) => c.toUpperCase());
-}
+const { toCamelCase } = require('../../core/utils/string');
 
 /**
  * Discovers services, middlewares, and configuration for a module directory

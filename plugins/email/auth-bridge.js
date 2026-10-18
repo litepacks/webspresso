@@ -5,6 +5,7 @@
 
 const { createKnexAuthTokensAdapter } = require('../../core/auth/tokens');
 const { registerBundledAuthTemplates } = require('./bundled-templates');
+const { stripTrailingSlash } = require('../../core/utils/url');
 
 const DEFAULT_AUTH_EMAILS = {
   passwordReset: {
@@ -62,7 +63,7 @@ function wireAuthEmails(authManager, emailService, registry, config, db) {
     authManager.authTokens = createKnexAuthTokensAdapter(db);
   }
 
-  const baseUrl = (merged.baseUrl || process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const baseUrl = stripTrailingSlash(merged.baseUrl || process.env.BASE_URL || 'http://localhost:7331');
   const identifierField = authManager.identifierField || 'email';
 
   function userDisplayName(user) {
@@ -153,7 +154,7 @@ function registerAuthEmailRoutes(options) {
   const guest = ctx.middlewares?.guest;
   const authMw = ctx.middlewares?.auth;
 
-  const base = (authEmailsConfig.baseUrl || process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const base = stripTrailingSlash(authEmailsConfig.baseUrl || process.env.BASE_URL || 'http://localhost:7331');
 
   async function forgotPasswordHandler(req, res) {
     try {

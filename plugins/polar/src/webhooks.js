@@ -1,7 +1,6 @@
 'use strict';
 
-const crypto = require('crypto');
-const { safeCompare } = require('../../../core/utils/crypto');
+const { safeCompare, hmacSha256 } = require('../../../core/utils/crypto');
 const { syncPolarBillingForUser, applyPolarProSubscription } = require('./sync');
 const {
   collectPolarMetadata,
@@ -38,10 +37,10 @@ function verifyPolarWebhook(rawPayload, headers, secret) {
     ? Buffer.from(secret.slice(6), 'base64')
     : secret;
 
-  const expectedBase64 = crypto.createHmac('sha256', cleanSecret).update(standardToSign).digest('base64');
-  const expectedHex = crypto.createHmac('sha256', cleanSecret).update(standardToSign).digest('hex');
-  const rawExpectedBase64 = crypto.createHmac('sha256', cleanSecret).update(payloadStr).digest('base64');
-  const rawExpectedHex = crypto.createHmac('sha256', cleanSecret).update(payloadStr).digest('hex');
+  const expectedBase64 = hmacSha256(standardToSign, cleanSecret, 'base64');
+  const expectedHex = hmacSha256(standardToSign, cleanSecret, 'hex');
+  const rawExpectedBase64 = hmacSha256(payloadStr, cleanSecret, 'base64');
+  const rawExpectedHex = hmacSha256(payloadStr, cleanSecret, 'hex');
 
   const expectedList = [expectedBase64, expectedHex, rawExpectedBase64, rawExpectedHex];
 

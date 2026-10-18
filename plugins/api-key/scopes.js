@@ -5,6 +5,8 @@
 
 'use strict';
 
+const { safeJsonParse } = require('../../core/utils/json');
+
 /**
  * Normalize scopes input into an array of string tokens
  * 
@@ -25,13 +27,9 @@ function normalizeScopes(scopes) {
   if (typeof scopes === 'string') {
     const trimmed = scopes.trim();
     if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) {
-          return parsed.map((s) => String(s).trim()).filter(Boolean);
-        }
-      } catch (_) {
-        // Fallback to comma-separated parsing
+      const parsed = safeJsonParse(trimmed, null);
+      if (Array.isArray(parsed)) {
+        return parsed.map((s) => String(s).trim()).filter(Boolean);
       }
     }
     return trimmed

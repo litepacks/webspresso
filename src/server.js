@@ -50,6 +50,7 @@ const {
   toErrorResponseObject,
   preferJsonErrorResponse,
 } = require('../core/errors');
+const { escapeRegExp } = require('../core/utils/regex');
 
 // Async storage for tracking template render call stacks (circular extends guard)
 const renderStackStorage = new AsyncLocalStorage();
@@ -926,7 +927,7 @@ function createApp(options = {}) {
         regexStr += '(.*)';
         hasWildcard = true;
       } else {
-        regexStr += part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        regexStr += escapeRegExp(part);
       }
     }
 
@@ -1637,7 +1638,7 @@ function createApp(options = {}) {
 
   // Helper to create error page context with fsy
   function createErrorContext(req, extraData = {}) {
-    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 7331}`;
     const locale = detectLocale(req);
     
     // Create fsy helpers

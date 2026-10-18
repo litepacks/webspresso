@@ -15,7 +15,8 @@ const NOOP = () => {};
 const EMPTY_OBJECT = Object.freeze({});
 const ignoreRegexCache = new Map();
 
-const { safeCompare } = require('../../core/utils/crypto');
+const { safeCompare, randomToken } = require('../../core/utils/crypto');
+const { globToRegExp } = require('../../core/utils/regex');
 
 /**
  * Check if the request path matches any ignore patterns
@@ -35,12 +36,7 @@ function isIgnored(req, ignorePaths) {
       if (pattern.includes('*')) {
         let regex = ignoreRegexCache.get(pattern);
         if (regex === undefined) {
-          const regexPattern = pattern
-            .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-            .replace(/\*\*/g, '___GLOB_STAR_STAR___')
-            .replace(/\*/g, '[^/]*')
-            .replace(/___GLOB_STAR_STAR___/g, '.*');
-          regex = new RegExp(`^${regexPattern}$`);
+          regex = globToRegExp(pattern, { separator: '/' });
           if (ignoreRegexCache.size < 500) {
             ignoreRegexCache.set(pattern, regex);
           }
@@ -149,7 +145,7 @@ function csrfPlugin(options = {}) {
       if (useCookie) {
         csrfTokenValue = cookieOptions.signed ? req.signedCookies[cookieKey] : req.cookies[cookieKey];
         if (!csrfTokenValue) {
-          csrfTokenValue = crypto.randomBytes(32).toString('hex');
+          csrfTokenValue = randomToken(32, 'hex');
           const isHttps = req.secure || req.headers?.['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true';
           const effectiveCookieOptions = {
             httpOnly: true,
@@ -162,7 +158,7 @@ function csrfPlugin(options = {}) {
       } else {
         // Session based
         if (!req.session[sessionKey]) {
-          req.session[sessionKey] = crypto.randomBytes(32).toString('hex');
+          req.session[sessionKey] = randomToken(32, 'hex');
         }
         csrfTokenValue = req.session[sessionKey];
       }

@@ -6,6 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { walkDirectory } = require('../utils/fs');
 
 /**
  * Define a typed event listener
@@ -45,29 +46,6 @@ function filePathToEventName(relPath) {
 }
 
 /**
- * Recursively find all .js / .cjs files in a directory
- * @param {string} dir
- * @returns {string[]}
- */
-function walkDirectory(dir) {
-  const files = [];
-  if (!fs.existsSync(dir)) return files;
-
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...walkDirectory(fullPath));
-    } else if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.cjs'))) {
-      if (!entry.name.startsWith('_') && !entry.name.endsWith('.test.js')) {
-        files.push(fullPath);
-      }
-    }
-  }
-  return files;
-}
-
-/**
  * Load and register listeners from a directory into an EventDispatcher
  * @param {string} dirPath - Absolute or relative directory path
  * @param {import('./dispatcher').EventDispatcher} dispatcher
@@ -84,7 +62,11 @@ function loadListeners(dirPath, dispatcher, options = {}) {
     return [];
   }
 
-  const filePaths = walkDirectory(resolvedDir);
+  const filePaths = walkDirectory(resolvedDir, {
+    extensions: ['.js', '.cjs'],
+    ignorePrefixes: ['_', '.'],
+    ignoreTests: true,
+  });
   const loaded = [];
 
   for (const filePath of filePaths) {

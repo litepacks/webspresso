@@ -15,6 +15,7 @@ const {
   consumeAuthToken,
   hash: hashPassword,
 } = require('./tokens');
+const { stripTrailingSlash, ensureLeadingSlash } = require('../utils/url');
 
 /**
  * Authentication error
@@ -959,12 +960,9 @@ class AuthManager extends EventEmitter {
       tokenTtlMs
     );
 
-    let baseUrl = String(options.baseUrl || this.config.baseUrl || process.env.BASE_URL || 'http://localhost:3000');
-    while (baseUrl.endsWith('/')) {
-      baseUrl = baseUrl.slice(0, -1);
-    }
+    const baseUrl = stripTrailingSlash(options.baseUrl || this.config.baseUrl || process.env.BASE_URL || 'http://localhost:7331');
     const pathSegment = options.path || '/auth/magic-link/verify';
-    const cleanPath = pathSegment.startsWith('/') ? pathSegment : `/${pathSegment}`;
+    const cleanPath = ensureLeadingSlash(pathSegment);
     const sep = cleanPath.includes('?') ? '&' : '?';
 
     const hasCustomUrl = typeof options.buildMagicLinkUrl === 'function' || Boolean(options.path) || Boolean(options.baseUrl);
