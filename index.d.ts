@@ -216,6 +216,8 @@ export interface ServiceContext {
     invalidate?: (name: string, input?: unknown, ctx?: unknown) => boolean;
     clearCache?: (name?: string) => boolean;
   };
+  breaker?: (name: string, options?: CircuitBreakerOptions) => CircuitBreaker;
+  retry?: typeof retry;
   [key: string]: unknown;
 }
 
@@ -239,6 +241,8 @@ export interface ServiceDefinition<TInput = unknown, TOutput = unknown> {
       };
   timeout?: number | string;
   transaction?: boolean;
+  circuitBreaker?: boolean | string | CircuitBreakerOptions | CircuitBreaker;
+  retry?: boolean | number | RetryOptions;
   [key: string]: unknown;
 }
 
@@ -447,6 +451,8 @@ export interface WebspressoApplication extends Application {
   readonly isShuttingDown: boolean;
   shutdownManager: ShutdownManager;
   serviceRegistry: ServiceRegistry;
+  breakers?: CircuitBreakerRegistry;
+  getBreaker?(name: string, options?: CircuitBreakerOptions): CircuitBreaker;
   onShutdown(fn: () => Promise<void> | void): this;
   close(reason?: string): Promise<void>;
   enableShutdownHooks(): this;
@@ -515,6 +521,16 @@ export class RequestTimeoutError extends HttpError { constructor(message?: strin
 export class TooManyRequestsError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
 export class ServiceUnavailableError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
 export class GatewayTimeoutError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
+export class CircuitBreakerOpenError extends ServiceUnavailableError {
+  breakerName: string;
+  resetTimeoutMs: number;
+  constructor(breakerName?: string, resetTimeoutMs?: number, options?: ErrorOptions);
+}
+export class CircuitBreakerTimeoutError extends GatewayTimeoutError {
+  breakerName: string;
+  timeoutMs: number;
+  constructor(breakerName?: string, timeoutMs?: number, options?: ErrorOptions);
+}
 
 export class ValidationError extends HttpError {
   fields: Record<string, string[] | string>;
@@ -745,6 +761,129 @@ export function approximateByteSize(value: unknown): number;
 
 export namespace cache {
   export { LruCache, TaggedLruCache, createLruCache, createTaggedLruCache, approximateByteSize };
+}
+
+// --- Enterprise Resilience & Fault Tolerance (Circuit Breaker & Retry Engine) ---
+
+export interface CircuitBreakerOptions {
+  name?: string;
+  failureThreshold?: number;
+  failureRateThreshold?: number;
+  minimumRequests?: number;
+  rollingWindow?: number | string;
+  rollingWindowMs?: number | string;
+  successThreshold?: number;
+  resetTimeout?: number | string;
+  resetTimeoutMs?: number | string;
+  timeout?: number | string;
+  timeoutMs?: number | string;
+  fallback?: (err: Error, ...args: any[]) => any;
+  isFailure?: (err: Error) => boolean;
+  onStateChange?: (from: string, to: string, breaker: CircuitBreaker) => void;
+}
+
+export interface CircuitBreakerStats {
+  name: string;
+  state: 'CLOSED' | 'OPEN' | 'HALF_OPEN';
+  totalCalls: number;
+  successfulCalls: number;
+  failedCalls: number;
+  rejectedCalls: number;
+  timedOutCalls: number;
+  fallbackCalls: number;
+  consecutiveFailures: number;
+  consecutiveSuccesses: number;
+  failureRate: number;
+  lastFailureTime: number | null;
+  lastSuccessTime: number | null;
+  lastStateChange: number;
+}
+
+export class CircuitBreaker extends import('events').EventEmitter {
+  readonly name: string;
+  readonly failureThreshold: number;
+  readonly failureRateThreshold: number | null;
+  readonly minimumRequests: number;
+  readonly rollingWindowMs: number;
+  readonly successThreshold: number;
+  readonly resetTimeoutMs: number;
+  readonly timeoutMs: number;
+  readonly fallback: ((err: Error, ...args: any[]) => any) | null;
+  readonly isFailure: (err: Error) => boolean;
+
+  state: 'CLOSED' | 'OPEN' | 'HALF_OPEN';
+  consecutiveFailures: number;
+  consecutiveSuccesses: number;
+  lastStateChange: number;
+  lastFailureTime: number | null;
+  lastSuccessTime: number | null;
+
+  static readonly STATE_CLOSED: 'CLOSED';
+  static readonly STATE_OPEN: 'OPEN';
+  static readonly STATE_HALF_OPEN: 'HALF_OPEN';
+
+  readonly isClosed: boolean;
+  readonly isOpen: boolean;
+  readonly isHalfOpen: boolean;
+
+  constructor(options?: CircuitBreakerOptions);
+
+  execute<T = any>(fn: (...args: any[]) => Promise<T> | T, ...args: any[]): Promise<T>;
+  wrap<T = any>(fn: (...args: any[]) => Promise<T> | T): (...args: any[]) => Promise<T>;
+  open(): this;
+  close(): this;
+  halfOpen(): this;
+  reset(): this;
+  getFailureRate(): number;
+  getStats(): CircuitBreakerStats;
+}
+
+export function createCircuitBreaker(options?: CircuitBreakerOptions): CircuitBreaker;
+
+export interface RetryOptions {
+  retries?: number;
+  delay?: number | string;
+  minTimeout?: number | string;
+  maxTimeout?: number | string;
+  factor?: number;
+  jitter?: boolean;
+  shouldRetry?: (error: Error, attempt: number) => boolean;
+  onRetry?: (info: { attempt: number; error: Error; delayMs: number }) => void;
+  signal?: AbortSignal;
+}
+
+export function retry<T = any>(asyncFn: (attempt: number) => Promise<T>, options?: RetryOptions): Promise<T>;
+export function withRetry<T = any>(asyncFn: (...args: any[]) => Promise<T>, options?: RetryOptions): (...args: any[]) => Promise<T>;
+export function isTransientError(error: unknown): boolean;
+export function calculateBackoffDelay(attempt: number, minTimeoutMs: number, maxTimeoutMs: number, factor: number, jitter: boolean): number;
+
+export class CircuitBreakerRegistry {
+  readonly breakers: Map<string, CircuitBreaker>;
+  getBreaker(name: string, options?: CircuitBreakerOptions): CircuitBreaker;
+  hasBreaker(name: string): boolean;
+  getAllBreakers(): CircuitBreaker[];
+  getStats(): Record<string, CircuitBreakerStats>;
+  resetAll(): void;
+  clear(): void;
+}
+
+export const circuitBreakerRegistry: CircuitBreakerRegistry;
+export function getBreaker(name: string, options?: CircuitBreakerOptions): CircuitBreaker;
+
+export namespace resilience {
+  export {
+    CircuitBreaker,
+    createCircuitBreaker,
+    retry,
+    withRetry,
+    isTransientError,
+    calculateBackoffDelay,
+    CircuitBreakerRegistry,
+    circuitBreakerRegistry,
+    getBreaker,
+    CircuitBreakerOpenError,
+    CircuitBreakerTimeoutError,
+  };
 }
 
 export function resolveClientRuntime(options?: {

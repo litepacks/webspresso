@@ -109,6 +109,8 @@ class ServiceRegistry {
         cache: definition.cache,
         timeout: definition.timeout,
         transaction: definition.transaction,
+        circuitBreaker: definition.circuitBreaker,
+        retry: definition.retry,
       };
 
       this.services.set(name, serviceDef);
@@ -166,6 +168,8 @@ class ServiceRegistry {
       cache: def.cache,
       timeout: def.timeout,
       transaction: def.transaction,
+      circuitBreaker: def.circuitBreaker,
+      retry: def.retry,
     };
 
     this.services.set(name, serviceDef);

@@ -18,6 +18,7 @@ When tasked with a feature or bugfix, **immediately consult the corresponding to
 | **Authentication (Session / JWT / Guard)** | [`.agents/AUTH.md`](.agents/AUTH.md) | `core/auth/` |
 | **Background Jobs & Worker Queue** | [`.agents/QUEUE.md`](.agents/QUEUE.md) | `jobs/` |
 | **Decoupled Events & Signals** | [`.agents/EVENTS.md`](.agents/EVENTS.md) | `core/events/`, `listeners/` |
+| **Fault Tolerance / Circuit Breaker / Retry** | [`.agents/RESILIENCE.md`](.agents/RESILIENCE.md) | `core/resilience/` |
 | **API Signatures & Types Verification** | [`index.d.ts`](index.d.ts) | **Canonical Ground Truth** |
 
 ---
@@ -61,6 +62,7 @@ Every coding agent working on Webspresso **MUST** follow this 4-step execution d
 - **Configurable Payload Size Limits & DoS Protection**: Zero-dependency body limit enforcement configured via `createApp({ limits: { json: '1mb', urlencoded: '1mb', raw: false, text: false, parameterLimit: 1000, captureRawBody: false } })` or shorthand `limits: '5mb'`, with automatic HTTP 413 `PayloadTooLargeError` and HTTP 400 `BadRequestError` mapping, route overrides (`limits.routes`), streaming bypass (`limits.exclude`), and raw body capture on `req.rawBody` for webhook signatures.
 - **Native Cloud & Kubernetes Health & Readiness Probes**: Zero-dependency RFC-compliant liveness (`/healthz`), readiness (`/readyz`), and combined diagnostic (`/health`) endpoints configured via `createApp({ healthCheck: true })`. Includes non-blocking event loop lag monitoring (`perf_hooks.monitorEventLoopDelay`), database/queue connectivity tests, and automatic HTTP 503 draining integration with `ShutdownManager` when pods enter graceful termination.
 - **High-Performance In-Memory LRU & Tagged Cache Engine**: Zero-dependency memory-bounded caching (`core/cache`) configured via `createApp({ cache: { maxEntries: 1000, maxMemoryMb: 50, defaultTtl: '15m' } })` or shorthand `cache: true|false`. Provides O(1) LRU eviction, byte budget constraints preventing OOM, leak-free tag invalidation (`TaggedLruCache`), stampede protection (`getOrSet`), and powers ORM query caching and Zod schema caching.
+- **Enterprise Resilience & Fault Tolerance (Circuit Breaker & Retry Engine)**: Zero-dependency resilience system (`core/resilience`) featuring a three-state `CircuitBreaker` (`CLOSED`, `OPEN`, `HALF_OPEN`), rolling window failure rate tracking, per-call execution timeouts, graceful fallbacks, and an exponential backoff retry engine (`retry`, `withRetry`) with randomized jitter and transient error detection (`ECONNRESET`, 429, 5xx). Seamlessly integrated into the Services Layer (`defineService({ circuitBreaker, retry })`) and exposed via `app.breakers`, `app.getBreaker()`, `req.breaker()`, and `req.retry()`.
 - **Custom Error & 404 Pages**: Configured via `createApp({ errorPages: { notFound, serverError, timeout } })`. Supports template paths (e.g. `notFound: '404.njk'`) or custom handler functions, passing `{ fsy, locale, isDev, url, method }` to templates.
 - **Cold Start & High-Performance Optimizations**:
   - Unified single-pass route scanner (`discoverAppRoutes`).

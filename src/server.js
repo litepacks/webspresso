@@ -36,6 +36,12 @@ const { discoverModuleDetails } = require('./modules/module-discovery');
 const { ShutdownManager, NodeHttpAdapter } = require('../core/shutdown');
 const { createCompressionMiddleware } = require('../core/compression');
 const { createEarlyHintsMiddleware } = require('../core/early-hints');
+const {
+  circuitBreakerRegistry,
+  getBreaker,
+  retry,
+  withRetry,
+} = require('../core/resilience');
 const { createFlashMiddleware } = require('../core/forms/flash');
 const { createBouncerMiddleware } = require('../core/auth/bouncer');
 const {
@@ -753,6 +759,8 @@ function createApp(options = {}) {
   app.pluginManager = pluginManager;
   app.events = eventDispatcher;
   app.cache = appCache;
+  app.breakers = circuitBreakerRegistry;
+  app.getBreaker = (name, opts) => circuitBreakerRegistry.getBreaker(name, opts);
   if (options.queue) {
     app.queue = options.queue;
   }
@@ -793,6 +801,9 @@ function createApp(options = {}) {
     }
     req.events = eventDispatcher;
     req.cache = appCache;
+    req.breakers = circuitBreakerRegistry;
+    req.breaker = (name, opts) => circuitBreakerRegistry.getBreaker(name, opts);
+    req.retry = retry;
     req.context = {
       req,
       res,
@@ -800,6 +811,10 @@ function createApp(options = {}) {
       queue: options.queue ?? null,
       events: eventDispatcher,
       cache: appCache,
+      breakers: circuitBreakerRegistry,
+      getBreaker: (name, opts) => circuitBreakerRegistry.getBreaker(name, opts),
+      breaker: (name, opts) => circuitBreakerRegistry.getBreaker(name, opts),
+      retry,
       app,
       serviceRegistry,
       ...(req.context || {}),

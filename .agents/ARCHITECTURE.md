@@ -67,6 +67,13 @@
   - **Bidirectional Tag Invalidation (`TaggedLruCache`)**: Supports model and query tagging (`invalidateTag`, `invalidateTags`). When items are evicted via LRU, all associated tag sets are automatically and symmetrically cleaned up, eliminating dangling Set memory leaks.
   - **Stampede / Thundering Herd Protection**: `getOrSet(key, asyncFactory, options)` deduplicates concurrent in-flight requests for cold keys so expensive factories execute only once.
   - **Framework Integration**: Directly powers `core/orm/cache/memory-provider.js` (ORM query caching) and `core/schema-cache.js` (Zod schema cache), and is automatically exposed on `req.cache`, `req.context.cache`, and `app.cache`.
+- **Enterprise Resilience, Circuit Breaker & Retry Engine (`core/resilience`)**:
+  - Zero-dependency fault tolerance and cascading failure prevention system built natively on `events` and `perf_hooks`.
+  - **Three-State Circuit Breaker (`CircuitBreaker`)**: Standard `CLOSED`, `OPEN`, and `HALF_OPEN` states. Trips to `OPEN` when consecutive failures reach `failureThreshold` or failure rate percentage exceeds `failureRateThreshold` in a rolling sample window (`rollingWindow`).
+  - **Fail-Fast & Graceful Fallbacks**: Fast-fails calls with `CircuitBreakerOpenError` (HTTP 503) without executing downstream code when open, or seamlessly executes fallback handlers (`fallback: (err, ...args) => ...`).
+  - **Trial Recovery Probing**: Automatically transitions to `HALF_OPEN` after `resetTimeout` and tests downstream health using trial probes (`successThreshold`).
+  - **Exponential Backoff Retry with Full Jitter (`retry`, `withRetry`)**: Automatically retries transient network errors (`ECONNRESET`, `ETIMEDOUT`, 429 Too Many Requests, and 5xx errors) with randomized full jitter to prevent thundering herd spikes while avoiding retrying 4xx client errors.
+  - **Services Layer Integration**: Declarative `defineService({ circuitBreaker, retry })` seamlessly wraps service execution. Also accessible on `app.breakers`, `app.getBreaker()`, `req.breaker()`, `req.retry()`, `ctx.breaker()`, and `ctx.retry()`.
 - **Custom Error & 404 Pages (`errorPages`)**:
   - Configured via `createApp({ errorPages: { notFound, serverError, timeout } })`.
   - **404 Not Found (`notFound`)**: Template path (`'404.njk'`) or handler `(req, res, ctx) => ...`.

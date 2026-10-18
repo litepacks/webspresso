@@ -30,6 +30,8 @@ const {
   RouterError,
   RouteNotFoundError,
   RouteGenerationError,
+  CircuitBreakerOpenError,
+  CircuitBreakerTimeoutError,
 } = require('./domain');
 const {
   getStatusTitle,
@@ -72,6 +74,8 @@ module.exports = {
   RouterError,
   RouteNotFoundError,
   RouteGenerationError,
+  CircuitBreakerOpenError,
+  CircuitBreakerTimeoutError,
 
   // Utilities & Middleware
   getStatusTitle,

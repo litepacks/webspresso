@@ -18,6 +18,11 @@ const {
   hasAmbientTransaction,
 } = require('../../core/orm/transaction');
 const { ensureArray } = require('../../core/utils/object');
+const {
+  CircuitBreaker,
+  circuitBreakerRegistry,
+  retry,
+} = require('../../core/resilience');
 
 const SERVICE_CALL_STACK_SYMBOL = Symbol.for('webspresso.service.call_stack');
 
@@ -186,6 +191,9 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
     registry.invalidate(subName, subInput, subCtx || executionContext);
   executionContext.service.clearCache = (subName) =>
     registry.clearCache(subName);
+  executionContext.breaker = (bName, bOpts) =>
+    circuitBreakerRegistry.getBreaker(bName, bOpts);
+  executionContext.retry = retry;
 
   // Validate input
   const validatedInput = await validateServiceInput(serviceDef.schema, input, name);
@@ -197,6 +205,48 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
   const timeoutMs = (timeoutConfig !== undefined && timeoutConfig !== null && timeoutConfig !== false)
     ? parseTtlMs(timeoutConfig)
     : null;
+
+  // Resolve circuit breaker configuration
+  let breaker = null;
+  const cbConfig = options.skipCircuitBreaker === true
+    ? null
+    : (options.circuitBreaker !== undefined ? options.circuitBreaker : serviceDef.circuitBreaker);
+
+  if (cbConfig) {
+    if (cbConfig instanceof CircuitBreaker) {
+      breaker = cbConfig;
+    } else if (typeof cbConfig === 'string') {
+      breaker = circuitBreakerRegistry.getBreaker(cbConfig);
+    } else if (typeof cbConfig === 'object' && cbConfig !== null) {
+      const breakerName = cbConfig.name || name;
+      breaker = circuitBreakerRegistry.getBreaker(breakerName, cbConfig);
+    } else if (cbConfig === true) {
+      breaker = circuitBreakerRegistry.getBreaker(name);
+    }
+  }
+
+  // Resolve retry configuration
+  const retryConfig = options.skipRetry === true
+    ? null
+    : (options.retry !== undefined ? options.retry : serviceDef.retry);
+
+  const runWithRetry = async (fn) => {
+    if (!retryConfig) {
+      return await fn();
+    }
+    const retryOpts = typeof retryConfig === 'number'
+      ? { retries: retryConfig }
+      : (typeof retryConfig === 'object' && retryConfig !== null ? retryConfig : { retries: 3 });
+
+    return await retry((attempt) => fn(attempt), retryOpts);
+  };
+
+  const runWithBreaker = async (fn) => {
+    if (!breaker) {
+      return await fn(validatedInput, executionContext);
+    }
+    return await breaker.execute(fn, validatedInput, executionContext);
+  };
 
   // Helper to execute handler with optional database transaction
   const executeHandler = async (activeCtx) => {
@@ -230,6 +280,9 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
             registry.invalidate(subName, subInput, subCtx || txCtx);
           txCtx.service.clearCache = (subName) =>
             registry.clearCache(subName);
+          txCtx.breaker = (bName, bOpts) =>
+            circuitBreakerRegistry.getBreaker(bName, bOpts);
+          txCtx.retry = retry;
           return await serviceDef.handler(validatedInput, txCtx);
         });
       });
@@ -239,36 +292,36 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
   };
 
   try {
-    let result;
+    const invokeOperation = () => {
+      if (timeoutMs && timeoutMs > 0) {
+        let timerId;
+        const timeoutPromise = new Promise((_, reject) => {
+          timerId = setTimeout(() => {
+            const timeoutErr = new WebspressoError(`Service '${name}' timed out after ${timeoutMs}ms`);
+            timeoutErr.code = 'SERVICE_TIMEOUT';
+            timeoutErr.statusCode = 504;
+            timeoutErr.service = name;
+            reject(timeoutErr);
+          }, timeoutMs);
+          if (timerId && typeof timerId.unref === 'function') {
+            timerId.unref();
+          }
+        });
 
-    if (timeoutMs && timeoutMs > 0) {
-      let timerId;
-      const timeoutPromise = new Promise((_, reject) => {
-        timerId = setTimeout(() => {
-          const timeoutErr = new WebspressoError(`Service '${name}' timed out after ${timeoutMs}ms`);
-          timeoutErr.code = 'SERVICE_TIMEOUT';
-          timeoutErr.statusCode = 504;
-          timeoutErr.service = name;
-          reject(timeoutErr);
-        }, timeoutMs);
-        if (timerId && typeof timerId.unref === 'function') {
-          timerId.unref();
-        }
-      });
-
-      try {
-        result = await Promise.race([
+        return Promise.race([
           executeHandler(executionContext),
           timeoutPromise,
-        ]);
-      } finally {
-        if (timerId) {
-          clearTimeout(timerId);
-        }
+        ]).finally(() => {
+          if (timerId) {
+            clearTimeout(timerId);
+          }
+        });
       }
-    } else {
-      result = await executeHandler(executionContext);
-    }
+
+      return executeHandler(executionContext);
+    };
+
+    const result = await runWithBreaker(() => runWithRetry(invokeOperation));
 
     const duration = Date.now() - startTime;
     if (logger && typeof logger.debug === 'function') {

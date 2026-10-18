@@ -18,6 +18,7 @@ When tasked with a feature or bugfix, **immediately consult the corresponding to
 | **Authentication (Session / JWT / Guard)** | [`.agents/AUTH.md`](AUTH.md) | `core/auth/` |
 | **Background Jobs & Worker Queue** | [`.agents/QUEUE.md`](QUEUE.md) | `jobs/` |
 | **Decoupled Events & Signals** | [`.agents/EVENTS.md`](EVENTS.md) | `core/events/`, `listeners/` |
+| **Fault Tolerance / Circuit Breaker / Retry** | [`.agents/RESILIENCE.md`](RESILIENCE.md) | `core/resilience/` |
 | **API Signatures & Types Verification** | [`index.d.ts`](../index.d.ts) | **Canonical Ground Truth** |
 
 ---
@@ -60,6 +61,7 @@ This `.agents/` customization root is organized into modular topic guides:
 21. **[Payload Limits & DoS Protection](.agents/LIMITS.md)** — Zero-dependency request body limits and DoS protection (`core/limits`), `createApp({ limits })`, automatic `PayloadTooLargeError` (HTTP 413) mapping, route overrides (`limits.routes`), streaming bypass, and native HMAC webhook `req.rawBody` capture.
 22. **[Cloud & Kubernetes Health Probes](.agents/HEALTH.md)** — Zero-dependency RFC-compliant liveness (`/healthz`), readiness (`/readyz`), and combined diagnostic (`/health`) probes (`core/health`), event loop lag telemetry, database/queue health monitors, automatic HTTP 503 draining on graceful shutdown, and `createApp({ healthCheck: true })`.
 23. **[LRU & Tagged Cache Engine](.agents/CACHE.md)** — Zero-dependency, memory-bounded in-memory LRU cache (`core/cache`), byte budget constraints (`maxBytes` / `maxMemoryMb`), TTL expiration, stampede protection (`getOrSet`), leak-free tag invalidation (`TaggedLruCache`), ORM query cache provider, and `createApp({ cache })`.
+24. **[Enterprise Resilience & Circuit Breaker](.agents/RESILIENCE.md)** — Zero-dependency fault tolerance engine (`core/resilience`), three-state `CircuitBreaker` (`CLOSED`, `OPEN`, `HALF_OPEN`), rolling window failure rate, per-call execution timeout, fallback handlers, and exponential backoff retry engine (`retry`, `withRetry`) with randomized jitter and transient error detection.
 
 ---
 

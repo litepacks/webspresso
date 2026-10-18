@@ -30,6 +30,7 @@ const earlyHints = require('./core/early-hints');
 const limits = require('./core/limits');
 const health = require('./core/health');
 const cache = require('./core/cache');
+const resilience = require('./core/resilience');
 const errors = require('./core/errors');
 const { 
   mountPages, 
@@ -157,6 +158,23 @@ module.exports = {
   createTaggedLruCache: cache.createTaggedLruCache,
   approximateByteSize: cache.approximateByteSize,
 
+  // Enterprise Resilience & Fault Tolerance (Circuit Breaker & Retry Engine)
+  resilience,
+  CircuitBreaker: resilience.CircuitBreaker,
+  createCircuitBreaker: resilience.createCircuitBreaker,
+  STATE_CLOSED: resilience.STATE_CLOSED,
+  STATE_OPEN: resilience.STATE_OPEN,
+  STATE_HALF_OPEN: resilience.STATE_HALF_OPEN,
+  retry: resilience.retry,
+  withRetry: resilience.withRetry,
+  isTransientError: resilience.isTransientError,
+  calculateBackoffDelay: resilience.calculateBackoffDelay,
+  CircuitBreakerRegistry: resilience.CircuitBreakerRegistry,
+  circuitBreakerRegistry: resilience.circuitBreakerRegistry,
+  getBreaker: resilience.getBreaker,
+  CircuitBreakerOpenError: resilience.CircuitBreakerOpenError,
+  CircuitBreakerTimeoutError: resilience.CircuitBreakerTimeoutError,
+
   // Exceptions & Error Handling
   errors,
   WebspressoError: errors.WebspressoError,
@@ -174,6 +192,8 @@ module.exports = {
   TooManyRequestsError: errors.TooManyRequestsError,
   ServiceUnavailableError: errors.ServiceUnavailableError,
   GatewayTimeoutError: errors.GatewayTimeoutError,
+  CircuitBreakerOpenError: errors.CircuitBreakerOpenError,
+  CircuitBreakerTimeoutError: errors.CircuitBreakerTimeoutError,
   ValidationError: errors.ValidationError,
   ConfigurationError: errors.ConfigurationError,
   PluginError: errors.PluginError,

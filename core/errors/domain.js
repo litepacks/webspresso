@@ -180,6 +180,51 @@ class RouteGenerationError extends RouterError {
   }
 }
 
+/**
+ * Circuit Breaker Open Error
+ * Thrown when an invocation is rejected because the circuit is in the OPEN state.
+ * Maps to HTTP 503 Service Unavailable.
+ */
+class CircuitBreakerOpenError extends HttpError {
+  /**
+   * @param {string} [breakerName='default']
+   * @param {number} [resetTimeoutMs=0]
+   * @param {Object} [options]
+   */
+  constructor(breakerName = 'default', resetTimeoutMs = 0, options = {}) {
+    super(503, `Circuit breaker '${breakerName}' is OPEN and failing fast`, {
+      code: 'CIRCUIT_BREAKER_OPEN',
+      expose: true,
+      ...options,
+    });
+    this.breakerName = breakerName;
+    this.resetTimeoutMs = resetTimeoutMs;
+    this.state = 'OPEN';
+  }
+}
+
+/**
+ * Circuit Breaker Timeout Error
+ * Thrown when execution inside a circuit breaker exceeds timeout.
+ * Maps to HTTP 504 Gateway Timeout.
+ */
+class CircuitBreakerTimeoutError extends HttpError {
+  /**
+   * @param {string} [breakerName='default']
+   * @param {number} [timeoutMs=0]
+   * @param {Object} [options]
+   */
+  constructor(breakerName = 'default', timeoutMs = 0, options = {}) {
+    super(504, `Execution in circuit breaker '${breakerName}' timed out after ${timeoutMs}ms`, {
+      code: 'CIRCUIT_BREAKER_TIMEOUT',
+      expose: true,
+      ...options,
+    });
+    this.breakerName = breakerName;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
 module.exports = {
   ValidationError,
   ConfigurationError,
@@ -190,4 +235,7 @@ module.exports = {
   RouterError,
   RouteNotFoundError,
   RouteGenerationError,
+  CircuitBreakerOpenError,
+  CircuitBreakerTimeoutError,
 };
+

@@ -3,7 +3,9 @@
  * @module src/app-context
  */
 
-/** @type {{ db: object|null, shutdownManager: object|null, serviceRegistry: object|null, events: object|null, mailer: object|null, cache: object|null }} */
+const { circuitBreakerRegistry, retry } = require('../core/resilience');
+
+/** @type {{ db: object|null, shutdownManager: object|null, serviceRegistry: object|null, events: object|null, mailer: object|null, cache: object|null, breakers: object|null }} */
 let context = {
   db: null,
   shutdownManager: null,
@@ -11,6 +13,7 @@ let context = {
   events: null,
   mailer: null,
   cache: null,
+  breakers: circuitBreakerRegistry,
 };
 
 /**
@@ -150,9 +153,22 @@ function attachDbMiddleware(req, res, next) {
   if (context.cache != null) {
     req.cache = context.cache;
   }
+  req.breakers = context.breakers || circuitBreakerRegistry;
+  req.breaker = (name, opts) => (context.breakers || circuitBreakerRegistry).getBreaker(name, opts);
+  req.retry = retry;
   if (context.serviceRegistry != null) {
     req.service = (name, input, opts) =>
-      context.serviceRegistry.call(name, input, req.context || { req, res, db: context.db, events: context.events, mailer: context.mailer, cache: context.cache }, opts);
+      context.serviceRegistry.call(name, input, req.context || {
+        req,
+        res,
+        db: context.db,
+        events: context.events,
+        mailer: context.mailer,
+        cache: context.cache,
+        breakers: req.breakers,
+        breaker: req.breaker,
+        retry,
+      }, opts);
   }
   next();
 }
