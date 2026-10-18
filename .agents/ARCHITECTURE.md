@@ -56,6 +56,11 @@
   - **HTTP 413 & 400 Error Mapping**: Payload limit violations and excessive form parameters automatically produce `PayloadTooLargeError` (HTTP 413) with `{ limit, length, expected }` metadata; malformed JSON bodies produce `BadRequestError` (HTTP 400) with `INVALID_JSON_PAYLOAD`.
   - **Raw Body Capture for Webhooks**: `captureRawBody: true | string[] | Function` captures incoming request payload `Buffer` on `req.rawBody` for zero-overhead HMAC cryptographic verification (Polar, Stripe, GitHub).
   - **Route Overrides & Exclusions**: `limits.routes` supports per-route limit adjustments (e.g. `routes: { '/api/upload': { json: '25mb' } }`), while `limits.exclude` completely bypasses body parsing for raw socket/streaming endpoints.
+- **Cloud & Kubernetes Health Probes (`core/health`, `/healthz`, `/readyz`, `/health`)**:
+  - RFC-compliant cloud-native endpoints enabled via `createApp({ healthCheck: true })` or fine-grained `{ path: '/healthz', readyPath: '/readyz', combinedPath: '/health', db: true, queue: true, eventLoopLag: true }`.
+  - **Liveness Probe (`/healthz`)**: Non-blocking probe reporting basic process health, memory usage (`rss`, `heapUsed`, `heapTotal`, `external`), and system uptime.
+  - **Readiness Probe (`/readyz`)**: Deep dependency inspection checking database ping (`knex.raw('SELECT 1')`), worker queue status, custom user checks, and `ShutdownManager` draining state (immediately returning HTTP 503 so upstream load balancers detach the instance).
+  - **Diagnostic Health (`/health`)**: Full operational dashboard with event loop lag percentiles (`perf_hooks.monitorEventLoopDelay`), dependency breakdown, and latency metrics.
 - **Custom Error & 404 Pages (`errorPages`)**:
   - Configured via `createApp({ errorPages: { notFound, serverError, timeout } })`.
   - **404 Not Found (`notFound`)**: Template path (`'404.njk'`) or handler `(req, res, ctx) => ...`.

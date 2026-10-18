@@ -605,6 +605,7 @@ function createApp(options = {}) {
     setupRoutes,
     dev: devOpts = {},
     limits: limitsConfig = null,
+    healthCheck: healthCheckConfig = null,
   } = options;
 
   // Centralized global timeout configuration
@@ -1256,6 +1257,15 @@ function createApp(options = {}) {
       }
     }
     next();
+  });
+
+  // Native Health & Readiness Probes (/healthz & /readyz)
+  const { setupHealthMiddleware } = require('../core/health');
+  const healthOpt = options.healthCheck ?? options.server?.healthCheck;
+  setupHealthMiddleware(app, healthOpt, {
+    db: options.db,
+    queue: options.queue,
+    shutdownManager,
   });
   
   // Authentication middleware (if auth manager provided)

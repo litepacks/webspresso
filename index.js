@@ -26,6 +26,7 @@ const { ShutdownManager, NodeHttpAdapter } = require('./core/shutdown');
 const compression = require('./core/compression');
 const earlyHints = require('./core/early-hints');
 const limits = require('./core/limits');
+const health = require('./core/health');
 const errors = require('./core/errors');
 const { 
   mountPages, 
@@ -134,6 +135,14 @@ module.exports = {
   setupLimitsMiddleware: limits.setupLimitsMiddleware,
   createLimitsMiddleware: limits.createLimitsMiddleware,
   parseByteSize: limits.parseByteSize,
+
+  // Health & Readiness Probes
+  health,
+  normalizeHealthConfig: health.normalizeHealthConfig,
+  setupHealthMiddleware: health.setupHealthMiddleware,
+  createHealthManager: health.createHealthManager,
+  probeDatabase: health.probeDatabase,
+  probeQueue: health.probeQueue,
 
   // Exceptions & Error Handling
   errors,

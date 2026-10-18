@@ -80,6 +80,8 @@ export interface CreateAppOptions {
   earlyHints?: boolean | (string | EarlyHintLink)[] | EarlyHintsOptions;
   /** Payload size limits and DoS protection for JSON, URL-encoded, raw, and text bodies */
   limits?: string | number | PayloadLimitsConfig;
+  /** Cloud & Kubernetes Health check probes (/healthz & /readyz) */
+  healthCheck?: boolean | string | HealthCheckConfig;
   /** Shutdown and lifecycle configuration */
   shutdown?: ShutdownOptions;
   /**
@@ -107,6 +109,7 @@ export interface CreateAppOptions {
     compression?: boolean | CompressionOptions;
     earlyHints?: boolean | (string | EarlyHintLink)[] | EarlyHintsOptions;
     limits?: string | number | PayloadLimitsConfig;
+    healthCheck?: boolean | string | HealthCheckConfig;
     trustProxy?: boolean | number | string;
     [key: string]: unknown;
   };
@@ -607,6 +610,48 @@ export namespace limits {
   export function shouldCaptureRawBody(req: Request, captureSetting?: unknown): boolean;
   export function createLimitsMiddleware(routeOptions?: unknown): RequestHandler;
   export function setupLimitsMiddleware(app: Application, options?: unknown): unknown;
+}
+
+export interface HealthCheckConfig {
+  /** Enable or disable health check endpoints (default: true if healthCheck option is provided) */
+  enabled?: boolean;
+  /** Liveness endpoint path (default: '/healthz', or false to disable) */
+  path?: string | false;
+  /** Readiness endpoint path (default: '/readyz', or false to disable) */
+  readyPath?: string | false;
+  /** Combined status endpoint path (default: '/health', or false to disable) */
+  combinedPath?: string | false;
+  /** Probe database connectivity in readiness (default: true) */
+  db?: boolean;
+  /** Probe worker queue readiness (default: true) */
+  queue?: boolean;
+  /** Monitor event loop delay/lag (default: true) */
+  eventLoopLag?: boolean;
+  /** Event loop delay threshold in ms before marking degraded (default: 300) */
+  eventLoopThresholdMs?: number;
+  /** Timeout in ms for DB and custom checks (default: 3000) */
+  timeoutMs?: number;
+  /** Map of custom async health checks */
+  checks?: Record<string, (context: unknown) => Promise<unknown> | unknown>;
+  /** Custom headers to attach to health probe responses */
+  headers?: Record<string, string>;
+}
+
+export function normalizeHealthConfig(options?: unknown): unknown;
+export function setupHealthMiddleware(app: Application, options?: unknown, context?: unknown): unknown;
+export function createHealthManager(config: unknown, context?: unknown): unknown;
+
+export namespace health {
+  export const DEFAULT_HEALTH_CONFIG: Record<string, unknown>;
+  export function normalizeHealthConfig(options?: unknown): unknown;
+  export function formatMb(bytes: number): string;
+  export function createEventLoopMonitor(): unknown;
+  export function getSystemMetrics(monitor?: unknown): unknown;
+  export function probeDatabase(db: unknown, timeoutMs?: number): Promise<{ status: string; latencyMs?: number; error?: string }>;
+  export function probeQueue(queue: unknown): Promise<{ status: string; stats?: unknown; error?: string }>;
+  export function probeCustomChecks(checks?: Record<string, Function>, context?: unknown, timeoutMs?: number): Promise<{ isHealthy: boolean; results: Record<string, unknown> }>;
+  export function createHealthManager(config: unknown, context?: unknown): unknown;
+  export function setupHealthMiddleware(app: Application, options?: unknown, context?: unknown): unknown;
 }
 
 export function resolveClientRuntime(options?: {
