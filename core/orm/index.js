@@ -321,12 +321,7 @@ function createDatabase(config) {
   }
 
   return {
-    get knex() {
-      return knexInstance;
-    },
-    set knex(val) {
-      knexInstance = val;
-    },
+    knex: knexInstance,
     migrate,
     getModel: getModelInstance,
     hasModel: hasModelInstance,

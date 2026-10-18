@@ -167,8 +167,10 @@ function handleRlsResult(qb, result) {
     return qb.where(result);
   }
   if (typeof result === 'function') {
-    const fnRes = result(qb);
-    return fnRes || qb;
+    return qb.where((scopedQb) => {
+      const fnRes = result(scopedQb);
+      return fnRes || scopedQb;
+    });
   }
   return qb;
 }

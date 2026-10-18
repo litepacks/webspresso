@@ -48,12 +48,11 @@ describe('Dynamic Model Row-Level Security (RLS)', () => {
     });
 
     db = createDatabase({
+      knex,
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
     });
-    // Replace internal knex with initialized table knex
-    db.knex = knex;
   });
 
   afterEach(async () => {
