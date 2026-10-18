@@ -434,5 +434,9 @@ Object.defineProperties(module.exports, {
   defineCommand: { get: () => require('./core/commands').defineCommand, enumerable: true, configurable: true },
   createCommandRegistry: { get: () => require('./core/commands').createCommandRegistry, enumerable: true, configurable: true },
   executeCommand: { get: () => require('./core/commands').executeCommand, enumerable: true, configurable: true },
+
+  // Row Level Security (RLS) plugin
+  rlsPlugin: { get: () => require('./plugins/rls').rlsPlugin, enumerable: true, configurable: true },
+  createRlsMiddleware: { get: () => require('./plugins/rls').createRlsMiddleware, enumerable: true, configurable: true },
 });
 

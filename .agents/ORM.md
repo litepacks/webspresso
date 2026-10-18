@@ -490,5 +490,137 @@ const user = await UserFactory.create({ db });
 const admins = await UserFactory.count(3).apply('admin').create({ db });
 ```
 
+---
+
+## 12. Dynamic Model Row-Level Security (RLS)
+
+Webspresso ORM features zero-dependency, declarative Row-Level Security (RLS) directly on model definitions, ensuring data isolation across users, organizations, and multi-tenant systems.
+
+### 12.1 Declaring RLS Policies on Models
+
+Models declare row-level access rules with `rls` inside `defineModel`:
+
+```javascript
+const { defineModel, zdb } = require('webspresso');
+
+module.exports = defineModel({
+  name: 'Document',
+  table: 'documents',
+  schema: zdb.schema({
+    id: zdb.id(),
+    user_id: zdb.integer(),
+    tenant_id: zdb.string().optional(),
+    title: zdb.string(),
+    content: zdb.text(),
+    status: zdb.string().default('draft'),
+    is_public: zdb.boolean().default(false),
+  }),
+  rls: {
+    // Shorthand: automatically scopes queries and mutations to user.id
+    userColumn: 'user_id',
+
+    // Multi-tenant shorthand: scopes to user.tenant_id or scopeContext.tenantId
+    tenantColumn: 'tenant_id',
+
+    // Role-based bypass: admins and superadmins bypass RLS by default
+    bypassRoles: ['admin', 'superadmin'],
+
+    // Granular action rules:
+    // Read / Select: public documents are visible to anyone, drafts only to author
+    read: (user, qb) => {
+      if (!user) return { is_public: true };
+      return (q) => q.where('user_id', user.id).orWhere('is_public', true);
+    },
+
+    // Update: only allow modifying draft documents
+    update: (user, qb) => {
+      if (!user) return false;
+      return (q) => q.where('user_id', user.id).where('status', 'draft');
+    },
+
+    // Delete: completely disabled or owner only
+    delete: (user, qb) => {
+      if (!user) return false;
+      return { user_id: user.id };
+    },
+
+    // Create: auto-populates user_id, validates permissions or modifies payload
+    create: (user, data) => {
+      if (!user) return false; // Throws UnauthorizedError/ForbiddenError
+      return { status: 'draft' }; // Enforce default state
+    },
+  },
+});
+```
+
+### 12.2 Scoping Repositories and Query Builders
+
+Repositories and query builders provide fluent scoping methods:
+
+```javascript
+const repo = db.getRepository('Document');
+
+// Scoped to specific user:
+const userRepo = repo.forUser(currentUser);
+const myDocs = await userRepo.findAll();
+const myDoc = await userRepo.findById(docId); // null if not owned
+
+// Auto-populates user_id and rejects spoofed user IDs:
+const newDoc = await userRepo.create({ title: 'My Report' });
+
+// QueryBuilder chaining:
+const count = await repo.query().forUser(currentUser).where('status', 'draft').count();
+const paged = await repo.query().forUser(currentUser).paginate(1, 10);
+
+// Explicit bypass (system/admin operations):
+const allDocs = await repo.withoutRls().findAll();
+const total = await repo.query().withoutRls().count();
+
+// Multi-tenant scoping:
+const tenantRepo = repo.forTenant('org_acme');
+```
+
+### 12.3 Database Scoped Accessors
+
+```javascript
+// Scoped database instance:
+const userDb = db.forUser(currentUser);
+const docs = await userDb.getRepository('Document').findAll();
+const drafts = await userDb.query('Document').where('status', 'draft').list();
+
+// Ambient transaction scoping:
+await db.transaction(async (trx) => {
+  const noteRepo = trx.forUser(currentUser).getRepository('Document');
+  await noteRepo.create({ title: 'Transaction Document' });
+});
+```
+
+### 12.4 Automatic Express Integration (`rlsPlugin`)
+
+Register `rlsPlugin()` to automatically wrap `req.db.getRepository()` with `req.user` in API endpoints and SSR loaders:
+
+```javascript
+const { createApp, rlsPlugin } = require('webspresso');
+
+const app = createApp({
+  plugins: [
+    rlsPlugin({
+      bypassRoles: ['admin', 'superadmin'], // default
+      getUser: (req) => req.user,           // default
+    }),
+  ],
+});
+
+// Inside any API route (pages/api/documents.get.js):
+module.exports = defineApi({
+  handler: async (req, res) => {
+    // req.db.getRepository('Document') is automatically scoped to req.user!
+    const docs = await req.db.getRepository('Document').findAll();
+    return res.json(docs);
+  },
+});
+```
+
+
 
 

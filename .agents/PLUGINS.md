@@ -692,3 +692,31 @@ Zero-dependency on-demand plugin hydration wrapper that defers heavy plugin init
   - Mounts a lightweight Express router proxy at `prefix`.
   - Stubs placeholder services into `ServiceRegistry` and proxy helpers into Nunjucks context.
   - Intercepts incoming requests/calls, executes the plugin factory function, runs `register(ctx)` and `onRoutesReady(ctx)`, replaces proxies seamlessly with the real router/services, and forwards the initial call with zero dropped requests.
+
+### 2.21 `rlsPlugin` (`plugins/rls`)
+Zero-dependency Dynamic Model Row-Level Security (RLS) plugin that bridges request authentication (`req.user`, `req.auth`, `req.tenantId`) to ORM repositories with automatic query scoping, role-based bypass, and route-level overrides.
+- **Why**: Eliminates manual `where({ user_id: req.user.id })` boilerplate across all API endpoints, prevents accidental cross-tenant/cross-user data leakage, and provides declarative data access boundaries.
+- **Options**:
+  - `bypassRoles`: Global roles that bypass RLS across all models (default: `['admin', 'superadmin']`). Set to `false` to disable.
+  - `getUser`: Custom extractor for current user from `req` (default: `req.user || req.adminUser || req.auth?.user`).
+  - `getTenantId`: Custom extractor for current tenant ID from `req` (default: `req.tenantId || req.user?.tenant_id`).
+  - `global`: Mount global middleware wrapping `req.db` (default: `true`).
+  - `enabled`: Toggle RLS plugin active state (default: `true`).
+- **Usage**:
+  ```javascript
+  const { createApp, rlsPlugin } = require('webspresso');
+
+  const app = createApp({
+    plugins: [
+      rlsPlugin({
+        bypassRoles: ['admin', 'superadmin'],
+      }),
+    ],
+  });
+  ```
+- **How It Works**:
+  - Automatically wraps `req.db.getRepository()` and `req.db.query()` with the active `user` and `tenantId`.
+  - Admins bypass filters automatically unless model specifies `bypassRoles: false`.
+  - Endpoints can explicitly bypass RLS when needed via `req.db.getRepository('Model').withoutRls()`.
+  - Named middleware `middleware: ['rls']` available for selective route application.
+

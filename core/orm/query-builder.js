@@ -384,6 +384,45 @@ class QueryBuilder {
   }
 
   /**
+   * Set authenticated user context for RLS
+   * @param {Object|null} user - User object
+   * @returns {this}
+   */
+  forUser(user) {
+    this.scopeContext.user = user;
+    return this;
+  }
+
+  /**
+   * Bypass Row Level Security on this query
+   * @returns {this}
+   */
+  withoutRls() {
+    this.scopeContext.rlsDisabled = true;
+    return this;
+  }
+
+  /**
+   * Apply custom scope context
+   * @param {Object} customContext
+   * @returns {this}
+   */
+  withContext(customContext) {
+    Object.assign(this.scopeContext, customContext);
+    return this;
+  }
+
+  /**
+   * Explicitly set action mode for RLS
+   * @param {'read'|'update'|'delete'|'create'} action
+   * @returns {this}
+   */
+  asAction(action) {
+    this.action = action;
+    return this;
+  }
+
+  /**
    * Resolve active Knex instance (explicit or ambient transaction)
    * @returns {import('knex').Knex|import('knex').Knex.Transaction}
    */
@@ -414,12 +453,12 @@ class QueryBuilder {
    * @returns {import('knex').Knex.QueryBuilder}
    */
   toKnex(options = {}) {
-    const { includeLimitOffset = true } = options;
+    const { includeLimitOffset = true, action = this.action || 'read', mutationData = null } = options;
     const activeKnex = this.getActiveKnex();
     let qb = activeKnex(this.model.table);
 
-    // Apply global scopes
-    qb = applyScopes(qb, this.scopeContext, this.model);
+    // Apply global scopes (soft delete, multi-tenant, RLS)
+    qb = applyScopes(qb, this.scopeContext, this.model, action, mutationData);
 
     // Apply selects
     if (this.state.selects.length > 0) {
@@ -795,7 +834,7 @@ class QueryBuilder {
    * @returns {Promise<number>} Number of deleted records
    */
   async delete() {
-    const n = await this.toKnex().delete();
+    const n = await this.toKnex({ action: 'delete' }).delete();
     if (this.cacheLayer && n > 0) {
       this.cacheLayer.invalidateModelAll(this.model);
     }
@@ -808,8 +847,10 @@ class QueryBuilder {
    * @returns {Promise<number>} Number of updated records
    */
   async update(data) {
+    const { checkUpdateRls } = require('./scopes');
+    checkUpdateRls(data, this.scopeContext, this.model);
     const serialized = serializeJsonFields(data, this.jsonColumns);
-    const n = await this.toKnex().update(serialized);
+    const n = await this.toKnex({ action: 'update', mutationData: data }).update(serialized);
     if (this.cacheLayer && n > 0) {
       this.cacheLayer.invalidateModelAll(this.model);
     }

@@ -1111,7 +1111,32 @@ export interface ScopeContext {
   tenantId?: unknown;
   withTrashed?: boolean;
   onlyTrashed?: boolean;
+  user?: Record<string, any> | null;
+  rlsDisabled?: boolean;
   [key: string]: unknown;
+}
+
+export type ModelRlsAction = 'read' | 'update' | 'delete' | 'create';
+
+export type ModelRlsRuleCallback<T = any> = (
+  user: Record<string, any> | null,
+  qb: import('knex').Knex.QueryBuilder,
+  action?: ModelRlsAction,
+  context?: ScopeContext
+) => boolean | Record<string, any> | ((q: import('knex').Knex.QueryBuilder) => any) | void;
+
+export interface ModelRlsConfig<T = any> {
+  userColumn?: string;
+  tenantColumn?: string;
+  bypassRoles?: string[] | ((user: Record<string, any> | null, action?: string) => boolean) | false;
+  bypass?: (user: Record<string, any> | null, action: string, context?: ScopeContext) => boolean;
+  read?: ModelRlsRuleCallback<T> | Record<string, any> | boolean;
+  update?: ModelRlsRuleCallback<T> | Record<string, any> | boolean;
+  delete?: ModelRlsRuleCallback<T> | Record<string, any> | boolean;
+  create?: ((user: Record<string, any> | null, data: Partial<T>, context?: ScopeContext) => boolean | Partial<T> | Promise<boolean | Partial<T>>) | boolean;
+  rule?: ModelRlsRuleCallback<T>;
+  filter?: ModelRlsRuleCallback<T>;
+  validateUpdate?: (user: Record<string, any> | null, data: Partial<T>, context?: ScopeContext) => boolean | void;
 }
 
 export type RelationType = 'belongsTo' | 'hasMany' | 'hasOne';
@@ -1294,6 +1319,7 @@ export interface ModelOptions<TSchema = ZodObject<Record<string, ZodTypeAny>>> {
   };
   searchable?: string[];
   cache?: boolean | 'auto' | 'smart' | { strategy: 'auto' | 'smart' };
+  rls?: ModelRlsConfig<any> | ModelRlsRuleCallback<any> | null;
 }
 
 export interface ModelDefinition<TModel = Record<string, any>> {
@@ -1335,6 +1361,7 @@ export interface ModelDefinition<TModel = Record<string, any>> {
   searchable?: string[];
   hooks: Record<string, unknown>;
   cache?: boolean | 'auto' | 'smart' | { strategy: 'auto' | 'smart' };
+  rls?: ModelRlsConfig<any> | ModelRlsRuleCallback<any> | null;
 }
 
 export function defineModel<TSchema = ZodObject<any>>(
@@ -1416,6 +1443,11 @@ export interface QueryBuilder<T = Record<string, any>> {
   include(...relations: string[]): this;
   withTrashed(): this;
   onlyTrashed(): this;
+  forUser(user: Record<string, any> | null): this;
+  withoutRls(): this;
+  forTenant(tenantId: unknown): this;
+  withContext(customContext: Partial<ScopeContext>): this;
+  asAction(action: ModelRlsAction): this;
   first(): Promise<T | null>;
   list(): Promise<T[]>;
   get(): Promise<T[]>;
@@ -1477,6 +1509,11 @@ export interface Repository<T = Record<string, any>> {
   with(...relations: string[]): QueryBuilder<T>;
   include(...relations: string[]): QueryBuilder<T>;
   search(term: string, columns?: string | string[], options?: SearchOptions): QueryBuilder<T>;
+  forUser(user: Record<string, any> | null): Repository<T>;
+  withoutRls(): Repository<T>;
+  forTenant(tenantId: unknown): Repository<T>;
+  withContext(customContext: Partial<ScopeContext>): Repository<T>;
+  getScopeContext(): ScopeContext;
   model: ModelDefinition<T>;
 }
 
@@ -1583,6 +1620,10 @@ export interface TransactionContext {
   getRepository<K extends keyof WebspressoModels>(modelName: K, scopeContext?: ScopeContext): Repository<WebspressoModels[K]>;
   getRepository<T = Record<string, any>>(modelName: string, scopeContext?: ScopeContext): Repository<T>;
   createRepository<T = Record<string, any>>(model: ModelDefinition<T>, scopeContext?: ScopeContext): Repository<T>;
+  forTenant(tenantId: unknown): this;
+  forUser(user: Record<string, any> | null): this;
+  withoutRls(): this;
+  getScopeContext(): ScopeContext;
 }
 
 export interface DatabaseInstance {
@@ -1596,6 +1637,21 @@ export interface DatabaseInstance {
   getRepository<T = Record<string, any>>(modelName: string, scopeContext?: ScopeContext): Repository<T>;
   createRepository<T = Record<string, any>>(model: ModelDefinition<T>, scopeContext?: ScopeContext): Repository<T>;
   query<T = Record<string, any>>(modelName: string, scopeContext?: ScopeContext): QueryBuilder<T>;
+  forUser(user: Record<string, any> | null): {
+    getRepository<K extends keyof WebspressoModels>(modelName: K, scopeContext?: ScopeContext): Repository<WebspressoModels[K]>;
+    getRepository<T = Record<string, any>>(modelName: string, scopeContext?: ScopeContext): Repository<T>;
+    query<T = Record<string, any>>(modelName: string, scopeContext?: ScopeContext): QueryBuilder<T>;
+  };
+  withoutRls(): {
+    getRepository<K extends keyof WebspressoModels>(modelName: K, scopeContext?: ScopeContext): Repository<WebspressoModels[K]>;
+    getRepository<T = Record<string, any>>(modelName: string, scopeContext?: ScopeContext): Repository<T>;
+    query<T = Record<string, any>>(modelName: string, scopeContext?: ScopeContext): QueryBuilder<T>;
+  };
+  forTenant(tenantId: unknown): {
+    getRepository<K extends keyof WebspressoModels>(modelName: K, scopeContext?: ScopeContext): Repository<WebspressoModels[K]>;
+    getRepository<T = Record<string, any>>(modelName: string, scopeContext?: ScopeContext): Repository<T>;
+    query<T = Record<string, any>>(modelName: string, scopeContext?: ScopeContext): QueryBuilder<T>;
+  };
   transaction<T>(callback: (ctx: TransactionContext) => Promise<T>, scopeContext?: ScopeContext): Promise<T>;
   runInTransaction<T>(callback: (ctx: TransactionContext) => Promise<T>, scopeContext?: ScopeContext): Promise<T>;
   getAmbientTransaction(): Knex.Transaction | null;
@@ -4084,5 +4140,18 @@ export namespace commands {
     executeCommand,
   };
 }
+
+// --- Row Level Security Plugin ---
+export interface RlsPluginOptions {
+  bypassRoles?: string[] | ((user: Record<string, any> | null, req: any) => boolean) | false;
+  getUser?: (req: any) => Record<string, any> | null;
+  getTenantId?: (req: any, user: Record<string, any> | null) => unknown;
+  global?: boolean;
+  enabled?: boolean;
+}
+
+export function rlsPlugin(options?: RlsPluginOptions): import('./src/plugin-manager').Plugin;
+export function createRlsMiddleware(options?: RlsPluginOptions): (req: any, res: any, next: (err?: any) => void) => void;
+
 
 

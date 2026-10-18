@@ -39,6 +39,7 @@ function defineModel(options) {
     timestamps: timestampsOpt,
     softDelete: softDeleteOpt,
     softDeletes: softDeletesOpt,
+    rls: rlsOpt,
     options: nestedOptions = {},
   } = options;
 
@@ -185,6 +186,13 @@ function defineModel(options) {
     };
   }
 
+  const rlsConfig = rlsOpt !== undefined
+    ? rlsOpt
+    : (nestedOptions.rls !== undefined ? nestedOptions.rls : scopes.rls);
+  const normalizedRls = (typeof rlsConfig === 'function' || (rlsConfig && typeof rlsConfig === 'object'))
+    ? rlsConfig
+    : null;
+
   // Create model definition
   const model = {
     name,
@@ -198,9 +206,11 @@ function defineModel(options) {
       timestamps: Boolean(timestampsConfig),
       tenant: scopes.tenant || null,
     },
+    rls: normalizedRls,
     options: {
       timestamps: timestampsConfig || false,
       softDelete: softDeleteConfig || false,
+      rls: normalizedRls,
       ...nestedOptions,
     },
     columns,

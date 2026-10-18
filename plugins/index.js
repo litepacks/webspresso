@@ -63,6 +63,8 @@ module.exports = {
   get WebhookDispatcher() { return require('./webhooks').WebhookDispatcher; },
   get lazyPlugin() { return require('./lazy').lazyPlugin; },
   get defineLazyPlugin() { return require('./lazy').defineLazyPlugin; },
+  get rlsPlugin() { return require('./rls').rlsPlugin; },
+  get createRlsMiddleware() { return require('./rls').createRlsMiddleware; },
 };
 
 

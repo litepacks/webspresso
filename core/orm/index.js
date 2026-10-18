@@ -300,6 +300,16 @@ function createDatabase(config) {
           scopeContext.tenantId = tenantId;
           return this;
         },
+        forUser(user) {
+          if (!scopeContext) scopeContext = createScopeContext();
+          scopeContext.user = user;
+          return this;
+        },
+        withoutRls() {
+          if (!scopeContext) scopeContext = createScopeContext();
+          scopeContext.rlsDisabled = true;
+          return this;
+        },
         getScopeContext() {
           return { ...(scopeContext || createScopeContext()) };
         },
@@ -318,6 +328,45 @@ function createDatabase(config) {
     getRepository,
     createRepository: createRepositoryFromModel,
     query,
+    forUser(user) {
+      return {
+        getRepository(modelName, customContext = {}) {
+          return getRepository(modelName, { ...customContext, user });
+        },
+        createRepository(model, customContext = {}) {
+          return createRepositoryFromModel(model, { ...customContext, user });
+        },
+        query(modelName, customContext = {}) {
+          return query(modelName, { ...customContext, user });
+        },
+      };
+    },
+    withoutRls() {
+      return {
+        getRepository(modelName, customContext = {}) {
+          return getRepository(modelName, { ...customContext, rlsDisabled: true });
+        },
+        createRepository(model, customContext = {}) {
+          return createRepositoryFromModel(model, { ...customContext, rlsDisabled: true });
+        },
+        query(modelName, customContext = {}) {
+          return query(modelName, { ...customContext, rlsDisabled: true });
+        },
+      };
+    },
+    forTenant(tenantId) {
+      return {
+        getRepository(modelName, customContext = {}) {
+          return getRepository(modelName, { ...customContext, tenantId });
+        },
+        createRepository(model, customContext = {}) {
+          return createRepositoryFromModel(model, { ...customContext, tenantId });
+        },
+        query(modelName, customContext = {}) {
+          return query(modelName, { ...customContext, tenantId });
+        },
+      };
+    },
     transaction,
     runInTransaction: transaction,
     getAmbientTransaction,
@@ -400,4 +449,13 @@ module.exports = {
   // Batch & Bulk Operation Utilities
   calculateSafeChunkSize: require('./batch').calculateSafeChunkSize,
   chunkArray: require('./batch').chunkArray,
+  // Row Level Security (RLS) & Scopes
+  applyRlsScope: require('./scopes').applyRlsScope,
+  applyScopes: require('./scopes').applyScopes,
+  applyInsertRls: require('./scopes').applyInsertRls,
+  checkUpdateRls: require('./scopes').checkUpdateRls,
+  isRlsBypassed: require('./scopes').isRlsBypassed,
+  getUserId: require('./scopes').getUserId,
+  getTenantId: require('./scopes').getTenantId,
+  createScopeContext: require('./scopes').createScopeContext,
 };

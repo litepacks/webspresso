@@ -60,16 +60,326 @@ function applyTenantScope(qb, context, model) {
 }
 
 /**
+ * Extract user ID from user object
+ * Supports id, userId, _id, sub
+ * @param {Object|null} user
+ * @returns {string|number|null}
+ */
+function getUserId(user) {
+  if (!user || typeof user !== 'object') return null;
+  if (user.id !== undefined && user.id !== null) return user.id;
+  if (user.userId !== undefined && user.userId !== null) return user.userId;
+  if (user._id !== undefined && user._id !== null) return user._id;
+  if (user.sub !== undefined && user.sub !== null) return user.sub;
+  return null;
+}
+
+/**
+ * Extract tenant ID from user or context
+ * Supports tenant_id, tenantId, organization_id, organizationId
+ * @param {Object|null} user
+ * @param {import('./types').ScopeContext} [context]
+ * @returns {unknown|null}
+ */
+function getTenantId(user, context) {
+  if (user && typeof user === 'object') {
+    if (user.tenant_id !== undefined && user.tenant_id !== null) return user.tenant_id;
+    if (user.tenantId !== undefined && user.tenantId !== null) return user.tenantId;
+    if (user.organization_id !== undefined && user.organization_id !== null) return user.organization_id;
+    if (user.organizationId !== undefined && user.organizationId !== null) return user.organizationId;
+  }
+  if (context && context.tenantId !== undefined && context.tenantId !== null) {
+    return context.tenantId;
+  }
+  return null;
+}
+
+/**
+ * Check if RLS is bypassed for the given model, user, context, and action
+ * @param {import('./types').ModelDefinition} model
+ * @param {import('./types').ScopeContext} context
+ * @param {string} [action='read']
+ * @returns {boolean}
+ */
+function isRlsBypassed(model, context, action = 'read') {
+  if (!model || !model.rls) {
+    return true;
+  }
+  if (context && context.rlsDisabled === true) {
+    return true;
+  }
+
+  const rls = model.rls;
+  const user = context ? context.user : null;
+
+  // Custom bypass function: bypass(user, action, context)
+  if (typeof rls.bypass === 'function') {
+    if (rls.bypass(user, action, context)) {
+      return true;
+    }
+  }
+
+  // bypassRoles configuration
+  // If explicitly set to false, role-based bypass is disabled
+  if (rls.bypassRoles === false) {
+    return false;
+  }
+
+  // If user has admin/superadmin flags
+  if (user && (user.isAdmin === true || user.isSuperAdmin === true)) {
+    if (rls.bypassRoles === undefined || rls.bypassRoles === null) {
+      return true;
+    }
+  }
+
+  if (user) {
+    if (typeof rls.bypassRoles === 'function') {
+      if (rls.bypassRoles(user, action)) return true;
+    } else {
+      const allowedRoles = Array.isArray(rls.bypassRoles)
+        ? rls.bypassRoles
+        : (rls.bypassRoles === undefined ? ['admin', 'superadmin'] : []);
+
+      if (allowedRoles.length > 0) {
+        const uRole = user.role || user.roleName || user.type;
+        const uRoles = Array.isArray(user.roles) ? user.roles : (uRole ? [uRole] : []);
+        if (allowedRoles.some((r) => uRoles.includes(r))) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Handle return value from an RLS rule
+ * @param {import('knex').Knex.QueryBuilder} qb
+ * @param {*} result
+ * @returns {import('knex').Knex.QueryBuilder}
+ */
+function handleRlsResult(qb, result) {
+  if (result === false) {
+    return qb.whereRaw('1 = 0');
+  }
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    return qb.where(result);
+  }
+  if (typeof result === 'function') {
+    const fnRes = result(qb);
+    return fnRes || qb;
+  }
+  return qb;
+}
+
+/**
+ * Apply Row Level Security (RLS) scope to a query builder
+ * @param {import('knex').Knex.QueryBuilder} qb - Knex query builder
+ * @param {import('./types').ScopeContext} context - Scope context
+ * @param {import('./types').ModelDefinition} model - Model definition
+ * @param {string} [action='read'] - Query action ('read' | 'update' | 'delete' | 'create')
+ * @param {Object} [mutationData=null] - Optional mutation data for update/create
+ * @returns {import('knex').Knex.QueryBuilder}
+ */
+function applyRlsScope(qb, context, model, action = 'read', mutationData = null) {
+  if (!model || !model.rls) {
+    return qb;
+  }
+
+  if (isRlsBypassed(model, context, action)) {
+    return qb;
+  }
+
+  const rls = model.rls;
+  const user = context ? context.user : null;
+  const ruleCtx = mutationData ? { ...context, data: mutationData } : context;
+
+  // 1. Direct function on model.rls: (user, qb, action, ctx) => ...
+  if (typeof rls === 'function') {
+    const result = rls(user, qb, action, ruleCtx);
+    return handleRlsResult(qb, result);
+  }
+
+  // 2. Action-specific handler: rls[action] (e.g. rls.read, rls.update, rls.delete)
+  const actionRule = rls[action];
+  if (actionRule !== undefined) {
+    if (typeof actionRule === 'function') {
+      const result = actionRule(user, qb, action, ruleCtx);
+      return handleRlsResult(qb, result);
+    }
+    return handleRlsResult(qb, actionRule);
+  }
+
+  // 3. Fallback catch-all rule: rls.rule or rls.filter
+  const genericRule = rls.rule || rls.filter;
+  if (typeof genericRule === 'function') {
+    const result = genericRule(user, qb, action, ruleCtx);
+    return handleRlsResult(qb, result);
+  } else if (genericRule !== undefined) {
+    return handleRlsResult(qb, genericRule);
+  }
+
+  // 4. Shorthand column filters (userColumn, tenantColumn)
+  let builder = qb;
+
+  if (rls.userColumn) {
+    const uid = getUserId(user);
+    if (uid !== null) {
+      builder = builder.where(rls.userColumn, uid);
+    } else {
+      // Unauthenticated access to user-scoped resource -> return empty set
+      builder = builder.whereRaw('1 = 0');
+    }
+  }
+
+  if (rls.tenantColumn) {
+    const tid = getTenantId(user, context);
+    if (tid !== null) {
+      builder = builder.where(rls.tenantColumn, tid);
+    } else if (!user) {
+      builder = builder.whereRaw('1 = 0');
+    }
+  }
+
+  return builder;
+}
+
+/**
+ * Apply RLS validation and auto-population for insert operations
+ * @param {Object} data - Row data to insert
+ * @param {import('./types').ScopeContext} context - Scope context
+ * @param {import('./types').ModelDefinition} model - Model definition
+ * @returns {Promise<Object>|Object} Modified data
+ */
+async function applyInsertRls(data, context, model) {
+  if (!model || !model.rls) {
+    return data;
+  }
+
+  if (isRlsBypassed(model, context, 'create')) {
+    return data;
+  }
+
+  const rls = model.rls;
+  const user = context ? context.user : null;
+  let modified = { ...data };
+
+  // 1. Custom create rule on model.rls.create
+  if (rls.create !== undefined) {
+    if (typeof rls.create === 'function') {
+      const res = await rls.create(user, modified, context);
+      if (res === false) {
+        const { ForbiddenError } = require('../errors');
+        throw new ForbiddenError(`Access denied by Row Level Security for creating ${model.name}`);
+      }
+      if (res && typeof res === 'object') {
+        modified = { ...modified, ...res };
+      }
+    } else if (rls.create === false) {
+      const { ForbiddenError } = require('../errors');
+      throw new ForbiddenError(`Creating ${model.name} is disabled by Row Level Security`);
+    }
+  }
+
+  // 2. Shorthand userColumn
+  if (rls.userColumn) {
+    const uid = getUserId(user);
+    if (uid === null) {
+      const { UnauthorizedError } = require('../errors');
+      throw new UnauthorizedError(`Authentication required by Row Level Security to create ${model.name}`);
+    }
+
+    if (modified[rls.userColumn] === undefined || modified[rls.userColumn] === null) {
+      modified[rls.userColumn] = uid;
+    } else if (modified[rls.userColumn] !== uid) {
+      const { ForbiddenError } = require('../errors');
+      throw new ForbiddenError(`Cannot create ${model.name} for another user under Row Level Security`);
+    }
+  }
+
+  // 3. Shorthand tenantColumn
+  if (rls.tenantColumn) {
+    const tid = getTenantId(user, context);
+    if (tid !== null) {
+      if (modified[rls.tenantColumn] === undefined || modified[rls.tenantColumn] === null) {
+        modified[rls.tenantColumn] = tid;
+      } else if (modified[rls.tenantColumn] !== tid) {
+        const { ForbiddenError } = require('../errors');
+        throw new ForbiddenError(`Cannot create ${model.name} for another tenant under Row Level Security`);
+      }
+    }
+  }
+
+  return modified;
+}
+
+/**
+ * Validate update payload against RLS invariants
+ * @param {Object} data - Update data payload
+ * @param {import('./types').ScopeContext} context - Scope context
+ * @param {import('./types').ModelDefinition} model - Model definition
+ */
+function checkUpdateRls(data, context, model) {
+  if (!model || !model.rls || !data || typeof data !== 'object') {
+    return;
+  }
+
+  if (isRlsBypassed(model, context, 'update')) {
+    return;
+  }
+
+  const rls = model.rls;
+  const user = context ? context.user : null;
+
+  // If update is explicitly disabled:
+  if (rls.update === false) {
+    const { ForbiddenError } = require('../errors');
+    throw new ForbiddenError(`Updating ${model.name} is disabled by Row Level Security`);
+  }
+
+  // Prevent reassigning userColumn
+  if (rls.userColumn && data[rls.userColumn] !== undefined) {
+    const uid = getUserId(user);
+    if (data[rls.userColumn] !== uid) {
+      const { ForbiddenError } = require('../errors');
+      throw new ForbiddenError(`Cannot reassign ${rls.userColumn} under Row Level Security`);
+    }
+  }
+
+  // Prevent reassigning tenantColumn
+  if (rls.tenantColumn && data[rls.tenantColumn] !== undefined) {
+    const tid = getTenantId(user, context);
+    if (tid !== null && data[rls.tenantColumn] !== tid) {
+      const { ForbiddenError } = require('../errors');
+      throw new ForbiddenError(`Cannot reassign ${rls.tenantColumn} under Row Level Security`);
+    }
+  }
+
+  // Custom update validator if provided
+  if (typeof rls.validateUpdate === 'function') {
+    const valid = rls.validateUpdate(user, data, context);
+    if (valid === false) {
+      const { ForbiddenError } = require('../errors');
+      throw new ForbiddenError(`Update rejected by Row Level Security policy for ${model.name}`);
+    }
+  }
+}
+
+/**
  * Apply all global scopes to a query builder
  * @param {import('knex').Knex.QueryBuilder} qb - Knex query builder
  * @param {import('./types').ScopeContext} context - Scope context
  * @param {import('./types').ModelDefinition} model - Model definition
+ * @param {string} [action='read'] - Query action ('read' | 'update' | 'delete' | 'create')
+ * @param {Object} [mutationData=null] - Optional mutation data
  * @returns {import('knex').Knex.QueryBuilder}
  */
-function applyScopes(qb, context, model) {
+function applyScopes(qb, context, model, action = 'read', mutationData = null) {
   let builder = qb;
   builder = applySoftDeleteScope(builder, context, model);
   builder = applyTenantScope(builder, context, model);
+  builder = applyRlsScope(builder, context, model, action, mutationData);
   return builder;
 }
 
@@ -221,6 +531,8 @@ function createScopeContext(overrides = {}) {
     tenantId: undefined,
     withTrashed: false,
     onlyTrashed: false,
+    user: null,
+    rlsDisabled: false,
     ...overrides,
   };
 }
@@ -228,6 +540,7 @@ function createScopeContext(overrides = {}) {
 module.exports = {
   applySoftDeleteScope,
   applyTenantScope,
+  applyRlsScope,
   applyScopes,
   applyInsertTimestamps,
   applyUpdateTimestamps,
@@ -235,6 +548,11 @@ module.exports = {
   applyInsertNanoidPrimary,
   applyInsertModifiers,
   applyUpdateModifiers,
+  applyInsertRls,
+  checkUpdateRls,
+  isRlsBypassed,
+  getUserId,
+  getTenantId,
   getSoftDeleteData,
   getRestoreData,
   getSoftDeleteColumn,

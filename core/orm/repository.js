@@ -15,6 +15,9 @@ const {
   getSoftDeleteColumn,
   createScopeContext,
   applyScopes,
+  applyRlsScope,
+  applyInsertRls,
+  checkUpdateRls,
 } = require('./scopes');
 const { ensureArray } = require('./utils');
 const { ModelEvents, createEventContext, Hooks, HookCancellationError } = require('./events');
@@ -79,12 +82,14 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
 
   /**
    * Get base query builder
+   * @param {string} [action='read'] - Query action ('read' | 'update' | 'delete' | 'create')
+   * @param {Object} [mutationData=null] - Optional mutation data
    * @returns {import('knex').Knex.QueryBuilder}
    */
-  function baseQuery() {
+  function baseQuery(action = 'read', mutationData = null) {
     const activeKnex = getActiveKnex();
     let qb = activeKnex(model.table);
-    return applyScopes(qb, scopeContext, model);
+    return applyScopes(qb, scopeContext, model, action, mutationData);
   }
 
   /**
@@ -341,6 +346,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
 
     // Apply insert modifiers (timestamps, tenant)
     let insertData = applyInsertModifiers(validated, scopeContext, model);
+    insertData = await applyInsertRls(insertData, scopeContext, model);
 
     // Serialize JSON fields
     if (hasJson) {
@@ -435,6 +441,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
         }
 
         let insertData = applyInsertModifiers(validatedData, scopeContext, model);
+        insertData = await applyInsertRls(insertData, scopeContext, model);
         if (hasJson) {
           insertData = serializeJsonFields(insertData, jsonColumns);
         }
@@ -585,6 +592,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
 
         let insertData = applyInsertModifiers(validatedData, scopeContext, model);
         insertData = applyUpdateModifiers(insertData, model);
+        insertData = await applyInsertRls(insertData, scopeContext, model);
 
         if (hasJson) {
           insertData = serializeJsonFields(insertData, jsonColumns);
@@ -666,6 +674,9 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
       throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_VALIDATION);
     }
 
+    // Check RLS update invariants
+    checkUpdateRls(workingData, scopeContext, model);
+
     // Validate with Zod schema (partial for update)
     const validated = getPartialSchema(model).parse(workingData);
 
@@ -696,7 +707,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     }
 
     // Update the record
-    const updated = await baseQuery()
+    const updated = await baseQuery('update', updateData)
       .where(model.primaryKey, id)
       .update(updateData);
 
@@ -723,6 +734,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    * @returns {Promise<number>} Number of updated records
    */
   async function updateWhere(conditions, data) {
+    checkUpdateRls(data, scopeContext, model);
     // Validate with Zod schema (partial for update)
     const validated = getPartialSchema(model).parse(data);
 
@@ -732,7 +744,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     // Serialize JSON fields
     updateData = serializeJsonFields(updateData, jsonColumns);
 
-    let qb = baseQuery();
+    let qb = baseQuery('update', updateData);
     
     for (const [key, value] of Object.entries(conditions)) {
       qb = qb.where(key, value);
@@ -995,7 +1007,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
 
     // Soft delete if enabled
     if (model.scopes.softDelete) {
-      const updated = await baseQuery()
+      const updated = await baseQuery('delete')
         .where(model.primaryKey, id)
         .update(getSoftDeleteData(deletedAt, model));
       success = updated > 0;
@@ -1019,7 +1031,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
         await cascadeHardDelete(model, record, options);
       }
 
-      const deleted = await baseQuery()
+      const deleted = await baseQuery('delete')
         .where(model.primaryKey, id)
         .delete();
       success = deleted > 0;
@@ -1056,10 +1068,10 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
       await cascadeHardDelete(model, record, options);
     }
 
-    // Use raw query to bypass soft delete scope
-    const deleted = await getActiveKnex()(model.table)
-      .where(model.primaryKey, id)
-      .delete();
+    // Use raw query to bypass soft delete scope, but apply RLS delete policy
+    let qb = getActiveKnex()(model.table).where(model.primaryKey, id);
+    qb = applyRlsScope(qb, scopeContext, model, 'delete');
+    const deleted = await qb.delete();
 
     if (cacheLayer && deleted > 0) {
       cacheLayer.invalidateModelAll(model);
@@ -1241,6 +1253,11 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     exists,
     with: withRelations,
     include: withRelations,
+    forUser: (user) => createRepository(model, knex, { ...scopeContext, user }, cacheLayer),
+    withoutRls: () => createRepository(model, knex, { ...scopeContext, rlsDisabled: true }, cacheLayer),
+    forTenant: (tenantId) => createRepository(model, knex, { ...scopeContext, tenantId }, cacheLayer),
+    withContext: (customContext) => createRepository(model, knex, { ...scopeContext, ...customContext }, cacheLayer),
+    getScopeContext: () => ({ ...scopeContext }),
     // Expose model for introspection
     model,
   };
