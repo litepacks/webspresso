@@ -25,6 +25,7 @@ const {
 const { ShutdownManager, NodeHttpAdapter } = require('./core/shutdown');
 const compression = require('./core/compression');
 const earlyHints = require('./core/early-hints');
+const limits = require('./core/limits');
 const errors = require('./core/errors');
 const { 
   mountPages, 
@@ -126,6 +127,13 @@ module.exports = {
   formatLink: earlyHints.formatLink,
   formatLinkHeader: earlyHints.formatLinkHeader,
   inferAsType: earlyHints.inferAsType,
+
+  // Payload Limits & DoS Protection
+  limits,
+  normalizeLimits: limits.normalizeLimits,
+  setupLimitsMiddleware: limits.setupLimitsMiddleware,
+  createLimitsMiddleware: limits.createLimitsMiddleware,
+  parseByteSize: limits.parseByteSize,
 
   // Exceptions & Error Handling
   errors,

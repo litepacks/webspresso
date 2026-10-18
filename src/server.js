@@ -51,10 +51,12 @@ const {
   RouteNotFoundError,
   RequestAbortedError,
   ValidationError,
+  getStatusTitle,
   normalizeError,
   toErrorResponseObject,
   preferJsonErrorResponse,
 } = require('../core/errors');
+const { setupLimitsMiddleware } = require('../core/limits');
 const { escapeRegExp } = require('../core/utils/regex');
 
 // Async storage for tracking template render call stacks (circular extends guard)
@@ -493,6 +495,8 @@ function default404Html() {
  * Default 500 page HTML
  */
 function default500Html(err, isDev) {
+  const status = (err && typeof err.status === 'number') ? err.status : 500;
+  const title = getStatusTitle(status);
   const detail =
     isDev && err
       ? `<pre>${String(err.stack || err.message)
@@ -505,15 +509,15 @@ function default500Html(err, isDev) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>500 - Server Error</title>
+  <title>${status} - ${title}</title>
   <style>${defaultErrorPageStyles()}
   </style>
 </head>
 <body>
   <div class="container">
     <div class="card">
-      <h1>500</h1>
-      <p class="muted">Internal Server Error</p>
+      <h1>${status}</h1>
+      <p class="muted">${title}</p>
       ${detail}
       <a href="/">← Back to Home</a>
     </div>
@@ -600,6 +604,7 @@ function createApp(options = {}) {
     auth: authManager = null,
     setupRoutes,
     dev: devOpts = {},
+    limits: limitsConfig = null,
   } = options;
 
   // Centralized global timeout configuration
@@ -1232,9 +1237,9 @@ function createApp(options = {}) {
     app.set('etag', etagSetting);
   }
   
-  // JSON body parser for API routes
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
+  // Configurable payload size limits & DoS protection
+  const limitsOpt = options.limits ?? options.server?.limits;
+  const activeLimits = setupLimitsMiddleware(app, limitsOpt);
 
   // Cookie parser & Flash messages (AdonisJS & Django-inspired old input and errors)
   const cookieParser = require('cookie-parser');
@@ -1246,7 +1251,9 @@ function createApp(options = {}) {
   app.use((req, res, next) => {
     if (timeouts.request !== false && req.timedout) return;
     if (req.body === undefined && (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH')) {
-      req.body = {};
+      if (!req._skipBodyDefault) {
+        req.body = {};
+      }
     }
     next();
   });

@@ -78,6 +78,8 @@ export interface CreateAppOptions {
   compression?: boolean | CompressionOptions;
   /** HTTP 103 Early Hints options (preloads CSS/JS before SSR finish) */
   earlyHints?: boolean | (string | EarlyHintLink)[] | EarlyHintsOptions;
+  /** Payload size limits and DoS protection for JSON, URL-encoded, raw, and text bodies */
+  limits?: string | number | PayloadLimitsConfig;
   /** Shutdown and lifecycle configuration */
   shutdown?: ShutdownOptions;
   /**
@@ -104,6 +106,7 @@ export interface CreateAppOptions {
     shutdown?: ShutdownOptions;
     compression?: boolean | CompressionOptions;
     earlyHints?: boolean | (string | EarlyHintLink)[] | EarlyHintsOptions;
+    limits?: string | number | PayloadLimitsConfig;
     trustProxy?: boolean | number | string;
     [key: string]: unknown;
   };
@@ -558,6 +561,52 @@ export namespace earlyHints {
     callback?: (err?: Error | null) => void
   ): boolean;
   export function createEarlyHintsMiddleware(options?: boolean | EarlyHintsOptions): RequestHandler;
+}
+
+export interface PayloadLimitParserConfig {
+  enabled?: boolean;
+  limit?: string | number;
+  strict?: boolean;
+  extended?: boolean;
+  parameterLimit?: number;
+  type?: string | ((req: Request) => boolean);
+  verify?: (req: Request, res: Response, buf: Buffer, encoding: string) => void;
+  [key: string]: unknown;
+}
+
+export interface PayloadLimitsConfig {
+  /** Size limit for application/json (default: '1mb') or false to disable */
+  json?: string | number | boolean | PayloadLimitParserConfig;
+  /** Size limit for application/x-www-form-urlencoded (default: '1mb') or false to disable */
+  urlencoded?: string | number | boolean | PayloadLimitParserConfig;
+  /** Size limit for application/octet-stream (default: false / disabled) */
+  raw?: string | number | boolean | PayloadLimitParserConfig;
+  /** Size limit for text/plain (default: false / disabled) */
+  text?: string | number | boolean | PayloadLimitParserConfig;
+  /** Maximum number of URL-encoded parameters (default: 1000) */
+  parameterLimit?: number;
+  /** Capture raw request body Buffer to req.rawBody (e.g. for webhook signatures) */
+  captureRawBody?: boolean | (string | RegExp)[] | ((req: Request) => boolean);
+  /** Path prefixes or patterns excluded from global body parsing */
+  exclude?: (string | RegExp)[];
+  /** Per-route payload limits or false to disable body parsing */
+  routes?: Record<string, string | number | boolean | PayloadLimitsConfig>;
+}
+
+export function normalizeLimits(options?: unknown): unknown;
+export function setupLimitsMiddleware(app: Application, options?: unknown): unknown;
+export function createLimitsMiddleware(routeOptions?: unknown): RequestHandler;
+export function parseByteSize(value: string | number): number | string;
+
+export namespace limits {
+  export const DEFAULT_LIMITS: Record<string, unknown>;
+  export function parseByteSize(value: string | number): number | string;
+  export function normalizeLimits(options?: unknown): unknown;
+  export function matchesPath(pattern: string | RegExp | Function, pathname: string): boolean;
+  export function shouldSkipBodyParser(req: Request, excludeList?: unknown[]): boolean;
+  export function shouldCaptureRawBody(req: Request, captureSetting?: unknown): boolean;
+  export function createLimitsMiddleware(routeOptions?: unknown): RequestHandler;
+  export function setupLimitsMiddleware(app: Application, options?: unknown): unknown;
 }
 
 export function resolveClientRuntime(options?: {

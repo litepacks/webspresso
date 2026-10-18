@@ -51,6 +51,11 @@
 - **HTTP Response Compression (`core/compression`)**:
   - Zero-dependency streaming zlib compression configured via `createApp({ server: { compression: true } })`.
   - Content negotiation for Brotli (`br`), Gzip (`gzip`), Deflate (`deflate`), threshold filtering (1 KB), and `res.compress(false)` route opt-out.
+- **Configurable Payload Size Limits & DoS Protection (`core/limits`)**:
+  - Zero-dependency request body limits configured via `createApp({ limits: { json: '1mb', urlencoded: '1mb', raw: false, text: false, parameterLimit: 1000 } })` or shorthand string/number (`limits: '5mb'`). Also accepted under `createApp({ server: { limits } })`.
+  - **HTTP 413 & 400 Error Mapping**: Payload limit violations and excessive form parameters automatically produce `PayloadTooLargeError` (HTTP 413) with `{ limit, length, expected }` metadata; malformed JSON bodies produce `BadRequestError` (HTTP 400) with `INVALID_JSON_PAYLOAD`.
+  - **Raw Body Capture for Webhooks**: `captureRawBody: true | string[] | Function` captures incoming request payload `Buffer` on `req.rawBody` for zero-overhead HMAC cryptographic verification (Polar, Stripe, GitHub).
+  - **Route Overrides & Exclusions**: `limits.routes` supports per-route limit adjustments (e.g. `routes: { '/api/upload': { json: '25mb' } }`), while `limits.exclude` completely bypasses body parsing for raw socket/streaming endpoints.
 - **Custom Error & 404 Pages (`errorPages`)**:
   - Configured via `createApp({ errorPages: { notFound, serverError, timeout } })`.
   - **404 Not Found (`notFound`)**: Template path (`'404.njk'`) or handler `(req, res, ctx) => ...`.

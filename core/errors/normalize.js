@@ -5,7 +5,11 @@
  */
 
 const { WebspressoError } = require('./base');
-const { HttpError } = require('./http');
+const {
+  HttpError,
+  BadRequestError,
+  PayloadTooLargeError,
+} = require('./http');
 
 const HTTP_TITLES = {
   400: 'Bad Request',
@@ -62,6 +66,60 @@ function normalizeError(err, isDev = false) {
     const isClientError = status < 500;
     const expose = typeof err.expose === 'boolean' ? err.expose : isClientError;
 
+    // Body parser / payload limit error mapping (HTTP 413)
+    if (status === 413 || err.type === 'entity.too.large' || err.type === 'parameters.too.many') {
+      const code = err.code || (err.type === 'parameters.too.many' ? 'PARAMETERS_TOO_MANY' : 'PAYLOAD_TOO_LARGE');
+      const details = err.details || (
+        (err.limit !== undefined || err.length !== undefined || err.expected !== undefined)
+          ? { limit: err.limit, length: err.length, expected: err.expected }
+          : (err.type ? { type: err.type } : undefined)
+      );
+      const payloadErr = new PayloadTooLargeError(
+        (expose || isDev) ? (err.message || getStatusTitle(413)) : getStatusTitle(413),
+        {
+          code,
+          details,
+          cause: err,
+          headers: err.headers,
+          expose,
+        }
+      );
+
+      if (err.stack) payloadErr.stack = err.stack;
+      if (err.route) payloadErr.route = err.route;
+      if (err.method) payloadErr.method = err.method;
+      if (err.source) payloadErr.source = err.source;
+      if (err.module) payloadErr.module = err.module;
+      if (err.phase) payloadErr.phase = err.phase;
+      if (err.requestId) payloadErr.requestId = err.requestId;
+
+      return payloadErr;
+    }
+
+    // Body parser JSON syntax error (HTTP 400)
+    if (err.type === 'entity.parse.failed') {
+      const badReqErr = new BadRequestError(
+        (expose || isDev) ? (err.message || 'Invalid JSON payload') : 'Invalid JSON payload',
+        {
+          code: err.code || 'INVALID_JSON_PAYLOAD',
+          details: err.details || { type: err.type },
+          cause: err,
+          headers: err.headers,
+          expose: true,
+        }
+      );
+
+      if (err.stack) badReqErr.stack = err.stack;
+      if (err.route) badReqErr.route = err.route;
+      if (err.method) badReqErr.method = err.method;
+      if (err.source) badReqErr.source = err.source;
+      if (err.module) badReqErr.module = err.module;
+      if (err.phase) badReqErr.phase = err.phase;
+      if (err.requestId) badReqErr.requestId = err.requestId;
+
+      return badReqErr;
+    }
+
     const httpErr = new HttpError(
       status,
       (expose || isDev) ? (err.message || getStatusTitle(status)) : getStatusTitle(status),
@@ -105,13 +163,41 @@ function normalizeError(err, isDev = false) {
       ? err.status
       : (typeof err.statusCode === 'number' ? err.statusCode : 500);
 
+    const isClientError = status < 500;
+    const expose = typeof err.expose === 'boolean' ? err.expose : isClientError;
+
+    if (status === 413 || err.type === 'entity.too.large' || err.type === 'parameters.too.many') {
+      const code = err.code || (err.type === 'parameters.too.many' ? 'PARAMETERS_TOO_MANY' : 'PAYLOAD_TOO_LARGE');
+      const details = err.details || (
+        (err.limit !== undefined || err.length !== undefined || err.expected !== undefined)
+          ? { limit: err.limit, length: err.length, expected: err.expected }
+          : (err.type ? { type: err.type } : undefined)
+      );
+      const payloadErr = new PayloadTooLargeError(
+        (expose || isDev) ? (err.message || getStatusTitle(413)) : getStatusTitle(413),
+        {
+          code,
+          details,
+          headers: err.headers,
+          expose,
+        }
+      );
+      if (err.route) payloadErr.route = err.route;
+      if (err.method) payloadErr.method = err.method;
+      if (err.source) payloadErr.source = err.source;
+      if (err.module) payloadErr.module = err.module;
+      if (err.phase) payloadErr.phase = err.phase;
+      if (err.requestId) payloadErr.requestId = err.requestId;
+      return payloadErr;
+    }
+
     const msg = typeof err.message === 'string' ? err.message : getStatusTitle(status);
 
     const httpErr = new HttpError(status, (status < 500 || isDev) ? msg : getStatusTitle(status), {
       code: err.code,
       details: err.details,
       headers: err.headers,
-      expose: typeof err.expose === 'boolean' ? err.expose : status < 500,
+      expose,
     });
 
     if (err.route) httpErr.route = err.route;
