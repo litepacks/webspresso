@@ -326,6 +326,47 @@ module.exports = {
   withTimeout: require('./core/utils/timeout').withTimeout,
   createTimeoutMiddleware: require('./core/utils/timeout').createTimeoutMiddleware,
   TimeoutError: require('./core/utils/timeout').TimeoutError,
+
+  // Native Cloud & Kubernetes Health & Readiness Probes
+  health,
+  normalizeHealthConfig: health.normalizeHealthConfig,
+  setupHealthMiddleware: health.setupHealthMiddleware,
+  createHealthManager: health.createHealthManager,
+  probeDatabase: health.probeDatabase,
+  probeQueue: health.probeQueue,
+  probeCustomChecks: health.probeCustomChecks,
+  formatMb: health.formatMb,
+  createEventLoopMonitor: health.createEventLoopMonitor,
+  getSystemMetrics: health.getSystemMetrics,
+
+  // Payload Limits & DoS Protection
+  limits,
+  normalizeLimits: limits.normalizeLimits,
+  setupLimitsMiddleware: limits.setupLimitsMiddleware,
+  createLimitsMiddleware: limits.createLimitsMiddleware,
+  parseByteSize: limits.parseByteSize,
+  PayloadTooLargeError: errors.PayloadTooLargeError,
+  BadRequestError: errors.BadRequestError,
+
+  // High-Performance In-Memory LRU & Tagged Cache
+  cache,
+  normalizeCacheConfig: cache.normalizeCacheConfig,
+  parseCacheTtlMs: cache.parseCacheTtlMs,
+  LruCache: cache.LruCache,
+  TaggedLruCache: cache.TaggedLruCache,
+  createTaggedLruCache: cache.createTaggedLruCache,
+  createOrmCacheProvider: cache.createOrmCacheProvider,
+
+  // Enterprise Resilience & Circuit Breaker Engine
+  resilience,
+  CircuitBreaker: resilience.CircuitBreaker,
+  CircuitBreakerRegistry: resilience.CircuitBreakerRegistry,
+  circuitBreakerRegistry: resilience.circuitBreakerRegistry,
+  getBreaker: resilience.getBreaker,
+  retry: resilience.retry,
+  withRetry: resilience.withRetry,
+  CircuitBreakerOpenError: resilience.CircuitBreakerOpenError,
+  CircuitBreakerTimeoutError: resilience.CircuitBreakerTimeoutError,
 };
 
 // Define lazy getters for plugins, ORM, and heavy core subsystems

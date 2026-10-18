@@ -738,6 +738,9 @@ function createApp(options = {}) {
     queue: options.queue || null,
     logger: logging ? console : null,
   });
+  shutdownManager.onShutdown(() => {
+    eventDispatcher.removeAllListeners();
+  });
 
   // Auto-bridge ORM lifecycle events (ModelEvents) to app.events ('model:created', etc.)
   if (options.db) {
@@ -2058,7 +2061,17 @@ function createApp(options = {}) {
     });
   };
   
-  return { app, nunjucksEnv, pluginManager, authMiddleware, shutdownManager, events: eventDispatcher, timeouts };
+  Object.assign(app, {
+    app,
+    nunjucksEnv,
+    pluginManager,
+    authMiddleware,
+    shutdownManager,
+    events: eventDispatcher,
+    timeouts,
+    close: (reason) => shutdownManager.close(reason),
+  });
+  return app;
   } catch (err) {
     try {
       shutdownManager.close('startup_failure');

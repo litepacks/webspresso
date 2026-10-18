@@ -141,9 +141,13 @@ function collectBannerSummary(context = {}) {
   // 5. Plugins
   let pluginsList = [];
   let hasAdmin = false;
-  if (pluginManager && pluginManager.plugins instanceof Map) {
+  if (context.hasAdmin !== undefined) {
+    hasAdmin = Boolean(context.hasAdmin);
+  } else if (pluginManager && pluginManager.plugins instanceof Map) {
     pluginsList = Array.from(pluginManager.plugins.keys());
     hasAdmin = pluginManager.plugins.has('adminPanel') || pluginManager.plugins.has('admin');
+  } else {
+    hasAdmin = true;
   }
 
   // URLs

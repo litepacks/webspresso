@@ -105,7 +105,7 @@ function normalizeLimits(options = {}) {
     : 1000;
 
   // 1. JSON
-  let json = { enabled: true, limit: '1mb', strict: true, options: {} };
+  let json = { enabled: true, limit: parseByteSize('1mb'), strict: true, options: {} };
   if (opts.json === false) {
     json.enabled = false;
   } else if (typeof opts.json === 'string' || typeof opts.json === 'number') {
@@ -114,7 +114,7 @@ function normalizeLimits(options = {}) {
     const { limit, strict, verify, enabled, ...rest } = opts.json;
     json = {
       enabled: enabled !== false,
-      limit: limit !== undefined ? parseByteSize(limit) : '1mb',
+      limit: limit !== undefined ? parseByteSize(limit) : parseByteSize('1mb'),
       strict: strict !== false,
       verify: typeof verify === 'function' ? verify : undefined,
       options: rest,
@@ -122,7 +122,7 @@ function normalizeLimits(options = {}) {
   }
 
   // 2. URL-encoded
-  let urlencoded = { enabled: true, limit: '1mb', extended: true, parameterLimit: globalParamLimit, options: {} };
+  let urlencoded = { enabled: true, limit: parseByteSize('1mb'), extended: true, parameterLimit: globalParamLimit, options: {} };
   if (opts.urlencoded === false) {
     urlencoded.enabled = false;
   } else if (typeof opts.urlencoded === 'string' || typeof opts.urlencoded === 'number') {
@@ -131,7 +131,7 @@ function normalizeLimits(options = {}) {
     const { limit, extended, parameterLimit, verify, enabled, ...rest } = opts.urlencoded;
     urlencoded = {
       enabled: enabled !== false,
-      limit: limit !== undefined ? parseByteSize(limit) : '1mb',
+      limit: limit !== undefined ? parseByteSize(limit) : parseByteSize('1mb'),
       extended: extended !== false,
       parameterLimit: typeof parameterLimit === 'number' ? Math.max(1, Math.floor(parameterLimit)) : globalParamLimit,
       verify: typeof verify === 'function' ? verify : undefined,
@@ -140,9 +140,10 @@ function normalizeLimits(options = {}) {
   }
 
   // 3. Raw Body (application/octet-stream by default)
-  let rawBody = { enabled: false, limit: '1mb', type: 'application/octet-stream', options: {} };
+  let rawBody = { enabled: false, limit: parseByteSize('1mb'), type: 'application/octet-stream', options: {} };
   if (opts.raw === true) {
     rawBody.enabled = true;
+    rawBody.limit = parseByteSize('1mb');
   } else if (typeof opts.raw === 'string' || typeof opts.raw === 'number') {
     rawBody.enabled = true;
     rawBody.limit = parseByteSize(opts.raw);
@@ -150,7 +151,7 @@ function normalizeLimits(options = {}) {
     const { limit, type, verify, enabled, ...rest } = opts.raw;
     rawBody = {
       enabled: enabled !== false,
-      limit: limit !== undefined ? parseByteSize(limit) : '1mb',
+      limit: limit !== undefined ? parseByteSize(limit) : parseByteSize('1mb'),
       type: type || 'application/octet-stream',
       verify: typeof verify === 'function' ? verify : undefined,
       options: rest,
@@ -158,9 +159,10 @@ function normalizeLimits(options = {}) {
   }
 
   // 4. Text Body (text/plain by default)
-  let textBody = { enabled: false, limit: '1mb', type: 'text/plain', options: {} };
+  let textBody = { enabled: false, limit: parseByteSize('1mb'), type: 'text/plain', options: {} };
   if (opts.text === true) {
     textBody.enabled = true;
+    textBody.limit = parseByteSize('1mb');
   } else if (typeof opts.text === 'string' || typeof opts.text === 'number') {
     textBody.enabled = true;
     textBody.limit = parseByteSize(opts.text);
@@ -168,7 +170,7 @@ function normalizeLimits(options = {}) {
     const { limit, type, verify, enabled, ...rest } = opts.text;
     textBody = {
       enabled: enabled !== false,
-      limit: limit !== undefined ? parseByteSize(limit) : '1mb',
+      limit: limit !== undefined ? parseByteSize(limit) : parseByteSize('1mb'),
       type: type || 'text/plain',
       verify: typeof verify === 'function' ? verify : undefined,
       options: rest,

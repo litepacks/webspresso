@@ -31,7 +31,16 @@ const DEFAULT_HEALTH_CONFIG = Object.freeze({
  * @param {Object|boolean|string} [options]
  * @returns {Object} Normalized health configuration
  */
-function normalizeHealthConfig(options = {}) {
+function normalizeHealthConfig(options) {
+  if (options === undefined || options === null || options === false) {
+    return {
+      ...DEFAULT_HEALTH_CONFIG,
+      enabled: false,
+      checks: {},
+      headers: { ...DEFAULT_HEALTH_CONFIG.headers },
+    };
+  }
+
   // If top-level createApp options passed, extract options.healthCheck ?? options.server?.healthCheck
   let raw = options;
   if (options && typeof options === 'object') {
@@ -85,7 +94,8 @@ function normalizeHealthConfig(options = {}) {
     return fallback;
   };
 
-  const enabled = opts.enabled !== undefined ? Boolean(opts.enabled) : true;
+  const hasExplicitConfig = Object.keys(opts).length > 0;
+  const enabled = opts.enabled !== undefined ? Boolean(opts.enabled) : hasExplicitConfig;
   const path = cleanPath(opts.path, DEFAULT_HEALTH_CONFIG.path);
   const readyPath = cleanPath(opts.readyPath, DEFAULT_HEALTH_CONFIG.readyPath);
   const combinedPath = cleanPath(opts.combinedPath, DEFAULT_HEALTH_CONFIG.combinedPath);

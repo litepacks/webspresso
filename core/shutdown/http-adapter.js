@@ -124,7 +124,7 @@ class NodeHttpAdapter {
    * Detach all listeners from the server
    */
   destroy() {
-    if (this.server) {
+    if (this.server && typeof this.server.removeListener === 'function') {
       this.server.removeListener('connection', this._onConnection);
       this.server.removeListener('secureConnection', this._onSecureConnection);
     }

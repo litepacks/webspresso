@@ -311,6 +311,7 @@ function fakeResOr(fn) {
 describe('HTTP 103 Early Hints - Wire & App Integration', () => {
   it('sends 103 Early Hints on the wire before 200 OK using native HTTP socket', async () => {
     const app = createApp({
+      pagesDir: 'pages',
       server: {
         earlyHints: {
           links: ['/css/main.css', '/js/bundle.js'],

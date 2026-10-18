@@ -17,7 +17,25 @@ function getJsonColumns(model) {
   const jsonCols = new Set();
   if (model && model.columns) {
     for (const [name, meta] of model.columns) {
-      if (meta.type === 'json' || meta.type === 'array' || meta.type === 'files') {
+      if (meta && (meta.type === 'json' || meta.type === 'array' || meta.type === 'files')) {
+        jsonCols.add(name);
+      }
+    }
+  }
+  if (model && model.schema && model.schema.shape) {
+    for (const [name, fieldSchema] of Object.entries(model.schema.shape)) {
+      let current = fieldSchema;
+      while (current && current._def) {
+        if (current._def.innerType) {
+          current = current._def.innerType;
+        } else if (current._def.schema) {
+          current = current._def.schema;
+        } else {
+          break;
+        }
+      }
+      const typeName = current?._def?.typeName;
+      if (typeName === 'ZodRecord' || typeName === 'ZodObject' || typeName === 'ZodArray') {
         jsonCols.add(name);
       }
     }
