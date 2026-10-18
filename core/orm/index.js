@@ -397,4 +397,7 @@ module.exports = {
   applyColumnFilters: require('./query-filters').applyColumnFilters,
   applyFilterCondition: require('./query-filters').applyFilterCondition,
   queryFilters: require('./query-filters'),
+  // Batch & Bulk Operation Utilities
+  calculateSafeChunkSize: require('./batch').calculateSafeChunkSize,
+  chunkArray: require('./batch').chunkArray,
 };

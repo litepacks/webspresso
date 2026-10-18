@@ -33,6 +33,10 @@ class QueueManager extends EventEmitter {
     this.maxPollInterval = Math.max(this.pollInterval, options.maxPollInterval || (this.pollInterval * 5));
     this._currentPollInterval = this.pollInterval;
     this.jobsDir = options.jobsDir || null;
+    this.timeouts = options.timeouts || null;
+    this.defaultTimeout = options.timeout !== undefined
+      ? parseDurationMs(options.timeout, 30000)
+      : (options.timeouts?.queue ? parseDurationMs(options.timeouts.queue, 30000) : 30000);
 
     /** @type {Map<string, { handler: Function, options: Object }>} */
     this.handlers = new Map();
@@ -119,7 +123,7 @@ class QueueManager extends EventEmitter {
       handler,
       options: {
         attempts: 3,
-        timeout: 30000,
+        timeout: options.timeout !== undefined ? parseDurationMs(options.timeout, this.defaultTimeout) : this.defaultTimeout,
         priority: 10,
         ...options,
       },
@@ -595,13 +599,16 @@ class QueueManager extends EventEmitter {
     this.emit('job:started', job);
 
     const { handler } = registered;
-    const timeoutMs = job.timeout || 30000;
+    const timeoutMs = job.timeout || this.defaultTimeout || 30000;
 
     let timeoutTimer = null;
     const timeoutPromise = new Promise((_, reject) => {
       timeoutTimer = setTimeout(() => {
         reject(new Error(`Job '${job.name}' (${job.id}) exceeded timeout of ${timeoutMs}ms`));
       }, timeoutMs);
+      if (timeoutTimer && typeof timeoutTimer.unref === 'function') {
+        timeoutTimer.unref();
+      }
     });
 
     try {
@@ -609,12 +616,16 @@ class QueueManager extends EventEmitter {
         handler(job, { queue: this }),
         timeoutPromise,
       ]);
-      clearTimeout(timeoutTimer);
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+      }
 
       const completedJob = await this.adapter.complete(job.id, result);
       this.emit('job:completed', completedJob || job, result);
     } catch (err) {
-      clearTimeout(timeoutTimer);
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+      }
 
       if (job.attempts < job.maxAttempts) {
         const delayMs = job.getNextRetryDelay();

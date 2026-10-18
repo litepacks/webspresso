@@ -104,6 +104,12 @@ function webhooksPlugin(options = {}) {
         dispatcher.knex = db.knex || db;
       }
 
+      // Sync timeouts from app context if not explicitly passed
+      const timeouts = ctx?.timeouts || (ctx?.app && typeof ctx.app.get === 'function' ? ctx.app.get('timeouts') : null);
+      if (timeouts && timeouts.webhook && dispatcher.timeoutMs === 10000 && options.timeoutMs === undefined && options.timeout === undefined) {
+        dispatcher.timeoutMs = timeouts.webhook;
+      }
+
       // Attach dispatcher to app and request objects
       if (ctx.app) {
         ctx.app.webhooks = dispatcher;

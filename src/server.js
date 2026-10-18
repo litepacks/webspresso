@@ -11,7 +11,11 @@ const { AsyncLocalStorage } = require('async_hooks');
 const express = require('express');
 const helmet = require('helmet');
 const nunjucks = require('nunjucks');
-const timeout = require('connect-timeout');
+const {
+  DEFAULT_TIMEOUTS,
+  normalizeTimeouts,
+  createTimeoutMiddleware,
+} = require('../core/utils/timeout');
 
 const { setAppContext } = require('./app-context');
 const { mountClientRuntime } = require('./client-runtime/mount');
@@ -31,6 +35,7 @@ const { mountDiscoveredRoutes } = require('./routing/mount-discovered-routes');
 const { discoverModuleDetails } = require('./modules/module-discovery');
 const { ShutdownManager, NodeHttpAdapter } = require('../core/shutdown');
 const { createCompressionMiddleware } = require('../core/compression');
+const { createEarlyHintsMiddleware } = require('../core/early-hints');
 const { createFlashMiddleware } = require('../core/forms/flash');
 const { createBouncerMiddleware } = require('../core/auth/bouncer');
 const {
@@ -590,11 +595,15 @@ function createApp(options = {}) {
     plugins = [],
     assets: assetsConfig = {},
     errorPages = {},
-    timeout: timeoutConfig = '30s',
+    timeout: timeoutConfig,
+    timeouts: timeoutsConfig,
     auth: authManager = null,
     setupRoutes,
     dev: devOpts = {},
   } = options;
+
+  // Centralized global timeout configuration
+  const timeouts = normalizeTimeouts(options);
 
   // Auto-instrument Knex queries for dev profiler
   if (options.db && options.db.knex) {
@@ -644,7 +653,7 @@ function createApp(options = {}) {
   const shutdownConfig = {
     enabled: true,
     mode: isDev ? 'force' : 'graceful',
-    timeout: isDev ? 1000 : 10_000,
+    timeout: isDev ? 1000 : (timeouts.shutdown !== false ? timeouts.shutdown : 10_000),
     ...(options.shutdown || options.server?.shutdown || {}),
   };
 
@@ -665,6 +674,7 @@ function createApp(options = {}) {
     servicesDir: resolvedServicesDir,
     isDev,
     logger: logging ? console : null,
+    timeouts,
   });
 
   // Auto-register built-in auth services if database is present and service is not custom-defined
@@ -1178,10 +1188,21 @@ function createApp(options = {}) {
       app.use(createCompressionMiddleware(compressionConfig));
     }
   }
+
+  // HTTP 103 Early Hints
+  const earlyHintsOpt = options.earlyHints ?? options.server?.earlyHints ?? false;
+  app.use(createEarlyHintsMiddleware(earlyHintsOpt));
   
+  // Attach normalized timeouts to app and incoming requests
+  app.set('timeouts', timeouts);
+  app.use((req, res, next) => {
+    req.timeouts = timeouts;
+    next();
+  });
+
   // Request timeout middleware
-  if (timeoutConfig !== false) {
-    app.use(timeout(timeoutConfig));
+  if (timeouts.request !== false) {
+    app.use(createTimeoutMiddleware(timeouts.request));
   }
   
   // Trust proxy (for correct req.ip, req.protocol behind reverse proxy; configurable via options.trustProxy)
@@ -1223,7 +1244,7 @@ function createApp(options = {}) {
   // Ensure default empty object for body on mutating requests if not populated
   // and halt processing if request has timed out (after body parsers)
   app.use((req, res, next) => {
-    if (timeoutConfig !== false && req.timedout) return;
+    if (timeouts.request !== false && req.timedout) return;
     if (req.body === undefined && (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH')) {
       req.body = {};
     }
@@ -1665,7 +1686,8 @@ function createApp(options = {}) {
       locale,
       t,
       service: (name, input, opts) =>
-        serviceRegistry.call(name, input, { req, res: {}, fsy, locale, t, db: options.db ?? null }, opts),
+        serviceRegistry.call(name, input, { req, res: {}, fsy, locale, t, db: options.db ?? null, timeouts }, opts),
+      timeouts,
       isDev,
       url: req.url,
       method: req.method,
@@ -1971,7 +1993,7 @@ function createApp(options = {}) {
     });
   };
   
-  return { app, nunjucksEnv, pluginManager, authMiddleware, shutdownManager, events: eventDispatcher };
+  return { app, nunjucksEnv, pluginManager, authMiddleware, shutdownManager, events: eventDispatcher, timeouts };
 }
 
 // Export for use as library

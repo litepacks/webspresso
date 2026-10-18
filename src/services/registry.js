@@ -21,6 +21,8 @@ class ServiceRegistry {
     this.servicesDir = options.servicesDir ? path.resolve(options.servicesDir) : null;
     this.isDev = Boolean(options.isDev);
     this.logger = options.logger || null;
+    this.timeouts = options.timeouts || null;
+    this.timeout = options.timeout !== undefined ? options.timeout : null;
 
     /** @type {Map<string, Object>} */
     this.services = new Map();

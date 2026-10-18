@@ -24,6 +24,7 @@ const {
 } = require('./src/services');
 const { ShutdownManager, NodeHttpAdapter } = require('./core/shutdown');
 const compression = require('./core/compression');
+const earlyHints = require('./core/early-hints');
 const errors = require('./core/errors');
 const { 
   mountPages, 
@@ -118,6 +119,14 @@ module.exports = {
   compression,
   createCompressionMiddleware: compression.createCompressionMiddleware,
 
+  // HTTP 103 Early Hints
+  earlyHints,
+  sendEarlyHints: earlyHints.sendEarlyHints,
+  createEarlyHintsMiddleware: earlyHints.createEarlyHintsMiddleware,
+  formatLink: earlyHints.formatLink,
+  formatLinkHeader: earlyHints.formatLinkHeader,
+  inferAsType: earlyHints.inferAsType,
+
   // Exceptions & Error Handling
   errors,
   WebspressoError: errors.WebspressoError,
@@ -131,7 +140,10 @@ module.exports = {
   PayloadTooLargeError: errors.PayloadTooLargeError,
   UnsupportedMediaTypeError: errors.UnsupportedMediaTypeError,
   UnprocessableEntityError: errors.UnprocessableEntityError,
+  RequestTimeoutError: errors.RequestTimeoutError,
   TooManyRequestsError: errors.TooManyRequestsError,
+  ServiceUnavailableError: errors.ServiceUnavailableError,
+  GatewayTimeoutError: errors.GatewayTimeoutError,
   ValidationError: errors.ValidationError,
   ConfigurationError: errors.ConfigurationError,
   PluginError: errors.PluginError,
@@ -257,6 +269,13 @@ module.exports = {
   pick: require('./core/utils/object').pick,
   omit: require('./core/utils/object').omit,
   deepClone: require('./core/utils/object').deepClone,
+
+  // Timeout Utilities & Middleware
+  DEFAULT_TIMEOUTS: require('./core/utils/timeout').DEFAULT_TIMEOUTS,
+  normalizeTimeouts: require('./core/utils/timeout').normalizeTimeouts,
+  withTimeout: require('./core/utils/timeout').withTimeout,
+  createTimeoutMiddleware: require('./core/utils/timeout').createTimeoutMiddleware,
+  TimeoutError: require('./core/utils/timeout').TimeoutError,
 };
 
 // Define lazy getters for plugins, ORM, and heavy core subsystems
@@ -314,6 +333,8 @@ Object.defineProperties(module.exports, {
   FactoryBuilder: { get: () => getOrm().FactoryBuilder, enumerable: true, configurable: true },
   diffSchema: { get: () => getOrm().diffSchema, enumerable: true, configurable: true },
   makeMigrations: { get: () => getOrm().makeMigrations, enumerable: true, configurable: true },
+  calculateSafeChunkSize: { get: () => getOrm().calculateSafeChunkSize, enumerable: true, configurable: true },
+  chunkArray: { get: () => getOrm().chunkArray, enumerable: true, configurable: true },
 
   // Cascading Middleware & Layouts
   cascading: { get: () => require('./src/routing/cascading'), enumerable: true, configurable: true },

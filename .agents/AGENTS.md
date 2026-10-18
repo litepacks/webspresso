@@ -56,6 +56,7 @@ This `.agents/` customization root is organized into modular topic guides:
 17. **[SSR Streaming & Chunked Transfer](.agents/STREAMING.md)** — Native HTTP chunked streaming (`res.renderStream()`), deferred data loader slots (`defer: { key: promise }`), and TTFB optimization.
 18. **Polar billing production checklist** — [docs/guides/polar-production-checklist.md](../docs/guides/polar-production-checklist.md) (env, webhooks, rate limits, external tier hooks, CSP). Plugin reference: [PLUGINS.md § polarPlugin](PLUGINS.md).
 19. **[Decoupled Events & Signals Architecture](.agents/EVENTS.md)** — Zero-dependency enterprise event dispatcher (`core/events`), sync/async/parallel/serial/waterfall dispatch, wildcard listeners (`order.*`), Django-style `Signal` and sender filtering, queue bridging, and listener auto-discovery.
+20. **[HTTP 103 Early Hints](.agents/EARLY_HINTS.md)** — Zero-dependency RFC 8288 / RFC 8297 Early Hints dispatcher (`core/early-hints`), preloading route CSS/JS and fonts before SSR loader execution, `createApp({ earlyHints })`, and `res.earlyHints(links)` / `ctx.earlyHints(links)` helpers.
 
 ---
 

@@ -62,10 +62,22 @@ export interface CreateAppOptions {
     timeout?: string | ((req: Request, res: Response, ctx: ErrorPageContext) => unknown);
   };
   timeout?: string | false;
+  /** Global timeouts configuration across server, services, background jobs, outgoing fetch, webhooks, and shutdown */
+  timeouts?: {
+    request?: number | string | false;
+    service?: number | string | false;
+    queue?: number | string | false;
+    fetch?: number | string | false;
+    webhook?: number | string | false;
+    shutdown?: number | string | false;
+    loader?: number | string | false;
+  };
   auth?: unknown;
   db?: DatabaseInstance | null;
   /** HTTP response compression options */
   compression?: boolean | CompressionOptions;
+  /** HTTP 103 Early Hints options (preloads CSS/JS before SSR finish) */
+  earlyHints?: boolean | (string | EarlyHintLink)[] | EarlyHintsOptions;
   /** Shutdown and lifecycle configuration */
   shutdown?: ShutdownOptions;
   /**
@@ -91,6 +103,7 @@ export interface CreateAppOptions {
     port?: number;
     shutdown?: ShutdownOptions;
     compression?: boolean | CompressionOptions;
+    earlyHints?: boolean | (string | EarlyHintLink)[] | EarlyHintsOptions;
     trustProxy?: boolean | number | string;
     [key: string]: unknown;
   };
@@ -362,6 +375,27 @@ export interface ShutdownOptions {
   exitOnSignal?: boolean;
 }
 
+export interface EarlyHintLink {
+  url?: string;
+  href?: string;
+  rel?: 'preload' | 'preconnect' | 'prefetch' | 'modulepreload' | 'dns-prefetch' | string;
+  as?: 'style' | 'script' | 'font' | 'image' | 'fetch' | 'video' | 'audio' | string;
+  crossOrigin?: boolean | '' | 'anonymous' | 'use-credentials';
+  crossorigin?: boolean | '' | 'anonymous' | 'use-credentials';
+  type?: string;
+  media?: string;
+  fetchPriority?: 'high' | 'low' | 'auto';
+  fetchpriority?: 'high' | 'low' | 'auto';
+  noPush?: boolean;
+  nopush?: boolean;
+}
+
+export interface EarlyHintsOptions {
+  enabled?: boolean;
+  auto?: boolean;
+  links?: (string | EarlyHintLink)[] | ((req: Request) => (string | EarlyHintLink)[]);
+}
+
 export interface ServerAdapter {
   close(): Promise<void>;
   forceClose?(): void;
@@ -468,7 +502,10 @@ export class ConflictError extends HttpError { constructor(message?: string, opt
 export class PayloadTooLargeError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
 export class UnsupportedMediaTypeError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
 export class UnprocessableEntityError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
+export class RequestTimeoutError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
 export class TooManyRequestsError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
+export class ServiceUnavailableError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
+export class GatewayTimeoutError extends HttpError { constructor(message?: string, options?: ErrorOptions); }
 
 export class ValidationError extends HttpError {
   fields: Record<string, string[] | string>;
@@ -498,6 +535,29 @@ export namespace compression {
   export function createCompressionStream(encoding: string, options?: CompressionOptions): unknown;
   export function createCompressionMiddleware(options?: CompressionOptions): RequestHandler;
   export function appendVary(res: unknown, field: string): void;
+}
+
+export function createEarlyHintsMiddleware(options?: boolean | EarlyHintsOptions): RequestHandler;
+export function sendEarlyHints(
+  res: unknown,
+  hints: string | EarlyHintLink | (string | EarlyHintLink)[] | Record<string, unknown>,
+  callback?: (err?: Error | null) => void
+): boolean;
+export function formatLink(item: string | EarlyHintLink): string | null;
+export function formatLinkHeader(links: string | EarlyHintLink | (string | EarlyHintLink)[]): string[];
+export function inferAsType(url: string): string | null;
+
+export namespace earlyHints {
+  export const EXTENSION_AS_MAP: Record<string, string>;
+  export function inferAsType(url: string): string | null;
+  export function formatLink(item: string | EarlyHintLink): string | null;
+  export function formatLinkHeader(links: string | EarlyHintLink | (string | EarlyHintLink)[]): string[];
+  export function sendEarlyHints(
+    res: unknown,
+    hints: string | EarlyHintLink | (string | EarlyHintLink)[] | Record<string, unknown>,
+    callback?: (err?: Error | null) => void
+  ): boolean;
+  export function createEarlyHintsMiddleware(options?: boolean | EarlyHintsOptions): RequestHandler;
 }
 
 export function resolveClientRuntime(options?: {
@@ -910,6 +970,60 @@ export function pick<T extends object, K extends keyof T>(obj: T | null | undefi
 export function omit<T extends object, K extends keyof T>(obj: T | null | undefined, keys: K[] | K): Omit<T, K>;
 export function deepClone<T>(obj: T): T;
 
+export const DEFAULT_TIMEOUTS: Readonly<{
+  request: number;
+  service: number;
+  queue: number;
+  fetch: number;
+  webhook: number;
+  shutdown: number;
+  loader: number;
+}>;
+
+export interface NormalizedTimeouts {
+  request: number | false;
+  service: number | false;
+  queue: number | false;
+  fetch: number | false;
+  webhook: number | false;
+  shutdown: number | false;
+  loader: number | false;
+}
+
+export function normalizeTimeouts(options?: {
+  timeouts?: Partial<Record<keyof NormalizedTimeouts, number | string | false>>;
+  timeout?: number | string | false;
+  [key: string]: unknown;
+}): Readonly<NormalizedTimeouts>;
+
+export class TimeoutError extends WebspressoError {
+  status: number;
+  statusCode: number;
+  timeout?: number | null;
+  scope: string;
+  constructor(message?: string, options?: ErrorOptions & { timeout?: number; status?: number; statusCode?: number; scope?: string });
+}
+
+export function withTimeout<T>(
+  promiseOrFn: Promise<T> | ((signal?: AbortSignal) => Promise<T> | T),
+  timeout: number | string | boolean,
+  options?: {
+    controller?: AbortController;
+    signal?: AbortSignal;
+    errorMessage?: string;
+    errorCode?: string;
+    statusCode?: number;
+    scope?: string;
+    unref?: boolean;
+    createError?: (timeoutMs: number) => Error;
+  }
+): Promise<T>;
+
+export function createTimeoutMiddleware(
+  timeoutConfig: number | string | boolean,
+  options?: { respond?: boolean }
+): (req: Request, res: Response, next: (err?: unknown) => void) => void;
+
 export const utils: Record<string, unknown>;
 
 export class AssetManager {
@@ -1316,13 +1430,41 @@ export interface QueryBuilder<T = Record<string, any>> {
   [key: string]: unknown;
 }
 
+export interface BatchOptions {
+  chunkSize?: number;
+  transaction?: boolean;
+  validate?: boolean;
+  hooks?: boolean;
+  returning?: boolean;
+}
+
+export interface UpsertOptions extends BatchOptions {
+  updateColumns?: string[] | Record<string, unknown>;
+}
+
+export interface BatchUpsertOptions extends BatchOptions {
+  updateColumns?: string[] | Record<string, unknown>;
+}
+
 export interface Repository<T = Record<string, any>> {
   findById(id: string | number, options?: FindOptions): Promise<T | null>;
   findOne(conditions: Partial<T> | Record<string, unknown>, options?: FindOptions): Promise<T | null>;
   findAll(options?: FindOptions): Promise<T[]>;
   find(conditions?: Partial<T> | Record<string, unknown>, options?: FindOptions): Promise<T[]>;
   create(data: Partial<T> | Record<string, unknown>): Promise<T>;
-  createMany(data: (Partial<T> | Record<string, unknown>)[]): Promise<T[]>;
+  createMany(data: (Partial<T> | Record<string, unknown>)[], options?: BatchOptions): Promise<T[]>;
+  createBatch(data: (Partial<T> | Record<string, unknown>)[], options?: BatchOptions): Promise<T[]>;
+  upsert(
+    data: Partial<T> | Record<string, unknown>,
+    conflictTarget?: string | string[],
+    updateColumns?: string[] | Record<string, unknown>,
+    options?: UpsertOptions
+  ): Promise<T | null>;
+  upsertBatch(
+    data: (Partial<T> | Record<string, unknown>)[],
+    conflictTarget?: string | string[],
+    options?: BatchUpsertOptions
+  ): Promise<T[]>;
   update(id: string | number, data: Partial<T> | Record<string, unknown>): Promise<T | null>;
   updateWhere(conditions: Partial<T> | Record<string, unknown>, data: Partial<T> | Record<string, unknown>): Promise<number>;
   delete(id: string | number, options?: { cascade?: boolean; deletedAt?: Date }): Promise<boolean>;
@@ -1470,6 +1612,8 @@ export function getAmbientTransaction(): Knex.Transaction | null;
 export function hasAmbientTransaction(): boolean;
 export function createTransactionContext(trx: Knex.Transaction, scopeContext?: ScopeContext): TransactionContext;
 export function runTransaction<T>(knex: Knex, callback: (ctx: TransactionContext) => Promise<T>, scopeContext?: ScopeContext): Promise<T>;
+export function calculateSafeChunkSize(knexInstance: unknown, columnCount?: number, requestedChunkSize?: number | null): number;
+export function chunkArray<T>(array: T[], size: number): T[][];
 
 export function createMemoryCacheProvider(options?: OrmMemoryCacheOptions): {
   get(key: string): unknown;
@@ -3267,6 +3411,7 @@ export interface PageContext<TParams = Record<string, string>, TQuery = Record<s
   logger: Console;
   redirect: (url: string, status?: number) => { __redirected: boolean };
   error: (status?: number, message?: string) => never;
+  earlyHints?: (links: string | EarlyHintLink | (string | EarlyHintLink)[], callback?: (err?: Error | null) => void) => boolean;
   fsy: Record<string, unknown>;
   locale: string;
   t: (key: string, params?: Record<string, unknown>) => string;
@@ -3275,6 +3420,7 @@ export interface PageContext<TParams = Record<string, string>, TQuery = Record<s
 
 export interface DefinePageOptions<TData = any, TParams = Record<string, string>, TQuery = Record<string, string>> {
   middleware?: (string | import('express').RequestHandler | [string, Record<string, unknown>])[];
+  earlyHints?: boolean | (string | EarlyHintLink)[] | EarlyHintsOptions;
   load?: (ctx: PageContext<TParams, TQuery>) => Promise<TData> | TData;
   head?: (data: TData, ctx: PageContext<TParams, TQuery>) => Record<string, unknown>;
   render?: (data: TData, ctx: PageContext<TParams, TQuery>) => string | Promise<string>;

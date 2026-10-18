@@ -15,7 +15,10 @@ const {
   PayloadTooLargeError,
   UnsupportedMediaTypeError,
   UnprocessableEntityError,
+  RequestTimeoutError,
   TooManyRequestsError,
+  ServiceUnavailableError,
+  GatewayTimeoutError,
 } = require('./http');
 const {
   ValidationError,
@@ -54,7 +57,10 @@ module.exports = {
   PayloadTooLargeError,
   UnsupportedMediaTypeError,
   UnprocessableEntityError,
+  RequestTimeoutError,
   TooManyRequestsError,
+  ServiceUnavailableError,
+  GatewayTimeoutError,
 
   // Domain Exceptions
   ValidationError,

@@ -19,7 +19,8 @@ const {
 const { ensureArray } = require('./utils');
 const { ModelEvents, createEventContext, Hooks, HookCancellationError } = require('./events');
 const { getJsonColumns, serializeJsonFields, deserializeJsonFields } = require('./json-fields');
-const { getAmbientTransaction } = require('./transaction');
+const { getAmbientTransaction, hasAmbientTransaction, runTransaction } = require('./transaction');
+const { calculateSafeChunkSize, chunkArray } = require('./batch');
 
 /**
  * Get or cache partial schema for model
@@ -361,23 +362,289 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     // Emit afterSave
     ModelEvents.emit(model.name, Hooks.AFTER_SAVE, record, ctx);
 
+    // Invalidate cache
+    if (cacheLayer) {
+      cacheLayer.invalidateModelAll(model);
+    }
+
     return record;
+  }
+
+  /**
+   * Create multiple records in chunked batches with SQL variable limit protection
+   * and atomic transaction rollback guarantees.
+   *
+   * @param {Object[]} dataArray - Array of records to create
+   * @param {Object} [options] - Batch options
+   * @param {number} [options.chunkSize] - Custom chunk size (auto-calculated safely if omitted)
+   * @param {boolean} [options.transaction=true] - Wrap in transaction
+   * @param {boolean} [options.validate=true] - Validate schema for each item
+   * @param {boolean} [options.hooks=true] - Execute model lifecycle hooks
+   * @param {boolean} [options.returning=true] - Return created records
+   * @returns {Promise<Object[]>}
+   */
+  async function createBatch(dataArray, options = {}) {
+    if (!Array.isArray(dataArray) || dataArray.length === 0) {
+      return [];
+    }
+
+    const {
+      chunkSize: userChunkSize,
+      transaction = true,
+      validate = true,
+      hooks = true,
+      returning = true,
+    } = options;
+
+    const executeBatch = async (trxInstance) => {
+      const activeKnex = trxInstance || getActiveKnex();
+      const hookTrx = (activeKnex && (activeKnex.isTransaction || typeof activeKnex.commit === 'function')) ? activeKnex : null;
+
+      // 1. Prepare, validate and serialize all rows
+      const preparedRows = [];
+      const eventContexts = [];
+
+      for (let i = 0; i < dataArray.length; i++) {
+        const item = dataArray[i];
+        let workingData = { ...item };
+        const ctx = hooks ? createEventContext(model.name, 'create', hookTrx) : null;
+        if (ctx) eventContexts.push(ctx);
+
+        if (hooks) {
+          await ModelEvents.emitAsync(model.name, Hooks.BEFORE_VALIDATION, workingData, ctx);
+          if (ctx.isCancelled) {
+            throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_VALIDATION);
+          }
+        }
+
+        let validatedData = workingData;
+        if (validate) {
+          validatedData = getPartialSchema(model).parse(workingData);
+        }
+
+        if (hooks) {
+          ModelEvents.emit(model.name, Hooks.AFTER_VALIDATION, validatedData, ctx);
+          await ModelEvents.emitAsync(model.name, Hooks.BEFORE_SAVE, validatedData, ctx);
+          if (ctx.isCancelled) {
+            throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_SAVE);
+          }
+          await ModelEvents.emitAsync(model.name, Hooks.BEFORE_CREATE, validatedData, ctx);
+          if (ctx.isCancelled) {
+            throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_CREATE);
+          }
+        }
+
+        let insertData = applyInsertModifiers(validatedData, scopeContext, model);
+        if (hasJson) {
+          insertData = serializeJsonFields(insertData, jsonColumns);
+        }
+
+        preparedRows.push(insertData);
+      }
+
+      // 2. Determine safe chunk size based on column count and dialect
+      const sampleCols = Object.keys(preparedRows[0] || {}).length;
+      const safeChunk = calculateSafeChunkSize(activeKnex, sampleCols, userChunkSize);
+      const chunks = chunkArray(preparedRows, safeChunk);
+
+      const allCreated = [];
+
+      // 3. Insert chunk by chunk
+      for (const chunk of chunks) {
+        let insertedResult = [];
+        try {
+          insertedResult = await activeKnex(model.table).insert(chunk).returning('*');
+        } catch (insertErr) {
+          try {
+            const ids = await activeKnex(model.table).insert(chunk).returning(model.primaryKey);
+            insertedResult = ids.map((id) => (typeof id === 'object' && id !== null ? id : { [model.primaryKey]: id }));
+          } catch (_) {
+            insertedResult = await activeKnex(model.table).insert(chunk);
+          }
+        }
+
+        if (returning && Array.isArray(insertedResult)) {
+          for (let r of insertedResult) {
+            if (hasJson && r && typeof r === 'object') {
+              r = deserializeJsonFields(r, jsonColumns);
+            }
+            allCreated.push(r);
+          }
+        }
+      }
+
+      // 4. Invalidate cache
+      if (cacheLayer) {
+        cacheLayer.invalidateModelAll(model);
+      }
+
+      // 5. Emit afterCreate and afterSave hooks
+      if (hooks) {
+        for (let i = 0; i < allCreated.length; i++) {
+          const rec = allCreated[i];
+          const ctx = eventContexts[i];
+          if (ctx) {
+            ModelEvents.emit(model.name, Hooks.AFTER_CREATE, rec, ctx);
+            ModelEvents.emit(model.name, Hooks.AFTER_SAVE, rec, ctx);
+          }
+        }
+      }
+
+      return allCreated.length > 0 ? allCreated : preparedRows;
+    };
+
+    if (transaction && !hasAmbientTransaction()) {
+      return runTransaction(knex, (trxCtx) => executeBatch(trxCtx.trx), scopeContext);
+    }
+
+    return executeBatch(getActiveKnex());
   }
 
   /**
    * Create multiple records
    * @param {Object[]} dataArray - Array of record data
+   * @param {Object} [options] - Optional batch options
    * @returns {Promise<Object[]>}
    */
-  async function createMany(dataArray) {
-    const records = [];
-    
-    for (const data of dataArray) {
-      const record = await create(data);
-      records.push(record);
+  async function createMany(dataArray, options = {}) {
+    return createBatch(dataArray, options);
+  }
+
+  /**
+   * Upsert a record (insert or update on conflict)
+   * @param {Object} data - Record data
+   * @param {string|string[]} [conflictTarget] - Conflict column(s), defaults to primaryKey
+   * @param {string[]|Object} [updateColumns] - Columns to update on conflict
+   * @param {Object} [options] - Options
+   * @returns {Promise<Object>}
+   */
+  async function upsert(data, conflictTarget, updateColumns, options = {}) {
+    const results = await upsertBatch([data], conflictTarget, {
+      ...options,
+      updateColumns,
+    });
+    return results[0] || null;
+  }
+
+  /**
+   * Batch upsert records with auto-chunking and transaction guarantees
+   * @param {Object[]} dataArray - Array of records
+   * @param {string|string[]} [conflictTarget] - Column(s) to detect conflict
+   * @param {Object} [options] - Upsert options
+   * @returns {Promise<Object[]>}
+   */
+  async function upsertBatch(dataArray, conflictTarget, options = {}) {
+    if (!Array.isArray(dataArray) || dataArray.length === 0) {
+      return [];
     }
 
-    return records;
+    const {
+      updateColumns: customUpdateCols,
+      chunkSize: userChunkSize,
+      transaction = true,
+      validate = true,
+      hooks = true,
+      returning = true,
+    } = options;
+
+    const target = conflictTarget || model.primaryKey;
+    const targetCols = Array.isArray(target) ? target : [target];
+
+    const executeUpsertBatch = async (trxInstance) => {
+      const activeKnex = trxInstance || getActiveKnex();
+      const hookTrx = (activeKnex && (activeKnex.isTransaction || typeof activeKnex.commit === 'function')) ? activeKnex : null;
+
+      const preparedRows = [];
+      const eventContexts = [];
+
+      for (let i = 0; i < dataArray.length; i++) {
+        const item = dataArray[i];
+        let workingData = { ...item };
+        const ctx = hooks ? createEventContext(model.name, 'upsert', hookTrx) : null;
+        if (ctx) eventContexts.push(ctx);
+
+        if (hooks) {
+          await ModelEvents.emitAsync(model.name, Hooks.BEFORE_VALIDATION, workingData, ctx);
+          if (ctx.isCancelled) {
+            throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_VALIDATION);
+          }
+        }
+
+        let validatedData = workingData;
+        if (validate) {
+          validatedData = getPartialSchema(model).parse(workingData);
+        }
+
+        if (hooks) {
+          ModelEvents.emit(model.name, Hooks.AFTER_VALIDATION, validatedData, ctx);
+          await ModelEvents.emitAsync(model.name, Hooks.BEFORE_SAVE, validatedData, ctx);
+          if (ctx.isCancelled) {
+            throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_SAVE);
+          }
+        }
+
+        let insertData = applyInsertModifiers(validatedData, scopeContext, model);
+        insertData = applyUpdateModifiers(insertData, model);
+
+        if (hasJson) {
+          insertData = serializeJsonFields(insertData, jsonColumns);
+        }
+
+        preparedRows.push(insertData);
+      }
+
+      let mergeCols = customUpdateCols;
+      if (!mergeCols) {
+        const sampleKeys = Object.keys(preparedRows[0] || {});
+        mergeCols = sampleKeys.filter(
+          (k) => !targetCols.includes(k) && k !== 'created_at' && k !== 'createdAt'
+        );
+      }
+
+      const sampleCols = Object.keys(preparedRows[0] || {}).length;
+      const safeChunk = calculateSafeChunkSize(activeKnex, sampleCols, userChunkSize);
+      const chunks = chunkArray(preparedRows, safeChunk);
+
+      const allResults = [];
+
+      for (const chunk of chunks) {
+        let query = activeKnex(model.table).insert(chunk).onConflict(target);
+
+        if (Array.isArray(mergeCols) || typeof mergeCols === 'object') {
+          query = query.merge(mergeCols);
+        } else {
+          query = query.merge();
+        }
+
+        let res = [];
+        try {
+          res = await query.returning('*');
+        } catch (_) {
+          res = await query;
+        }
+
+        if (returning && Array.isArray(res)) {
+          for (let r of res) {
+            if (hasJson && r && typeof r === 'object') {
+              r = deserializeJsonFields(r, jsonColumns);
+            }
+            allResults.push(r);
+          }
+        }
+      }
+
+      if (cacheLayer) {
+        cacheLayer.invalidateModelAll(model);
+      }
+
+      return allResults.length > 0 ? allResults : preparedRows;
+    };
+
+    if (transaction && !hasAmbientTransaction()) {
+      return runTransaction(knex, (trxCtx) => executeUpsertBatch(trxCtx.trx), scopeContext);
+    }
+
+    return executeUpsertBatch(getActiveKnex());
   }
 
   /**
@@ -959,6 +1226,9 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     find,
     create,
     createMany,
+    createBatch,
+    upsert,
+    upsertBatch,
     update,
     updateWhere,
     delete: del,

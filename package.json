@@ -115,7 +115,6 @@
     "bcrypt": "^5.1.1",
     "commander": "^11.1.0",
     "compression": "^1.8.2",
-    "connect-timeout": "^1.9.1",
     "cookie-parser": "^1.4.7",
     "csv-parse": "^7.0.2",
     "dayjs": "^1.11.19",

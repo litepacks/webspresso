@@ -110,11 +110,38 @@ class UnprocessableEntityError extends HttpError {
 }
 
 /**
+ * 408 Request Timeout
+ */
+class RequestTimeoutError extends HttpError {
+  constructor(message = 'Request Timeout', options = {}) {
+    super(408, message, { code: 'REQUEST_TIMEOUT', ...options });
+  }
+}
+
+/**
  * 429 Too Many Requests
  */
 class TooManyRequestsError extends HttpError {
   constructor(message = 'Too Many Requests', options = {}) {
     super(429, message, { code: 'TOO_MANY_REQUESTS', ...options });
+  }
+}
+
+/**
+ * 503 Service Unavailable
+ */
+class ServiceUnavailableError extends HttpError {
+  constructor(message = 'Service Unavailable', options = {}) {
+    super(503, message, { code: 'SERVICE_UNAVAILABLE', ...options });
+  }
+}
+
+/**
+ * 504 Gateway Timeout
+ */
+class GatewayTimeoutError extends HttpError {
+  constructor(message = 'Gateway Timeout', options = {}) {
+    super(504, message, { code: 'GATEWAY_TIMEOUT', ...options });
   }
 }
 
@@ -129,5 +156,9 @@ module.exports = {
   PayloadTooLargeError,
   UnsupportedMediaTypeError,
   UnprocessableEntityError,
+  RequestTimeoutError,
   TooManyRequestsError,
+  ServiceUnavailableError,
+  GatewayTimeoutError,
 };
+

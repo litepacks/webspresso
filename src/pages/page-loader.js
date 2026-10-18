@@ -18,6 +18,7 @@ const {
   resolvePageAssets,
   applyPageAssetsToTemplateData,
 } = require('../file-router');
+const { sendEarlyHints } = require('../../core/early-hints');
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -162,11 +163,62 @@ function createPageHandler(descriptor, context) {
           err.status = status;
           throw err;
         },
+        earlyHints: (links, cb) => sendEarlyHints(res, links, cb),
         fsy,
         locale,
         t,
         db,
       };
+
+      // 3.5. Dispatch Early Hints (if configured or enabled) before load()
+      const earlyHintsOpt = pageDef.earlyHints !== undefined
+        ? pageDef.earlyHints
+        : (descriptor.earlyHints !== undefined
+            ? descriptor.earlyHints
+            : (appOptions && (appOptions.earlyHints ?? appOptions.server?.earlyHints)));
+
+      if (earlyHintsOpt && earlyHintsOpt !== false && !res.headersSent) {
+        const auto = typeof earlyHintsOpt === 'object' ? (earlyHintsOpt.auto !== false) : Boolean(earlyHintsOpt);
+        const linksToSend = [];
+
+        // Explicit links from page definition or app earlyHints config
+        if (Array.isArray(earlyHintsOpt)) {
+          linksToSend.push(...earlyHintsOpt);
+        } else if (typeof earlyHintsOpt === 'object' && earlyHintsOpt.links) {
+          const customLinks = typeof earlyHintsOpt.links === 'function' ? earlyHintsOpt.links(req) : earlyHintsOpt.links;
+          if (Array.isArray(customLinks)) linksToSend.push(...customLinks);
+          else if (customLinks) linksToSend.push(customLinks);
+        }
+
+        // Auto-discover route CSS & JS assets via AssetManager
+        if (auto) {
+          const assetManager = fsy?.assetManager || getAssetManager();
+          if (assetManager && typeof assetManager.getRouteAssetCandidates === 'function') {
+            const candidates = assetManager.getRouteAssetCandidates(
+              descriptor.source || descriptor.file,
+              descriptor.path
+            );
+            if (Array.isArray(candidates)) {
+              for (const cand of candidates) {
+                if (typeof assetManager.hasPageCss === 'function' && assetManager.hasPageCss(cand)) {
+                  linksToSend.push(assetManager.pageCssUrl(cand));
+                  break;
+                }
+              }
+              for (const cand of candidates) {
+                if (typeof assetManager.hasPageJs === 'function' && assetManager.hasPageJs(cand)) {
+                  linksToSend.push(assetManager.pageJsUrl(cand));
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        if (linksToSend.length > 0) {
+          sendEarlyHints(res, linksToSend);
+        }
+      }
 
       // 4. Run load() lifecycle
       let loadedData = {};

@@ -193,8 +193,10 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
   const startTime = Date.now();
   const logger = executionContext.logger || registry.logger || null;
 
-  const timeoutConfig = options.timeout ?? serviceDef.timeout;
-  const timeoutMs = timeoutConfig ? parseTtlMs(timeoutConfig) : null;
+  const timeoutConfig = options.timeout ?? serviceDef.timeout ?? executionContext?.timeouts?.service ?? registry?.timeouts?.service ?? registry?.timeout;
+  const timeoutMs = (timeoutConfig !== undefined && timeoutConfig !== null && timeoutConfig !== false)
+    ? parseTtlMs(timeoutConfig)
+    : null;
 
   // Helper to execute handler with optional database transaction
   const executeHandler = async (activeCtx) => {
@@ -249,6 +251,9 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
           timeoutErr.service = name;
           reject(timeoutErr);
         }, timeoutMs);
+        if (timerId && typeof timerId.unref === 'function') {
+          timerId.unref();
+        }
       });
 
       try {
@@ -257,7 +262,9 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
           timeoutPromise,
         ]);
       } finally {
-        clearTimeout(timerId);
+        if (timerId) {
+          clearTimeout(timerId);
+        }
       }
     } else {
       result = await executeHandler(executionContext);

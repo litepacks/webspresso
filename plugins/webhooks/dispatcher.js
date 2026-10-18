@@ -48,8 +48,10 @@ class WebhookDispatcher extends EventEmitter {
     this.endpointsTable = options.endpointsTable || 'webhook_endpoints';
     this.deliveriesTable = options.deliveriesTable || 'webhook_deliveries';
     this.maxAttempts = typeof options.maxAttempts === 'number' ? options.maxAttempts : 3;
-    this.backoffBaseMs = typeof options.backoffBaseMs === 'number' ? options.backoffBaseMs : 1000;
-    this.timeoutMs = typeof options.timeoutMs === 'number' ? options.timeoutMs : 10000;
+    const defaultWebhookTimeout = options.timeouts?.webhook || 10000;
+    this.timeoutMs = typeof options.timeoutMs === 'number'
+      ? options.timeoutMs
+      : (typeof options.timeout === 'number' ? options.timeout : defaultWebhookTimeout);
     this.wrapPayload = options.wrapPayload !== undefined ? options.wrapPayload : true;
     this.queue = options.queue || null;
     this.logger = options.logger || console;

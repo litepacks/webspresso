@@ -9,6 +9,7 @@
 const crypto = require('crypto');
 const { signPayload } = require('./crypto');
 const { safeJsonParse } = require('../../core/utils/json');
+const { parseDurationMs } = require('../../core/utils/time');
 
 /**
  * Send a webhook HTTP request to a target endpoint
@@ -42,10 +43,11 @@ async function sendWebhook(options = {}) {
     secret,
     deliveryId = crypto.randomUUID ? crypto.randomUUID() : `dlv_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`,
     headers: customHeaders = {},
-    timeoutMs = 10000,
     wrapPayload = true,
     maxResponseBodyLength = 2048,
   } = opts;
+
+  const timeoutMs = parseDurationMs(opts.timeout !== undefined ? opts.timeout : (opts.timeoutMs !== undefined ? opts.timeoutMs : 10000), 10000);
 
   if (!url || typeof url !== 'string') {
     return {

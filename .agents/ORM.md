@@ -116,10 +116,32 @@ const product = await productRepo.findById(1);
 const activeProducts = await productRepo.find({ active: true });
 const singleProduct = await productRepo.findOne({ slug: 'laptop' });
 
-// 2. Insert, Update, Delete
+// 2. Insert, Update, Delete & Batch Operations
 const newProduct = await productRepo.create({ name: 'Laptop', price: 999, category_id: 1 });
 const updated = await productRepo.update(newProduct.id, { price: 899 });
 await productRepo.delete(newProduct.id); // Soft or hard delete based on model config
+
+// 2.1 Batch Insert (Auto-Chunked with SQL Variable Limit Protection)
+// Automatically chunks rows to stay safely within SQLite/Postgres parameter limits (prevents 'too many SQL variables' error)
+// and executes inside an atomic transaction (all succeed or all rollback).
+const products = await productRepo.createBatch([
+  { name: 'Tablet', price: 499, category_id: 1 },
+  { name: 'Phone', price: 799, category_id: 1 },
+], { chunkSize: 500, transaction: true });
+
+// 2.2 Upsert & Batch Upsert (onConflict Merge)
+// Inserts new records or updates existing records on conflict target (e.g. sku or primaryKey)
+const upserted = await productRepo.upsert(
+  { sku: 'SKU-001', name: 'Keyboard', price: 59 },
+  'sku',
+  ['name', 'price']
+);
+
+const batchUpserted = await productRepo.upsertBatch(
+  catalogItems,
+  'sku',
+  { updateColumns: ['name', 'price', 'updated_at'] }
+);
 
 // 3. Query Builder & Pagination
 const result = await productRepo.query()
