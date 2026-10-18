@@ -238,24 +238,24 @@ function setupLimitsMiddleware(app, options = {}) {
 
   // Global JSON Parser
   if (limits.json.enabled) {
-    const jsonParser = express.json({
+    const jsonParserFn = express.json({
       ...limits.json.options,
       limit: limits.json.limit,
       strict: limits.json.strict,
       verify: globalVerify(limits.json.verify),
     });
 
-    app.use((req, res, next) => {
+    app.use(function jsonParser(req, res, next) {
       if (req._body || shouldSkipBodyParser(req, allExcludes)) {
         return next();
       }
-      jsonParser(req, res, next);
+      jsonParserFn(req, res, next);
     });
   }
 
   // Global URL-Encoded Parser
   if (limits.urlencoded.enabled) {
-    const urlencodedParser = express.urlencoded({
+    const urlencodedParserFn = express.urlencoded({
       ...limits.urlencoded.options,
       limit: limits.urlencoded.limit,
       extended: limits.urlencoded.extended,
@@ -263,11 +263,11 @@ function setupLimitsMiddleware(app, options = {}) {
       verify: globalVerify(limits.urlencoded.verify),
     });
 
-    app.use((req, res, next) => {
+    app.use(function urlencodedParser(req, res, next) {
       if (req._body || shouldSkipBodyParser(req, allExcludes)) {
         return next();
       }
-      urlencodedParser(req, res, next);
+      urlencodedParserFn(req, res, next);
     });
   }
 

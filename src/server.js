@@ -21,7 +21,7 @@ const { setAppContext } = require('./app-context');
 const { mountClientRuntime } = require('./client-runtime/mount');
 const { resolveClientRuntime } = require('./client-runtime/resolve');
 const { mountPages, detectLocale, loadI18n, createTranslator } = require('./file-router');
-const { configureAssets, createHelpers, getScriptInjector } = require('./helpers');
+const { configureAssets, createHelpers, getScriptInjector, AssetManager } = require('./helpers');
 const { createDevReloadHub } = require('./dev-reload');
 const { createDevBundler } = require('./bundle');
 const { registerClearHook } = require('./njk-frontmatter');
@@ -37,6 +37,7 @@ const { ShutdownManager, NodeHttpAdapter } = require('../core/shutdown');
 const { createCompressionMiddleware } = require('../core/compression');
 const { createEarlyHintsMiddleware } = require('../core/early-hints');
 const {
+  CircuitBreakerRegistry,
   circuitBreakerRegistry,
   getBreaker,
   retry,
@@ -648,17 +649,23 @@ function createApp(options = {}) {
     }
   }
 
+  // Create Express application instance
+  const app = express();
+
   // Create plugin manager
   const pluginManager = createPluginManager();
   
   // Configure asset manager
   const projectBase = publicDir ? path.dirname(path.resolve(publicDir)) : process.cwd();
-  configureAssets({
+  const assetOpts = {
     publicDir: publicDir || 'public',
     srcDir: options.srcDir || path.join(projectBase, 'src'),
     pagesDir: pagesDir || 'pages',
     ...assetsConfig
-  });
+  };
+  const appAssetManager = new AssetManager(assetOpts);
+  app.assetManager = appAssetManager;
+  configureAssets(assetOpts);
   
   const clientRuntime = resolveClientRuntime(options);
 
@@ -672,6 +679,18 @@ function createApp(options = {}) {
   const shutdownManager = new ShutdownManager({
     ...shutdownConfig,
     logger: logging ? console : null,
+  });
+
+  try {
+  // Circuit Breakers Layer initialization (isolated per application instance)
+  const appBreakers = options.breakers instanceof CircuitBreakerRegistry
+    ? options.breakers
+    : new CircuitBreakerRegistry();
+  app.breakers = appBreakers;
+  app.getBreaker = (name, opts) => appBreakers.getBreaker(name, opts);
+  app.breaker = (name, opts) => appBreakers.getBreaker(name, opts);
+  shutdownManager.onShutdown(() => {
+    appBreakers.resetAll();
   });
 
   // Services Layer initialization
@@ -754,13 +773,10 @@ function createApp(options = {}) {
     cache: appCache,
   });
   
-  const app = express();
   app.serviceRegistry = serviceRegistry;
   app.pluginManager = pluginManager;
   app.events = eventDispatcher;
   app.cache = appCache;
-  app.breakers = circuitBreakerRegistry;
-  app.getBreaker = (name, opts) => circuitBreakerRegistry.getBreaker(name, opts);
   if (options.queue) {
     app.queue = options.queue;
   }
@@ -801,8 +817,8 @@ function createApp(options = {}) {
     }
     req.events = eventDispatcher;
     req.cache = appCache;
-    req.breakers = circuitBreakerRegistry;
-    req.breaker = (name, opts) => circuitBreakerRegistry.getBreaker(name, opts);
+    req.breakers = appBreakers;
+    req.breaker = (name, opts) => appBreakers.getBreaker(name, opts);
     req.retry = retry;
     req.context = {
       req,
@@ -811,11 +827,12 @@ function createApp(options = {}) {
       queue: options.queue ?? null,
       events: eventDispatcher,
       cache: appCache,
-      breakers: circuitBreakerRegistry,
-      getBreaker: (name, opts) => circuitBreakerRegistry.getBreaker(name, opts),
-      breaker: (name, opts) => circuitBreakerRegistry.getBreaker(name, opts),
+      breakers: appBreakers,
+      getBreaker: (name, opts) => appBreakers.getBreaker(name, opts),
+      breaker: (name, opts) => appBreakers.getBreaker(name, opts),
       retry,
       app,
+      assetManager: appAssetManager,
       serviceRegistry,
       ...(req.context || {}),
     };
@@ -2042,6 +2059,14 @@ function createApp(options = {}) {
   };
   
   return { app, nunjucksEnv, pluginManager, authMiddleware, shutdownManager, events: eventDispatcher, timeouts };
+  } catch (err) {
+    try {
+      shutdownManager.close('startup_failure');
+    } catch (cleanupErr) {
+      console.warn('[webspresso] Cleanup error after startup failure:', cleanupErr?.message);
+    }
+    throw err;
+  }
 }
 
 // Export for use as library

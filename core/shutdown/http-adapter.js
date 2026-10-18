@@ -66,6 +66,7 @@ class NodeHttpAdapter {
     return new Promise((resolve) => {
       if (!this.server || !this.server.listening) {
         this._closed = true;
+        this.destroy();
         return resolve();
       }
 
@@ -73,6 +74,7 @@ class NodeHttpAdapter {
 
       this.server.close(() => {
         this._closed = true;
+        this.destroy();
         resolve();
       });
     });
@@ -115,6 +117,7 @@ class NodeHttpAdapter {
       }
     }
     this.sockets.clear();
+    this.destroy();
   }
 
   /**

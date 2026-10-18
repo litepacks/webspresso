@@ -208,16 +208,65 @@ class ShutdownManager {
 
       this._log('info', `Starting ${modeLabel} shutdown (reason: ${reason})`);
 
+      const totalTimeout = isForce ? 0 : Math.max(0, this.options.timeout);
+      const startTime = Date.now();
+      const deadline = totalTimeout > 0 ? startTime + totalTimeout : 0;
+
+      const getRemainingTime = () => {
+        if (deadline === 0) return 0;
+        return Math.max(0, deadline - Date.now());
+      };
+
       // 1. Run plugin disposers in reverse registration order (terminates SSE streams, WebSockets, devReload clients, and workers)
       if (this._disposers.length > 0) {
         this._log('info', `Disposing ${this._disposers.length} plugins`);
-        // Reverse array to tear down dependencies in reverse order
         const reverseDisposers = this._disposers.slice().reverse();
-        for (const { name, fn } of reverseDisposers) {
+        for (let i = 0; i < reverseDisposers.length; i++) {
+          const { name, fn } = reverseDisposers[i];
+          const remainingDisposers = reverseDisposers.length - i;
+          const remainingMs = getRemainingTime();
+
+          if (isForce || (deadline > 0 && remainingMs <= 0)) {
+            try {
+              const res = fn();
+              if (res && typeof res.then === 'function') {
+                await Promise.race([
+                  Promise.resolve(res),
+                  new Promise(r => {
+                    const t = setTimeout(r, 50);
+                    if (typeof t.unref === 'function') t.unref();
+                  })
+                ]);
+              }
+            } catch (err) {
+              this._log('error', `Error in plugin disposer "${name}":`, err);
+            }
+            continue;
+          }
+
+          const perDisposerTimeout = Math.min(
+            remainingMs,
+            Math.max(100, Math.floor(remainingMs / (remainingDisposers + 1)))
+          );
+
+          let timer = null;
+          const timeoutPromise = new Promise((resolve) => {
+            timer = setTimeout(() => {
+              this._log('warn', `Plugin disposer "${name}" timed out after ${perDisposerTimeout}ms`);
+              resolve();
+            }, perDisposerTimeout);
+            if (typeof timer.unref === 'function') timer.unref();
+          });
+
           try {
-            await fn();
+            await Promise.race([
+              Promise.resolve().then(() => fn()),
+              timeoutPromise
+            ]);
           } catch (err) {
             this._log('error', `Error in plugin disposer "${name}":`, err);
+          } finally {
+            if (timer) clearTimeout(timer);
           }
         }
       }
@@ -227,13 +276,24 @@ class ShutdownManager {
         this._log('info', 'Closing HTTP server');
 
         for (const adapter of this._adapters) {
-          if (isForce) {
-            // Force mode: immediately close listener & force terminate connections
+          const remainingMs = getRemainingTime();
+
+          if (isForce || (deadline > 0 && remainingMs <= 0)) {
+            // Force mode or deadline expired: immediately forceClose
             try {
               if (typeof adapter.forceClose === 'function') {
                 adapter.forceClose();
               }
-              await adapter.close();
+              const closeRes = adapter.close();
+              if (closeRes && typeof closeRes.then === 'function') {
+                await Promise.race([
+                  Promise.resolve(closeRes),
+                  new Promise(r => {
+                    const t = setTimeout(r, 100);
+                    if (typeof t.unref === 'function') t.unref();
+                  })
+                ]);
+              }
             } catch (err) {
               this._log('error', 'Error force closing adapter:', err);
             }
@@ -246,15 +306,13 @@ class ShutdownManager {
             } catch (e) {}
 
             let timer = null;
-            let timedOut = false;
-
             const closePromise = adapter.close();
 
-            if (this.options.timeout > 0) {
+            if (deadline > 0) {
+              const adapterTimeout = getRemainingTime();
               const timeoutPromise = new Promise((resolve) => {
                 timer = setTimeout(() => {
-                  timedOut = true;
-                  this._log('warn', `Graceful shutdown timed out after ${this.options.timeout}ms`);
+                  this._log('warn', `Graceful shutdown timed out with ${adapterTimeout}ms remaining budget`);
                   this._log('info', 'Force closing active connections');
                   try {
                     if (typeof adapter.forceClose === 'function') {
@@ -264,7 +322,7 @@ class ShutdownManager {
                     this._log('error', 'Error force closing connections after timeout:', err);
                   }
                   resolve();
-                }, this.options.timeout);
+                }, adapterTimeout);
 
                 if (typeof timer.unref === 'function') {
                   timer.unref();
@@ -280,8 +338,8 @@ class ShutdownManager {
               clearTimeout(timer);
             }
 
-            // Ensure closePromise has resolved
-            await closePromise.catch(() => {});
+            // Prevent unhandled rejection without blocking shutdown if timeout won
+            closePromise.catch(() => {});
           }
         }
       }
@@ -289,11 +347,52 @@ class ShutdownManager {
       // 3. Run application shutdown hooks (app.onShutdown)
       if (this._hooks.length > 0) {
         this._log('info', `Running ${this._hooks.length} shutdown hooks`);
-        for (const hook of this._hooks) {
+        for (let i = 0; i < this._hooks.length; i++) {
+          const hook = this._hooks[i];
+          const remainingHooks = this._hooks.length - i;
+          const remainingMs = getRemainingTime();
+
+          if (isForce || (deadline > 0 && remainingMs <= 0)) {
+            try {
+              const res = hook();
+              if (res && typeof res.then === 'function') {
+                await Promise.race([
+                  Promise.resolve(res),
+                  new Promise(r => {
+                    const t = setTimeout(r, 50);
+                    if (typeof t.unref === 'function') t.unref();
+                  })
+                ]);
+              }
+            } catch (err) {
+              this._log('error', 'Error in shutdown hook:', err);
+            }
+            continue;
+          }
+
+          const perHookTimeout = Math.min(
+            remainingMs,
+            Math.max(100, Math.floor(remainingMs / (remainingHooks + 1)))
+          );
+
+          let timer = null;
+          const timeoutPromise = new Promise((resolve) => {
+            timer = setTimeout(() => {
+              this._log('warn', `Shutdown hook timed out after ${perHookTimeout}ms`);
+              resolve();
+            }, perHookTimeout);
+            if (typeof timer.unref === 'function') timer.unref();
+          });
+
           try {
-            await hook();
+            await Promise.race([
+              Promise.resolve().then(() => hook()),
+              timeoutPromise
+            ]);
           } catch (err) {
             this._log('error', 'Error in shutdown hook:', err);
+          } finally {
+            if (timer) clearTimeout(timer);
           }
         }
       }

@@ -62,6 +62,11 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    */
   function getActiveKnex() {
     if (knex && (knex.isTransaction || typeof knex.commit === 'function')) {
+      if (typeof knex.isCompleted === 'function' && knex.isCompleted()) {
+        const ambientTrx = getAmbientTransaction();
+        if (ambientTrx) return ambientTrx;
+        return knex;
+      }
       return knex;
     }
     const ambientTrx = getAmbientTransaction();
@@ -77,7 +82,14 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
    */
   function getHookTrx() {
     const active = getActiveKnex();
-    return (active && (active.isTransaction || typeof active.commit === 'function')) ? active : null;
+    if (!active) return null;
+    if (active.isTransaction || typeof active.commit === 'function') {
+      if (typeof active.isCompleted === 'function' && active.isCompleted()) {
+        return null;
+      }
+      return active;
+    }
+    return null;
   }
 
   /**

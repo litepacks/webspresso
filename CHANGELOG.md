@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.105] - 2026-10-18
+
+### Fixed & Hardened
+
+#### Core Isolation & Lifecycle Hardening (`core/shutdown`, `core/orm`, `src/server.js`, `src/plugin-manager.js`, `src/helpers.js`)
+- **Transaction Stale Context & Caller Scope Isolation (`core/orm/transaction.js`, `core/orm/index.js`, `core/orm/repository.js`, `core/orm/query-builder.js`)**:
+  - `getAmbientTransaction()` now verifies `isCompleted()` on the stored transaction, returning `null` when a transaction is already committed or rolled back so lingering async tasks or late callbacks never execute against closed Knex transaction instances.
+  - `db.transaction()` and `createTransactionContext()` now clone `scopeContext`, preventing tenant/user mutations within a transaction block from bleeding into caller context.
+  - Added graceful non-transactional fallback in `runTransaction` when `runner.transaction` is not defined (e.g. test stubs or mock Knex instances).
+- **QueryBuilder Clone & Condition Isolation (`core/orm/query-builder.js`)**:
+  - `clone()` now explicitly preserves `this.action` (`'select'`, `'update'`, `'delete'`, `'count'`).
+  - Synchronized `cloned.state.scopeContext = cloned.scopeContext` to ensure scope mutations remain consistent on cloned instances without polluting parent builders.
+  - Deep-copied `wheres` and `orderBys` arrays to prevent cross-query clause mutation.
+- **ShutdownManager Global Deadline & Hung Disposer Bounding (`core/shutdown/shutdown-manager.js`)**:
+  - Unified all shutdown steps under a single absolute deadline budget (`startTime + totalTimeout`). Multiple server adapters now share the remaining timeout budget rather than multiplying shutdown duration per adapter.
+  - Bounded each plugin disposer and shutdown hook with per-step timeout caps (`Math.min(remainingMs, Math.max(100, Math.floor(remainingMs / (remaining + 1))))`), preventing single stuck or hanging disposers from indefinitely blocking graceful server termination.
+  - Eliminated deadlock where `closePromise` was awaited indefinitely after graceful timeout expired.
+- **NodeHttpAdapter Connection Cleanup (`core/shutdown/http-adapter.js`)**:
+  - Invokes `this.destroy()` on adapter close and force close to remove connection listeners and clear socket sets.
+- **Multi-App Instance Isolation (`src/server.js`, `src/helpers.js`)**:
+  - Initialized Express `app` early in `createApp` and attached per-instance `CircuitBreakerRegistry` (`app.breakers`) and `AssetManager` (`app.assetManager`), preventing breaker trips or asset configurations in one app instance from affecting others running in the same Node.js process.
+  - `src/helpers.js` now dynamically resolves `AssetManager` via `Proxy`, respecting per-instance configurations without locking stale closures.
+- **Startup Partial Failure Rollback (`src/plugin-manager.js`, `src/server.js`)**:
+  - Added `_rollbackPlugin` and `_rollbackPluginSync` to `PluginManager`. If a plugin's `setup()` or `register()` fails, partially registered disposers for that plugin are executed in reverse order and removed without leaving dangling resources.
+  - Wrapped `createApp` initialization in a cleanup error boundary, ensuring `shutdownManager.close('startup_failure')` unwinds all acquired resources in reverse order without shadowing the original startup error.
+- **Body Parser Introspection & Webhook Backoff Fixes (`core/limits/middleware.js`, `plugins/webhooks/dispatcher.js`)**:
+  - Named global body parsing middleware functions (`function jsonParser`, `function urlencodedParser`) for proper Express stack layer introspection.
+  - Initialized `this.backoffBaseMs` in `WebhookDispatcher` constructor, fixing `NaN` retry delay calculations.
+
 ## [0.0.104] - 2026-10-17
 
 ### Fixed

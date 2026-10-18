@@ -321,8 +321,7 @@ class PluginManager {
         }
       } catch (err) {
         console.warn(`[plugin-manager] Plugin "${plugin.name}" setup() failed:`, err.message);
-        this.plugins.delete(plugin.name);
-        if (plugin.api) this.pluginAPIs.delete(plugin.name);
+        await this._rollbackPlugin(plugin.name, plugin, ctx);
         return;
       }
     }
@@ -337,8 +336,7 @@ class PluginManager {
         }
       } catch (err) {
         console.warn(`[plugin-manager] Plugin "${plugin.name}" register() failed:`, err.message);
-        this.plugins.delete(plugin.name);
-        if (plugin.api) this.pluginAPIs.delete(plugin.name);
+        await this._rollbackPlugin(plugin.name, plugin, ctx);
         return;
       }
     }
@@ -354,6 +352,89 @@ class PluginManager {
 
     // Apply registered helpers to nunjucks
     this._applyHelpersAndFilters();
+  }
+
+  /**
+   * Roll back any partially acquired state or disposers for a failed plugin
+   * @private
+   */
+  async _rollbackPlugin(name, plugin, ctx) {
+    this.plugins.delete(name);
+    if (plugin && plugin.api) {
+      this.pluginAPIs.delete(name);
+    }
+
+    const remainingDisposers = [];
+    const rollbackDisposers = [];
+    for (const d of this.disposers) {
+      if (d.name === name) {
+        rollbackDisposers.push(d);
+      } else {
+        remainingDisposers.push(d);
+      }
+    }
+    this.disposers = remainingDisposers;
+
+    // Run disposers registered so far by this plugin in reverse order
+    for (let i = rollbackDisposers.length - 1; i >= 0; i--) {
+      try {
+        const res = rollbackDisposers[i].fn();
+        if (res && typeof res.then === 'function') {
+          await res;
+        }
+      } catch (cleanupErr) {
+        console.warn(`[plugin-manager] Rollback disposer for "${name}" failed:`, cleanupErr?.message);
+      }
+    }
+
+    if (plugin && typeof plugin.dispose === 'function') {
+      try {
+        const res = plugin.dispose(ctx);
+        if (res && typeof res.then === 'function') {
+          await res;
+        }
+      } catch (cleanupErr) {
+        console.warn(`[plugin-manager] Rollback dispose() for "${name}" failed:`, cleanupErr?.message);
+      }
+    }
+  }
+
+  /**
+   * Roll back partially acquired state or disposers for a failed plugin (sync)
+   * @private
+   */
+  _rollbackPluginSync(name, plugin, ctx) {
+    this.plugins.delete(name);
+    if (plugin && plugin.api) {
+      this.pluginAPIs.delete(name);
+    }
+
+    const remainingDisposers = [];
+    const rollbackDisposers = [];
+    for (const d of this.disposers) {
+      if (d.name === name) {
+        rollbackDisposers.push(d);
+      } else {
+        remainingDisposers.push(d);
+      }
+    }
+    this.disposers = remainingDisposers;
+
+    for (let i = rollbackDisposers.length - 1; i >= 0; i--) {
+      try {
+        rollbackDisposers[i].fn();
+      } catch (cleanupErr) {
+        console.warn(`[plugin-manager] Rollback disposer for "${name}" failed:`, cleanupErr?.message);
+      }
+    }
+
+    if (plugin && typeof plugin.dispose === 'function') {
+      try {
+        plugin.dispose(ctx);
+      } catch (cleanupErr) {
+        console.warn(`[plugin-manager] Rollback dispose() for "${name}" failed:`, cleanupErr?.message);
+      }
+    }
   }
 
   /**
@@ -396,8 +477,7 @@ class PluginManager {
         }
       } catch (err) {
         console.warn(`[plugin-manager] Plugin "${plugin.name}" setup() failed:`, err.message);
-        this.plugins.delete(plugin.name);
-        if (plugin.api) this.pluginAPIs.delete(plugin.name);
+        this._rollbackPluginSync(plugin.name, plugin, ctx);
         return;
       }
     }
@@ -412,8 +492,7 @@ class PluginManager {
         }
       } catch (err) {
         console.warn(`[plugin-manager] Plugin "${plugin.name}" register() failed:`, err.message);
-        this.plugins.delete(plugin.name);
-        if (plugin.api) this.pluginAPIs.delete(plugin.name);
+        this._rollbackPluginSync(plugin.name, plugin, ctx);
         return;
       }
     }

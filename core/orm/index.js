@@ -284,34 +284,32 @@ function createDatabase(config) {
     const runner = (ambientTrx && typeof ambientTrx.transaction === 'function') ? ambientTrx : knexInstance;
 
     return runner.transaction(async (trx) => {
+      let currentScope = scopeContext ? { ...scopeContext } : createScopeContext();
       const trxContext = {
         trx,
         getRepository(modelName, sContext) {
           const model = getModelInstance(modelName);
-          const ctx = sContext || scopeContext || createScopeContext();
+          const ctx = sContext || currentScope;
           return createRepository(model, trx, ctx, ormCacheLayer);
         },
         createRepository(model, sContext) {
-          const ctx = sContext || scopeContext || createScopeContext();
+          const ctx = sContext || currentScope;
           return createRepository(model, trx, ctx, ormCacheLayer);
         },
         forTenant(tenantId) {
-          if (!scopeContext) scopeContext = createScopeContext();
-          scopeContext.tenantId = tenantId;
+          currentScope = { ...currentScope, tenantId };
           return this;
         },
         forUser(user) {
-          if (!scopeContext) scopeContext = createScopeContext();
-          scopeContext.user = user;
+          currentScope = { ...currentScope, user };
           return this;
         },
         withoutRls() {
-          if (!scopeContext) scopeContext = createScopeContext();
-          scopeContext.rlsDisabled = true;
+          currentScope = { ...currentScope, rlsDisabled: true };
           return this;
         },
         getScopeContext() {
-          return { ...(scopeContext || createScopeContext()) };
+          return { ...currentScope };
         },
       };
       return runWithAmbientTransaction(trx, () => callback(trxContext));

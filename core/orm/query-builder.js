@@ -428,6 +428,11 @@ class QueryBuilder {
    */
   getActiveKnex() {
     if (this.knex && (this.knex.isTransaction || typeof this.knex.commit === 'function')) {
+      if (typeof this.knex.isCompleted === 'function' && this.knex.isCompleted()) {
+        const ambientTrx = getAmbientTransaction();
+        if (ambientTrx) return ambientTrx;
+        return this.knex;
+      }
       return this.knex;
     }
     const ambientTrx = getAmbientTransaction();
@@ -443,7 +448,14 @@ class QueryBuilder {
    */
   _hookTrx() {
     const active = this.getActiveKnex();
-    return (active && (active.isTransaction || typeof active.commit === 'function')) ? active : null;
+    if (!active) return null;
+    if (active.isTransaction || typeof active.commit === 'function') {
+      if (typeof active.isCompleted === 'function' && active.isCompleted()) {
+        return null;
+      }
+      return active;
+    }
+    return null;
   }
 
   /**
@@ -880,14 +892,15 @@ class QueryBuilder {
   clone() {
     const cloned = new QueryBuilder(this.model, this.knex, { ...this.scopeContext }, this.cacheLayer);
     cloned.jsonColumns = this.jsonColumns;
+    cloned.action = this.action;
     cloned.state = {
-      wheres: [...this.state.wheres],
-      orderBys: [...this.state.orderBys],
+      wheres: this.state.wheres.map(w => ({ ...w })),
+      orderBys: this.state.orderBys.map(o => ({ ...o })),
       selects: [...this.state.selects],
       withs: [...this.state.withs],
       limitValue: this.state.limitValue,
       offsetValue: this.state.offsetValue,
-      scopeContext: { ...this.state.scopeContext },
+      scopeContext: cloned.scopeContext,
     };
     return cloned;
   }

@@ -661,6 +661,14 @@ function getAssetManager() {
  */
 function createHelpers(ctx) {
   const { req, res, baseUrl = process.env.BASE_URL || 'http://localhost:7331', locale = 'en', t = null } = ctx || {};
+  const resolveAssetManager = () => ctx?.assetManager || ctx?.app?.assetManager || req?.app?.assetManager || getAssetManager();
+  const assetManager = new Proxy({}, {
+    get(_, prop) {
+      const mgr = resolveAssetManager();
+      const val = mgr[prop];
+      return typeof val === 'function' ? val.bind(mgr) : val;
+    }
+  });
 
   return {
     /** Active request locale */
@@ -990,16 +998,6 @@ function createHelpers(ctx) {
     },
 
     /**
-     * Get the path to a static asset
-     * @param {string} path - Asset path
-     * @returns {string}
-     */
-    asset(path) {
-      const assetPath = path.startsWith('/') ? path : `/${path}`;
-      return assetPath;
-    },
-
-    /**
      * Get the current locale
      * @returns {string}
      */
@@ -1043,7 +1041,7 @@ function createHelpers(ctx) {
      * @returns {string}
      */
     asset(assetPath) {
-      return getAssetManager().asset(assetPath);
+      return assetManager.asset(assetPath);
     },
 
     /**
@@ -1053,7 +1051,7 @@ function createHelpers(ctx) {
      * @returns {string}
      */
     css(href, attrs = {}) {
-      return getAssetManager().css(href, attrs);
+      return assetManager.css(href, attrs);
     },
 
     /**
@@ -1063,7 +1061,7 @@ function createHelpers(ctx) {
      * @returns {string}
      */
     js(src, attrs = {}) {
-      return getAssetManager().js(src, attrs);
+      return assetManager.js(src, attrs);
     },
 
     /**
@@ -1074,7 +1072,7 @@ function createHelpers(ctx) {
      * @returns {string}
      */
     img(src, alt = '', attrs = {}) {
-      return getAssetManager().img(src, alt, attrs);
+      return assetManager.img(src, alt, attrs);
     },
 
     /**
@@ -1094,7 +1092,7 @@ function createHelpers(ctx) {
      * @returns {string}
      */
     pageJs(name, attrs = {}) {
-      return getAssetManager().pageJs(name, attrs);
+      return assetManager.pageJs(name, attrs);
     },
 
     /**
@@ -1103,7 +1101,7 @@ function createHelpers(ctx) {
      * @returns {string}
      */
     pageJsUrl(name) {
-      return getAssetManager().pageJsUrl(name);
+      return assetManager.pageJsUrl(name);
     },
 
     /**
@@ -1113,7 +1111,7 @@ function createHelpers(ctx) {
      * @returns {string}
      */
     pageCss(name, attrs = {}) {
-      return getAssetManager().pageCss(name, attrs);
+      return assetManager.pageCss(name, attrs);
     },
 
     /**
@@ -1122,7 +1120,7 @@ function createHelpers(ctx) {
      * @returns {string}
      */
     pageCssUrl(name) {
-      return getAssetManager().pageCssUrl(name);
+      return assetManager.pageCssUrl(name);
     },
 
     /**
@@ -1131,7 +1129,7 @@ function createHelpers(ctx) {
      * @returns {boolean}
      */
     hasPageJs(name) {
-      return getAssetManager().hasPageJs(name);
+      return assetManager.hasPageJs(name);
     },
 
     /**
@@ -1140,7 +1138,7 @@ function createHelpers(ctx) {
      * @returns {boolean}
      */
     hasPageCss(name) {
-      return getAssetManager().hasPageCss(name);
+      return assetManager.hasPageCss(name);
     },
 
     /**
@@ -1151,12 +1149,12 @@ function createHelpers(ctx) {
      */
     pageAssets(nameOrAttrs, attrs) {
       if (typeof nameOrAttrs === 'string' && nameOrAttrs.trim()) {
-        return getAssetManager().pageAssets(nameOrAttrs, attrs);
+        return assetManager.pageAssets(nameOrAttrs, attrs);
       }
       const opts = (typeof nameOrAttrs === 'object' && nameOrAttrs !== null) ? nameOrAttrs : (attrs || {});
       const routeFile = req?.context?.file;
       const routePath = req?.context?.path || req?.path;
-      return getAssetManager().pageAssetsForRoute(routeFile, routePath, opts);
+      return assetManager.pageAssetsForRoute(routeFile, routePath, opts);
     },
 
     /**

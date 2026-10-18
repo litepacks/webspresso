@@ -26,7 +26,11 @@ function runWithAmbientTransaction(trx, callback) {
  */
 function getAmbientTransaction() {
   const store = ambientTransactionStorage.getStore();
-  return store && store.trx ? store.trx : null;
+  if (!store || !store.trx) return null;
+  if (typeof store.trx.isCompleted === 'function' && store.trx.isCompleted()) {
+    return null;
+  }
+  return store.trx;
 }
 
 /**
@@ -45,7 +49,7 @@ function hasAmbientTransaction() {
  */
 function createTransactionContext(trx, scopeContext) {
   const { createRepository } = require('./repository');
-  const context = scopeContext || createScopeContext();
+  const context = scopeContext ? { ...scopeContext } : createScopeContext();
 
   return {
     trx,
@@ -89,6 +93,10 @@ function createTransactionContext(trx, scopeContext) {
 async function runTransaction(knex, callback, scopeContext) {
   const ambientTrx = getAmbientTransaction();
   const runner = (ambientTrx && typeof ambientTrx.transaction === 'function') ? ambientTrx : knex;
+  if (!runner || typeof runner.transaction !== 'function') {
+    const ctx = createTransactionContext(runner, scopeContext);
+    return callback(ctx);
+  }
   return runner.transaction(async (trx) => {
     const ctx = createTransactionContext(trx, scopeContext);
     return runWithAmbientTransaction(trx, () => callback(ctx));
