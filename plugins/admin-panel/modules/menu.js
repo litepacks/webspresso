@@ -498,7 +498,7 @@ const VersionUpdateToast = {
           m('div.mt-2.5.flex.items-center.gap-2', [
             m('code.text-[11px].bg-gray-100.dark:bg-slate-800.text-gray-800.dark:text-slate-200.px-2.py-1.rounded.font-mono.border.border-gray-200.dark:border-slate-700.select-all', 'npm i webspresso@latest'),
             m('a.text-xs.font-medium.text-indigo-600.dark:text-indigo-400.hover:underline.ml-auto', {
-              href: 'https://github.com/webspresso/webspresso/releases',
+              href: 'https://github.com/litepacks/webspresso/releases',
               target: '_blank',
               rel: 'noopener noreferrer',
             }, 'Changelog')

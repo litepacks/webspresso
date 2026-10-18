@@ -339,7 +339,8 @@ describe('Webspresso Enterprise Resilience Engine (core/resilience)', () => {
         },
         {
           retries: 5,
-          delay: 100,
+          delay: 200,
+          jitter: false,
           signal: controller.signal,
         }
       );
