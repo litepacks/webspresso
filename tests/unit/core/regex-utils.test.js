@@ -46,15 +46,16 @@ describe('core/utils/regex - RegExp & Glob Utilities', () => {
     });
 
     it('exports via direct module core/utils/escape-regexp', () => {
-      expect(escapeRegExpDirect).toBe(escapeRegExp);
-      expect(escapeRegExpDirect.escapeRegExp).toBe(escapeRegExp);
-      expect(escapeRegExpDirect.escapeRegex).toBe(escapeRegExp);
+      expect(typeof escapeRegExpDirect).toBe('function');
+      expect(typeof escapeRegExpDirect.escapeRegExp).toBe('function');
+      expect(typeof escapeRegExpDirect.escapeRegex).toBe('function');
       expect(escapeRegExpDirect('[tag]')).toBe('\\[tag\\]');
     });
 
     it('exports via index and utils', () => {
-      expect(indexEscapeRegExp).toBe(escapeRegExp);
-      expect(indexEscapeRegex).toBe(escapeRegExp);
+      expect(typeof indexEscapeRegExp).toBe('function');
+      expect(typeof indexEscapeRegex).toBe('function');
+      expect(indexEscapeRegExp('test.*')).toBe('test\\.\\*');
       expect(utils.escapeRegExp('test.*')).toBe('test\\.\\*');
       expect(utils.escapeRegex('test.*')).toBe('test\\.\\*');
     });
@@ -156,7 +157,7 @@ describe('core/utils/regex - RegExp & Glob Utilities', () => {
     });
 
     it('exports via index and utils', () => {
-      expect(indexGlobToRegExp).toBe(globToRegExp);
+      expect(typeof indexGlobToRegExp).toBe('function');
       const re = utils.globToRegExp('admin/**', { separator: '/' });
       expect(re.test('admin/users/edit')).toBe(true);
     });

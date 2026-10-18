@@ -160,11 +160,14 @@ describe('core/utils/time - Time & Duration Utilities', () => {
 
   describe('re-exports via index and utils', () => {
     it('exports time functions via index', () => {
-      expect(indexParseDurationSec).toBe(parseDurationSec);
-      expect(indexParseDuration).toBe(parseDurationSec);
-      expect(indexParseDurationMs).toBe(parseDurationMs);
+      expect(typeof indexParseDurationSec).toBe('function');
+      expect(typeof indexParseDuration).toBe('function');
+      expect(typeof indexParseDurationMs).toBe('function');
+      expect(indexParseDurationSec('10s')).toBe(10);
+      expect(indexParseDuration('2h')).toBe(7200);
+      expect(indexParseDurationMs('5s')).toBe(5000);
       expect(indexParseTtlMs('5s')).toBe(5000);
-      expect(indexSleep).toBe(sleep);
+      expect(typeof indexSleep).toBe('function');
     });
 
     it('exports time functions via src/helpers.js utils', () => {

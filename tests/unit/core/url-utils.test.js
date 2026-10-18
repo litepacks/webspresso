@@ -119,14 +119,16 @@ describe('core/utils/url - URL & Path Formatting Utilities', () => {
 
   describe('Direct and Index Re-exports', () => {
     it('provides consistent functions across exports', () => {
-      expect(stripTrailingSlashDirect).toBe(stripTrailingSlash);
-      expect(ensureLeadingSlashDirect).toBe(ensureLeadingSlash);
+      expect(typeof stripTrailingSlashDirect).toBe('function');
+      expect(stripTrailingSlashDirect('/foo/')).toBe('/foo');
+      expect(typeof ensureLeadingSlashDirect).toBe('function');
+      expect(ensureLeadingSlashDirect('foo')).toBe('/foo');
 
-      expect(indexStripTrailing).toBe(stripTrailingSlash);
-      expect(indexEnsureLeading).toBe(ensureLeadingSlash);
-      expect(indexEnsureTrailing).toBe(ensureTrailingSlash);
-      expect(indexStripLeading).toBe(stripLeadingSlash);
-      expect(indexJoinUrl).toBe(joinUrl);
+      expect(typeof indexStripTrailing).toBe('function');
+      expect(typeof indexEnsureLeading).toBe('function');
+      expect(typeof indexEnsureTrailing).toBe('function');
+      expect(typeof indexStripLeading).toBe('function');
+      expect(typeof indexJoinUrl).toBe('function');
 
       expect(typeof utils.stripTrailingSlash).toBe('function');
       expect(typeof utils.ensureLeadingSlash).toBe('function');

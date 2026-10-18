@@ -36,7 +36,7 @@ function globToRegExp(pattern, options = {}) {
   } = options;
 
   if (typeof pattern !== 'string') {
-    return exact ? /^$/ : /(?:)/;
+    return exact ? /(?!)/ : /(?:)/;
   }
 
   if (pattern === '*' || pattern === '**') {

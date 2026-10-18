@@ -788,8 +788,10 @@ function createApp(options = {}) {
   const { renderStream } = require('../core/ssr/stream');
   const { createSseStream } = require('../core/sse/stream');
   app.use((req, res, next) => {
-    // 1. Request draining check during graceful shutdown
-    if (shutdownManager.isShuttingDown) {
+    // 1. Request draining check during graceful shutdown (allow health/readiness probes through)
+    const isHealthEndpoint = req.path === '/healthz' || req.path === '/readyz' || req.path === '/health' ||
+      Boolean(app.healthManager?.config && (req.path === app.healthManager.config.path || req.path === app.healthManager.config.readyPath || req.path === app.healthManager.config.combinedPath));
+    if (shutdownManager.isShuttingDown && !isHealthEndpoint) {
       res.set('Connection', 'close');
       if (!res.headersSent) {
         if (preferJsonErrorResponse(req)) {

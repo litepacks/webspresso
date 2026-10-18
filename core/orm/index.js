@@ -112,9 +112,12 @@ function createDatabase(config) {
   }
 
   let knexInstance;
-  try {
-    knexInstance = knex(knexConfig);
-  } catch (e) {
+  if (config.knex) {
+    knexInstance = config.knex;
+  } else {
+    try {
+      knexInstance = knex(knexConfig);
+    } catch (e) {
     // Provide helpful error message
     if (e.message && (e.message.includes('Cannot find module') || e.message.includes('npm install'))) {
       const driverName = driverMap[config.client] || config.client;
@@ -133,6 +136,7 @@ function createDatabase(config) {
     }
     throw e;
   }
+}
 
   // Create migration manager
   const migrationConfig = config.migrations || {};
@@ -317,7 +321,12 @@ function createDatabase(config) {
   }
 
   return {
-    knex: knexInstance,
+    get knex() {
+      return knexInstance;
+    },
+    set knex(val) {
+      knexInstance = val;
+    },
     migrate,
     getModel: getModelInstance,
     hasModel: hasModelInstance,

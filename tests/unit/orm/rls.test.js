@@ -1,13 +1,13 @@
 'use strict';
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import knexLib from 'knex';
-import { z } from 'zod';
-import { defineModel, clearRegistry } from '../../../core/orm/model';
-import { createRepository } from '../../../core/orm/repository';
-import { createDatabase } from '../../../core/orm/index';
-import { rlsPlugin, createRlsMiddleware } from '../../../plugins/rls/index';
-import { ForbiddenError, UnauthorizedError } from '../../../core/errors';
+const knexLib = require('knex');
+const { z } = require('zod');
+const { defineModel, clearRegistry } = require('../../../core/orm/model');
+const { createRepository } = require('../../../core/orm/repository');
+const { createDatabase } = require('../../../core/orm/index');
+const { rlsPlugin, createRlsMiddleware } = require('../../../plugins/rls/index');
+const { ForbiddenError, UnauthorizedError } = require('../../../core/errors');
 
 describe('Dynamic Model Row-Level Security (RLS)', () => {
   let knex;
