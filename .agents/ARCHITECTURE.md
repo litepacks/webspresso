@@ -61,6 +61,12 @@
   - **Liveness Probe (`/healthz`)**: Non-blocking probe reporting basic process health, memory usage (`rss`, `heapUsed`, `heapTotal`, `external`), and system uptime.
   - **Readiness Probe (`/readyz`)**: Deep dependency inspection checking database ping (`knex.raw('SELECT 1')`), worker queue status, custom user checks, and `ShutdownManager` draining state (immediately returning HTTP 503 so upstream load balancers detach the instance).
   - **Diagnostic Health (`/health`)**: Full operational dashboard with event loop lag percentiles (`perf_hooks.monitorEventLoopDelay`), dependency breakdown, and latency metrics.
+- **In-Memory LRU & Tagged Cache Engine (`core/cache`)**:
+  - Zero-dependency O(1) Least-Recently-Used caching engine configured via `createApp({ cache: { maxEntries, maxMemoryMb, defaultTtl } })` or `cache: false`.
+  - **Memory Budget & Leak Prevention**: Enforces byte boundaries (`maxBytes` / `maxMemoryMb`) via `approximateByteSize` to prevent process OOM errors, combined with passive and active TTL pruning (`pruneExpired()`).
+  - **Bidirectional Tag Invalidation (`TaggedLruCache`)**: Supports model and query tagging (`invalidateTag`, `invalidateTags`). When items are evicted via LRU, all associated tag sets are automatically and symmetrically cleaned up, eliminating dangling Set memory leaks.
+  - **Stampede / Thundering Herd Protection**: `getOrSet(key, asyncFactory, options)` deduplicates concurrent in-flight requests for cold keys so expensive factories execute only once.
+  - **Framework Integration**: Directly powers `core/orm/cache/memory-provider.js` (ORM query caching) and `core/schema-cache.js` (Zod schema cache), and is automatically exposed on `req.cache`, `req.context.cache`, and `app.cache`.
 - **Custom Error & 404 Pages (`errorPages`)**:
   - Configured via `createApp({ errorPages: { notFound, serverError, timeout } })`.
   - **404 Not Found (`notFound`)**: Template path (`'404.njk'`) or handler `(req, res, ctx) => ...`.

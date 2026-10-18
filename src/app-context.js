@@ -3,18 +3,19 @@
  * @module src/app-context
  */
 
-/** @type {{ db: object|null, shutdownManager: object|null, serviceRegistry: object|null, events: object|null, mailer: object|null }} */
+/** @type {{ db: object|null, shutdownManager: object|null, serviceRegistry: object|null, events: object|null, mailer: object|null, cache: object|null }} */
 let context = {
   db: null,
   shutdownManager: null,
   serviceRegistry: null,
   events: null,
   mailer: null,
+  cache: null,
 };
 
 /**
  * Merge into the current context (typically called once from createApp).
- * @param {{ db?: object|null, shutdownManager?: object|null, serviceRegistry?: object|null, events?: object|null, mailer?: object|null }} partial
+ * @param {{ db?: object|null, shutdownManager?: object|null, serviceRegistry?: object|null, events?: object|null, mailer?: object|null, cache?: object|null }} partial
  */
 function setAppContext(partial) {
   context = { ...context, ...partial };
@@ -99,7 +100,7 @@ function hasEvents() {
  * Clear context (e.g. between tests).
  */
 function resetAppContext() {
-  context = { db: null, shutdownManager: null, serviceRegistry: null, events: null, mailer: null };
+  context = { db: null, shutdownManager: null, serviceRegistry: null, events: null, mailer: null, cache: null };
 }
 
 /**
@@ -117,7 +118,21 @@ function hasMailer() {
 }
 
 /**
- * Express middleware: sets `req.db`, `req.service`, `req.events`, and `req.mailer` from registered app context.
+ * @returns {object|null}
+ */
+function getCache() {
+  return context.cache;
+}
+
+/**
+ * @returns {boolean}
+ */
+function hasCache() {
+  return context.cache != null;
+}
+
+/**
+ * Express middleware: sets `req.db`, `req.service`, `req.events`, `req.mailer`, and `req.cache` from registered app context.
  * File-based `pages/api/*` routes attach this automatically; use in `setupRoutes`
  * for manually registered handlers that need `req.db` and `req.service`.
  * @type {import('express').RequestHandler}
@@ -132,9 +147,12 @@ function attachDbMiddleware(req, res, next) {
   if (context.mailer != null) {
     req.mailer = context.mailer;
   }
+  if (context.cache != null) {
+    req.cache = context.cache;
+  }
   if (context.serviceRegistry != null) {
     req.service = (name, input, opts) =>
-      context.serviceRegistry.call(name, input, req.context || { req, res, db: context.db, events: context.events, mailer: context.mailer }, opts);
+      context.serviceRegistry.call(name, input, req.context || { req, res, db: context.db, events: context.events, mailer: context.mailer, cache: context.cache }, opts);
   }
   next();
 }
@@ -152,6 +170,8 @@ module.exports = {
   hasEvents,
   getMailer,
   hasMailer,
+  getCache,
+  hasCache,
   resetAppContext,
   attachDbMiddleware,
 };

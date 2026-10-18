@@ -14,6 +14,8 @@ const {
   hasShutdownManager,
   getServiceRegistry,
   hasServiceRegistry,
+  getCache,
+  hasCache,
   resetAppContext,
   setAppContext,
 } = require('./src/app-context');
@@ -27,6 +29,7 @@ const compression = require('./core/compression');
 const earlyHints = require('./core/early-hints');
 const limits = require('./core/limits');
 const health = require('./core/health');
+const cache = require('./core/cache');
 const errors = require('./core/errors');
 const { 
   mountPages, 
@@ -94,6 +97,8 @@ module.exports = {
   hasShutdownManager,
   getServiceRegistry,
   hasServiceRegistry,
+  getCache,
+  hasCache,
   resetAppContext,
   setAppContext,
 
@@ -143,6 +148,14 @@ module.exports = {
   createHealthManager: health.createHealthManager,
   probeDatabase: health.probeDatabase,
   probeQueue: health.probeQueue,
+
+  // High-Performance In-Memory & Tagged LRU Cache Engine
+  cache,
+  LruCache: cache.LruCache,
+  createLruCache: cache.createLruCache,
+  TaggedLruCache: cache.TaggedLruCache,
+  createTaggedLruCache: cache.createTaggedLruCache,
+  approximateByteSize: cache.approximateByteSize,
 
   // Exceptions & Error Handling
   errors,

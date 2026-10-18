@@ -1,10 +1,17 @@
+'use strict';
+
 /**
  * Schema Cache
- * Caches compiled Zod schemas per file path
+ * Caches compiled Zod schemas per file path using memory-bounded LRU eviction
  * @module core/schema-cache
  */
 
-const cache = new Map();
+const { createLruCache } = require('./cache');
+
+// 2,000 schemas capacity protects against OOM in dynamic routing/JIT compilation
+const cache = createLruCache({
+  maxEntries: 2000,
+});
 
 /**
  * Get cached schema for a file path

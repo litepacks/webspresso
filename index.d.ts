@@ -82,6 +82,8 @@ export interface CreateAppOptions {
   limits?: string | number | PayloadLimitsConfig;
   /** Cloud & Kubernetes Health check probes (/healthz & /readyz) */
   healthCheck?: boolean | string | HealthCheckConfig;
+  /** High-Performance In-Memory LRU & Tagged Cache options */
+  cache?: boolean | LruCacheConfig;
   /** Shutdown and lifecycle configuration */
   shutdown?: ShutdownOptions;
   /**
@@ -110,6 +112,7 @@ export interface CreateAppOptions {
     earlyHints?: boolean | (string | EarlyHintLink)[] | EarlyHintsOptions;
     limits?: string | number | PayloadLimitsConfig;
     healthCheck?: boolean | string | HealthCheckConfig;
+    cache?: boolean | LruCacheConfig;
     trustProxy?: boolean | number | string;
     [key: string]: unknown;
   };
@@ -654,6 +657,96 @@ export namespace health {
   export function setupHealthMiddleware(app: Application, options?: unknown, context?: unknown): unknown;
 }
 
+// --- In-Memory & Tagged LRU Cache Engine ---
+
+export interface LruCacheConfig {
+  /** Maximum number of entries before LRU eviction (default: 1000, 0 = unlimited) */
+  maxEntries?: number;
+  /** Maximum byte budget (default: 0 = unlimited) */
+  maxBytes?: number;
+  /** Maximum megabytes budget (converts to bytes) */
+  maxMemoryMb?: number;
+  /** Default TTL in milliseconds or duration string ('5m', '1h', default: 0 = no expiry) */
+  defaultTtl?: string | number;
+  /** Whether to deep-clone cached values on read/write to prevent accidental mutation (default: false) */
+  clone?: boolean;
+  /** Custom byte sizer function (default: approximateByteSize) */
+  sizeCalculation?: (value: unknown, key: string) => number;
+  /** Callback fired when an entry is evicted, expired, or deleted */
+  onEvict?: (key: string, value: unknown, reason: 'evict' | 'expire' | 'delete' | 'clear') => void;
+}
+
+export class LruCache<V = unknown> {
+  constructor(options?: LruCacheConfig);
+  readonly size: number;
+  readonly currentBytes: number;
+  readonly maxBytes: number;
+  readonly maxEntries: number;
+  readonly hits: number;
+  readonly misses: number;
+  readonly hitRate: number;
+  readonly evictions: number;
+  readonly expirations: number;
+  get(key: string): V | undefined;
+  peek(key: string): V | undefined;
+  has(key: string): boolean;
+  set(key: string, value: V, options?: { ttl?: string | number; ttlMs?: number; size?: number }): this;
+  delete(key: string): boolean;
+  del(key: string): boolean;
+  clear(): this;
+  pruneExpired(): number;
+  getOrSet(key: string, asyncFactory: (key: string) => Promise<V>, options?: { ttl?: string | number; ttlMs?: number; size?: number }): Promise<V>;
+  getStats(): Record<string, number>;
+  resetStats(): void;
+  keys(): IterableIterator<string>;
+  values(): IterableIterator<V>;
+  entries(): IterableIterator<[string, V]>;
+  [Symbol.iterator](): IterableIterator<[string, V]>;
+  forEach(callback: (value: V, key: string, cache: this) => void, thisArg?: unknown): void;
+}
+
+export class TaggedLruCache<V = unknown> {
+  constructor(options?: LruCacheConfig);
+  readonly size: number;
+  readonly currentBytes: number;
+  readonly maxBytes: number;
+  readonly maxEntries: number;
+  readonly hits: number;
+  readonly misses: number;
+  readonly hitRate: number;
+  readonly evictions: number;
+  readonly expirations: number;
+  get(key: string): V | undefined;
+  peek(key: string): V | undefined;
+  has(key: string): boolean;
+  set(key: string, value: V, options?: { tags?: string | string[]; ttl?: string | number; ttlMs?: number; size?: number }): this;
+  delete(key: string): boolean;
+  del(key: string): boolean;
+  invalidateTag(tag: string): number;
+  invalidateTags(tags: string | string[]): number;
+  hasTag(tag: string): boolean;
+  getKeysForTag(tag: string): string[];
+  clear(): this;
+  pruneExpired(): number;
+  getOrSet(key: string, asyncFactory: (key: string) => Promise<V>, options?: { tags?: string | string[]; ttl?: string | number; ttlMs?: number; size?: number }): Promise<V>;
+  getSizeStats(): Record<string, number>;
+  getStats(): Record<string, number>;
+  resetStats(): void;
+  keys(): IterableIterator<string>;
+  values(): IterableIterator<V>;
+  entries(): IterableIterator<[string, V]>;
+  [Symbol.iterator](): IterableIterator<[string, V]>;
+  forEach(callback: (value: V, key: string, cache: this) => void, thisArg?: unknown): void;
+}
+
+export function createLruCache<V = unknown>(options?: LruCacheConfig): LruCache<V>;
+export function createTaggedLruCache<V = unknown>(options?: LruCacheConfig): TaggedLruCache<V>;
+export function approximateByteSize(value: unknown): number;
+
+export namespace cache {
+  export { LruCache, TaggedLruCache, createLruCache, createTaggedLruCache, approximateByteSize };
+}
+
 export function resolveClientRuntime(options?: {
   clientRuntime?: {
     alpine?: boolean | Record<string, unknown>;
@@ -673,7 +766,11 @@ export function getAppContext(): {
   serviceRegistry: ServiceRegistry | null;
   events?: any;
   mailer?: Mailer | null;
+  cache?: TaggedLruCache | null;
 };
+
+export function getCache(): TaggedLruCache | null;
+export function hasCache(): boolean;
 
 export function getDb(): DatabaseInstance;
 

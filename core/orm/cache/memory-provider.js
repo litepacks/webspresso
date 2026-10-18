@@ -1,12 +1,18 @@
 /**
- * In-memory CacheProvider (process-local, tag-based invalidation)
+ * In-memory CacheProvider (process-local, tag-based invalidation, true LRU & memory budget)
+ * Upgraded with zero-allocation O(1) LRU eviction, byte budget constraints, and leak-free tag sets.
  * @module core/orm/cache/memory-provider
  */
 
+const { createTaggedLruCache } = require('../../cache');
+
 /**
  * @typedef {Object} MemoryCacheProviderOptions
- * @property {number} [maxEntries=10000] - Max stored keys; FIFO evict on overflow
- * @property {number} [defaultTtlMs=0] - Default TTL (0 = no expiry)
+ * @property {number} [maxEntries=10000] - Max stored keys; LRU evict on overflow
+ * @property {number} [maxBytes=0] - Max byte size budget (0 = disabled)
+ * @property {number} [maxMemoryMb=0] - Max megabytes budget (converts to bytes)
+ * @property {number} [defaultTtlMs=0] - Default TTL in ms (0 = no expiry)
+ * @property {function(*, string): number} [sizeCalculation] - Custom byte sizer
  */
 
 /**
@@ -16,116 +22,27 @@
 function createMemoryCacheProvider(options = {}) {
   const maxEntries = options.maxEntries ?? 10000;
   const defaultTtlMs = options.defaultTtlMs ?? 0;
+  const maxBytes = options.maxBytes ?? (options.maxMemoryMb ? options.maxMemoryMb * 1024 * 1024 : 0);
 
-  /** @type {Map<string, { value: *, expiresAt: number, tags: Set<string> }>} */
-  const store = new Map();
-  /** @type {Map<string, Set<string>>} */
-  const tagToKeys = new Map();
-  /** @type {Map<string, Set<string>>} */
-  const keyToTags = new Map();
-
-  function removeKey(key) {
-    const tags = keyToTags.get(key);
-    if (tags) {
-      for (const t of tags) {
-        const set = tagToKeys.get(t);
-        if (set) {
-          set.delete(key);
-          if (set.size === 0) tagToKeys.delete(t);
-        }
-      }
-    }
-    keyToTags.delete(key);
-    store.delete(key);
-  }
-
-  function get(key) {
-    const entry = store.get(key);
-    if (!entry) return undefined;
-    if (entry.expiresAt > 0 && Date.now() > entry.expiresAt) {
-      removeKey(key);
-      return undefined;
-    }
-    return entry.value;
-  }
-
-  function set(key, value, opts = {}) {
-    const tags = Array.isArray(opts.tags) ? opts.tags : [];
-    const ttlMs = opts.ttlMs ?? defaultTtlMs;
-
-    if (store.has(key)) removeKey(key);
-
-    if (maxEntries > 0 && store.size >= maxEntries) {
-      // Active sweep: evict expired entries before falling back to FIFO eviction
-      const now = Date.now();
-      let freed = 0;
-      for (const [k, entry] of store.entries()) {
-        if (entry.expiresAt > 0 && now > entry.expiresAt) {
-          removeKey(k);
-          freed++;
-          if (freed >= 10 || store.size < maxEntries) break;
-        }
-      }
-      if (store.size >= maxEntries) {
-        const first = store.keys().next().value;
-        if (first !== undefined) removeKey(first);
-      }
-    }
-
-    const expiresAt = ttlMs > 0 ? Date.now() + ttlMs : 0;
-    const tagSet = new Set(tags);
-    store.set(key, { value, expiresAt, tags: tagSet });
-    keyToTags.set(key, new Set(tags));
-
-    for (const t of tags) {
-      if (!tagToKeys.has(t)) tagToKeys.set(t, new Set());
-      tagToKeys.get(t).add(key);
-    }
-  }
-
-  function invalidateTags(tags) {
-    const toDelete = new Set();
-    for (const t of tags) {
-      const keys = tagToKeys.get(t);
-      if (!keys) continue;
-      for (const k of keys) toDelete.add(k);
-    }
-    for (const k of toDelete) removeKey(k);
-    for (const t of tags) tagToKeys.delete(t);
-  }
-
-  function pruneExpired() {
-    const now = Date.now();
-    let count = 0;
-    for (const [k, entry] of store.entries()) {
-      if (entry.expiresAt > 0 && now > entry.expiresAt) {
-        removeKey(k);
-        count++;
-      }
-    }
-    return count;
-  }
-
-  function clear() {
-    store.clear();
-    tagToKeys.clear();
-    keyToTags.clear();
-  }
-
-  function getSizeStats() {
-    return {
-      entries: store.size,
-      tags: tagToKeys.size,
-    };
-  }
+  const cache = createTaggedLruCache({
+    maxEntries,
+    defaultTtl: defaultTtlMs,
+    maxBytes,
+    sizeCalculation: options.sizeCalculation,
+  });
 
   return {
-    get,
-    set,
-    invalidateTags,
-    pruneExpired,
-    clear,
-    getSizeStats,
+    get: (key) => cache.get(key),
+    set: (key, value, opts = {}) => cache.set(key, value, {
+      tags: opts.tags,
+      ttlMs: opts.ttlMs ?? defaultTtlMs,
+      size: opts.size,
+    }),
+    invalidateTags: (tags) => cache.invalidateTags(tags),
+    pruneExpired: () => cache.pruneExpired(),
+    clear: () => cache.clear(),
+    getSizeStats: () => cache.getSizeStats(),
+    getStats: () => cache.getStats(),
   };
 }
 

@@ -59,6 +59,7 @@ This `.agents/` customization root is organized into modular topic guides:
 20. **[HTTP 103 Early Hints](.agents/EARLY_HINTS.md)** — Zero-dependency RFC 8288 / RFC 8297 Early Hints dispatcher (`core/early-hints`), preloading route CSS/JS and fonts before SSR loader execution, `createApp({ earlyHints })`, and `res.earlyHints(links)` / `ctx.earlyHints(links)` helpers.
 21. **[Payload Limits & DoS Protection](.agents/LIMITS.md)** — Zero-dependency request body limits and DoS protection (`core/limits`), `createApp({ limits })`, automatic `PayloadTooLargeError` (HTTP 413) mapping, route overrides (`limits.routes`), streaming bypass, and native HMAC webhook `req.rawBody` capture.
 22. **[Cloud & Kubernetes Health Probes](.agents/HEALTH.md)** — Zero-dependency RFC-compliant liveness (`/healthz`), readiness (`/readyz`), and combined diagnostic (`/health`) probes (`core/health`), event loop lag telemetry, database/queue health monitors, automatic HTTP 503 draining on graceful shutdown, and `createApp({ healthCheck: true })`.
+23. **[LRU & Tagged Cache Engine](.agents/CACHE.md)** — Zero-dependency, memory-bounded in-memory LRU cache (`core/cache`), byte budget constraints (`maxBytes` / `maxMemoryMb`), TTL expiration, stampede protection (`getOrSet`), leak-free tag invalidation (`TaggedLruCache`), ORM query cache provider, and `createApp({ cache })`.
 
 ---
 

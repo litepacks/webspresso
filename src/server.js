@@ -731,14 +731,28 @@ function createApp(options = {}) {
     loadListeners(resolvedListenersDir, eventDispatcher, { logger: logging ? console : null });
   }
 
-  shutdownManager.onShutdown(() => eventDispatcher.clear());
+  // Native High-Performance In-Memory Cache (LRU + Tagged Invalidation + Byte Budget)
+  const { createTaggedLruCache } = require('../core/cache');
+  const cacheOpt = options.cache ?? options.server?.cache;
+  const appCache = cacheOpt === false ? null : createTaggedLruCache(typeof cacheOpt === 'object' ? cacheOpt : {});
 
-  setAppContext({ db: options.db ?? null, shutdownManager, serviceRegistry, events: eventDispatcher });
+  if (appCache) {
+    shutdownManager.onShutdown(() => appCache.clear());
+  }
+
+  setAppContext({
+    db: options.db ?? null,
+    shutdownManager,
+    serviceRegistry,
+    events: eventDispatcher,
+    cache: appCache,
+  });
   
   const app = express();
   app.serviceRegistry = serviceRegistry;
   app.pluginManager = pluginManager;
   app.events = eventDispatcher;
+  app.cache = appCache;
   if (options.queue) {
     app.queue = options.queue;
   }
@@ -778,12 +792,14 @@ function createApp(options = {}) {
       req.queue = options.queue;
     }
     req.events = eventDispatcher;
+    req.cache = appCache;
     req.context = {
       req,
       res,
       db: options.db ?? null,
       queue: options.queue ?? null,
       events: eventDispatcher,
+      cache: appCache,
       app,
       serviceRegistry,
       ...(req.context || {}),
