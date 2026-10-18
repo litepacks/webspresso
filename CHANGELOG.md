@@ -9,6 +9,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.105] - 2026-10-18
 
+### Added
+
+#### Enterprise Resilience & Fault Tolerance (`core/resilience`, `core/errors/domain.js`)
+- **Three-State Circuit Breaker (`core/resilience/circuit-breaker.js`)**:
+  - Implemented zero-dependency `CircuitBreaker` transitioning between `CLOSED`, `OPEN`, and `HALF_OPEN` states.
+  - Rolling window failure rate monitoring, execution timeout bounding per call, graceful fallback handlers, and health state events (`open`, `close`, `halfOpen`, `trip`, `reject`).
+  - Seamless integration into Services Layer (`defineService({ circuitBreaker: { failureThreshold, resetTimeout, timeout, fallback } })`) and exposed via `app.breakers`, `app.getBreaker(name)`, and `req.breaker(name)`.
+- **Exponential Backoff Retry Engine (`core/resilience/retry.js`)**:
+  - Configurable retries with randomized jitter (`full`, `equal`, `decorrelated`) preventing thundering herd problems.
+  - Built-in transient error detection (`isTransientError`) covering network drops (`ECONNRESET`, `ETIMEDOUT`, `EPIPE`), HTTP 429 Rate Limits, and HTTP 503/504 Service Unavailable.
+  - Declarative retry support on services (`defineService({ retry: { maxRetries, delay, factor, jitter } })`) and helpers `retry()` and `withRetry()`.
+
+#### High-Performance In-Memory LRU & Tagged Cache Engine (`core/cache`)
+- **Memory-Bounded LRU Engine (`core/cache/lru.js`, `core/cache/byte-size.js`)**:
+  - Zero-dependency O(1) doubly-linked list LRU cache with byte-budget estimation preventing Node.js process Out-Of-Memory (OOM).
+  - Configurable via `createApp({ cache: { maxEntries, maxBytes, maxMemoryMb, defaultTtl } })` or standalone `new LruCache()`.
+  - Cache stampede protection via async `getOrSet(key, fn, ttl)` mutex deduplication.
+- **Tagged Cache Invalidation (`core/cache/tagged-lru.js`)**:
+  - `TaggedLruCache` supporting multi-tag association (`cache.set(key, val, { tags: ['posts', 'user:1'] })`) and atomic tag invalidation (`cache.invalidateTag('posts')`) with zero memory leakage.
+  - Pluggable backing provider for ORM query cache (`core/orm/cache/memory-provider.js`) and Zod schema caching (`core/schema-cache.js`).
+
+#### Native Cloud & Kubernetes Health & Readiness Probes (`core/health`)
+- **RFC-Compliant Probes (`/healthz`, `/readyz`, `/health`)**:
+  - Built-in liveness (`/healthz`), readiness (`/readyz`), and combined diagnostic (`/health`) endpoints configured via `createApp({ healthCheck: true })`.
+  - Non-blocking event loop lag telemetry via `perf_hooks.monitorEventLoopDelay`, database and queue connectivity checks, and custom user probe registration (`app.addHealthCheck`).
+  - Automatic HTTP 503 draining integration with `ShutdownManager` during pod termination.
+
+#### Configurable Payload Size Limits & DoS Protection (`core/limits`)
+- **Request Body Limit Enforcement (`core/limits/middleware.js`, `core/limits/normalize.js`)**:
+  - Zero-dependency body limit enforcement configured via `createApp({ limits })` or shorthand `limits: '5mb'`.
+  - Content-Type specific limits (`json`, `urlencoded`, `raw`, `text`), route overrides (`limits.routes`), and streaming bypass (`limits.exclude`).
+  - Automatic mapping to HTTP 413 `PayloadTooLargeError` and HTTP 400 `BadRequestError`, with raw body capture on `req.rawBody` for webhook HMAC signature verification.
+
+#### Dynamic Row-Level Security (RLS) (`plugins/rls`, `core/orm/scopes.js`)
+- **Declarative Multi-Tenant Isolation**:
+  - Define model row-level policies via `defineModel({ rls: { read, write } })` with role/user context evaluation.
+  - Automatic injection of scoping rules into QueryBuilder and Repositories.
+  - Express middleware `createRlsMiddleware` and plugin `rlsPlugin`.
+
+#### Batch Upsert & HTTP 103 Early Hints (`core/orm/batch.js`, `core/early-hints`)
+- **High-Performance Multi-Row Batch Upsert**:
+  - `repo.upsertMany()` and `db.batchUpsert()` with dialect-specific optimizations (`ON CONFLICT` / `ON DUPLICATE KEY UPDATE`).
+- **HTTP 103 Early Hints Preloading**:
+  - Zero-dependency RFC 8288 / RFC 8297 Early Hints dispatcher configured via `createApp({ earlyHints: true })` or per-page `definePage({ earlyHints })`. Emits informational 103 status code with route CSS/JS preloads before async `load()` finishes.
+
+#### Centralized Core Utilities & Default Port 7331 (`core/utils`, `src/helpers.js`)
+- Updated default port from `3000` to `7331` across CLI, servers, docs, and starter templates.
+- Centralized crypto, filesystem walking, url, regex, time, duration, and safe JSON serialization helpers.
+
 ### Fixed & Hardened
 
 #### Core Isolation & Lifecycle Hardening (`core/shutdown`, `core/orm`, `src/server.js`, `src/plugin-manager.js`, `src/helpers.js`)
@@ -16,14 +65,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `getAmbientTransaction()` now verifies `isCompleted()` on the stored transaction, returning `null` when a transaction is already committed or rolled back so lingering async tasks or late callbacks never execute against closed Knex transaction instances.
   - `db.transaction()` and `createTransactionContext()` now clone `scopeContext`, preventing tenant/user mutations within a transaction block from bleeding into caller context.
   - Added graceful non-transactional fallback in `runTransaction` when `runner.transaction` is not defined (e.g. test stubs or mock Knex instances).
+  - Supported passing pre-configured `knex` directly in `createDatabase({ knex })` while keeping `db.knex` as a regular own property.
 - **QueryBuilder Clone & Condition Isolation (`core/orm/query-builder.js`)**:
   - `clone()` now explicitly preserves `this.action` (`'select'`, `'update'`, `'delete'`, `'count'`).
   - Synchronized `cloned.state.scopeContext = cloned.scopeContext` to ensure scope mutations remain consistent on cloned instances without polluting parent builders.
   - Deep-copied `wheres` and `orderBys` arrays to prevent cross-query clause mutation.
-- **ShutdownManager Global Deadline & Hung Disposer Bounding (`core/shutdown/shutdown-manager.js`)**:
+- **SQL Operator Precedence in RLS Scopes (`core/orm/scopes.js`)**:
+  - Wrapped functional query builder rules in parenthesized where groups `qb.where(scopedQb => result(scopedQb))` to prevent `OR` operator precedence leakage into subsequent `.where('id', id)` conditions.
+- **ShutdownManager Global Deadline & Hung Disposer Bounding (`core/shutdown/shutdown-manager.js`, `src/server.js`)**:
   - Unified all shutdown steps under a single absolute deadline budget (`startTime + totalTimeout`). Multiple server adapters now share the remaining timeout budget rather than multiplying shutdown duration per adapter.
   - Bounded each plugin disposer and shutdown hook with per-step timeout caps (`Math.min(remainingMs, Math.max(100, Math.floor(remainingMs / (remaining + 1))))`), preventing single stuck or hanging disposers from indefinitely blocking graceful server termination.
   - Eliminated deadlock where `closePromise` was awaited indefinitely after graceful timeout expired.
+  - Allowed health endpoints (`/healthz`, `/readyz`, `/health`) to bypass general 503 draining middleware during graceful shutdown so load balancer readiness probes receive structured JSON draining status.
 - **NodeHttpAdapter Connection Cleanup (`core/shutdown/http-adapter.js`)**:
   - Invokes `this.destroy()` on adapter close and force close to remove connection listeners and clear socket sets.
 - **Multi-App Instance Isolation (`src/server.js`, `src/helpers.js`)**:
@@ -35,6 +88,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Body Parser Introspection & Webhook Backoff Fixes (`core/limits/middleware.js`, `plugins/webhooks/dispatcher.js`)**:
   - Named global body parsing middleware functions (`function jsonParser`, `function urlencodedParser`) for proper Express stack layer introspection.
   - Initialized `this.backoffBaseMs` in `WebhookDispatcher` constructor, fixing `NaN` retry delay calculations.
+- **Admin Panel & Test Determinism (`plugins/admin-panel/modules/menu.js`, `tests/unit/core/resilience.test.js`)**:
+  - Updated admin panel changelog release link to `https://github.com/litepacks/webspresso/releases`.
+  - Configured zero jitter on retry abort unit tests to eliminate timing race conditions under heavy CPU coverage runs.
 
 ## [0.0.104] - 2026-10-17
 
