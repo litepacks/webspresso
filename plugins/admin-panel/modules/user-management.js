@@ -50,7 +50,7 @@ function resolveUserManagementModelName(config = {}) {
  * @param {Object} [options.config] - User management config
  */
 function registerUserManagement(options) {
-  const { registry, db, auth, config = {} } = options;
+  const { registry, db, auth, config = {}, hashPassword: customHashPassword } = options;
   
   const {
     fields = {},
@@ -230,7 +230,8 @@ function registerUserManagement(options) {
       const repo = db.getRepository(targetModel);
       // Generate random password
       const newPassword = generateRandomPassword(12);
-      const hashedPassword = await hash(newPassword);
+      const hashFn = customHashPassword || ((p) => hash(p, process.env.NODE_ENV === 'test' ? 4 : 10));
+      const hashedPassword = await hashFn(newPassword);
       await repo.update(record.id, { [fieldMap.password]: hashedPassword });
       return { message: 'Password reset', newPassword }; // Return new password to show in UI
     },

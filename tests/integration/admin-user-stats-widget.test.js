@@ -100,6 +100,13 @@ describe('Admin User Statistics widget', () => {
       pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
       db,
       plugins: [
         adminPanelPlugin({
@@ -201,6 +208,13 @@ describe('User Statistics widget — schema without active/role', () => {
       pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
       db,
       plugins: [
         adminPanelPlugin({
@@ -298,6 +312,13 @@ describe('User Statistics widget — schema/DB drift (role in model only)', () =
       pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
       db,
       plugins: [
         adminPanelPlugin({

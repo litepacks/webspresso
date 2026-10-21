@@ -92,6 +92,13 @@ describe('Admin Media Library / File Manager Picker in Model Forms', () => {
       pagesDir: emptyPagesDir,
       viewsDir: './tests/fixtures/views',
       publicDir: path.join(tmpDir, 'public'),
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
       plugins: [
         fileManagerPlugin({
           baseDir: uploadDir,

@@ -337,6 +337,7 @@ describe('User Management Module Branches', () => {
       db: mockDb,
       auth: { enabled: true },
       config: { model: 'User' },
+      hashPassword: vi.fn().mockResolvedValue('mock_hash'),
     });
 
     expect(mockRegistry.enableUserManagement).toHaveBeenCalled();

@@ -119,6 +119,13 @@ describe('Admin Panel Custom Actions & Bulk Actions UI Integration', () => {
       pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
       db,
       plugins: [
         adminPanelPlugin({
@@ -132,8 +139,8 @@ describe('Admin Panel Custom Actions & Bulk Actions UI Integration', () => {
     app = result.app;
     request = supertest(app);
 
-    // Setup admin user & login
-    await request
+    // Setup admin user
+    const setupRes = await request
       .post('/_admin/api/auth/setup')
       .send({
         email: 'admin@action-test.com',
@@ -142,15 +149,7 @@ describe('Admin Panel Custom Actions & Bulk Actions UI Integration', () => {
       })
       .expect(200);
 
-    const loginRes = await request
-      .post('/_admin/api/auth/login')
-      .send({
-        email: 'admin@action-test.com',
-        password: 'Password123!',
-      })
-      .expect(200);
-
-    adminCookie = loginRes.headers['set-cookie'];
+    adminCookie = setupRes.headers['set-cookie'];
   });
 
   describe('Model Actions Declarative Definition & Normalization', () => {

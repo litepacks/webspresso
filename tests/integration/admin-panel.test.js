@@ -264,14 +264,7 @@ describe.sequential('Admin Panel Integration', () => {
           name: 'Admin User',
         });
 
-      const loginRes = await request(app)
-        .post('/_admin/api/auth/login')
-        .send({
-          email: 'admin@example.com',
-          password: 'password123',
-        });
-
-      adminCookie = loginRes.headers['set-cookie'] || setupRes.headers['set-cookie'] || [];
+      adminCookie = setupRes.headers['set-cookie'] || [];
     });
 
     it('should list enabled models', async () => {
@@ -320,14 +313,7 @@ describe.sequential('Admin Panel Integration', () => {
           name: 'Admin User',
         });
 
-      const loginRes = await request(app)
-        .post('/_admin/api/auth/login')
-        .send({
-          email: 'admin@example.com',
-          password: 'password123',
-        });
-
-      adminCookie = loginRes.headers['set-cookie'] || setupRes.headers['set-cookie'] || [];
+      adminCookie = setupRes.headers['set-cookie'] || [];
       testRepo = db.getRepository('TestModel');
     });
 
@@ -443,9 +429,11 @@ describe.sequential('Admin Panel Integration', () => {
 
     beforeEach(async () => {
       await db.knex('test_models').del();
-      await testRepo.create({ name: 'Apple', email: 'apple@test.com', active: true });
-      await testRepo.create({ name: 'Banana', email: 'banana@test.com', active: false });
-      await testRepo.create({ name: 'Cherry', email: 'cherry@test.com', active: true });
+      await db.knex('test_models').insert([
+        { name: 'Apple', email: 'apple@test.com', active: true },
+        { name: 'Banana', email: 'banana@test.com', active: false },
+        { name: 'Cherry', email: 'cherry@test.com', active: true },
+      ]);
     });
 
     it('should filter by string field (contains)', async () => {
@@ -493,8 +481,10 @@ describe.sequential('Admin Panel Integration', () => {
     });
 
     it('should filter by nullable string is_null / is_not_null', async () => {
-      await testRepo.create({ name: 'SubNull', email: 'n1@test.com', active: true, subtitle: null });
-      await testRepo.create({ name: 'SubSet', email: 'n2@test.com', active: true, subtitle: 'hello' });
+      await db.knex('test_models').insert([
+        { name: 'SubNull', email: 'n1@test.com', active: true, subtitle: null },
+        { name: 'SubSet', email: 'n2@test.com', active: true, subtitle: 'hello' },
+      ]);
 
       const onlyNull = await request(app)
         .get('/_admin/api/models/TestModel/records?filter[subtitle][op]=is_null')
@@ -524,10 +514,12 @@ describe.sequential('Admin Panel Integration', () => {
     });
 
     it('should maintain pagination with filters', async () => {
-      // Create more records
+      // Create more records in batch
+      const extra = [];
       for (let i = 0; i < 5; i++) {
-        await testRepo.create({ name: `Filtered${i}`, email: `filtered${i}@test.com`, active: true });
+        extra.push({ name: `Filtered${i}`, email: `filtered${i}@test.com`, active: true });
       }
+      await db.knex('test_models').insert(extra);
 
       const res = await request(app)
         .get('/_admin/api/models/TestModel/records?filter[name][op]=contains&filter[name][value]=Filtered&page=1&perPage=2')

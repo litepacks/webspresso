@@ -324,6 +324,7 @@ function adminPanelPlugin(options = {}) {
           db,
           auth,
           config: userMgmtConfig,
+          hashPassword: (password, rounds) => bcrypt.hash(password, process.env.NODE_ENV === 'test' ? 4 : (rounds || 10)),
         });
       }
 

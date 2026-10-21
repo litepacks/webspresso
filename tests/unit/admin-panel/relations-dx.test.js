@@ -133,27 +133,36 @@ describe('Admin Panel Relational Fields & Performance DX', { timeout: 120000 }, 
       table.integer('author_id');
     });
 
-    // Seed 15 authors to test search, pagination & projection
-    const authorRepo = db.getRepository('AuthorRelDx');
+    // Seed 15 authors to test search, pagination & projection in batch
+    const authors = [];
     for (let i = 1; i <= 15; i++) {
-      await authorRepo.create({
+      authors.push({
         full_name: i === 1 ? 'Alice Wonderland' : (i === 15 ? 'Zack Snyder' : `Author Number ${i}`),
         email: `author${i}@example.com`,
         secret_notes: `Very heavy private text payload for author ${i}`,
       });
     }
+    await db.knex('authors_rel_dx').insert(authors);
 
-    // Seed tags
-    const tagRepo = db.getRepository('TagRelDx');
-    await tagRepo.create({ title: 'JavaScript' });
-    await tagRepo.create({ title: 'TypeScript' });
-    await tagRepo.create({ title: 'Node.js' });
+    // Seed tags in batch
+    await db.knex('tags_rel_dx').insert([
+      { title: 'JavaScript' },
+      { title: 'TypeScript' },
+      { title: 'Node.js' },
+    ]);
 
     // Create App
     const result = createApp({
       pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
       db,
       plugins: [
         adminPanelPlugin({
