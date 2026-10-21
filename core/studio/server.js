@@ -104,8 +104,11 @@ function createStudioApp(options = {}) {
   app.post('/_studio/api/query', async (req, res, next) => {
     try {
       const { sql, bindings = [] } = req.body || {};
-      if (!sql) {
+      if (!sql || typeof sql !== 'string') {
         return res.status(400).json({ error: 'SQL query string is required.' });
+      }
+      if (!Array.isArray(bindings)) {
+        return res.status(400).json({ error: 'Bindings must be an array.' });
       }
       const result = await executeRawQuery(knex, sql, bindings);
       res.json(result);
@@ -266,6 +269,9 @@ function openBrowser(url) {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return;
     }
+    if (!/^[a-zA-Z0-9.:/?#\[\]@!$&'()*+,;=-]+$/.test(url)) {
+      return;
+    }
   } catch (_) {
     return;
   }
@@ -275,7 +281,7 @@ function openBrowser(url) {
     if (platform === 'darwin') {
       spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
     } else if (platform === 'win32') {
-      spawn('cmd.exe', ['/c', 'start', '""', url], { detached: true, stdio: 'ignore' }).unref();
+      spawn('explorer.exe', [url], { detached: true, stdio: 'ignore' }).unref();
     } else {
       spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
     }

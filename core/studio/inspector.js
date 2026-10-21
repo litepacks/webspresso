@@ -228,8 +228,12 @@ async function deleteRow(knex, tableName, id, pkField = 'id') {
  * @returns {Promise<{ rows: Array<any>, durationMs: number, changes?: number }>}
  */
 async function executeRawQuery(knex, sql, bindings = []) {
+  if (typeof sql !== 'string') {
+    throw new TypeError('SQL query must be a string');
+  }
+  const cleanBindings = Array.isArray(bindings) ? bindings : [];
   const start = Date.now();
-  const rawRes = await knex.raw(sql, bindings);
+  const rawRes = await knex.raw(sql, cleanBindings);
   const durationMs = Date.now() - start;
 
   let rows = [];

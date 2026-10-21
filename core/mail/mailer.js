@@ -67,7 +67,7 @@ class Mailer {
 
     // Fallback simple text from HTML if text not provided
     if (!msg.text && typeof msg.html === 'string') {
-      msg.text = msg.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      msg.text = msg.html.replace(/<[^<>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
     try {

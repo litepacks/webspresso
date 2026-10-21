@@ -1108,7 +1108,7 @@ describe('core/content/field-types.js edge cases and branches', () => {
     expect(() => normalizeFieldValue(123, { name: 't', type: 'text' })).toThrow('Field "t" must be a string');
 
     // rich-text with sanitize option
-    const sanitizer = (html) => html.replace(/<script.*?>.*?<\/script>/gi, '');
+    const sanitizer = (html) => String(html).split('<script')[0];
     expect(
       normalizeFieldValue('<p>hi</p><script>alert(1)</script>', { name: 'rt', type: 'rich-text' }, { sanitizeRichHtml: sanitizer })
     ).toBe('<p>hi</p>');

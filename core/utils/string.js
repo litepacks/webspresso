@@ -18,10 +18,35 @@
  */
 function toCamelCase(str) {
   if (!str || typeof str !== 'string') return '';
-  const trimmed = str.trim().replace(/^[-_]+/, '').replace(/[-_]+$/, '');
-  if (!trimmed) return '';
-  const res = trimmed.replace(/[-_\s]+([a-zA-Z0-9])/g, (_, letter) => letter.toUpperCase());
-  return res.charAt(0).toLowerCase() + res.slice(1);
+  const s = str.trim();
+  if (!s) return '';
+
+  let start = 0;
+  let end = s.length;
+  while (start < end && (s[start] === '-' || s[start] === '_')) {
+    start++;
+  }
+  while (end > start && (s[end - 1] === '-' || s[end - 1] === '_')) {
+    end--;
+  }
+  if (start >= end) return '';
+
+  let result = '';
+  let capitalizeNext = false;
+  for (let i = start; i < end; i++) {
+    const ch = s[i];
+    if (ch === '-' || ch === '_' || ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
+      capitalizeNext = true;
+    } else {
+      if (capitalizeNext) {
+        result += result.length === 0 ? ch.toLowerCase() : ch.toUpperCase();
+        capitalizeNext = false;
+      } else {
+        result += result.length === 0 ? ch.toLowerCase() : ch;
+      }
+    }
+  }
+  return result;
 }
 
 /**
@@ -35,12 +60,30 @@ function toCamelCase(str) {
  */
 function toSnakeCase(str) {
   if (!str || typeof str !== 'string') return '';
-  return str
-    .trim()
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .replace(/[-_\s]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .toLowerCase();
+  const s = str.trim();
+  if (!s) return '';
+
+  const expanded = s.replace(/([a-z0-9])([A-Z])/g, '$1_$2');
+  let result = '';
+  let prevWasUnderscore = false;
+
+  for (let i = 0; i < expanded.length; i++) {
+    const ch = expanded[i];
+    if (ch === '-' || ch === '_' || ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
+      if (!prevWasUnderscore && result.length > 0) {
+        result += '_';
+        prevWasUnderscore = true;
+      }
+    } else {
+      result += ch.toLowerCase();
+      prevWasUnderscore = false;
+    }
+  }
+
+  while (result.endsWith('_')) {
+    result = result.slice(0, -1);
+  }
+  return result;
 }
 
 /**
@@ -54,12 +97,30 @@ function toSnakeCase(str) {
  */
 function toKebabCase(str) {
   if (!str || typeof str !== 'string') return '';
-  return str
-    .trim()
-    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-    .replace(/[-_\s]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .toLowerCase();
+  const s = str.trim();
+  if (!s) return '';
+
+  const expanded = s.replace(/([a-z0-9])([A-Z])/g, '$1-$2');
+  let result = '';
+  let prevWasDash = false;
+
+  for (let i = 0; i < expanded.length; i++) {
+    const ch = expanded[i];
+    if (ch === '-' || ch === '_' || ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
+      if (!prevWasDash && result.length > 0) {
+        result += '-';
+        prevWasDash = true;
+      }
+    } else {
+      result += ch.toLowerCase();
+      prevWasDash = false;
+    }
+  }
+
+  while (result.endsWith('-')) {
+    result = result.slice(0, -1);
+  }
+  return result;
 }
 
 /**

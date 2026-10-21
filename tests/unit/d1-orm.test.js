@@ -39,7 +39,7 @@ class MockD1Database {
           const id = db.nextId++;
           const tableRows = db.tables[tableName] || (db.tables[tableName] = []);
           const record = { id };
-          const colMatch = /\(([^)]+)\)\s+values/i.exec(sql);
+          const colMatch = /\(([^()]+)\)\s+values/i.exec(sql);
           if (colMatch) {
             const cols = colMatch[1].split(',').map((c) => c.trim().replace(/[`"]/g, ''));
             cols.forEach((col, idx) => {
@@ -79,7 +79,7 @@ class MockD1Database {
           const id = db.nextId++;
           const tableRows = db.tables[tableName] || (db.tables[tableName] = []);
           const record = { id };
-          const colMatch = /\(([^)]+)\)\s+values/i.exec(sql);
+          const colMatch = /\(([^()]+)\)\s+values/i.exec(sql);
           if (colMatch) {
             const cols = colMatch[1].split(',').map((c) => c.trim().replace(/[`"]/g, ''));
             cols.forEach((col, idx) => {
