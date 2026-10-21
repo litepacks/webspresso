@@ -22,7 +22,7 @@ const {
 const { resolveMiddlewares } = require('../../src/file-router');
 
 const viewsDir = path.join(__dirname, '../fixtures/views');
-const pagesDir = path.join(__dirname, '../fixtures/pages');
+const pagesDir = path.join(__dirname, '../fixtures/empty-pages');
 
 describe('apiKeyPlugin', () => {
   describe('Cryptographic Utilities', () => {
@@ -575,6 +575,8 @@ describe('apiKeyPlugin', () => {
         pagesDir,
         viewsDir,
         logging: false,
+        cache: false,
+        lazyRoutes: true,
         plugins: [
           apiKeyPlugin({
             keys: [
@@ -649,6 +651,8 @@ describe('apiKeyPlugin', () => {
         pagesDir,
         viewsDir,
         logging: false,
+        cache: false,
+        lazyRoutes: true,
         plugins: [
           apiKeyPlugin({
             global: true,
