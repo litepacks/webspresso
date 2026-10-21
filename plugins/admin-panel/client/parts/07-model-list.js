@@ -518,7 +518,7 @@ function parseFilterQuery(queryString) {
   if (!queryString) return filters;
   
   const params = new URLSearchParams(queryString);
-  const filterParams = {};
+  const filterParams = Object.create(null);
   
   // Group filter parameters using simple string parsing (no regex needed)
   for (const [key, value] of params.entries()) {
@@ -532,7 +532,10 @@ function parseFilterQuery(queryString) {
         const col = key.substring(7, firstClose);
         const prop = key.substring(secondOpen + 1, secondClose);
         
-        if (!filterParams[col]) filterParams[col] = {};
+        if (col === '__proto__' || col === 'constructor' || col === 'prototype') continue;
+        if (prop === '__proto__' || prop === 'constructor' || prop === 'prototype') continue;
+
+        if (!filterParams[col]) filterParams[col] = Object.create(null);
         if (prop === 'value' && filterParams[col].value) {
           // Multiple values for 'in' operator
           if (!Array.isArray(filterParams[col].value)) {
