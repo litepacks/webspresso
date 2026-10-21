@@ -9,7 +9,7 @@ import { createRequire } from 'node:module';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../src/server.js';
-import { createDatabase, defineModel, zdb, hasModel, getModel } from '../../core/orm/index.js';
+import { createDatabase, defineModel, zdb, hasModel, getModel, clearRegistry } from '../../core/orm/index.js';
 import { adminPanelPlugin } from '../../plugins/admin-panel/index.js';
 
 const require = createRequire(import.meta.url);
@@ -114,6 +114,7 @@ describe.sequential('Admin Panel Integration', () => {
     if (db) {
       await db.destroy();
     }
+    clearRegistry();
   });
 
   describe('Custom Field Renderers', () => {

@@ -2,8 +2,7 @@
  * Query Builder Integration Tests
  */
 
-const knex = require('knex');
-const { createDatabase } = require('../../../core/orm');
+const { createDatabase, clearRegistry } = require('../../../core/orm');
 const {
   initModels,
   createTestSchema,
@@ -16,10 +15,12 @@ describe('Query Builder Integration', () => {
   let UserRepo;
 
   beforeAll(async () => {
+    clearRegistry();
     db = createDatabase({
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
+      cache: false,
       models: './tests/fixtures/models-empty', // Skip auto-loading
     });
 
@@ -38,6 +39,7 @@ describe('Query Builder Integration', () => {
 
   afterAll(async () => {
     await db.destroy();
+    clearRegistry();
   });
 
   beforeEach(async () => {

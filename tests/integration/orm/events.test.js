@@ -33,7 +33,9 @@ describe('ORM Events Integration', () => {
   });
 
   afterAll(async () => {
-    await db.destroy();
+    if (db) await db.destroy();
+    ModelEvents.removeAllListeners();
+    clearRegistry();
   });
 
   beforeEach(async () => {

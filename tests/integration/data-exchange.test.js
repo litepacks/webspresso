@@ -3,10 +3,10 @@
  * @vitest-environment node
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../src/server.js';
-import { createDatabase, defineModel, zdb, hasModel, getModel } from '../../index.js';
+import { createDatabase, defineModel, zdb, hasModel, getModel, clearRegistry } from '../../index.js';
 import { adminPanelPlugin, dataExchangePlugin } from '../../plugins/index.js';
 import ExcelJS from 'exceljs';
 import { z } from 'zod';
@@ -85,6 +85,10 @@ describe.sequential('Data exchange plugin', () => {
 
   afterEach(async () => {
     if (db) await db.destroy();
+  });
+
+  afterAll(() => {
+    clearRegistry();
   });
 
   async function loginCookie() {

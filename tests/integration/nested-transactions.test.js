@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 const { z } = require('zod');
-const { createDatabase, defineModel, zdb } = require('../../core/orm');
+const { createDatabase, defineModel, zdb, clearRegistry } = require('../../core/orm');
 
 describe('Nested Transactions & Savepoints (SQLite)', () => {
   let db;
@@ -14,11 +14,13 @@ describe('Nested Transactions & Savepoints (SQLite)', () => {
     }),
   });
 
-  beforeEach(async () => {
+  beforeAll(async () => {
+    clearRegistry();
     db = createDatabase({
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
+      cache: false,
       pool: { min: 1, max: 1 },
     });
 
@@ -30,10 +32,17 @@ describe('Nested Transactions & Savepoints (SQLite)', () => {
     db.registerModel(Note);
   });
 
-  afterEach(async () => {
+  beforeEach(async () => {
+    if (db && db.knex) {
+      await db.knex('notes').delete();
+    }
+  });
+
+  afterAll(async () => {
     if (db && db.knex) {
       await db.knex.destroy();
     }
+    clearRegistry();
   });
 
   it('should allow nested db.transaction calls without deadlock and commit both', async () => {

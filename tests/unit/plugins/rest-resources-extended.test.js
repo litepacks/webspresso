@@ -30,10 +30,12 @@ describe.sequential('REST Resources Extended Scenarios', () => {
   let app;
 
   beforeAll(async () => {
+    clearRegistry();
     db = createDatabase({
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
+      cache: false,
     });
     knex = db.knex;
 
@@ -123,6 +125,7 @@ describe.sequential('REST Resources Extended Scenarios', () => {
 
   afterAll(async () => {
     if (knex) await knex.destroy();
+    clearRegistry();
   });
 
   describe('Helper Functions & Parsers', () => {

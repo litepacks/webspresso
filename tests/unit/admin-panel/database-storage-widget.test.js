@@ -3,8 +3,8 @@
  * @vitest-environment node
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import knex from 'knex';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+const knex = require('knex');
 const vm = require('vm');
 const {
   collectDatabaseStorageStats,
@@ -15,7 +15,7 @@ const {
 describe('Database Storage & Health Widget', () => {
   let db;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     const k = knex({
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
@@ -61,7 +61,7 @@ describe('Database Storage & Health Widget', () => {
     };
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db && db.knex) {
       await db.knex.destroy();
     }

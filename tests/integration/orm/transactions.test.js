@@ -2,7 +2,7 @@
  * Transaction Integration Tests
  */
 
-const { createDatabase } = require('../../../core/orm');
+const { createDatabase, clearRegistry } = require('../../../core/orm');
 const {
   initModels,
   createTestSchema,
@@ -14,10 +14,12 @@ describe('Transaction Integration', () => {
   let User, Company, Post;
 
   beforeAll(async () => {
+    clearRegistry();
     db = createDatabase({
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
+      cache: false,
       models: './tests/fixtures/models-empty', // Skip auto-loading
     });
 
@@ -36,6 +38,7 @@ describe('Transaction Integration', () => {
 
   afterAll(async () => {
     await db.destroy();
+    clearRegistry();
   });
 
   beforeEach(async () => {

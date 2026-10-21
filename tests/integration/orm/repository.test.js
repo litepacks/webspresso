@@ -3,8 +3,7 @@
  * Uses SQLite in-memory database
  */
 
-const knex = require('knex');
-const { createDatabase } = require('../../../core/orm');
+const { createDatabase, clearRegistry } = require('../../../core/orm');
 const {
   initModels,
   createTestSchema,
@@ -14,23 +13,18 @@ const {
 
 describe('Repository Integration', () => {
   let db;
-  let knexInstance;
   let User, Company, Post;
   let UserRepo, CompanyRepo, PostRepo;
 
   beforeAll(async () => {
-    // Create SQLite in-memory database
-    knexInstance = knex({
-      client: 'better-sqlite3',
-      connection: { filename: ':memory:' },
-      useNullAsDefault: true,
-    });
+    clearRegistry();
 
     // Create database instance (skip auto-loading)
     db = createDatabase({
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
+      cache: false,
       models: './tests/fixtures/models-empty',
     });
 
@@ -51,7 +45,7 @@ describe('Repository Integration', () => {
 
   afterAll(async () => {
     await db.destroy();
-    await knexInstance.destroy();
+    clearRegistry();
   });
 
   beforeEach(async () => {

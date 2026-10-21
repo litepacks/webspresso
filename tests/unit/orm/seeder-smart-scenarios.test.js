@@ -14,10 +14,12 @@ describe.sequential('ORM Seeder Smart Fields & Factory Scenarios', () => {
   let seeder;
 
   beforeAll(async () => {
+    clearRegistry();
     db = createDatabase({
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
+      cache: false,
     });
     knex = db.knex;
 
@@ -53,6 +55,7 @@ describe.sequential('ORM Seeder Smart Fields & Factory Scenarios', () => {
 
   afterAll(async () => {
     if (knex) await knex.destroy();
+    clearRegistry();
   });
 
   beforeEach(() => {

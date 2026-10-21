@@ -5,7 +5,7 @@
 const path = require('path');
 const request = require('supertest');
 const { createApp } = require('../../src/server');
-const { createDatabase } = require('../../core/orm');
+const { createDatabase, clearRegistry } = require('../../core/orm');
 const restResourcePlugin = require('../../plugins/rest-resources');
 const {
   initModels,
@@ -14,17 +14,19 @@ const {
   seedTestData,
 } = require('../fixtures/orm/models');
 
-const FIXTURES_PAGES = path.join(__dirname, '..', 'fixtures', 'pages');
+const FIXTURES_PAGES = path.join(__dirname, '..', 'fixtures', 'empty-pages');
 const FIXTURES_VIEWS = path.join(__dirname, '..', 'fixtures', 'views');
 
 describe('REST resources plugin', { timeout: 60000 }, () => {
   let db;
 
   beforeAll(async () => {
+    clearRegistry();
     db = createDatabase({
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
+      cache: false,
       models: './tests/fixtures/models-empty',
     });
 
@@ -43,6 +45,7 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
   afterAll(async () => {
     await dropTestSchema(db.knex);
     await db.destroy();
+    clearRegistry();
   });
 
   it('does not mount companies when rest.enabled is false and no whitelist', async () => {
