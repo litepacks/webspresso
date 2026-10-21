@@ -86,6 +86,13 @@ describe.sequential('Admin Panel Integration', () => {
       pagesDir: emptyPagesDir,
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
       plugins: [
         adminPanelPlugin({
           path: '/_admin',

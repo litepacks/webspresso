@@ -468,11 +468,15 @@ describe('core/flags: Edge Cases & Defensive Handling', () => {
 
   it('executes 10,000 deterministic FNV-1a hash operations rapidly under stress', () => {
     const startTime = Date.now();
+    let min = 100;
+    let max = -1;
     for (let i = 0; i < 10000; i++) {
       const bucket = getBucket('feature_perf_test', 'user_' + i);
-      expect(bucket).toBeGreaterThanOrEqual(0);
-      expect(bucket).toBeLessThan(100);
+      if (bucket < min) min = bucket;
+      if (bucket > max) max = bucket;
     }
+    expect(min).toBeGreaterThanOrEqual(0);
+    expect(max).toBeLessThan(100);
     const elapsed = Date.now() - startTime;
     expect(elapsed).toBeLessThan(1000); // 10,000 evaluations well under 1000ms
   });

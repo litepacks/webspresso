@@ -543,11 +543,11 @@ module.exports = {
   getUserId: require('./scopes').getUserId,
   getTenantId: require('./scopes').getTenantId,
   createScopeContext: require('./scopes').createScopeContext,
-  // Cloudflare D1 Native Edge Dialect
-  createD1Knex: require('./d1').createD1Knex,
-  Client_D1: require('./d1').Client_D1,
-  executeD1Batch: require('./d1').executeD1Batch,
-  normalizeD1Bindings: require('./d1').normalizeD1Bindings,
+  // Cloudflare D1 Native Edge Dialect (lazy getters to avoid eager dialect loading)
+  get createD1Knex() { return require('./d1').createD1Knex; },
+  get Client_D1() { return require('./d1').Client_D1; },
+  get executeD1Batch() { return require('./d1').executeD1Batch; },
+  get normalizeD1Bindings() { return require('./d1').normalizeD1Bindings; },
   // Serverless Connection Pool Management
   isServerlessEnvironment,
   normalizeServerlessPoolConfig,
@@ -555,9 +555,9 @@ module.exports = {
     isServerlessEnvironment,
     normalizeServerlessPoolConfig,
   },
-  // Cloud Database Migrations
-  waitForDatabaseConnection: require('./migrate-cloud').waitForDatabaseConnection,
-  freeStaleMigrationLock: require('./migrate-cloud').freeStaleMigrationLock,
-  getMigrationStatus: require('./migrate-cloud').getMigrationStatus,
-  runCloudMigration: require('./migrate-cloud').runCloudMigration,
+  // Cloud Database Migrations (lazy getters)
+  get waitForDatabaseConnection() { return require('./migrate-cloud').waitForDatabaseConnection; },
+  get freeStaleMigrationLock() { return require('./migrate-cloud').freeStaleMigrationLock; },
+  get getMigrationStatus() { return require('./migrate-cloud').getMigrationStatus; },
+  get runCloudMigration() { return require('./migrate-cloud').runCloudMigration; },
 };

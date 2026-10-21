@@ -5,12 +5,14 @@
  * Command-line interface for Webspresso framework
  */
 
-const { program } = require('commander');
+function createProgram() {
+  const { Command } = require('commander');
+  const program = new Command();
 
-program
-  .name('webspresso')
-  .description('Webspresso CLI - Minimal file-based SSR framework')
-  .version(require('../package.json').version);
+  program
+    .name('webspresso')
+    .description('Webspresso CLI - Minimal file-based SSR framework')
+    .version(require('../package.json').version);
 
 // Register commands
 const { registerCommand: registerNew } = require('./commands/new');
@@ -125,6 +127,14 @@ registerTypegen(program);
 registerClientGen(program);
 registerConsole(program);
 
-// Parse arguments
-program.parse();
+  return program;
+}
+
+// Parse arguments if executed directly
+if (require.main === module) {
+  const program = createProgram();
+  program.parse();
+}
+
+module.exports = { createProgram };
 

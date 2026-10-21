@@ -570,24 +570,36 @@ function adminPanelPlugin(options = {}) {
       // Static Vendor Assets (Offline Zero-CDN)
       // ==========================================
       const vendorDir = path.join(__dirname, 'vendor');
+      const vendorAssetCache = new Map();
       ctx.addRoute('get', `${adminPath}/vendor/:file`, (req, res) => {
         const fileName = path.basename(req.params.file);
-        const filePath = path.join(vendorDir, fileName);
+        let cached = vendorAssetCache.get(fileName);
+        if (cached === undefined) {
+          const filePath = path.join(vendorDir, fileName);
+          if (!fs.existsSync(filePath)) {
+            vendorAssetCache.set(fileName, null);
+            return res.status(404).send('Vendor asset not found');
+          }
+          let contentType = 'application/octet-stream';
+          if (fileName.endsWith('.js')) {
+            contentType = 'application/javascript';
+          } else if (fileName.endsWith('.css')) {
+            contentType = 'text/css';
+          }
+          cached = {
+            buffer: fs.readFileSync(filePath),
+            contentType,
+          };
+          vendorAssetCache.set(fileName, cached);
+        }
 
-        if (!fs.existsSync(filePath)) {
+        if (!cached) {
           return res.status(404).send('Vendor asset not found');
         }
 
-        if (fileName.endsWith('.js')) {
-          res.type('application/javascript');
-        } else if (fileName.endsWith('.css')) {
-          res.type('text/css');
-        } else {
-          res.type('application/octet-stream');
-        }
-
+        res.type(cached.contentType);
         res.setHeader('Cache-Control', 'public, max-age=86400');
-        res.sendFile(filePath);
+        res.send(cached.buffer);
       });
 
       // ==========================================

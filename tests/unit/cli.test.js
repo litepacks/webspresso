@@ -13,6 +13,7 @@ const TEST_DIR = path.join(__dirname, '../fixtures/cli-test-projects');
 const FAVICON_TEST_DIR = path.join(__dirname, '../fixtures/favicon-test');
 
 const { Command } = require('commander');
+const { createProgram } = require('../../bin/webspresso');
 const { registerCommand: registerNew } = require('../../bin/commands/new');
 const { registerCommand: registerAddTailwind } = require('../../bin/commands/add-tailwind');
 const { registerCommand: registerSeed } = require('../../bin/commands/seed');
@@ -68,7 +69,7 @@ function tokenizeCliLine(line) {
 }
 
 // Helper to run CLI commands
-// Non-interactive: spawn node without shell. Interactive `new`: feed 'n\\n' answers on stdin (no bash).
+// Non-interactive: in-process via Commander for speed; spawns node child process if interactive or requested.
 function runCli(args, options = {}) {
   const argParts = Array.isArray(args) ? [...args] : tokenizeCliLine(args);
 
@@ -77,6 +78,68 @@ function runCli(args, options = {}) {
     !argParts.includes('--install') &&
     !argParts.includes('--help') &&
     !argParts.includes('--yes');
+
+  if (!isInteractive && !options.spawn) {
+    const origCwd = process.cwd();
+    const origLog = console.log;
+    const origError = console.error;
+    const origWarn = console.warn;
+    const origExit = process.exit;
+
+    let stdout = '';
+    let stderr = '';
+
+    console.log = (...msgs) => {
+      stdout += msgs.map((m) => (typeof m === 'object' ? JSON.stringify(m) : String(m))).join(' ') + '\n';
+    };
+    console.error = (...msgs) => {
+      stderr += msgs.map((m) => (typeof m === 'object' ? JSON.stringify(m) : String(m))).join(' ') + '\n';
+    };
+    console.warn = (...msgs) => {
+      stdout += msgs.map((m) => (typeof m === 'object' ? JSON.stringify(m) : String(m))).join(' ') + '\n';
+    };
+
+    process.exit = (code = 0) => {
+      throw new ProcessExitError(code);
+    };
+
+    const program = createProgram();
+    program.exitOverride();
+    program.configureOutput({
+      writeOut: (str) => { stdout += str; },
+      writeErr: (str) => { stderr += str; },
+    });
+
+    let exitCode = 0;
+    try {
+      if (options.cwd) {
+        process.chdir(options.cwd);
+      }
+      program.parse(['node', 'webspresso', ...argParts]);
+    } catch (err) {
+      if (err instanceof ProcessExitError) {
+        exitCode = err.exitCode;
+      } else if (err && err.exitCode !== undefined) {
+        exitCode = err.exitCode;
+      } else {
+        exitCode = 1;
+        stderr += (err?.message || String(err)) + '\n';
+      }
+    } finally {
+      process.chdir(origCwd);
+      console.log = origLog;
+      console.error = origError;
+      console.warn = origWarn;
+      process.exit = origExit;
+    }
+
+    const combined = `${stdout}${stderr}`;
+    return {
+      stdout: combined,
+      stderr,
+      exitCode,
+    };
+  }
 
   /** @type {string|undefined} */
   let input;

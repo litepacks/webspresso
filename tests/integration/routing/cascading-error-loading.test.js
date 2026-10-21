@@ -7,6 +7,18 @@ import { clearCascadingCaches } from '../../../src/routing/cascading';
 import { createApp } from '../../../src/server';
 import { NotFoundError, ForbiddenError } from '../../../core/errors';
 
+function createTestApp(opts) {
+  return createApp({
+    silent: true,
+    helmet: false,
+    compression: false,
+    cache: false,
+    healthCheck: false,
+    metrics: false,
+    ...opts,
+  });
+}
+
 describe('Cascading Error Boundaries & Loading Skeletons (_error.njk, _loading.njk)', () => {
   let tempDir;
 
@@ -59,7 +71,7 @@ describe('Cascading Error Boundaries & Loading Skeletons (_error.njk, _loading.n
         };`
       );
 
-      const { app } = createApp({
+      const { app } = createTestApp({
         rootDir: tempDir,
         pagesDir,
         silent: true,
@@ -108,7 +120,7 @@ describe('Cascading Error Boundaries & Loading Skeletons (_error.njk, _loading.n
         };`
       );
 
-      const { app } = createApp({
+      const { app } = createTestApp({
         rootDir: tempDir,
         pagesDir,
         silent: true,
@@ -140,7 +152,7 @@ describe('Cascading Error Boundaries & Loading Skeletons (_error.njk, _loading.n
         };`
       );
 
-      const { app } = createApp({
+      const { app } = createTestApp({
         rootDir: tempDir,
         pagesDir,
         silent: true,
@@ -166,7 +178,7 @@ describe('Cascading Error Boundaries & Loading Skeletons (_error.njk, _loading.n
         };`
       );
 
-      const { app } = createApp({
+      const { app } = createTestApp({
         rootDir: tempDir,
         pagesDir,
         silent: true,
@@ -208,7 +220,7 @@ layout: false
         };`
       );
 
-      const { app } = createApp({
+      const { app } = createTestApp({
         rootDir: tempDir,
         pagesDir,
         silent: true,
@@ -264,7 +276,7 @@ layout: false
         };`
       );
 
-      const { app } = createApp({
+      const { app } = createTestApp({
         rootDir: tempDir,
         pagesDir,
         silent: true,
@@ -312,7 +324,7 @@ layout: false
         };`
       );
 
-      const { app } = createApp({
+      const { app } = createTestApp({
         rootDir: tempDir,
         pagesDir,
         silent: true,
@@ -360,7 +372,7 @@ layout: false
         };`
       );
 
-      const { app } = createApp({
+      const { app } = createTestApp({
         rootDir: tempDir,
         pagesDir,
         silent: true,

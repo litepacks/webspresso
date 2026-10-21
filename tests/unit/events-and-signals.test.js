@@ -266,7 +266,13 @@ describe('Decoupled Events & Signals System (AdonisJS Events & Django Signals-in
       appObj = createApp({
         rootDir: tempDir,
         pagesDir: path.join(tempDir, 'pages'),
-        logging: false,
+        silent: true,
+        helmet: false,
+        compression: false,
+        cache: false,
+        healthCheck: false,
+        metrics: false,
+        lazyRoutes: true,
       });
     });
 

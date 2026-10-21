@@ -19,6 +19,18 @@ import {
 } from '../../../src/routing/cascading';
 import { createApp } from '../../../src/server';
 
+function createTestApp(opts) {
+  return createApp({
+    silent: true,
+    helmet: false,
+    compression: false,
+    cache: false,
+    healthCheck: false,
+    metrics: false,
+    ...opts,
+  });
+}
+
 describe('Cascading Middleware & Nested Layouts', () => {
   let tempDir;
 
@@ -336,7 +348,7 @@ describe('Cascading Middleware & Nested Layouts', () => {
         };`
       );
 
-      const { app } = createApp({
+      const { app } = createTestApp({
         rootDir: tempDir,
         pagesDir,
         silent: true,
@@ -392,7 +404,7 @@ describe('Cascading Middleware & Nested Layouts', () => {
         };`
       );
 
-      const { app } = createApp({
+      const { app } = createTestApp({
         rootDir: tempDir,
         pagesDir,
         silent: true,
@@ -425,7 +437,7 @@ describe('Cascading Middleware & Nested Layouts', () => {
         };`
       );
 
-      const { app } = createApp({
+      const { app } = createTestApp({
         rootDir: tempDir,
         pagesDir,
         silent: true,
@@ -461,7 +473,7 @@ describe('Cascading Middleware & Nested Layouts', () => {
         `{% extends "custom-base.njk" %}{% block body %}<h1>Extended Content</h1>{% endblock %}`
       );
 
-      const { app } = createApp({
+      const { app } = createTestApp({
         rootDir: tempDir,
         pagesDir,
         viewsDir,
@@ -504,7 +516,7 @@ describe('Cascading Middleware & Nested Layouts', () => {
         `<span class="page">All systems operational</span>`
       );
 
-      const { app } = createApp({
+      const { app } = createTestApp({
         rootDir: tempDir,
         pagesDir,
         silent: true,
@@ -541,7 +553,7 @@ describe('Cascading Middleware & Nested Layouts', () => {
         };`
       );
 
-      const { app } = createApp({
+      const { app } = createTestApp({
         rootDir: tempDir,
         pagesDir,
         silent: true,
@@ -575,7 +587,7 @@ data:
 
       fs.writeFileSync(path.join(pagesDir, 'welcome.njk'), `<p>Hello world</p>`);
 
-      const { app } = createApp({
+      const { app } = createTestApp({
         rootDir: tempDir,
         pagesDir,
         silent: true,

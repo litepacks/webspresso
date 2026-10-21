@@ -454,6 +454,13 @@ describe('Webhooks Plugin', () => {
       const serverApp = createApp({
         pagesDir,
         viewsDir,
+        silent: true,
+        helmet: false,
+        compression: false,
+        cache: false,
+        healthCheck: false,
+        metrics: false,
+        lazyRoutes: true,
         plugins: [
           fakeAdminPanel,
           webhooks,
