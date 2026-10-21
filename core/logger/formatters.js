@@ -12,7 +12,6 @@ const DEFAULT_REDACT_KEYS = [
   'secret',
   'token',
   'authorization',
-  'auth',
   'cookie',
   'apikey',
   'api_key',

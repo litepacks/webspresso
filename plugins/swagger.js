@@ -198,6 +198,7 @@ function swaggerPlugin(options = {}) {
     authorize,
     includeOrmSchemas = false,
     ormExclude = [],
+    jsonPath: customJsonPath,
     title,
     version,
     description,
@@ -212,7 +213,7 @@ function swaggerPlugin(options = {}) {
   } = options;
 
   const normalizedBase = `/${trimUrlPathSlashes(basePath)}`;
-  const jsonPath = `${normalizedBase}/openapi.json`;
+  const jsonPath = customJsonPath ? `/${trimUrlPathSlashes(customJsonPath)}` : `${normalizedBase}/openapi.json`;
   const uiPath = normalizedBase;
   const swaggerSubPath = `${normalizedBase}/swagger`;
   const scalarSubPath = `${normalizedBase}/scalar`;
@@ -255,9 +256,14 @@ function swaggerPlugin(options = {}) {
           if (cachedDoc && process.env.NODE_ENV === 'production') {
             return res.json(cachedDoc);
           }
+          const resolvedPagesDir = ctx.pagesDir
+            || ctx.options?.pagesDir
+            || (typeof ctx.options?.pages === 'string' ? ctx.options.pages : null)
+            || (ctx.options?.rootDir ? path.join(ctx.options.rootDir, 'pages') : path.join(process.cwd(), 'pages'));
+
           const doc = buildOpenApiDocument({
             routes: ctx.routes || [],
-            pagesDir: ctx.options.pagesDir,
+            pagesDir: resolvedPagesDir,
             includeOrmSchemas,
             ormExclude,
             info: {

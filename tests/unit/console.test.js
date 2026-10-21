@@ -65,7 +65,7 @@ describe('Webspresso Interactive Console & REPL', () => {
 
     it('injects pre-instantiated database, models, and creates direct shortcuts', async () => {
       const testDb = createDatabase({
-        client: 'sqlite3',
+        client: 'better-sqlite3',
         connection: ':memory:',
         useNullAsDefault: true,
       });

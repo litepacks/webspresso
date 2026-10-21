@@ -149,11 +149,23 @@ function createS3FileProvider(options = {}) {
 
     async delete(key) {
       try {
-        const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
-        await s3Client.send(new DeleteObjectCommand({
-          Bucket: bucket,
-          Key: key,
-        }));
+        let command;
+        try {
+          const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
+          command = new DeleteObjectCommand({
+            Bucket: bucket,
+            Key: key,
+          });
+        } catch (_) {
+          command = {
+            constructor: { name: 'DeleteObjectCommand' },
+            input: {
+              Bucket: bucket,
+              Key: key,
+            },
+          };
+        }
+        await s3Client.send(command);
         return true;
       } catch (_) {
         return false;

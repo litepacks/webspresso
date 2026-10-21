@@ -26,7 +26,7 @@ const crypto = require('crypto');
 function parseGcpTraceContext(header) {
   if (!header || typeof header !== 'string') return null;
 
-  const match = header.match(/^([a-f0-9]+)(?:\/([0-9a-f]+))?(?:;o=([01]))?$/i);
+  const match = header.match(/^([a-f0-9]+)(?:\/([^;]+))?(?:;o=([01]))?$/i);
   if (!match) return null;
 
   return {

@@ -767,7 +767,7 @@ function createHelpers(ctx) {
       if (ctx && typeof ctx.getVariant === 'function') {
         return ctx.getVariant(flagKey, customContext);
       }
-      return this.hasFeature(flagKey, customContext) ? 'enabled' : null;
+      return this.hasFeature(flagKey, customContext) ? 'enabled' : false;
     },
 
     /**

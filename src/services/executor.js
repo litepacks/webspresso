@@ -197,6 +197,15 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
 
   // Validate input
   const validatedInput = await validateServiceInput(serviceDef.schema, input, name);
+  if (validatedInput && typeof validatedInput === 'object' && !('input' in validatedInput)) {
+    try {
+      Object.defineProperty(validatedInput, 'input', {
+        value: validatedInput,
+        enumerable: false,
+        configurable: true,
+      });
+    } catch (_) {}
+  }
 
   const startTime = Date.now();
   const logger = executionContext.logger || registry.logger || null;

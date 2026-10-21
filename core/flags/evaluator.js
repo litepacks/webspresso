@@ -20,6 +20,9 @@ function normalizeContext(context = {}) {
     || user?.userId
     || context.id
     || context.userId
+    || user?.email
+    || context.email
+    || context.session?.id
     || context.session?.userId
     || context.ip
     || 'anonymous';
@@ -217,9 +220,16 @@ function evaluateFlag(flagKey, definition, rawContext = {}, options = {}) {
     }
 
     // 4.7 Fallback default
+    const hasTargeting = (Array.isArray(definition.users) && definition.users.length > 0)
+      || (Array.isArray(definition.roles) && definition.roles.length > 0)
+      || (Array.isArray(definition.emailDomains) && definition.emailDomains.length > 0)
+      || (typeof definition.condition === 'function')
+      || (Array.isArray(definition.variants) && definition.variants.length > 0)
+      || (typeof definition.rollout === 'number');
+
     const fallback = definition.default !== undefined
       ? Boolean(definition.default)
-      : (definition.enabled !== undefined ? Boolean(definition.enabled) : true);
+      : (definition.enabled !== undefined ? Boolean(definition.enabled) : (hasTargeting ? false : true));
 
     return {
       enabled: fallback,

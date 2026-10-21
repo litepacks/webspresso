@@ -129,7 +129,15 @@ class ServiceRegistry {
    * @param {Object|Function} definition - Service definition or handler function
    * @returns {ServiceRegistry}
    */
-  register(name, definition, options = {}) {
+  register(nameOrDef, maybeDef, options = {}) {
+    let name = nameOrDef;
+    let definition = maybeDef;
+
+    if (nameOrDef && typeof nameOrDef === 'object' && nameOrDef.name && maybeDef === undefined) {
+      name = nameOrDef.name;
+      definition = nameOrDef;
+    }
+
     if (!name || typeof name !== 'string') {
       throw new WebspressoError('Service name must be a non-empty string');
     }

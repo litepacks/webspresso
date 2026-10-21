@@ -122,6 +122,125 @@ function uploadPlugin(options = {}) {
   const mw = ensureArray(middleware).filter(Boolean);
   const parseMultipart = createMulterMiddleware(maxBytes, fieldName, multiple, maxFiles);
 
+  let routesMounted = false;
+  function mountRoutes(ctx) {
+    if (routesMounted) return;
+    if (!ctx || typeof ctx.addRoute !== 'function') return;
+    routesMounted = true;
+
+    if (ctx.app && typeof ctx.app.set === 'function') {
+      ctx.app.set('webspresso.uploadPath', normalizedPath);
+    }
+
+    const handler = (req, res) => {
+      parseMultipart(req, res, async (err) => {
+        if (err) {
+          const { status, message } = multerErrorResponse(err);
+          return res.status(status).json({ error: message, message });
+        }
+
+        const files = multiple ? (req.files || []) : (req.file ? [req.file] : []);
+        if (files.length === 0) {
+          return res.status(400).json({ error: 'No file uploaded', message: 'No file uploaded' });
+        }
+
+        // Validate all files first
+        for (const file of files) {
+          if (!file || !file.buffer) {
+            return res.status(400).json({ error: 'No file uploaded', message: 'No file uploaded' });
+          }
+
+          const mime = file.mimetype || 'application/octet-stream';
+          const originalName = file.originalname || 'upload';
+          const ext = extensionFromName(originalName);
+
+          if (mimeAllowlist && mimeAllowlist.length && !mimeAllowlist.includes(mime)) {
+            return res.status(415).json({ error: 'MIME type not allowed', message: 'MIME type not allowed' });
+          }
+          if (
+            extensionAllowlist &&
+            extensionAllowlist.length &&
+            (!ext || !extensionAllowlist.includes(ext))
+          ) {
+            return res.status(400).json({ error: 'File extension not allowed', message: 'File extension not allowed' });
+          }
+        }
+
+        try {
+          const uploadPromises = files.map(async (file) => {
+            const mime = file.mimetype || 'application/octet-stream';
+            const originalName = file.originalname || 'upload';
+            const result = await provider.put({
+              buffer: file.buffer,
+              originalName,
+              mimeType: mime,
+              size: file.size,
+              req,
+            });
+            return {
+              url: result.publicUrl,
+              publicUrl: result.publicUrl,
+              key: result.key,
+            };
+          });
+
+          const results = await Promise.all(uploadPromises);
+
+          if (multiple) {
+            res.json(results);
+          } else {
+            res.json(results[0]);
+          }
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+          res.status(500).json({ error: message, message });
+        }
+      });
+    };
+
+    ctx.addRoute('post', normalizedPath, ...mw, handler);
+
+    // Direct presigned upload endpoint for cloud storage (AWS S3, GCS, R2)
+    if (options.presigned) {
+      const presignPath = options.presignedRoute ? ensureLeadingSlash(options.presignedRoute) : `${normalizedPath}/presign`;
+      const presignMw = ensureArray(options.presignedMiddleware || options.middleware || []);
+
+      ctx.addRoute('post', presignPath, ...presignMw, async (req, res) => {
+        if (!provider || typeof provider.createSignedUploadUrl !== 'function') {
+          return res.status(400).json({
+            error: 'Configured upload provider does not support direct presigned uploads',
+          });
+        }
+
+        const { originalName, mimeType, key, expiresInSeconds, expiresInMs } = req.body || {};
+        if (!originalName) {
+          return res.status(400).json({ error: 'originalName is required in request body' });
+        }
+
+        try {
+          const result = await provider.createSignedUploadUrl({
+            originalName,
+            mimeType: mimeType || 'application/octet-stream',
+            key,
+            expiresInSeconds,
+            expiresInMs,
+          });
+          return res.json(result);
+        } catch (err) {
+          return res.status(500).json({ error: err.message || 'Failed to create presigned upload URL' });
+        }
+      });
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`  Upload plugin: POST ${presignPath} (Presigned URL)`);
+      }
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`  Upload plugin: POST ${normalizedPath}`);
+    }
+  }
+
   return {
     name: 'upload',
     version: '1.0.0',
@@ -160,119 +279,13 @@ function uploadPlugin(options = {}) {
           }
         }
       }
+      if (typeof ctx.addRoute === 'function') {
+        mountRoutes(ctx);
+      }
     },
 
     onRoutesReady(ctx) {
-      const { app } = ctx;
-      app.set('webspresso.uploadPath', normalizedPath);
-
-      const handler = (req, res) => {
-        parseMultipart(req, res, async (err) => {
-          if (err) {
-            const { status, message } = multerErrorResponse(err);
-            return res.status(status).json({ error: message, message });
-          }
-
-          const files = multiple ? (req.files || []) : (req.file ? [req.file] : []);
-          if (files.length === 0) {
-            return res.status(400).json({ error: 'No file uploaded', message: 'No file uploaded' });
-          }
-
-          // Validate all files first
-          for (const file of files) {
-            if (!file || !file.buffer) {
-              return res.status(400).json({ error: 'No file uploaded', message: 'No file uploaded' });
-            }
-
-            const mime = file.mimetype || 'application/octet-stream';
-            const originalName = file.originalname || 'upload';
-            const ext = extensionFromName(originalName);
-
-            if (mimeAllowlist && mimeAllowlist.length && !mimeAllowlist.includes(mime)) {
-              return res.status(415).json({ error: 'MIME type not allowed', message: 'MIME type not allowed' });
-            }
-            if (
-              extensionAllowlist &&
-              extensionAllowlist.length &&
-              (!ext || !extensionAllowlist.includes(ext))
-            ) {
-              return res.status(400).json({ error: 'File extension not allowed', message: 'File extension not allowed' });
-            }
-          }
-
-          try {
-            const uploadPromises = files.map(async (file) => {
-              const mime = file.mimetype || 'application/octet-stream';
-              const originalName = file.originalname || 'upload';
-              const result = await provider.put({
-                buffer: file.buffer,
-                originalName,
-                mimeType: mime,
-                size: file.size,
-                req,
-              });
-              return {
-                url: result.publicUrl,
-                publicUrl: result.publicUrl,
-                key: result.key,
-              };
-            });
-
-            const results = await Promise.all(uploadPromises);
-
-            if (multiple) {
-              res.json(results);
-            } else {
-              res.json(results[0]);
-            }
-          } catch (e) {
-            const message = e instanceof Error ? e.message : String(e);
-            res.status(500).json({ error: message, message });
-          }
-        });
-      };
-
-      ctx.addRoute('post', normalizedPath, ...mw, handler);
-
-      // Direct presigned upload endpoint for cloud storage (AWS S3, GCS, R2)
-      if (options.presigned) {
-        const presignPath = options.presignedRoute ? ensureLeadingSlash(options.presignedRoute) : `${normalizedPath}/presign`;
-        const presignMw = ensureArray(options.presignedMiddleware || options.middleware || []);
-
-        ctx.addRoute('post', presignPath, ...presignMw, async (req, res) => {
-          if (!provider || typeof provider.createSignedUploadUrl !== 'function') {
-            return res.status(400).json({
-              error: 'Configured upload provider does not support direct presigned uploads',
-            });
-          }
-
-          const { originalName, mimeType, key, expiresInSeconds, expiresInMs } = req.body || {};
-          if (!originalName) {
-            return res.status(400).json({ error: 'originalName is required in request body' });
-          }
-
-          try {
-            const result = await provider.createSignedUploadUrl({
-              originalName,
-              mimeType: mimeType || 'application/octet-stream',
-              key,
-              expiresInSeconds,
-              expiresInMs,
-            });
-            return res.json(result);
-          } catch (err) {
-            return res.status(500).json({ error: err.message || 'Failed to create presigned upload URL' });
-          }
-        });
-
-        if (process.env.NODE_ENV !== 'production') {
-          console.log(`  Upload plugin: POST ${presignPath} (Presigned URL)`);
-        }
-      }
-
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`  Upload plugin: POST ${normalizedPath}`);
-      }
+      mountRoutes(ctx);
     },
   };
 }

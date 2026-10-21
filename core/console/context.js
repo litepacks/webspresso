@@ -217,14 +217,14 @@ REPL Dot Commands:
 
     return {
       models: Object.keys(models),
-      services: services ? services.list().map((s) => s.name) : [],
+      services: services ? services.list().map((s) => (typeof s === 'string' ? s : (s?.name || s))) : [],
     };
   };
 
   // 6. Metadata summary
   const modelNames = Object.keys(models);
   const serviceList = services && typeof services.list === 'function' ? services.list() : [];
-  const serviceNames = serviceList.map((s) => s.name);
+  const serviceNames = serviceList.map((s) => (typeof s === 'string' ? s : (s?.name || s)));
 
   const meta = {
     env,

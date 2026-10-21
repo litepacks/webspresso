@@ -47,6 +47,7 @@ describe('API Docs Plugin - HTML Builders', () => {
 describe('API Docs Plugin - Endpoints & Route Mounting', () => {
   it('mounts OpenAPI JSON and Scalar UI endpoints on an Express application', async () => {
     const app = createApp({
+      rootDir: process.cwd(),
       server: { port: 0 },
       plugins: [
         apiDocsPlugin({
@@ -84,6 +85,7 @@ describe('API Docs Plugin - Endpoints & Route Mounting', () => {
 
   it('mounts Swagger UI when ui: "swagger" is specified', async () => {
     const app = createApp({
+      rootDir: process.cwd(),
       server: { port: 0 },
       plugins: [
         swaggerPlugin({
@@ -108,6 +110,7 @@ describe('API Docs Plugin - Endpoints & Route Mounting', () => {
 
   it('works seamlessly on Hono adapter with res.type("html")', async () => {
     const app = createApp({
+      rootDir: process.cwd(),
       adapter: 'hono',
       plugins: [
         apiDocsPlugin({

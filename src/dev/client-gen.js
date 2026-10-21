@@ -345,7 +345,7 @@ class WebspressoClientError extends Error {
  */
 function createWebspressoClient(options = {}) {
   const baseUrl = (options.baseUrl || '').replace(/\/+$/, '');
-  const customFetch = options.fetch || (typeof fetch !== 'undefined' ? fetch : null);
+  const customFetch = options.fetch !== undefined ? options.fetch : (typeof fetch !== 'undefined' ? fetch : null);
 
   if (!customFetch) {
     throw new Error('[WebspressoClient] No global fetch found. Please provide a custom fetch in options.');

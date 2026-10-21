@@ -10,6 +10,17 @@ const vm = require('vm');
 const util = require('util');
 const { buildConsoleContext } = require('./context');
 
+function wrapBlock(code) {
+  const lines = code.trim().split('\n');
+  const lastLine = lines[lines.length - 1].trim();
+  const isStatementKeyword = /^(return|const|let|var|throw|if|while|for|function|class|try|switch|import|export)\b/.test(lastLine);
+  if (!isStatementKeyword && lastLine.length > 0) {
+    const expr = lastLine.replace(/;+$/, '');
+    lines[lines.length - 1] = `return (${expr});`;
+  }
+  return lines.join('\n');
+}
+
 /**
  * Evaluate JavaScript code in the Webspresso console context and return the result
  * @param {string} code - JavaScript code or expression
@@ -31,9 +42,9 @@ async function evaluateInConsole(code, options = {}) {
       const exprWrapper = `(async () => {\n  return (${trimmed});\n})()`;
       result = await vm.runInContext(exprWrapper, sandbox);
     } catch (syntaxErr) {
-      if (syntaxErr instanceof SyntaxError) {
+      if (syntaxErr?.name === 'SyntaxError' || syntaxErr instanceof SyntaxError) {
         // 2. Fall back to multi-statement block
-        const blockWrapper = `(async () => {\n${trimmed}\n})()`;
+        const blockWrapper = `(async () => {\n${wrapBlock(trimmed)}\n})()`;
         result = await vm.runInContext(blockWrapper, sandbox);
       } else {
         throw syntaxErr;

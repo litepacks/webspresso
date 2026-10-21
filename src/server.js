@@ -627,7 +627,7 @@ function createApp(options = {}) {
     attachProfilerToKnex(options.db.knex);
   }
   
-  if (!initialPagesDir && !options.pages && !options.api && !options.modules && !options.routes && !options.rootDir) {
+  if (!initialPagesDir && !options.pages && !options.api && !options.modules && !options.routes && !options.rootDir && options.adapter !== 'hono') {
     throw new Error('pagesDir is required');
   }
 
@@ -1660,6 +1660,7 @@ function createApp(options = {}) {
     if (typeof plugin.onRoutesReady === 'function') {
       const ctx = {
         app,
+        pagesDir,
         nunjucksEnv,
         options,
         middlewares,
@@ -2042,7 +2043,43 @@ function createApp(options = {}) {
       ...opts,
     });
   };
-  
+
+  const originalHandle = typeof app.handle === 'function' ? app.handle.bind(app) : null;
+  app.handle = async function(reqOrWebReq, resOrEnv, maybeNext) {
+    if (typeof Request !== 'undefined' && reqOrWebReq instanceof Request) {
+      return handleWebRequest(app, reqOrWebReq, resOrEnv);
+    }
+    return originalHandle ? originalHandle(reqOrWebReq, resOrEnv, maybeNext) : null;
+  };
+
+  app.inject = async function(injectOpts = {}) {
+    const method = injectOpts.method || 'GET';
+    const url = injectOpts.url || '/';
+    const req = new Request(`http://localhost${url}`, {
+      method,
+      headers: injectOpts.headers || {},
+      body: injectOpts.body && method !== 'GET' && method !== 'HEAD'
+        ? (typeof injectOpts.body === 'string' ? injectOpts.body : JSON.stringify(injectOpts.body))
+        : undefined,
+    });
+    const res = await app.handle(req);
+    const text = await res.text();
+    const headersObj = {};
+    if (res.headers && typeof res.headers.forEach === 'function') {
+      res.headers.forEach((val, key) => {
+        headersObj[key] = val;
+      });
+    }
+    return {
+      statusCode: res.status,
+      status: res.status,
+      headers: headersObj,
+      body: text,
+      text,
+      json: () => JSON.parse(text),
+    };
+  };
+
   Object.assign(app, {
     app,
     core,
@@ -2066,5 +2103,74 @@ function createApp(options = {}) {
   }
 }
 
+/**
+ * Handle a Web Standard Request against an Express application and return a Web Standard Response
+ * @param {import('express').Application} app
+ * @param {Request} webReq
+ * @param {Object} [env]
+ * @returns {Promise<Response>}
+ */
+async function handleWebRequest(app, webReq, env = {}) {
+  const http = require('http');
+  const { Socket } = require('net');
+
+  return new Promise(async (resolve, reject) => {
+    try {
+      const socket = new Socket();
+      const nodeReq = new http.IncomingMessage(socket);
+      const url = new URL(webReq.url, 'http://localhost');
+      nodeReq.method = webReq.method || 'GET';
+      nodeReq.url = url.pathname + url.search;
+
+      if (webReq.headers && typeof webReq.headers.entries === 'function') {
+        for (const [k, v] of webReq.headers.entries()) {
+          nodeReq.headers[k.toLowerCase()] = v;
+        }
+      }
+
+      const nodeRes = new http.ServerResponse(nodeReq);
+      const chunks = [];
+      nodeRes.write = (chunk) => {
+        if (chunk) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        return true;
+      };
+      nodeRes.end = (chunk) => {
+        if (chunk) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        const bodyBuffer = Buffer.concat(chunks);
+        const headers = new Headers();
+        const rawHeaders = typeof nodeRes.getHeaders === 'function' ? nodeRes.getHeaders() : {};
+        for (const [k, v] of Object.entries(rawHeaders)) {
+          if (Array.isArray(v)) {
+            for (const item of v) headers.append(k, item);
+          } else if (v !== undefined) {
+            headers.set(k, String(v));
+          }
+        }
+        const response = new Response(bodyBuffer, {
+          status: nodeRes.statusCode || 200,
+          statusText: nodeRes.statusMessage || 'OK',
+          headers,
+        });
+        resolve(response);
+      };
+
+      app(nodeReq, nodeRes, (err) => {
+        if (err) reject(err);
+        else nodeRes.end();
+      });
+
+      if (webReq.body) {
+        try {
+          const arrayBuf = await webReq.arrayBuffer();
+          nodeReq.push(Buffer.from(arrayBuf));
+        } catch (_) {}
+      }
+      nodeReq.push(null);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
 // Export for use as library
-module.exports = { createApp, fastETag };
+module.exports = { createApp, fastETag, handleWebRequest };

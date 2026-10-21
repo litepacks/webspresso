@@ -133,6 +133,17 @@ class QueueManager extends EventEmitter {
   }
 
   /**
+   * Alias for define
+   * @param {string} name
+   * @param {Function} handler
+   * @param {Object} [options]
+   * @returns {JobQueueManager}
+   */
+  register(name, handler, options = {}) {
+    return this.define(name, handler, options);
+  }
+
+  /**
    * Check if a job handler is defined
    * @param {string} name
    * @returns {boolean}

@@ -237,12 +237,15 @@ function createDatabase(config) {
     return Array.from(models.values());
   }
 
+  const repoCache = new Map();
+
   /**
    * Register a model
    * @param {import('./types').ModelDefinition} model - Model definition
    */
   function registerModel(model) {
     models.set(model.name, model);
+    repoCache.delete(model.name);
     // Also ensure it's in global registry (defineModel already does this, but just in case)
   }
 
@@ -253,10 +256,18 @@ function createDatabase(config) {
    * @returns {import('./types').Repository}
    */
   function getRepository(modelName, scopeContext) {
-    const model = getModelInstance(modelName);
+    const resolvedName = resolveModelName(modelName);
+    if (!scopeContext && repoCache.has(resolvedName)) {
+      return repoCache.get(resolvedName);
+    }
+    const model = getModelInstance(resolvedName);
     // Always create fresh scope context if not provided to avoid shared state
     const ctx = scopeContext || createScopeContext();
-    return createRepository(model, knexInstance, ctx, ormCacheLayer);
+    const repo = createRepository(model, knexInstance, ctx, ormCacheLayer);
+    if (!scopeContext) {
+      repoCache.set(resolvedName, repo);
+    }
+    return repo;
   }
 
   /**

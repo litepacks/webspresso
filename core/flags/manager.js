@@ -121,7 +121,7 @@ class FeatureFlagManager {
   middleware() {
     return async (reqOrC, resOrNext, maybeNext) => {
       // 1. Hono signature: (c, next)
-      const isHono = typeof reqOrC.header === 'function' && typeof reqOrC.text === 'function' && typeof resOrNext === 'function';
+      const isHono = typeof reqOrC?.set === 'function' && typeof reqOrC?.get === 'function' && typeof resOrNext === 'function' && maybeNext === undefined;
 
       if (isHono) {
         const c = reqOrC;
@@ -130,13 +130,15 @@ class FeatureFlagManager {
         const context = {
           user: c.get?.('user') || null,
           distinctId: this.identify(c.req),
-          ip: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '127.0.0.1',
-          path: c.req.path,
+          ip: c.req?.header ? (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '127.0.0.1') : '127.0.0.1',
+          path: c.req?.path || '/',
         };
 
         const flagsContext = this.forContext(context);
         if (typeof c.set === 'function') {
           c.set('flags', flagsContext);
+          c.set('hasFeature', (key, customCtx) => this.isEnabled(key, Object.assign({}, context, customCtx)));
+          c.set('getVariant', (key, customCtx) => this.getVariant(key, Object.assign({}, context, customCtx)));
         }
         c.hasFeature = (key, customCtx) => this.isEnabled(key, Object.assign({}, context, customCtx));
         c.getVariant = (key, customCtx) => this.getVariant(key, Object.assign({}, context, customCtx));
@@ -178,7 +180,7 @@ class FeatureFlagManager {
    * @param {string} flagKey
    * @param {Object} [options]
    * @param {number} [options.statusCode=404]
-   * @param {string} [options.message='Not Found']
+   * @param {string} [options.message]
    * @param {Function} [options.fallback]
    * @returns {Function}
    */
@@ -186,7 +188,36 @@ class FeatureFlagManager {
     const statusCode = options.statusCode || 404;
     const message = options.message || (statusCode === 403 ? 'Forbidden' : 'Not Found');
 
-    return (req, res, next) => {
+    return (reqOrC, resOrNext, maybeNext) => {
+      const isHono = typeof reqOrC?.set === 'function' && typeof reqOrC?.get === 'function' && typeof resOrNext === 'function' && maybeNext === undefined;
+      if (isHono) {
+        const c = reqOrC;
+        const next = resOrNext;
+        const isEnabled = typeof c.get === 'function' && typeof c.get('hasFeature') === 'function'
+          ? c.get('hasFeature')(flagKey)
+          : (typeof c.hasFeature === 'function' ? c.hasFeature(flagKey) : this.isEnabled(flagKey, c.req));
+
+        if (isEnabled) {
+          return next();
+        }
+
+        if (typeof options.fallback === 'function') {
+          return options.fallback(c, next);
+        }
+
+        return c.json(
+          options.message ? { error: options.message } : {
+            error: statusCode === 403 ? 'Forbidden' : 'Not Found',
+            message,
+            feature: flagKey,
+          },
+          statusCode
+        );
+      }
+
+      const req = reqOrC;
+      const res = resOrNext;
+      const next = maybeNext || (() => {});
       const isEnabled = typeof req?.hasFeature === 'function'
         ? req.hasFeature(flagKey)
         : this.isEnabled(flagKey, req);
@@ -200,11 +231,13 @@ class FeatureFlagManager {
       }
 
       if (res && typeof res.status === 'function') {
-        return res.status(statusCode).json({
-          error: statusCode === 403 ? 'Forbidden' : 'Not Found',
-          message,
-          feature: flagKey,
-        });
+        return res.status(statusCode).json(
+          options.message ? { error: options.message } : {
+            error: statusCode === 403 ? 'Forbidden' : 'Not Found',
+            message,
+            feature: flagKey,
+          }
+        );
       }
 
       if (statusCode === 403) {

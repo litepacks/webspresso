@@ -119,6 +119,7 @@ function signAwsV4Request(params) {
   return {
     ...requestHeaders,
     Authorization: authHeader,
+    authorization: authHeader,
   };
 }
 
