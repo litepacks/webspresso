@@ -1,5 +1,5 @@
 const path = require('path');
-const http = require('http');
+const request = require('supertest');
 const {
   dashboardPlugin,
   devToolbarPlugin,
@@ -14,14 +14,8 @@ const { defineService, createServiceRegistry } = require('../../src/services');
 
 describe('Enhanced Developer Dashboard & Dev Toolbar', () => {
   let app;
-  let server;
-  let baseUrl;
 
-  afterEach(async () => {
-    if (server) {
-      await new Promise((resolve) => server.close(resolve));
-      server = null;
-    }
+  afterEach(() => {
     if (hasModel('DevToolProduct')) {
       unregisterModel('DevToolProduct');
     }
@@ -79,26 +73,18 @@ describe('Enhanced Developer Dashboard & Dev Toolbar', () => {
       );
 
       app = instance.app;
-      server = instance.server || http.createServer(app);
-      await new Promise((resolve) => server.listen(0, resolve));
-      const port = server.address().port;
-      baseUrl = `http://localhost:${port}`;
     });
 
     afterAll(async () => {
-      if (server) {
-        await new Promise((resolve) => server.close(resolve));
-        server = null;
-      }
       if (hasModel('DevToolProduct')) {
         unregisterModel('DevToolProduct');
       }
     });
 
     it('should return models list from /_webspresso/api/models', async () => {
-      const res = await fetch(`${baseUrl}/_webspresso/api/models`);
+      const res = await request(app).get('/_webspresso/api/models');
       expect(res.status).toBe(200);
-      const models = await res.json();
+      const models = res.body;
 
       expect(Array.isArray(models)).toBe(true);
       expect(models.length).toBeGreaterThan(0);
@@ -113,9 +99,9 @@ describe('Enhanced Developer Dashboard & Dev Toolbar', () => {
     });
 
     it('should return services list from /_webspresso/api/services', async () => {
-      const res = await fetch(`${baseUrl}/_webspresso/api/services`);
+      const res = await request(app).get('/_webspresso/api/services');
       expect(res.status).toBe(200);
-      const services = await res.json();
+      const services = res.body;
 
       expect(Array.isArray(services)).toBe(true);
       expect(services.length).toBeGreaterThan(0);
@@ -128,9 +114,9 @@ describe('Enhanced Developer Dashboard & Dev Toolbar', () => {
     });
 
     it('should return system overview metrics from /_webspresso/api/overview', async () => {
-      const res = await fetch(`${baseUrl}/_webspresso/api/overview`);
+      const res = await request(app).get('/_webspresso/api/overview');
       expect(res.status).toBe(200);
-      const data = await res.json();
+      const data = res.body;
 
       expect(data).toHaveProperty('routesCount');
       expect(data).toHaveProperty('pluginsCount');

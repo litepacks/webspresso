@@ -50,17 +50,10 @@ describe('Seeder Integration', () => {
 
     // Create seeder factory function
     seederFactory = () => createSeeder(faker, knexInstance);
-  });
 
-  afterAll(async () => {
-    await knexInstance.destroy();
-  });
-
-  beforeEach(async () => {
+    // Define models once for all tests in this suite
     clearRegistry();
-    faker.seed(12345);
 
-    // Define models
     const companySchema = z.object({
       id: zdb.id(),
       name: zdb.string(),
@@ -111,6 +104,15 @@ describe('Seeder Integration', () => {
         author: { type: 'belongsTo', model: () => User, foreignKey: 'user_id' },
       },
     });
+  });
+
+  afterAll(async () => {
+    clearRegistry();
+    await knexInstance.destroy();
+  });
+
+  beforeEach(async () => {
+    faker.seed(12345);
 
     // Clear tables
     await knexInstance('posts').del();

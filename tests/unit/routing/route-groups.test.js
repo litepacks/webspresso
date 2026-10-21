@@ -110,8 +110,9 @@ describe('Route Groups `(group)` Syntax', () => {
 
   describe('Full-Stack HTTP Integration with Route Groups', () => {
     let tmpDir;
+    let app;
 
-    beforeEach(() => {
+    beforeAll(() => {
       tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-route-groups-'));
       const pagesDir = path.join(tmpDir, 'pages');
       fs.mkdirSync(pagesDir, { recursive: true });
@@ -205,18 +206,23 @@ describe('Route Groups `(group)` Syntax', () => {
         path.join(marketingApiDir, 'newsletter.post.js'),
         'module.exports = { handler: async (req, res) => res.status(201).json({ status: "subscribed" }) };'
       );
+
+      const serverInstance = createApp({
+        pagesDir: path.join(tmpDir, 'pages'),
+        logging: false,
+        cache: false,
+        lazyRoutes: true,
+      });
+      app = serverInstance.app;
     });
 
-    afterEach(() => {
+    afterAll(() => {
       if (tmpDir && fs.existsSync(tmpDir)) {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }
     });
 
     it('serves route group home page at / with marketing layout and middleware', async () => {
-      const { app } = createApp({
-        pagesDir: path.join(tmpDir, 'pages'),
-      });
 
       const res = await request(app).get('/');
       expect(res.status).toBe(200);
@@ -230,10 +236,6 @@ describe('Route Groups `(group)` Syntax', () => {
     });
 
     it('serves (marketing)/about.njk at clean URL /about with marketing layout', async () => {
-      const { app } = createApp({
-        pagesDir: path.join(tmpDir, 'pages'),
-      });
-
       const res = await request(app).get('/about');
       expect(res.status).toBe(200);
       expect(res.headers['x-global']).toBe('ok');
@@ -244,10 +246,6 @@ describe('Route Groups `(group)` Syntax', () => {
     });
 
     it('serves (auth)/login.njk at clean URL /login with auth layout and middleware, isolated from marketing', async () => {
-      const { app } = createApp({
-        pagesDir: path.join(tmpDir, 'pages'),
-      });
-
       const res = await request(app).get('/login');
       expect(res.status).toBe(200);
       expect(res.headers['x-global']).toBe('ok');
@@ -258,10 +256,6 @@ describe('Route Groups `(group)` Syntax', () => {
     });
 
     it('serves nested route groups (shop)/(checkout)/cart.njk at /cart', async () => {
-      const { app } = createApp({
-        pagesDir: path.join(tmpDir, 'pages'),
-      });
-
       const res = await request(app).get('/cart');
       expect(res.status).toBe(200);
       expect(res.headers['x-global']).toBe('ok');
@@ -270,30 +264,18 @@ describe('Route Groups `(group)` Syntax', () => {
     });
 
     it('serves dynamic routes inside route groups (app)/users/[id].njk at /users/:id', async () => {
-      const { app } = createApp({
-        pagesDir: path.join(tmpDir, 'pages'),
-      });
-
       const res = await request(app).get('/users/42');
       expect(res.status).toBe(200);
       expect(res.text).toContain('<h1>User Profile 42</h1>');
     });
 
     it('serves API routes with route group segments: /api/items from api/(v1)/items.get.js', async () => {
-      const { app } = createApp({
-        pagesDir: path.join(tmpDir, 'pages'),
-      });
-
       const res = await request(app).get('/api/items');
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ items: ['pen', 'notebook'] });
     });
 
     it('serves API routes within parent route groups: /api/newsletter from (marketing)/api/newsletter.post.js', async () => {
-      const { app } = createApp({
-        pagesDir: path.join(tmpDir, 'pages'),
-      });
-
       const res = await request(app).post('/api/newsletter');
       expect(res.status).toBe(201);
       expect(res.body).toEqual({ status: 'subscribed' });

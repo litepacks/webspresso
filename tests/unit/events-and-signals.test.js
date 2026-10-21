@@ -139,7 +139,7 @@ describe('Decoupled Events & Signals System (AdonisJS Events & Django Signals-in
     it('emitSerial runs async listeners in sequence', async () => {
       const timeline = [];
       dispatcher.on('step', async () => {
-        await new Promise((r) => setTimeout(r, 10));
+        await new Promise((r) => setTimeout(r, 1));
         timeline.push('first');
         return 1;
       });
@@ -246,7 +246,7 @@ describe('Decoupled Events & Signals System (AdonisJS Events & Django Signals-in
     let appObj;
     let tempDir;
 
-    beforeEach(() => {
+    beforeAll(() => {
       tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-app-events-'));
       fs.mkdirSync(path.join(tempDir, 'pages', 'api'), { recursive: true });
 
@@ -276,7 +276,7 @@ describe('Decoupled Events & Signals System (AdonisJS Events & Django Signals-in
       });
     });
 
-    afterEach(async () => {
+    afterAll(async () => {
       if (appObj?.shutdownManager) {
         await appObj.shutdownManager.close('test');
       }

@@ -229,12 +229,12 @@ describe('Webhooks Plugin', () => {
     });
 
     it('handles network timeouts gracefully', async () => {
-      delayMs = 200;
+      delayMs = 50;
       const result = await sendWebhook({
         url: serverUrl,
         event: 'test.timeout',
         payload: { slow: true },
-        timeoutMs: 50, // shorter than delay
+        timeoutMs: 10, // shorter than delay
       });
 
       expect(result.success).toBe(false);

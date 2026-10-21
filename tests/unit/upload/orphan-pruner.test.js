@@ -62,10 +62,11 @@ describe('Orphaned Uploads Pruner', () => {
         { name: 'Article', table: 'articles' },
       ],
     };
+
+    await populateSampleFiles();
   });
 
-  beforeEach(async () => {
-    // Populate tmpDir with sample files on disk
+  const populateSampleFiles = async () => {
     await fs.mkdir(path.join(tmpDir, 'charts'), { recursive: true });
     await fs.mkdir(path.join(tmpDir, 'old-folder'), { recursive: true });
 
@@ -77,6 +78,12 @@ describe('Orphaned Uploads Pruner', () => {
     await fs.writeFile(path.join(tmpDir, 'abandoned-draft.pdf'), 'PDF_DATA_UNUSED');
     await fs.writeFile(path.join(tmpDir, 'old-folder', 'orphan-nested.docx'), 'NESTED_ORPHAN_DOC');
     await fs.writeFile(path.join(tmpDir, '.DS_Store'), 'IGNORED_HIDDEN_METADATA');
+  };
+
+  beforeEach(async () => {
+    if (!fsSync.existsSync(path.join(tmpDir, 'abandoned-draft.pdf'))) {
+      await populateSampleFiles();
+    }
   });
 
   afterAll(async () => {
