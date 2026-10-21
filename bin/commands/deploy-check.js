@@ -10,6 +10,26 @@ const fs = require('fs');
 const path = require('path');
 const { resolveDbConfigIfExists, createDbInstance } = require('../utils/db');
 
+function resolveProjectDbConfig(dir, targetEnv) {
+  for (const filename of ['webspresso.db.js', 'knexfile.js']) {
+    const full = path.resolve(dir || process.cwd(), filename);
+    if (fs.existsSync(full)) {
+      try {
+        if (fs.statSync(full).isFile()) {
+          const loaded = require(full);
+          const resolved = (loaded && typeof loaded === 'object') ? (loaded[targetEnv] || loaded) : null;
+          if (resolved && typeof resolved === 'object' && resolved.client) {
+            return resolved;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Known weak secret patterns that should never be used in production
  */
@@ -218,7 +238,7 @@ async function runDeployCheck(options = {}) {
     addPass('Migrations', `Found ${files.length} migration file(s) in migrations/`);
 
     // Try verifying migration status and connection pool if db config exists
-    const dbConfig = resolveDbConfigIfExists(cwd, targetEnv);
+    const dbConfig = resolveProjectDbConfig(cwd, targetEnv);
     if (dbConfig) {
       // Check connection pool for serverless/container scale-out
       const isSqlite = dbConfig.client === 'better-sqlite3' || dbConfig.client === 'sqlite3';
@@ -236,14 +256,19 @@ async function runDeployCheck(options = {}) {
       }
 
       try {
-        const db = createDbInstance(dbConfig);
-        const status = await db.knex.migrate.status();
-        if (status > 0) {
-          addWarn('Pending Migrations', `There are ${status} pending database migration(s) to run (run: npx webspresso db:migrate)`);
-        } else if (status === 0) {
-          addPass('Pending Migrations', 'All database migrations are applied up to date');
+        const db = createDbInstance(dbConfig, targetEnv);
+        const knexInstance = db.knex || db;
+        if (knexInstance?.migrate?.status) {
+          const status = await knexInstance.migrate.status();
+          if (status > 0) {
+            addWarn('Pending Migrations', `There are ${status} pending database migration(s) to run (run: npx webspresso db:migrate)`);
+          } else if (status === 0) {
+            addPass('Pending Migrations', 'All database migrations are applied up to date');
+          }
         }
-        await db.knex.destroy();
+        if (knexInstance && typeof knexInstance.destroy === 'function') {
+          await knexInstance.destroy();
+        }
       } catch (err) {
         addWarn('Database Connectivity', `Could not check migration status: ${err.message}`);
       }
@@ -321,7 +346,7 @@ async function runDeployCheck(options = {}) {
   // ----------------------------------------------------
   // 9. Platform-Specific Cloud Preflight
   // ----------------------------------------------------
-  const dbConfig = resolveDbConfigIfExists(cwd, targetEnv);
+  const dbConfig = resolveProjectDbConfig(cwd, targetEnv);
   const isSqlite = !dbConfig || dbConfig.client === 'better-sqlite3' || dbConfig.client === 'sqlite3';
 
   // 9.1 Ephemeral Storage (Database & Uploads)

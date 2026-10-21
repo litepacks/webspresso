@@ -78,6 +78,7 @@ function adminPanelPlugin(options = {}) {
 
   // Create fresh registry for this plugin instance
   const registry = new AdminRegistry();
+  let activeCtx = null;
   if (title) {
     registry.setTitle(title);
   }
@@ -131,8 +132,8 @@ function adminPanelPlugin(options = {}) {
       requireAuth,
       optionalAuth,
       registerModule(config) {
-        // When bound to plugin, "this" is the plugin; _ctx lives on this.api
-        const ctx = this.api?._ctx ?? this._ctx;
+        // When bound to plugin, "this" is the plugin; _ctx lives on this.api or activeCtx closure
+        const ctx = activeCtx || this.api?._ctx || this._ctx;
         if (!ctx) {
           throw new Error('registerModule can only be called during or after onRoutesReady');
         }
@@ -146,7 +147,7 @@ function adminPanelPlugin(options = {}) {
         });
       },
       registerPageDir(dirPath) {
-        const ctx = this.api?._ctx ?? this._ctx;
+        const ctx = activeCtx || this.api?._ctx || this._ctx;
         if (!ctx) {
           throw new Error('registerPageDir can only be called during or after onRoutesReady');
         }
@@ -205,6 +206,10 @@ function adminPanelPlugin(options = {}) {
      * Register hook - called when plugin is registered
      */
     register(ctx) {
+      activeCtx = ctx;
+      if (this?.api) this.api._ctx = ctx;
+      this._ctx = ctx;
+
       // Ensure enabled is set
       this.enabled = enabled;
 
@@ -265,7 +270,9 @@ function adminPanelPlugin(options = {}) {
         return;
       }
 
-      this.api._ctx = ctx;
+      activeCtx = ctx;
+      if (this?.api) this.api._ctx = ctx;
+      this._ctx = ctx;
       const { app } = ctx;
 
       const uploadUrlResolved =

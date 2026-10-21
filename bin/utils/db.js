@@ -38,7 +38,13 @@ function resolveDbConfigIfExists(configPath) {
   for (const p of paths) {
     const fullPath = path.resolve(process.cwd(), p);
     if (fs.existsSync(fullPath)) {
-      return { config: require(fullPath), path: fullPath };
+      try {
+        if (fs.statSync(fullPath).isFile()) {
+          return { config: require(fullPath), path: fullPath };
+        }
+      } catch {
+        // ignore
+      }
     }
   }
   return null;

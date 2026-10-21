@@ -255,6 +255,7 @@ const db = createDatabase({
         }),
         {
           name: 'euix-test-plugin',
+          dependencies: ['admin-panel'],
           onRoutesReady(ctx) {
             const adminApi = ctx.usePlugin('admin-panel');
             if (adminApi) {
