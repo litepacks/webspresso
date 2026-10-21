@@ -135,9 +135,9 @@ function setupHealthMiddleware(app, options = {}, context = {}) {
   const serverContext = {
     ...context,
     app,
-    db: context.db || app.db || (app.get ? app.get('db') : null),
-    queue: context.queue || app.queue || (app.get ? app.get('queue') : null),
-    shutdownManager: context.shutdownManager || app.shutdownManager,
+    db: context.db || options.db || config.db || app.db || (app.get ? app.get('db') : null),
+    queue: context.queue || options.queue || config.queue || app.queue || (app.get ? app.get('queue') : null),
+    shutdownManager: context.shutdownManager || options.shutdownManager || config.shutdownManager || app.shutdownManager,
   };
 
   const healthManager = createHealthManager(config, serverContext);
