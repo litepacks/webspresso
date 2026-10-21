@@ -293,6 +293,10 @@ Object.defineProperties(module.exports, {
   createExpressHttpAdapter: { get: () => require('./http').createExpressHttpAdapter, enumerable: true, configurable: true },
   HonoHttpAdapter: { get: () => require('./http').HonoHttpAdapter, enumerable: true, configurable: true },
   createHonoHttpAdapter: { get: () => require('./http').createHonoHttpAdapter, enumerable: true, configurable: true },
+  executeApiPipeline: { get: () => require('./http').executeApiPipeline, enumerable: true, configurable: true },
+  executePagePipeline: { get: () => require('./http').executePagePipeline, enumerable: true, configurable: true },
+  runMiddlewares: { get: () => require('./http').runMiddlewares, enumerable: true, configurable: true },
+  enrichRouteError: { get: () => require('./http').enrichRouteError, enumerable: true, configurable: true },
 
   // Authentication & Verification
   auth: { get: () => require('./auth'), enumerable: true, configurable: true },
