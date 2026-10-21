@@ -103,6 +103,15 @@ class ShutdownManager {
   }
 
   /**
+   * Register a shutdown hook (alias for onShutdown)
+   * @param {Function} fn
+   * @returns {this}
+   */
+  register(fn) {
+    return this.onShutdown(fn);
+  }
+
+  /**
    * Register a plugin disposer / cleanup function
    * @param {string|Function} nameOrFn - Plugin name or disposer function
    * @param {Function} [maybeFn] - Disposer function if name is provided

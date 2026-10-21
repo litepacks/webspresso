@@ -493,6 +493,9 @@ Object.defineProperties(module.exports, {
   // Static Site Export & Prerendering
   exportStaticSite: { get: () => require('./core/export').exportStaticSite, enumerable: true, configurable: true },
   discoverExportRoutes: { get: () => require('./core/export').discoverExportRoutes, enumerable: true, configurable: true },
+  urlToFilePath: { get: () => require('./core/export').urlToFilePath, enumerable: true, configurable: true },
+  generateSitemapXml: { get: () => require('./core/export').generateSitemapXml, enumerable: true, configurable: true },
+  copyDirRecursive: { get: () => require('./core/export').copyDirRecursive, enumerable: true, configurable: true },
 
   // Server-Sent Events (SSE) Streaming
   sse: { get: () => require('./core/sse'), enumerable: true, configurable: true },

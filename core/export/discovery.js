@@ -98,6 +98,7 @@ async function discoverExportRoutes(options = {}) {
           path: item.routePath,
           sourceFile: item.fullPath,
           isDynamic: false,
+          isNotFound: item.routePath === '/404',
         });
       }
       continue;

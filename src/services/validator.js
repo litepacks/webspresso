@@ -121,7 +121,13 @@ function compileServiceSchema(rawSchema) {
       if (res && (res instanceof z.ZodType || typeof res.safeParse === 'function')) {
         compiled = res;
       } else if (res && typeof res === 'object' && !(res instanceof Promise) && typeof res.then !== 'function' && (res.constructor === Object || !res.constructor)) {
-        compiled = shapeFromDescriptor(res);
+        if (res.input && (res.input instanceof z.ZodType || typeof res.input.safeParse === 'function' || (typeof res.input === 'object' && res.input !== null))) {
+          compiled = (res.input instanceof z.ZodType || typeof res.input.safeParse === 'function')
+            ? res.input
+            : shapeFromDescriptor(res.input);
+        } else {
+          compiled = shapeFromDescriptor(res);
+        }
       }
     } catch (e) {
       // If invoking with { z } throws, treat as a direct validator function
@@ -130,12 +136,18 @@ function compileServiceSchema(rawSchema) {
       compiled = rawSchema;
     }
   } else if (typeof rawSchema === 'object' && rawSchema !== null) {
-    // If object descriptor: { id: 'number', name: 'string', email: 'email' }
-    const keys = Object.keys(rawSchema);
-    if (keys.length === 0) {
-      compiled = null;
+    if (rawSchema.input && (rawSchema.input instanceof z.ZodType || typeof rawSchema.input.safeParse === 'function' || (typeof rawSchema.input === 'object' && rawSchema.input !== null))) {
+      compiled = (rawSchema.input instanceof z.ZodType || typeof rawSchema.input.safeParse === 'function')
+        ? rawSchema.input
+        : shapeFromDescriptor(rawSchema.input);
     } else {
-      compiled = shapeFromDescriptor(rawSchema);
+      // If object descriptor: { id: 'number', name: 'string', email: 'email' }
+      const keys = Object.keys(rawSchema);
+      if (keys.length === 0) {
+        compiled = null;
+      } else {
+        compiled = shapeFromDescriptor(rawSchema);
+      }
     }
   } else {
     compiled = rawSchema;

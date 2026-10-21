@@ -102,6 +102,8 @@ class CoreApp {
       ...shutdownConfig,
       logger: this.logger,
     });
+    this.shutdown = this.shutdownManager;
+
 
     // 5. Circuit Breakers Layer (isolated per instance)
     this.breakers = options.breakers instanceof CircuitBreakerRegistry
@@ -127,6 +129,7 @@ class CoreApp {
       logger: this.logger,
       timeouts: this.timeouts,
     });
+    this.services = this.serviceRegistry;
 
     // Auto-register built-in auth services if database is present
     if (options.db) {
@@ -285,6 +288,9 @@ class CoreApp {
       breaker: (name, opts) => this.breakers.getBreaker(name, opts),
       retry,
       serviceRegistry: this.serviceRegistry,
+      services: this.serviceRegistry,
+      shutdownManager: this.shutdownManager,
+      shutdown: this.shutdownManager,
       secrets: this.secrets,
       secret: (name, opts) => (this.secrets ? this.secrets.get(name, opts) : (process.env[name] ?? null)),
       core: this,

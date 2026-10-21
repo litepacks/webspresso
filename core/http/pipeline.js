@@ -222,7 +222,8 @@ async function executeApiPipeline(params) {
   // 5. Auto-respond if handler returned a value and response not yet sent
   if (res && !res.headersSent) {
     if (result !== undefined && typeof res.json === 'function') {
-      return res.json(result);
+      res.json(result);
+      return result;
     }
   }
 

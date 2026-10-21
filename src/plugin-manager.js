@@ -550,9 +550,17 @@ class PluginManager {
 
     return {
       app: context.app,
+      core: context.core || null,
+      http: context.http || null,
+      shutdown: context.shutdown || context.shutdownManager || null,
+      shutdownManager: context.shutdownManager || context.shutdown || null,
+      services: context.services || context.serviceRegistry || null,
+      serviceRegistry: context.serviceRegistry || context.services || null,
+      events: context.events || null,
+      cache: context.cache || null,
       options: plugin._options || {},
       nunjucksEnv: context.nunjucksEnv,
-      db: context.options?.db ?? null,
+      db: context.options?.db ?? context.db ?? null,
       /** @type {Record<string, unknown>} Named middleware registry (same reference as createApp → mountPages) */
       middlewares: context.middlewares ?? {},
 

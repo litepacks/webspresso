@@ -83,7 +83,9 @@ function createMetricsManager(options = {}, context = {}) {
         res.setHeader('x-trace-id', traceId);
       }
       if (!res.getHeader('traceparent')) {
-        res.setHeader('traceparent', `00-${traceId.padStart(32, '0')}-${spanId.padStart(16, '0')}-01`);
+        const cleanTraceId = String(traceId).replace(/-/g, '').padStart(32, '0').slice(0, 32);
+        const cleanSpanId = String(spanId).replace(/-/g, '').padStart(16, '0').slice(0, 16);
+        res.setHeader('traceparent', `00-${cleanTraceId}-${cleanSpanId}-01`);
       }
     }
 

@@ -253,6 +253,9 @@ function redirectPlugin(options = {}) {
     description: 'Configurable HTTP redirects before file-based routes',
 
     register(ctx) {
+      if (compiled.length === 0) {
+        return;
+      }
       const target = ctx.http || ctx.app;
       if (target && typeof target.use === 'function') {
         target.use(redirectMiddleware);

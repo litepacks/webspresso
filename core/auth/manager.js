@@ -116,10 +116,10 @@ class AuthManager extends EventEmitter {
     this.totp = require('./totp');
     this.twoFactor = config.twoFactor || { enabled: false };
 
-    if (config.jwt) {
+    if (config.jwt || config.secret) {
       const jwtSecret = typeof config.jwt === 'object' && config.jwt.secret
         ? config.jwt.secret
-        : (config.session?.secret || process.env.JWT_SECRET || process.env.AUTH_SESSION_SECRET || 'webspresso-jwt-secret');
+        : (config.secret || config.session?.secret || process.env.JWT_SECRET || process.env.AUTH_SESSION_SECRET || 'webspresso-jwt-secret');
       const refreshSecret = typeof config.jwt === 'object' && config.jwt.refreshSecret
         ? config.jwt.refreshSecret
         : (process.env.JWT_REFRESH_SECRET || jwtSecret);
@@ -185,6 +185,16 @@ class AuthManager extends EventEmitter {
    * @param {Object} config
    */
   validateConfig(config) {
+    if (config && config.users && typeof config.users === 'object') {
+      if (!config.findUserById && typeof config.users.findById === 'function') {
+        config.findUserById = config.users.findById;
+      }
+      if (!config.findUserByCredentials && typeof config.users.findByCredentials === 'function') {
+        config.findUserByCredentials = config.users.findByCredentials;
+      } else if (!config.findUserByCredentials) {
+        config.findUserByCredentials = () => null;
+      }
+    }
     if (typeof config.findUserById !== 'function') {
       throw new Error('findUserById function is required');
     }
@@ -1091,7 +1101,7 @@ class AuthManager extends EventEmitter {
    * @returns {string} JWT string
    */
   createJwt(payload, options = {}) {
-    const secret = options.secret || this.jwt?.secret || this.config.session?.secret || process.env.JWT_SECRET;
+    const secret = options.secret || this.jwt?.secret || this.config.secret || this.config.session?.secret || process.env.JWT_SECRET;
     if (!secret) {
       throw new Error('JWT secret is missing');
     }
@@ -1110,7 +1120,7 @@ class AuthManager extends EventEmitter {
    * @returns {Object} Decoded payload
    */
   verifyJwt(token, options = {}) {
-    const secret = options.secret || this.jwt?.secret || this.config.session?.secret || process.env.JWT_SECRET;
+    const secret = options.secret || this.jwt?.secret || this.config.secret || this.config.session?.secret || process.env.JWT_SECRET;
     if (!secret) {
       throw new Error('JWT secret is missing');
     }

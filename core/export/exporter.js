@@ -210,7 +210,7 @@ async function exportStaticSite(options = {}) {
             },
           });
 
-          if (res.status >= 400 && !item.isNotFound) {
+          if (res.status >= 400 && !item.isNotFound && item.path !== '/404') {
             const errBody = await res.text();
             throw new Error(`HTTP ${res.status}: Failed to render "${item.path}". Response: ${errBody.slice(0, 100)}`);
           }
