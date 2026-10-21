@@ -3,7 +3,7 @@
  * Tests listColumns, searchFields, displayField, readOnly, permissions, defaultSort, group, and badge formatters.
  */
 
-const { createDatabase, defineModel, zdb, hasModel } = require('../../../core/orm');
+const { createDatabase, defineModel, zdb, hasModel, clearRegistry } = require('../../../core/orm');
 const { createApp } = require('../../../index');
 const supertest = require('supertest');
 const adminPanelPlugin = require('../../../plugins/admin-panel');
@@ -15,6 +15,7 @@ describe('Admin Panel Declarative Model DX (ORM ↔ Admin)', () => {
   let adminCookie;
 
   beforeAll(async () => {
+    clearRegistry();
     db = createDatabase({
       client: 'better-sqlite3',
       connection: ':memory:',
@@ -269,6 +270,7 @@ describe('Admin Panel Declarative Model DX (ORM ↔ Admin)', () => {
 
   afterAll(async () => {
     if (db) await db.destroy();
+    clearRegistry();
   });
 
   describe('Model Definition & Metadata Normalization', () => {

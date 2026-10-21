@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import path from 'path';
 import fs from 'fs';
 import request from 'supertest';
@@ -189,7 +189,9 @@ describe('API Validation i18n & Error Translation', () => {
     const tempDir = path.join(__dirname, '../../fixtures/temp-api-i18n-test');
     let origSupported;
 
-    beforeEach(() => {
+    let app;
+
+    beforeAll(() => {
       origSupported = process.env.SUPPORTED_LOCALES;
       process.env.SUPPORTED_LOCALES = 'en,tr,de';
       fs.mkdirSync(path.join(tempDir, 'pages', 'locales'), { recursive: true });
@@ -251,9 +253,22 @@ describe('API Validation i18n & Error Translation', () => {
         });
         `
       );
+
+      const serverInstance = createApp({
+        rootDir: tempDir,
+        pagesDir: path.join(tempDir, 'pages'),
+        silent: true,
+        helmet: false,
+        compression: false,
+        cache: false,
+        healthCheck: false,
+        metrics: false,
+        lazyRoutes: true,
+      });
+      app = serverInstance.app;
     });
 
-    afterEach(() => {
+    afterAll(() => {
       if (origSupported !== undefined) {
         process.env.SUPPORTED_LOCALES = origSupported;
       } else {
@@ -265,11 +280,6 @@ describe('API Validation i18n & Error Translation', () => {
     });
 
     it('returns Turkish validation messages with Accept-Language: tr', async () => {
-      const { app } = createApp({
-        rootDir: tempDir,
-        pagesDir: path.join(tempDir, 'pages'),
-        logging: false,
-      });
 
       const res = await request(app)
         .post('/api/register')
@@ -296,11 +306,6 @@ describe('API Validation i18n & Error Translation', () => {
     });
 
     it('returns English validation messages with Accept-Language: en', async () => {
-      const { app } = createApp({
-        rootDir: tempDir,
-        pagesDir: path.join(tempDir, 'pages'),
-        logging: false,
-      });
 
       const res = await request(app)
         .post('/api/register')
@@ -324,11 +329,6 @@ describe('API Validation i18n & Error Translation', () => {
     });
 
     it('switches locale dynamically via query string ?lang=tr', async () => {
-      const { app } = createApp({
-        rootDir: tempDir,
-        pagesDir: path.join(tempDir, 'pages'),
-        logging: false,
-      });
 
       const res = await request(app)
         .post('/api/register?lang=tr')
@@ -342,11 +342,6 @@ describe('API Validation i18n & Error Translation', () => {
     });
 
     it('passes t and locale to apiCtx on successful valid requests', async () => {
-      const { app } = createApp({
-        rootDir: tempDir,
-        pagesDir: path.join(tempDir, 'pages'),
-        logging: false,
-      });
 
       const res = await request(app)
         .post('/api/register?lang=tr')

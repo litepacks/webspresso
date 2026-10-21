@@ -193,6 +193,7 @@ describe.sequential('Admin Panel API Extended Scenarios', () => {
 
   afterAll(async () => {
     if (knex) await knex.destroy();
+    clearRegistry();
   });
 
   describe('quickEditHandler', () => {
