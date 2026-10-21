@@ -13,9 +13,11 @@ import { wrapEditable, wrapEntryBlock } from '../../core/content/index.js';
 describe('content inline edit & helpers', () => {
   let app;
   let db;
+  let adminCookie;
 
   beforeAll(async () => {
     ({ app, db } = await createContentTestApp());
+    adminCookie = await loginAdmin(request, app);
   });
 
   afterAll(async () => {
@@ -31,8 +33,7 @@ describe('content inline edit & helpers', () => {
   });
 
   it('injects inline edit config + script for admin session', async () => {
-    const cookie = await loginAdmin(request, app);
-    const res = await request(app).get('/').set('Cookie', cookie).expect(200);
+    const res = await request(app).get('/').set('Cookie', adminCookie).expect(200);
     expect(res.text).toContain('id="ws-content-inline-edit"');
     expect(res.text).toContain('window.__WS_CONTENT__');
     expect(res.text).toContain('/_admin');

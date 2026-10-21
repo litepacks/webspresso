@@ -19,6 +19,7 @@ const FIXTURES_VIEWS = path.join(__dirname, '..', 'fixtures', 'views');
 
 describe('REST resources plugin', { timeout: 60000 }, () => {
   let db;
+  let app;
 
   beforeAll(async () => {
     clearRegistry();
@@ -34,11 +35,24 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
     db.registerModel(Company);
     db.registerModel(User);
     db.registerModel(Post);
+
+    await createTestSchema(db.knex);
+
+    const created = createApp({
+      pagesDir: FIXTURES_PAGES,
+      viewsDir: FIXTURES_VIEWS,
+      db,
+      cache: false,
+      lazyRoutes: true,
+      plugins: [restResourcePlugin({ path: '/api/rest' })],
+    });
+    app = created.app;
   });
 
   beforeEach(async () => {
-    await dropTestSchema(db.knex);
-    await createTestSchema(db.knex);
+    await db.knex('posts').del();
+    await db.knex('users').del();
+    await db.knex('companies').del();
     await seedTestData(db.knex);
   });
 
@@ -49,24 +63,10 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
   });
 
   it('does not mount companies when rest.enabled is false and no whitelist', async () => {
-    const { app } = createApp({
-      pagesDir: FIXTURES_PAGES,
-      viewsDir: FIXTURES_VIEWS,
-      db,
-      plugins: [restResourcePlugin({ path: '/api/rest' })],
-    });
-
     await request(app).get('/api/rest/companies').expect(404);
   });
 
   it('lists users and omits hidden columns', async () => {
-    const { app } = createApp({
-      pagesDir: FIXTURES_PAGES,
-      viewsDir: FIXTURES_VIEWS,
-      db,
-      plugins: [restResourcePlugin({ path: '/api/rest' })],
-    });
-
     const res = await request(app).get('/api/rest/users').expect(200);
     expect(res.body.data.length).toBeGreaterThanOrEqual(1);
     const row = res.body.data.find((r) => r.id === 1);
@@ -76,38 +76,17 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
   });
 
   it('eager-loads allowed include=company on user', async () => {
-    const { app } = createApp({
-      pagesDir: FIXTURES_PAGES,
-      viewsDir: FIXTURES_VIEWS,
-      db,
-      plugins: [restResourcePlugin({ path: '/api/rest' })],
-    });
-
     const res = await request(app).get('/api/rest/users/1?include=company').expect(200);
     expect(res.body.data.company).toBeDefined();
     expect(res.body.data.company.name).toBe('Acme Corp');
   });
 
   it('ignores disallowed include (posts) on user', async () => {
-    const { app } = createApp({
-      pagesDir: FIXTURES_PAGES,
-      viewsDir: FIXTURES_VIEWS,
-      db,
-      plugins: [restResourcePlugin({ path: '/api/rest' })],
-    });
-
     const res = await request(app).get('/api/rest/users/1?include=posts').expect(200);
     expect(res.body.data.posts).toBeUndefined();
   });
 
   it('eager-loads include=author on post and strips nested hidden on author', async () => {
-    const { app } = createApp({
-      pagesDir: FIXTURES_PAGES,
-      viewsDir: FIXTURES_VIEWS,
-      db,
-      plugins: [restResourcePlugin({ path: '/api/rest' })],
-    });
-
     const res = await request(app).get('/api/rest/posts/1?include=author').expect(200);
     expect(res.body.data.author).toBeDefined();
     expect(res.body.data.author.email).toBe('john@acme.com');
@@ -115,10 +94,12 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
   });
 
   it('exposes model with rest.enabled false when listed in plugin models whitelist', async () => {
-    const { app } = createApp({
+    const custom = createApp({
       pagesDir: FIXTURES_PAGES,
       viewsDir: FIXTURES_VIEWS,
       db,
+      cache: false,
+      lazyRoutes: true,
       plugins: [
         restResourcePlugin({
           path: '/api/rest',
@@ -127,19 +108,12 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
       ],
     });
 
-    const res = await request(app).get('/api/rest/companies').expect(200);
+    const res = await request(custom.app).get('/api/rest/companies').expect(200);
     expect(Array.isArray(res.body.data)).toBe(true);
     expect(res.body.data.some((c) => c.slug === 'acme-corp')).toBe(true);
   });
 
   it('creates, updates, and soft-deletes a user', async () => {
-    const { app } = createApp({
-      pagesDir: FIXTURES_PAGES,
-      viewsDir: FIXTURES_VIEWS,
-      db,
-      plugins: [restResourcePlugin({ path: '/api/rest' })],
-    });
-
     const email = `rest-${Date.now()}@example.com`;
     const created = await request(app)
       .post('/api/rest/users')
@@ -163,13 +137,6 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
   });
 
   it('filters records by table columns in query parameters', async () => {
-    const { app } = createApp({
-      pagesDir: FIXTURES_PAGES,
-      viewsDir: FIXTURES_VIEWS,
-      db,
-      plugins: [restResourcePlugin({ path: '/api/rest' })],
-    });
-
     const res = await request(app).get('/api/rest/users?status=inactive').expect(200);
     expect(res.body.data.length).toBe(1);
     expect(res.body.data[0].status).toBe('inactive');
@@ -177,13 +144,6 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
   });
 
   it('supports pagination with page and perPage limits', async () => {
-    const { app } = createApp({
-      pagesDir: FIXTURES_PAGES,
-      viewsDir: FIXTURES_VIEWS,
-      db,
-      plugins: [restResourcePlugin({ path: '/api/rest' })],
-    });
-
     const res = await request(app).get('/api/rest/users?page=1&perPage=2').expect(200);
     expect(res.body.data.length).toBe(2);
     expect(res.body.pagination.page).toBe(1);
@@ -193,13 +153,6 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
   });
 
   it('supports sorting by column name and order direction', async () => {
-    const { app } = createApp({
-      pagesDir: FIXTURES_PAGES,
-      viewsDir: FIXTURES_VIEWS,
-      db,
-      plugins: [restResourcePlugin({ path: '/api/rest' })],
-    });
-
     const ascRes = await request(app).get('/api/rest/users?sort=name&order=asc').expect(200);
     const namesAsc = ascRes.body.data.map((u) => u.name);
     const sortedAsc = [...namesAsc].sort((a, b) => a.localeCompare(b));
@@ -212,13 +165,6 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
   });
 
   it('handles soft-delete scopes with trashed=only and trashed=include', async () => {
-    const { app } = createApp({
-      pagesDir: FIXTURES_PAGES,
-      viewsDir: FIXTURES_VIEWS,
-      db,
-      plugins: [restResourcePlugin({ path: '/api/rest' })],
-    });
-
     const onlyTrashed = await request(app).get('/api/rest/users?trashed=only').expect(200);
     expect(onlyTrashed.body.data.length).toBeGreaterThanOrEqual(1);
     expect(onlyTrashed.body.data.some((u) => u.email === 'deleted@test.com')).toBe(true);
@@ -236,10 +182,12 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
       res.status(401).json({ error: 'Unauthorized request' });
     };
 
-    const { app } = createApp({
+    const custom = createApp({
       pagesDir: FIXTURES_PAGES,
       viewsDir: FIXTURES_VIEWS,
       db,
+      cache: false,
+      lazyRoutes: true,
       plugins: [
         restResourcePlugin({
           path: '/api/rest',
@@ -248,9 +196,9 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
       ],
     });
 
-    await request(app).get('/api/rest/users').expect(401);
+    await request(custom.app).get('/api/rest/users').expect(401);
 
-    const res = await request(app)
+    const res = await request(custom.app)
       .get('/api/rest/users')
       .set('x-api-key', 'secret-token')
       .expect(200);
@@ -258,23 +206,18 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
   });
 
   it('returns 404 for non-existent records on get, patch, delete', async () => {
-    const { app } = createApp({
-      pagesDir: FIXTURES_PAGES,
-      viewsDir: FIXTURES_VIEWS,
-      db,
-      plugins: [restResourcePlugin({ path: '/api/rest' })],
-    });
-
     await request(app).get('/api/rest/users/999999').expect(404);
     await request(app).patch('/api/rest/users/999999').send({ name: 'Ghost' }).expect(404);
     await request(app).delete('/api/rest/users/999999').expect(404);
   });
 
   it('respects excludeModels and filter options', async () => {
-    const { app } = createApp({
+    const custom = createApp({
       pagesDir: FIXTURES_PAGES,
       viewsDir: FIXTURES_VIEWS,
       db,
+      cache: false,
+      lazyRoutes: true,
       plugins: [
         restResourcePlugin({
           path: '/api/rest',
@@ -284,9 +227,9 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
       ],
     });
 
-    await request(app).get('/api/rest/posts').expect(404);
-    await request(app).get('/api/rest/companies').expect(404);
-    await request(app).get('/api/rest/users').expect(200);
+    await request(custom.app).get('/api/rest/posts').expect(404);
+    await request(custom.app).get('/api/rest/companies').expect(404);
+    await request(custom.app).get('/api/rest/users').expect(200);
   });
 });
 

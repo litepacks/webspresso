@@ -30,21 +30,6 @@ describe('ORM Events Integration', () => {
       table.timestamp('updated_at');
       table.timestamp('deleted_at').nullable();
     });
-  });
-
-  afterAll(async () => {
-    if (db) await db.destroy();
-    ModelEvents.removeAllListeners();
-    clearRegistry();
-  });
-
-  beforeEach(async () => {
-    // Clear listeners before each test
-    ModelEvents.removeAllListeners();
-    
-    // Clear registry and redefine model
-    clearRegistry();
-    
     // Define test model
     TestModel = defineModel({
       name: 'EventTest',
@@ -67,6 +52,22 @@ describe('ORM Events Integration', () => {
 
     db.registerModel(TestModel);
     TestRepo = db.getRepository('EventTest');
+  });
+
+  afterAll(async () => {
+    if (db) await db.destroy();
+    ModelEvents.removeAllListeners();
+    clearRegistry();
+  });
+
+  beforeEach(async () => {
+    // Clear listeners before each test
+    ModelEvents.removeAllListeners();
+
+    if (!db.hasModel('EventTest')) {
+      db.registerModel(TestModel);
+      TestRepo = db.getRepository('EventTest');
+    }
 
     // Clear table
     await db.knex('event_tests').del();
@@ -422,7 +423,6 @@ describe('ORM Events Integration', () => {
   describe('Model-Level Hooks', () => {
     it('should register hooks defined in model', async () => {
       ModelEvents.removeAllListeners();
-      clearRegistry();
 
       const hookCallback = vi.fn();
 
