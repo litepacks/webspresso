@@ -1685,6 +1685,9 @@ function createApp(options = {}) {
     }
   }
 
+  // Mount any custom routes registered via pluginManager
+  pluginManager.mountCustomRoutes();
+
   if (typeof setupRoutes === 'function') {
     setupRoutes(app, {
       nunjucksEnv,

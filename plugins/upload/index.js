@@ -122,11 +122,8 @@ function uploadPlugin(options = {}) {
   const mw = ensureArray(middleware).filter(Boolean);
   const parseMultipart = createMulterMiddleware(maxBytes, fieldName, multiple, maxFiles);
 
-  let routesMounted = false;
   function mountRoutes(ctx) {
-    if (routesMounted) return;
     if (!ctx || typeof ctx.addRoute !== 'function') return;
-    routesMounted = true;
 
     if (ctx.app && typeof ctx.app.set === 'function') {
       ctx.app.set('webspresso.uploadPath', normalizedPath);
@@ -278,9 +275,6 @@ function uploadPlugin(options = {}) {
             ctx.app.serviceRegistry.register(name, def);
           }
         }
-      }
-      if (typeof ctx.addRoute === 'function') {
-        mountRoutes(ctx);
       }
     },
 
