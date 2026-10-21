@@ -70,6 +70,10 @@ async function listTables(knex) {
  * @returns {Promise<Array<{ name: string, type: string, nullable: boolean, defaultValue: any, isPrimaryKey: boolean }>>}
  */
 async function getTableSchema(knex, tableName) {
+  if (typeof tableName !== 'string' || !/^[a-zA-Z0-9_]+$/.test(tableName)) {
+    throw new Error('Invalid table name');
+  }
+
   const dialect = getDialect(knex);
 
   if (dialect === 'sqlite') {

@@ -171,13 +171,14 @@ function csrfPlugin(options = {}) {
       if (activeMethods.includes(method) && !isIgnored(req, activeIgnorePaths)) {
         const body = req.body && typeof req.body === 'object' ? req.body : EMPTY_OBJECT;
         const query = req.query && typeof req.query === 'object' ? req.query : EMPTY_OBJECT;
-        const submitted = (
+        const rawSubmitted = (
           body._csrf ||
           query._csrf ||
           req.headers['x-csrf-token'] ||
           req.headers['xsrf-token'] ||
           req.headers['x-xsrf-token']
         );
+        const submitted = typeof rawSubmitted === 'string' ? rawSubmitted : null;
 
         if (!submitted || !safeCompare(submitted, csrfTokenValue)) {
           res.status(errorStatus);

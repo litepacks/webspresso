@@ -8,7 +8,7 @@
 
 const http = require('http');
 const express = require('express');
-const { exec } = require('child_process');
+const { spawn } = require('child_process');
 const {
   listTables,
   getTableSchema,
@@ -261,14 +261,24 @@ async function getTelemetrySnapshot(knex, options = {}) {
  * @param {string} url
  */
 function openBrowser(url) {
-  const platform = process.platform;
-  let cmd = '';
-  if (platform === 'darwin') cmd = `open "${url}"`;
-  else if (platform === 'win32') cmd = `start "" "${url}"`;
-  else cmd = `xdg-open "${url}"`;
-
   try {
-    exec(cmd);
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return;
+    }
+  } catch (_) {
+    return;
+  }
+
+  const platform = process.platform;
+  try {
+    if (platform === 'darwin') {
+      spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
+    } else if (platform === 'win32') {
+      spawn('cmd.exe', ['/c', 'start', '""', url], { detached: true, stdio: 'ignore' }).unref();
+    } else {
+      spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
+    }
   } catch (_) {}
 }
 

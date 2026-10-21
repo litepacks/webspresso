@@ -341,7 +341,7 @@ class HonoHttpAdapter extends HttpAdapter {
   route(method, path, ...handlers) {
     const m = (method || '').toLowerCase();
     // Normalize Express bracket parameters: e.g. /api/notes/[id] -> /api/notes/:id
-    const honoPath = path.replace(/\[([^\]]+)\]/g, ':$1');
+    const honoPath = typeof path === 'string' ? path.replace(/\[([^\[\]]+)\]/g, ':$1') : path;
 
     for (const handler of handlers) {
       if (typeof handler !== 'function') continue;

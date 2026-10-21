@@ -15,7 +15,10 @@ function wrapBlock(code) {
   const lastLine = lines[lines.length - 1].trim();
   const isStatementKeyword = /^(return|const|let|var|throw|if|while|for|function|class|try|switch|import|export)\b/.test(lastLine);
   if (!isStatementKeyword && lastLine.length > 0) {
-    const expr = lastLine.replace(/;+$/, '');
+    let expr = lastLine;
+    while (expr.endsWith(';')) {
+      expr = expr.slice(0, -1);
+    }
     lines[lines.length - 1] = `return (${expr});`;
   }
   return lines.join('\n');

@@ -205,6 +205,13 @@ class MiniRedisClient extends EventEmitter {
       password = urlOrOptions.password || null;
       db = urlOrOptions.db || 0;
       useTls = Boolean(urlOrOptions.tls);
+      if (typeof urlOrOptions.tls === 'object' && urlOrOptions.tls !== null) {
+        this.tlsOptions = { ...urlOrOptions.tls };
+      } else {
+        this.tlsOptions = {};
+      }
+    } else {
+      this.tlsOptions = {};
     }
 
     this.host = host;
@@ -273,7 +280,15 @@ class MiniRedisClient extends EventEmitter {
 
       try {
         if (this.useTls) {
-          this.socket = tls.connect({ host: this.host, port: this.port, rejectUnauthorized: false }, onConnect);
+          const tlsConnectOpts = {
+            host: this.host,
+            port: this.port,
+            rejectUnauthorized: this.tlsOptions?.rejectUnauthorized !== undefined
+              ? Boolean(this.tlsOptions.rejectUnauthorized)
+              : true,
+            ...(this.tlsOptions || {}),
+          };
+          this.socket = tls.connect(tlsConnectOpts, onConnect);
         } else {
           this.socket = net.createConnection({ host: this.host, port: this.port }, onConnect);
         }

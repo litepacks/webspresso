@@ -18,7 +18,7 @@
  */
 function toCamelCase(str) {
   if (!str || typeof str !== 'string') return '';
-  const trimmed = str.replace(/^[-_\s]+|[-_\s]+$/g, '');
+  const trimmed = str.trim().replace(/^[-_]+/, '').replace(/[-_]+$/, '');
   if (!trimmed) return '';
   const res = trimmed.replace(/[-_\s]+([a-zA-Z0-9])/g, (_, letter) => letter.toUpperCase());
   return res.charAt(0).toLowerCase() + res.slice(1);
