@@ -3,7 +3,7 @@
  * @vitest-environment node
  */
 
-import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../src/server.js';
 import { createDatabase, defineModel, zdb, hasModel, getModel, clearRegistry } from '../../index.js';
@@ -14,8 +14,9 @@ import { z } from 'zod';
 describe.sequential('Data exchange plugin', () => {
   let app;
   let db;
+  let cachedCookie;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     db = createDatabase({
       client: 'better-sqlite3',
       connection: ':memory:',
@@ -81,17 +82,19 @@ describe.sequential('Data exchange plugin', () => {
     });
 
     app = result.app;
+    cachedCookie = await fetchLoginCookie();
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db) await db.destroy();
-  });
-
-  afterAll(() => {
     clearRegistry();
   });
 
-  async function loginCookie() {
+  beforeEach(async () => {
+    await db.knex('test_models').delete();
+  });
+
+  async function fetchLoginCookie() {
     const setupRes = await request(app).post('/_admin/api/auth/setup').send({
       email: 'admin@example.com',
       password: 'password123',
@@ -105,6 +108,10 @@ describe.sequential('Data exchange plugin', () => {
       password: 'password123',
     });
     return loginRes.headers['set-cookie'];
+  }
+
+  async function loginCookie() {
+    return cachedCookie || fetchLoginCookie();
   }
 
   it('rejects export without auth', async () => {
