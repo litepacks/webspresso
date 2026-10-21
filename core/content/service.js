@@ -400,6 +400,7 @@ function createContentService(db, options = {}) {
     createEntry,
     updateEntry,
     deleteEntry,
+    invalidateCache: () => cache.invalidateAll(),
   };
 }
 

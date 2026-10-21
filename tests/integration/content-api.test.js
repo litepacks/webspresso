@@ -3,7 +3,7 @@
  * @vitest-environment node
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import { clearRegistry } from '../../index.js';
 import {
@@ -16,14 +16,23 @@ describe('content plugin API', () => {
   let app;
   let db;
   let cookie;
+  let contentService;
 
-  beforeEach(async () => {
-    ({ app, db } = await createContentTestApp({ pagesDir: './tests/fixtures/empty-pages' }));
+  beforeAll(async () => {
+    ({ app, db, contentService } = await createContentTestApp({ pagesDir: './tests/fixtures/empty-pages' }));
     cookie = await loginAdmin(request, app);
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db) await db.destroy();
+  });
+
+  beforeEach(async () => {
+    await db.knex('content_entries').delete();
+    await db.knex('content_types').delete();
+    if (contentService?.invalidateCache) {
+      contentService.invalidateCache();
+    }
   });
 
   it('rejects admin API without auth', async () => {

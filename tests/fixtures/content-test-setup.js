@@ -82,6 +82,12 @@ export async function createContentTestApp(options = {}) {
   await createContentTables(db.knex);
   await createAdminUsersTable(db.knex);
 
+  const contentPluginInstance = contentPlugin({
+    db,
+    adminPath: '/_admin',
+    inlineEdit: options.inlineEdit !== false,
+  });
+
   const { app } = createApp({
     pagesDir: options.pagesDir || './tests/fixtures/pages',
     viewsDir: './tests/fixtures/views',
@@ -96,15 +102,13 @@ export async function createContentTestApp(options = {}) {
     db,
     plugins: [
       adminPanelPlugin({ path: '/_admin', db }),
-      contentPlugin({
-        db,
-        adminPath: '/_admin',
-        inlineEdit: options.inlineEdit !== false,
-      }),
+      contentPluginInstance,
     ],
   });
 
-  return { app, db };
+  const contentService = contentPluginInstance.api?.getContentService(db);
+
+  return { app, db, contentService, contentPlugin: contentPluginInstance };
 }
 
 /**
