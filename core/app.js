@@ -27,15 +27,18 @@ const { createServiceRegistry } = require('../src/services');
 
 let isWebspressoPackageCache = null;
 function checkIsWebspressoPackage() {
+  if (process.env.__WEBSPRESSO_TESTING__ === 'true') return true;
   if (isWebspressoPackageCache === null) {
     try {
       const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
-      isWebspressoPackageCache = Boolean(pkg && pkg.name === 'webspresso');
+      if (pkg && pkg.name === 'webspresso') {
+        isWebspressoPackageCache = true;
+      }
     } catch (_) {
       isWebspressoPackageCache = false;
     }
   }
-  return isWebspressoPackageCache;
+  return isWebspressoPackageCache === true;
 }
 
 class CoreApp {

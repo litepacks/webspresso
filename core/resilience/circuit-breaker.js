@@ -341,6 +341,35 @@ class CircuitBreaker extends EventEmitter {
   }
 
   /**
+   * Manually record a success (useful for tests or custom telemetry integration)
+   * @returns {CircuitBreaker}
+   */
+  recordSuccess() {
+    this.metrics.totalCalls++;
+    this._onSuccess();
+    return this;
+  }
+
+  /**
+   * Manually record a failure (useful for tests or custom telemetry integration)
+   * @param {Error} [err]
+   * @returns {CircuitBreaker}
+   */
+  recordFailure(err = new Error('Circuit breaker failure recorded')) {
+    this.metrics.totalCalls++;
+    this._onFailure(err);
+    return this;
+  }
+
+  /**
+   * Get the current circuit breaker state
+   * @returns {'CLOSED'|'OPEN'|'HALF_OPEN'}
+   */
+  getState() {
+    return this.state;
+  }
+
+  /**
    * Wrap a function with this circuit breaker
    * @param {Function} fn
    * @returns {Function}
@@ -359,7 +388,9 @@ class CircuitBreaker extends EventEmitter {
       state: this.state,
       totalCalls: this.metrics.totalCalls,
       successfulCalls: this.metrics.successfulCalls,
+      successes: this.metrics.successfulCalls,
       failedCalls: this.metrics.failedCalls,
+      failures: this.metrics.failedCalls,
       rejectedCalls: this.metrics.rejectedCalls,
       timedOutCalls: this.metrics.timedOutCalls,
       fallbackCalls: this.metrics.fallbackCalls,

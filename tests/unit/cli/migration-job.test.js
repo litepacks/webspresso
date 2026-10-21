@@ -339,7 +339,7 @@ describe('Cloud Migration Jobs & Zero-Downtime DB Deploy (add:migration-job & co
         skipExit: true,
       });
 
-      const pass = report.passed.find((p) => p.title === 'Cloud Migration Strategy');
+      const pass = (report.passes || report.successes).find((p) => p.title === 'Cloud Migration Strategy');
       expect(pass).toBeDefined();
       expect(pass.message).toContain('Cloud Run migration job configuration found');
     });

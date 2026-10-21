@@ -87,9 +87,9 @@ async function runDeployCheck(options = {}) {
   const errors = [];
   const remediations = [];
 
-  const addPass = (check, message) => successes.push({ check, message });
-  const addWarn = (check, message) => warnings.push({ check, message });
-  const addError = (check, message) => errors.push({ check, message });
+  const addPass = (check, message) => successes.push({ check, title: check, message });
+  const addWarn = (check, message) => warnings.push({ check, title: check, message });
+  const addError = (check, message) => errors.push({ check, title: check, message });
   const addRemediation = (action) => {
     if (!remediations.includes(action)) remediations.push(action);
   };
@@ -469,6 +469,7 @@ async function runDeployCheck(options = {}) {
     platform: targetPlatform,
     isPlatformAuto,
     successes,
+    passes: successes,
     warnings,
     errors,
     remediations,

@@ -10,6 +10,7 @@ const workerId = Number(process.env.VITEST_POOL_ID || process.env.VITEST_WORKER_
 const testPort = String(3001 + workerId * 100);
 
 process.env.NODE_ENV = 'test';
+process.env.__WEBSPRESSO_TESTING__ = 'true';
 process.env.PORT = testPort;
 process.env.DEFAULT_LOCALE = 'en';
 process.env.SUPPORTED_LOCALES = 'en,de';

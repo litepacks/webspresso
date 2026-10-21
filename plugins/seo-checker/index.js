@@ -48,7 +48,7 @@ function seoCheckerPlugin(options = {}) {
       });
 
       // Inject panel styles into head
-      ctx.injectHead(generatePanelStyles(), { priority: 100 });
+      ctx.injectHead(generatePanelStyles(), { priority: 100, id: 'seo-checker-styles' });
 
       const safeSettings = JSON.stringify(mergedSettings).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
       const safeChecks = JSON.stringify(checkDefinitions).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
@@ -61,7 +61,7 @@ function seoCheckerPlugin(options = {}) {
           window.__SEO_CHECKER_CHECKS__ = ${safeChecks};
         </script>
         <script>${analyzerScript}</script>
-      `);
+      `, { id: 'seo-checker-panel' });
     },
 
     /**

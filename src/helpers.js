@@ -1439,6 +1439,13 @@ class ScriptInjector {
    * @param {Object} options - { priority: number, id: string }
    */
   addHead(content, options = {}) {
+    if (options.id) {
+      const idx = this.headScripts.findIndex(s => s.id === options.id);
+      if (idx !== -1) {
+        this.headScripts[idx] = { content, priority: options.priority || 0, id: options.id };
+        return;
+      }
+    }
     this.headScripts.push({
       content,
       priority: options.priority || 0,
@@ -1452,6 +1459,13 @@ class ScriptInjector {
    * @param {Object} options - { priority: number, id: string }
    */
   addBody(content, options = {}) {
+    if (options.id) {
+      const idx = this.bodyScripts.findIndex(s => s.id === options.id);
+      if (idx !== -1) {
+        this.bodyScripts[idx] = { content, priority: options.priority || 0, id: options.id };
+        return;
+      }
+    }
     this.bodyScripts.push({
       content,
       priority: options.priority || 0,
@@ -1465,6 +1479,13 @@ class ScriptInjector {
    * @param {Object} options - { id: string }
    */
   addStyle(css, options = {}) {
+    if (options.id) {
+      const idx = this.styles.findIndex(s => s.id === options.id);
+      if (idx !== -1) {
+        this.styles[idx] = { content: css, id: options.id };
+        return;
+      }
+    }
     this.styles.push({
       content: css,
       id: options.id || null
