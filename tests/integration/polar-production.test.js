@@ -18,8 +18,8 @@ import { rateLimit } from 'express-rate-limit';
 import { polarIpKey, loadIpKeyGenerator } from '../../plugins/polar/src/rate-limit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURES_PAGES = path.join(__dirname, '..', 'fixtures', 'pages');
-const FIXTURES_VIEWS = path.join(__dirname, '..', 'fixtures', 'views');
+const FIXTURES_PAGES = path.join(__dirname, '..', 'fixtures', 'empty-pages');
+const FIXTURES_VIEWS = path.join(__dirname, '..', 'fixtures', 'empty-pages');
 
 describe('Polar production readiness', () => {
   describe('package exports smoke', () => {
@@ -38,8 +38,50 @@ describe('Polar production readiness', () => {
     });
   });
 
+  let db;
+
+  beforeAll(async () => {
+    clearRegistry();
+    db = createDatabase({
+      client: 'better-sqlite3',
+      connection: ':memory:',
+      models: './tests/fixtures/models-empty',
+    });
+
+    await db.knex.schema.createTable('users', (table) => {
+      table.bigIncrements('id').primary();
+      table.string('email', 255).unique().notNullable();
+      table.string('password', 255).notNullable();
+      table.string('tier', 32).notNullable().defaultTo('free');
+      table.string('polar_status', 32).notNullable().defaultTo('none');
+    });
+
+    await db.knex.schema.createTable('subscriptions', (table) => {
+      table.bigIncrements('id').primary();
+      table.integer('user_id').notNullable();
+      table.string('plan_tier', 32).notNullable().defaultTo('free');
+    });
+
+    const UserModel = defineModel({
+      name: 'User',
+      table: 'users',
+      schema: zdb.schema({
+        id: zdb.id(),
+        email: zdb.string(),
+        password: zdb.string(),
+        tier: zdb.string({ default: 'free' }),
+        polar_status: zdb.string({ default: 'none' }),
+      }),
+    });
+    db.registerModel(UserModel);
+  });
+
+  afterAll(async () => {
+    if (db) await db.destroy();
+    clearRegistry();
+  });
+
   describe('Polar + rateLimitPlugin startup', () => {
-    let db;
     let app;
     let auth;
     let authToken;
@@ -48,34 +90,6 @@ describe('Polar production readiness', () => {
       process.env.POLAR_CHECKOUT_URL = 'https://buy.polar.sh/polar_cl_prod_test';
       process.env.POLAR_ORG_SLUG = 'prod-test-org';
       delete process.env.POLAR_ACCESS_TOKEN;
-
-      clearRegistry();
-      db = createDatabase({
-        client: 'better-sqlite3',
-        connection: ':memory:',
-        models: './tests/fixtures/models-empty',
-      });
-
-      await db.knex.schema.createTable('users', (table) => {
-        table.bigIncrements('id').primary();
-        table.string('email', 255).unique().notNullable();
-        table.string('password', 255).notNullable();
-        table.string('tier', 32).notNullable().defaultTo('free');
-        table.string('polar_status', 32).notNullable().defaultTo('none');
-      });
-
-      const UserModel = defineModel({
-        name: 'User',
-        table: 'users',
-        schema: zdb.schema({
-          id: zdb.id(),
-          email: zdb.string(),
-          password: zdb.string(),
-          tier: zdb.string({ default: 'free' }),
-          polar_status: zdb.string({ default: 'none' }),
-        }),
-      });
-      db.registerModel(UserModel);
 
       auth = quickAuth({
         db,
@@ -87,7 +101,7 @@ describe('Polar production readiness', () => {
 
       const user = await db.getRepository('User').create({
         email: `rl_${Date.now()}@example.com`,
-        password: await hash('Password123!'),
+        password: 'Password123!',
         tier: 'free',
       });
       authToken = auth.generateUserToken(user);
@@ -96,6 +110,13 @@ describe('Polar production readiness', () => {
         ({ app } = createApp({
           pagesDir: FIXTURES_PAGES,
           viewsDir: FIXTURES_VIEWS,
+          silent: true,
+          helmet: false,
+          compression: false,
+          cache: false,
+          healthCheck: false,
+          metrics: false,
+          lazyRoutes: true,
           db,
           auth,
           plugins: [
@@ -112,8 +133,6 @@ describe('Polar production readiness', () => {
     });
 
     afterAll(async () => {
-      if (db) await db.destroy();
-      clearRegistry();
       delete process.env.POLAR_CHECKOUT_URL;
       delete process.env.POLAR_ORG_SLUG;
     });
@@ -130,7 +149,6 @@ describe('Polar production readiness', () => {
   });
 
   describe('isPaidUser hook + syncBeforeCheckout', () => {
-    let db;
     let app;
     let auth;
     let authToken;
@@ -139,37 +157,6 @@ describe('Polar production readiness', () => {
     beforeAll(async () => {
       process.env.POLAR_ACCESS_TOKEN = 'polar_oat_test_sync';
       process.env.POLAR_CHECKOUT_URL = 'https://buy.polar.sh/polar_cl_hook_test';
-
-      clearRegistry();
-      db = createDatabase({
-        client: 'better-sqlite3',
-        connection: ':memory:',
-        models: './tests/fixtures/models-empty',
-      });
-
-      await db.knex.schema.createTable('users', (table) => {
-        table.bigIncrements('id').primary();
-        table.string('email', 255).unique().notNullable();
-        table.string('password', 255).notNullable();
-        table.string('tier', 32).notNullable().defaultTo('free');
-      });
-      await db.knex.schema.createTable('subscriptions', (table) => {
-        table.bigIncrements('id').primary();
-        table.integer('user_id').notNullable();
-        table.string('plan_tier', 32).notNullable().defaultTo('free');
-      });
-
-      const UserModel = defineModel({
-        name: 'User',
-        table: 'users',
-        schema: zdb.schema({
-          id: zdb.id(),
-          email: zdb.string(),
-          password: zdb.string(),
-          tier: zdb.string({ default: 'free' }),
-        }),
-      });
-      db.registerModel(UserModel);
 
       auth = quickAuth({
         db,
@@ -181,7 +168,7 @@ describe('Polar production readiness', () => {
 
       const user = await db.getRepository('User').create({
         email: `hook_${Date.now()}@example.com`,
-        password: await hash('Password123!'),
+        password: 'Password123!',
         tier: 'pro',
       });
       userId = user.id;
@@ -197,6 +184,13 @@ describe('Polar production readiness', () => {
       ({ app } = createApp({
         pagesDir: FIXTURES_PAGES,
         viewsDir: FIXTURES_VIEWS,
+        silent: true,
+        helmet: false,
+        compression: false,
+        cache: false,
+        healthCheck: false,
+        metrics: false,
+        lazyRoutes: true,
         db,
         auth,
         plugins: [
@@ -219,8 +213,6 @@ describe('Polar production readiness', () => {
 
     afterAll(async () => {
       vi.unstubAllGlobals();
-      if (db) await db.destroy();
-      clearRegistry();
       delete process.env.POLAR_ACCESS_TOKEN;
       delete process.env.POLAR_CHECKOUT_URL;
     });

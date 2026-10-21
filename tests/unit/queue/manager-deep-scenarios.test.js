@@ -88,7 +88,7 @@ describe('QueueManager Deep Scenarios & Branch Coverage', () => {
 
   describe('Pause, Resume, Stop & Drain Controls', () => {
     it('pauses and resumes queue processing', async () => {
-      manager = new QueueManager({ pollInterval: 50, autoStart: true });
+      manager = new QueueManager({ pollInterval: 10, autoStart: true });
       let processed = false;
 
       manager.define('quick.task', async () => {
@@ -99,30 +99,34 @@ describe('QueueManager Deep Scenarios & Branch Coverage', () => {
       expect(manager.isPaused).toBe(true);
 
       await manager.dispatch('quick.task', { foo: 'bar' });
-      // Wait a bit
-      await new Promise((r) => setTimeout(r, 100));
+      // Wait a short moment while paused
+      await new Promise((r) => setTimeout(r, 25));
       expect(processed).toBe(false);
+
+      const completedPromise = new Promise((resolve) => {
+        manager.on('job:completed', () => resolve());
+      });
 
       manager.resume();
       expect(manager.isPaused).toBe(false);
 
-      // Wait for processing
-      await new Promise((r) => setTimeout(r, 150));
+      // Wait for processing via event
+      await completedPromise;
       expect(processed).toBe(true);
     });
 
     it('drain() waits for active jobs to finish and prevents new executions', async () => {
-      manager = new QueueManager({ concurrency: 2, pollInterval: 50, autoStart: true });
+      manager = new QueueManager({ concurrency: 2, pollInterval: 10, autoStart: true });
       let jobFinished = false;
 
       manager.define('slow.task', async () => {
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 30));
         jobFinished = true;
       });
 
       await manager.dispatch('slow.task', {});
       // Wait for job to start running
-      await new Promise((r) => setTimeout(r, 30));
+      await new Promise((r) => setTimeout(r, 15));
 
       const drainPromise = manager.drain(1000);
       expect(manager.isDraining).toBe(true);
@@ -135,12 +139,16 @@ describe('QueueManager Deep Scenarios & Branch Coverage', () => {
 
   describe('Job Execution, Retries & Failure Scenarios', () => {
     it('executes job successfully and emits lifecycle events', async () => {
-      manager = new QueueManager({ pollInterval: 50, autoStart: true });
+      manager = new QueueManager({ pollInterval: 10, autoStart: true });
       const events = [];
 
       manager.on('job:queued', (j) => events.push(`queued:${j.name}`));
       manager.on('job:started', (j) => events.push(`started:${j.name}`));
       manager.on('job:completed', (j) => events.push(`completed:${j.name}`));
+
+      const completedPromise = new Promise((resolve) => {
+        manager.on('job:completed', () => resolve());
+      });
 
       manager.define('success.job', async (job) => {
         return { processed: job.data.id };
@@ -149,7 +157,7 @@ describe('QueueManager Deep Scenarios & Branch Coverage', () => {
       const job = await manager.dispatch('success.job', { id: 101 });
       expect(job.status).toBe('pending');
 
-      await new Promise((r) => setTimeout(r, 150));
+      await completedPromise;
 
       expect(events).toContain('queued:success.job');
       expect(events).toContain('started:success.job');
@@ -157,12 +165,15 @@ describe('QueueManager Deep Scenarios & Branch Coverage', () => {
     });
 
     it('retries failing jobs up to max attempts then emits job:failed', async () => {
-      manager = new QueueManager({ pollInterval: 50, autoStart: true });
+      manager = new QueueManager({ pollInterval: 10, autoStart: true });
       let attemptsCount = 0;
       let failedJob = null;
 
-      manager.on('job:failed', (job) => {
-        failedJob = job;
+      const failedPromise = new Promise((resolve) => {
+        manager.on('job:failed', (job) => {
+          failedJob = job;
+          resolve();
+        });
       });
 
       manager.define(
@@ -171,13 +182,13 @@ describe('QueueManager Deep Scenarios & Branch Coverage', () => {
           attemptsCount++;
           throw new Error(`Attempt ${attemptsCount} failed`);
         },
-        { attempts: 2, backoff: 20 }
+        { attempts: 2, backoff: 5 }
       );
 
       await manager.dispatch('failing.job', {});
 
-      // Wait for initial run + retry
-      await new Promise((r) => setTimeout(r, 350));
+      // Wait for initial run + retry via event
+      await failedPromise;
 
       expect(attemptsCount).toBe(2);
       expect(failedJob).not.toBeNull();
@@ -186,23 +197,26 @@ describe('QueueManager Deep Scenarios & Branch Coverage', () => {
     });
 
     it('handles job timeout properly', async () => {
-      manager = new QueueManager({ pollInterval: 50, autoStart: true });
+      manager = new QueueManager({ pollInterval: 10, autoStart: true });
       let timeoutError = null;
 
-      manager.on('job:failed', (job, err) => {
-        timeoutError = err;
+      const timeoutPromise = new Promise((resolve) => {
+        manager.on('job:failed', (job, err) => {
+          timeoutError = err;
+          resolve();
+        });
       });
 
       manager.define(
         'timeout.job',
         async (job) => {
-          await new Promise((r) => setTimeout(r, 200));
+          await new Promise((r) => setTimeout(r, 60));
         },
-        { timeout: 50, attempts: 1 }
+        { timeout: 20, attempts: 1 }
       );
 
       await manager.dispatch('timeout.job', {});
-      await new Promise((r) => setTimeout(r, 250));
+      await timeoutPromise;
 
       expect(timeoutError?.message || String(timeoutError)).toMatch(/timeout|timed out/i);
     });

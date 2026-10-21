@@ -48,6 +48,13 @@ describe.sequential('Admin File Manager Plugin Integration', () => {
       pagesDir: emptyPagesDir,
       viewsDir: './tests/fixtures/views',
       publicDir: path.join(tmpDir, 'public'),
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
       plugins: [
         fileManagerPlugin({
           baseDir: uploadDir,

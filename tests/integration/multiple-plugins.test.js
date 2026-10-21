@@ -71,6 +71,13 @@ describe('Multiple Plugins Integration', () => {
       pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
       viewsDir: path.join(__dirname, '../fixtures/views'),
       publicDir: path.join(__dirname, '../../public'),
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
       plugins: [
         dashboardPlugin({
           path: '/_webspresso',
@@ -90,11 +97,6 @@ describe('Multiple Plugins Integration', () => {
     if (db?.knex?.destroy) {
       await db.knex.destroy();
     }
-  });
-
-  beforeEach(async () => {
-    await db.knex('admin_users').del();
-    await db.knex('test_models').del();
   });
 
   describe('Dashboard Plugin Routes', () => {

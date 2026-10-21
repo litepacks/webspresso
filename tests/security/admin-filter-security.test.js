@@ -56,6 +56,13 @@ describe('Security: Admin Panel Filter Column Injection', () => {
 
     const result = createApp({
       pagesDir: PAGES_DIR,
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
       db,
       plugins: [
         adminPanelPlugin({

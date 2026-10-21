@@ -24,13 +24,13 @@ describe('Security: File Manager Hardening & Threat Mitigations', () => {
   let tmpDir;
   let uploadDir;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-fm-sec-'));
     uploadDir = path.join(tmpDir, 'public', 'uploads');
     await fs.mkdir(uploadDir, { recursive: true });
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (tmpDir) {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
@@ -117,7 +117,7 @@ describe('Security: File Manager Hardening & Threat Mitigations', () => {
     let app;
     let db;
 
-    beforeEach(async () => {
+    beforeAll(async () => {
       clearRegistry();
       db = createDatabase({
         client: 'better-sqlite3',
@@ -155,6 +155,13 @@ describe('Security: File Manager Hardening & Threat Mitigations', () => {
         pagesDir: emptyPagesDir,
         viewsDir: './tests/fixtures/views',
         publicDir: path.join(tmpDir, 'public'),
+        silent: true,
+        helmet: false,
+        compression: false,
+        cache: false,
+        healthCheck: false,
+        metrics: false,
+        lazyRoutes: true,
         plugins: [
           fileManagerPlugin({
             baseDir: uploadDir,
@@ -170,7 +177,7 @@ describe('Security: File Manager Hardening & Threat Mitigations', () => {
       app = result.app;
     });
 
-    afterEach(async () => {
+    afterAll(async () => {
       if (db) await db.destroy();
       clearRegistry();
     });

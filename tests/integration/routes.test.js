@@ -16,7 +16,14 @@ describe.sequential('SSR Routes Integration', () => {
   beforeAll(() => {
     const result = createApp({
       pagesDir: PAGES_DIR,
-      viewsDir: VIEWS_DIR
+      viewsDir: VIEWS_DIR,
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
     });
     app = result.app;
   });
@@ -186,6 +193,13 @@ describe.sequential('SSR Routes Integration', () => {
         viewsDir: VIEWS_DIR,
         pageAssets: true,
         logging: false,
+        silent: true,
+        helmet: false,
+        compression: false,
+        cache: false,
+        healthCheck: false,
+        metrics: false,
+        lazyRoutes: true,
       });
       const res = await request(appOn).get('/page-assets-test').expect(200);
       expect(res.text).toContain('page-assets-test-marker');

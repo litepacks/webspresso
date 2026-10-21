@@ -55,6 +55,13 @@ describe('MCP Plugin Full Integration', () => {
     // 3. Create Webspresso app with mcpPlugin
     const serverInstance = createApp({
       pagesDir: './tests/fixtures/empty-pages',
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
       db,
       serviceRegistry,
       plugins: [

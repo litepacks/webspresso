@@ -3,7 +3,7 @@
  * @vitest-environment node
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { clearRegistry } from '../../index.js';
 import { createContentTestApp, loginAdmin } from '../fixtures/content-test-setup.js';
@@ -14,11 +14,11 @@ describe('content inline edit & helpers', () => {
   let app;
   let db;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     ({ app, db } = await createContentTestApp());
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db) await db.destroy();
     clearRegistry();
   });
@@ -40,12 +40,14 @@ describe('content inline edit & helpers', () => {
   });
 
   it('skips inline edit when inlineEdit: false', async () => {
-    if (db) await db.destroy();
-    clearRegistry();
-    ({ app, db } = await createContentTestApp({ inlineEdit: false }));
-    const cookie = await loginAdmin(request, app);
-    const res = await request(app).get('/').set('Cookie', cookie).expect(200);
-    expect(res.text).not.toContain('ws-content-inline-edit');
+    const { app: noInlineApp, db: noInlineDb } = await createContentTestApp({ inlineEdit: false });
+    try {
+      const cookie = await loginAdmin(request, noInlineApp);
+      const res = await request(noInlineApp).get('/').set('Cookie', cookie).expect(200);
+      expect(res.text).not.toContain('ws-content-inline-edit');
+    } finally {
+      await noInlineDb.destroy();
+    }
   });
 
   describe('fsy.content helpers', () => {

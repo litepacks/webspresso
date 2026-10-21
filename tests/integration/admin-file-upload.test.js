@@ -106,10 +106,18 @@ describe.sequential('Admin file upload fields', () => {
       table.timestamp('updated_at');
     });
 
+    console.time('createApp');
     const result = createApp({
       pagesDir: emptyPagesDir,
       viewsDir: './tests/fixtures/views',
       publicDir: path.join(tmpDir, 'public'),
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
       plugins: [
         uploadPlugin({
           path: '/api/upload',
