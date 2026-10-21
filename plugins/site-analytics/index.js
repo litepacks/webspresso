@@ -192,7 +192,9 @@ function siteAnalyticsPlugin(options = {}) {
         errorLogIntervalMs: options.errorLogIntervalMs ?? 60000,
       });
 
-      ctx.app.use(trackingMiddleware);
+      if (typeof ctx.app?.use === 'function') {
+        ctx.app.use(trackingMiddleware);
+      }
 
       if (trackClientErrors) {
         const script = generateErrorTrackerScript({ endpoint: '/_analytics/report-error' });

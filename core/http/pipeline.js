@@ -66,8 +66,8 @@ function enrichRouteError(err, descriptor, req) {
     if (!err.source) err.source = descriptor.source || descriptor.file;
     if (!err.file) err.file = descriptor.file;
     if (!err.module) err.module = descriptor.module || null;
-    if (!err.phase) err.phase = 'handler';
-    if (!err.requestId) err.requestId = req.id || (req.headers && req.headers['x-request-id']) || null;
+    if (!err.phase) err.phase = descriptor && descriptor.type === 'page' ? 'page' : 'handler';
+    if (!err.requestId) err.requestId = req && (req.id || (req.headers && req.headers['x-request-id'])) || null;
   }
   return err;
 }
@@ -269,10 +269,9 @@ async function executePagePipeline(params) {
 
   // 3. Build Page Context
   const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 7331}`;
-  const { detectLocale, loadI18n, createTranslator } = require('../../src/file-router');
+  const { detectLocale, loadI18n, createTranslator, resolvePageAssets, applyPageAssetsToTemplateData } = require('../../src/file-router');
   const { createHelpers, getAssetManager } = require('../../src/helpers');
   const { sendEarlyHints } = require('../early-hints');
-  const { resolvePageAssets, applyPageAssetsToTemplateData } = require('../../src/pages/page-assets');
 
   const locale = detectLocale(req);
   const fsy = createHelpers({ req, res, baseUrl, locale });

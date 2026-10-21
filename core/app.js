@@ -320,6 +320,14 @@ class CoreApp {
   }
 
   /**
+   * No-op HTTP middleware registration on framework-agnostic kernel.
+   * HTTP middlewares are mounted on the underlying adapter (Express / Hono).
+   */
+  use() {
+    return this;
+  }
+
+  /**
    * Creates an execution context linked to this Core application.
    * State and object identity are preserved without destructive shallow cloning.
    *

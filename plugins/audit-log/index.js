@@ -160,7 +160,9 @@ function auditLogPlugin(options = {}) {
 
     register(ctx) {
       const adminPath = adminPathOpt || '/_admin';
-      ctx.app.use(createAuditMiddleware({ knex, adminPath, tableName }));
+      if (typeof ctx.app?.use === 'function') {
+        ctx.app.use(createAuditMiddleware({ knex, adminPath, tableName }));
+      }
 
       if (retentionConfig.enabled && autoCleanupEnabled) {
         startCleanup();

@@ -219,7 +219,7 @@ function adminPanelPlugin(options = {}) {
       }
 
       // Session must be registered before file routes so SSR pages can read adminUser.
-      if (enabled && ctx.app && !ctx.app._webspressoSessionInitialized) {
+      if (enabled && typeof ctx.app?.use === 'function' && !ctx.app._webspressoSessionInitialized) {
         const secret = sessionSecret || process.env.SESSION_SECRET || 'webspresso-admin-secret-change-in-production';
         const secureMode =
           process.env.NODE_ENV === 'production' ||
