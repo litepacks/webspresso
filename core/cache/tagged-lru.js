@@ -280,7 +280,15 @@ class TaggedLruCache {
       return cached;
     }
 
-    return this.lru.getOrSet(key, asyncFactory, options);
+    const val = await this.lru.getOrSet(key, asyncFactory, options);
+    if (options.tags) {
+      const tags = normalizeTags(options.tags);
+      if (this.keyToTags.has(key)) {
+        this._removeKeyFromTags(key);
+      }
+      this._addKeyToTags(key, tags);
+    }
+    return val;
   }
 
   /**

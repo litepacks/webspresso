@@ -36,9 +36,11 @@ function isServerlessEnvironment(env = process.env) {
  */
 function normalizeServerlessPoolConfig(knexConfig = {}, optionsOrEnv = {}) {
   // Determine if optionsOrEnv is an environment map or options object
-  const env = (optionsOrEnv.K_SERVICE || optionsOrEnv.NODE_ENV || optionsOrEnv.AWS_EXECUTION_ENV)
-    ? optionsOrEnv
-    : (optionsOrEnv.env || process.env);
+  const env = optionsOrEnv && optionsOrEnv.env ? optionsOrEnv.env : (
+    (optionsOrEnv.K_SERVICE || optionsOrEnv.K_REVISION || optionsOrEnv.CLOUD_RUN_JOB || optionsOrEnv.AWS_LAMBDA_FUNCTION_NAME || optionsOrEnv.AWS_EXECUTION_ENV || optionsOrEnv.SERVERLESS || optionsOrEnv.WEBSPRESSO_SERVERLESS || optionsOrEnv.CONTAINER_SCALE || optionsOrEnv.NODE_ENV)
+      ? optionsOrEnv
+      : process.env
+  );
   const explicitOptions = typeof optionsOrEnv === 'object' && !optionsOrEnv.NODE_ENV ? optionsOrEnv : {};
 
   const client = knexConfig.client || 'sqlite3';

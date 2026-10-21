@@ -1099,6 +1099,10 @@ class AuthManager extends EventEmitter {
     return signJwt(payload, secret, { expiresIn, ...options });
   }
 
+  signJwt(payload, options = {}) {
+    return this.createJwt(payload, options);
+  }
+
   /**
    * Verify JWT token
    * @param {string} token

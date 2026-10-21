@@ -372,6 +372,13 @@ class EventDispatcher extends EventEmitter {
   }
 
   /**
+   * Alias for emitAsync
+   */
+  async dispatch(eventOrInstance, data, options = {}) {
+    return this.emitAsync(eventOrInstance, data, options);
+  }
+
+  /**
    * Asynchronous sequential emit (one after another in priority order)
    * @param {string|Object} eventOrInstance
    * @param {any} [data]

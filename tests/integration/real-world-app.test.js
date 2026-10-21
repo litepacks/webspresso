@@ -59,7 +59,7 @@ const {
   setupMetricsMiddleware,
   createMetricsManager,
 } = require('../../core/metrics');
-const { createLimitsMiddleware } = require('../../core/limits');
+const { createLimitsMiddleware, setupLimitsMiddleware } = require('../../core/limits');
 const { createEarlyHintsMiddleware } = require('../../core/early-hints');
 const { z } = require('../../core/validation');
 const { NotFoundError, ValidationError } = require('../../core/errors');
@@ -744,7 +744,12 @@ describe.sequential('Comprehensive Real-World Application: Express & Hono Runtim
     beforeAll(() => {
       const express = require('express');
       const app = express();
-      app.use(express.json());
+      setupLimitsMiddleware(app, {
+        json: '1mb',
+        routes: {
+          '/api/notes/strict-limit': { json: '500b' },
+        },
+      });
 
       expressAdapter = createExpressHttpAdapter(app);
 
@@ -1704,8 +1709,8 @@ describe.sequential('Comprehensive Real-World Application: Express & Hono Runtim
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toContain('text/csv');
       const csvText = await res.text();
-      expect(csvText).toContain('High-Throughput Hono Worker');
-      expect(csvText).toContain('Microservices & Core Decoupling');
+      expect(csvText).toContain('Hono Batch 1');
+      expect(csvText).toContain('Hono Updated Title');
     });
 
     it('exports notes as XLSX spreadsheet on Hono via xlsxPlugin (xlsx.exportModel)', async () => {
@@ -1834,7 +1839,7 @@ describe.sequential('Comprehensive Real-World Application: Express & Hono Runtim
       expect(res.headers.get('content-type')).toContain('text/html');
       const html = await res.text();
       expect(html).toContain('All Notes');
-      expect(html).toContain('High-Throughput Hono Worker');
+      expect(html).toContain('Hono Updated Title');
     });
 
     it('supports native TCP socket binding via listen() on Hono', async () => {

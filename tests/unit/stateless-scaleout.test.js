@@ -99,7 +99,7 @@ describe('Stateless Scale-Out: MiniRedisClient RESP Protocol Parser', () => {
 
   it('parses errors (-)', () => {
     const res = client._parseResp('-ERR unknown command\r\n');
-    expect(res).toEqual({ value: 'ERR unknown command', bytesRead: 23, isError: true });
+    expect(res).toEqual({ value: 'ERR unknown command', bytesRead: 22, isError: true });
   });
 
   it('parses integers (:)', () => {
@@ -117,7 +117,7 @@ describe('Stateless Scale-Out: MiniRedisClient RESP Protocol Parser', () => {
 
   it('parses arrays (*)', () => {
     const res = client._parseResp('*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n');
-    expect(res).toEqual({ value: ['foo', 'bar'], bytesRead: 20 });
+    expect(res).toEqual({ value: ['foo', 'bar'], bytesRead: 22 });
 
     const nullArray = client._parseResp('*-1\r\n');
     expect(nullArray).toEqual({ value: null, bytesRead: 5 });

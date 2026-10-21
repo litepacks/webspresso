@@ -30,6 +30,7 @@ class ValidationError extends HttpError {
     });
 
     this.fields = options.fields || {};
+    this.issues = options.issues || options.details || [];
   }
 }
 

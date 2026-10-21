@@ -39,6 +39,9 @@ function parseCookies(cookieHeader) {
  * @returns {Object}
  */
 function createHonoCompatReq(c) {
+  if (c && c._webspressoReq) {
+    return c._webspressoReq;
+  }
   const rawHeaders = c.req.raw ? Object.fromEntries(c.req.raw.headers.entries()) : (c.req.header() || {});
   const cookieHeader = c.req.header('cookie') || '';
   const cookies = parseCookies(cookieHeader);
@@ -56,8 +59,18 @@ function createHonoCompatReq(c) {
     url: c.req.url,
     path: pathname,
     headers: rawHeaders,
-    params: c.req.param() || {},
-    query: c.req.query() || {},
+    get params() {
+      return this._params || c.req.param() || {};
+    },
+    set params(val) {
+      this._params = val;
+    },
+    get query() {
+      return this._query || c.req.query() || {};
+    },
+    set query(val) {
+      this._query = val;
+    },
     body: {},
     cookies,
     headersSent: false,
@@ -76,6 +89,9 @@ function createHonoCompatReq(c) {
     },
   };
 
+  if (c) {
+    c._webspressoReq = req;
+  }
   return req;
 }
 
@@ -85,6 +101,9 @@ function createHonoCompatReq(c) {
  * @returns {Object}
  */
 function createHonoCompatRes(c) {
+  if (c && c._webspressoRes) {
+    return c._webspressoRes;
+  }
   let statusCode = 200;
   const headers = new Headers();
   let bodyContent = null;
@@ -147,7 +166,7 @@ function createHonoCompatRes(c) {
       }
       statusCode = status;
       headers.set('location', url);
-      return res;
+      return res.end();
     },
     writeHead(code, reasonOrHeaders, maybeHeaders) {
       statusCode = code;
@@ -247,6 +266,9 @@ function createHonoCompatRes(c) {
     },
   };
 
+  if (c) {
+    c._webspressoRes = res;
+  }
   return res;
 }
 
@@ -365,7 +387,7 @@ class HonoHttpAdapter extends HttpAdapter {
             error: err.name || 'Error',
             message: err.message,
             status,
-            ...(err.issues ? { issues: err.issues } : {}),
+            ...(err.issues || err.details ? { issues: err.issues || err.details } : {}),
           }, status);
         }
       };

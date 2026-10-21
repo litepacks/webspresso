@@ -163,7 +163,9 @@ describe('AI & LLM Streaming Engine (core/stream)', () => {
 
   describe('Express Response Decorator (createApp)', () => {
     it('decorates res.streamText and res.streamJson on requests in live HTTP server', async () => {
+      const path = require('path');
       const { app } = createApp({
+        pagesDir: path.join(__dirname, '../fixtures/pages'),
         server: { silent: true },
       });
 

@@ -72,6 +72,26 @@ function descriptorToZod(typeName) {
   return finalSchema;
 }
 
+function shapeFromDescriptor(descriptorObj) {
+  const shape = {};
+  for (const [key, val] of Object.entries(descriptorObj)) {
+    if (typeof val === 'string') {
+      shape[key] = descriptorToZod(val);
+    } else if (val instanceof z.ZodType || (val && typeof val.safeParse === 'function')) {
+      shape[key] = val;
+    } else if (typeof val === 'object' && val !== null) {
+      const isOpt = val.optional === true || val.required === false;
+      let base = val.type ? descriptorToZod(String(val.type)) : z.any();
+      shape[key] = isOpt ? base.optional() : base;
+    } else if (typeof val === 'function') {
+      shape[key] = z.custom(val);
+    } else {
+      shape[key] = z.any();
+    }
+  }
+  return z.object(shape);
+}
+
 const compiledSchemaCache = new WeakMap();
 
 /**
@@ -100,6 +120,8 @@ function compileServiceSchema(rawSchema) {
       const res = rawSchema({ z: zForServices });
       if (res && (res instanceof z.ZodType || typeof res.safeParse === 'function')) {
         compiled = res;
+      } else if (res && typeof res === 'object') {
+        compiled = shapeFromDescriptor(res);
       }
     } catch (e) {
       // If invoking with { z } throws, treat as a direct validator function
@@ -113,23 +135,7 @@ function compileServiceSchema(rawSchema) {
     if (keys.length === 0) {
       compiled = null;
     } else {
-      const shape = {};
-      for (const [key, val] of Object.entries(rawSchema)) {
-        if (typeof val === 'string') {
-          shape[key] = descriptorToZod(val);
-        } else if (val instanceof z.ZodType || (val && typeof val.safeParse === 'function')) {
-          shape[key] = val;
-        } else if (typeof val === 'object' && val !== null) {
-          const isOpt = val.optional === true || val.required === false;
-          let base = val.type ? descriptorToZod(String(val.type)) : z.any();
-          shape[key] = isOpt ? base.optional() : base;
-        } else if (typeof val === 'function') {
-          shape[key] = z.custom(val);
-        } else {
-          shape[key] = z.any();
-        }
-      }
-      compiled = z.object(shape);
+      compiled = shapeFromDescriptor(rawSchema);
     }
   } else {
     compiled = rawSchema;

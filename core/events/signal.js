@@ -72,6 +72,13 @@ class Signal {
   async sendSerial(data, options = {}) {
     return this.dispatcher.emitSerial(this.name, data, options);
   }
+
+  /**
+   * Alias for sendAsync
+   */
+  async dispatch(data, options = {}) {
+    return this.sendAsync(data, options);
+  }
 }
 
 /**

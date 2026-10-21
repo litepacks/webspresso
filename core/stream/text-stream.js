@@ -253,7 +253,15 @@ function streamText(req, res, sourceOrCallback, maybeOptions = {}) {
   let source = null;
   let options = {};
 
-  if (typeof sourceOrCallback === 'function' || (sourceOrCallback && typeof sourceOrCallback[Symbol.asyncIterator] === 'function') || (sourceOrCallback && typeof sourceOrCallback.pipe === 'function')) {
+  const isSource =
+    typeof sourceOrCallback === 'function' ||
+    (sourceOrCallback && (
+      typeof sourceOrCallback[Symbol.asyncIterator] === 'function' ||
+      typeof sourceOrCallback[Symbol.iterator] === 'function' ||
+      typeof sourceOrCallback.pipe === 'function'
+    ));
+
+  if (isSource) {
     source = sourceOrCallback;
     options = maybeOptions || {};
   } else if (sourceOrCallback && typeof sourceOrCallback === 'object') {
@@ -284,7 +292,15 @@ function streamJson(req, res, sourceOrCallback, maybeOptions = {}) {
   let source = null;
   let options = {};
 
-  if (typeof sourceOrCallback === 'function' || (sourceOrCallback && typeof sourceOrCallback[Symbol.asyncIterator] === 'function') || (sourceOrCallback && typeof sourceOrCallback.pipe === 'function')) {
+  const isSource =
+    typeof sourceOrCallback === 'function' ||
+    (sourceOrCallback && (
+      typeof sourceOrCallback[Symbol.asyncIterator] === 'function' ||
+      typeof sourceOrCallback[Symbol.iterator] === 'function' ||
+      typeof sourceOrCallback.pipe === 'function'
+    ));
+
+  if (isSource) {
     source = sourceOrCallback;
     options = maybeOptions || {};
   } else if (sourceOrCallback && typeof sourceOrCallback === 'object') {

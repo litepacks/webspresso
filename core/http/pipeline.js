@@ -107,9 +107,10 @@ async function executeApiPipeline(params) {
   // 1. Injections
   if (db && !req.db) req.db = db;
   if (!req.service && serviceRegistry) {
-    const baseContext = req.context || { req, res, db, user: req.user, session: req.session };
-    req.service = (name, input, opts) =>
-      serviceRegistry.call(name, input, baseContext, opts);
+    req.service = (name, input, opts) => {
+      const baseContext = req.context || { req, res, db, user: req.user, session: req.session };
+      return serviceRegistry.call(name, input, baseContext, opts);
+    };
   }
 
   // 2. Schema validation

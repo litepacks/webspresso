@@ -23,7 +23,13 @@ class FeatureFlagManager {
     this.envPrefix = options.envPrefix || 'FEATURE_';
     this.identify = typeof options.identify === 'function'
       ? options.identify
-      : ((req) => req?.user?.id || req?.user?.userId || req?.session?.userId || req?.ip || 'anonymous');
+      : ((req) => {
+          const headerVal = (req && typeof req.header === 'function' ? req.header('x-user-id') : null)
+            || (req && typeof req.get === 'function' ? req.get('x-user-id') : null)
+            || (req?.headers ? req.headers['x-user-id'] : null)
+            || req?.raw?.headers?.get?.('x-user-id');
+          return req?.user?.id || req?.user?.userId || req?.session?.userId || headerVal || req?.ip || 'anonymous';
+        });
 
     // Bind methods for direct extraction
     this.middleware = this.middleware.bind(this);
