@@ -120,7 +120,9 @@ describe('Built-in Media Services (media.*)', () => {
   describe('uploadPlugin automatic registration', () => {
     it('should auto-register media.* services into serviceRegistry when uploadPlugin is used in createApp', async () => {
       const { app } = createApp({
-        pagesDir: path.join(__dirname, '../fixtures/pages'),
+        pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
+        cache: false,
+        lazyRoutes: true,
         plugins: [
           uploadPlugin({
             local: { destDir: tmpDir, publicBasePath: '/uploads' },

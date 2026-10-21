@@ -123,7 +123,9 @@ describe('Built-in System Services (system.*)', () => {
   describe('createApp automatic registration', () => {
     it('should auto-register system.* services in createApp', async () => {
       const { app } = createApp({
-        pagesDir: path.join(__dirname, '../fixtures/pages'),
+        pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
+        cache: false,
+        lazyRoutes: true,
         db,
       });
 

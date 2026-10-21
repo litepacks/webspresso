@@ -110,7 +110,9 @@ describe('Built-in Mail Services (mail.*)', () => {
     it('should auto-register mail.* services into serviceRegistry when emailPlugin is used in createApp', async () => {
       const path = require('path');
       const { app } = createApp({
-        pagesDir: path.join(__dirname, '../fixtures/pages'),
+        pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
+        cache: false,
+        lazyRoutes: true,
         plugins: [
           emailPlugin({
             transport: mockTransport,

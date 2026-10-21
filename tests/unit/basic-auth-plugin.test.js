@@ -245,6 +245,8 @@ describe('basicAuthPlugin', () => {
         pagesDir,
         viewsDir,
         logging: false,
+        cache: false,
+        lazyRoutes: true,
         plugins: [
           basicAuthPlugin({
             global: true,
@@ -273,6 +275,8 @@ describe('basicAuthPlugin', () => {
         pagesDir,
         viewsDir,
         logging: false,
+        cache: false,
+        lazyRoutes: true,
         plugins: [
           basicAuthPlugin({
             users: { admin: 'adminsecret' },

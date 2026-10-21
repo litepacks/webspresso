@@ -10,7 +10,7 @@ const {
   realtime,
 } = require('../../../plugins/realtime');
 
-const pagesDir = path.join(__dirname, '../../fixtures/pages');
+const pagesDir = path.join(__dirname, '../../fixtures/empty-pages');
 const viewsDir = path.join(__dirname, '../../fixtures/views');
 
 class MockWebSocket {
@@ -31,6 +31,8 @@ describe('Realtime Plugin Integration', () => {
       pagesDir,
       viewsDir,
       logging: false,
+      cache: false,
+      lazyRoutes: true,
       plugins: [
         realtimePlugin({
           adapter: websocket({

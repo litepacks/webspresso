@@ -133,7 +133,9 @@ describe('Built-in Exchange Services (exchange.*)', () => {
   describe('dataExchangePlugin automatic registration', () => {
     it('should auto-register exchange.* services in createApp when plugin is loaded', async () => {
       const { app } = createApp({
-        pagesDir: path.join(__dirname, '../fixtures/pages'),
+        pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
+        cache: false,
+        lazyRoutes: true,
         db,
         plugins: [
           dataExchangePlugin({ db }),
