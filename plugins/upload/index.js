@@ -234,6 +234,42 @@ function uploadPlugin(options = {}) {
 
       ctx.addRoute('post', normalizedPath, ...mw, handler);
 
+      // Direct presigned upload endpoint for cloud storage (AWS S3, GCS, R2)
+      if (options.presigned) {
+        const presignPath = options.presignedRoute ? ensureLeadingSlash(options.presignedRoute) : `${normalizedPath}/presign`;
+        const presignMw = ensureArray(options.presignedMiddleware || options.middleware || []);
+
+        ctx.addRoute('post', presignPath, ...presignMw, async (req, res) => {
+          if (!provider || typeof provider.createSignedUploadUrl !== 'function') {
+            return res.status(400).json({
+              error: 'Configured upload provider does not support direct presigned uploads',
+            });
+          }
+
+          const { originalName, mimeType, key, expiresInSeconds, expiresInMs } = req.body || {};
+          if (!originalName) {
+            return res.status(400).json({ error: 'originalName is required in request body' });
+          }
+
+          try {
+            const result = await provider.createSignedUploadUrl({
+              originalName,
+              mimeType: mimeType || 'application/octet-stream',
+              key,
+              expiresInSeconds,
+              expiresInMs,
+            });
+            return res.json(result);
+          } catch (err) {
+            return res.status(500).json({ error: err.message || 'Failed to create presigned upload URL' });
+          }
+        });
+
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`  Upload plugin: POST ${presignPath} (Presigned URL)`);
+        }
+      }
+
       if (process.env.NODE_ENV !== 'production') {
         console.log(`  Upload plugin: POST ${normalizedPath}`);
       }
@@ -245,10 +281,22 @@ const {
   scanOrphanedUploads,
   pruneOrphanedUploads,
 } = require('./orphan-pruner');
+const {
+  createR2FileProvider,
+  createS3FileProvider,
+  generateStorageKey,
+} = require('./s3-provider');
+const {
+  createGcsFileProvider,
+} = require('./gcs-provider');
 
 module.exports = {
   uploadPlugin,
   createLocalFileProvider,
+  createR2FileProvider,
+  createS3FileProvider,
+  createGcsFileProvider,
+  generateStorageKey,
   scanOrphanedUploads,
   pruneOrphanedUploads,
 };

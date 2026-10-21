@@ -2,9 +2,18 @@
  * Webspresso - Minimal file-based SSR framework for Node.js
  */
 
-const { createApp } = require('./src/server');
+const { createCoreApp, CoreApp } = require('./core/app');
 const { resolveClientRuntime } = require('./src/client-runtime/resolve');
-const { CLIENT_RUNTIME_BASE } = require('./src/client-runtime/mount');
+const { CLIENT_RUNTIME_BASE } = require('./src/client-runtime/constants');
+
+// Lazy-loaded createApp to avoid eagerly loading Express on pure core/utility imports
+let _createApp = null;
+function createApp(options = {}) {
+  if (!_createApp) {
+    _createApp = require('./src/server').createApp;
+  }
+  return _createApp(options);
+}
 const {
   attachDbMiddleware,
   getAppContext,
@@ -32,6 +41,8 @@ const health = require('./core/health');
 const cache = require('./core/cache');
 const resilience = require('./core/resilience');
 const errors = require('./core/errors');
+const secrets = require('./core/secrets');
+const metrics = require('./core/metrics');
 const { 
   mountPages, 
   filePathToRoute, 
@@ -87,6 +98,8 @@ const plugins = require('./plugins');
 module.exports = {
   // Main API
   createApp,
+  createCoreApp,
+  CoreApp,
   resolveClientRuntime,
   CLIENT_RUNTIME_BASE,
 
@@ -150,13 +163,17 @@ module.exports = {
   probeDatabase: health.probeDatabase,
   probeQueue: health.probeQueue,
 
-  // High-Performance In-Memory & Tagged LRU Cache Engine
+  // High-Performance In-Memory & Tagged LRU Cache Engine & Edge CDN
   cache,
   LruCache: cache.LruCache,
   createLruCache: cache.createLruCache,
   TaggedLruCache: cache.TaggedLruCache,
   createTaggedLruCache: cache.createTaggedLruCache,
   approximateByteSize: cache.approximateByteSize,
+  buildCdnCacheHeaders: cache.buildCdnCacheHeaders,
+  setCdnCache: cache.setCdnCache,
+  createCdnPurgeClient: cache.createCdnPurgeClient,
+  bindOrmCdnPurge: cache.bindOrmCdnPurge,
 
   // Enterprise Resilience & Fault Tolerance (Circuit Breaker & Retry Engine)
   resilience,
@@ -256,6 +273,20 @@ module.exports = {
   resolveMiddlewares: require('./src/routing/middleware-resolver').resolveMiddlewares,
   translateValidationIssues: require('./src/api/validation-i18n').translateValidationIssues,
   getTranslatorForRequest: require('./src/api/validation-i18n').getTranslatorForRequest,
+
+  // HTTP Adapter & Pipeline Layer
+  HttpAdapter: require('./core/http').HttpAdapter,
+  ExpressHttpAdapter: require('./core/http').ExpressHttpAdapter,
+  createExpressHttpAdapter: require('./core/http').createExpressHttpAdapter,
+  HonoHttpAdapter: require('./core/http').HonoHttpAdapter,
+  createHonoHttpAdapter: require('./core/http').createHonoHttpAdapter,
+  runMiddlewares: require('./core/http').runMiddlewares,
+  enrichRouteError: require('./core/http').enrichRouteError,
+  executeApiPipeline: require('./core/http').executeApiPipeline,
+  executePagePipeline: require('./core/http').executePagePipeline,
+
+  // Authentication & Verification
+  authenticateRequest: require('./core/auth').authenticateRequest,
 
   // Forms & Flash subsystem (AdonisJS & Django-inspired)
   createFlashMiddleware: require('./core/forms').createFlashMiddleware,
@@ -367,6 +398,19 @@ module.exports = {
   withRetry: resilience.withRetry,
   CircuitBreakerOpenError: resilience.CircuitBreakerOpenError,
   CircuitBreakerTimeoutError: resilience.CircuitBreakerTimeoutError,
+
+  // Cloud Secrets Management
+  secrets,
+  SecretManager: secrets.SecretManager,
+  createSecretManager: secrets.createSecretManager,
+  loadSecrets: secrets.loadSecrets,
+  resolveSecret: secrets.resolveSecret,
+  SecretNotFoundError: secrets.SecretNotFoundError,
+
+  // Cloud Metrics & Distributed Tracing
+  metrics,
+  MetricsRegistry: metrics.MetricsRegistry,
+  createMetricsRegistry: metrics.createMetricsRegistry,
 };
 
 // Define lazy getters for plugins, ORM, and heavy core subsystems
@@ -426,6 +470,17 @@ Object.defineProperties(module.exports, {
   makeMigrations: { get: () => getOrm().makeMigrations, enumerable: true, configurable: true },
   calculateSafeChunkSize: { get: () => getOrm().calculateSafeChunkSize, enumerable: true, configurable: true },
   chunkArray: { get: () => getOrm().chunkArray, enumerable: true, configurable: true },
+  createD1Knex: { get: () => getOrm().createD1Knex, enumerable: true, configurable: true },
+  Client_D1: { get: () => getOrm().Client_D1, enumerable: true, configurable: true },
+  executeD1Batch: { get: () => getOrm().executeD1Batch, enumerable: true, configurable: true },
+  normalizeD1Bindings: { get: () => getOrm().normalizeD1Bindings, enumerable: true, configurable: true },
+  runCloudMigration: { get: () => getOrm().runCloudMigration, enumerable: true, configurable: true },
+  waitForDatabaseConnection: { get: () => getOrm().waitForDatabaseConnection, enumerable: true, configurable: true },
+  freeStaleMigrationLock: { get: () => getOrm().freeStaleMigrationLock, enumerable: true, configurable: true },
+  getMigrationStatus: { get: () => getOrm().getMigrationStatus, enumerable: true, configurable: true },
+  studio: { get: () => require('./core/studio'), enumerable: true, configurable: true },
+  startStudio: { get: () => require('./core/studio').startStudio, enumerable: true, configurable: true },
+  getTelemetrySnapshot: { get: () => require('./core/studio').getTelemetrySnapshot, enumerable: true, configurable: true },
 
   // Cascading Middleware & Layouts
   cascading: { get: () => require('./src/routing/cascading'), enumerable: true, configurable: true },
@@ -435,10 +490,20 @@ Object.defineProperties(module.exports, {
   renderStream: { get: () => require('./core/ssr').renderStream, enumerable: true, configurable: true },
   createHtmlStream: { get: () => require('./core/ssr').createHtmlStream, enumerable: true, configurable: true },
 
+  // Static Site Export & Prerendering
+  exportStaticSite: { get: () => require('./core/export').exportStaticSite, enumerable: true, configurable: true },
+  discoverExportRoutes: { get: () => require('./core/export').discoverExportRoutes, enumerable: true, configurable: true },
+
   // Server-Sent Events (SSE) Streaming
   sse: { get: () => require('./core/sse'), enumerable: true, configurable: true },
   createSseStream: { get: () => require('./core/sse').createSseStream, enumerable: true, configurable: true },
   ServerSentEventsStream: { get: () => require('./core/sse').ServerSentEventsStream, enumerable: true, configurable: true },
+
+  // AI & LLM Text / NDJSON Streaming
+  stream: { get: () => require('./core/stream'), enumerable: true, configurable: true },
+  streamText: { get: () => require('./core/stream').streamText, enumerable: true, configurable: true },
+  streamJson: { get: () => require('./core/stream').streamJson, enumerable: true, configurable: true },
+  TextStreamController: { get: () => require('./core/stream').TextStreamController, enumerable: true, configurable: true },
 
   /** Event bus / plugin shell / view resolver / flows (`kernel.createApp` is distinct from SSR `createApp`) */
   kernel: { get: () => require('./core/kernel'), enumerable: true, configurable: true },
@@ -473,6 +538,12 @@ Object.defineProperties(module.exports, {
   parseUserAgent: { get: () => require('./core/auth').parseUserAgent, enumerable: true, configurable: true },
   sessions: { get: () => require('./core/auth').sessions, enumerable: true, configurable: true },
   SessionManager: { get: () => require('./core/auth').SessionManager, enumerable: true, configurable: true },
+  createRedisSessionStore: { get: () => require('./core/auth').createRedisSessionStore, enumerable: true, configurable: true },
+  createRedisSessionTracker: { get: () => require('./core/auth').createRedisSessionTracker, enumerable: true, configurable: true },
+  RedisSessionStore: { get: () => require('./core/auth').RedisSessionStore, enumerable: true, configurable: true },
+  createMiniRedisClient: { get: () => require('./core/auth').createMiniRedisClient, enumerable: true, configurable: true },
+  normalizeServerlessPoolConfig: { get: () => require('./core/orm').normalizeServerlessPoolConfig, enumerable: true, configurable: true },
+  isServerlessEnvironment: { get: () => require('./core/orm').isServerlessEnvironment, enumerable: true, configurable: true },
 
   // Validation
   z: { get: () => require('./core/validation').z, enumerable: true, configurable: true },
@@ -485,6 +556,8 @@ Object.defineProperties(module.exports, {
   CronExpression: { get: () => require('./core/queue').CronExpression, enumerable: true, configurable: true },
   parseCron: { get: () => require('./core/queue').parseCron, enumerable: true, configurable: true },
   isValidCron: { get: () => require('./core/queue').isValidCron, enumerable: true, configurable: true },
+  SqsQueueAdapter: { get: () => require('./core/queue').SqsQueueAdapter, enumerable: true, configurable: true },
+  PubSubQueueAdapter: { get: () => require('./core/queue').PubSubQueueAdapter, enumerable: true, configurable: true },
 
   // Schema-driven CMS core (framework-agnostic)
   content: { get: () => require('./core/content'), enumerable: true, configurable: true },
@@ -506,6 +579,9 @@ Object.defineProperties(module.exports, {
   createDevProfilerMiddleware: { get: () => require('./src/dev').createDevProfilerMiddleware, enumerable: true, configurable: true },
   generateTypes: { get: () => require('./src/dev/typegen').generateTypes, enumerable: true, configurable: true },
   typegen: { get: () => require('./src/dev/typegen'), enumerable: true, configurable: true },
+  generateClient: { get: () => require('./src/dev/client-gen').generateClient, enumerable: true, configurable: true },
+  createWebspressoClient: { get: () => require('./src/dev/client-gen').createWebspressoClient, enumerable: true, configurable: true },
+  WebspressoClientError: { get: () => require('./src/dev/client-gen').WebspressoClientError, enumerable: true, configurable: true },
 
   // Webhooks plugin
   webhooks: { get: () => require('./plugins/webhooks'), enumerable: true, configurable: true },
@@ -529,5 +605,48 @@ Object.defineProperties(module.exports, {
   // Row Level Security (RLS) plugin
   rlsPlugin: { get: () => require('./plugins/rls').rlsPlugin, enumerable: true, configurable: true },
   createRlsMiddleware: { get: () => require('./plugins/rls').createRlsMiddleware, enumerable: true, configurable: true },
+
+  // Upload plugin & S3 / R2 / GCS Providers
+  uploadPlugin: { get: () => require('./plugins/upload').uploadPlugin, enumerable: true, configurable: true },
+  createLocalFileProvider: { get: () => require('./plugins/upload').createLocalFileProvider, enumerable: true, configurable: true },
+  createR2FileProvider: { get: () => require('./plugins/upload').createR2FileProvider, enumerable: true, configurable: true },
+  createS3FileProvider: { get: () => require('./plugins/upload').createS3FileProvider, enumerable: true, configurable: true },
+  createGcsFileProvider: { get: () => require('./plugins/upload').createGcsFileProvider, enumerable: true, configurable: true },
+
+  // API Docs & Swagger / Scalar Plugin
+  swaggerPlugin: { get: () => require('./plugins/swagger').swaggerPlugin, enumerable: true, configurable: true },
+  openapiPlugin: { get: () => require('./plugins/swagger').openapiPlugin, enumerable: true, configurable: true },
+  apiDocsPlugin: { get: () => require('./plugins/swagger').apiDocsPlugin, enumerable: true, configurable: true },
+  buildSwaggerUiHtml: { get: () => require('./plugins/swagger').buildSwaggerUiHtml, enumerable: true, configurable: true },
+  buildScalarUiHtml: { get: () => require('./plugins/swagger').buildScalarUiHtml, enumerable: true, configurable: true },
+
+  // Structured Cloud Logging
+  logger: { get: () => require('./core/logger'), enumerable: true, configurable: true },
+  createLogger: { get: () => require('./core/logger').createLogger, enumerable: true, configurable: true },
+  createLogMiddleware: { get: () => require('./core/logger').createLogMiddleware, enumerable: true, configurable: true },
+  CloudLogger: { get: () => require('./core/logger').CloudLogger, enumerable: true, configurable: true },
+  extractTraceContext: { get: () => require('./core/logger').extractTraceContext, enumerable: true, configurable: true },
+
+  // Rate Limiting (Core & Plugin)
+  rateLimit: { get: () => require('./core/rate-limit').rateLimit, enumerable: true, configurable: true },
+  createRateLimiter: { get: () => require('./core/rate-limit').createRateLimiter, enumerable: true, configurable: true },
+  RateLimiter: { get: () => require('./core/rate-limit').RateLimiter, enumerable: true, configurable: true },
+  MemoryRateLimitStore: { get: () => require('./core/rate-limit').MemoryRateLimitStore, enumerable: true, configurable: true },
+  RedisRateLimitStore: { get: () => require('./core/rate-limit').RedisRateLimitStore, enumerable: true, configurable: true },
+  rateLimitPlugin: { get: () => require('./plugins/rate-limit').rateLimitPlugin, enumerable: true, configurable: true },
+
+  // Feature Flags & Canary Traffic Splitter (Core)
+  flags: { get: () => require('./core/flags'), enumerable: true, configurable: true },
+  FeatureFlagManager: { get: () => require('./core/flags').FeatureFlagManager, enumerable: true, configurable: true },
+  createFeatureFlagManager: { get: () => require('./core/flags').createFeatureFlagManager, enumerable: true, configurable: true },
+  MemoryFlagStore: { get: () => require('./core/flags').MemoryFlagStore, enumerable: true, configurable: true },
+  evaluateFlag: { get: () => require('./core/flags').evaluateFlag, enumerable: true, configurable: true },
+  getBucket: { get: () => require('./core/flags').getBucket, enumerable: true, configurable: true },
+
+  // Interactive REPL Console (Core)
+  repl: { get: () => require('./core/console'), enumerable: true, configurable: true },
+  startConsole: { get: () => require('./core/console').startConsole, enumerable: true, configurable: true },
+  buildConsoleContext: { get: () => require('./core/console').buildConsoleContext, enumerable: true, configurable: true },
+  evaluateInConsole: { get: () => require('./core/console').evaluateInConsole, enumerable: true, configurable: true },
 });
 

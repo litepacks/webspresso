@@ -65,10 +65,14 @@ async function runDeployCheck(options = {}) {
   const successes = [];
   const warnings = [];
   const errors = [];
+  const remediations = [];
 
   const addPass = (check, message) => successes.push({ check, message });
   const addWarn = (check, message) => warnings.push({ check, message });
   const addError = (check, message) => errors.push({ check, message });
+  const addRemediation = (action) => {
+    if (!remediations.includes(action)) remediations.push(action);
+  };
 
   // Load environment variables from process.env and local .env files
   const localEnv = {
@@ -76,6 +80,25 @@ async function runDeployCheck(options = {}) {
     ...parseEnvFile(path.join(cwd, `.env.${targetEnv}`)),
     ...process.env,
   };
+
+  // ----------------------------------------------------
+  // Target Platform Detection
+  // ----------------------------------------------------
+  let targetPlatform = (options.platform || 'auto').toLowerCase();
+  const isPlatformAuto = targetPlatform === 'auto';
+  if (isPlatformAuto) {
+    if (localEnv.K_SERVICE || fs.existsSync(path.join(cwd, 'cloudbuild.yaml')) || fs.existsSync(path.join(cwd, '.gcloudignore'))) {
+      targetPlatform = 'cloudrun';
+    } else if (localEnv.AWS_EXECUTION_ENV || localEnv.AWS_LAMBDA_FUNCTION_NAME || fs.existsSync(path.join(cwd, 'apprunner.yaml')) || fs.existsSync(path.join(cwd, 'ecs-task-definition.json'))) {
+      targetPlatform = 'aws';
+    } else if (fs.existsSync(path.join(cwd, 'wrangler.toml'))) {
+      targetPlatform = 'cloudflare';
+    } else if (fs.existsSync(path.join(cwd, 'Dockerfile'))) {
+      targetPlatform = 'docker';
+    } else {
+      targetPlatform = 'generic';
+    }
+  }
 
   // ----------------------------------------------------
   // 1. Project & Server Basics
@@ -194,9 +217,24 @@ async function runDeployCheck(options = {}) {
     const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.js') || f.endsWith('.ts'));
     addPass('Migrations', `Found ${files.length} migration file(s) in migrations/`);
 
-    // Try verifying migration status if db config exists
+    // Try verifying migration status and connection pool if db config exists
     const dbConfig = resolveDbConfigIfExists(cwd, targetEnv);
     if (dbConfig) {
+      // Check connection pool for serverless/container scale-out
+      const isSqlite = dbConfig.client === 'better-sqlite3' || dbConfig.client === 'sqlite3';
+      if (!isSqlite && (dbConfig.client === 'pg' || dbConfig.client === 'mysql2' || dbConfig.client === 'mysql')) {
+        const pool = dbConfig.pool || {};
+        if (pool.max > 10) {
+          addWarn('DB Connection Pool', `DB pool max is ${pool.max}. Large pools per container can exhaust database connections when autoscaling. Consider max <= 5 or an external pooler.`);
+        } else if (pool.serverless || (pool.min === 0 && (pool.max || 5) <= 5)) {
+          addPass('DB Connection Pool', `Database connection pool configured for serverless scaling (min: ${pool.min ?? 0}, max: ${pool.max ?? 5})`);
+        }
+
+        if ((localEnv.K_SERVICE || localEnv.AWS_EXECUTION_ENV || pool.serverless) && pool.min > 0) {
+          addWarn('DB Connection Pool', `DB pool min is ${pool.min}. For serverless scale-to-zero, min: 0 is recommended so idle containers release connections.`);
+        }
+      }
+
       try {
         const db = createDbInstance(dbConfig);
         const status = await db.knex.migrate.status();
@@ -208,6 +246,27 @@ async function runDeployCheck(options = {}) {
         await db.knex.destroy();
       } catch (err) {
         addWarn('Database Connectivity', `Could not check migration status: ${err.message}`);
+      }
+    }
+
+    // Check cloud migration job setup for Cloud Run or AWS
+    if (targetPlatform === 'cloudrun') {
+      const hasJob = fs.existsSync(path.join(cwd, 'cloudrun-job.yaml')) ||
+                     fs.existsSync(path.join(cwd, 'deploy-cloudrun-migration.sh')) ||
+                     (fs.existsSync(path.join(cwd, 'cloudbuild.yaml')) && fs.readFileSync(path.join(cwd, 'cloudbuild.yaml'), 'utf8').includes('run jobs'));
+      if (hasJob) {
+        addPass('Cloud Migration Strategy', 'Cloud Run migration job configuration found');
+      } else {
+        addWarn('Cloud Migration Strategy', 'Running migrations inside scaled web containers can cause race conditions. Scaffold an isolated Cloud Run Job: npx webspresso add:migration-job --platform cloudrun');
+      }
+    } else if (targetPlatform === 'aws') {
+      const hasEcsTask = fs.existsSync(path.join(cwd, 'ecs-migration-task.json')) ||
+                         fs.existsSync(path.join(cwd, 'deploy-aws-migration.sh')) ||
+                         (fs.existsSync(path.join(cwd, 'apprunner.yaml')) && fs.readFileSync(path.join(cwd, 'apprunner.yaml'), 'utf8').includes('db:migrate'));
+      if (hasEcsTask) {
+        addPass('Cloud Migration Strategy', 'AWS ECS Task or App Runner pre-deploy migration configuration found');
+      } else {
+        addWarn('Cloud Migration Strategy', 'Recommend running migrations as an isolated ECS Task or App Runner pre-run: npx webspresso add:migration-job --platform aws');
       }
     }
   } else {
@@ -249,13 +308,145 @@ async function runDeployCheck(options = {}) {
     }
   }
 
+  // ----------------------------------------------------
+  // 8. Stateless Scale-Out & Session Store
+  // ----------------------------------------------------
+  const hasRedis = Boolean(localEnv.REDIS_URL || localEnv.SESSION_STORE === 'redis');
+  if (hasRedis) {
+    addPass('Distributed Session Store', `Distributed session store configured for scale-out (${localEnv.SESSION_STORE || 'Redis'})`);
+  } else if (targetEnv === 'production' && serverCode && (serverCode.includes('auth') || serverCode.includes('session'))) {
+    addWarn('Distributed Session Store', 'In-memory session store detected in production. For stateless scale-out (Cloud Run, AWS ECS/Fargate, Kubernetes), configure a distributed store via REDIS_URL=redis://... or SESSION_STORE=redis.');
+  }
+
+  // ----------------------------------------------------
+  // 9. Platform-Specific Cloud Preflight
+  // ----------------------------------------------------
+  const dbConfig = resolveDbConfigIfExists(cwd, targetEnv);
+  const isSqlite = !dbConfig || dbConfig.client === 'better-sqlite3' || dbConfig.client === 'sqlite3';
+
+  // 9.1 Ephemeral Storage (Database & Uploads)
+  if (isSqlite && (targetPlatform === 'cloudrun' || targetPlatform === 'aws')) {
+    const pName = targetPlatform === 'cloudrun' ? 'Google Cloud Run' : 'AWS (App Runner / ECS)';
+    const dbRec = targetPlatform === 'cloudrun' ? 'Google Cloud SQL (PostgreSQL/MySQL)' : 'AWS RDS / Aurora';
+    addWarn(
+      'Ephemeral Storage (Database)',
+      `${pName} uses an ephemeral container filesystem. Local SQLite databases will be lost on scale-down or redeploy. Migrate to ${dbRec}.`
+    );
+    addRemediation(`Configure managed database: Use ${dbRec} via webspresso.db.js or DATABASE_URL`);
+  }
+
+  if (serverCode && (serverCode.includes("storage: 'local'") || serverCode.includes('uploadPlugin({') || serverCode.includes('uploadPlugin()'))) {
+    const hasCloudStorage = serverCode.includes("storage: 'gcs'") || serverCode.includes("storage: 's3'") || serverCode.includes("storage: 'cloudflare'");
+    if (!hasCloudStorage && (targetPlatform === 'cloudrun' || targetPlatform === 'aws')) {
+      const pStorage = targetPlatform === 'cloudrun' ? 'Google Cloud Storage (GCS)' : 'AWS S3';
+      addWarn(
+        'Ephemeral Storage (Uploads)',
+        `Local disk file upload storage detected. Container restarts on ${targetPlatform === 'cloudrun' ? 'Cloud Run' : 'AWS'} will cause uploaded files to be lost. Configure ${pStorage}.`
+      );
+      addRemediation(`Configure ${pStorage}: uploadPlugin({ storage: '${targetPlatform === 'cloudrun' ? 'gcs' : 's3'}' })`);
+    }
+  }
+
+  // 9.2 Shutdown Timeout Alignment
+  if (targetPlatform === 'cloudrun') {
+    if (serverCode) {
+      const match = serverCode.match(/timeout:\s*(\d+)/);
+      if (match) {
+        const timeoutMs = parseInt(match[1], 10);
+        if (timeoutMs > 10000) {
+          addWarn('Shutdown Timeout Alignment', `Webspresso shutdown timeout (${timeoutMs}ms) exceeds Cloud Run default SIGTERM deadline (10000ms). Container may be forcibly SIGKILLed before draining.`);
+          addRemediation('Set shutdown timeout <= 10000ms in createApp({ server: { shutdown: { timeout: 9000 } } })');
+        } else {
+          addPass('Shutdown Timeout Alignment', `Shutdown timeout (${timeoutMs}ms) matches Cloud Run 10s SIGTERM deadline`);
+        }
+      } else {
+        addPass('Shutdown Timeout Alignment', 'Default shutdown timeout (10s) compatible with Cloud Run SIGTERM deadline');
+      }
+    }
+  } else if (targetPlatform === 'aws') {
+    addPass('Shutdown Timeout Alignment', 'Default shutdown timeout (10s) well within AWS ECS 30s stopTimeout');
+  }
+
+  // 9.3 Platform Artifacts & Secrets Inspection
+  if (targetPlatform === 'cloudrun') {
+    const gcloudignorePath = path.join(cwd, '.gcloudignore');
+    if (fs.existsSync(gcloudignorePath)) {
+      const gignore = fs.readFileSync(gcloudignorePath, 'utf8');
+      if (!gignore.includes('.env')) {
+        addError('Google Cloud Ignore', '.env is NOT excluded in .gcloudignore! Secrets may leak into Google Cloud Build.');
+        addRemediation('Add .env to .gcloudignore');
+      } else {
+        addPass('Google Cloud Ignore', '.gcloudignore present and properly excludes .env');
+      }
+    } else {
+      addWarn('Google Cloud Ignore', '.gcloudignore not found (recommend running: npx webspresso add:cloudrun)');
+      addRemediation('Generate Cloud Run configuration: npx webspresso add:cloudrun');
+    }
+
+    const cloudbuildPath = path.join(cwd, 'cloudbuild.yaml');
+    if (fs.existsSync(cloudbuildPath)) {
+      addPass('Cloud Build Pipeline', 'cloudbuild.yaml CI/CD pipeline found');
+    } else {
+      addWarn('Cloud Build Pipeline', 'cloudbuild.yaml not found (run: npx webspresso add:cloudrun)');
+    }
+
+    if (serverCode) {
+      if (serverCode.includes('process.env.PORT') || serverCode.includes('PORT')) {
+        addPass('Cloud Run PORT Binding', 'Binds to dynamic process.env.PORT (required for Cloud Run 8080)');
+      } else {
+        addWarn('Cloud Run PORT Binding', 'Ensure server listens on process.env.PORT (Cloud Run assigns port 8080)');
+        addRemediation('Listen on process.env.PORT: app.listen(process.env.PORT || 3000)');
+      }
+    }
+  } else if (targetPlatform === 'aws') {
+    const apprunnerPath = path.join(cwd, 'apprunner.yaml');
+    const ecsTaskPath = path.join(cwd, 'ecs-task-definition.json');
+
+    if (fs.existsSync(apprunnerPath)) {
+      addPass('AWS App Runner Config', 'apprunner.yaml found');
+    }
+    if (fs.existsSync(ecsTaskPath)) {
+      try {
+        const ecsTask = JSON.parse(fs.readFileSync(ecsTaskPath, 'utf8'));
+        if (ecsTask.containerDefinitions?.[0]?.logConfiguration?.logDriver === 'awslogs') {
+          addPass('AWS CloudWatch Logs', 'CloudWatch logDriver (awslogs) configured in ECS task definition');
+        }
+        addPass('AWS ECS Task Definition', 'ecs-task-definition.json found and valid JSON');
+      } catch (err) {
+        addError('AWS ECS Task Definition', `ecs-task-definition.json is invalid JSON: ${err.message}`);
+      }
+    }
+
+    if (!fs.existsSync(apprunnerPath) && !fs.existsSync(ecsTaskPath)) {
+      addWarn('AWS Configuration', 'Neither apprunner.yaml nor ecs-task-definition.json found');
+      addRemediation('Generate AWS configuration: npx webspresso add:aws');
+    }
+  } else if (targetPlatform === 'cloudflare') {
+    const wranglerPath = path.join(cwd, 'wrangler.toml');
+    if (fs.existsSync(wranglerPath)) {
+      const wrangler = fs.readFileSync(wranglerPath, 'utf8');
+      if (wrangler.includes('nodejs_compat')) {
+        addPass('Cloudflare Worker Config', 'wrangler.toml found with nodejs_compat flag');
+      } else {
+        addWarn('Cloudflare Worker Config', 'wrangler.toml missing compatibility_flags = ["nodejs_compat"]');
+        addRemediation('Add compatibility_flags = ["nodejs_compat"] to wrangler.toml');
+      }
+    } else {
+      addWarn('Cloudflare Worker Config', 'wrangler.toml not found (run: npx webspresso add:cloudflare)');
+      addRemediation('Generate Cloudflare Worker files: npx webspresso add:cloudflare');
+    }
+  }
+
   const passed = errors.length === 0;
 
   return {
     passed,
+    platform: targetPlatform,
+    isPlatformAuto,
     successes,
     warnings,
     errors,
+    remediations,
   };
 }
 
@@ -269,6 +460,7 @@ function registerCommand(program) {
     .alias('check:deploy')
     .description('Run production preflight check (secrets, container hardening, database, and optimizations)')
     .option('-e, --env <environment>', 'Target environment to evaluate (default: production)', 'production')
+    .option('-p, --platform <platform>', 'Target cloud platform (cloudrun, aws, cloudflare, docker, or auto)', 'auto')
     .option('--strict', 'Fail with exit code 1 if any warnings are detected', false)
     .option('--json', 'Output preflight results as JSON', false)
     .action(async (...actionArgs) => {
@@ -280,6 +472,7 @@ function registerCommand(program) {
       const result = await runDeployCheck({
         cwd: process.cwd(),
         env: options.env || 'production',
+        platform: options.platform || 'auto',
       });
 
       if (options.json) {
@@ -291,7 +484,9 @@ function registerCommand(program) {
       }
 
       console.log('\n🚀 Webspresso Production Deployment Preflight');
-      console.log('=============================================\n');
+      console.log('=============================================');
+      console.log(`Target Platform : ${result.platform.toUpperCase()} ${result.isPlatformAuto ? '(auto-detected)' : ''}`);
+      console.log(`Environment     : ${options.env || 'production'}\n`);
 
       if (result.successes.length > 0) {
         console.log('Passed Checks:');
@@ -313,6 +508,14 @@ function registerCommand(program) {
         console.log('Errors (Must be resolved before production deployment):');
         for (const item of result.errors) {
           console.log(`  ❌ [${item.check}] ${item.message}`);
+        }
+        console.log('');
+      }
+
+      if (result.remediations && result.remediations.length > 0) {
+        console.log('Recommended Actions:');
+        for (const rem of result.remediations) {
+          console.log(`  👉 ${rem}`);
         }
         console.log('');
       }

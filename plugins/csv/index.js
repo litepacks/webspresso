@@ -55,12 +55,14 @@ function csvPlugin(options = {}) {
       }
 
       // 2. Register built-in services (csv.generate, csv.parse, csv.exportModel)
-      if (ctx.app && ctx.app.serviceRegistry) {
+      // 2. Register built-in services (csv.generate, csv.parse, csv.exportModel)
+      const serviceRegistry = ctx.serviceRegistry || ctx.services || ctx.app?.serviceRegistry;
+      if (serviceRegistry) {
         const db = dbOption ?? ctx.db ?? ctx.app?.get?.('db') ?? null;
         const services = createCsvServices({ db, ...options });
         for (const [name, def] of Object.entries(services)) {
-          if (!ctx.app.serviceRegistry.has(name)) {
-            ctx.app.serviceRegistry.register(name, def);
+          if (!serviceRegistry.has(name)) {
+            serviceRegistry.register(name, def);
           }
         }
       }
@@ -77,8 +79,9 @@ function csvPlugin(options = {}) {
         ctx.middlewares.csv = middleware;
       }
 
-      if (ctx.app && typeof ctx.app.use === 'function') {
-        ctx.app.use(middleware);
+      const target = ctx.http || ctx.app;
+      if (target && typeof target.use === 'function') {
+        target.use(middleware);
       }
     },
   };

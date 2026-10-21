@@ -540,6 +540,15 @@ class QueryBuilder {
   }
 
   /**
+   * Compile the query to a SQL string and parameter bindings
+   * @param {Object} [options]
+   * @returns {{ sql: string, bindings: Array<any>, method: string }}
+   */
+  toSQL(options = {}) {
+    return this.toKnex(options).toSQL();
+  }
+
+  /**
    * Execute query and return first result
    * @returns {Promise<Object|null>}
    */

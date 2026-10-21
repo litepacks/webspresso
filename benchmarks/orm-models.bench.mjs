@@ -33,7 +33,7 @@ const userModel = defineModel({
     name: zdb.string({ maxLength: 100 }),
     email: zdb.string().email(),
   }),
-  scopes: { timestamps: true, softDelete: false },
+  scopes: { timestamps: { snakeCase: true }, softDelete: false },
   relations: {
     posts: {
       type: 'hasMany',
@@ -55,7 +55,7 @@ const postModel = defineModel({
     metadata: zdb.json({ nullable: true }),
     is_published: zdb.boolean({ default: true }),
   }),
-  scopes: { timestamps: true, softDelete: true },
+  scopes: { timestamps: { snakeCase: true }, softDelete: { snakeCase: true } },
   relations: {
     user: {
       type: 'belongsTo',
@@ -75,7 +75,7 @@ const cachedModel = defineModel({
     title: zdb.string(),
     slug: zdb.string(),
   }),
-  scopes: { timestamps: true },
+  scopes: { timestamps: { snakeCase: true } },
 });
 
 // Top-level await initialization for in-memory SQLite DB

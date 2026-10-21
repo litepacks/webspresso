@@ -53,12 +53,13 @@ function xlsxPlugin(options = {}) {
       }
 
       // 2. Register built-in services (xlsx.generate, xlsx.parse, xlsx.exportModel)
-      if (ctx.app && ctx.app.serviceRegistry) {
+      const registry = ctx.serviceRegistry || ctx.services || ctx.app?.serviceRegistry;
+      if (registry && typeof registry.register === 'function') {
         const db = dbOption ?? ctx.db ?? ctx.app?.get?.('db') ?? null;
         const services = createXlsxServices({ db, ...options });
         for (const [name, def] of Object.entries(services)) {
-          if (!ctx.app.serviceRegistry.has(name)) {
-            ctx.app.serviceRegistry.register(name, def);
+          if (!registry.has(name)) {
+            registry.register(name, def);
           }
         }
       }
@@ -74,8 +75,9 @@ function xlsxPlugin(options = {}) {
         ctx.middlewares.xlsx = middleware;
       }
 
-      if (ctx.app && typeof ctx.app.use === 'function') {
-        ctx.app.use(middleware);
+      const target = ctx.http || ctx.app;
+      if (target && typeof target.use === 'function') {
+        target.use(middleware);
       }
     },
   };

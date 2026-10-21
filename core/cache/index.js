@@ -9,6 +9,13 @@
 const { LruCache, createLruCache, safeClone } = require('./lru');
 const { TaggedLruCache, createTaggedLruCache, normalizeTags } = require('./tagged-lru');
 const { approximateByteSize } = require('./byte-size');
+const {
+  buildCdnCacheHeaders,
+  setCdnCache,
+  CdnPurgeClient,
+  createCdnPurgeClient,
+  bindOrmCdnPurge,
+} = require('./cdn');
 
 module.exports = {
   LruCache,
@@ -18,4 +25,9 @@ module.exports = {
   approximateByteSize,
   safeClone,
   normalizeTags,
+  buildCdnCacheHeaders,
+  setCdnCache,
+  CdnPurgeClient,
+  createCdnPurgeClient,
+  bindOrmCdnPurge,
 };

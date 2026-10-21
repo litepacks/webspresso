@@ -4,9 +4,7 @@
  */
 
 const path = require('path');
-const express = require('express');
-
-const CLIENT_RUNTIME_BASE = '/__webspresso/client-runtime';
+const { CLIENT_RUNTIME_BASE } = require('./constants');
 
 /** Resolve a file next to the package's resolved main entry (works with package "exports"). */
 function pkgFileFromMain(pkg, ...segments) {
@@ -21,6 +19,7 @@ function pkgFileFromMain(pkg, ...segments) {
 function mountClientRuntime(app, flags) {
   if (!flags || (!flags.alpine && !flags.swup)) return;
 
+  const express = require('express');
   const router = express.Router();
 
   function send(res, filePath) {

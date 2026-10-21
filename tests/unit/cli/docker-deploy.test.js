@@ -361,5 +361,109 @@ EMPTY=
       expect(res.exitCode).toBe(1);
       expect(res.stdout).toContain('FAILED');
     });
+
+    it('auto-detects cloudrun, aws, and cloudflare platforms from project files', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'platform-detect-app' }));
+      fs.writeFileSync(path.join(tmpDir, 'server.js'), '// server');
+      fs.writeFileSync(path.join(tmpDir, '.env'), 'SESSION_SECRET=a8f9c0e2b1d4f7a3c5e8b0d2f4a6c8e1b3d5f7a9c2e4b6d8f0a2c4e6b8d0f2a4\n');
+      fs.writeFileSync(path.join(tmpDir, '.gitignore'), '.env\n');
+
+      // Test 1: Cloud Run detection via cloudbuild.yaml
+      fs.writeFileSync(path.join(tmpDir, 'cloudbuild.yaml'), 'steps: []\n');
+      fs.writeFileSync(path.join(tmpDir, '.gcloudignore'), '.git\n.env\n');
+      let result = await runDeployCheck({ cwd: tmpDir });
+      expect(result.platform).toBe('cloudrun');
+      expect(result.isPlatformAuto).toBe(true);
+      expect(result.successes.some((s) => s.check === 'Cloud Build Pipeline')).toBe(true);
+      expect(result.successes.some((s) => s.check === 'Google Cloud Ignore')).toBe(true);
+
+      // Clean up Cloud Run files
+      fs.unlinkSync(path.join(tmpDir, 'cloudbuild.yaml'));
+      fs.unlinkSync(path.join(tmpDir, '.gcloudignore'));
+
+      // Test 2: AWS detection via apprunner.yaml
+      fs.writeFileSync(path.join(tmpDir, 'apprunner.yaml'), 'version: 1.0\n');
+      result = await runDeployCheck({ cwd: tmpDir });
+      expect(result.platform).toBe('aws');
+      expect(result.successes.some((s) => s.check === 'AWS App Runner Config')).toBe(true);
+
+      // Clean up AWS files
+      fs.unlinkSync(path.join(tmpDir, 'apprunner.yaml'));
+
+      // Test 3: Cloudflare detection via wrangler.toml
+      fs.writeFileSync(path.join(tmpDir, 'wrangler.toml'), 'name = "cf-app"\ncompatibility_flags = ["nodejs_compat"]\n');
+      result = await runDeployCheck({ cwd: tmpDir });
+      expect(result.platform).toBe('cloudflare');
+      expect(result.successes.some((s) => s.check === 'Cloudflare Worker Config')).toBe(true);
+    });
+
+    it('warns on ephemeral SQLite and local file upload storage on stateless containers', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'ephemeral-test-app' }));
+      // Default sqlite and local uploads
+      fs.writeFileSync(path.join(tmpDir, 'server.js'), "const { createApp } = require('webspresso');\nconst { uploadPlugin } = require('webspresso/plugins/upload');\ncreateApp({ plugins: [uploadPlugin({ storage: 'local' })] });");
+      fs.writeFileSync(path.join(tmpDir, '.env'), 'SESSION_SECRET=a8f9c0e2b1d4f7a3c5e8b0d2f4a6c8e1b3d5f7a9c2e4b6d8f0a2c4e6b8d0f2a4\n');
+      fs.writeFileSync(path.join(tmpDir, '.gitignore'), '.env\n');
+
+      const result = await runDeployCheck({ cwd: tmpDir, platform: 'cloudrun' });
+      expect(result.platform).toBe('cloudrun');
+      expect(result.warnings.some((w) => w.check === 'Ephemeral Storage (Database)')).toBe(true);
+      expect(result.warnings.some((w) => w.check === 'Ephemeral Storage (Uploads)')).toBe(true);
+      expect(result.remediations.some((r) => r.includes('Google Cloud SQL'))).toBe(true);
+      expect(result.remediations.some((r) => r.includes('Google Cloud Storage'))).toBe(true);
+    });
+
+    it('audits shutdown timeout alignment and .gcloudignore leaks on Cloud Run', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'cloudrun-timeout-app' }));
+      // Timeout > 10000ms
+      fs.writeFileSync(path.join(tmpDir, 'server.js'), "const { createApp } = require('webspresso');\ncreateApp({ server: { shutdown: { timeout: 15000 } } });");
+      fs.writeFileSync(path.join(tmpDir, '.env'), 'SESSION_SECRET=a8f9c0e2b1d4f7a3c5e8b0d2f4a6c8e1b3d5f7a9c2e4b6d8f0a2c4e6b8d0f2a4\n');
+      fs.writeFileSync(path.join(tmpDir, '.gitignore'), '.env\n');
+      // .gcloudignore without .env
+      fs.writeFileSync(path.join(tmpDir, '.gcloudignore'), '.git\nnode_modules\n');
+
+      const result = await runDeployCheck({ cwd: tmpDir, platform: 'cloudrun' });
+      expect(result.passed).toBe(false); // .env in .gcloudignore is an error
+      expect(result.errors.some((e) => e.check === 'Google Cloud Ignore')).toBe(true);
+      expect(result.warnings.some((w) => w.check === 'Shutdown Timeout Alignment')).toBe(true);
+      expect(result.remediations.some((r) => r.includes('.gcloudignore'))).toBe(true);
+    });
+
+    it('validates AWS ECS task definition and CloudWatch logging', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'aws-app' }));
+      fs.writeFileSync(path.join(tmpDir, 'server.js'), '// aws server');
+      fs.writeFileSync(path.join(tmpDir, '.env'), 'SESSION_SECRET=a8f9c0e2b1d4f7a3c5e8b0d2f4a6c8e1b3d5f7a9c2e4b6d8f0a2c4e6b8d0f2a4\n');
+      fs.writeFileSync(path.join(tmpDir, '.gitignore'), '.env\n');
+      fs.writeFileSync(path.join(tmpDir, 'ecs-task-definition.json'), JSON.stringify({
+        containerDefinitions: [{
+          name: 'webspresso',
+          logConfiguration: {
+            logDriver: 'awslogs',
+            options: { 'awslogs-group': '/ecs/webspresso' },
+          },
+        }],
+      }));
+
+      const result = await runDeployCheck({ cwd: tmpDir, platform: 'aws' });
+      expect(result.successes.some((s) => s.check === 'AWS ECS Task Definition')).toBe(true);
+      expect(result.successes.some((s) => s.check === 'AWS CloudWatch Logs')).toBe(true);
+      expect(result.successes.some((s) => s.check === 'Shutdown Timeout Alignment')).toBe(true);
+    });
+
+    it('deploy:check CLI accepts --platform option and outputs remediations', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'cli-platform-test' }));
+      fs.writeFileSync(path.join(tmpDir, 'server.js'), "const { createApp } = require('webspresso');\nconst app = createApp({ server: { compression: true } });");
+      fs.writeFileSync(path.join(tmpDir, '.env'), 'SESSION_SECRET=a8f9c0e2b1d4f7a3c5e8b0d2f4a6c8e1b3d5f7a9c2e4b6d8f0a2c4e6b8d0f2a4\n');
+      fs.writeFileSync(path.join(tmpDir, '.gitignore'), '.env\n');
+
+      const res = await runCli(registerDeployCheck, 'deploy:check --platform cloudrun', { cwd: tmpDir });
+      expect(res.stdout).toContain('Target Platform : CLOUDRUN');
+      expect(res.stdout).toContain('Recommended Actions:');
+
+      const resJson = await runCli(registerDeployCheck, 'deploy:check -p aws --json', { cwd: tmpDir });
+      const parsed = JSON.parse(resJson.stdout);
+      expect(parsed.platform).toBe('aws');
+      expect(parsed.isPlatformAuto).toBe(false);
+      expect(Array.isArray(parsed.remediations)).toBe(true);
+    });
   });
 });

@@ -739,6 +739,38 @@ function createHelpers(ctx) {
     },
 
     /**
+     * Check if a feature flag is enabled for current request/context
+     * @param {string} flagKey
+     * @param {Object} [customContext]
+     * @returns {boolean}
+     */
+    hasFeature(flagKey, customContext) {
+      if (req && typeof req.hasFeature === 'function') {
+        return req.hasFeature(flagKey, customContext);
+      }
+      if (ctx && typeof ctx.hasFeature === 'function') {
+        return ctx.hasFeature(flagKey, customContext);
+      }
+      return false;
+    },
+
+    /**
+     * Get active variant for a multivariate feature flag
+     * @param {string} flagKey
+     * @param {Object} [customContext]
+     * @returns {string|null}
+     */
+    flag(flagKey, customContext) {
+      if (req && typeof req.getVariant === 'function') {
+        return req.getVariant(flagKey, customContext);
+      }
+      if (ctx && typeof ctx.getVariant === 'function') {
+        return ctx.getVariant(flagKey, customContext);
+      }
+      return this.hasFeature(flagKey, customContext) ? 'enabled' : null;
+    },
+
+    /**
      * Get flash message by key (e.g. 'success', 'error', 'info')
      * @param {string} [key]
      * @returns {any}

@@ -6,7 +6,15 @@
 
 const { AuthManager, AuthenticationError, DEFAULT_CONFIG } = require('./manager');
 const { PolicyManager, AuthorizationError } = require('./policy');
-const { createAuthMiddleware, setupAuthMiddleware } = require('./middleware');
+const { authenticateRequest } = require('./authenticate');
+
+let _middleware = null;
+function getMiddleware() {
+  if (!_middleware) {
+    _middleware = require('./middleware');
+  }
+  return _middleware;
+}
 const { hash, verify, needsRehash, generateToken, hashToken } = require('./hash');
 const { signJwt, verifyJwt, decodeJwt } = require('./jwt');
 const {
@@ -57,6 +65,13 @@ const {
   dropUserSessionsTable,
   createKnexSessionTracker,
   createMemorySessionTracker,
+  createKvSessionTracker,
+  createRedisSessionStore,
+  createRedisSessionTracker,
+  RedisSessionStore,
+  MiniRedisClient,
+  InMemoryRedisClient,
+  createMiniRedisClient,
   getClientIp,
   parseUserAgent,
 } = require('./sessions');
@@ -240,9 +255,10 @@ module.exports = {
   AuthenticationError,
   AuthorizationError,
   
-  // Middleware
-  createAuthMiddleware,
-  setupAuthMiddleware,
+  // Middleware & Authenticator
+  authenticateRequest,
+  createAuthMiddleware: (...args) => getMiddleware().createAuthMiddleware(...args),
+  setupAuthMiddleware: (...args) => getMiddleware().setupAuthMiddleware(...args),
   
   // Hash utilities
   hash,
@@ -311,6 +327,13 @@ module.exports = {
   dropUserSessionsTable,
   createKnexSessionTracker,
   createMemorySessionTracker,
+  createKvSessionTracker,
+  createRedisSessionStore,
+  createRedisSessionTracker,
+  RedisSessionStore,
+  MiniRedisClient,
+  InMemoryRedisClient,
+  createMiniRedisClient,
   getClientIp,
   parseUserAgent,
   createListSessionsHandler,
@@ -321,6 +344,13 @@ module.exports = {
     dropUserSessionsTable,
     createKnexSessionTracker,
     createMemorySessionTracker,
+    createKvSessionTracker,
+    createRedisSessionStore,
+    createRedisSessionTracker,
+    RedisSessionStore,
+    MiniRedisClient,
+    InMemoryRedisClient,
+    createMiniRedisClient,
     getClientIp,
     parseUserAgent,
     createListSessionsHandler,

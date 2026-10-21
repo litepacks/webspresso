@@ -56,6 +56,7 @@ describe('Auth: createRequestAuth & checks', () => {
     authManager = new AuthManager({
       session: { secret: 'super-secret-key-1234567890123456' },
       findUserById: async (id) => ({ id, email: 'user@example.com' }),
+      findUserByCredentials: async () => ({ id: 123, email: 'user@example.com' }),
     });
   });
 

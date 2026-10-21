@@ -1,6 +1,6 @@
 {
   "name": "webspresso",
-  "version": "0.0.105",
+  "version": "0.0.106",
   "description": "Minimal, production-ready SSR framework for Node.js with file-based routing, Nunjucks templating, built-in i18n, and CLI tooling",
   "main": "index.js",
   "types": "index.d.ts",
@@ -18,6 +18,7 @@
     "./plugins/polar/src/*": "./plugins/polar/src/*.js",
     "./plugins/*": "./plugins/*/index.js",
     "./realtime": "./core/realtime/index.js",
+    "./core": "./core/index.js",
     "./core/auth": "./core/auth/index.js",
     "./core/auth/*": "./core/auth/*.js",
     "./core/errors": "./core/errors/index.js",
@@ -174,6 +175,7 @@
     "docboot": "^0.3.0",
     "dotenv": "^16.3.1",
     "express-rate-limit": "^8.4.1",
+    "hono": "^4.13.13",
     "release-it": "^20.2.1",
     "softscope": "^0.3.2",
     "supertest": "^6.3.4",

@@ -24,10 +24,12 @@ export interface ErrorPageContext {
 }
 
 export interface CreateAppOptions {
+  core?: CoreApp;
   pagesDir: string;
   viewsDir?: string;
   publicDir?: string;
   logging?: boolean;
+  logger?: boolean | CloudLogger | LoggerOptions;
   helmet?: boolean | Record<string, unknown>;
   middlewares?: Record<string, WebspressoRegisteredMiddleware>;
   plugins?: WebspressoPlugin[];
@@ -82,6 +84,8 @@ export interface CreateAppOptions {
   limits?: string | number | PayloadLimitsConfig;
   /** Cloud & Kubernetes Health check probes (/healthz & /readyz) */
   healthCheck?: boolean | string | HealthCheckConfig;
+  /** Cloud Metrics & Distributed Tracing (/metrics) */
+  metrics?: boolean | MetricsConfig;
   /** High-Performance In-Memory LRU & Tagged Cache options */
   cache?: boolean | LruCacheConfig;
   /** Shutdown and lifecycle configuration */
@@ -112,6 +116,7 @@ export interface CreateAppOptions {
     earlyHints?: boolean | (string | EarlyHintLink)[] | EarlyHintsOptions;
     limits?: string | number | PayloadLimitsConfig;
     healthCheck?: boolean | string | HealthCheckConfig;
+    metrics?: boolean | MetricsConfig;
     cache?: boolean | LruCacheConfig;
     trustProxy?: boolean | number | string;
     [key: string]: unknown;
@@ -444,15 +449,20 @@ export interface SetupRoutesContext {
   pluginManager: PluginManager;
   options: CreateAppOptions;
   clientRuntime: { alpine: boolean; swup: boolean };
+  http?: HttpAdapter;
 }
 
 export interface WebspressoApplication extends Application {
+  core?: CoreApp;
+  http?: HttpAdapter;
   server?: unknown;
   readonly isShuttingDown: boolean;
   shutdownManager: ShutdownManager;
   serviceRegistry: ServiceRegistry;
   breakers?: CircuitBreakerRegistry;
+  metrics?: MetricsRegistry;
   getBreaker?(name: string, options?: CircuitBreakerOptions): CircuitBreaker;
+  service<T = unknown>(name: string, input?: unknown, options?: unknown): Promise<T>;
   onShutdown(fn: () => Promise<void> | void): this;
   close(reason?: string): Promise<void>;
   enableShutdownHooks(): this;
@@ -473,12 +483,118 @@ export interface CreateAppResult {
   shutdownManager: ShutdownManager;
 }
 
+export interface CoreAppOptions {
+  servicesDir?: string | null;
+  moduleServices?: Record<string, unknown>;
+  plugins?: WebspressoPlugin[];
+  http?: HttpAdapter | null;
+  db?: unknown;
+  queue?: unknown;
+  timeouts?: unknown;
+  cache?: unknown;
+  server?: unknown;
+  [key: string]: unknown;
+}
+
+export class CoreApp {
+  options: CoreAppOptions;
+  http?: HttpAdapter | null;
+  services: ServiceRegistry;
+  serviceRegistry: ServiceRegistry;
+  shutdown: ShutdownManager;
+  shutdownManager: ShutdownManager;
+  breakers: CircuitBreakerRegistry;
+  events: EventDispatcher;
+  cache: TaggedLruCache | null;
+  metrics?: MetricsRegistry | null;
+  db: unknown;
+  queue: unknown;
+  timeouts: unknown;
+  plugins: PluginManager;
+  pluginManager: PluginManager;
+  context: Record<string, unknown>;
+
+  constructor(options?: CoreAppOptions);
+  createContext(extra?: Record<string, unknown>): Record<string, unknown>;
+  service<T = unknown>(name: string, input?: unknown, contextOrOptions?: unknown, maybeOptions?: unknown): Promise<T>;
+  close(reason?: string): Promise<void>;
+}
+
+export function createCoreApp(options?: CoreAppOptions): CoreApp;
+
 export function createApp(options?: CreateAppOptions): CreateAppResult;
 
 export function formatDevBanner(context?: Record<string, unknown>, options?: Record<string, unknown>): { bannerText: string; plainText: string; summary: Record<string, unknown> };
 export function printDevBanner(context?: Record<string, unknown>, options?: Record<string, unknown>): void;
 export function formatRouteTable(routeTable: unknown, options?: Record<string, unknown>): string;
 export function createDevProfilerMiddleware(options?: Record<string, unknown>): RequestHandler;
+
+// --- HTTP Layer & Adapters ---
+
+export class HttpAdapter {
+  app: unknown;
+  options: Record<string, unknown>;
+  constructor(app?: unknown, options?: Record<string, unknown>);
+  use(...args: unknown[]): unknown;
+  route(method: string, path: string, ...handlers: unknown[]): unknown;
+  get(path: string, ...handlers: unknown[]): unknown;
+  post(path: string, ...handlers: unknown[]): unknown;
+  put(path: string, ...handlers: unknown[]): unknown;
+  delete(path: string, ...handlers: unknown[]): unknown;
+  patch(path: string, ...handlers: unknown[]): unknown;
+  all(path: string, ...handlers: unknown[]): unknown;
+  listen(port: number | string, callback?: () => void): unknown;
+  getApp(): unknown;
+}
+
+export class ExpressHttpAdapter extends HttpAdapter {
+  constructor(app: Application, options?: Record<string, unknown>);
+}
+
+export function createExpressHttpAdapter(app: Application, options?: Record<string, unknown>): ExpressHttpAdapter;
+
+export class HonoHttpAdapter extends HttpAdapter {
+  constructor(app?: unknown, options?: Record<string, unknown>);
+  registerApi(method: string, path: string, apiDef: unknown, context?: Record<string, unknown>): this;
+  registerPage(path: string, pageDef: unknown, context?: Record<string, unknown>): this;
+  request(input: string | unknown, init?: unknown): Promise<Response>;
+  fetch(request: unknown, env?: unknown, ctx?: unknown): Response | Promise<Response>;
+}
+
+export function createHonoHttpAdapter(app?: unknown, options?: Record<string, unknown>): HonoHttpAdapter;
+
+export function runMiddlewares(middlewares: unknown[], req: unknown, res: unknown): Promise<void>;
+export function enrichRouteError(err: unknown, descriptor: RouteDescriptor | Record<string, unknown>, req: unknown): unknown;
+export function executeApiPipeline(params: {
+  descriptor: RouteDescriptor | Record<string, unknown>;
+  context?: Record<string, unknown>;
+  apiDef?: unknown;
+  handlerFn: Function;
+  compiledSchema?: unknown;
+  middlewares?: unknown[];
+  req: unknown;
+  res: unknown;
+}): Promise<unknown>;
+export function executePagePipeline(params: {
+  descriptor: RouteDescriptor | Record<string, unknown>;
+  context?: Record<string, unknown>;
+  pageDef: unknown;
+  middlewares?: unknown[];
+  req: unknown;
+  res: unknown;
+  nunjucks?: unknown;
+  njkCandidate?: string;
+  hasNjkTemplate?: boolean;
+}): Promise<unknown>;
+
+// --- Auth & Verification ---
+
+export function authenticateRequest(
+  req: Request | Record<string, unknown>,
+  res?: Response | Record<string, unknown>,
+  authManager?: unknown
+): Promise<unknown>;
+
 
 // --- Exceptions & Errors ---
 
@@ -759,8 +875,113 @@ export function createLruCache<V = unknown>(options?: LruCacheConfig): LruCache<
 export function createTaggedLruCache<V = unknown>(options?: LruCacheConfig): TaggedLruCache<V>;
 export function approximateByteSize(value: unknown): number;
 
+export interface CdnCacheOptions {
+  maxAge?: number | string;
+  sMaxAge?: number | string;
+  staleWhileRevalidate?: number | string;
+  staleIfError?: number | string;
+  tags?: string[] | string;
+  public?: boolean;
+  private?: boolean;
+  mustRevalidate?: boolean;
+  immutable?: boolean;
+}
+
+export function buildCdnCacheHeaders(options?: CdnCacheOptions): Record<string, string>;
+export function setCdnCache(res: unknown, options?: CdnCacheOptions): void;
+
+export interface CdnPurgeOptions {
+  provider?: 'cloudflare' | 'fastly' | 'custom' | 'mock';
+  apiToken?: string;
+  zoneId?: string;
+  serviceId?: string;
+  purge?: (params: { tags: string[] }) => Promise<Record<string, unknown>>;
+}
+
+export interface CdnPurgeClient {
+  purgeTags(tags: string[] | string): Promise<{ success: boolean; count?: number; error?: string }>;
+  purgeAll(): Promise<{ success: boolean; error?: string }>;
+  purgedHistory: Array<{ type: string; tags?: string[]; timestamp: Date }>;
+}
+
+export function createCdnPurgeClient(options?: CdnPurgeOptions): CdnPurgeClient;
+export function bindOrmCdnPurge(db: unknown, config: { modelTags: Record<string, (record: any) => string[]>; client: CdnPurgeClient }): void;
+
 export namespace cache {
-  export { LruCache, TaggedLruCache, createLruCache, createTaggedLruCache, approximateByteSize };
+  export {
+    LruCache,
+    TaggedLruCache,
+    createLruCache,
+    createTaggedLruCache,
+    approximateByteSize,
+    buildCdnCacheHeaders,
+    setCdnCache,
+    createCdnPurgeClient,
+    bindOrmCdnPurge,
+  };
+}
+
+// --- Cloud Secrets Management (Google Cloud Secret Manager & AWS Secrets Manager) ---
+
+export interface SecretManagerOptions {
+  provider?: 'auto' | 'gcp' | 'cloudrun' | 'aws' | 'env' | 'memory' | any;
+  cache?: boolean;
+  cacheTtl?: string | number;
+  projectId?: string;
+  region?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  sessionToken?: string;
+  token?: string;
+  credentials?: Record<string, unknown>;
+  client?: any;
+  mockSecrets?: Record<string, unknown>;
+  secrets?: Record<string, unknown>;
+  httpTransport?: (url: string, options?: any) => Promise<any>;
+}
+
+export interface SecretGetOptions {
+  fallback?: any;
+  required?: boolean;
+  parseJson?: boolean;
+  bypassCache?: boolean;
+}
+
+export interface SecretLoadOptions {
+  inject?: boolean;
+  override?: boolean;
+}
+
+export declare class SecretManager {
+  constructor(options?: SecretManagerOptions);
+  get<T = any>(secretName: string, options?: SecretGetOptions): Promise<T>;
+  invalidate(secretName: string): void;
+  clearCache(): void;
+  load(secretsMapOrArray: Record<string, string> | string[], options?: SecretLoadOptions): Promise<Record<string, string>>;
+  loadBundle(bundleName: string, options?: SecretLoadOptions): Promise<Record<string, any>>;
+}
+
+export declare class SecretNotFoundError extends Error {
+  secretName: string;
+}
+
+export function createSecretManager(options?: SecretManagerOptions): SecretManager;
+export function resolveSecret<T = any>(secretName: string, options?: SecretManagerOptions & SecretGetOptions): Promise<T>;
+export function loadSecrets(options?: SecretManagerOptions & {
+  secrets?: Record<string, string> | string[];
+  bundle?: string;
+  inject?: boolean;
+  override?: boolean;
+}): Promise<Record<string, any>>;
+
+export namespace secrets {
+  export {
+    SecretManager,
+    SecretNotFoundError,
+    createSecretManager,
+    resolveSecret,
+    loadSecrets,
+  };
 }
 
 // --- Enterprise Resilience & Fault Tolerance (Circuit Breaker & Retry Engine) ---
@@ -1400,6 +1621,7 @@ export interface RoutesReadyContext {
 
 export interface PluginRegisterContext {
   app: Application;
+  http?: HttpAdapter;
   nunjucksEnv: unknown;
   options: Record<string, unknown>;
   /** Same object as `createApp({ middlewares })` for registering named route middleware. */
@@ -1875,6 +2097,7 @@ export interface OrmDatabaseCacheConfig {
 export interface DatabaseConfig {
   client?: string;
   connection?: string | Record<string, unknown>;
+  d1?: unknown;
   models?: string;
   migrations?: MigrationConfig;
   pool?: Record<string, unknown>;
@@ -1984,6 +2207,9 @@ export interface DatabaseInstance {
   };
   transaction<T>(callback: (ctx: TransactionContext) => Promise<T>, scopeContext?: ScopeContext): Promise<T>;
   runInTransaction<T>(callback: (ctx: TransactionContext) => Promise<T>, scopeContext?: ScopeContext): Promise<T>;
+  batch<T = any>(
+    queriesOrCallback: Array<any> | ((batch: { add(q: any): any; raw(sql: string, bindings?: any[]): any }) => Promise<any> | any)
+  ): Promise<T[]>;
   getAmbientTransaction(): Knex.Transaction | null;
   hasActiveTransaction(): boolean;
   createSeeder(): unknown;
@@ -1992,6 +2218,85 @@ export interface DatabaseInstance {
 }
 
 export function createDatabase(config: DatabaseConfig): DatabaseInstance;
+export function createD1Knex(d1Database: unknown, options?: Record<string, unknown>): Knex;
+export const Client_D1: unknown;
+export function executeD1Batch(
+  d1Database: unknown,
+  queriesOrCallback: Array<any> | ((batch: { add(q: any): any; raw(sql: string, bindings?: any[]): any }) => Promise<any> | any)
+): Promise<Array<any>>;
+export function normalizeD1Bindings(rawBindings?: any[]): any[];
+
+export interface ServerlessPoolEnvironment {
+  isServerless: boolean;
+  platform: 'cloudrun' | 'aws-lambda' | 'ecs' | 'serverless' | 'standard';
+}
+
+export function isServerlessEnvironment(env?: Record<string, string>): ServerlessPoolEnvironment;
+export function normalizeServerlessPoolConfig(
+  knexConfig?: any,
+  optionsOrEnv?: Record<string, any>
+): any;
+
+// --- Webspresso DB Studio Subsystem ---
+
+export interface StudioOptions {
+  knex?: Knex;
+  db?: DatabaseInstance;
+  app?: any;
+  queue?: any;
+  port?: number;
+  host?: string;
+  open?: boolean;
+  silent?: boolean;
+}
+
+export interface StudioTelemetrySnapshot {
+  timestamp: string;
+  uptimeSeconds: number;
+  nodeVersion: string;
+  pid: number;
+  memory: {
+    rssMb: number;
+    heapUsedMb: number;
+    heapTotalMb: number;
+    externalMb: number;
+  };
+  pool: {
+    client: string;
+    used: number;
+    free: number;
+    pending: number;
+  };
+  breakers: Array<{
+    name: string;
+    state: string;
+    failures: number;
+    successes: number;
+    totalCalls: number;
+    failureRate: number;
+    lastFailureTime: number | null;
+  }>;
+  queue: {
+    enabled: boolean;
+    activeWorkers?: number;
+    concurrency?: number;
+    registeredJobs?: string[];
+    isPaused?: boolean;
+    isRunning?: boolean;
+    waiting?: number;
+    [key: string]: any;
+  };
+}
+
+export interface StudioInstance {
+  server: import('http').Server;
+  url: string;
+  close: () => Promise<void>;
+}
+
+export function startStudio(options?: StudioOptions): Promise<StudioInstance>;
+export function createStudioApp(options?: StudioOptions): import('express').Express;
+export function getTelemetrySnapshot(knex?: Knex, options?: StudioOptions): Promise<StudioTelemetrySnapshot>;
 
 export function runWithAmbientTransaction<T>(trx: Knex.Transaction, callback: () => Promise<T> | T): Promise<T>;
 export function getAmbientTransaction(): Knex.Transaction | null;
@@ -2032,6 +2337,31 @@ export function defineFactory<T = Record<string, any>>(
 
 export function diffSchema(options: { knex: Knex; models?: ModelDefinition<any>[]; includeDrops?: boolean }): Promise<{ hasChanges: boolean; changes: Array<any> }>;
 export function makeMigrations(options: { knex: Knex; modelsDir?: string; migrationDir?: string; dryRun?: boolean; includeDrops?: boolean; name?: string }): Promise<{ hasChanges: boolean; created: Array<any>; skipped: Array<any> }>;
+
+// --- Cloud Database Migrations ---
+
+export interface CloudMigrationOptions {
+  migrationConfig?: Record<string, unknown>;
+  dryRun?: boolean;
+  unlockIfStale?: boolean;
+  waitForDb?: boolean;
+  retries?: number;
+  logger?: (message: string) => void;
+}
+
+export interface CloudMigrationResult {
+  success: boolean;
+  batch: number;
+  applied: string[];
+  pendingBefore: string[];
+  durationMs: number;
+  dryRun: boolean;
+}
+
+export function waitForDatabaseConnection(knex: unknown, options?: { retries?: number; initialDelayMs?: number; maxDelayMs?: number; onRetry?: (info: unknown) => void }): Promise<boolean>;
+export function freeStaleMigrationLock(knex: unknown, migrationConfig?: Record<string, unknown>): Promise<boolean>;
+export function getMigrationStatus(knex: unknown, migrationConfig?: Record<string, unknown>): Promise<{ completed: string[]; pending: string[] }>;
+export function runCloudMigration(knex: unknown, options?: CloudMigrationOptions): Promise<CloudMigrationResult>;
 
 // --- ORM: nanoid / zod ---
 
@@ -2574,6 +2904,147 @@ export interface RateLimitPluginOptions {
 
 export function rateLimitPlugin(options?: RateLimitPluginOptions): WebspressoPlugin;
 
+export interface RateLimitInfo {
+  totalHits: number;
+  remaining: number;
+  resetTime: Date;
+  limit: number;
+}
+
+export interface RateLimitStore {
+  increment(key: string, windowMs: number): Promise<{ totalHits: number; resetTime: Date }>;
+  decrement?(key: string): Promise<void>;
+  resetKey?(key: string): Promise<void>;
+  resetAll?(): Promise<void>;
+}
+
+export class MemoryRateLimitStore implements RateLimitStore {
+  constructor(options?: { cleanupIntervalMs?: number });
+  increment(key: string, windowMs: number): Promise<{ totalHits: number; resetTime: Date }>;
+  decrement(key: string): Promise<void>;
+  resetKey(key: string): Promise<void>;
+  resetAll(): Promise<void>;
+  sweep(): void;
+  destroy(): void;
+}
+
+export class RedisRateLimitStore implements RateLimitStore {
+  constructor(options: { client: unknown; prefix?: string; passOnStoreError?: boolean });
+  increment(key: string, windowMs: number): Promise<{ totalHits: number; resetTime: Date }>;
+  decrement(key: string): Promise<void>;
+  resetKey(key: string): Promise<void>;
+  resetAll(): Promise<void>;
+}
+
+export interface RateLimitOptions {
+  limit?: number;
+  max?: number;
+  window?: string | number;
+  windowMs?: string | number;
+  store?: RateLimitStore;
+  keyGenerator?: (req: any) => string;
+  skip?: (req: any) => boolean;
+  standardHeaders?: boolean | string;
+  legacyHeaders?: boolean;
+  skipFailedRequests?: boolean;
+  skipSuccessfulRequests?: boolean;
+  statusCode?: number;
+  message?: string | Record<string, unknown>;
+  handler?: (req: any, res: any, next: any, info: RateLimitInfo) => unknown;
+}
+
+export class RateLimiter {
+  constructor(options?: RateLimitOptions);
+  limit: number;
+  windowMs: number;
+  store: RateLimitStore;
+  middleware(reqOrC: unknown, resOrNext: unknown, maybeNext?: unknown): Promise<unknown>;
+}
+
+export function createRateLimiter(options?: RateLimitOptions): ((req: any, res: any, next: any) => unknown) & { limiter: RateLimiter };
+export function rateLimit(options?: RateLimitOptions): ((req: any, res: any, next: any) => unknown) & { limiter: RateLimiter };
+
+// --- Feature Flags & Canary Traffic Splitter ---
+
+export interface FeatureFlagVariant {
+  name: string;
+  weight?: number;
+  [key: string]: unknown;
+}
+
+export interface FeatureFlagDefinition {
+  enabled?: boolean;
+  rollout?: number;
+  users?: string[];
+  roles?: string[];
+  emailDomains?: string[];
+  condition?: (context: FeatureFlagContext) => boolean;
+  variants?: FeatureFlagVariant[];
+  variant?: string;
+  default?: boolean;
+  [key: string]: unknown;
+}
+
+export interface FeatureFlagContext {
+  user?: any;
+  distinctId?: string;
+  role?: string;
+  roles?: string[] | Set<string>;
+  email?: string;
+  ip?: string;
+  [key: string]: unknown;
+}
+
+export interface FeatureFlagEvaluation {
+  enabled: boolean;
+  variant: string | null;
+  reason: string;
+  bucket?: number;
+}
+
+export class MemoryFlagStore {
+  constructor(initialFlags?: Record<string, any> | string);
+  get(key: string): any;
+  set(key: string, definition: any): void;
+  has(key: string): boolean;
+  delete(key: string): boolean;
+  clear(): void;
+  getAll(): Record<string, any>;
+  load(source: Record<string, any> | string): void;
+}
+
+export interface FeatureFlagOptions {
+  flags?: Record<string, any> | string;
+  store?: MemoryFlagStore | any;
+  envPrefix?: string;
+  identify?: (req: any) => string;
+}
+
+export class FeatureFlagManager {
+  constructor(options?: FeatureFlagOptions);
+  store: MemoryFlagStore | any;
+  envPrefix: string;
+  isEnabled(flagKey: string, context?: FeatureFlagContext): boolean;
+  getVariant(flagKey: string, context?: FeatureFlagContext): string | null;
+  evaluate(flagKey: string, context?: FeatureFlagContext): FeatureFlagEvaluation;
+  getAllFlags(context?: FeatureFlagContext): Record<string, boolean>;
+  setFlag(flagKey: string, definition: any): void;
+  removeFlag(flagKey: string): boolean;
+  forContext(context?: FeatureFlagContext): {
+    isEnabled: (key: string) => boolean;
+    getVariant: (key: string) => string | null;
+    evaluate: (key: string) => FeatureFlagEvaluation;
+    all: () => Record<string, boolean>;
+  };
+  middleware(): (reqOrC: any, resOrNext: any, maybeNext?: any) => Promise<unknown> | unknown;
+  guard(flagKey: string, options?: { statusCode?: number; message?: string; fallback?: Function }): (req: any, res: any, next: any) => unknown;
+}
+
+export function createFeatureFlagManager(options?: FeatureFlagOptions): FeatureFlagManager;
+export function evaluateFlag(flagKey: string, definition: any, rawContext?: any, options?: { envPrefix?: string }): FeatureFlagEvaluation;
+export function getBucket(flagKey: string, distinctId: string | number): number;
+export function fnv1a(str: string): number;
+
 export interface CsrfCookieOptions {
   key?: string;
   signed?: boolean;
@@ -2832,7 +3303,7 @@ export function restResourcePlugin(options?: RestResourcePluginOptions): Webspre
 
 export function ormCacheAdminPlugin(options: { db: DatabaseInstance }): WebspressoPlugin;
 
-/** Multipart upload storage (e.g. local disk or S3). */
+/** Multipart upload storage (e.g. local disk, R2, or S3). */
 export interface UploadStorageProvider {
   put(args: {
     buffer?: Buffer;
@@ -2842,6 +3313,20 @@ export interface UploadStorageProvider {
     size: number;
     req: Request;
   }): Promise<{ publicUrl: string; key?: string }>;
+  delete?(key: string): Promise<boolean | void>;
+  createSignedUploadUrl?(params?: {
+    originalName?: string;
+    mimeType?: string;
+    expiresInSeconds?: number;
+    expiresInMs?: number;
+    key?: string;
+  }): Promise<{
+    uploadUrl: string;
+    publicUrl: string;
+    key: string;
+    method: string;
+    headers?: Record<string, string>;
+  }>;
 }
 
 export interface UploadPluginOptions {
@@ -2853,6 +3338,11 @@ export interface UploadPluginOptions {
   extensionAllowlist?: string[] | null;
   middleware?: RequestHandler | RequestHandler[];
   fieldName?: string;
+  multiple?: boolean;
+  maxFiles?: number;
+  presigned?: boolean;
+  presignedRoute?: string;
+  presignedMiddleware?: RequestHandler | RequestHandler[];
 }
 
 export function uploadPlugin(options?: UploadPluginOptions): WebspressoPlugin;
@@ -2860,6 +3350,27 @@ export function uploadPlugin(options?: UploadPluginOptions): WebspressoPlugin;
 export function createLocalFileProvider(options?: {
   destDir?: string;
   publicBasePath?: string;
+}): UploadStorageProvider;
+
+export function createR2FileProvider(options: {
+  bucket: unknown;
+  publicBaseUrl?: string;
+  prefix?: string;
+}): UploadStorageProvider;
+
+export function createS3FileProvider(options: {
+  s3Client: unknown;
+  bucket: string;
+  publicBaseUrl?: string;
+  prefix?: string;
+  createSignedUrl?: (params: { bucket: string; key: string; mimeType: string; expiresInSeconds: number }) => Promise<string>;
+}): UploadStorageProvider;
+
+export function createGcsFileProvider(options: {
+  bucket: unknown;
+  storageClient?: unknown;
+  publicBaseUrl?: string;
+  prefix?: string;
 }): UploadStorageProvider;
 
 export interface OrphanedUploadsResult {
@@ -3271,6 +3782,64 @@ export class RedisQueueAdapter implements QueueAdapter {
   }): Promise<number>;
 }
 
+export class WaitUntilQueueAdapter extends MemoryQueueAdapter {
+  constructor(options?: { waitUntil?: (promise: Promise<unknown>) => void; maxRetainedJobs?: number });
+  setWaitUntil(fn: (promise: Promise<unknown>) => void): void;
+  runInBackground(promise: Promise<unknown>): void;
+}
+
+export class CloudflareQueueAdapter {
+  constructor(options: { queue: { send(message: unknown, options?: unknown): Promise<unknown> } });
+  enqueue(job: Job): Promise<Job>;
+  dequeue(): Promise<null>;
+  complete(jobId: string | number, result?: unknown): Promise<Job | null>;
+  fail(jobId: string | number, error?: unknown): Promise<Job | null>;
+  retry(jobId: string | number, delayMs: number, error?: unknown): Promise<Job | null>;
+  processBatch(batch: unknown, queueManager: unknown): Promise<{ processed: number; failed: number }>;
+}
+
+export interface SqsQueueAdapterOptions {
+  queueUrl?: string;
+  region?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  sessionToken?: string;
+  waitTimeSeconds?: number;
+  visibilityTimeout?: number;
+  sqsClient?: unknown;
+  httpTransport?: unknown;
+}
+
+export class SqsQueueAdapter implements QueueAdapter {
+  constructor(options?: SqsQueueAdapterOptions);
+  enqueue(job: Job): Promise<Job>;
+  dequeue(jobNames?: string[]): Promise<Job | null>;
+  complete(jobId: string | number, result?: unknown): Promise<Job | null>;
+  fail(jobId: string | number, error?: unknown): Promise<Job | null>;
+  retry(jobId: string | number, delayMs: number, error?: unknown): Promise<Job | null>;
+  getStats(): Promise<{ pending: number; running: number; delayed: number; total: number }>;
+  processBatch(records: unknown[], queueManager: unknown): Promise<{ processed: number; failed: number }>;
+}
+
+export interface PubSubQueueAdapterOptions {
+  projectId?: string;
+  topic: string;
+  subscription?: string;
+  token?: string;
+  pubsubClient?: unknown;
+  httpTransport?: unknown;
+}
+
+export class PubSubQueueAdapter implements QueueAdapter {
+  constructor(options: PubSubQueueAdapterOptions);
+  enqueue(job: Job): Promise<Job>;
+  dequeue(jobNames?: string[]): Promise<Job | null>;
+  complete(jobId: string | number, result?: unknown): Promise<Job | null>;
+  fail(jobId: string | number, error?: unknown): Promise<Job | null>;
+  retry(jobId: string | number, delayMs: number, error?: unknown): Promise<Job | null>;
+  processPushRequest(req: unknown, res: unknown, queueManager: unknown): Promise<boolean>;
+}
+
 export interface DispatchOptions {
   delay?: number | Date;
   attempts?: number;
@@ -3499,6 +4068,43 @@ export const ssr: {
   renderStream: typeof renderStream;
 };
 
+// --- Static Site Export & Prerendering ---
+
+export interface StaticExportOptions {
+  cwd?: string;
+  app?: import('express').Express;
+  createApp?: (config?: any) => any;
+  serverConfig?: Record<string, unknown>;
+  pagesDir?: string;
+  publicDir?: string;
+  outDir?: string;
+  clean?: boolean;
+  cleanUrls?: boolean;
+  copyAssets?: boolean;
+  sitemap?: boolean;
+  baseUrl?: string;
+  concurrency?: number;
+  extraRoutes?: string[];
+  silent?: boolean;
+  db?: unknown;
+}
+
+export interface StaticExportResult {
+  total: number;
+  rendered: number;
+  skipped: number;
+  errors: Array<{ path: string; error: string }>;
+  outDir: string;
+  durationMs: number;
+}
+
+export function exportStaticSite(options?: StaticExportOptions): Promise<StaticExportResult>;
+export function discoverExportRoutes(options?: {
+  pagesDir?: string;
+  db?: unknown;
+  extraRoutes?: string[];
+}): Promise<Array<{ path: string; sourceFile: string | null; isDynamic: boolean; params?: Record<string, any> }>>;
+
 // --- Server-Sent Events (SSE) Streaming ---
 
 export interface SseOptions {
@@ -3545,6 +4151,51 @@ export const sseStream: {
   ServerSentEventsStream: typeof ServerSentEventsStream;
   createSseStream: typeof createSseStream;
   formatSseFrame: (data?: any, event?: string, id?: string | number, retry?: number) => string;
+};
+
+// --- AI & LLM Text / NDJSON Streaming ---
+
+export interface TextStreamOptions {
+  status?: number;
+  contentType?: string;
+  headers?: Record<string, string>;
+  map?: (chunk: any) => any;
+}
+
+export class TextStreamController extends EventEmitter {
+  req: import('http').IncomingMessage;
+  res: import('http').ServerResponse;
+  options: TextStreamOptions;
+  ndjson: boolean;
+  isOpen: boolean;
+  isClosed: boolean;
+
+  constructor(req: import('http').IncomingMessage, res: import('http').ServerResponse, options?: TextStreamOptions & { ndjson?: boolean });
+  write(chunk: any): Promise<boolean>;
+  pipe(source: AsyncIterable<any> | Iterable<any> | import('stream').Readable, transform?: (chunk: any) => any): Promise<void>;
+  stream(runnerFn: (stream: TextStreamController) => any): Promise<void>;
+  close(): void;
+  end(): void;
+}
+
+export function streamText(
+  req: import('http').IncomingMessage,
+  res: import('http').ServerResponse,
+  sourceOrCallback?: TextStreamOptions | AsyncIterable<any> | Iterable<any> | import('stream').Readable | ((stream: TextStreamController) => any),
+  maybeOptions?: TextStreamOptions
+): TextStreamController | Promise<void>;
+
+export function streamJson(
+  req: import('http').IncomingMessage,
+  res: import('http').ServerResponse,
+  sourceOrCallback?: TextStreamOptions | AsyncIterable<any> | Iterable<any> | import('stream').Readable | ((stream: TextStreamController) => any),
+  maybeOptions?: TextStreamOptions
+): TextStreamController | Promise<void>;
+
+export const stream: {
+  TextStreamController: typeof TextStreamController;
+  streamText: typeof streamText;
+  streamJson: typeof streamJson;
 };
 
 // --- Model Context Protocol (MCP) Plugin ---
@@ -3834,13 +4485,19 @@ export interface ApiContext<TBody = any, TParams = Record<string, string>, TQuer
   config: Record<string, unknown>;
   logger: Console;
   db: unknown;
+  flags?: any;
+  hasFeature?: (key: string, customContext?: any) => boolean;
+  getVariant?: (key: string, customContext?: any) => string | null;
   sse?: (sourceOrOptions?: any, maybeOptions?: any) => any;
+  streamText?: (sourceOrCallback?: any, maybeOptions?: any) => any;
+  streamJson?: (sourceOrCallback?: any, maybeOptions?: any) => any;
 }
 
 export interface DefineApiOptions<TResult = any, TBody = any, TParams = Record<string, string>, TQuery = Record<string, string>> {
   description?: string;
   tags?: string[];
   middleware?: (string | import('express').RequestHandler | [string, Record<string, unknown>])[];
+  flag?: string | { key: string; statusCode?: number; message?: string };
   schema?: {
     params?: unknown;
     query?: unknown;
@@ -4042,6 +4699,21 @@ export interface GenerateTypesResult {
 }
 
 export function generateTypes(options?: GenerateTypesOptions): GenerateTypesResult;
+
+export interface ClientGeneratorOptions {
+  rootDir?: string;
+  pagesDir?: string;
+  outFile?: string;
+  baseUrl?: string;
+  silent?: boolean;
+}
+
+export interface ClientGeneratorResult {
+  outFile: string;
+  routesCount: number;
+}
+
+export function generateClient(options?: ClientGeneratorOptions): ClientGeneratorResult;
 
 // --- OAuth 2.0 & Social Login Plugin ---
 
@@ -4407,6 +5079,41 @@ export function createMemorySessionTracker(): SessionTracker;
 export function createListSessionsHandler(authManager: any): (req: any, res: any) => Promise<any>;
 export function createRevokeSessionHandler(authManager: any): (req: any, res: any) => Promise<any>;
 
+export interface RedisSessionStoreOptions {
+  client?: any;
+  url?: string;
+  prefix?: string;
+  ttl?: number;
+  disableTouch?: boolean;
+  inMemory?: boolean;
+  serializer?: { parse: (s: string) => any; stringify: (o: any) => string };
+}
+
+export class RedisSessionStore {
+  constructor(options?: RedisSessionStoreOptions);
+  prefix: string;
+  ttl: number;
+  disableTouch: boolean;
+  get(sid: string, callback?: (err?: any, session?: any) => void): void;
+  set(sid: string, session: any, callback?: (err?: any) => void): void;
+  destroy(sid: string, callback?: (err?: any) => void): void;
+  touch(sid: string, session: any, callback?: (err?: any) => void): void;
+  all(callback?: (err?: any, sessions?: any[]) => void): void;
+  length(callback?: (err?: any, count?: number) => void): void;
+  clear(callback?: (err?: any) => void): void;
+  close(): Promise<void>;
+}
+
+export function createRedisSessionStore(options?: RedisSessionStoreOptions): RedisSessionStore;
+export function createRedisSessionTracker(options?: {
+  client?: any;
+  url?: string;
+  prefix?: string;
+  ttlSeconds?: number;
+  inMemory?: boolean;
+}): SessionTracker;
+export function createMiniRedisClient(urlOrOptions?: string | { host?: string; port?: number; password?: string; db?: number; inMemory?: boolean }): any;
+
 export namespace sessions {
   export {
     SessionManager,
@@ -4414,6 +5121,10 @@ export namespace sessions {
     dropUserSessionsTable,
     createKnexSessionTracker,
     createMemorySessionTracker,
+    createRedisSessionStore,
+    createRedisSessionTracker,
+    RedisSessionStore,
+    createMiniRedisClient,
     getClientIp,
     parseUserAgent,
     createListSessionsHandler,
@@ -4482,6 +5193,227 @@ export interface RlsPluginOptions {
 
 export function rlsPlugin(options?: RlsPluginOptions): import('./src/plugin-manager').Plugin;
 export function createRlsMiddleware(options?: RlsPluginOptions): (req: any, res: any, next: (err?: any) => void) => void;
+
+// --- Structured Cloud Logging ---
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
+export type LogFormat = 'auto' | 'gcp' | 'aws' | 'json' | 'pretty';
+
+export interface LoggerOptions {
+  format?: LogFormat;
+  level?: LogLevel;
+  stream?: NodeJS.WritableStream;
+  defaultMeta?: Record<string, unknown>;
+  redact?: string[];
+  project?: string;
+  exclude?: string[];
+}
+
+export class CloudLogger {
+  constructor(options?: LoggerOptions);
+  format: LogFormat;
+  level: LogLevel;
+  child(additionalMeta?: Record<string, unknown>): CloudLogger;
+  debug(message: string, meta?: Record<string, unknown>): void;
+  info(message: string, meta?: Record<string, unknown>): void;
+  warn(message: string, meta?: Record<string, unknown>): void;
+  error(message: string, meta?: Record<string, unknown>): void;
+  fatal(message: string, meta?: Record<string, unknown>): void;
+  log(level: string, message: string, meta?: Record<string, unknown>): void;
+}
+
+export function createLogger(options?: LoggerOptions): CloudLogger;
+export function createLogMiddleware(logger?: CloudLogger, options?: LoggerOptions): RequestHandler;
+export function extractTraceContext(req: unknown): {
+  traceId: string;
+  spanId?: string | null;
+  sampled: boolean;
+  raw?: string | null;
+  platform?: string;
+};
+
+// --- Cloud Metrics & Distributed Tracing ---
+
+export interface MetricLabels {
+  [key: string]: string | number;
+}
+
+export interface MetricSeries<T = unknown> {
+  labels: MetricLabels;
+  value?: number;
+  sum?: number;
+  count?: number;
+  buckets?: Array<{ le: number | string; count: number }>;
+}
+
+export class Counter {
+  name: string;
+  help: string;
+  type: 'counter';
+  constructor(name: string, help?: string);
+  inc(labels?: MetricLabels, value?: number): void;
+  inc(value?: number): void;
+  get(labels?: MetricLabels): number;
+  reset(): void;
+  toPrometheus(): string;
+}
+
+export class Gauge {
+  name: string;
+  help: string;
+  type: 'gauge';
+  constructor(name: string, help?: string);
+  set(labels: MetricLabels, value: number): void;
+  set(value: number): void;
+  inc(labels?: MetricLabels, value?: number): void;
+  inc(value?: number): void;
+  dec(labels?: MetricLabels, value?: number): void;
+  dec(value?: number): void;
+  get(labels?: MetricLabels): number;
+  reset(): void;
+  toPrometheus(): string;
+}
+
+export class Histogram {
+  name: string;
+  help: string;
+  type: 'histogram';
+  buckets: number[];
+  constructor(name: string, help?: string, buckets?: number[]);
+  observe(labels: MetricLabels, value: number): void;
+  observe(value: number): void;
+  reset(): void;
+  toPrometheus(): string;
+}
+
+export class MetricsRegistry {
+  constructor();
+  counter(name: string, help?: string): Counter;
+  gauge(name: string, help?: string): Gauge;
+  histogram(name: string, help?: string, buckets?: number[]): Histogram;
+  remove(name: string): void;
+  reset(): void;
+  formatPrometheus(): string;
+  formatJson(): Record<string, unknown>;
+}
+
+export function createMetricsRegistry(): MetricsRegistry;
+
+export interface MetricsConfig {
+  /** Enable or disable metrics collection and endpoint (default: true if metrics option is provided) */
+  enabled?: boolean;
+  /** Custom endpoint path (default: '/metrics') */
+  path?: string;
+  /** Whether to collect default Node.js system, event loop, pool, and cache metrics (default: true) */
+  collectDefault?: boolean;
+  /** Whether to inject x-trace-id and W3C traceparent response headers (default: true) */
+  traceHeader?: boolean;
+  /** Authentication bearer token required to access /metrics (string or { token: string }) */
+  auth?: string | { token: string } | null;
+  /** Custom histogram latency buckets in seconds */
+  buckets?: number[];
+}
+
+export function setupMetricsMiddleware(
+  app: unknown,
+  options?: boolean | MetricsConfig,
+  context?: Record<string, unknown>
+): {
+  config: MetricsConfig;
+  registry: MetricsRegistry;
+  requestMiddleware: RequestHandler;
+  getPrometheusMetrics: (scrapeContext?: Record<string, unknown>) => string;
+  getJsonMetrics: (scrapeContext?: Record<string, unknown>) => Record<string, unknown>;
+  requestsTotal: Counter;
+  requestDuration: Histogram;
+  activeRequests: Gauge;
+} | null;
+
+export namespace metrics {
+  export {
+    MetricsRegistry,
+    createMetricsRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    setupMetricsMiddleware,
+    MetricsConfig,
+  };
+}
+
+export interface ConsoleOptions {
+  rootDir?: string;
+  configPath?: string;
+  env?: string;
+  input?: NodeJS.ReadableStream;
+  output?: NodeJS.WritableStream;
+  useColors?: boolean;
+  history?: boolean;
+  historyPath?: string;
+  banner?: boolean;
+  prompt?: string;
+  eval?: string;
+}
+
+export interface ConsoleContext {
+  db: any;
+  models: Record<string, any>;
+  services: any;
+  service: (name: string, input?: any, ctx?: any) => Promise<any>;
+  queue: any;
+  events: any;
+  flags: any;
+  cache: any;
+  mailer: any;
+  webspresso: any;
+  env: string;
+  rootDir: string;
+  context: ConsoleContext;
+  help: () => void;
+  reload: () => Promise<{ models: string[]; services: string[] }>;
+  [key: string]: any;
+}
+
+export interface ConsoleSession {
+  replServer: any;
+  context: ConsoleContext;
+  meta: {
+    env: string;
+    rootDir: string;
+    hasDb: boolean;
+    modelsCount: number;
+    modelNames: string[];
+    hasServices: boolean;
+    servicesCount: number;
+    serviceNames: string[];
+  };
+  teardown: () => Promise<void>;
+}
+
+export function buildConsoleContext(options?: ConsoleOptions): Promise<{
+  context: ConsoleContext;
+  meta: ConsoleSession['meta'];
+  teardown: () => Promise<void>;
+}>;
+
+export function startConsole(options?: ConsoleOptions): Promise<ConsoleSession>;
+
+export function evaluateInConsole(
+  code: string,
+  options?: ConsoleOptions
+): Promise<{ result?: any; output: string | null; error?: Error }>;
+
+export namespace repl {
+  export {
+    buildConsoleContext,
+    startConsole,
+    evaluateInConsole,
+    ConsoleOptions,
+    ConsoleContext,
+    ConsoleSession,
+  };
+}
+
+
 
 
 

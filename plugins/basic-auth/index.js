@@ -249,9 +249,10 @@ function basicAuthPlugin(options = {}) {
       }
 
       // Mount global middleware if global: true
-      if (applyGlobal && ctx.app) {
+      const target = ctx.http || ctx.app;
+      if (applyGlobal && target) {
         const globalMw = createBasicAuthMiddleware(options);
-        ctx.app.use(globalMw);
+        target.use(globalMw);
       }
     },
   };

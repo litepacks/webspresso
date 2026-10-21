@@ -24,6 +24,10 @@ const {
   createTransactionContext,
   runTransaction,
 } = require('./transaction');
+const {
+  isServerlessEnvironment,
+  normalizeServerlessPoolConfig,
+} = require('./pool');
 
 /**
  * Create a database instance
@@ -39,9 +43,12 @@ function createDatabase(config) {
     throw new Error('Knex is required for ORM. Install it with: npm install knex');
   }
 
-  // Check if database driver is available in project's node_modules
+  const isD1 = config.client === 'd1' || Boolean(config.d1);
+  const d1Database = config.d1 || config.connection?.d1;
   const client = config.client;
-  if (client) {
+
+  // Check if database driver is available in project's node_modules (skip for D1 and pre-instantiated knex)
+  if (client && !isD1 && !config.knex) {
     const driverMap = {
       'better-sqlite3': 'better-sqlite3',
       'pg': 'pg',
@@ -76,10 +83,11 @@ function createDatabase(config) {
 
   // Create Knex instance (default useNullAsDefault: true for SQLite to prevent unneeded warnings)
   const isSqlite = client === 'better-sqlite3' || client === 'sqlite3';
-  const knexConfig = {
+  let knexConfig = {
     ...(isSqlite && config.useNullAsDefault === undefined ? { useNullAsDefault: true } : {}),
     ...config,
   };
+  knexConfig = normalizeServerlessPoolConfig(knexConfig);
 
   if (isSqlite) {
     const userAfterCreate = knexConfig.pool?.afterCreate;
@@ -114,6 +122,12 @@ function createDatabase(config) {
   let knexInstance;
   if (config.knex) {
     knexInstance = config.knex;
+  } else if (isD1) {
+    const { createD1Knex } = require('./d1');
+    if (!d1Database) {
+      throw new Error('Cloudflare D1 requires a D1 Database instance in `config.d1` or `config.connection.d1`.');
+    }
+    knexInstance = createD1Knex(d1Database, config);
   } else {
     try {
       knexInstance = knex(knexConfig);
@@ -320,9 +334,67 @@ function createDatabase(config) {
     });
   }
 
+  /**
+   * Execute multiple queries atomically in a batch.
+   * On Cloudflare D1: leverages native edge RPC batching (env.DB.batch).
+   * On Node.js (SQLite / Postgres / MySQL): executes queries inside an atomic transaction.
+   * @param {Array<any>|Function} queriesOrCallback - Array of queries or builder callback
+   * @returns {Promise<Array<any>>} Array of query results
+   */
+  async function batch(queriesOrCallback) {
+    if (isD1 && d1Database) {
+      const { executeD1Batch } = require('./d1');
+      return executeD1Batch(d1Database, queriesOrCallback);
+    }
+
+    let queryList = [];
+    if (typeof queriesOrCallback === 'function') {
+      const collector = [];
+      const batchProxy = {
+        add(q) {
+          collector.push(q);
+          return batchProxy;
+        },
+        raw(sql, bindings = []) {
+          collector.push({ sql, bindings });
+          return batchProxy;
+        },
+      };
+      const res = await queriesOrCallback(batchProxy);
+      queryList = Array.isArray(res) ? res : collector;
+    } else if (Array.isArray(queriesOrCallback)) {
+      queryList = queriesOrCallback;
+    } else if (queriesOrCallback) {
+      queryList = [queriesOrCallback];
+    }
+
+    if (queryList.length === 0) {
+      return [];
+    }
+
+    return transaction(async (trxContext) => {
+      const results = [];
+      for (const item of queryList) {
+        if (item && typeof item.toKnex === 'function') {
+          results.push(await item.toKnex().transacting(trxContext.trx));
+        } else if (item && typeof item.transacting === 'function') {
+          results.push(await item.transacting(trxContext.trx));
+        } else if (typeof item === 'string') {
+          results.push(await trxContext.trx.raw(item));
+        } else if (item && item.sql) {
+          results.push(await trxContext.trx.raw(item.sql, item.bindings || item.params || []));
+        } else {
+          results.push(await item);
+        }
+      }
+      return results;
+    });
+  }
+
   return {
     knex: knexInstance,
     migrate,
+    batch,
     getModel: getModelInstance,
     hasModel: hasModelInstance,
     getAllModels: getAllModelInstances,
@@ -460,4 +532,21 @@ module.exports = {
   getUserId: require('./scopes').getUserId,
   getTenantId: require('./scopes').getTenantId,
   createScopeContext: require('./scopes').createScopeContext,
+  // Cloudflare D1 Native Edge Dialect
+  createD1Knex: require('./d1').createD1Knex,
+  Client_D1: require('./d1').Client_D1,
+  executeD1Batch: require('./d1').executeD1Batch,
+  normalizeD1Bindings: require('./d1').normalizeD1Bindings,
+  // Serverless Connection Pool Management
+  isServerlessEnvironment,
+  normalizeServerlessPoolConfig,
+  pool: {
+    isServerlessEnvironment,
+    normalizeServerlessPoolConfig,
+  },
+  // Cloud Database Migrations
+  waitForDatabaseConnection: require('./migrate-cloud').waitForDatabaseConnection,
+  freeStaleMigrationLock: require('./migrate-cloud').freeStaleMigrationLock,
+  getMigrationStatus: require('./migrate-cloud').getMigrationStatus,
+  runCloudMigration: require('./migrate-cloud').runCloudMigration,
 };

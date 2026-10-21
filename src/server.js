@@ -17,6 +17,7 @@ const {
   createTimeoutMiddleware,
 } = require('../core/utils/timeout');
 
+const { createCoreApp } = require('../core/app');
 const { setAppContext } = require('./app-context');
 const { mountClientRuntime } = require('./client-runtime/mount');
 const { resolveClientRuntime } = require('./client-runtime/resolve');
@@ -652,8 +653,14 @@ function createApp(options = {}) {
   // Create Express application instance
   const app = express();
 
-  // Create plugin manager
-  const pluginManager = createPluginManager();
+  // Create or adopt Core Application instance (services, db, events, cache, breakers, shutdown)
+  const core = options.core || createCoreApp(options);
+  const pluginManager = core.pluginManager;
+  const shutdownManager = core.shutdownManager;
+  const appBreakers = core.breakers;
+  const serviceRegistry = core.serviceRegistry;
+  const eventDispatcher = core.events;
+  const appCache = core.cache;
   
   // Configure asset manager
   const projectBase = publicDir ? path.dirname(path.resolve(publicDir)) : process.cwd();
@@ -676,98 +683,7 @@ function createApp(options = {}) {
     ...(options.shutdown || options.server?.shutdown || {}),
   };
 
-  const shutdownManager = new ShutdownManager({
-    ...shutdownConfig,
-    logger: logging ? console : null,
-  });
-
   try {
-  // Circuit Breakers Layer initialization (isolated per application instance)
-  const appBreakers = options.breakers instanceof CircuitBreakerRegistry
-    ? options.breakers
-    : new CircuitBreakerRegistry();
-  app.breakers = appBreakers;
-  app.getBreaker = (name, opts) => appBreakers.getBreaker(name, opts);
-  app.breaker = (name, opts) => appBreakers.getBreaker(name, opts);
-  shutdownManager.onShutdown(() => {
-    appBreakers.resetAll();
-  });
-
-  // Services Layer initialization
-  const servicesDirOption = options.servicesDir ?? options.services?.dir;
-  const resolvedServicesDir = servicesDirOption
-    ? path.resolve(servicesDirOption)
-    : (fs.existsSync(path.join(process.cwd(), 'services'))
-      ? path.join(process.cwd(), 'services')
-      : null);
-
-  const serviceRegistry = createServiceRegistry({
-    servicesDir: resolvedServicesDir,
-    isDev,
-    logger: logging ? console : null,
-    timeouts,
-  });
-
-  // Auto-register built-in auth services if database is present and service is not custom-defined
-  if (options.db) {
-    const { createAuthServices } = require('./services/builtins/auth');
-    const authServices = createAuthServices({ db: options.db });
-    for (const [name, def] of Object.entries(authServices)) {
-      if (!serviceRegistry.has(name)) {
-        serviceRegistry.register(name, def);
-      }
-    }
-  }
-
-  // Auto-register built-in system services (health, cleanup, cache flush, info)
-  const { createSystemServices } = require('./services/builtins/system');
-  const systemServices = createSystemServices({
-    db: options.db ?? null,
-    serviceRegistry,
-    pluginManager,
-  });
-  for (const [name, def] of Object.entries(systemServices)) {
-    if (!serviceRegistry.has(name)) {
-      serviceRegistry.register(name, def);
-    }
-  }
-
-  // Events Subsystem (AdonisJS Events & Django Signals-inspired)
-  const { createEventDispatcher, loadListeners } = require('../core/events');
-  const eventDispatcher = options.events || createEventDispatcher({
-    queue: options.queue || null,
-    logger: logging ? console : null,
-  });
-  shutdownManager.onShutdown(() => {
-    eventDispatcher.removeAllListeners();
-  });
-
-  // Auto-bridge ORM lifecycle events (ModelEvents) to app.events ('model:created', etc.)
-  if (options.db) {
-    const { ModelEvents } = require('../core/orm/events');
-    eventDispatcher.bridgeOrm(ModelEvents);
-  }
-
-  // Auto-discover listeners from listeners/ or options.listenersDir
-  const listenersDirOption = options.listenersDir ?? options.listeners?.dir;
-  const resolvedListenersDir = listenersDirOption
-    ? path.resolve(listenersDirOption)
-    : (fs.existsSync(path.join(rootDir, 'listeners'))
-      ? path.join(rootDir, 'listeners')
-      : null);
-  if (resolvedListenersDir) {
-    loadListeners(resolvedListenersDir, eventDispatcher, { logger: logging ? console : null });
-  }
-
-  // Native High-Performance In-Memory Cache (LRU + Tagged Invalidation + Byte Budget)
-  const { createTaggedLruCache } = require('../core/cache');
-  const cacheOpt = options.cache ?? options.server?.cache;
-  const appCache = cacheOpt === false ? null : createTaggedLruCache(typeof cacheOpt === 'object' ? cacheOpt : {});
-
-  if (appCache) {
-    shutdownManager.onShutdown(() => appCache.clear());
-  }
-
   setAppContext({
     db: options.db ?? null,
     shutdownManager,
@@ -776,17 +692,22 @@ function createApp(options = {}) {
     cache: appCache,
   });
   
+  app.core = core;
   app.serviceRegistry = serviceRegistry;
   app.pluginManager = pluginManager;
   app.events = eventDispatcher;
   app.cache = appCache;
+  app.breakers = appBreakers;
+  app.getBreaker = (name, opts) => core.getBreaker(name, opts);
+  app.breaker = (name, opts) => core.breaker(name, opts);
+  app.service = (name, input, opts) => core.service(name, input, opts);
   if (options.queue) {
     app.queue = options.queue;
   }
 
-  // Unified Request Context & Lifecycle Initializer middleware
   const { renderStream } = require('../core/ssr/stream');
   const { createSseStream } = require('../core/sse/stream');
+  const { streamText, streamJson } = require('../core/stream/text-stream');
   app.use((req, res, next) => {
     // 1. Request draining check during graceful shutdown (allow health/readiness probes through)
     const isHealthEndpoint = req.path === '/healthz' || req.path === '/readyz' || req.path === '/health' ||
@@ -825,24 +746,15 @@ function createApp(options = {}) {
     req.breakers = appBreakers;
     req.breaker = (name, opts) => appBreakers.getBreaker(name, opts);
     req.retry = retry;
-    req.context = {
+    req.context = core.createContext({
       req,
       res,
-      db: options.db ?? null,
-      queue: options.queue ?? null,
-      events: eventDispatcher,
-      cache: appCache,
-      breakers: appBreakers,
-      getBreaker: (name, opts) => appBreakers.getBreaker(name, opts),
-      breaker: (name, opts) => appBreakers.getBreaker(name, opts),
-      retry,
       app,
       assetManager: appAssetManager,
-      serviceRegistry,
       ...(req.context || {}),
-    };
+    });
     req.service = (name, input, opts) =>
-      serviceRegistry.call(name, input, req.context, opts);
+      core.service(name, input, req.context, opts);
 
     // 4. SSR Streaming Response Helper
     res.renderStream = (templatePath, context = {}, renderOptions = {}) => {
@@ -855,6 +767,15 @@ function createApp(options = {}) {
     // 5. Server-Sent Events (SSE) Response Helper
     res.sse = (sourceOrOptions, maybeOptions) => {
       return createSseStream(req, res, sourceOrOptions, maybeOptions);
+    };
+
+    // 6. Text and NDJSON Streaming Helpers (AI / LLM Tokens)
+    res.streamText = (sourceOrCallback, maybeOptions) => {
+      return streamText(req, res, sourceOrCallback, maybeOptions);
+    };
+
+    res.streamJson = (sourceOrCallback, maybeOptions) => {
+      return streamJson(req, res, sourceOrCallback, maybeOptions);
     };
 
     next();
@@ -1251,7 +1172,27 @@ function createApp(options = {}) {
   // HTTP 103 Early Hints
   const earlyHintsOpt = options.earlyHints ?? options.server?.earlyHints ?? false;
   app.use(createEarlyHintsMiddleware(earlyHintsOpt));
-  
+
+  // Structured Cloud Logging & Distributed Trace Context
+  const { createLogger, createLogMiddleware, CloudLogger } = require('../core/logger');
+  let cloudLogger = null;
+  if (options.logger instanceof CloudLogger) {
+    cloudLogger = options.logger;
+  } else if (options.logger && typeof options.logger === 'object' && options.logger !== console) {
+    cloudLogger = createLogger(options.logger);
+  } else if (options.logger === true || (!isTest && (process.env.K_SERVICE || process.env.AWS_EXECUTION_ENV))) {
+    cloudLogger = createLogger(typeof options.logger === 'object' ? options.logger : {});
+  } else if (options.logger) {
+    cloudLogger = options.logger;
+  }
+
+  if (cloudLogger) {
+    app.logger = cloudLogger;
+    if (cloudLogger instanceof CloudLogger) {
+      app.use(createLogMiddleware(cloudLogger, typeof options.logger === 'object' ? options.logger : {}));
+    }
+  }
+
   // Attach normalized timeouts to app and incoming requests
   app.set('timeouts', timeouts);
   app.use((req, res, next) => {
@@ -1320,6 +1261,19 @@ function createApp(options = {}) {
     queue: options.queue,
     shutdownManager,
   });
+
+  // Cloud Metrics & Distributed Tracing (/metrics)
+  const { setupMetricsMiddleware } = require('../core/metrics');
+  const metricsOpt = options.metrics ?? options.server?.metrics;
+  const metricsManager = setupMetricsMiddleware(app, metricsOpt, {
+    db: options.db,
+    cache: options.cache,
+    breakers: core.breakers,
+    shutdownManager,
+  });
+  if (metricsManager) {
+    app.metrics = metricsManager.registry;
+  }
   
   // Authentication middleware (if auth manager provided)
   let authMiddleware = null;
@@ -1331,6 +1285,27 @@ function createApp(options = {}) {
     middlewares.auth = authMiddleware.auth;
     middlewares.guest = authMiddleware.guest;
     middlewares.jwt = authMiddleware.jwt;
+  }
+
+  // Feature Flags & Canary Traffic Splitter
+  const flagsOpt = options.flags;
+  if (flagsOpt) {
+    const { createFeatureFlagManager } = require('../core/flags');
+    const flagManager = createFeatureFlagManager(typeof flagsOpt === 'object' ? flagsOpt : { flags: flagsOpt });
+    app.flags = flagManager;
+    app.use(flagManager.middleware());
+  } else {
+    app.use((req, res, next) => {
+      req.hasFeature = () => false;
+      req.getVariant = () => null;
+      req.flags = {
+        isEnabled: () => false,
+        getVariant: () => null,
+        evaluate: () => ({ enabled: false, variant: null, reason: 'no_flags_configured' }),
+        all: () => ({}),
+      };
+      next();
+    });
   }
 
   // Bouncer authorization middleware (AdonisJS Bouncer & Django Permissions-inspired)
@@ -1472,34 +1447,27 @@ function createApp(options = {}) {
     return d.toString();
   });
 
-  // Auto-discover module services and middlewares if modules directory exists
-  const modulesDirCandidate = options.modules?.dir
-    ? (path.isAbsolute(options.modules.dir) ? options.modules.dir : path.join(rootDir, options.modules.dir))
-    : (fs.existsSync(path.join(rootDir, 'src/modules')) ? path.join(rootDir, 'src/modules') : (fs.existsSync(path.join(rootDir, 'modules')) ? path.join(rootDir, 'modules') : null));
-
-  if (modulesDirCandidate && fs.existsSync(modulesDirCandidate) && options.modules !== false) {
-    try {
-      const entries = fs.readdirSync(modulesDirCandidate, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory() && !entry.name.startsWith('_') && !entry.name.startsWith('.')) {
-          const details = discoverModuleDetails(path.join(modulesDirCandidate, entry.name), entry.name);
-          for (const [sName, sDef] of Object.entries(details.services)) {
-            if (!serviceRegistry.has(sName)) {
-              serviceRegistry.register(sName, sDef);
-            }
-          }
-          for (const [mName, mFn] of Object.entries(details.middlewares)) {
-            middlewares[`${entry.name}.${mName}`] = mFn;
-          }
-        }
-      }
-    } catch (mErr) {
-      console.warn('[webspresso] Warning discovering modules:', mErr.message);
-    }
+  // Merge module middlewares discovered by core
+  if (core.moduleMiddlewares && typeof core.moduleMiddlewares === 'object') {
+    Object.assign(middlewares, core.moduleMiddlewares);
   }
 
+  const { createExpressHttpAdapter } = require('../core/http');
+  const httpAdapter = createExpressHttpAdapter(app, options);
+  app.http = httpAdapter;
+
   // Register plugins (sync) — middlewares is the same object later passed to mountPages
-  const pluginContext = { app, nunjucksEnv, options, middlewares, shutdownManager, events: eventDispatcher };
+  const pluginContext = {
+    app,
+    core,
+    http: httpAdapter,
+    nunjucksEnv,
+    options,
+    middlewares,
+    shutdownManager,
+    events: eventDispatcher,
+    serviceRegistry,
+  };
   pluginManager.registerSync(plugins, pluginContext);
   
   // Request logging & query profiling middleware
@@ -1914,9 +1882,17 @@ function createApp(options = {}) {
 
     // Log errors based on severity
     if (status >= 500) {
-      console.error('Server error:', err);
+      if (req && req.logger && typeof req.logger.error === 'function') {
+        req.logger.error('Server error: ' + (err.message || String(err)), { error: err });
+      } else {
+        console.error('Server error:', err);
+      }
     } else if (isDev && status >= 400) {
-      console.warn(`[webspresso] HTTP ${status}:`, normalized.message);
+      if (req && req.logger && typeof req.logger.warn === 'function') {
+        req.logger.warn(`HTTP ${status}: ${normalized.message}`);
+      } else {
+        console.warn(`[webspresso] HTTP ${status}:`, normalized.message);
+      }
     }
 
     res.status(status);
@@ -2065,13 +2041,15 @@ function createApp(options = {}) {
   
   Object.assign(app, {
     app,
+    core,
+    http: httpAdapter,
     nunjucksEnv,
     pluginManager,
     authMiddleware,
     shutdownManager,
     events: eventDispatcher,
     timeouts,
-    close: (reason) => shutdownManager.close(reason),
+    close: (reason) => core.close(reason),
   });
   return app;
   } catch (err) {

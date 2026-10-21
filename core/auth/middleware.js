@@ -4,8 +4,19 @@
  * @module core/auth/middleware
  */
 
-const session = require('express-session');
-const cookieParser = require('cookie-parser');
+let _session = null;
+function getSession() {
+  if (!_session) _session = require('express-session');
+  return _session;
+}
+
+let _cookieParser = null;
+function getCookieParser() {
+  if (!_cookieParser) _cookieParser = require('cookie-parser');
+  return _cookieParser;
+}
+
+const { authenticateRequest } = require('./authenticate');
 const { createListSessionsHandler, createRevokeSessionHandler } = require('./session-manager');
 
 /**
@@ -15,6 +26,8 @@ const { createListSessionsHandler, createRevokeSessionHandler } = require('./ses
  */
 function createAuthMiddleware(authManager) {
   const config = authManager.config;
+  const session = getSession();
+  const cookieParser = getCookieParser();
 
   const sessionConfig = authManager.getSessionConfig();
 
@@ -67,72 +80,7 @@ function createAuthMiddleware(authManager) {
    */
   async function authenticate(req, res, next) {
     try {
-      // Initialize req.user as null
-      req.user = null;
-      
-      // Create request-bound auth helper
-      req.auth = authManager.createRequestAuth(req, res);
-
-      // Check Bearer JWT token header first
-      const authHeader = req.headers?.authorization || req.headers?.Authorization;
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        const token = authHeader.substring(7).trim();
-        try {
-          const payload = authManager.verifyJwt(token);
-          req.token = token;
-          req.jwtPayload = payload;
-          if (payload.id) {
-            const user = await authManager.findUserById(payload.id);
-            req.user = user || payload;
-          } else {
-            req.user = payload;
-          }
-        } catch (jwtErr) {
-          // Invalid or expired JWT token header
-        }
-      }
-
-      // Try to load user from session if not authenticated by JWT
-      if (!req.user && req.session?.userId) {
-        // If session tracking is enabled, verify session has not been revoked
-        let isSessionValid = true;
-        if (authManager.sessionManager && req.sessionID) {
-          isSessionValid = await authManager.isSessionValid(req.sessionID, req.session.userId);
-        }
-
-        if (!isSessionValid) {
-          // Session was revoked remotely
-          delete req.session.userId;
-          if (typeof req.session.destroy === 'function') {
-            req.session.destroy(() => {});
-          }
-        } else {
-          const user = await authManager.findUserById(req.session.userId);
-          if (user) {
-            req.user = user;
-            if (req.sessionID && authManager.sessionManager) {
-              authManager.touchSession(req.sessionID).catch(() => {});
-            }
-          } else {
-            // User no longer exists, clear session
-            delete req.session.userId;
-          }
-        }
-      }
-
-      // If no user in session or JWT, try remember me token
-      if (!req.user && authManager.rememberTokens) {
-        const user = await authManager.verifyRememberToken(req, res);
-        if (user) {
-          req.user = user;
-          req.session.userId = user.id;
-          req.session.loggedInAt = Date.now();
-          if (req.sessionID && authManager.sessionManager) {
-            authManager.trackSession(req.sessionID, user.id, req).catch(() => {});
-          }
-        }
-      }
-
+      await authenticateRequest(req, res, authManager);
       next();
     } catch (error) {
       console.error('Authentication middleware error:', error);

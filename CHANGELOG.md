@@ -5,7 +5,139 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.106] - 2026-10-21
+
+### Added
+
+#### Interactive REPL Console (`core/console/`, `bin/commands/console.js`, `tests/unit/console.test.js`)
+- **Rails- & Tinker-Inspired Interactive Terminal Console (`webspresso console` / `webspresso c`)**:
+  - Implemented zero-dependency interactive REPL console with auto-injected database (`db`), models (`Note`, `User`), services (`services`, `service()`), queues (`queue`), events (`events`), feature flags (`flags`), and cache (`cache`).
+  - **Direct Model Shortcuts**: Auto-binds registered ORM models directly to the REPL context (`await Note.find()`, `await User.findById(1)`).
+  - **Custom REPL Dot-Commands**: Added `.models` (inspect tables and schema), `.services` (inspect registered business services), `.routes` (scan and display discovered API and SSR routes), `.flags` (view active feature flags), and `.reload` (hot-reload models and services from filesystem without session restart).
+  - **One-Off Expression Evaluator (`-e, --eval`)**: Evaluates JavaScript expressions with top-level await and prints inspected output directly to stdout before graceful connection teardown.
+  - **Persistent History**: Auto-configures `.webspresso_history` for persistent cross-session command recall.
+  - **Full TypeScript Type Declarations & Testing**: Added complete type contracts (`ConsoleOptions`, `ConsoleContext`, `ConsoleSession`) to `index.d.ts` and verified with 12 automated Vitest unit tests in `tests/unit/console.test.js`.
+
+#### Type-Safe Frontend Client Generator (`src/dev/client-gen.js`, `bin/commands/client-generate.js`, `tests/unit/client-gen.test.js`)
+- **End-to-End Type-Safe Client Generator (`webspresso client:generate`)**:
+  - Automatically scans API routes (`pages/api/**/*.js`) and translates Zod schemas (`body`, `query`, `params`, `response`) into pure TypeScript interfaces.
+  - Generates a standalone, zero-dependency universal fetch client (`createWebspressoClient`) for Next.js, Vite, React, Vue, Svelte, or React Native.
+  - Supports recursive Proxy routing (`client.api.notes.get()`, `client.api.notes('123').delete()`), dynamic query serialization, bearer auth token callbacks (`getToken`), and typed error boundaries (`WebspressoClientError`).
+  - Verified with 4 unit tests in `tests/unit/client-gen.test.js` and CLI integration.
+
+#### DB Studio Live Telemetry & Queue Monitoring (`core/studio/`, `tests/unit/studio.test.js`)
+- **Real-Time Telemetry & Monitoring Subsystem**:
+  - Added Server-Sent Events (SSE) stream (`GET /_studio/api/live`) and snapshot endpoint (`GET /_studio/api/telemetry`).
+  - Real-time monitoring of Node.js memory metrics (heap used/total, RSS), Knex database pool active/idle connections, background job queues, and circuit breaker trip states.
+  - Interactive "Live Telemetry" tab in Studio UI powered by Tailwind 4 and EUIXjs.
+  - Remote Circuit Breaker reset capabilities (`POST /_studio/api/breakers/:name/reset`) and Queue controls (`POST /_studio/api/queue/:action`).
+  - Verified with comprehensive unit test suite in `tests/unit/studio.test.js`.
+
+#### Feature Flags & Canary Traffic Splitter (`core/flags`, `tests/unit/core-flags.test.js`)
+- **Zero-Dependency Feature Flag Engine (`core/flags/`)**:
+  - Implemented high-throughput feature flag management and traffic splitting engine with zero external runtime dependencies.
+  - **Deterministic FNV-1a Hashing (`getBucket`)**: Computes stable 0-99 percentage buckets for user identifiers across distributed instances without database hits or network overhead.
+  - **Comprehensive Targeting Rules**: Supports boolean flags, canary percentage rollouts (`rollout: 25`), user whitelists (`users`), role targeting (`roles`), email domain matching (`emailDomains`), multivariate A/B testing variants (`variants`), and custom conditional predicates (`condition`).
+  - **Full-Stack Framework Integration**:
+    - **Application Kernel (`createApp({ flags })`)**: Instantiates `app.flags` and mounts universal middleware.
+    - **Nunjucks SSR Templates**: Seamless access through `{{ fsy.hasFeature('flag_name') }}` and `{{ fsy.flag('theme') }}`.
+    - **API Route Guards (`defineApi({ flag })`)**: Automatically protects endpoints with HTTP 404 (or configured status) if feature is disabled.
+    - **Environment Overrides**: Instant zero-downtime flag toggling via `FEATURE_<KEY>=true|false`.
+  - **Full TypeScript Type Declarations & Testing**: Added complete type contracts to `index.d.ts` and verified with 22 automated Vitest unit tests in `tests/unit/core-flags.test.js`.
+
+#### Native Zero-Dependency Rate Limiting Engine (`core/rate-limit`, `tests/unit/core-rate-limit.test.js`)
+- **Zero-Dependency High-Performance Rate Limiter (`core/rate-limit/`)**:
+  - Implemented framework-agnostic rate limiting engine working natively across both Express `(req, res, next)` and modern edge/serverless contexts like Hono `(c, next)`.
+  - **Memory Leak-Free Sliding Window Store (`MemoryRateLimitStore`)**: Tracks timestamp hits with sub-millisecond precision, auto-expires stale buckets, and features an unref'd sweep timer preventing process hangs or memory unbounded growth.
+  - **Distributed Redis Store (`RedisRateLimitStore`)**: Atomic sliding window rate limiting backed by Redis sorted sets (`ZREMRANGEBYSCORE`, `ZADD`, `ZCARD`, `PEXPIRE`) with fail-open fallback (`passOnStoreError: true`). Supports official `redis`, `ioredis`, or Webspresso's internal `MiniRedisClient`.
+  - **RFC 6585 & IETF Draft Compliance**: Automatically emits standard headers (`RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`, `RateLimit-Policy`), `Retry-After` on HTTP 429, and optional legacy headers (`X-RateLimit-*`).
+  - **Intelligent Client IP Extraction (`extractClientIp`)**: Seamlessly resolves real client IPs through reverse proxies, supporting `CF-Connecting-IP` (Cloudflare), `Fastly-Client-IP`, `X-Forwarded-For` chains, and `X-Real-IP`.
+  - **Skip Logic & Dynamic Handlers**: Supports `skip(req)`, `skipFailedRequests`, `skipSuccessfulRequests`, custom status codes, and custom exceeded handler callbacks.
+  - **Preserved Plugin Ecosystem**: Kept `plugins/rate-limit` intact for existing users relying on `express-rate-limit` peer dependencies.
+  - **TypeScript Declarations & Testing**: Full typings in `index.d.ts` and 30 automated Vitest unit tests in `tests/unit/core-rate-limit.test.js`.
+
+#### Cloud-Native Queue Adapters (`AWS SQS` & `Google Cloud Pub/Sub`) (`core/queue/adapters/sqs.js`, `core/queue/adapters/pubsub.js`, `tests/unit/cloud-queue-adapters.test.js`)
+- **Zero-Dependency AWS SQS Queue Adapter (`SqsQueueAdapter`)**:
+  - Implemented zero-dependency AWS SQS adapter using native Node.js HTTPS and standard AWS Signature Version 4 (SigV4) HMAC-SHA256 request signing.
+  - **Pull & Polling Workers**: Supports configurable long-polling wait times (`waitTimeSeconds`, up to 20s), visibility timeouts, message receipt handle tracking, and job name filtering with immediate visibility release for unhandled jobs.
+  - **Message Scheduling & Delays**: Automatically computes SQS `DelaySeconds` (up to 900s) from job `runAt` scheduling.
+  - **AWS Lambda SQS Batch Execution (`processBatch`)**: Seamlessly dispatches AWS Lambda SQS event batches (`event.Records`) directly through the `QueueManager` with event emitter hooks (`job:start`, `job:completed`, `job:failed`) without needing long-polling worker processes.
+- **Zero-Dependency Google Cloud Pub/Sub Queue Adapter (`PubSubQueueAdapter`)**:
+  - Implemented zero-dependency Google Cloud Pub/Sub adapter utilizing standard REST APIs (`:publish`, `:pull`, `:acknowledge`, `:modifyAckDeadline`) with automatic base64 payload encoding/decoding and attribute tagging.
+  - **Resource Normalization**: Automatically formats full topic and subscription resource paths (`projects/PROJECT_ID/topics/TOPIC` and `projects/PROJECT_ID/subscriptions/SUB`).
+  - **Cloud Run Push Subscription Webhooks (`processPushRequest`)**: Handles incoming HTTP push subscription webhooks from Cloud Run or App Engine. Returns HTTP 200 on success, HTTP 204 for unhandled jobs, and HTTP 500 on execution failure so Pub/Sub automatically schedules retries with exponential backoff.
+- **Dual Runtime Support**: Accepts either native zero-dependency HTTP configurations or optional official SDK clients (`@aws-sdk/client-sqs`, `@google-cloud/pubsub`).
+- **Full TypeScript Type Declarations & Testing**: Added complete type contracts to `index.d.ts` and verified with 15 automated Vitest unit tests in `tests/unit/cloud-queue-adapters.test.js`.
+
+#### Cloud Migration Jobs & Zero-Downtime Database Deploy (`bin/commands/add-migration-job.js`, `core/orm/migrate-cloud.js`, `tests/unit/cli/migration-job.test.js`)
+- **Pre-Deploy Cloud Migration Job Generator (`webspresso add:migration-job`)**:
+  - Scaffolds isolated, single-run database migration jobs for Google Cloud Run (`cloudrun-job.yaml`, `deploy-cloudrun-migration.sh`), AWS ECS Fargate (`ecs-migration-task.json`, `deploy-aws-migration.sh`), and Kubernetes / Helm pre-upgrade hooks (`k8s/migration-job.yaml`).
+  - Completely decouples schema migrations from web server startup commands, preventing multi-instance concurrency locks and crash loops.
+- **Resilient Cloud Migration Engine (`core/orm/migrate-cloud.js`, `webspresso db:migrate --safe`)**:
+  - Added connection retry with exponential backoff (`waitForDatabaseConnection`) to handle Cloud SQL Auth Proxy and AWS Aurora cold starts.
+  - Automatic stale lock detection & auto-healing (`freeStaleMigrationLock`) to clear hanging locks from aborted serverless jobs.
+  - Dry-run mode (`webspresso db:migrate --dry-run`) to inspect pending migrations without applying changes.
+- **Deployment Auditing (`webspresso deploy:check`)**:
+  - Automatically audits projects deploying to Cloud Run or AWS ECS to ensure an isolated migration strategy is in place.
+
+#### Cloud Metrics & Distributed Tracing (`core/metrics`, `tests/unit/metrics.test.js`)
+- **Enterprise Prometheus Exposition & Distributed Tracing (`core/metrics`)**:
+  - Implemented zero-dependency in-memory Prometheus exposition engine producing compliant `text/plain; version=0.0.4; charset=utf-8` output at `/metrics` and JSON telemetry at `/metrics.json`.
+  - **Metric Primitives**: `Counter`, `Gauge`, and `Histogram` with cumulative buckets, sum, count, and label formatting.
+  - **HTTP Request Telemetry**: Automated tracking of `webspresso_http_requests_total{method, route, status}`, `webspresso_http_request_duration_seconds{method, route}`, and in-flight active requests `webspresso_http_active_requests`. Internal scraper calls to `/metrics` and `/healthz` are excluded from tracking to avoid dashboard noise.
+  - **Automated Runtime Collectors**: Collects process uptime, memory usage (heap total/used, RSS, external), CPU usage (user/system), event loop lag quantiles (`perf_hooks.monitorEventLoopDelay`), Knex connection pool status (size, used, available), in-memory LRU cache entries and byte budget, and circuit breaker states/failures.
+  - **Distributed Tracing Context Propagation**: Automatically parses incoming W3C (`traceparent`), GCP (`x-cloud-trace-context`), AWS (`x-amzn-trace-id`), or correlation headers and injects `x-trace-id` and W3C `traceparent` (`00-${traceId}-${spanId}-01`) onto outgoing response headers.
+  - **Security & Authorization**: Built-in optional bearer token authentication (`auth: 'secret-token'`).
+  - **Full TypeScript Types & DX**: Exported `MetricsRegistry`, `createMetricsRegistry`, `metrics` namespace, and `createApp({ metrics: true })` configuration option.
+
+#### Zero-Secret CI/CD Pipeline Scaffolding (`bin/commands/add-ci.js`, `tests/unit/cli/cloud-commands.test.js`)
+- **Automated Keyless CI/CD Generator (`webspresso add:ci`)**:
+  - Scaffolds secure, keyless GitHub Actions workflows using Google Workload Identity Federation (WIF) and AWS IAM OIDC roles to eliminate static long-lived credentials.
+  - Automatically incorporates `npm test` and `npx webspresso deploy:check --strict` gating before container building or cloud deployment.
+  - Supports Google Cloud Run (`deploy-cloudrun.yml`), AWS App Runner / ECS (`deploy-aws.yml`), Cloudflare Workers (`deploy-cloudflare.yml`), general multi-version testing (`ci.yml`), and GitLab CI pipelines (`.gitlab-ci.yml`).
+
+#### Cloud Secrets Management & Synchronization (`core/secrets`, `bin/commands/secrets-pull.js`, `tests/unit/secrets.test.js`)
+- **Enterprise Multi-Cloud Secret Manager (`core/secrets`)**:
+  - Implemented zero-dependency integration with Google Cloud Secret Manager and AWS Secrets Manager / SSM Parameter Store.
+  - **Google Cloud Secret Manager**: Automated OAuth2 token acquisition from the local GCP Metadata Server in Cloud Run/GKE, RSA-SHA256 signed JWT assertions for service account keys, and direct REST API v1 access with base64 decoding.
+  - **AWS Secrets Manager & SSM Parameter Store**: Standards-compliant AWS Signature Version 4 (SigV4) HMAC-SHA256 request signing with automatic region and credential resolution.
+  - **In-Memory Caching & Rotation**: Bounded RAM caching with configurable TTL (`cacheTtl: '5m'`), single-secret invalidation (`secrets.invalidate(name)`), and full cache clearing (`secrets.clearCache()`).
+  - **JSON Bundle Unpacking & Dot Notation**: Resolves subkeys within JSON secret bundles (e.g. `await secrets.get('prod/app.DATABASE_URL')`) and unpacks bundles into `process.env`.
+  - **Bootstrap Environment Hydration**: `loadSecrets({ provider: 'auto', secrets: { ... } })` hydrates `process.env` before database or server initialization.
+- **Local Developer Secrets Pull CLI (`webspresso secrets:pull`)**:
+  - Added CLI command to pull secrets directly from GCP or AWS into a local `.env.local` file with support for key discovery, JSON bundles, dry-run previews, and custom formatters.
+
+#### Cloud Platform Preflight & Deployment Auditing (`bin/commands/deploy-check.js`, `tests/unit/cli/docker-deploy.test.js`)
+- **Multi-Cloud Preflight Verification (`webspresso deploy:check --platform <platform>`)**:
+  - Implemented target platform auditing with automatic detection (`cloudrun`, `aws`, `cloudflare`, `docker`, or `generic`) from project configuration markers and cloud environment variables.
+  - **Google Cloud Run**: Ephemeral SQLite and local file upload storage warnings, SIGTERM shutdown timeout alignment (`timeout <= 10000ms`), `.gcloudignore` secrets exclusion to prevent `.env` leaks in Cloud Build, `cloudbuild.yaml` CI/CD pipeline verification, and dynamic `process.env.PORT` binding.
+  - **AWS (App Runner & ECS Fargate)**: Ephemeral storage audits, `apprunner.yaml` and `ecs-task-definition.json` JSON validation, and CloudWatch log driver (`awslogs`) verification.
+  - **Cloudflare Workers**: `wrangler.toml` configuration verification and `nodejs_compat` compatibility flag checks.
+  - **Actionable Remediation Guidance**: Actionable remediation steps emitted in human-readable console output and machine-readable JSON reports (`--json`), with `--strict` mode support for CI/CD gates.
+
+#### Core Decoupling & Framework Independence (`core/app.js`, `core/index.js`, `core/http`, `core/auth`, `index.js`)
+- **Pure Core Container (`core/app.js`, `core/index.js`)**:
+  - Implemented `CoreApp` and `createCoreApp(options)` decoupling business logic, service registry, validation, authorization, ambient database transactions, events, circuit breakers, cache, and shutdown management from HTTP/Express concerns.
+  - Exported standalone `./core` package entry point (`require('webspresso/core')`) with zero transitive dependency on Express (`require.cache` contains 0 Express modules).
+  - Direct service invocation without HTTP server or mock `req`/`res` objects (`core.service(name, input, ctxOrOpts)`).
+  - Execution context creation via `core.createContext(extra)` preserving prototype inheritance and object identity without shallow-copy loss.
+- **HTTP Adapter & Pipeline Layer (`core/http`)**:
+  - Introduced `HttpAdapter` abstract contract (`use`, `route`, `get`, `post`, `put`, `delete`, `patch`, `all`, `listen`, `getApp`) with default `ExpressHttpAdapter` and modern zero-dependency `HonoHttpAdapter`.
+  - Added `createHonoHttpAdapter(app, options)` supporting Web standard `app.request()` fetch execution and native Node `http.createServer` socket binding.
+  - Framework-agnostic execution pipelines: `executeApiPipeline` and `executePagePipeline` decoupling API endpoints and SSR loaders from Express `(req, res, next)` internals.
+  - Route error enrichment helper `enrichRouteError` attaching path, method, source file, module, and request ID metadata.
+  - End-to-end integration test suite `tests/integration/real-world-app.test.js` validating 100% behavioral parity between Express and Hono runtimes across database models, domain services, Zod API validation, JWT dual auth, and SSR page rendering.
+- **Auth & Session Decoupling (`core/auth/authenticate.js`, `core/auth/middleware.js`)**:
+  - Extracted framework-agnostic `authenticateRequest(req, res, authManager)` resolving Bearer JWT header, session store, and remember-me tokens without Express middleware coupling.
+  - Lazified `express-session` and `cookie-parser` loading in `core/auth/middleware.js` to ensure zero session overhead when using pure JWT, hashing, or TOTP.
+- **Plugin HTTP Contract (`ctx.http`)**:
+  - Injected `ctx.http` (`HttpAdapter`) into `PluginRegisterContext` alongside `ctx.app`, providing a framework-agnostic interface (`use`, `route`, `get`, `post`, etc.) for plugin routes and middlewares without hardcoding Express `app.use()`.
+  - Added `http: options.http || null` to `CoreAppOptions` and `CoreApp`.
+- **Express Integration & Full Backward Compatibility (`src/server.js`, `index.js`)**:
+  - `createApp(options)` now delegates core subsystem orchestration to `CoreApp` while preserving 100% of existing Express routes, middleware (`app.use`, `app.get`), router stack, and SSR/API loaders.
+  - Added `app.core`, `app.http`, and `app.service(name, input, opts)` directly on the Webspresso application instance.
+  - Seamless request context binding: `req.context` and `req.service` injected early and propagated across API handlers, SSR page loaders, and nested service calls.
+  - Extracted `CLIENT_RUNTIME_BASE` into `src/client-runtime/constants.js` and lazified Express middleware imports in `core/limits` to keep pure imports lean.
 
 ## [0.0.105] - 2026-10-18
 

@@ -240,9 +240,10 @@ function apiKeyPlugin(options = {}) {
       }
 
       // 3. Mount global middleware if global: true
-      if (applyGlobal && ctx.app) {
+      const target = ctx.http || ctx.app;
+      if (applyGlobal && target) {
         const globalMw = createApiKeyMiddleware(options);
-        ctx.app.use(globalMw);
+        target.use(globalMw);
       }
     },
   };

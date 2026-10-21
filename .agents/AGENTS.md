@@ -19,6 +19,12 @@ When tasked with a feature or bugfix, **immediately consult the corresponding to
 | **Background Jobs & Worker Queue** | [`.agents/QUEUE.md`](QUEUE.md) | `jobs/` |
 | **Decoupled Events & Signals** | [`.agents/EVENTS.md`](EVENTS.md) | `core/events/`, `listeners/` |
 | **Fault Tolerance / Circuit Breaker / Retry** | [`.agents/RESILIENCE.md`](RESILIENCE.md) | `core/resilience/` |
+| **Stateless Scale-Out (Redis Sessions & DB Pool)** | [`.agents/SCALE_OUT.md`](SCALE_OUT.md) | `core/auth/redis-session.js`, `core/orm/pool.js` |
+| **Cloud Secrets (GCP & AWS Secret Manager)** | [`.agents/SECRETS.md`](SECRETS.md) | `core/secrets/`, `bin/commands/secrets-pull.js` |
+| **Cloud Metrics & Distributed Tracing** | [`.agents/METRICS.md`](METRICS.md) | `core/metrics/`, `/metrics` |
+| **Cloud Migration Jobs (Zero-Downtime DB Deploy)** | [`.agents/MIGRATION_JOBS.md`](MIGRATION_JOBS.md) | `bin/commands/add-migration-job.js`, `core/orm/migrate-cloud.js` |
+| **Rate Limiting Engine (Zero-Dependency & Redis)** | [`.agents/RATE_LIMIT.md`](RATE_LIMIT.md) | `core/rate-limit/` |
+| **Feature Flags & Canary Splitter (`core/flags`)** | [`.agents/FLAGS.md`](FLAGS.md) | `core/flags/` |
 | **API Signatures & Types Verification** | [`index.d.ts`](../index.d.ts) | **Canonical Ground Truth** |
 
 ---
@@ -50,10 +56,10 @@ This `.agents/` customization root is organized into modular topic guides:
 10. **[Realtime Layer & Adapters](.agents/REALTIME.md)** — Framework-agnostic realtime layer (`core/realtime`), generic WebSocket, SSE, and Socket.IO adapters, subscription identity, backoff reconnect, and auth lifecycle.
 11. **[Email Plugin Guide](.agents/EMAIL.md)** — MJML template compilation, Nodemailer transport, DB delivery logs, Auth Email bridge, and Admin UI.
 12. **[Admin Panel Customization](.agents/ADMIN.md)** — Extending Mithril.js Admin Panel SPA (Custom pages `component.js`, custom field renderers, widgets, single & bulk actions).
-13. **[CLI Tooling & Commands](CLI.md)** — `webspresso dev`, `build`, `doctor`, `db:migrate`, `db:seed`, `polar:migrate`, `favicon:generate`, `add:tailwind`, `add:docker`, `deploy:check`, `agents:init`.
+13. **[CLI Tooling & Commands](CLI.md)** — `webspresso dev`, `build`, `doctor`, `db:migrate`, `db:seed`, `polar:migrate`, `favicon:generate`, `add:tailwind`, `add:docker`, `add:cloudrun`, `add:aws`, `add:cloudflare`, `deploy:check`, `agents:init`.
 14. **[Development & Testing Workflow](.agents/WORKFLOW.md)** — CLI commands, Vitest unit/integration testing, Playwright E2E tests, TypeScript type checking, and zero regression policy.
 15. **[Coding Standards & Conventions](.agents/CONVENTIONS.md)** — Zero external dependencies policy, strict function signature & schema verification, clean component separation, and log traceback inspection rules.
-16. **[Background Job Queue](.agents/QUEUE.md)** — In-Memory, Knex Database, and Distributed Redis queue adapters, job auto-discovery (`jobs/`), retries, and graceful draining.
+16. **[Background Job Queue](.agents/QUEUE.md)** — In-Memory, Knex Database, Distributed Redis, AWS SQS, and Google Cloud Pub/Sub queue adapters, job auto-discovery (`jobs/`), retries, and graceful draining.
 17. **[SSR Streaming & Chunked Transfer](.agents/STREAMING.md)** — Native HTTP chunked streaming (`res.renderStream()`), deferred data loader slots (`defer: { key: promise }`), and TTFB optimization.
 18. **Polar billing production checklist** — [docs/guides/polar-production-checklist.md](../docs/guides/polar-production-checklist.md) (env, webhooks, rate limits, external tier hooks, CSP). Plugin reference: [PLUGINS.md § polarPlugin](PLUGINS.md).
 19. **[Decoupled Events & Signals Architecture](.agents/EVENTS.md)** — Zero-dependency enterprise event dispatcher (`core/events`), sync/async/parallel/serial/waterfall dispatch, wildcard listeners (`order.*`), Django-style `Signal` and sender filtering, queue bridging, and listener auto-discovery.
@@ -62,6 +68,13 @@ This `.agents/` customization root is organized into modular topic guides:
 22. **[Cloud & Kubernetes Health Probes](.agents/HEALTH.md)** — Zero-dependency RFC-compliant liveness (`/healthz`), readiness (`/readyz`), and combined diagnostic (`/health`) probes (`core/health`), event loop lag telemetry, database/queue health monitors, automatic HTTP 503 draining on graceful shutdown, and `createApp({ healthCheck: true })`.
 23. **[LRU & Tagged Cache Engine](.agents/CACHE.md)** — Zero-dependency, memory-bounded in-memory LRU cache (`core/cache`), byte budget constraints (`maxBytes` / `maxMemoryMb`), TTL expiration, stampede protection (`getOrSet`), leak-free tag invalidation (`TaggedLruCache`), ORM query cache provider, and `createApp({ cache })`.
 24. **[Enterprise Resilience & Circuit Breaker](.agents/RESILIENCE.md)** — Zero-dependency fault tolerance engine (`core/resilience`), three-state `CircuitBreaker` (`CLOSED`, `OPEN`, `HALF_OPEN`), rolling window failure rate, per-call execution timeout, fallback handlers, and exponential backoff retry engine (`retry`, `withRetry`) with randomized jitter and transient error detection.
+25. **[Structured Cloud Logging & Distributed Tracing](.agents/LOGGING.md)** — Zero-dependency cloud logger (`core/logger`), GCP Cloud Logging, AWS CloudWatch, automatic trace propagation (`x-cloud-trace-context`, `x-amzn-trace-id`, `traceparent`), sensitive key redaction, and `req.logger` child context.
+26. **[Stateless Scale-Out & Database Pool Management](.agents/SCALE_OUT.md)** — Distributed Redis session store (`createRedisSessionStore`), Redis session tracker (`createRedisSessionTracker`), zero-dependency RESP client, serverless DB connection pool optimizer (`normalizeServerlessPoolConfig`), and scale-out preflight audits (`deploy:check`).
+27. **[Cloud Secrets Management](.agents/SECRETS.md)** — Zero-dependency Google Cloud Secret Manager & AWS Secrets Manager/SSM integration (`core/secrets`), in-memory caching with TTL, dot-notation JSON subkeys, process.env hydration, and `webspresso secrets:pull`.
+28. **[Cloud Metrics & Distributed Tracing](.agents/METRICS.md)** — Zero-dependency Prometheus exposition format (`/metrics`), JSON telemetry (`/metrics.json`), HTTP latency histograms, Node.js event loop/memory/pool/cache collectors, and W3C `traceparent` & `x-trace-id` propagation (`core/metrics`).
+29. **[Cloud Migration Jobs & Zero-Downtime Database Deploy](.agents/MIGRATION_JOBS.md)** — Dedicated pre-deploy migration jobs for Cloud Run, AWS ECS, and Kubernetes (`webspresso add:migration-job`), connection retries, and stale lock auto-healing (`webspresso db:migrate --safe`).
+30. **[Native Zero-Dependency Rate Limiting Engine](.agents/RATE_LIMIT.md)** — Framework-agnostic rate limiter (`core/rate-limit`), sliding window in-memory & Redis stores, RFC 6585 standard headers (`RateLimit-*`, `Retry-After`), Express & Hono dual support, and `rateLimit({ window, limit })`.
+31. **[Feature Flags & Canary Traffic Splitter](.agents/FLAGS.md)** — Zero-dependency feature flag and canary rollout engine (`core/flags`), deterministic FNV-1a bucketing, targeting rules (users, roles, email domains), A/B variants, SSR template helpers (`fsy.hasFeature`), and declarative API guards (`defineApi({ flag })`).
 
 ---
 

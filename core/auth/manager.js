@@ -149,7 +149,19 @@ class AuthManager extends EventEmitter {
 
     let tracker = config.sessionTracker || null;
     if (!tracker && (config.sessionTracking || config.trackSessions)) {
-      if (config.db || this.config.db) {
+      if (
+        config.session?.storeType === 'redis' ||
+        process.env.SESSION_STORE === 'redis' ||
+        Boolean(process.env.REDIS_URL && !config.db && !this.config.db)
+      ) {
+        const { createRedisSessionTracker } = require('./redis-session');
+        const redisUrl = process.env.REDIS_URL || config.session?.redisUrl;
+        tracker = createRedisSessionTracker({
+          url: redisUrl,
+          client: config.session?.redisClient,
+          prefix: config.session?.redisPrefix || 'sess:',
+        });
+      } else if (config.db || this.config.db) {
         tracker = createKnexSessionTracker(config.db || this.config.db);
       } else {
         tracker = createMemorySessionTracker();
@@ -206,6 +218,25 @@ class AuthManager extends EventEmitter {
     
     if (!config.secret) {
       throw new Error('Session secret is required. Set AUTH_SESSION_SECRET environment variable or pass session.secret in config.');
+    }
+
+    // Auto-detect and configure distributed Redis session store
+    if (!config.store) {
+      const isRedisStore =
+        config.storeType === 'redis' ||
+        process.env.SESSION_STORE === 'redis' ||
+        Boolean(process.env.REDIS_URL);
+
+      if (isRedisStore) {
+        const { createRedisSessionStore } = require('./redis-session');
+        const redisUrl = process.env.REDIS_URL || config.redisUrl || config.redis?.url;
+        config.store = createRedisSessionStore({
+          url: redisUrl,
+          client: config.redisClient || config.redis?.client,
+          prefix: config.redisPrefix || 'sess:',
+          ttl: config.ttl,
+        });
+      }
     }
 
     const mergedCookie = {

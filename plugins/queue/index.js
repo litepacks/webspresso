@@ -12,13 +12,17 @@ const {
   MemoryQueueAdapter,
   DatabaseQueueAdapter,
   RedisQueueAdapter,
+  WaitUntilQueueAdapter,
+  CloudflareQueueAdapter,
 } = require('../../core/queue');
 
 /**
  * @param {Object} [options]
- * @param {'memory'|'database'|'redis'|Object} [options.adapter='memory'] - Queue backend adapter or name
+ * @param {'memory'|'database'|'redis'|'wait-until'|'cloudflare'|Object} [options.adapter='memory'] - Queue backend adapter or name
  * @param {Object} [options.db] - Knex/ORM database instance for database adapter
  * @param {Object} [options.redisClient] - Redis client instance for redis adapter
+ * @param {Object} [options.queue] - Cloudflare Queue binding for cloudflare adapter
+ * @param {Function} [options.waitUntil] - Optional global waitUntil handler for wait-until adapter
  * @param {string} [options.tableName='webspresso_jobs'] - Database queue table name
  * @param {number} [options.concurrency=2] - Worker concurrency
  * @param {number} [options.pollInterval=500] - Idle poll interval in ms
@@ -37,7 +41,7 @@ function queuePlugin(options = {}) {
   return {
     name: 'queue',
     version: '1.0.0',
-    description: 'Background Job Queue Engine with Memory, DB, and Redis adapters',
+    description: 'Background Job Queue Engine with Memory, DB, Redis, WaitUntil, and Cloudflare adapters',
 
     register(ctx) {
       const { app, db } = ctx;
@@ -46,6 +50,18 @@ function queuePlugin(options = {}) {
 
       if (!adapter || adapter === 'memory') {
         adapter = new MemoryQueueAdapter();
+      } else if (adapter === 'wait-until' || adapter === 'edge') {
+        adapter = new WaitUntilQueueAdapter({
+          waitUntil: options.waitUntil,
+        });
+      } else if (adapter === 'cloudflare' || adapter === 'cf') {
+        const cfQueue = options.queue || options.cfQueue;
+        if (!cfQueue) {
+          throw new Error('[queuePlugin] Cloudflare queue adapter requires a valid queue binding in options.queue.');
+        }
+        adapter = new CloudflareQueueAdapter({
+          queue: cfQueue,
+        });
       } else if (adapter === 'database' || adapter === 'db') {
         const knexInstance = options.db?.knex || db?.knex || options.knex;
         if (!knexInstance) {

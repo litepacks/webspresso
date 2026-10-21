@@ -173,8 +173,9 @@ function corsPlugin(options = {}) {
         ctx.middlewares.cors = corsMiddleware;
       }
 
-      if (ctx.app && options.global !== false) {
-        ctx.app.use(corsMiddleware);
+      const target = ctx.http || ctx.app;
+      if (target && options.global !== false && typeof target.use === 'function') {
+        target.use(corsMiddleware);
       }
     },
   };

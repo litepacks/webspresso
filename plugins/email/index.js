@@ -241,16 +241,18 @@ function emailPlugin(options = {}) {
       setAppContext({ mailer });
       if (ctx.app) {
         ctx.app.mailer = mailer;
-        if (typeof ctx.app.use === 'function') {
-          ctx.app.use((req, res, next) => {
-            req.mailer = mailer;
-            next();
-          });
-        }
+      }
+      const target = ctx.http || ctx.app;
+      if (target && typeof target.use === 'function') {
+        target.use((req, res, next) => {
+          req.mailer = mailer;
+          next();
+        });
       }
       ctx.mailer = mailer;
 
-      if (ctx.app && ctx.app.serviceRegistry) {
+      const registry = ctx.serviceRegistry || ctx.services || ctx.app?.serviceRegistry;
+      if (registry) {
         const { createMailServices } = require('../../src/services/builtins/mail');
         const mailServices = createMailServices({
           emailService,
@@ -259,8 +261,8 @@ function emailPlugin(options = {}) {
           tableName,
         });
         for (const [name, def] of Object.entries(mailServices)) {
-          if (!ctx.app.serviceRegistry.has(name)) {
-            ctx.app.serviceRegistry.register(name, def);
+          if (!registry.has(name)) {
+            registry.register(name, def);
           }
         }
       }

@@ -1483,6 +1483,8 @@ function mountPages(app, options) {
             service: req.service,
             db,
             sse: res.sse,
+            streamText: res.streamText,
+            streamJson: res.streamJson,
           });
 
           await fn(req, res, apiCtx);

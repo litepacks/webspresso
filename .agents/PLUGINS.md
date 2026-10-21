@@ -161,10 +161,17 @@ Schema-driven headless CMS & inline content editing.
 - **Features**: Dynamic content types & entries, public API (`/api/content/:type/:slug`), visual inline editor widget.
 
 ### 2.4 `uploadPlugin` (`plugins/upload`)
-Multipart file upload manager with local / cloud storage providers.
-- **Options**: `{ path: '/api/upload', local: { destDir, publicBasePath }, maxBytes: 10000000, mimeAllowlist: ['image/png', 'image/jpeg'] }`
-- **Features**: Single & multi-file uploads, file size & extension validation, storage drivers.
+Multipart file upload manager with local disk, AWS S3, Google Cloud Storage (GCS), and Cloudflare R2 drivers.
+- **Options**: `{ path: '/api/upload', provider, local: { destDir, publicBasePath }, maxBytes: 10000000, mimeAllowlist: ['image/png', 'image/jpeg'], presigned: true, presignedRoute: '/api/upload/presign' }`
+- **Supported Storage Drivers**:
+  - `createLocalFileProvider({ destDir, publicBasePath })`: Local disk storage (monolith / VPS).
+  - `createS3FileProvider({ s3Client, bucket, publicBaseUrl, prefix })`: AWS S3, MinIO, or S3-compatible endpoints with direct presigned PUT URLs (`createSignedUploadUrl`).
+  - `createGcsFileProvider({ bucket, storageClient, publicBaseUrl, prefix })`: Google Cloud Storage with V4 signed URLs for serverless direct uploads.
+  - `createR2FileProvider({ bucket, publicBaseUrl, prefix })`: Cloudflare Workers native R2 binding.
+- **Direct-to-Cloud Presigned Uploads**: Set `presigned: true` to mount `POST /api/upload/presign`, allowing web browsers to upload directly to S3 or GCS without passing large payloads through memory-limited or ephemeral containers.
+- **Static Asset Sync**: `webspresso assets:sync [--bucket <name>] [--provider s3|gcs|r2] [--dry-run]` to upload compiled JS/CSS bundles to cloud storage with `Cache-Control: public, max-age=31536000, immutable`.
 - **Orphan Pruning**: `scanOrphanedUploads({ db, destDir })` and `pruneOrphanedUploads({ db, destDir, dryRun })` to detect and remove disk files no longer referenced by any database model, accompanied by CLI command `webspresso upload:prune [--dry-run]`.
+
 
 
 ### 2.5 `fileManagerPlugin` (`plugins/file-manager`)

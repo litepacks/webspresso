@@ -213,9 +213,10 @@ function csrfPlugin(options = {}) {
       ctx.addHelper('csrfToken', csrfToken);
       ctx.addHelper('csrfInput', csrfInput);
 
-      // If global validation is enabled, mount the middleware globally on the Express app
-      if (applyGlobal) {
-        ctx.app.use(createMiddleware());
+      // If global validation is enabled, mount the middleware globally
+      const target = ctx.http || ctx.app;
+      if (applyGlobal && target && typeof target.use === 'function') {
+        target.use(createMiddleware());
       }
     },
   };

@@ -113,34 +113,39 @@ function webhooksPlugin(options = {}) {
       // Attach dispatcher to app and request objects
       if (ctx.app) {
         ctx.app.webhooks = dispatcher;
-        ctx.app.use((req, res, next) => {
+      }
+      const target = ctx.http || ctx.app;
+      if (target && typeof target.use === 'function') {
+        target.use((req, res, next) => {
           req.webhooks = dispatcher;
           next();
         });
+      }
 
-        // Register built-in services in app.serviceRegistry if available
-        if (ctx.app.serviceRegistry && typeof ctx.app.serviceRegistry.register === 'function') {
-          if (!ctx.app.serviceRegistry.has('webhook.dispatch')) {
-            ctx.app.serviceRegistry.register('webhook.dispatch', {
-              handler: async (input) => dispatcher.dispatch(input.event, input.payload, input),
-            });
-          }
-          if (!ctx.app.serviceRegistry.has('webhook.ping')) {
-            ctx.app.serviceRegistry.register('webhook.ping', {
-              handler: async (input) => dispatcher.pingEndpoint(input.endpointId),
-            });
-          }
-          if (!ctx.app.serviceRegistry.has('webhook.retry')) {
-            ctx.app.serviceRegistry.register('webhook.retry', {
-              handler: async (input) => dispatcher.retryDelivery(input.deliveryId),
-            });
-          }
+      // Register built-in services in app.serviceRegistry if available
+      const registry = ctx.serviceRegistry || ctx.services || ctx.app?.serviceRegistry;
+      if (registry && typeof registry.register === 'function') {
+        if (!registry.has('webhook.dispatch')) {
+          registry.register('webhook.dispatch', {
+            handler: async (input) => dispatcher.dispatch(input.event, input.payload, input),
+          });
         }
+        if (!registry.has('webhook.ping')) {
+          registry.register('webhook.ping', {
+            handler: async (input) => dispatcher.pingEndpoint(input.endpointId),
+          });
+        }
+        if (!registry.has('webhook.retry')) {
+          registry.register('webhook.retry', {
+            handler: async (input) => dispatcher.retryDelivery(input.deliveryId),
+          });
+        }
+      }
 
-        // Integrate with core/queue if queue is present
-        const queueManager = options.queue || ctx.app.queue;
-        if (queueManager && typeof queueManager.define === 'function') {
-          dispatcher.setQueue(queueManager);
+      // Integrate with core/queue if queue is present
+      const queueManager = options.queue || ctx.queue || ctx.app?.queue;
+      if (queueManager && typeof queueManager.define === 'function') {
+        dispatcher.setQueue(queueManager);
           if (!queueManager.handlers?.has?.('webhooks.deliver')) {
             queueManager.define('webhooks.deliver', async (job) => {
               const { endpointId, deliveryId, event, payload, attempt } = job.data;

@@ -4,6 +4,8 @@
 import type { Application } from 'express';
 import {
   createApp,
+  createCoreApp,
+  CoreApp,
   createDatabase,
   defineModel,
   defineService,
@@ -139,3 +141,36 @@ void testRepositoryInference();
 void testServiceInference();
 void db.knex;
 void getAllModels();
+
+const core: CoreApp = createCoreApp();
+void core.services;
+void core.service('some.service', { foo: 'bar' });
+void app.service('some.service', { foo: 'bar' });
+void app.core;
+
+import { createSecretManager, loadSecrets, resolveSecret, SecretManager, createMetricsRegistry, MetricsRegistry } from '../..';
+const sm: SecretManager = createSecretManager({ provider: 'memory' });
+void sm.get('KEY');
+void loadSecrets({ provider: 'auto', secrets: { DB: 'db-key' } });
+void resolveSecret('MY_SECRET');
+
+const metricsReg: MetricsRegistry = createMetricsRegistry();
+metricsReg.counter('requests_total', 'Requests').inc({ status: 200 }, 1);
+metricsReg.gauge('active_conns', 'Connections').set(5);
+metricsReg.histogram('req_latency', 'Latency').observe(0.045);
+void metricsReg.formatPrometheus();
+void metricsReg.formatJson();
+
+const metricsApp = createApp({
+  pagesDir: './pages',
+  metrics: {
+    enabled: true,
+    path: '/custom-metrics',
+    collectDefault: true,
+    traceHeader: true,
+  },
+});
+void metricsApp.app.metrics;
+
+
+

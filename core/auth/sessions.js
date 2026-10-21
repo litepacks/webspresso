@@ -341,11 +341,167 @@ function createMemorySessionTracker() {
   };
 }
 
+/**
+ * Generic Key-Value session tracker adapter
+ * Compatible with Cloudflare KV (env.SESSIONS), Vercel KV, or custom KV stores
+ * @param {Object} kv - KV store instance
+ * @param {Object} [options]
+ * @param {string} [options.prefix='sess:'] - Session key prefix
+ * @param {number} [options.ttlSeconds=2592000] - Default TTL in seconds (30 days)
+ * @returns {Object} Session tracker adapter
+ */
+function createKvSessionTracker(kv, options = {}) {
+  if (!kv) {
+    throw new Error('[createKvSessionTracker] KV store instance is required.');
+  }
+
+  const prefix = options.prefix || 'sess:';
+  const defaultTtl = options.ttlSeconds || 2592000;
+
+  const kvGet = async (key) => {
+    if (typeof kv.get === 'function') {
+      const val = await kv.get(key, { type: 'json' });
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch (_) { return val; }
+      }
+      return val;
+    }
+    return null;
+  };
+
+  const kvPut = async (key, val, ttl) => {
+    const serialized = typeof val === 'string' ? val : JSON.stringify(val);
+    if (typeof kv.put === 'function') {
+      // Cloudflare KV syntax
+      return await kv.put(key, serialized, { expirationTtl: ttl || defaultTtl });
+    }
+    if (typeof kv.set === 'function') {
+      // Generic / Redis KV syntax
+      return await kv.set(key, serialized, { ex: ttl || defaultTtl });
+    }
+  };
+
+  const kvDelete = async (key) => {
+    if (typeof kv.delete === 'function') {
+      return await kv.delete(key);
+    }
+    if (typeof kv.del === 'function') {
+      return await kv.del(key);
+    }
+  };
+
+  return {
+    track: async (sessionId, userId, metadata = {}) => {
+      if (!sessionId || !userId) return null;
+
+      const ua = metadata.userAgent || '';
+      const parsed = parseUserAgent(ua);
+      const ip = metadata.ip || '127.0.0.1';
+      const now = new Date();
+
+      const record = {
+        session_id: sessionId,
+        user_id: userId,
+        ip_address: ip,
+        user_agent: ua,
+        browser: metadata.browser || parsed.browser,
+        os: metadata.os || parsed.os,
+        device: metadata.device || parsed.device,
+        last_active_at: now.toISOString(),
+        created_at: now.toISOString(),
+      };
+
+      await kvPut(`${prefix}${sessionId}`, record, defaultTtl);
+      return record;
+    },
+
+    listUserSessions: async (userId) => {
+      // If list is supported by KV
+      if (typeof kv.list === 'function') {
+        const listRes = await kv.list({ prefix });
+        const keys = listRes.keys || [];
+        const results = [];
+        for (const k of keys) {
+          const item = await kvGet(k.name);
+          if (item && String(item.user_id) === String(userId)) {
+            results.push(item);
+          }
+        }
+        return results;
+      }
+      return [];
+    },
+
+    validate: async (sessionId, userId) => {
+      if (!sessionId) return false;
+      const record = await kvGet(`${prefix}${sessionId}`);
+      if (!record) return false;
+      if (userId && String(record.user_id) !== String(userId)) return false;
+      return true;
+    },
+
+    revoke: async (sessionId) => {
+      if (!sessionId) return false;
+      await kvDelete(`${prefix}${sessionId}`);
+      return true;
+    },
+
+    revokeOthers: async (userId, currentSessionId) => {
+      if (typeof kv.list !== 'function') return 0;
+      const listRes = await kv.list({ prefix });
+      let count = 0;
+      for (const k of listRes.keys || []) {
+        const item = await kvGet(k.name);
+        if (item && String(item.user_id) === String(userId) && item.session_id !== currentSessionId) {
+          await kvDelete(k.name);
+          count++;
+        }
+      }
+      return count;
+    },
+
+    revokeAll: async (userId) => {
+      if (typeof kv.list !== 'function') return 0;
+      const listRes = await kv.list({ prefix });
+      let count = 0;
+      for (const k of listRes.keys || []) {
+        const item = await kvGet(k.name);
+        if (item && String(item.user_id) === String(userId)) {
+          await kvDelete(k.name);
+          count++;
+        }
+      }
+      return count;
+    },
+
+    purgeExpired: async () => {
+      // Cloudflare KV automatically purges expired keys via expirationTtl
+      return 0;
+    },
+  };
+}
+
+const {
+  RedisSessionStore,
+  createRedisSessionStore,
+  createRedisSessionTracker,
+  MiniRedisClient,
+  InMemoryRedisClient,
+  createMiniRedisClient,
+} = require('./redis-session');
+
 module.exports = {
   createUserSessionsTable,
   dropUserSessionsTable,
   createKnexSessionTracker,
   createMemorySessionTracker,
+  createKvSessionTracker,
+  createRedisSessionStore,
+  createRedisSessionTracker,
+  RedisSessionStore,
+  MiniRedisClient,
+  InMemoryRedisClient,
+  createMiniRedisClient,
   getClientIp,
   parseUserAgent,
 };

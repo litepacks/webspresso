@@ -332,11 +332,16 @@ npx webspresso add:docker --force
 
 ## 17. Production Deployment Preflight Check (`deploy:check` / `check:deploy`)
 
-Run comprehensive pre-flight verification before deploying to Fly.io, Railway, Render, VPS, or Kubernetes:
+Run comprehensive pre-flight verification before deploying to Google Cloud Run, AWS (App Runner / ECS), Cloudflare Workers, Fly.io, Railway, Render, VPS, or Kubernetes:
 
 ```bash
-# Run production preflight verification
+# Run production preflight verification (auto-detects target platform)
 npx webspresso deploy:check
+
+# Target a specific cloud platform explicitly (cloudrun, aws, cloudflare, docker)
+npx webspresso deploy:check --platform cloudrun
+npx webspresso deploy:check --platform aws
+npx webspresso deploy:check -p cloudflare
 
 # Run against a specific environment (.env.staging or .env.production)
 npx webspresso deploy:check --env staging
@@ -349,11 +354,17 @@ npx webspresso deploy:check --json
 ```
 
 ### Audited Verification Areas:
-1. **Secrets & Cryptography**: Ensures `SESSION_SECRET` or `APP_KEY` is set, >= 32 characters, and not using weak placeholder defaults.
-2. **Git & Leak Prevention**: Verifies `.env` and local database files are excluded in `.gitignore`.
-3. **Container Hardening**: Ensures `Dockerfile` runs as a non-root `USER`, configures a `HEALTHCHECK`, and uses multi-stage caching.
-4. **Database & Migrations**: Audits for pending unapplied migrations and warns against ephemeral SQLite storage.
-5. **Server Optimizations**: Validates HTTP compression (`compression: true`), graceful shutdown, and health check endpoints.
+1. **Platform-Specific Cloud Preflight**:
+   - **Google Cloud Run**: Ephemeral SQLite/local upload warnings, SIGTERM timeout alignment (<= 10000ms), `.gcloudignore` secrets exclusion (`.env`), `cloudbuild.yaml` pipeline, and dynamic `PORT` binding.
+   - **AWS (App Runner / ECS Fargate)**: Ephemeral storage audits, `apprunner.yaml` / `ecs-task-definition.json` validity, and CloudWatch `awslogs` log driver configuration.
+   - **Cloudflare Workers**: `wrangler.toml` configuration and `nodejs_compat` compatibility flag verification.
+   - **Stateless Scale-Out**: Distributed Redis sessions and serverless connection pool limits.
+2. **Secrets & Cryptography**: Ensures `SESSION_SECRET` or `APP_KEY` is set, >= 32 characters, and not using weak placeholder defaults.
+3. **Git & Leak Prevention**: Verifies `.env` and local database files are excluded in `.gitignore`.
+4. **Container Hardening**: Ensures `Dockerfile` runs as a non-root `USER`, configures a `HEALTHCHECK`, and uses multi-stage caching.
+5. **Database & Migrations**: Audits for pending unapplied migrations and warns against ephemeral SQLite storage.
+6. **Server Optimizations**: Validates HTTP compression (`compression: true`), graceful shutdown, and health check endpoints.
+7. **Actionable Remediations**: Emits precise, single-command remediation steps for every warning and error detected.
 
 ---
 
@@ -434,4 +445,205 @@ npx webspresso make:event order:completed
 npx webspresso make:mail Welcome
 # Outputs: emails/WelcomeEmail.js
 ```
+
+---
+
+## 21. Google Cloud Run Deployment (`add:cloudrun` / `cloudrun`)
+
+Generate production-ready Google Cloud Run configuration with Google Cloud Build CI/CD pipeline, `.gcloudignore`, and one-command deployment script:
+
+```bash
+# Generate cloudbuild.yaml, .gcloudignore, deploy-cloudrun.sh, and Dockerfile
+npx webspresso add:cloudrun
+
+# Customize region, container resources, scaling limits, and Cloud SQL
+npx webspresso add:cloudrun --region europe-west1 --memory 1Gi --cpu 2 --min-instances 1 --max-instances 20 --cloud-sql my-project:europe-west1:my-db
+
+# Overwrite existing files
+npx webspresso add:cloudrun --force
+```
+
+### Generated Artifacts:
+- **`cloudbuild.yaml`**: Multi-stage Docker image build, Google Artifact Registry push, and zero-downtime serverless Cloud Run deployment with Gen2 execution environment.
+- **`.gcloudignore`**: Prevents `.env`, SQLite files, node_modules, and test directories from entering the Cloud Build upload context.
+- **`deploy-cloudrun.sh`**: Executable bash script for direct zero-friction deployment (`chmod +x`).
+- **`package.json` Scripts**: Adds `gcp:deploy` and `gcp:build`.
+
+---
+
+## 22. AWS App Runner & ECS Fargate Deployment (`add:aws` / `aws`)
+
+Generate production-ready AWS deployment configuration supporting both AWS App Runner and Amazon ECS (Fargate):
+
+```bash
+# Generate apprunner.yaml, ecs-task-definition.json, deploy-aws.sh, and Dockerfile
+npx webspresso add:aws
+
+# Customize region, CPU, and memory allocations
+npx webspresso add:aws --region us-east-1 --cpu "1 vCPU" --memory "2 GB"
+
+# Overwrite existing files
+npx webspresso add:aws --force
+```
+
+### Generated Artifacts:
+- **`apprunner.yaml`**: AWS App Runner configuration with build commands (`npm ci --omit=dev`), start command, and port network mapping.
+- **`ecs-task-definition.json`**: Production ECS Fargate task definition with `awsvpc` network mode, container resource constraints, CloudWatch `awslogs`, and native `/healthz` health checks.
+- **`deploy-aws.sh`**: Automated deployment shell script that verifies AWS credentials, creates Amazon ECR repositories, builds and pushes Docker images, and updates services.
+- **`package.json` Scripts**: Adds `aws:deploy`.
+
+---
+
+## 23. Cloudflare Workers Deployment (`add:cloudflare` / `cloudflare`)
+
+Generate serverless edge deployment files for Cloudflare Workers with D1, KV, and Queues support:
+
+```bash
+# Generate wrangler.toml and worker.js
+npx webspresso add:cloudflare
+
+# Include Cloudflare D1, KV, and Queues
+npx webspresso add:cloudflare --d1 --kv --queue
+```
+
+---
+
+## 24. Cloud Static Asset Sync (`assets:sync` / `assets-sync`)
+
+Upload and synchronize compiled static assets (`public/assets/`, `dist/`, fonts, images) to S3, Cloudflare R2, or Google Cloud Storage with immutable CDN cache headers:
+
+```bash
+# Preview files to be uploaded without transmitting data
+npx webspresso assets:sync --dry-run
+
+# Sync assets to an AWS S3 bucket
+npx webspresso assets:sync --bucket my-cdn-bucket --provider s3
+
+# Sync assets to Google Cloud Storage
+npx webspresso assets:sync --bucket my-gcs-bucket --provider gcs --prefix assets
+
+# Override directory or custom Cache-Control header
+npx webspresso assets:sync --dir public --cache-control "public, max-age=604800"
+```
+
+---
+
+## 25. Cloud Secrets Synchronization (`secrets:pull` / `pull:secrets`)
+
+Pull cloud secrets from Google Cloud Secret Manager or AWS Secrets Manager into a local `.env.local` file for secure local development:
+
+```bash
+# Auto-detect cloud platform and pull expected secrets
+npx webspresso secrets:pull
+
+# Explicitly pull specific secrets from Google Cloud Secret Manager
+npx webspresso secrets:pull --platform cloudrun -s SESSION_SECRET DATABASE_URL
+
+# Explicitly pull from AWS Secrets Manager
+npx webspresso secrets:pull --platform aws -s SESSION_SECRET DATABASE_URL
+
+# Unpack a JSON secret bundle to stdout (dry run)
+npx webspresso secrets:pull --bundle prod/app/config --dry-run
+
+# Output secrets in JSON format
+npx webspresso secrets:pull -s API_KEY DB_PASS --format json -o secrets.json
+```
+
+---
+
+## 26. Zero-Secret CI/CD Pipeline Generator (`add:ci` / `add:workflow`)
+
+Scaffold automated, keyless GitHub Actions workflows (Google WIF, AWS IAM OIDC, Cloudflare) and GitLab CI pipelines with integrated test suites and `webspresso deploy:check --strict` gating:
+
+```bash
+# Auto-detect cloud platform and scaffold GitHub Actions workflows
+npx webspresso add:ci
+
+# Explicitly target Google Cloud Run (Workload Identity Federation)
+npx webspresso add:ci --platform cloudrun
+
+# Explicitly target AWS (IAM OIDC Role & Amazon ECR)
+npx webspresso add:ci --platform aws
+
+# Explicitly target Cloudflare Workers
+npx webspresso add:ci --platform cloudflare
+
+# Scaffold all cloud workflows alongside a GitLab CI pipeline (.gitlab-ci.yml)
+npx webspresso add:ci --platform all --gitlab
+```
+
+---
+
+## 27. Type-Safe Frontend Client Generator (`client:generate` / `client:gen`)
+
+Generate an end-to-end typed TypeScript HTTP client from your Webspresso API routes and Zod schemas for React, Next.js, Vite, Vue, Svelte, or mobile apps:
+
+```bash
+# Generate client into src/client.ts (or .webspresso/client.ts)
+npx webspresso client:generate
+
+# Specify custom output path and base URL
+npx webspresso client:generate --out src/api-client.ts --base-url https://api.myapp.com
+```
+
+---
+
+## 28. DB Studio Live Telemetry & SQL Runner (`db:studio`)
+
+Launch an interactive database inspector, SQL query runner, and real-time system monitoring dashboard:
+
+```bash
+# Launch DB Studio on default port 4567
+npx webspresso db:studio
+
+# Custom port without opening default browser
+npx webspresso db:studio --port 5000 --no-open
+```
+- Schema inspection & CRUD operations for all database tables.
+- Real-time SSE Live Telemetry streaming Node.js memory metrics (RSS, Heap), Knex connection pool utilization, background queues, and circuit breaker trip states.
+- Interactive Circuit Breaker manual reset (`POST /_studio/api/breakers/:name/reset`).
+
+---
+
+## 29. Interactive REPL Console (`console` / `c`)
+
+Launch an interactive Node.js REPL session with auto-injected framework context (database, repositories, services, queues, events, feature flags, and cache):
+
+```bash
+# Start interactive console
+npx webspresso console
+# Alias:
+npx webspresso c
+
+# Evaluate a single expression and print output (with top-level await support)
+npx webspresso console -e "await Note.find({ status: 'published' })"
+
+# Target specific environment or config file
+npx webspresso console -E production -c config/db.js
+
+# Disable command history persistence or banner
+npx webspresso console --no-history --no-banner
+```
+
+### Context & Shortcuts Injected:
+- `db`: Knex / ORM database instance.
+- `<ModelName>` (e.g. `Note`, `User`): Direct repository shortcuts (`await Note.find()`, `await Note.findById(1)`).
+- `models`: Dictionary of all loaded model repositories (`models.Note`).
+- `services`: ServiceRegistry instance.
+- `service(name, input)`: Direct helper to invoke domain services (`await service('notes.create', payload)`).
+- `queue`: Background QueueDispatcher (`await queue.dispatch('email.send', data)`).
+- `events`: Decoupled EventDispatcher (`events.emit('order.created', order)`).
+- `flags`: FeatureFlagManager (`flags.isEnabled('new_checkout', { user })`).
+- `cache`: TaggedLruCache instance (`await cache.get('key')`).
+- `mailer`: Framework mailer service.
+- `reload()`: Hot-reloads all models and services from filesystem without exiting the REPL.
+- `help()`: Displays interactive help menu with all available objects and commands.
+
+### Custom REPL Dot-Commands:
+- `.models`: List all loaded models, table names, and available repository methods.
+- `.services`: List all registered business services and descriptions.
+- `.routes`: Scan and list all API endpoints and SSR pages.
+- `.flags`: List active feature flags and targeting rules.
+- `.reload`: Hot-reload models and services from filesystem.
+- `.exit`: Exit the console session (`Ctrl+D`).
 

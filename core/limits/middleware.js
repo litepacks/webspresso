@@ -7,7 +7,13 @@
  * @module core/limits/middleware
  */
 
-const express = require('express');
+let _express = null;
+function getExpress() {
+  if (!_express) {
+    _express = require('express');
+  }
+  return _express;
+}
 const { normalizeLimits } = require('./normalize');
 
 /**
@@ -116,6 +122,7 @@ function shouldCaptureRawBody(req, captureSetting) {
  * @returns {import('express').RequestHandler}
  */
 function createLimitsMiddleware(routeOptions = {}) {
+  const express = getExpress();
   const limits = normalizeLimits(routeOptions);
   const parsers = [];
 
@@ -200,6 +207,7 @@ function createLimitsMiddleware(routeOptions = {}) {
  * @returns {Object} Normalized limits configuration
  */
 function setupLimitsMiddleware(app, options = {}) {
+  const express = getExpress();
   const limits = normalizeLimits(options);
 
   // Expose limits on app instance for introspection

@@ -11,6 +11,7 @@ const { ZodError } = require('zod');
 const { z: zForApi } = require('../../core/validation');
 const { resolveMiddlewares } = require('../file-router');
 const { translateValidationIssues, getTranslatorForRequest } = require('./validation-i18n');
+const { executeApiPipeline, enrichRouteError } = require('../../core/http');
 
 /**
  * Compiles a schema definition from an API module
@@ -136,110 +137,26 @@ function createApiHandler(descriptor, context) {
         }
       }
 
-      // 2. Injections
-      if (db) req.db = db;
-      if (serviceRegistry) {
-        req.service = (name, input, opts) =>
-          serviceRegistry.call(name, input, { req, res, db }, opts);
-      }
-
-      // 3. Schema validation
-      if (compiledSchema) {
-        try {
-          validateRequestInput(req, compiledSchema);
-        } catch (err) {
-          if (err instanceof ZodError || err.name === 'ZodError' || Array.isArray(err?.issues)) {
-            const pagesDir = context.pagesDir || appOptions.pagesDir || 'pages';
-            const routeDir = descriptor.file ? path.dirname(descriptor.file) : '';
-            const translatedIssues = translateValidationIssues(err.issues, {
-              req,
-              pagesDir,
-              routeDir,
-              isDev,
-            });
-            return res.status(400).json({
-              error: 'Validation Error',
-              issues: translatedIssues,
-            });
-          }
-          throw err;
-        }
-      } else {
-        req.input = {
-          body: req.body,
-          params: req.params,
-          query: req.query,
-        };
-      }
-
-      // 4. Resolve and execute middlewares (module-local first, cached across requests)
+      // 2. Resolve middlewares (module-local first, cached across requests)
       if (!cachedMiddlewares) {
         const moduleMiddlewares = descriptor.moduleConfig?.middlewares || {};
         const combinedRegistry = Object.assign({}, middlewares, moduleMiddlewares);
         cachedMiddlewares = resolveMiddlewares(apiDef.middleware, combinedRegistry);
       }
 
-      for (const mw of cachedMiddlewares) {
-        if (typeof mw !== 'function') continue;
-        await new Promise((resolve, reject) => {
-          try {
-            mw(req, res, (err) => {
-              if (err) reject(err);
-              else resolve();
-            });
-          } catch (syncErr) {
-            reject(syncErr);
-          }
-        });
-        if (res.headersSent) return;
-      }
-
-      // 5. Execute handler
-      const pagesDir = context.pagesDir || appOptions.pagesDir || 'pages';
-      const routeDir = descriptor.file ? path.dirname(descriptor.file) : '';
-      const tr = getTranslatorForRequest(req, { pagesDir, routeDir, isDev });
-
-      const apiCtx = {
+      // 3. Execute framework-agnostic API pipeline
+      await executeApiPipeline({
+        descriptor,
+        context,
+        apiDef,
+        handlerFn,
+        compiledSchema,
+        middlewares: cachedMiddlewares,
         req,
         res,
-        params: req.params || {},
-        query: req.query || {},
-        body: req.body || {},
-        input: req.input,
-        locale: tr.locale,
-        t: tr.t,
-        service: (name, input, opts) =>
-          serviceRegistry ? serviceRegistry.call(name, input, { req, res, db }, opts) : null,
-        module: descriptor.module || null,
-        config: appOptions,
-        logger: console,
-        db,
-        sse: (sourceOrOptions, maybeOptions) => res.sse(sourceOrOptions, maybeOptions),
-      };
-
-      req.ctx = apiCtx;
-      res.service = apiCtx.service;
-      res.input = apiCtx.input;
-      res.module = apiCtx.module;
-
-      const result = await handlerFn(req, res, apiCtx);
-
-      // 6. Auto-respond if handler returned a value and response not yet sent
-      if (!res.headersSent) {
-        if (result !== undefined) {
-          return res.json(result);
-        }
-      }
+      });
     } catch (err) {
-      if (err && typeof err === 'object') {
-        if (!err.route) err.route = descriptor.path;
-        if (!err.method) err.method = descriptor.method ? descriptor.method.toUpperCase() : (req.method || 'GET');
-        if (!err.source) err.source = descriptor.source || descriptor.file;
-        if (!err.file) err.file = descriptor.file;
-        if (!err.module) err.module = descriptor.module || null;
-        if (!err.phase) err.phase = 'handler';
-        if (!err.requestId) err.requestId = req.id || (req.headers && req.headers['x-request-id']) || null;
-      }
+      enrichRouteError(err, descriptor, req);
       return next(err);
     }
   };

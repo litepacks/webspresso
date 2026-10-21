@@ -11,6 +11,7 @@
  * @param {string} [config.description] - Endpoint description for OpenAPI
  * @param {Array<string>} [config.tags] - Endpoint tags for OpenAPI
  * @param {Array<string|Function>} [config.middleware] - Named or functional middlewares
+ * @param {string|{ key: string, statusCode?: number, message?: string }} [config.flag] - Feature flag required to access this endpoint
  * @param {Object|Function} [config.schema] - Request schemas (params, query, body, headers)
  * @param {Object} [config.response] - Expected response schemas by status code
  * @param {Function} config.handler - Request handler: async (req, ctx) => data

@@ -92,6 +92,48 @@ queuePlugin({
 });
 ```
 
+### 4. `SqsQueueAdapter` (AWS SQS)
+Zero-dependency AWS SQS adapter powered by native Node.js HTTP and standard AWS SigV4 request signing. Supports long-polling worker loops (`dequeue`), direct enqueue with delay seconds calculation, and AWS Lambda push batch execution (`processBatch`).
+
+```js
+const { SqsQueueAdapter } = require('webspresso');
+
+// Worker daemon or long-polling runner:
+const adapter = new SqsQueueAdapter({
+  queueUrl: process.env.AWS_SQS_QUEUE_URL,
+  region: process.env.AWS_REGION || 'us-east-1',
+  waitTimeSeconds: 10,
+  visibilityTimeout: 30,
+});
+
+// AWS Lambda SQS Event Handler:
+exports.handler = async (event) => {
+  return adapter.processBatch(event.Records, queueManager);
+};
+```
+
+### 5. `PubSubQueueAdapter` (Google Cloud Pub/Sub)
+Zero-dependency Google Cloud Pub/Sub adapter using standard REST API (`:publish`, `:pull`, `:acknowledge`, `:modifyAckDeadline`) with base64 payload serialization. Supports both background pull workers and Cloud Run / App Engine Push Subscription HTTP webhooks (`processPushRequest`).
+
+```js
+const { PubSubQueueAdapter } = require('webspresso');
+
+const adapter = new PubSubQueueAdapter({
+  projectId: process.env.GOOGLE_CLOUD_PROJECT,
+  topic: 'app-jobs',
+  subscription: 'app-jobs-sub',
+});
+
+// Cloud Run Push Subscription Webhook Route:
+app.post('/api/queue/push', async (req, res) => {
+  await adapter.processPushRequest(req, res, req.queue);
+});
+```
+
+### 6. `WaitUntilQueueAdapter` & `CloudflareQueueAdapter`
+- `WaitUntilQueueAdapter`: Serverless & Edge execution (Cloudflare Workers `ctx.waitUntil`, Vercel Edge).
+- `CloudflareQueueAdapter`: Cloudflare Queues integration (`env.MY_QUEUE.send`).
+
 ---
 
 ## 4. File-Based Auto-Discovery (`jobs/`)
