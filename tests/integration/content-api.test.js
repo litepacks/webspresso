@@ -15,12 +15,21 @@ import {
 describe('content plugin API', () => {
   let app;
   let db;
+  let cookie;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     ({ app, db } = await createContentTestApp({ pagesDir: './tests/fixtures/empty-pages' }));
+    cookie = await loginAdmin(request, app);
   });
 
-  afterEach(async () => {
+  beforeEach(async () => {
+    if (db) {
+      await db.knex('content_entries').truncate().catch(() => {});
+      await db.knex('content_types').truncate().catch(() => {});
+    }
+  });
+
+  afterAll(async () => {
     if (db) await db.destroy();
   });
 
@@ -29,7 +38,6 @@ describe('content plugin API', () => {
   });
 
   it('creates content via admin API and reads via public API', async () => {
-    const cookie = await loginAdmin(request, app);
     await seedHeroContent(request, app, cookie);
 
     const pub = await request(app).get('/api/content/hero/home').expect(200);
@@ -38,8 +46,6 @@ describe('content plugin API', () => {
   });
 
   it('does not expose draft entries on public API', async () => {
-    const cookie = await loginAdmin(request, app);
-
     await request(app)
       .post('/_admin/api/content/types')
       .set('Cookie', cookie)
@@ -64,7 +70,6 @@ describe('content plugin API', () => {
   });
 
   it('rejects duplicate entry slug per type', async () => {
-    const cookie = await loginAdmin(request, app);
     await seedHeroContent(request, app, cookie);
 
     await request(app)
@@ -75,7 +80,6 @@ describe('content plugin API', () => {
   });
 
   it('cascades entry delete when type is deleted', async () => {
-    const cookie = await loginAdmin(request, app);
     const { type } = await seedHeroContent(request, app, cookie);
 
     await request(app)

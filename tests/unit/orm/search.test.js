@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
   createDatabase,
   defineModel,
@@ -234,7 +234,7 @@ describe('ORM Universal Full-Text Search (core/orm/search.js)', () => {
     let Article;
     let repo;
 
-    beforeEach(async () => {
+    beforeAll(async () => {
       clearRegistry();
 
       db = createDatabase({
@@ -296,6 +296,11 @@ describe('ORM Universal Full-Text Search (core/orm/search.js)', () => {
           status: 'published',
         },
       ]);
+    });
+
+    afterAll(async () => {
+      if (db) await db.destroy();
+      clearRegistry();
     });
 
     it('searches across default searchable columns using query().search(term)', async () => {

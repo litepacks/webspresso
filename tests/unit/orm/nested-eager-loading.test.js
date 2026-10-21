@@ -66,7 +66,7 @@ describe('Nested Eager Loading', () => {
     let Post;
     let Comment;
 
-    beforeEach(async () => {
+    beforeAll(async () => {
       clearRegistry();
 
       db = createDatabase({
@@ -271,8 +271,9 @@ describe('Nested Eager Loading', () => {
       ]);
     });
 
-    afterEach(async () => {
+    afterAll(async () => {
       await db.destroy();
+      clearRegistry();
     });
 
     it('should eager load nested belongsTo in belongsTo: author.company', async () => {

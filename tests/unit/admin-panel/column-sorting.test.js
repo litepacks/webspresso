@@ -2,7 +2,7 @@
  * Unit tests for Admin Panel 3-state Column Sorting and per-column/per-model configurations
  */
 
-const { createDatabase, defineModel, getModel, zdb, hasModel } = require('../../../core/orm');
+const { createDatabase, defineModel, getModel, zdb, hasModel, clearRegistry } = require('../../../core/orm');
 const { createApp } = require('../../../index');
 const supertest = require('supertest');
 const adminPanelPlugin = require('../../../plugins/admin-panel');
@@ -13,6 +13,7 @@ describe('Admin Panel Column Sorting (3-State & Configuration)', () => {
   let adminCookie;
 
   beforeAll(async () => {
+    clearRegistry();
     const productModel = hasModel('ProductSortTest')
       ? getModel('ProductSortTest')
       : defineModel({
@@ -132,6 +133,7 @@ describe('Admin Panel Column Sorting (3-State & Configuration)', () => {
 
   afterAll(async () => {
     if (db) await db.destroy();
+    clearRegistry();
   });
 
   describe('Model metadata column sortable flag', () => {

@@ -29,7 +29,7 @@ const {
 } = require('../../plugins/webhooks');
 
 const viewsDir = path.join(__dirname, '../fixtures/views');
-const pagesDir = path.join(__dirname, '../fixtures/pages');
+const pagesDir = path.join(__dirname, '../fixtures/empty-pages');
 
 describe('Webhooks Plugin', () => {
   describe('1. Cryptographic Utilities & Signatures', () => {

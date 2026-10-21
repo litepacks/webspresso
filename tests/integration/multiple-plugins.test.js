@@ -168,7 +168,7 @@ describe('Multiple Plugins Integration', () => {
 
     it('should not interfere with each other', async () => {
       // Setup admin user
-      await request(app)
+      const setupRes = await request(app)
         .post('/_admin/api/auth/setup')
         .send({
           email: 'admin@example.com',
@@ -177,16 +177,17 @@ describe('Multiple Plugins Integration', () => {
         })
         .expect(200);
 
-      // Login
-      const loginRes = await request(app)
-        .post('/_admin/api/auth/login')
-        .send({
-          email: 'admin@example.com',
-          password: 'password123',
-        })
-        .expect(200);
-
-      const adminCookie = loginRes.headers['set-cookie'];
+      let adminCookie = setupRes.headers['set-cookie'];
+      if (!adminCookie) {
+        const loginRes = await request(app)
+          .post('/_admin/api/auth/login')
+          .send({
+            email: 'admin@example.com',
+            password: 'password123',
+          })
+          .expect(200);
+        adminCookie = loginRes.headers['set-cookie'];
+      }
 
       // Admin panel should work
       const adminRes = await request(app)

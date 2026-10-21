@@ -29,12 +29,19 @@ describe.sequential('content plugin API contracts', () => {
   let db;
   let cookie;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     ({ app, db } = await createContentTestApp({ pagesDir: './tests/fixtures/empty-pages' }));
     cookie = await loginAdmin(request, app);
   });
 
-  afterEach(async () => {
+  beforeEach(async () => {
+    if (db) {
+      await db.knex('content_entries').truncate().catch(() => {});
+      await db.knex('content_types').truncate().catch(() => {});
+    }
+  });
+
+  afterAll(async () => {
     if (db) await db.destroy();
   });
 
