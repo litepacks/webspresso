@@ -17,19 +17,12 @@ describe('content plugin API', () => {
   let db;
   let cookie;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     ({ app, db } = await createContentTestApp({ pagesDir: './tests/fixtures/empty-pages' }));
     cookie = await loginAdmin(request, app);
   });
 
-  beforeEach(async () => {
-    if (db) {
-      await db.knex('content_entries').truncate().catch(() => {});
-      await db.knex('content_types').truncate().catch(() => {});
-    }
-  });
-
-  afterAll(async () => {
+  afterEach(async () => {
     if (db) await db.destroy();
   });
 

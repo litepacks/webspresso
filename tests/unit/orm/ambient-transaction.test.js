@@ -10,7 +10,7 @@ const { createServiceRegistry } = require('../../../src/services');
 describe('ORM Ambient Transaction Management', () => {
   let db;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     clearRegistry();
     db = createDatabase({
       client: 'better-sqlite3',
@@ -45,10 +45,17 @@ describe('ORM Ambient Transaction Management', () => {
     });
   });
 
-  afterEach(async () => {
+  beforeEach(async () => {
+    if (db) {
+      await db.knex('users').delete();
+    }
+  });
+
+  afterAll(async () => {
     if (db) {
       await db.destroy();
     }
+    clearRegistry();
   });
 
   describe('Basic Ambient Storage Lifecycle', () => {

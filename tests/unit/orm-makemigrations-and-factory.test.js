@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -14,38 +14,37 @@ import {
 } from '../../index.js';
 
 describe('ORM Enhancements: Schema Diff (Django-inspired) & Model Factory (Adonis-inspired)', () => {
-  let db;
-  let rawKnex;
-  let tempDir;
-
-  beforeEach(() => {
-    clearRegistry();
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-diff-test-'));
-    rawKnex = knex({
-      client: 'better-sqlite3',
-      connection: {
-        filename: ':memory:',
-      },
-      useNullAsDefault: true,
-    });
-  });
-
-  afterEach(async () => {
-    if (db) {
-      await db.destroy().catch(() => {});
-      db = null;
-    }
-    if (rawKnex) {
-      await rawKnex.destroy().catch(() => {});
-      rawKnex = null;
-    }
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
-    clearRegistry();
-  });
-
   describe('Django-inspired: Schema Diff & MakeMigrations', () => {
+    let db;
+    let rawKnex;
+    let tempDir;
+
+    beforeEach(() => {
+      clearRegistry();
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-diff-test-'));
+      rawKnex = knex({
+        client: 'better-sqlite3',
+        connection: {
+          filename: ':memory:',
+        },
+        useNullAsDefault: true,
+      });
+    });
+
+    afterEach(async () => {
+      if (db) {
+        await db.destroy().catch(() => {});
+        db = null;
+      }
+      if (rawKnex) {
+        await rawKnex.destroy().catch(() => {});
+        rawKnex = null;
+      }
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+      clearRegistry();
+    });
     it('detects missing table and proposes create_table migration', async () => {
       const PostModel = defineModel({
         name: 'Post',
@@ -191,8 +190,10 @@ describe('ORM Enhancements: Schema Diff (Django-inspired) & Model Factory (Adoni
 
   describe('AdonisJS-inspired: Model Factory', () => {
     let UserModel;
+    let db;
 
-    beforeEach(async () => {
+    beforeAll(async () => {
+      clearRegistry();
       UserModel = defineModel({
         name: 'User',
         table: 'users',
@@ -209,6 +210,7 @@ describe('ORM Enhancements: Schema Diff (Django-inspired) & Model Factory (Adoni
         client: 'better-sqlite3',
         connection: ':memory:',
         useNullAsDefault: true,
+        cache: false,
       });
 
       await db.knex.schema.createTable('users', (table) => {
@@ -218,6 +220,19 @@ describe('ORM Enhancements: Schema Diff (Django-inspired) & Model Factory (Adoni
         table.string('role', 50).defaultTo('user');
         table.boolean('isActive').defaultTo(true);
       });
+    });
+
+    beforeEach(async () => {
+      if (db) {
+        await db.knex('users').delete();
+      }
+    });
+
+    afterAll(async () => {
+      if (db) {
+        await db.destroy().catch(() => {});
+      }
+      clearRegistry();
     });
 
     it('generates in-memory data objects with .make()', () => {
