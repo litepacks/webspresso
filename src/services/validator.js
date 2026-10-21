@@ -120,7 +120,7 @@ function compileServiceSchema(rawSchema) {
       const res = rawSchema({ z: zForServices });
       if (res && (res instanceof z.ZodType || typeof res.safeParse === 'function')) {
         compiled = res;
-      } else if (res && typeof res === 'object') {
+      } else if (res && typeof res === 'object' && !(res instanceof Promise) && typeof res.then !== 'function' && (res.constructor === Object || !res.constructor)) {
         compiled = shapeFromDescriptor(res);
       }
     } catch (e) {

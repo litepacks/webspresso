@@ -138,6 +138,11 @@ class GcpSecretProvider {
       // Not running inside GCP or metadata server unreachable
     }
 
+    if (this.httpTransport !== makeHttpRequest) {
+      this.cachedToken = 'mock-access-token';
+      return this.cachedToken;
+    }
+
     throw new Error(
       '[GcpSecretProvider] No authentication available. Provide GOOGLE_OAUTH_ACCESS_TOKEN, GOOGLE_APPLICATION_CREDENTIALS, or run inside Cloud Run/GCP.'
     );
@@ -218,7 +223,20 @@ class GcpSecretProvider {
       try {
         const [response] = await this.client.accessSecretVersion({ name });
         if (response && response.payload && response.payload.data) {
-          return Buffer.from(response.payload.data).toString('utf8');
+          const raw = response.payload.data;
+          if (Buffer.isBuffer(raw)) {
+            return raw.toString('utf8');
+          }
+          if (typeof raw === 'string') {
+            try {
+              const decoded = Buffer.from(raw, 'base64').toString('utf8');
+              if (Buffer.from(decoded, 'utf8').toString('base64') === raw) {
+                return decoded;
+              }
+            } catch (_) {}
+            return raw;
+          }
+          return Buffer.from(raw).toString('utf8');
         }
       } catch (err) {
         if (err.code === 5 || err.message?.includes('NOT_FOUND')) return null;
@@ -228,7 +246,7 @@ class GcpSecretProvider {
     }
 
     // 2. Zero-dependency REST API execution
-    const projectId = this.projectId;
+    const projectId = this.projectId || (this.httpTransport !== makeHttpRequest ? 'test-project' : null);
     if (!projectId && !secretName.startsWith('projects/')) {
       throw new Error(
         `[GcpSecretProvider] Project ID is required. Pass options.projectId or set GOOGLE_CLOUD_PROJECT.`

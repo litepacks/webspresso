@@ -82,6 +82,11 @@ async function runSecretsPull(options = {}) {
     region: options.region,
     cache: false,
     httpTransport: options.httpTransport,
+    token: options.token,
+    credentials: options.credentials,
+    accessKeyId: options.accessKeyId,
+    secretAccessKey: options.secretAccessKey,
+    ...options,
   });
 
   const pulledValues = {};

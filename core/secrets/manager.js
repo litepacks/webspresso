@@ -251,7 +251,10 @@ class SecretManager {
     }
 
     for (const [envKey, secretName] of Object.entries(mappings)) {
-      const val = await this.get(secretName);
+      let val = await this.get(secretName);
+      if ((val === null || val === undefined) && envKey !== secretName) {
+        val = await this.get(envKey);
+      }
       if (val !== null && val !== undefined) {
         const strVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
         result[envKey] = strVal;
