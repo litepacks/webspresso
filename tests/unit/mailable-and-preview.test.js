@@ -7,7 +7,7 @@
  * - Dev Mail Preview UI & REST endpoints (/_webspresso/mail-preview)
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import {
@@ -236,15 +236,16 @@ describe('Mailable & Email Enhancements (Item #6)', () => {
   describe('Email Plugin Integration & Dev Preview Route', () => {
     let db;
 
-    beforeEach(() => {
+    beforeAll(() => {
       db = createDatabase({
         client: 'better-sqlite3',
         connection: { filename: ':memory:' },
         useNullAsDefault: true,
+        cache: false,
       });
     });
 
-    afterEach(async () => {
+    afterAll(async () => {
       if (db?.knex) await db.knex.destroy();
     });
 
@@ -303,8 +304,10 @@ describe('Mailable & Email Enhancements (Item #6)', () => {
 
       const fixturesDir = path.join(__dirname, '../fixtures');
       const { app } = createApp({
-        pagesDir: path.join(fixturesDir, 'pages'),
+        pagesDir: path.join(fixturesDir, 'empty-pages'),
         viewsDir: path.join(fixturesDir, 'views'),
+        cache: false,
+        lazyRoutes: true,
         db,
         plugins: [email],
       });
@@ -358,8 +361,10 @@ describe('Mailable & Email Enhancements (Item #6)', () => {
 
       const fixturesDir = path.join(__dirname, '../fixtures');
       const { app } = createApp({
-        pagesDir: path.join(fixturesDir, 'pages'),
+        pagesDir: path.join(fixturesDir, 'empty-pages'),
         viewsDir: path.join(fixturesDir, 'views'),
+        cache: false,
+        lazyRoutes: true,
         db,
         plugins: [email],
         setupRoutes(router) {
