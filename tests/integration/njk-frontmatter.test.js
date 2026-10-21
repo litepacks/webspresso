@@ -18,6 +18,12 @@ describe('njk YAML frontmatter (integration)', () => {
     const { app: raw } = createApp({
       pagesDir: PAGES_FM,
       viewsDir: VIEWS,
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
     });
     app = raw;
   });

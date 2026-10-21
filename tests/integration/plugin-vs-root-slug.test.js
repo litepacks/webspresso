@@ -26,6 +26,12 @@ describe('Plugin routes vs root :slug file route', () => {
     const result = createApp({
       pagesDir: PAGES,
       viewsDir: VIEWS,
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
       plugins: [singleSegmentPlugin],
     });
     app = result.app;

@@ -167,8 +167,8 @@ describe('Admin Panel Lifecycle Hooks (Admin Hooks DX)', () => {
     app = result.app;
     request = supertest(app);
 
-    // Setup admin user & login
-    await request
+    // Setup admin user
+    const setupRes = await request
       .post('/_admin/api/auth/setup')
       .send({
         email: 'hooks_admin@test.com',
@@ -177,15 +177,7 @@ describe('Admin Panel Lifecycle Hooks (Admin Hooks DX)', () => {
       })
       .expect(200);
 
-    const loginRes = await request
-      .post('/_admin/api/auth/login')
-      .send({
-        email: 'hooks_admin@test.com',
-        password: 'Password123!',
-      })
-      .expect(200);
-
-    adminCookie = loginRes.headers['set-cookie'];
+    adminCookie = setupRes.headers['set-cookie'];
   });
 
   beforeEach(() => {

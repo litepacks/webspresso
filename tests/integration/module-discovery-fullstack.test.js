@@ -13,6 +13,12 @@ describe.sequential('Module & File Discovery Fullstack Integration', () => {
       pages: { dir: 'src/pages' },
       api: { dir: 'src/api', prefix: '/api' },
       modules: { dir: 'src/modules' },
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
     });
     app = serverInstance.app;
   });

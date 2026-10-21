@@ -16,6 +16,12 @@ describe('Route registration order (dynamic vs static siblings)', () => {
     const result = createApp({
       pagesDir: PAGES_DIR,
       viewsDir: VIEWS_DIR,
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
     });
     app = result.app;
   });

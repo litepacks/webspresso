@@ -73,6 +73,13 @@ describe('Schema Explorer Admin Plugin Integration', () => {
     const result = createApp({
       pagesDir: emptyPagesDir,
       viewsDir: './tests/fixtures/views',
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
       plugins: [
         adminPanelPlugin({ db }),
         schemaExplorerPlugin({
@@ -95,15 +102,7 @@ describe('Schema Explorer Admin Plugin Integration', () => {
       });
     expect(setupRes.status).toBe(200);
 
-    // Login
-    const loginRes = await request(app)
-      .post('/_admin/api/auth/login')
-      .send({
-        email: 'admin@webspresso.local',
-        password: 'password123',
-      });
-    expect(loginRes.status).toBe(200);
-    sharedCookie = loginRes.headers['set-cookie'];
+    sharedCookie = setupRes.headers['set-cookie'];
   });
 
   afterAll(async () => {
