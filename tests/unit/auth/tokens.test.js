@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 const knex = require('knex');
 const {
   createAuthTokensTable,
@@ -14,7 +14,7 @@ describe('Auth Tokens Module (core/auth/tokens)', () => {
   let db;
   let adapter;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     db = knex({
       client: 'better-sqlite3',
       connection: ':memory:',
@@ -24,9 +24,12 @@ describe('Auth Tokens Module (core/auth/tokens)', () => {
     adapter = createKnexAuthTokensAdapter(db);
   });
 
-  afterEach(async () => {
+  beforeEach(async () => {
+    await db('auth_tokens').delete();
+  });
+
+  afterAll(async () => {
     if (db) {
-      await dropAuthTokensTable(db);
       await db.destroy();
     }
   });

@@ -45,6 +45,7 @@ describe('content service', () => {
       client: 'better-sqlite3',
       connection: ':memory:',
       useNullAsDefault: true,
+      cache: false,
     });
 
     db.registerModel(createContentTypeModel());
