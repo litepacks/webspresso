@@ -6,6 +6,7 @@ const os = require('os');
 const http = require('http');
 const express = require('express');
 const nunjucks = require('nunjucks');
+const request = require('supertest');
 const { z } = require('zod');
 
 describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
@@ -16,6 +17,9 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
       const fixtureDir = path.join(__dirname, '../fixtures/empty-pages');
       const { nunjucksEnv } = createApp({
         pagesDir: fixtureDir,
+        api: false,
+        modules: false,
+        silent: true,
         helmet: false,
       });
 
@@ -52,6 +56,9 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
       const fixtureDir = path.join(__dirname, '../fixtures/empty-pages');
       const { app } = createApp({
         pagesDir: fixtureDir,
+        api: false,
+        modules: false,
+        silent: true,
         plugins: [pluginWithCsp],
         helmet: {
           contentSecurityPolicy: {
@@ -69,14 +76,19 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
 
     it('handles custom errorPages handlers and customErrorHandler', async () => {
       const fixtureDir = path.join(__dirname, '../fixtures/empty-pages');
-      const request = require('supertest');
 
       const { app } = createApp({
         pagesDir: fixtureDir,
+        api: false,
+        modules: false,
+        silent: true,
         helmet: false,
         setupRoutes: (a) => {
           a.get('/trigger-error', () => {
             throw new Error('Explosion');
+          });
+          a.get('/teapot-error', () => {
+            throw new Error('I am a teapot');
           });
         },
         errorPages: {
@@ -101,21 +113,15 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
       expect(res500.text).toBe('custom-server-error');
 
       // Test custom error handler (app.setErrorHandler)
-      const { app: appWithHandler } = createApp({
-        pagesDir: fixtureDir,
-        helmet: false,
-        setupRoutes: (a) => {
-          a.get('/teapot-error', () => {
-            throw new Error('I am a teapot');
-          });
-        },
-      });
-      appWithHandler.setErrorHandler(async (err, req, res) => {
-        res.status(418).send('I am a custom teapot');
-        return true;
+      app.setErrorHandler(async (err, req, res) => {
+        if (req.path === '/teapot-error') {
+          res.status(418).send('I am a custom teapot');
+          return true;
+        }
+        return false;
       });
 
-      const resTeapot = await request(appWithHandler).get('/teapot-error');
+      const resTeapot = await request(app).get('/teapot-error');
       expect(resTeapot.status).toBe(418);
       expect(resTeapot.text).toBe('I am a custom teapot');
 
@@ -129,10 +135,12 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
 
     it('handles template rendering failure fallback in error handlers', async () => {
       const fixtureDir = path.join(__dirname, '../fixtures/empty-pages');
-      const request = require('supertest');
 
       const { app } = createApp({
         pagesDir: fixtureDir,
+        api: false,
+        modules: false,
+        silent: true,
         helmet: false,
         setupRoutes: (a) => {
           a.get('/throw-server-err', () => {
@@ -164,9 +172,11 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
 
     it('handles request draining during shutdown', async () => {
       const fixtureDir = path.join(__dirname, '../fixtures/empty-pages');
-      const request = require('supertest');
       const { app, shutdownManager } = createApp({
         pagesDir: fixtureDir,
+        api: false,
+        modules: false,
+        silent: true,
         helmet: false,
       });
 
@@ -613,9 +623,9 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
           this.onopen = null;
           this.onerror = null;
           this.onmessage = null;
-          setTimeout(() => {
+          setImmediate(() => {
             if (this.onopen) this.onopen();
-          }, 10);
+          });
         }
         close() {}
       }
@@ -893,14 +903,14 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
 
       // 3. Valid message
       transport.rl.emit('line', JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }));
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise((r) => setImmediate(r));
       expect(mockOutput.writes.length).toBe(2);
       const successMsg = JSON.parse(mockOutput.writes[1]);
       expect(successMsg.result).toBe('ok');
 
       // 4. Server handling error
       transport.rl.emit('line', JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'boom' }));
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise((r) => setImmediate(r));
       expect(mockOutput.writes.length).toBe(3);
       const serverErr = JSON.parse(mockOutput.writes[2]);
       expect(serverErr.error.code).toBe(-32603);
@@ -929,6 +939,9 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
 
       const { app } = createApp({
         pagesDir: tmpDir,
+        api: false,
+        modules: false,
+        silent: true,
         helmet: false,
       });
 
@@ -943,6 +956,9 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
       const fixtureDir = path.join(__dirname, '../fixtures/empty-pages');
       const { app } = createApp({
         pagesDir: fixtureDir,
+        api: false,
+        modules: false,
+        silent: true,
         helmet: false,
         setupRoutes: (a) => {
           a.get('/trigger-timeout', (req, res, next) => {
@@ -1089,42 +1105,37 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
     it('exercises customErrorHandler fall-through and exception handling in server error boundary', async () => {
       const fixtureDir = path.join(__dirname, '../fixtures/empty-pages');
 
-      // 1. customErrorHandler returning false (falls through)
-      const { app: appFallthrough } = createApp({
+      const { app } = createApp({
         pagesDir: fixtureDir,
+        api: false,
+        modules: false,
+        silent: true,
         helmet: false,
         setupRoutes: (a) => {
           a.get('/fallthrough-err', () => {
             throw new Error('Should fall through');
           });
-        },
-      });
-
-      appFallthrough.setErrorHandler(async () => {
-        // Return false so default error handler runs
-        return false;
-      });
-
-      const resFallthrough = await request(appFallthrough).get('/fallthrough-err').set('Accept', 'application/json');
-      expect(resFallthrough.status).toBe(500);
-
-      // 2. customErrorHandler throwing an exception (caught and falls through)
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const { app: appExplodingHandler } = createApp({
-        pagesDir: fixtureDir,
-        helmet: false,
-        setupRoutes: (a) => {
           a.get('/handler-explode', () => {
             throw new Error('Original Error');
           });
         },
       });
 
-      appExplodingHandler.setErrorHandler(async () => {
+      // 1. customErrorHandler returning false (falls through)
+      app.setErrorHandler(async () => {
+        return false;
+      });
+
+      const resFallthrough = await request(app).get('/fallthrough-err').set('Accept', 'application/json');
+      expect(resFallthrough.status).toBe(500);
+
+      // 2. customErrorHandler throwing an exception (caught and falls through)
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      app.setErrorHandler(async () => {
         throw new Error('Error Handler Crashed!');
       });
 
-      const resExplode = await request(appExplodingHandler).get('/handler-explode').set('Accept', 'application/json');
+      const resExplode = await request(app).get('/handler-explode').set('Accept', 'application/json');
       expect(resExplode.status).toBe(500);
       consoleErrorSpy.mockRestore();
     });
