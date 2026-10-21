@@ -276,6 +276,9 @@ function uploadPlugin(options = {}) {
           }
         }
       }
+      if (typeof ctx.addRoute === 'function' && !ctx.core) {
+        mountRoutes(ctx);
+      }
     },
 
     onRoutesReady(ctx) {
