@@ -174,6 +174,7 @@ describe('Core Decoupling & Framework Independence', () => {
   describe('Backward Compatibility with Express createApp()', () => {
     it('createApp() returns functional Express app with app.use, app.get, app.service', async () => {
       const app = createApp({
+        rootDir: process.cwd(),
         servicesDir: null,
       });
 
@@ -253,6 +254,7 @@ describe('Core Decoupling & Framework Independence', () => {
     it('injects req.context, req.service, and propagates user/session into services during HTTP requests', async () => {
       const request = require('supertest');
       const app = createApp({
+        rootDir: process.cwd(),
         servicesDir: null,
       });
 
@@ -304,6 +306,7 @@ describe('Core Decoupling & Framework Independence', () => {
       };
 
       const app = createApp({
+        rootDir: process.cwd(),
         servicesDir: null,
         plugins: [pluginWithHttp],
       });

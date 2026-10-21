@@ -39,8 +39,13 @@ class MockD1Database {
           const id = db.nextId++;
           const tableRows = db.tables[tableName] || (db.tables[tableName] = []);
           const record = { id };
-          // Naive column extraction for mock
-          if (tableName === 'users') {
+          const colMatch = /\(([^)]+)\)\s+values/i.exec(sql);
+          if (colMatch) {
+            const cols = colMatch[1].split(',').map((c) => c.trim().replace(/[`"]/g, ''));
+            cols.forEach((col, idx) => {
+              record[col] = boundParams[idx];
+            });
+          } else if (tableName === 'users') {
             record.email = boundParams[0];
             record.role = boundParams[1] || 'user';
           } else {
@@ -73,7 +78,16 @@ class MockD1Database {
           const tableName = /into\s+[`"]?(\w+)[`"]?/i.exec(sql)?.[1] || 'notes';
           const id = db.nextId++;
           const tableRows = db.tables[tableName] || (db.tables[tableName] = []);
-          const record = { id, title: boundParams[0] };
+          const record = { id };
+          const colMatch = /\(([^)]+)\)\s+values/i.exec(sql);
+          if (colMatch) {
+            const cols = colMatch[1].split(',').map((c) => c.trim().replace(/[`"]/g, ''));
+            cols.forEach((col, idx) => {
+              record[col] = boundParams[idx];
+            });
+          } else {
+            record.title = boundParams[0];
+          }
           tableRows.push(record);
           return { success: true, meta: { changes: 1, last_row_id: id } };
         }

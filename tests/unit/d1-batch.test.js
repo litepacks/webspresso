@@ -257,7 +257,7 @@ describe('Cloudflare D1 Atomic Batch API', () => {
   describe('Dual-Runtime: db.batch() on standard Node.js SQLite', () => {
     it('executes atomically inside db.transaction() on standard SQLite', async () => {
       const db = createDatabase({
-        client: 'sqlite3',
+        client: 'better-sqlite3',
         connection: { filename: ':memory:' },
         useNullAsDefault: true,
       });
@@ -285,7 +285,7 @@ describe('Cloudflare D1 Atomic Batch API', () => {
 
     it('rolls back all statements if one statement fails in batch on Node.js', async () => {
       const db = createDatabase({
-        client: 'sqlite3',
+        client: 'better-sqlite3',
         connection: { filename: ':memory:' },
         useNullAsDefault: true,
       });
@@ -312,7 +312,7 @@ describe('Cloudflare D1 Atomic Batch API', () => {
 
     it('supports callback builder on standard Node.js database', async () => {
       const db = createDatabase({
-        client: 'sqlite3',
+        client: 'better-sqlite3',
         connection: { filename: ':memory:' },
         useNullAsDefault: true,
       });

@@ -627,6 +627,10 @@ function createApp(options = {}) {
     attachProfilerToKnex(options.db.knex);
   }
   
+  if (!initialPagesDir && !options.pages && !options.api && !options.modules && !options.routes && !options.rootDir) {
+    throw new Error('pagesDir is required');
+  }
+
   const rootDir = options.rootDir || (() => {
     if (process.env.NODE_ENV === 'test') {
       if (checkIsWebspressoPackage()) return process.cwd();
@@ -634,12 +638,6 @@ function createApp(options = {}) {
     }
     return process.cwd();
   })();
-
-  const hasDefaultPages = fs.existsSync(path.join(rootDir, 'src/pages')) || fs.existsSync(path.join(rootDir, 'pages'));
-
-  if (!initialPagesDir && !options.pages && !options.api && !options.modules && !options.routes && !options.rootDir && !hasDefaultPages) {
-    throw new Error('pagesDir is required');
-  }
 
   let pagesDir = initialPagesDir;
   if (!pagesDir) {
