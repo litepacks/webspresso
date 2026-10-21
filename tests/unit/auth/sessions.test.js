@@ -18,7 +18,7 @@ const {
 describe('Active Devices & Session Management (core/auth/sessions)', () => {
   let db;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     db = knex({
       client: 'better-sqlite3',
       connection: ':memory:',
@@ -27,11 +27,25 @@ describe('Active Devices & Session Management (core/auth/sessions)', () => {
     await createUserSessionsTable(db);
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db) {
       await dropUserSessionsTable(db);
       await db.destroy();
     }
+  });
+
+  beforeEach(async () => {
+    if (db) {
+      const hasTable = await db.schema.hasTable('user_sessions');
+      if (!hasTable) {
+        await createUserSessionsTable(db);
+      } else {
+        await db('user_sessions').delete();
+      }
+    }
+  });
+
+  afterEach(() => {
     vi.restoreAllMocks();
   });
 
