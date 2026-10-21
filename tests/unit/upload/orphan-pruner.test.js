@@ -3,7 +3,7 @@
  * @vitest-environment node
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
@@ -23,7 +23,7 @@ describe('Orphaned Uploads Pruner', () => {
   let tmpDir;
   let db;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'webspresso-upload-test-'));
 
     const k = knex({
@@ -62,7 +62,9 @@ describe('Orphaned Uploads Pruner', () => {
         { name: 'Article', table: 'articles' },
       ],
     };
+  });
 
+  beforeEach(async () => {
     // Populate tmpDir with sample files on disk
     await fs.mkdir(path.join(tmpDir, 'charts'), { recursive: true });
     await fs.mkdir(path.join(tmpDir, 'old-folder'), { recursive: true });
@@ -77,7 +79,7 @@ describe('Orphaned Uploads Pruner', () => {
     await fs.writeFile(path.join(tmpDir, '.DS_Store'), 'IGNORED_HIDDEN_METADATA');
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db && db.knex) {
       await db.knex.destroy();
     }

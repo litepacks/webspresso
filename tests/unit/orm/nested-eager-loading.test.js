@@ -73,6 +73,7 @@ describe('Nested Eager Loading', () => {
         client: 'better-sqlite3',
         connection: ':memory:',
         models: './tests/fixtures/models-empty',
+        cache: false,
       });
 
       // 1. Define Models

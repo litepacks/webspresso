@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import path from 'path';
 import fs from 'fs';
 import request from 'supertest';
@@ -8,7 +8,7 @@ describe('On-Demand / Lazy Plugins (lazyPlugin)', () => {
   let tempDir;
   let db;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     clearRegistry();
     tempDir = path.join(__dirname, '../../fixtures/temp-lazy-plugin-' + Date.now());
     fs.mkdirSync(path.join(tempDir, 'views'), { recursive: true });
@@ -27,6 +27,7 @@ describe('On-Demand / Lazy Plugins (lazyPlugin)', () => {
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
+      cache: false,
     });
     const TestItem = defineModel({
       name: 'TestItem',
@@ -43,7 +44,8 @@ describe('On-Demand / Lazy Plugins (lazyPlugin)', () => {
     });
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
+    clearRegistry();
     if (db && typeof db.close === 'function') {
       await db.close();
     }

@@ -1,6 +1,6 @@
 'use strict';
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import knexLib from 'knex';
 import { z } from 'zod';
 import { defineModel, clearRegistry } from '../../../core/orm/model';
@@ -11,8 +11,10 @@ describe('ORM Batch & Upsert Operations', () => {
   let knex;
   let ProductRepo;
   let ProductModel;
+  let WideRepo;
+  let WideModel;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     clearRegistry();
     knex = knexLib({
       client: 'better-sqlite3',
@@ -53,9 +55,26 @@ describe('ORM Batch & Upsert Operations', () => {
     });
 
     ProductRepo = createRepository(ProductModel, knex);
+
+    WideModel = defineModel({
+      name: 'WideItem',
+      table: 'wide_items',
+      schema: z.object({
+        id: z.number().int().optional(),
+        field_1: z.string().optional(),
+        field_20: z.string().optional(),
+      }).passthrough(),
+    });
+
+    WideRepo = createRepository(WideModel, knex);
   });
 
-  afterEach(async () => {
+  beforeEach(async () => {
+    await knex('products').delete();
+    await knex('wide_items').delete();
+  });
+
+  afterAll(async () => {
     clearRegistry();
     if (knex) {
       await knex.destroy();
@@ -142,18 +161,6 @@ describe('ORM Batch & Upsert Operations', () => {
     });
 
     it('handles thousands of rows without hitting SQLite too many SQL variables error', async () => {
-      const WideModel = defineModel({
-        name: 'WideItem',
-        table: 'wide_items',
-        schema: z.object({
-          id: z.number().int().optional(),
-          field_1: z.string().optional(),
-          field_20: z.string().optional(),
-        }).passthrough(),
-      });
-
-      const WideRepo = createRepository(WideModel, knex);
-
       // Create 1500 wide rows (1500 rows * 22 columns = 33,000 variables)
       const rows = [];
       for (let i = 0; i < 1500; i++) {

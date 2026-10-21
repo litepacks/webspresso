@@ -241,6 +241,7 @@ describe('ORM Universal Full-Text Search (core/orm/search.js)', () => {
         client: 'better-sqlite3',
         connection: ':memory:',
         models: './tests/fixtures/models-empty',
+        cache: false,
       });
 
       Article = defineModel({

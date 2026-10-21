@@ -5,12 +5,13 @@ const { createOrmTools, createOrmResources, describeModel } = require('../../../
 describe('MCP ORM Provider', () => {
   let db;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     clearRegistry();
     db = createDatabase({
       client: 'better-sqlite3',
       connection: ':memory:',
       models: './tests/fixtures/models-empty',
+      cache: false,
     });
 
     const Article = defineModel({
@@ -43,10 +44,11 @@ describe('MCP ORM Provider', () => {
     await repo.create({ title: 'First Post', views: 42, published: true });
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db && db.destroy) {
       await db.destroy();
     }
+    clearRegistry();
   });
 
   it('should describe an ORM model accurately', () => {

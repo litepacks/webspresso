@@ -7,17 +7,20 @@ const request = require('supertest');
 const { createApp, fastETag } = require('../../src/server');
 
 const FIXTURES_PATH = path.join(__dirname, '..', 'fixtures');
-const PAGES_DIR = path.join(FIXTURES_PATH, 'pages');
+const PAGES_DIR = path.join(FIXTURES_PATH, 'empty-pages');
 const VIEWS_DIR = path.join(FIXTURES_PATH, 'views');
 
 describe('server.js', () => {
   let app;
   let nunjucksEnv;
 
-  beforeEach(() => {
+  beforeAll(() => {
     const result = createApp({
       pagesDir: PAGES_DIR,
-      viewsDir: VIEWS_DIR
+      viewsDir: VIEWS_DIR,
+      cache: false,
+      logging: false,
+      lazyRoutes: true,
     });
     app = result.app;
     nunjucksEnv = result.nunjucksEnv;

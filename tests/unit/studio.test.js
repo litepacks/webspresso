@@ -31,11 +31,12 @@ describe('Webspresso DB Studio (core/studio)', () => {
   let db;
   let knex;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     db = createDatabase({
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
+      cache: false,
     });
     knex = db.knex;
 
@@ -52,21 +53,26 @@ describe('Webspresso DB Studio (core/studio)', () => {
       t.integer('user_id').notNullable();
       t.string('title').notNullable();
     });
+  });
 
-    // Seed test records
+  beforeEach(async () => {
+    await knex('posts').delete();
+    await knex('users').delete();
+
+    // Seed test records with explicit IDs
     await knex('users').insert([
-      { email: 'alice@example.com', name: 'Alice Smith', age: 25 },
-      { email: 'bob@example.com', name: 'Bob Jones', age: 30 },
-      { email: 'carol@example.com', name: 'Carol White', age: 35 },
+      { id: 1, email: 'alice@example.com', name: 'Alice Smith', age: 25 },
+      { id: 2, email: 'bob@example.com', name: 'Bob Jones', age: 30 },
+      { id: 3, email: 'carol@example.com', name: 'Carol White', age: 35 },
     ]);
 
     await knex('posts').insert([
-      { user_id: 1, title: 'First Post' },
-      { user_id: 1, title: 'Second Post' },
+      { id: 1, user_id: 1, title: 'First Post' },
+      { id: 2, user_id: 1, title: 'Second Post' },
     ]);
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db) {
       await db.destroy();
     }

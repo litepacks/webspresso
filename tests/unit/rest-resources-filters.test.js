@@ -12,13 +12,14 @@ describe('REST Resources - Rich Query Filtering & Multi-Column Sorting', () => {
   let db;
   let Product;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     clearRegistry();
 
     db = createDatabase({
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
+      cache: false,
     });
 
     await db.knex.schema.createTable('products', (table) => {
@@ -55,7 +56,7 @@ describe('REST Resources - Rich Query Filtering & Multi-Column Sorting', () => {
     await repo.create({ title: 'Old Book', sku: null, price: 15, active: false, category: null });
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db) await db.destroy();
     clearRegistry();
   });

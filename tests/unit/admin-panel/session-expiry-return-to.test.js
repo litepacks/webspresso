@@ -8,6 +8,33 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
+// Load client parts once at module scope
+const codePart1 = fs.readFileSync(
+  path.join(__dirname, '../../../plugins/admin-panel/client/parts/01-state-api-breadcrumb.js'),
+  'utf8'
+);
+const codePart6 = fs.readFileSync(
+  path.join(__dirname, '../../../plugins/admin-panel/client/parts/06-login-setup-forms.js'),
+  'utf8'
+);
+const clientBundleScript = new vm.Script(
+  codePart1 + '\n' + codePart6 + `
+    globalThis.state = state;
+    globalThis.isSafeIntendedRoute = isSafeIntendedRoute;
+    globalThis.saveIntendedRoute = saveIntendedRoute;
+    globalThis.consumeIntendedRoute = consumeIntendedRoute;
+    globalThis.redirectToLogin = redirectToLogin;
+    globalThis.toastState = toastState;
+    globalThis.notify = notify;
+    globalThis.confirmState = confirmState;
+    globalThis.confirmModal = confirmModal;
+    globalThis.confirmAction = confirmAction;
+    globalThis.ToastContainer = ToastContainer;
+    globalThis.ConfirmModalContainer = ConfirmModalContainer;
+    globalThis.LoginForm = LoginForm;
+  `
+);
+
 describe('Session Expiry & Toast/Confirm Notification UX', () => {
   let context;
   let sessionStorageStore = {};
@@ -81,18 +108,6 @@ describe('Session Expiry & Toast/Confirm Notification UX', () => {
       },
     };
 
-    // Load client part 01 (state, api, breadcrumb, notify, confirm, returnTo)
-    const codePart1 = fs.readFileSync(
-      path.join(__dirname, '../../../plugins/admin-panel/client/parts/01-state-api-breadcrumb.js'),
-      'utf8'
-    );
-
-    // Load client part 06 (login & setup forms)
-    const codePart6 = fs.readFileSync(
-      path.join(__dirname, '../../../plugins/admin-panel/client/parts/06-login-setup-forms.js'),
-      'utf8'
-    );
-
     context = {
       m,
       state,
@@ -127,24 +142,7 @@ describe('Session Expiry & Toast/Confirm Notification UX', () => {
     };
 
     vm.createContext(context);
-    vm.runInContext(
-      codePart1 + '\n' + codePart6 + `
-        globalThis.state = state;
-        globalThis.isSafeIntendedRoute = isSafeIntendedRoute;
-        globalThis.saveIntendedRoute = saveIntendedRoute;
-        globalThis.consumeIntendedRoute = consumeIntendedRoute;
-        globalThis.redirectToLogin = redirectToLogin;
-        globalThis.toastState = toastState;
-        globalThis.notify = notify;
-        globalThis.confirmState = confirmState;
-        globalThis.confirmModal = confirmModal;
-        globalThis.confirmAction = confirmAction;
-        globalThis.ToastContainer = ToastContainer;
-        globalThis.ConfirmModalContainer = ConfirmModalContainer;
-        globalThis.LoginForm = LoginForm;
-      `,
-      context
-    );
+    clientBundleScript.runInContext(context);
   });
 
   function findNode(node, predicate) {

@@ -1,6 +1,6 @@
 'use strict';
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 const knexLib = require('knex');
 const { z } = require('zod');
 const { defineModel, clearRegistry } = require('../../../core/orm/model');
@@ -13,7 +13,7 @@ describe('Dynamic Model Row-Level Security (RLS)', () => {
   let knex;
   let db;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     clearRegistry();
     knex = knexLib({
       client: 'better-sqlite3',
@@ -52,10 +52,18 @@ describe('Dynamic Model Row-Level Security (RLS)', () => {
       client: 'better-sqlite3',
       connection: { filename: ':memory:' },
       useNullAsDefault: true,
+      cache: false,
     });
   });
 
-  afterEach(async () => {
+  beforeEach(async () => {
+    clearRegistry();
+    await knex('notes').delete();
+    await knex('tenant_docs').delete();
+    await knex('articles').delete();
+  });
+
+  afterAll(async () => {
     clearRegistry();
     if (knex) {
       await knex.destroy();

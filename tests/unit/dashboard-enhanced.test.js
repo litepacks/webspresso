@@ -38,7 +38,7 @@ describe('Enhanced Developer Dashboard & Dev Toolbar', () => {
   });
 
   describe('Dashboard Extended APIs (/api/models, /api/services, /api/overview)', () => {
-    beforeEach(async () => {
+    beforeAll(async () => {
       if (hasModel('DevToolProduct')) {
         unregisterModel('DevToolProduct');
       }
@@ -60,9 +60,12 @@ describe('Enhanced Developer Dashboard & Dev Toolbar', () => {
       const fixturesDir = path.join(__dirname, '../fixtures');
       const instance = createApp({
         server: { port: 0 },
-        pagesDir: path.join(fixturesDir, 'pages'),
+        pagesDir: path.join(fixturesDir, 'empty-pages'),
         viewsDir: path.join(fixturesDir, 'views'),
         plugins: [dashboardPlugin()],
+        logging: false,
+        cache: false,
+        lazyRoutes: true,
       });
 
       instance.app.serviceRegistry.register(
@@ -80,6 +83,16 @@ describe('Enhanced Developer Dashboard & Dev Toolbar', () => {
       await new Promise((resolve) => server.listen(0, resolve));
       const port = server.address().port;
       baseUrl = `http://localhost:${port}`;
+    });
+
+    afterAll(async () => {
+      if (server) {
+        await new Promise((resolve) => server.close(resolve));
+        server = null;
+      }
+      if (hasModel('DevToolProduct')) {
+        unregisterModel('DevToolProduct');
+      }
     });
 
     it('should return models list from /_webspresso/api/models', async () => {
