@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 const knex = require('knex');
 const {
   createAuth,
@@ -22,7 +22,7 @@ describe('Magic Link Authentication (core/auth/magic-link)', () => {
   let adapter;
   let mockUsers;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     db = knex({
       client: 'better-sqlite3',
       connection: ':memory:',
@@ -30,18 +30,26 @@ describe('Magic Link Authentication (core/auth/magic-link)', () => {
     });
     await createAuthTokensTable(db);
     adapter = createKnexAuthTokensAdapter(db);
+  });
 
+  afterAll(async () => {
+    if (db) {
+      await dropAuthTokensTable(db);
+      await db.destroy();
+    }
+  });
+
+  beforeEach(async () => {
+    if (db) {
+      await db('auth_tokens').delete();
+    }
     mockUsers = [
       { id: 1, email: 'alice@example.com', name: 'Alice', role: 'admin', email_verified_at: null },
       { id: 2, email: 'bob@example.com', name: 'Bob', role: 'user', email_verified_at: new Date('2025-01-01') },
     ];
   });
 
-  afterEach(async () => {
-    if (db) {
-      await dropAuthTokensTable(db);
-      await db.destroy();
-    }
+  afterEach(() => {
     vi.restoreAllMocks();
   });
 
