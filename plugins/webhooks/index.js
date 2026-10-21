@@ -172,7 +172,6 @@ function webhooksPlugin(options = {}) {
             });
           }
         }
-      }
 
       return () => {
         dispatcher.dispose();
