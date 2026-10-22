@@ -207,7 +207,7 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
   executionContext.retry = retry;
 
   // Validate input
-  const validatedInput = await validateServiceInput(serviceDef.schema, input, name);
+  const validatedInput = await validateServiceInput(serviceDef.schema, input, name, serviceDef.validationOptions || options?.validation);
   if (validatedInput && typeof validatedInput === 'object' && !('input' in validatedInput)) {
     try {
       Object.defineProperty(validatedInput, 'input', {
@@ -515,6 +515,12 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
 
     if (logger && typeof logger.error === 'function' && !(err instanceof ValidationError)) {
       logger.error(`[service] ${name} execution failed (${duration}ms): ${err.message}`);
+    }
+
+    if (err instanceof ValidationError) {
+      if (!err.code) err.code = 'VALIDATION_ERROR';
+      if (err.statusCode === undefined) err.statusCode = err.status || 400;
+      if (err.status === undefined) err.status = 400;
     }
 
     // Attach service name to error if not present

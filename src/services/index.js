@@ -6,7 +6,14 @@
 
 const { ServiceRegistry } = require('./registry');
 const { discoverServices, filePathToServiceName, toCamelCase } = require('./discovery');
-const { validateServiceInput, sanitizeInput } = require('./validator');
+const {
+  validateServiceInput,
+  sanitizeInput,
+  createServiceValidationError,
+  normalizeValidationIssues,
+  formatZodErrors,
+  compileServiceSchema,
+} = require('./validator');
 const {
   executeService,
   composeMiddleware,
@@ -91,6 +98,10 @@ module.exports = {
   discoverServices,
   filePathToServiceName,
   validateServiceInput,
+  createServiceValidationError,
+  normalizeValidationIssues,
+  formatZodErrors,
+  compileServiceSchema,
   executeService,
   composeMiddleware,
   SERVICE_CALL_STACK_SYMBOL,

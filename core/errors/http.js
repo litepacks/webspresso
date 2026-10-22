@@ -23,6 +23,7 @@ class HttpError extends WebspressoError {
     super(message, options);
 
     this.status = typeof status === 'number' ? status : 500;
+    this.statusCode = this.status;
     this.headers = options.headers || {};
     this.expose = options.expose !== undefined ? Boolean(options.expose) : this.status < 500;
   }

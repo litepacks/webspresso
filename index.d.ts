@@ -492,7 +492,28 @@ export function createExchangeServices(options?: {
   db?: unknown;
 }): Record<string, ServiceDefinition>;
 
-export function validateServiceInput(schema: unknown, input: unknown, serviceName: string): unknown;
+export function validateServiceInput(
+  schema: unknown,
+  input: unknown,
+  serviceName: string,
+  options?: { rejectDangerousKeys?: boolean }
+): unknown;
+
+export function createServiceValidationError(
+  message: string,
+  options?: {
+    serviceName: string;
+    fields?: Record<string, string>;
+    fieldErrors?: Record<string, string[]>;
+    details?: unknown[];
+    cause?: unknown;
+    status?: number;
+  }
+): ValidationError;
+
+export function normalizeValidationIssues(
+  issues: unknown[]
+): Array<{ path: string; message: string; code?: string }>;
 
 export function executeService(
   registry: ServiceRegistry,
@@ -779,7 +800,19 @@ export class CircuitBreakerTimeoutError extends GatewayTimeoutError {
 
 export class ValidationError extends HttpError {
   fields: Record<string, string[] | string>;
-  constructor(message?: string, options?: ErrorOptions & { fields?: Record<string, string[] | string> });
+  fieldErrors?: Record<string, string[]>;
+  service?: string;
+  issues?: unknown[];
+  details?: unknown[];
+  normalizedIssues?: Array<{ path: string; message: string; code?: string }>;
+  constructor(message?: string, options?: ErrorOptions & {
+    fields?: Record<string, string[] | string>;
+    fieldErrors?: Record<string, string[]>;
+    service?: string;
+    statusCode?: number;
+    issues?: unknown[];
+    details?: unknown[];
+  });
 }
 
 export class ConfigurationError extends WebspressoError { constructor(message: string, options?: ErrorOptions); }

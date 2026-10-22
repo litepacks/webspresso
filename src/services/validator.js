@@ -161,24 +161,93 @@ function compileServiceSchema(rawSchema) {
 }
 
 /**
- * Format Zod validation errors into a clean string and fields map
+ * Format Zod validation errors into a clean string, fields map, and fieldErrors array map
  * @param {z.ZodError} zodError
  * @param {string} serviceName
- * @returns {{ message: string, fields: Record<string, string> }}
+ * @returns {{ message: string, fields: Record<string, string>, fieldErrors: Record<string, string[]> }}
  */
 function formatZodErrors(zodError, serviceName) {
   const fields = {};
+  const fieldErrors = {};
   const lines = [];
 
-  for (const issue of zodError.issues || []) {
+  for (const issue of (zodError && zodError.issues) || []) {
     const pathKey = issue.path && issue.path.length > 0 ? issue.path.join('.') : '_root';
     const fieldMsg = issue.message || 'invalid value';
-    fields[pathKey] = fieldMsg;
+    if (!fields[pathKey]) {
+      fields[pathKey] = fieldMsg;
+    }
+    if (!fieldErrors[pathKey]) {
+      fieldErrors[pathKey] = [];
+    }
+    fieldErrors[pathKey].push(fieldMsg);
     lines.push(`- ${pathKey}: ${fieldMsg}`);
   }
 
   const message = `Invalid service input for ${serviceName}:\n${lines.join('\n')}`;
-  return { message, fields };
+  return { message, fields, fieldErrors };
+}
+
+/**
+ * Normalize raw validation issues into a consistent structure
+ * @param {Array<Object>} issues
+ * @returns {Array<{ path: string, message: string, code?: string }>}
+ */
+function normalizeValidationIssues(issues) {
+  if (!Array.isArray(issues)) return [];
+  return issues.map((issue) => ({
+    path: Array.isArray(issue.path) ? issue.path.join('.') : (issue.path ? String(issue.path) : '_root'),
+    message: issue.message || 'invalid value',
+    code: issue.code || 'invalid_type',
+  }));
+}
+
+/**
+ * Create a standardized ValidationError for services input validation
+ * @param {string} message
+ * @param {Object} [options]
+ * @param {string} options.serviceName
+ * @param {Record<string, string>} [options.fields]
+ * @param {Record<string, string[]>} [options.fieldErrors]
+ * @param {Array<Object>} [options.details]
+ * @param {Error} [options.cause]
+ * @param {number} [options.status=400]
+ * @returns {ValidationError}
+ */
+function createServiceValidationError(message, {
+  serviceName,
+  fields = {},
+  fieldErrors = {},
+  details = [],
+  cause = null,
+  status = 400,
+} = {}) {
+  const normalizedIssues = normalizeValidationIssues(details);
+
+  const err = new ValidationError(message, {
+    status,
+    statusCode: status,
+    code: 'VALIDATION_ERROR',
+    service: serviceName,
+    fields,
+    fieldErrors,
+    details,
+    issues: details,
+    cause,
+  });
+
+  err.name = 'ValidationError';
+  err.code = 'VALIDATION_ERROR';
+  err.status = status;
+  err.statusCode = status;
+  err.service = serviceName;
+  err.fields = fields;
+  err.fieldErrors = fieldErrors;
+  err.details = details;
+  err.issues = details;
+  err.normalizedIssues = normalizedIssues;
+
+  return err;
 }
 
 /**
@@ -186,10 +255,22 @@ function formatZodErrors(zodError, serviceName) {
  * @param {Object|Function|null} schema - Schema definition
  * @param {*} input - Input to validate
  * @param {string} serviceName - Service name
+ * @param {Object} [options] - Validation options
+ * @param {boolean} [options.rejectDangerousKeys=false] - Whether to strictly reject prototype pollution keys
  * @returns {*|Promise<*>} Validated input
  * @throws {ValidationError} When validation fails
  */
-function validateServiceInput(schema, input, serviceName) {
+function validateServiceInput(schema, input, serviceName, options = {}) {
+  if (options && options.rejectDangerousKeys === true && hasDangerousKeys(input)) {
+    throw createServiceValidationError(`Invalid service input for ${serviceName}: dangerous prototype keys detected`, {
+      serviceName,
+      fields: { _root: 'Dangerous prototype keys detected in input' },
+      fieldErrors: { _root: ['Dangerous prototype keys detected in input'] },
+      details: [{ path: [], message: 'Dangerous prototype keys detected in input', code: 'prototype_pollution' }],
+      status: 400,
+    });
+  }
+
   const sanitized = sanitizeInput(input);
 
   if (!schema) {
@@ -206,10 +287,13 @@ function validateServiceInput(schema, input, serviceName) {
     try {
       const result = compiled.safeParse(sanitized);
       if (!result.success) {
-        const { message, fields } = formatZodErrors(result.error, serviceName);
-        throw new ValidationError(message, {
+        const { message, fields, fieldErrors } = formatZodErrors(result.error, serviceName);
+        throw createServiceValidationError(message, {
+          serviceName,
           fields,
+          fieldErrors,
           details: result.error.issues,
+          status: 400,
         });
       }
       return result.data;
@@ -221,13 +305,32 @@ function validateServiceInput(schema, input, serviceName) {
       if (typeof compiled.safeParseAsync === 'function') {
         return compiled.safeParseAsync(sanitized).then((asyncResult) => {
           if (!asyncResult.success) {
-            const { message, fields } = formatZodErrors(asyncResult.error, serviceName);
-            throw new ValidationError(message, {
+            const { message, fields, fieldErrors } = formatZodErrors(asyncResult.error, serviceName);
+            throw createServiceValidationError(message, {
+              serviceName,
               fields,
+              fieldErrors,
               details: asyncResult.error.issues,
+              status: 400,
             });
           }
           return asyncResult.data;
+        }).catch((asyncErr) => {
+          if (asyncErr instanceof ValidationError) {
+            if (!asyncErr.service) asyncErr.service = serviceName;
+            if (!asyncErr.code) asyncErr.code = 'VALIDATION_ERROR';
+            if (asyncErr.statusCode === undefined) asyncErr.statusCode = asyncErr.status || 400;
+            if (asyncErr.status === undefined) asyncErr.status = 400;
+            throw asyncErr;
+          }
+          throw createServiceValidationError(`Invalid service input for ${serviceName}: ${asyncErr.message}`, {
+            serviceName,
+            fields: { _root: asyncErr.message },
+            fieldErrors: { _root: [asyncErr.message] },
+            details: [{ path: [], message: asyncErr.message }],
+            cause: asyncErr,
+            status: 400,
+          });
         });
       }
       throw err;
@@ -241,21 +344,58 @@ function validateServiceInput(schema, input, serviceName) {
       if (res instanceof Promise) {
         return res.then((asyncRes) => {
           if (asyncRes === false) {
-            throw new ValidationError(`Invalid service input for ${serviceName}: custom validation rejected input`);
+            throw createServiceValidationError(`Invalid service input for ${serviceName}: custom validation rejected input`, {
+              serviceName,
+              fields: { _root: 'custom validation rejected input' },
+              fieldErrors: { _root: ['custom validation rejected input'] },
+              details: [{ path: [], message: 'custom validation rejected input' }],
+              status: 400,
+            });
           }
           return typeof asyncRes === 'object' && asyncRes !== null ? asyncRes : sanitized;
+        }).catch((asyncErr) => {
+          if (asyncErr instanceof ValidationError) {
+            if (!asyncErr.service) asyncErr.service = serviceName;
+            if (!asyncErr.code) asyncErr.code = 'VALIDATION_ERROR';
+            if (asyncErr.statusCode === undefined) asyncErr.statusCode = asyncErr.status || 400;
+            if (asyncErr.status === undefined) asyncErr.status = 400;
+            throw asyncErr;
+          }
+          throw createServiceValidationError(`Invalid service input for ${serviceName}: ${asyncErr.message}`, {
+            serviceName,
+            fields: { _root: asyncErr.message },
+            fieldErrors: { _root: [asyncErr.message] },
+            details: [{ path: [], message: asyncErr.message }],
+            cause: asyncErr,
+            status: 400,
+          });
         });
       }
       if (res === false) {
-        throw new ValidationError(`Invalid service input for ${serviceName}: custom validation rejected input`);
+        throw createServiceValidationError(`Invalid service input for ${serviceName}: custom validation rejected input`, {
+          serviceName,
+          fields: { _root: 'custom validation rejected input' },
+          fieldErrors: { _root: ['custom validation rejected input'] },
+          details: [{ path: [], message: 'custom validation rejected input' }],
+          status: 400,
+        });
       }
       return typeof res === 'object' && res !== null ? res : sanitized;
     } catch (err) {
       if (err instanceof ValidationError) {
+        if (!err.service) err.service = serviceName;
+        if (!err.code) err.code = 'VALIDATION_ERROR';
+        if (err.statusCode === undefined) err.statusCode = err.status || 400;
+        if (err.status === undefined) err.status = 400;
         throw err;
       }
-      throw new ValidationError(`Invalid service input for ${serviceName}: ${err.message}`, {
+      throw createServiceValidationError(`Invalid service input for ${serviceName}: ${err.message}`, {
+        serviceName,
+        fields: { _root: err.message },
+        fieldErrors: { _root: [err.message] },
+        details: [{ path: [], message: err.message }],
         cause: err,
+        status: 400,
       });
     }
   }
@@ -270,4 +410,6 @@ module.exports = {
   formatZodErrors,
   sanitizeInput,
   validateServiceInput,
+  createServiceValidationError,
+  normalizeValidationIssues,
 };

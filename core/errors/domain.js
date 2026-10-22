@@ -17,20 +17,36 @@ class ValidationError extends HttpError {
    * @param {string} [message='Validation failed']
    * @param {Object} [options]
    * @param {Record<string, string[]|string>} [options.fields={}] - Field-specific validation error messages
+   * @param {Record<string, string[]>} [options.fieldErrors={}] - Detailed array of errors per field
    * @param {number} [options.status=422]
+   * @param {number} [options.statusCode]
    * @param {string} [options.code='VALIDATION_ERROR']
+   * @param {string} [options.service] - Service identifier if originating from services layer
    * @param {unknown} [options.details]
+   * @param {unknown} [options.issues]
    * @param {unknown} [options.cause]
    */
   constructor(message = 'Validation failed', options = {}) {
-    super(options.status || 422, message, {
+    const status = typeof options.status === 'number'
+      ? options.status
+      : (typeof options.statusCode === 'number' ? options.statusCode : 422);
+
+    super(status, message, {
       code: options.code || 'VALIDATION_ERROR',
       expose: true,
       ...options,
     });
 
+    this.statusCode = this.status;
     this.fields = options.fields || {};
+    if (options.fieldErrors) {
+      this.fieldErrors = options.fieldErrors;
+    }
     this.issues = options.issues || options.details || [];
+    this.details = options.details || this.issues;
+    if (options.service) {
+      this.service = options.service;
+    }
   }
 }
 
