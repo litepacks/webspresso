@@ -41,6 +41,11 @@ describe('Repository Integration', () => {
 
     // Create schema
     await createTestSchema(db.knex);
+    await seedTestData(db.knex);
+
+    UserRepo = db.getRepository('User');
+    CompanyRepo = db.getRepository('Company');
+    PostRepo = db.getRepository('Post');
   });
 
   afterAll(async () => {
@@ -48,17 +53,22 @@ describe('Repository Integration', () => {
     clearRegistry();
   });
 
-  beforeEach(async () => {
-    // Clear and re-seed data before each test
-    await db.knex('posts').del();
-    await db.knex('users').del();
-    await db.knex('companies').del();
-    await seedTestData(db.knex);
+  let dirty = false;
 
-    // Create fresh repositories
-    UserRepo = db.getRepository('User');
-    CompanyRepo = db.getRepository('Company');
-    PostRepo = db.getRepository('Post');
+  beforeEach(async () => {
+    if (dirty) {
+      // Clear and re-seed data before each test
+      await db.knex('posts').del();
+      await db.knex('users').del();
+      await db.knex('companies').del();
+      await seedTestData(db.knex);
+
+      // Create fresh repositories
+      UserRepo = db.getRepository('User');
+      CompanyRepo = db.getRepository('Company');
+      PostRepo = db.getRepository('Post');
+      dirty = false;
+    }
   });
 
   describe('findById', () => {
@@ -131,6 +141,10 @@ describe('Repository Integration', () => {
   });
 
   describe('create', () => {
+    afterEach(() => {
+      dirty = true;
+    });
+
     it('should create a new record', async () => {
       const user = await UserRepo.create({
         email: 'new@test.com',
@@ -161,6 +175,10 @@ describe('Repository Integration', () => {
   });
 
   describe('createMany', () => {
+    afterEach(() => {
+      dirty = true;
+    });
+
     it('should create multiple records', async () => {
       const users = await UserRepo.createMany([
         { email: 'batch1@test.com', name: 'Batch 1' },
@@ -174,6 +192,10 @@ describe('Repository Integration', () => {
   });
 
   describe('update', () => {
+    afterEach(() => {
+      dirty = true;
+    });
+
     it('should update a record', async () => {
       const updated = await UserRepo.update(1, { name: 'Updated Name' });
 
@@ -184,8 +206,8 @@ describe('Repository Integration', () => {
     it('should update timestamps', async () => {
       const before = await UserRepo.findById(1);
       
-      // Wait a bit to ensure different timestamp
-      await new Promise(r => setTimeout(r, 10));
+      // Wait a tick to ensure different timestamp
+      await new Promise(r => setTimeout(r, 1));
       
       const updated = await UserRepo.update(1, { name: 'Newer Name' });
 
@@ -202,6 +224,10 @@ describe('Repository Integration', () => {
   });
 
   describe('updateWhere', () => {
+    afterEach(() => {
+      dirty = true;
+    });
+
     it('should update multiple records matching conditions', async () => {
       const count = await UserRepo.updateWhere(
         { company_id: 1 },
@@ -216,6 +242,10 @@ describe('Repository Integration', () => {
   });
 
   describe('delete (soft)', () => {
+    afterEach(() => {
+      dirty = true;
+    });
+
     it('should soft delete a record', async () => {
       const result = await UserRepo.delete(1);
 
@@ -233,6 +263,10 @@ describe('Repository Integration', () => {
   });
 
   describe('forceDelete', () => {
+    afterEach(() => {
+      dirty = true;
+    });
+
     it('should permanently delete a record', async () => {
       // Delete posts first to avoid FK constraint
       await db.knex('posts').where('user_id', 3).del();
@@ -248,6 +282,10 @@ describe('Repository Integration', () => {
   });
 
   describe('restore', () => {
+    afterEach(() => {
+      dirty = true;
+    });
+
     it('should restore a soft-deleted record', async () => {
       // User 4 is soft-deleted
       const restored = await UserRepo.restore(4);
@@ -290,6 +328,10 @@ describe('Repository Integration', () => {
   });
 
   describe('JSON field handling', () => {
+    afterEach(() => {
+      dirty = true;
+    });
+
     it('should store and retrieve JSON object correctly', async () => {
       const metadata = {
         preferences: { theme: 'dark', notifications: true },

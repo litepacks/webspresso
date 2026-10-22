@@ -35,6 +35,8 @@ describe('Query Builder Integration', () => {
     db.registerModel(Post);
 
     await createTestSchema(db.knex);
+    await seedTestData(db.knex);
+    UserRepo = db.getRepository('User');
   });
 
   afterAll(async () => {
@@ -42,13 +44,17 @@ describe('Query Builder Integration', () => {
     clearRegistry();
   });
 
-  beforeEach(async () => {
-    await db.knex('posts').del();
-    await db.knex('users').del();
-    await db.knex('companies').del();
-    await seedTestData(db.knex);
+  let dirty = false;
 
-    UserRepo = db.getRepository('User');
+  beforeEach(async () => {
+    if (dirty) {
+      await db.knex('posts').del();
+      await db.knex('users').del();
+      await db.knex('companies').del();
+      await seedTestData(db.knex);
+      UserRepo = db.getRepository('User');
+      dirty = false;
+    }
   });
 
   describe('where clauses', () => {
@@ -387,6 +393,10 @@ describe('Query Builder Integration', () => {
   });
 
   describe('update / delete on query builder', () => {
+    afterEach(() => {
+      dirty = true;
+    });
+
     it('should update matching records', async () => {
       const count = await UserRepo.query()
         .where('company_id', 1)
@@ -474,6 +484,10 @@ describe('Query Builder Integration', () => {
   });
 
   describe('JSON field handling', () => {
+    afterEach(() => {
+      dirty = true;
+    });
+
     it('should deserialize JSON fields with first()', async () => {
       const metadata = { theme: 'dark', locale: 'de' };
       

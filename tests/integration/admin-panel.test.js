@@ -19,6 +19,20 @@ describe.sequential('Admin Panel Integration', () => {
   let app;
   let db;
   let server;
+  let sharedAdminCookie = null;
+
+  async function getSharedAdminCookie() {
+    if (!sharedAdminCookie) {
+      const loginRes = await request(app)
+        .post('/_admin/api/auth/login')
+        .send({
+          email: 'admin@example.com',
+          password: 'password123',
+        });
+      sharedAdminCookie = loginRes.headers['set-cookie'];
+    }
+    return sharedAdminCookie;
+  }
 
   beforeAll(async () => {
     // Create in-memory database (skip auto-loading models)
@@ -160,16 +174,7 @@ describe.sequential('Admin Panel Integration', () => {
     });
 
     it('should not allow setup if admin already exists', async () => {
-      // Create first admin
-      await request(app)
-        .post('/_admin/api/auth/setup')
-        .send({
-          email: 'admin@example.com',
-          password: 'password123',
-          name: 'Admin User',
-        });
-
-      // Try to create another
+      // Try to create another admin when one already exists
       const res = await request(app)
         .post('/_admin/api/auth/setup')
         .send({
@@ -187,16 +192,14 @@ describe.sequential('Admin Panel Integration', () => {
     let adminCookie;
 
     beforeAll(async () => {
-      await db.knex('admin_users').del();
-      const setupRes = await request(app)
-        .post('/_admin/api/auth/setup')
+      const loginRes = await request(app)
+        .post('/_admin/api/auth/login')
         .send({
           email: 'admin@example.com',
           password: 'password123',
-          name: 'Admin User',
         });
 
-      adminCookie = setupRes.headers['set-cookie'];
+      adminCookie = loginRes.headers['set-cookie'];
     });
 
     it('should login with correct credentials', async () => {
@@ -256,16 +259,7 @@ describe.sequential('Admin Panel Integration', () => {
     let adminCookie;
 
     beforeAll(async () => {
-      await db.knex('admin_users').del();
-      const setupRes = await request(app)
-        .post('/_admin/api/auth/setup')
-        .send({
-          email: 'admin@example.com',
-          password: 'password123',
-          name: 'Admin User',
-        });
-
-      adminCookie = setupRes.headers['set-cookie'] || [];
+      adminCookie = await getSharedAdminCookie();
     });
 
     it('should list enabled models', async () => {
@@ -305,16 +299,7 @@ describe.sequential('Admin Panel Integration', () => {
     let testRepo;
 
     beforeAll(async () => {
-      await db.knex('admin_users').del();
-      const setupRes = await request(app)
-        .post('/_admin/api/auth/setup')
-        .send({
-          email: 'admin@example.com',
-          password: 'password123',
-          name: 'Admin User',
-        });
-
-      adminCookie = setupRes.headers['set-cookie'] || [];
+      adminCookie = await getSharedAdminCookie();
       testRepo = db.getRepository('TestModel');
     });
 
@@ -415,16 +400,7 @@ describe.sequential('Admin Panel Integration', () => {
     let testRepo;
 
     beforeAll(async () => {
-      await db.knex('admin_users').del();
-      const setupRes = await request(app)
-        .post('/_admin/api/auth/setup')
-        .send({
-          email: 'filteradmin@test.com',
-          password: 'password123',
-          name: 'Filter Admin',
-        });
-
-      adminCookie = setupRes.headers['set-cookie'];
+      adminCookie = await getSharedAdminCookie();
       testRepo = db.getRepository('TestModel');
     });
 

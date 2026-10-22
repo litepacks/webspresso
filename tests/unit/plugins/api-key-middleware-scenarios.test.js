@@ -415,7 +415,7 @@ describe('API Key Middleware Scenarios', () => {
       await request(app).get('/ping').set('x-api-key', key.key).expect(200);
 
       // Wait a tick for setImmediate
-      await new Promise((r) => setTimeout(r, 20));
+      await new Promise((r) => setImmediate(r));
       expect(updateMock).toHaveBeenCalledWith(42, expect.objectContaining({ id: 42 }));
     });
 

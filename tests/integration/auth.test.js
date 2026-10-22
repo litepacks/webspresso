@@ -71,8 +71,8 @@ describe('Auth Integration', () => {
     db.registerModel(UserModel);
     UserRepo = db.getRepository('User');
 
-    // Create test users
-    const hashedPassword = await hash('password123');
+    // Create test users (precomputed bcrypt rounds=4 for 'password123')
+    const hashedPassword = '$2b$04$Wuy3PNKivlnz5etS8gSaoeMqE7OUaMbnKcBRjSD0AxL.Qrd5hTAAK';
     users.push(await UserRepo.create({
       email: 'user@test.com',
       password: hashedPassword,

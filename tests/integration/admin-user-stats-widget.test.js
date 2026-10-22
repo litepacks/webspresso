@@ -11,6 +11,9 @@ import { adminPanelPlugin } from '../../plugins/admin-panel/index.js';
 import { clearRegistry } from '../../core/orm/model.js';
 import { hash } from '../../core/auth/hash.js';
 
+// Precomputed bcrypt hash (rounds=4) for 'password123' to avoid repeated CPU hashing during test setup
+const HASHED_ADMIN_PASS = '$2b$04$Wuy3PNKivlnz5etS8gSaoeMqE7OUaMbnKcBRjSD0AxL.Qrd5hTAAK';
+
 describe('Admin User Statistics widget', () => {
   let app;
   let db;
@@ -64,10 +67,9 @@ describe('Admin User Statistics widget', () => {
       table.timestamp('updated_at');
     });
 
-    const hashedAdminPass = await hash('password123', 4);
     await db.knex('admin_users').insert({
       email: 'panel@example.com',
-      password: hashedAdminPass,
+      password: HASHED_ADMIN_PASS,
       name: 'Panel',
       role: 'admin',
       active: true,
@@ -191,10 +193,9 @@ describe('User Statistics widget — schema without active/role', () => {
       table.timestamp('updated_at');
     });
 
-    const hashedAdminPass = await hash('password123', 4);
     await db.knex('admin_users').insert({
       email: 'a@x.com',
-      password: hashedAdminPass,
+      password: HASHED_ADMIN_PASS,
       name: 'A',
       role: 'admin',
       active: true,
@@ -295,10 +296,9 @@ describe('User Statistics widget — schema/DB drift (role in model only)', () =
       table.timestamp('updated_at');
     });
 
-    const hashedAdminPass = await hash('password123', 4);
     await db.knex('admin_users').insert({
       email: 'a@x.com',
-      password: hashedAdminPass,
+      password: HASHED_ADMIN_PASS,
       name: 'A',
       role: 'admin',
       active: true,
