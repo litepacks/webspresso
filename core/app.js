@@ -128,8 +128,20 @@ class CoreApp {
       isDev: this.isDev,
       logger: this.logger,
       timeouts: this.timeouts,
+      cacheProvider: options.cacheProvider || (options.cache && typeof options.cache === 'object' && options.cache.provider ? options.cache.provider : null),
     });
     this.services = this.serviceRegistry;
+
+    this.service.invalidate = (name, input, ctx) =>
+      this.serviceRegistry.invalidate(name, input, ctx || this.context);
+    this.service.clearCache = (name) =>
+      this.serviceRegistry.clearCache(name);
+    this.service.invalidateByTag = (tag, serviceName) =>
+      this.serviceRegistry.invalidateByTag(tag, serviceName);
+    this.service.invalidateByTags = (tags, serviceName) =>
+      this.serviceRegistry.invalidateByTags(tags, serviceName);
+    this.service.invalidateTag = this.service.invalidateByTag;
+    this.service.invalidateTags = this.service.invalidateByTags;
 
     // Auto-register built-in auth services if database is present
     if (options.db) {
@@ -348,6 +360,16 @@ class CoreApp {
     Object.assign(ctx, extra);
     ctx.service = (subName, subInput, subOpts) =>
       this.service(subName, subInput, ctx, subOpts);
+    ctx.service.invalidate = (subName, subInput, subCtx) =>
+      this.serviceRegistry.invalidate(subName, subInput, subCtx || ctx);
+    ctx.service.clearCache = (subName) =>
+      this.serviceRegistry.clearCache(subName);
+    ctx.service.invalidateByTag = (tag, serviceName) =>
+      this.serviceRegistry.invalidateByTag(tag, serviceName);
+    ctx.service.invalidateByTags = (tags, serviceName) =>
+      this.serviceRegistry.invalidateByTags(tags, serviceName);
+    ctx.service.invalidateTag = ctx.service.invalidateByTag;
+    ctx.service.invalidateTags = ctx.service.invalidateByTags;
     return ctx;
   }
 

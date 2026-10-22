@@ -194,6 +194,12 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
     registry.invalidate(subName, subInput, subCtx || executionContext);
   executionContext.service.clearCache = (subName) =>
     registry.clearCache(subName);
+  executionContext.service.invalidateByTag = (tag, serviceName) =>
+    registry.invalidateByTag(tag, serviceName);
+  executionContext.service.invalidateByTags = (tags, serviceName) =>
+    registry.invalidateByTags(tags, serviceName);
+  executionContext.service.invalidateTag = executionContext.service.invalidateByTag;
+  executionContext.service.invalidateTags = executionContext.service.invalidateByTags;
   executionContext.breaker = (bName, bOpts) =>
     circuitBreakerRegistry.getBreaker(bName, bOpts);
   executionContext.retry = retry;
@@ -332,6 +338,12 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
               registry.invalidate(subName, subInput, subCtx || txCtx);
             txCtx.service.clearCache = (subName) =>
               registry.clearCache(subName);
+            txCtx.service.invalidateByTag = (tag, serviceName) =>
+              registry.invalidateByTag(tag, serviceName);
+            txCtx.service.invalidateByTags = (tags, serviceName) =>
+              registry.invalidateByTags(tags, serviceName);
+            txCtx.service.invalidateTag = txCtx.service.invalidateByTag;
+            txCtx.service.invalidateTags = txCtx.service.invalidateByTags;
             txCtx.breaker = (bName, bOpts) =>
               circuitBreakerRegistry.getBreaker(bName, bOpts);
             txCtx.retry = retry;

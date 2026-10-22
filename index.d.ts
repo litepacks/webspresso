@@ -306,6 +306,8 @@ export class ServiceRegistry {
     after?: Array<(context: ServiceAfterContext) => unknown> | ((context: ServiceAfterContext) => unknown);
     onError?: Array<(context: ServiceErrorContext) => unknown> | ((context: ServiceErrorContext) => unknown);
     events?: unknown;
+    cacheProvider?: unknown;
+    cache?: unknown;
   });
   readonly services: Map<string, ServiceDefinition>;
   readonly lazyServices: Map<string, unknown>;
@@ -335,6 +337,10 @@ export class ServiceRegistry {
   invalidate(name: string, input?: unknown, ctx?: unknown): boolean;
   clearCache(name?: string): boolean;
   clearAllCaches(): boolean;
+  invalidateByTag(tag: string, serviceName?: string): number | Promise<number>;
+  invalidateByTags(tags: string | string[], serviceName?: string): number | Promise<number>;
+  invalidateTag?(tag: string, serviceName?: string): number | Promise<number>;
+  invalidateTags?(tags: string | string[], serviceName?: string): number | Promise<number>;
   call<T = unknown>(name: string, input?: unknown, ctx?: unknown, options?: unknown): Promise<T>;
   execute<T = unknown>(name: string, input?: unknown, ctx?: unknown, options?: unknown): Promise<T>;
   reload(): this;
@@ -355,6 +361,8 @@ export function createServiceRegistry(options?: {
   after?: Array<(context: ServiceAfterContext) => unknown> | ((context: ServiceAfterContext) => unknown);
   onError?: Array<(context: ServiceErrorContext) => unknown> | ((context: ServiceErrorContext) => unknown);
   events?: unknown;
+  cacheProvider?: unknown;
+  cache?: unknown;
 }): ServiceRegistry;
 
 export function createServiceRegistryAsync(options?: {
@@ -371,6 +379,8 @@ export function createServiceRegistryAsync(options?: {
   after?: Array<(context: ServiceAfterContext) => unknown> | ((context: ServiceAfterContext) => unknown);
   onError?: Array<(context: ServiceErrorContext) => unknown> | ((context: ServiceErrorContext) => unknown);
   events?: unknown;
+  cacheProvider?: unknown;
+  cache?: unknown;
 }): Promise<ServiceRegistry>;
 
 export function composeMiddleware(middlewares: Function[]): (context: unknown, next?: Function) => Promise<unknown>;
@@ -403,15 +413,22 @@ export const service: typeof defineService;
 export interface MemoizeOptions {
   ttl?: string | number | boolean;
   maxSize?: number;
+  clone?: boolean;
   key?: (input: unknown, ctx?: unknown) => string;
+  tags?: string | string[] | ((input: unknown, ctx?: unknown) => string | string[]);
+  provider?: unknown;
 }
 
 export interface MemoizedFunction<TArgs extends unknown[], TReturn> {
   (...args: TArgs): Promise<TReturn>;
-  invalidate(...args: TArgs): boolean;
-  delete(...args: TArgs): boolean;
-  clear(): void;
-  has(...args: TArgs): boolean;
+  invalidate(...args: TArgs): boolean | Promise<boolean>;
+  delete(...args: TArgs): boolean | Promise<boolean>;
+  invalidateByTag(tag: string): number | Promise<number>;
+  invalidateByTags(tags: string | string[]): number | Promise<number>;
+  invalidateTag?(tag: string): number | Promise<number>;
+  invalidateTags?(tags: string | string[]): number | Promise<number>;
+  clear(): void | Promise<void>;
+  has(...args: TArgs): boolean | Promise<boolean>;
   readonly size: number;
 }
 

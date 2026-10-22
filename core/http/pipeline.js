@@ -107,10 +107,20 @@ async function executeApiPipeline(params) {
   // 1. Injections
   if (db && !req.db) req.db = db;
   if (!req.service && serviceRegistry) {
+    const baseContext = req.context || { req, res, db, user: req.user, session: req.session };
     req.service = (name, input, opts) => {
-      const baseContext = req.context || { req, res, db, user: req.user, session: req.session };
       return serviceRegistry.call(name, input, baseContext, opts);
     };
+    req.service.invalidate = (name, input, ctx) =>
+      serviceRegistry.invalidate(name, input, ctx || baseContext);
+    req.service.clearCache = (name) =>
+      serviceRegistry.clearCache(name);
+    req.service.invalidateByTag = (tag, serviceName) =>
+      serviceRegistry.invalidateByTag(tag, serviceName);
+    req.service.invalidateByTags = (tags, serviceName) =>
+      serviceRegistry.invalidateByTags(tags, serviceName);
+    req.service.invalidateTag = req.service.invalidateByTag;
+    req.service.invalidateTags = req.service.invalidateByTags;
   }
 
   // 2. Schema validation
@@ -261,6 +271,16 @@ async function executePagePipeline(params) {
     const baseContext = req.context || { req, res, db, user: req.user, session: req.session };
     req.service = (name, input, opts) =>
       serviceRegistry.call(name, input, baseContext, opts);
+    req.service.invalidate = (name, input, ctx) =>
+      serviceRegistry.invalidate(name, input, ctx || baseContext);
+    req.service.clearCache = (name) =>
+      serviceRegistry.clearCache(name);
+    req.service.invalidateByTag = (tag, serviceName) =>
+      serviceRegistry.invalidateByTag(tag, serviceName);
+    req.service.invalidateByTags = (tags, serviceName) =>
+      serviceRegistry.invalidateByTags(tags, serviceName);
+    req.service.invalidateTag = req.service.invalidateByTag;
+    req.service.invalidateTags = req.service.invalidateByTags;
   }
 
   // 2. Middlewares

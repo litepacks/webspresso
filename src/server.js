@@ -706,6 +706,12 @@ function createApp(options = {}) {
   app.getBreaker = (name, opts) => core.getBreaker(name, opts);
   app.breaker = (name, opts) => core.breaker(name, opts);
   app.service = (name, input, opts) => core.service(name, input, opts);
+  app.service.invalidate = (name, input, ctx) => serviceRegistry.invalidate(name, input, ctx);
+  app.service.clearCache = (name) => serviceRegistry.clearCache(name);
+  app.service.invalidateByTag = (tag, serviceName) => serviceRegistry.invalidateByTag(tag, serviceName);
+  app.service.invalidateByTags = (tags, serviceName) => serviceRegistry.invalidateByTags(tags, serviceName);
+  app.service.invalidateTag = app.service.invalidateByTag;
+  app.service.invalidateTags = app.service.invalidateByTags;
   if (options.queue) {
     app.queue = options.queue;
   }
@@ -760,6 +766,16 @@ function createApp(options = {}) {
     });
     req.service = (name, input, opts) =>
       core.service(name, input, req.context, opts);
+    req.service.invalidate = (name, input, ctx) =>
+      serviceRegistry.invalidate(name, input, ctx || req.context);
+    req.service.clearCache = (name) =>
+      serviceRegistry.clearCache(name);
+    req.service.invalidateByTag = (tag, serviceName) =>
+      serviceRegistry.invalidateByTag(tag, serviceName);
+    req.service.invalidateByTags = (tags, serviceName) =>
+      serviceRegistry.invalidateByTags(tags, serviceName);
+    req.service.invalidateTag = req.service.invalidateByTag;
+    req.service.invalidateTags = req.service.invalidateByTags;
 
     // 4. SSR Streaming Response Helper
     res.renderStream = (templatePath, context = {}, renderOptions = {}) => {

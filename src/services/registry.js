@@ -36,6 +36,7 @@ class ServiceRegistry {
     this.timeouts = options.timeouts || null;
     this.timeout = options.timeout !== undefined ? options.timeout : null;
     this.lazy = Boolean(options.lazy);
+    this.cacheProvider = options.cacheProvider || (options.cache && typeof options.cache === 'object' && options.cache.provider ? options.cache.provider : null);
 
     /** @type {Map<string, Object>} Materialized service definitions */
     this.services = new Map();
@@ -109,8 +110,11 @@ class ServiceRegistry {
 
     if (definition.cache) {
       const memoizeOpts = typeof definition.cache === 'object' && definition.cache !== null
-        ? definition.cache
+        ? { ...definition.cache }
         : { ttl: definition.cache };
+      if (!memoizeOpts.provider && this.cacheProvider) {
+        memoizeOpts.provider = this.cacheProvider;
+      }
       memoizeFn = memoize(definition.handler, memoizeOpts);
       handler = memoizeFn;
     }
@@ -505,6 +509,98 @@ class ServiceRegistry {
    */
   clearAllCaches() {
     return this.clearCache();
+  }
+
+  /**
+   * Invalidate cached service entries matching a specific tag across all registered services
+   * or within a single named service.
+   * @param {string} tag - Tag to invalidate (e.g. 'users', 'user:123')
+   * @param {string} [serviceName] - Optional specific service name
+   * @returns {number|Promise<number>} Count of invalidated entries
+   */
+  invalidateByTag(tag, serviceName) {
+    if (serviceName) {
+      const serviceDef = this.get(serviceName);
+      if (serviceDef && serviceDef.memoize && typeof serviceDef.memoize.invalidateByTag === 'function') {
+        return serviceDef.memoize.invalidateByTag(tag);
+      }
+      return 0;
+    }
+
+    const promises = [];
+    let total = 0;
+
+    for (const serviceDef of this.services.values()) {
+      if (serviceDef.memoize && typeof serviceDef.memoize.invalidateByTag === 'function') {
+        const res = serviceDef.memoize.invalidateByTag(tag);
+        if (res && typeof res.then === 'function') {
+          promises.push(res);
+        } else if (typeof res === 'number') {
+          total += res;
+        }
+      }
+    }
+
+    if (promises.length > 0) {
+      return Promise.all(promises).then((results) => {
+        return total + results.reduce((acc, c) => acc + (typeof c === 'number' ? c : 0), 0);
+      });
+    }
+
+    return total;
+  }
+
+  /**
+   * Invalidate cached service entries matching any of the specified tags
+   * across all registered services or within a single named service.
+   * @param {string[]|string} tags - Tags to invalidate
+   * @param {string} [serviceName] - Optional specific service name
+   * @returns {number|Promise<number>} Total count of invalidated entries
+   */
+  invalidateByTags(tags, serviceName) {
+    if (serviceName) {
+      const serviceDef = this.get(serviceName);
+      if (serviceDef && serviceDef.memoize && typeof serviceDef.memoize.invalidateByTags === 'function') {
+        return serviceDef.memoize.invalidateByTags(tags);
+      }
+      return 0;
+    }
+
+    const promises = [];
+    let total = 0;
+
+    for (const serviceDef of this.services.values()) {
+      if (serviceDef.memoize && typeof serviceDef.memoize.invalidateByTags === 'function') {
+        const res = serviceDef.memoize.invalidateByTags(tags);
+        if (res && typeof res.then === 'function') {
+          promises.push(res);
+        } else if (typeof res === 'number') {
+          total += res;
+        }
+      }
+    }
+
+    if (promises.length > 0) {
+      return Promise.all(promises).then((results) => {
+        return total + results.reduce((acc, c) => acc + (typeof c === 'number' ? c : 0), 0);
+      });
+    }
+
+    return total;
+  }
+
+  /**
+   * Alias for invalidateByTag
+   */
+  invalidateTag(tag, serviceName) {
+    return this.invalidateByTag(tag, serviceName);
+  }
+
+  /**
+   * Alias for invalidateByTags
+   */
+  invalidateTags(tags, serviceName) {
+    return this.invalidateByTags(tags, serviceName);
   }
 
   /**
