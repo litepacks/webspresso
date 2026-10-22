@@ -1,3 +1,7 @@
+const {
+  cleanupDir
+} = require('../utils');
+
 /**
  * Unit Tests for src/file-router.js
  */
@@ -355,16 +359,12 @@ describe('file-router.js', () => {
     const tempDir = path.join(__dirname, '../fixtures/temp-mountpages-test');
 
     beforeEach(() => {
-      if (fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      }
+      cleanupDir(tempDir);
       fs.mkdirSync(tempDir, { recursive: true });
     });
 
     afterEach(() => {
-      if (fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      }
+      cleanupDir(tempDir);
       vi.restoreAllMocks();
     });
 

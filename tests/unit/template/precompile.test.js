@@ -1,3 +1,4 @@
+import { cleanupDir } from '../../utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import fs from 'fs';
@@ -13,9 +14,7 @@ describe('Nunjucks Template Precompilation (AOT & Zero-AST Parsing)', () => {
   const tempDir = path.join(__dirname, '../../fixtures/temp-precompile-' + Date.now());
 
   beforeEach(() => {
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    cleanupDir(tempDir);
     fs.mkdirSync(path.join(tempDir, 'views', 'partials'), { recursive: true });
     fs.mkdirSync(path.join(tempDir, 'pages'), { recursive: true });
 
@@ -50,9 +49,7 @@ title: Home Page
   });
 
   afterEach(() => {
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    cleanupDir(tempDir);
     vi.restoreAllMocks();
   });
 

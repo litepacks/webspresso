@@ -1,8 +1,12 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../utils');
+
 'use strict';
 
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
 const http = require('http');
 const express = require('express');
 const nunjucks = require('nunjucks');
@@ -926,7 +930,7 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
     const request = require('supertest');
 
     it('exercises 404 data loader execution and error handling', async () => {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-404-loader-'));
+      const tmpDir = createTempDir('test-404-loader');
 
       fs.writeFileSync(
         path.join(tmpDir, '404.njk'),
@@ -949,7 +953,7 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
       expect(res.status).toBe(404);
       expect(res.text).toContain('Custom 404: LoadedValue');
 
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      cleanupDir(tmpDir);
     });
 
     it('exercises request timeout and HttpError headers in central error handler', async () => {
@@ -998,7 +1002,7 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
     });
 
     it('exercises page loader fallback JSON, string, custom error, and nunjucks error branches', async () => {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-page-fallbacks-'));
+      const tmpDir = createTempDir('test-page-fallbacks');
 
       const createMockReq = (p) => ({
         path: p,
@@ -1099,7 +1103,7 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
       });
       expect(renderedHtml).toBe('<section>User: Bob</section>');
 
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      cleanupDir(tmpDir);
     });
 
     it('exercises customErrorHandler fall-through and exception handling in server error boundary', async () => {
@@ -1142,7 +1146,7 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
 
     it('exercises api-loader missing handler function, sync middleware throw, and early return', async () => {
       const { createApiHandler } = require('../../src/api/api-loader.js');
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-api-loader-branches-'));
+      const tmpDir = createTempDir('test-api-loader-branches');
 
       // 1. API file exporting non-function handler
       const invalidApiFile = path.join(tmpDir, 'invalid-handler.js');
@@ -1207,7 +1211,7 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
       await earlyResHandler({ headers: {}, query: {}, params: {} }, resEarly, vi.fn());
       expect(resEarly.send).toHaveBeenCalledWith('Early Response');
 
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      cleanupDir(tmpDir);
     });
   });
 });

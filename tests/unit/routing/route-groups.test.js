@@ -1,7 +1,7 @@
+import { createTempDir, cleanupDir } from '../../utils';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import request from 'supertest';
 
 import {
@@ -113,7 +113,7 @@ describe('Route Groups `(group)` Syntax', () => {
     let app;
 
     beforeAll(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-route-groups-'));
+      tmpDir = createTempDir('ws-route-groups');
       const pagesDir = path.join(tmpDir, 'pages');
       fs.mkdirSync(pagesDir, { recursive: true });
 
@@ -222,9 +222,7 @@ describe('Route Groups `(group)` Syntax', () => {
     });
 
     afterAll(() => {
-      if (tmpDir && fs.existsSync(tmpDir)) {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-      }
+      cleanupDir(tmpDir);
     });
 
     it('serves route group home page at / with marketing layout and middleware', async () => {

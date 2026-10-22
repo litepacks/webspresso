@@ -1,7 +1,7 @@
+import { createTempDir, cleanupDir } from '../../utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { Command } = require('commander');
 const {
   registerCommand: registerAddDocker,
@@ -87,13 +87,11 @@ describe('DevOps & Docker CLI (add:docker & deploy:check)', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-docker-test-'));
+    tmpDir = createTempDir('webspresso-docker-test');
   });
 
   afterEach(() => {
-    if (tmpDir && fs.existsSync(tmpDir)) {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    cleanupDir(tmpDir);
     vi.restoreAllMocks();
   });
 

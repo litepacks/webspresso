@@ -1,7 +1,7 @@
+import { createTempDir, cleanupDir } from '../utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import path from 'path';
 import fs from 'fs';
-import os from 'os';
 import request from 'supertest';
 import {
   EventDispatcher,
@@ -213,11 +213,11 @@ describe('Decoupled Events & Signals System (AdonisJS Events & Django Signals-in
     let tmpDir;
 
     beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-listeners-'));
+      tmpDir = createTempDir('webspresso-listeners');
     });
 
     afterEach(() => {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      cleanupDir(tmpDir);
     });
 
     it('loads listeners exported as objects or functions', () => {
@@ -247,7 +247,7 @@ describe('Decoupled Events & Signals System (AdonisJS Events & Django Signals-in
     let tempDir;
 
     beforeAll(() => {
-      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-app-events-'));
+      tempDir = createTempDir('webspresso-app-events');
       fs.mkdirSync(path.join(tempDir, 'pages', 'api'), { recursive: true });
 
       // Create an API route testing req.events
@@ -280,7 +280,7 @@ describe('Decoupled Events & Signals System (AdonisJS Events & Django Signals-in
       if (appObj?.shutdownManager) {
         await appObj.shutdownManager.close('test');
       }
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupDir(tempDir);
     });
 
     it('exposes app.events, req.events, and drains on shutdown', async () => {

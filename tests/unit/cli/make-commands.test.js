@@ -1,7 +1,7 @@
+import { createTempDir, cleanupDir } from '../../utils';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { Command } = require('commander');
 
 const { registerCommand: registerMakeModel } = require('../../../bin/commands/make-model');
@@ -14,12 +14,12 @@ describe('Webspresso make:* CLI Scaffolding Commands', () => {
   let tempDir;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-make-test-'));
+    tempDir = createTempDir('ws-make-test');
   });
 
   afterEach(() => {
     try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupDir(tempDir);
     } catch (_) {}
   });
 

@@ -1,3 +1,4 @@
+import { createTempDir, cleanupDir } from '../../utils';
 import { describe, it, expect, vi } from 'vitest';
 import path from 'path';
 import fs from 'fs';
@@ -78,7 +79,7 @@ describe('scanRoutes Directory Scanner', () => {
 
   it('should skip pages/api subdirectory and companion njk files in scanRoutes', () => {
     const os = require('os');
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scan-edge-'));
+    const tempDir = createTempDir('scan-edge');
 
     try {
       const pagesDir = path.join(tempDir, 'pages');
@@ -113,13 +114,13 @@ describe('scanRoutes Directory Scanner', () => {
       expect(paths).not.toContain('/api/inside-pages');
       expect(paths).not.toContain('/_private');
     } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupDir(tempDir);
     }
   });
 
   it('should support module pages and api opt-outs or custom options', () => {
     const os = require('os');
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mod-opts-'));
+    const tempDir = createTempDir('mod-opts');
 
     try {
       const modDir = path.join(tempDir, 'modules', 'shop');
@@ -143,7 +144,7 @@ describe('scanRoutes Directory Scanner', () => {
       expect(paths).toContain('/store/cart');
       expect(paths).not.toContain('/api/shop/cart');
     } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupDir(tempDir);
     }
   });
 });

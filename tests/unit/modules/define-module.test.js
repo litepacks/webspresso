@@ -1,3 +1,4 @@
+import { createTempDir, cleanupDir } from '../../utils';
 import { describe, it, expect, vi } from 'vitest';
 import { defineModule } from '../../../src/modules/define-module';
 
@@ -151,10 +152,9 @@ describe('defineModule Helper', () => {
   it('should cover all branches in discoverModuleDetails', () => {
     const fs = require('fs');
     const path = require('path');
-    const os = require('os');
     const { discoverModuleDetails } = require('../../../src/modules/module-discovery');
 
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mod-disc-test-'));
+    const tempDir = createTempDir('mod-disc-test');
 
     try {
       // 1. Module with module.js returning config with services/middlewares
@@ -196,7 +196,7 @@ describe('defineModule Helper', () => {
       const d2 = discoverModuleDetails(mod2Dir, 'mod2');
       expect(d2.config).toBeNull();
     } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupDir(tempDir);
     }
   });
 });

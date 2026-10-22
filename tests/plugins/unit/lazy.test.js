@@ -1,3 +1,4 @@
+import { cleanupDir } from '../../utils';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import path from 'path';
 import fs from 'fs';
@@ -49,9 +50,7 @@ describe('On-Demand / Lazy Plugins (lazyPlugin)', () => {
     if (db && typeof db.close === 'function') {
       await db.close();
     }
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    cleanupDir(tempDir);
   });
 
   it('should create a lazy plugin definition with isLazy: true and isHydrated: false', () => {

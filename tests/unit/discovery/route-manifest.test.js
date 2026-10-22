@@ -1,3 +1,4 @@
+import { cleanupDir } from '../../utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import fs from 'fs';
@@ -13,9 +14,7 @@ describe('AOT Route Manifest (Production Manifest & Zero-Scan Boot)', () => {
   const tempDir = path.join(__dirname, '../../fixtures/temp-manifest-' + Date.now());
 
   beforeEach(() => {
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    cleanupDir(tempDir);
     fs.mkdirSync(path.join(tempDir, 'pages', 'api'), { recursive: true });
     fs.mkdirSync(path.join(tempDir, 'src', 'api'), { recursive: true });
     fs.mkdirSync(path.join(tempDir, 'views'), { recursive: true });
@@ -40,9 +39,7 @@ describe('AOT Route Manifest (Production Manifest & Zero-Scan Boot)', () => {
   });
 
   afterEach(() => {
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    cleanupDir(tempDir);
     vi.restoreAllMocks();
   });
 

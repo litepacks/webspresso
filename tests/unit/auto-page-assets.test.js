@@ -1,3 +1,7 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../utils');
 /**
  * Unit & Integration tests for Zero-Config Auto Page Asset Resolution
  * Tests automatic route-matching CSS & JS detection, AssetManager candidate generation,
@@ -6,7 +10,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const request = require('supertest');
 const { AssetManager, createHelpers, utils } = require('../../src/helpers');
 const {
@@ -19,12 +22,12 @@ describe('Zero-Config Auto Page Assets', () => {
   let tempDir;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-page-assets-'));
+    tempDir = createTempDir('webspresso-page-assets');
   });
 
   afterEach(() => {
     try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupDir(tempDir);
     } catch (_) {}
   });
 

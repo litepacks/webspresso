@@ -1,7 +1,7 @@
+import { createTempDir, cleanupDir } from '../utils';
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import knex from 'knex';
 import {
   defineModel,
@@ -20,7 +20,7 @@ describe('ORM Enhancements: Schema Diff (Django-inspired) & Model Factory (Adoni
     let tempDir;
 
     beforeAll(() => {
-      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-diff-test-'));
+      tempDir = createTempDir('webspresso-diff-test');
       rawKnex = knex({
         client: 'better-sqlite3',
         connection: {
@@ -39,9 +39,7 @@ describe('ORM Enhancements: Schema Diff (Django-inspired) & Model Factory (Adoni
         await rawKnex.destroy().catch(() => {});
         rawKnex = null;
       }
-      if (fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      }
+      cleanupDir(tempDir);
       clearRegistry();
     });
 

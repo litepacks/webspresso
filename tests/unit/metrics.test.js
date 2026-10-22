@@ -1,3 +1,4 @@
+import { createTempDir, cleanupDir } from '../utils';
 'use strict';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -339,8 +340,7 @@ describe('Cloud Metrics & Distributed Tracing (core/metrics)', () => {
     it('createApp correctly initializes metrics registry on app and mounts endpoint', async () => {
       const fs = require('fs');
       const path = require('path');
-      const os = require('os');
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-metrics-app-'));
+      const tmpDir = createTempDir('webspresso-metrics-app');
       const pagesDir = path.join(tmpDir, 'pages');
       fs.mkdirSync(pagesDir, { recursive: true });
 
@@ -357,7 +357,7 @@ describe('Cloud Metrics & Distributed Tracing (core/metrics)', () => {
         expect(res.status).toBe(200);
         expect(res.text).toContain('nodejs_heap_size_used_bytes');
       } finally {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
+        cleanupDir(tmpDir);
       }
     });
   });

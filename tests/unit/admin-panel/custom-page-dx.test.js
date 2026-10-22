@@ -1,3 +1,7 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../../utils');
 /**
  * Admin Panel Custom Page & Widget Developer Experience (Frontend DX) Tests
  * Covers:
@@ -9,7 +13,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const vm = require('vm');
 const { AdminRegistry } = require('../../../plugins/admin-panel/core/registry');
 const { registerModule } = require('../../../plugins/admin-panel/core/admin-module');
@@ -20,14 +23,14 @@ describe('Admin Panel Custom Page & Widget DX (Task 4)', () => {
   let originalEnv;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-custom-dx-'));
+    tmpDir = createTempDir('webspresso-custom-dx');
     originalEnv = process.env.NODE_ENV;
   });
 
   afterEach(() => {
     process.env.NODE_ENV = originalEnv;
     try {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      cleanupDir(tmpDir);
     } catch (e) {}
   });
 

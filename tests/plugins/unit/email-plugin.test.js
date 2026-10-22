@@ -1,3 +1,4 @@
+import { createTempDir, cleanupDir } from '../../utils';
 /**
  * Email plugin unit tests
  * @vitest-environment node
@@ -5,7 +6,6 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import nodemailer from 'nodemailer';
 import knexFactory from 'knex';
@@ -79,14 +79,14 @@ describe('TemplateRegistry', () => {
   });
 
   it('loads mjml files from directory on Node.js', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-email-'));
+    const dir = createTempDir('ws-email');
     fs.writeFileSync(path.join(dir, 'notice.mjml'), '<mjml><mj-body><mj-text>Notice</mj-text></mj-body></mjml>');
     const registry = new TemplateRegistry();
     const count = registry.loadFromDir(dir);
     expect(count).toBe(1);
     expect(registry.has('notice')).toBe(true);
     expect(registry.get('notice').kind).toBe('inline');
-    fs.rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   });
 });
 

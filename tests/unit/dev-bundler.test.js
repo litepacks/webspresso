@@ -1,10 +1,13 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../utils');
 /**
  * Unit & Integration tests for Dev Bundler (esbuild context() API & client bundling)
  */
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { Command } = require('commander');
 const { createDevBundler, findDefaultEntryPoints } = require('../../src/bundle');
 const { createApp } = require('../../index');
@@ -85,12 +88,12 @@ describe('Dev Bundler (esbuild context() API)', () => {
   let tempDir;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-bundler-test-'));
+    tempDir = createTempDir('webspresso-bundler-test');
   });
 
   afterEach(() => {
     try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupDir(tempDir);
     } catch (_) {}
   });
 

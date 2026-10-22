@@ -1,7 +1,7 @@
+import { createTempDir, cleanupDir } from '../../utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import {
   createQueueManager,
   CronExpression,
@@ -175,7 +175,7 @@ describe('TaskScheduler & QueueManager Recurring Jobs', () => {
   let tempDir;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-queue-test-'));
+    tempDir = createTempDir('webspresso-queue-test');
   });
 
   afterEach(async () => {
@@ -183,9 +183,7 @@ describe('TaskScheduler & QueueManager Recurring Jobs', () => {
       await queue.drain(1000);
       queue.scheduler.destroy();
     }
-    if (tempDir && fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    cleanupDir(tempDir);
   });
 
   it('schedules and dispatches jobs with queue.schedule and queue.cron', async () => {
@@ -411,7 +409,7 @@ describe('File-Based Cron Job Auto-Discovery', () => {
   let queue;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-cron-discovery-'));
+    tempDir = createTempDir('webspresso-cron-discovery');
   });
 
   afterEach(async () => {
@@ -419,9 +417,7 @@ describe('File-Based Cron Job Auto-Discovery', () => {
       await queue.drain(1000);
       queue.scheduler.destroy();
     }
-    if (tempDir && fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    cleanupDir(tempDir);
   });
 
   it('auto-discovers and registers scheduled jobs from jobs directory', async () => {

@@ -1,3 +1,7 @@
+const {
+  cleanupDir
+} = require('../utils');
+
 'use strict';
 
 const path = require('path');
@@ -201,7 +205,7 @@ describe('Routing Table & Scan Routes Branch Coverage', () => {
         expect(resStream.setHeader).toHaveBeenCalled();
       }
 
-      fs.rmSync(fixturesDir, { recursive: true, force: true });
+      cleanupDir(fixturesDir);
     });
   });
 
@@ -316,7 +320,7 @@ describe('Routing Table & Scan Routes Branch Coverage', () => {
       expect(descriptors.find((d) => d.path === '/auth/login')).toBeDefined();
       expect(descriptors.find((d) => d.path === '/api/auth/token')).toBeDefined();
 
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      cleanupDir(tmpDir);
     });
   });
 });

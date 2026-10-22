@@ -1,7 +1,7 @@
+import { createTempDir, cleanupDir } from '../utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const express = require('express');
 const request = require('supertest');
 
@@ -270,13 +270,11 @@ describe('Cloud Storage Providers (S3, GCS & Presigned Direct Upload)', () => {
     let tmpDir;
 
     beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-assets-test-'));
+      tmpDir = createTempDir('webspresso-assets-test');
     });
 
     afterEach(() => {
-      if (tmpDir && fs.existsSync(tmpDir)) {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-      }
+      cleanupDir(tmpDir);
     });
 
     it('determines MIME types accurately', () => {

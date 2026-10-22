@@ -1,3 +1,7 @@
+const {
+  cleanupDir
+} = require('../utils');
+
 /**
  * Admin Password CLI Tests
  */
@@ -242,7 +246,7 @@ describe('admin:password CLI', () => {
     expect(result.status).toBe(1);
     expect(output).toContain('admin_users table does not exist');
 
-    fs.rmSync(noTableDir, { recursive: true, force: true });
+    cleanupDir(noTableDir);
   });
 
   it('should list admin users', async () => {

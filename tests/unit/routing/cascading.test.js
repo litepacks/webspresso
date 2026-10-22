@@ -1,7 +1,7 @@
+import { createTempDir, cleanupDir } from '../../utils';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import request from 'supertest';
 import {
   getDirectoryChain,
@@ -35,15 +35,13 @@ describe('Cascading Middleware & Nested Layouts', () => {
   let tempDir;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-cascading-test-'));
+    tempDir = createTempDir('webspresso-cascading-test');
     clearCascadingCaches();
   });
 
   afterEach(() => {
     clearCascadingCaches();
-    if (tempDir && fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    cleanupDir(tempDir);
   });
 
   describe('getDirectoryChain', () => {

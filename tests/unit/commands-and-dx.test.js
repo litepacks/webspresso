@@ -1,3 +1,4 @@
+import { createTempDir, cleanupDir } from '../utils';
 /**
  * Unit & Integration Tests: Management Commands & CLI DX (Item #7)
  * - defineCommand, createCommandRegistry, executeCommand
@@ -9,7 +10,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import {
   defineCommand,
   createCommandRegistry,
@@ -28,12 +28,12 @@ describe('Management Commands & CLI DX (Item #7)', () => {
   let tempDir;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-cmd-test-'));
+    tempDir = createTempDir('webspresso-cmd-test');
   });
 
   afterEach(() => {
     try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupDir(tempDir);
     } catch (_) {}
   });
 

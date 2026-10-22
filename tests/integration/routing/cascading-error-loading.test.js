@@ -1,7 +1,7 @@
+import { createTempDir, cleanupDir } from '../../utils';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import request from 'supertest';
 import { clearCascadingCaches } from '../../../src/routing/cascading';
 import { createApp } from '../../../src/server';
@@ -23,15 +23,13 @@ describe('Cascading Error Boundaries & Loading Skeletons (_error.njk, _loading.n
   let tempDir;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-err-load-test-'));
+    tempDir = createTempDir('webspresso-err-load-test');
     clearCascadingCaches();
   });
 
   afterEach(() => {
     clearCascadingCaches();
-    if (tempDir && fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    cleanupDir(tempDir);
   });
 
   describe('Directory-Level Error Boundaries (_error.njk)', () => {

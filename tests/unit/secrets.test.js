@@ -1,7 +1,7 @@
+import { createTempDir, cleanupDir } from '../utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const {
   createSecretManager,
   loadSecrets,
@@ -22,14 +22,12 @@ describe('Cloud Secrets Management (core/secrets & secrets:pull)', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-secrets-test-'));
+    tmpDir = createTempDir('webspresso-secrets-test');
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
-    if (tmpDir && fs.existsSync(tmpDir)) {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    cleanupDir(tmpDir);
     vi.restoreAllMocks();
   });
 

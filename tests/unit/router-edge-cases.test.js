@@ -1,6 +1,9 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../utils');
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
 const request = require('supertest');
 const { createApp } = require('../../src/server');
 
@@ -10,7 +13,7 @@ describe.sequential('Router & Error Edge Cases', () => {
   let viewsDir;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-router-edge-'));
+    tempDir = createTempDir('webspresso-router-edge');
     pagesDir = path.join(tempDir, 'pages');
     viewsDir = path.join(tempDir, 'views');
     fs.mkdirSync(pagesDir, { recursive: true });
@@ -18,7 +21,7 @@ describe.sequential('Router & Error Edge Cases', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    cleanupDir(tempDir);
   });
 
   it('should warn when duplicate route bindings exist across files', () => {

@@ -1,6 +1,9 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../utils');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const {
   zodToTsType,
   collectModelMetadata,
@@ -127,7 +130,7 @@ describe('Webspresso TypeGen Engine', () => {
     let tempDir;
 
     beforeEach(() => {
-      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-typegen-test-'));
+      tempDir = createTempDir('ws-typegen-test');
       // Create minimal structure
       fs.mkdirSync(path.join(tempDir, 'models'), { recursive: true });
       fs.mkdirSync(path.join(tempDir, 'services', 'user'), { recursive: true });
@@ -156,9 +159,7 @@ describe('Webspresso TypeGen Engine', () => {
     });
 
     afterEach(() => {
-      if (tempDir && fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      }
+      cleanupDir(tempDir);
     });
 
     it('should write .webspresso/types.d.ts and webspresso-env.d.ts', () => {
@@ -199,14 +200,12 @@ describe('Webspresso TypeGen Engine', () => {
     let tempDir;
 
     beforeEach(() => {
-      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-typegen-cli-test-'));
+      tempDir = createTempDir('ws-typegen-cli-test');
       fs.mkdirSync(path.join(tempDir, 'models'), { recursive: true });
     });
 
     afterEach(() => {
-      if (tempDir && fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      }
+      cleanupDir(tempDir);
     });
 
     it('should run typegen command and generate declarations via commander', () => {

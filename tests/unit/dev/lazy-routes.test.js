@@ -1,3 +1,4 @@
+import { cleanupDir } from '../../utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import fs from 'fs';
@@ -10,17 +11,13 @@ describe('Dev Mode On-Demand (Lazy) Route Evaluation', () => {
 
   beforeEach(() => {
     process.env.NODE_ENV = 'development';
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    cleanupDir(tempDir);
     fs.mkdirSync(path.join(tempDir, 'pages', 'api'), { recursive: true });
   });
 
   afterEach(() => {
     process.env.NODE_ENV = origEnv;
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    cleanupDir(tempDir);
     vi.restoreAllMocks();
   });
 

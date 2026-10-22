@@ -1,7 +1,7 @@
+import { createTempDir, cleanupDir } from '../../utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { Command } = require('commander');
 
 const {
@@ -99,13 +99,11 @@ describe('Cloud Deployment CLI Commands', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-cloud-test-'));
+    tmpDir = createTempDir('webspresso-cloud-test');
   });
 
   afterEach(() => {
-    if (tmpDir && fs.existsSync(tmpDir)) {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    cleanupDir(tmpDir);
     vi.restoreAllMocks();
   });
 

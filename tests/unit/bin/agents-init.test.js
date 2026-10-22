@@ -1,3 +1,4 @@
+import { createTempDir, cleanupDir } from '../../utils';
 /**
  * @vitest-environment node
  */
@@ -5,20 +6,17 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { scaffoldAgentsFiles } from '../../../bin/commands/agents-init.js';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 
 describe('agents:init command', () => {
   let tempDir;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-agents-test-'));
+    tempDir = createTempDir('webspresso-agents-test');
   });
 
   afterEach(() => {
-    if (tempDir && fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    cleanupDir(tempDir);
   });
 
   it('scaffolds complete agent suite into target project', () => {

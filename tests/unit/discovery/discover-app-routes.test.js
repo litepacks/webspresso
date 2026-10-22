@@ -1,3 +1,4 @@
+import { cleanupDir } from '../../utils';
 import { describe, it, expect, vi } from 'vitest';
 import path from 'path';
 import fs from 'fs';
@@ -64,9 +65,7 @@ describe('discoverAppRoutes Unified Scanner', () => {
 
       readdirSpy.mockRestore();
     } finally {
-      if (fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      }
+      cleanupDir(tempDir);
     }
   });
 
@@ -89,9 +88,7 @@ describe('discoverAppRoutes Unified Scanner', () => {
       expect(calls.some((c) => c.includes('Dynamic route collision'))).toBe(true);
     } finally {
       mockWarn.mockRestore();
-      if (fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      }
+      cleanupDir(tempDir);
     }
   });
 });

@@ -1,3 +1,4 @@
+import { createTempDir, cleanupDir } from '../utils';
 /**
  * Targeted Unit Tests for Branch & Function Coverage Across Missing Paths
  *
@@ -15,7 +16,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import fs from 'fs';
-import os from 'os';
 
 // 1. Auth Hash Tests
 import { hash, verify, needsRehash, generateToken, hashToken } from '../../core/auth/hash.js';
@@ -112,7 +112,7 @@ describe('core/events/discovery.js edge cases and branches', () => {
   });
 
   it('loadListeners() loads functions, arrays, multiple events, and skips _ files and test files', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-discovery-test-'));
+    const tmpDir = createTempDir('ws-discovery-test');
     try {
       const subDir = path.join(tmpDir, 'users');
       fs.mkdirSync(subDir, { recursive: true });
@@ -168,7 +168,7 @@ describe('core/events/discovery.js edge cases and branches', () => {
       dispatcher.emit('single.event', 'test1');
       expect(received).toContain('test1');
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      cleanupDir(tmpDir);
     }
   });
 });
@@ -765,7 +765,7 @@ describe('core/queue/manager.js edge cases and branches', () => {
   });
 
   it('loadJobsFromDirectory() discovers recursive job and cron files', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-jobs-dir-'));
+    const tmpDir = createTempDir('ws-jobs-dir');
     try {
       const subDir = path.join(tmpDir, 'reports');
       fs.mkdirSync(subDir, { recursive: true });
@@ -800,7 +800,7 @@ describe('core/queue/manager.js edge cases and branches', () => {
       expect(qm.has('reports.weekly')).toBe(true);
       expect(qm.has('reports.daily')).toBe(true);
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      cleanupDir(tmpDir);
     }
   });
 });

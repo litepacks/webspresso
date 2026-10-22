@@ -1,10 +1,13 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../utils');
 /**
  * Unit & Integration tests for Tailwind CSS v4 support & migration
  */
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { Command } = require('commander');
 const { registerCommand: registerAddTailwind } = require('../../bin/commands/add-tailwind');
 const { registerCommand: registerNew } = require('../../bin/commands/new');
@@ -109,12 +112,12 @@ describe('Tailwind CSS v4 CLI Integration', () => {
   let testRoot;
 
   beforeEach(() => {
-    testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-tw4-test-'));
+    testRoot = createTempDir('webspresso-tw4-test');
   });
 
   afterEach(() => {
     try {
-      fs.rmSync(testRoot, { recursive: true, force: true });
+      cleanupDir(testRoot);
     } catch (_) {}
   });
 

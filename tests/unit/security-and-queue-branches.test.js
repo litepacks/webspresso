@@ -1,3 +1,7 @@
+const {
+  cleanupDir
+} = require('../utils');
+
 'use strict';
 
 const path = require('path');
@@ -328,7 +332,7 @@ describe('Security & Queue Branch Coverage', () => {
       });
       expect(list.items.length).toBeGreaterThanOrEqual(1);
 
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      cleanupDir(tmpDir);
     });
   });
 
@@ -445,7 +449,7 @@ describe('Security & Queue Branch Coverage', () => {
       await handler4(createMockReq(), { setHeader: vi.fn() }, nextFn);
       expect(nextFn).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
 
-      fs.rmSync(fixturesDir, { recursive: true, force: true });
+      cleanupDir(fixturesDir);
     });
   });
 
@@ -518,7 +522,7 @@ describe('Security & Queue Branch Coverage', () => {
       expect(req200.passedMiddleware).toBe(true);
       expect(res200.json).toHaveBeenCalledWith({ age: 25, ok: true });
 
-      fs.rmSync(fixturesDir, { recursive: true, force: true });
+      cleanupDir(fixturesDir);
     });
   });
 

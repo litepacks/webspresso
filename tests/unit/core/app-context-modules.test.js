@@ -1,3 +1,4 @@
+import { cleanupDir } from '../../utils';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 const path = require('path');
 const fs = require('fs');
@@ -295,9 +296,7 @@ describe('src/modules/module-discovery.js', () => {
       );
     } finally {
       warnSpy.mockRestore();
-      if (fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      }
+      cleanupDir(tempDir);
     }
   });
 });

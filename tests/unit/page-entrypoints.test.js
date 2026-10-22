@@ -1,3 +1,7 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../utils');
 /**
  * Unit tests for Page-Specific Client Entrypoints & esbuild Multi-Bundle Support
  * Tests:
@@ -12,7 +16,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const {
   findPageEntryPoints,
   findDefaultEntryPoints,
@@ -29,12 +32,12 @@ describe('Page-Specific Client Entrypoints (Multi-Bundle esbuild)', () => {
   let tempDir;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-page-entries-'));
+    tempDir = createTempDir('webspresso-page-entries');
   });
 
   afterEach(() => {
     try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupDir(tempDir);
     } catch (_) {}
   });
 

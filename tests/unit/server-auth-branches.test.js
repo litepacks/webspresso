@@ -1,8 +1,12 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../utils');
+
 'use strict';
 
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
 
 describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
   describe('src/app-context.js branch coverage', () => {
@@ -331,7 +335,7 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
     const { scanRoutes } = require('../../src/discovery/scan-routes.js');
 
     it('scans modules with custom pages and api directories', () => {
-      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-modules-scan-'));
+      const tempDir = createTempDir('test-modules-scan');
       const tmpModuleDir = path.join(tempDir, 'modules', 'shop');
       fs.mkdirSync(path.join(tmpModuleDir, 'custom-pages'), { recursive: true });
       fs.mkdirSync(path.join(tmpModuleDir, 'custom-api'), { recursive: true });
@@ -362,7 +366,7 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
 
       expect(descriptors.length).toBeGreaterThanOrEqual(1);
 
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupDir(tempDir);
     });
   });
 
@@ -371,7 +375,7 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
     const { createPageHandler } = require('../../src/pages/page-loader.js');
 
     it('covers auto-responding when handler returns object and error metadata population', async () => {
-      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-auto-api-'));
+      const tempDir = createTempDir('test-auto-api');
       const fixtureApiFile = path.join(tempDir, 'test-auto-api.js');
       fs.writeFileSync(
         fixtureApiFile,
@@ -409,11 +413,11 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
       expect(err.phase).toBe('handler');
       expect(err.requestId).toBe('req_123');
 
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupDir(tempDir);
     });
 
     it('covers page-loader redirect, error helper, head, render method, and error normalization', async () => {
-      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-render-page-'));
+      const tempDir = createTempDir('test-render-page');
       const fixturePageFile = path.join(tempDir, 'test-render-page.js');
       fs.writeFileSync(
         fixturePageFile,
@@ -460,7 +464,7 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
       expect(nextErr).toHaveBeenCalled();
       expect(nextErr.mock.calls[0][0].status).toBe(403);
 
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupDir(tempDir);
     });
   });
 

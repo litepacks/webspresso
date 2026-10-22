@@ -1,3 +1,7 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../utils');
 /**
  * Database CLI Command Tests
  */
@@ -5,7 +9,6 @@
 const { Command } = require('commander');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 
 const { registerCommand: registerDbMigrate } = require('../../bin/commands/db-migrate');
 const { registerCommand: registerDbRollback } = require('../../bin/commands/db-rollback');
@@ -15,7 +18,7 @@ const { registerCommand: registerDbScaffold } = require('../../bin/commands/db-s
 const { registerCommand: registerDbMakeMigrations } = require('../../bin/commands/db-makemigrations');
 
 describe('Database CLI Commands', () => {
-  const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-test-project-'));
+  const testDir = createTempDir('cli-test-project');
   const migrationsDir = path.join(testDir, 'migrations');
   const modelsDir = path.join(testDir, 'models');
   const configFile = path.join(testDir, 'webspresso.db.js');
@@ -113,9 +116,7 @@ exports.down = function(knex) {
   });
 
   afterAll(() => {
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true, force: true });
-    }
+    cleanupDir(testDir);
   });
 
   describe('db:status', () => {

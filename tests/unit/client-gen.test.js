@@ -1,8 +1,12 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../utils');
+
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const {
   pathToSegments,
   extractRouteTypes,
@@ -27,10 +31,10 @@ describe('Webspresso Client Generator Engine', () => {
   describe('extractRouteTypes()', () => {
     let tmpDir;
     beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'client-gen-test-'));
+      tmpDir = createTempDir('client-gen-test');
     });
     afterEach(() => {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      cleanupDir(tmpDir);
     });
 
     it('should extract body, query, and params types from route definition', () => {
@@ -90,10 +94,10 @@ describe('Webspresso Client Generator Engine', () => {
   describe('generateClientCode() & generateClient()', () => {
     let tmpDir;
     beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'client-gen-full-'));
+      tmpDir = createTempDir('client-gen-full');
     });
     afterEach(() => {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      cleanupDir(tmpDir);
     });
 
     it('should generate valid client code and write output file', () => {

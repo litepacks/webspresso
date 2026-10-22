@@ -1,9 +1,12 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../utils');
 /**
  * Asset Manager Tests
  */
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
 
 const { AssetManager, configureAssets, getAssetManager, createHelpers } = require('../../src/helpers');
 
@@ -42,11 +45,11 @@ describe('AssetManager', () => {
     let manifestPath;
 
     beforeEach(() => {
-      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-test-'));
+      tempDir = createTempDir('webspresso-test');
     });
 
     afterEach(() => {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupDir(tempDir);
     });
 
     it('should resolve from Vite manifest', () => {

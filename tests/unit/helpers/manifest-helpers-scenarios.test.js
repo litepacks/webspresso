@@ -1,3 +1,4 @@
+import { cleanupDir } from '../../utils';
 /**
  * Extended Scenarios for AssetManager & View Helpers
  * (src/helpers.js)
@@ -43,7 +44,7 @@ describe.sequential('AssetManager & Helper Scenarios', () => {
 
   afterAll(() => {
     try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupDir(tempDir);
     } catch (_) {}
   });
 

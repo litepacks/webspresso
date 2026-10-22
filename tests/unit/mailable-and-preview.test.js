@@ -1,3 +1,4 @@
+import { cleanupDir } from '../utils';
 /**
  * Mailable & Developer Mail Preview Unit Tests (AdonisJS & Django-inspired)
  * - Declarative Mailable classes
@@ -171,8 +172,7 @@ describe('Mailable & Email Enhancements (Item #6)', () => {
       expect(saved.to).toBe('file@example.com');
       expect(saved.subject).toBe('File Test');
 
-      // Cleanup
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      cleanupDir(tmpDir);
     });
 
     it('resolveTransport selects appropriate backend based on options and env', () => {

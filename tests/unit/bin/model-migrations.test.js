@@ -1,9 +1,12 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../../utils');
 /**
  * Model migration scaffolding utilities
  */
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { z } = require('zod');
 const { defineModel, clearRegistry, zdb } = require('../../../core/orm');
@@ -68,7 +71,7 @@ describe('model-migrations utilities', () => {
 
   describe('findExistingCreateMigration', () => {
     it('detects existing createTable migration for a table', () => {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-mig-'));
+      const dir = createTempDir('ws-mig');
       fs.writeFileSync(
         path.join(dir, '20240101_create_users_table.js'),
         "exports.up = (knex) => knex.schema.createTable('users', () => {});"
@@ -77,7 +80,7 @@ describe('model-migrations utilities', () => {
       expect(findExistingCreateMigration(dir, 'users')).toBe('20240101_create_users_table.js');
       expect(findExistingCreateMigration(dir, 'posts')).toBeNull();
 
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanupDir(dir);
     });
   });
 
@@ -87,7 +90,7 @@ describe('model-migrations utilities', () => {
     let migrationDir;
 
     beforeEach(() => {
-      root = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-scaffold-'));
+      root = createTempDir('ws-scaffold');
       modelsDir = path.join(root, 'models');
       migrationDir = path.join(root, 'migrations');
       fs.mkdirSync(modelsDir, { recursive: true });
@@ -126,9 +129,7 @@ module.exports = defineModel({
     });
 
     afterEach(() => {
-      if (root) {
-        fs.rmSync(root, { recursive: true, force: true });
-      }
+      cleanupDir(root);
       clearRegistry();
     });
 

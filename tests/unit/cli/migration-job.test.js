@@ -1,7 +1,7 @@
+import { createTempDir, cleanupDir } from '../../utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const {
   generateCloudRunJobYaml,
   generateCloudRunJobScript,
@@ -22,13 +22,11 @@ describe('Cloud Migration Jobs & Zero-Downtime DB Deploy (add:migration-job & co
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-migration-job-test-'));
+    tmpDir = createTempDir('webspresso-migration-job-test');
   });
 
   afterEach(() => {
-    if (tmpDir && fs.existsSync(tmpDir)) {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    cleanupDir(tmpDir);
     vi.restoreAllMocks();
   });
 

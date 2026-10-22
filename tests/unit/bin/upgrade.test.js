@@ -1,3 +1,4 @@
+import { createTempDir, cleanupDir } from '../../utils';
 /**
  * @vitest-environment node
  */
@@ -8,12 +9,11 @@ import {
   findWebspressoDep,
 } from '../../../bin/commands/upgrade.js';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 
 describe('upgrade command helpers', () => {
   it('detectPackageManager prefers pnpm / yarn lockfiles', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-up-'));
+    const dir = createTempDir('ws-up');
     try {
       expect(detectPackageManager(dir)).toBe('npm');
       fs.writeFileSync(path.join(dir, 'yarn.lock'), '');
@@ -21,7 +21,7 @@ describe('upgrade command helpers', () => {
       fs.writeFileSync(path.join(dir, 'pnpm-lock.yaml'), '');
       expect(detectPackageManager(dir)).toBe('pnpm');
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanupDir(dir);
     }
   });
 

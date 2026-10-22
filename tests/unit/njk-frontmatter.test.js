@@ -1,10 +1,12 @@
+const {
+  createTempDir
+} = require('../utils');
 /**
  * Unit tests: src/njk-frontmatter.js
  */
 
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
 const {
   parseNjkFrontmatter,
   frontmatterToPatches,
@@ -92,7 +94,7 @@ description: Overlay
 
   describe('loadNjkRouteTemplate', () => {
     it('loads from filesystem and merges patches (cold prod cache)', () => {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-fm-'));
+      const dir = createTempDir('ws-fm');
       const fp = path.join(dir, 'p.njk');
       fs.writeFileSync(
         fp,
@@ -127,7 +129,7 @@ x`,
     });
 
     it('invalidate dev cache when mtime changes', () => {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-fm-dev-'));
+      const dir = createTempDir('ws-fm-dev');
       const fp = path.join(dir, 'q.njk');
       fs.writeFileSync(
         fp,

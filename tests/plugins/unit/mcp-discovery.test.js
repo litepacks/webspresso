@@ -1,3 +1,4 @@
+import { createTempDir, cleanupDir } from '../../utils';
 /**
  * Unit tests for MCP Directory & Component Discovery
  * @vitest-environment node
@@ -6,20 +7,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { discoverMcpDirectory, scanModuleDir } from '../../../plugins/mcp/discovery';
 
 describe('MCP Directory Auto-Discovery', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-disc-test-'));
+    tmpDir = createTempDir('mcp-disc-test');
   });
 
   afterEach(() => {
-    if (tmpDir && fs.existsSync(tmpDir)) {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    cleanupDir(tmpDir);
   });
 
   describe('scanModuleDir', () => {

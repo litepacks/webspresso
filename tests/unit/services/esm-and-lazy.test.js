@@ -1,8 +1,12 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../../utils');
+
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const {
   ServiceRegistry,
   createServiceRegistry,
@@ -18,13 +22,11 @@ describe('Services ESM, Dynamic Import & Lazy Loading', () => {
   let tempDir;
 
   beforeAll(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-services-esm-test-'));
+    tempDir = createTempDir('webspresso-services-esm-test');
   });
 
   afterAll(() => {
-    if (tempDir && fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    cleanupDir(tempDir);
   });
 
   describe('1. Module Loader & Export Normalization (extractModuleExport)', () => {

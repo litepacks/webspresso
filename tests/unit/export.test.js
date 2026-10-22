@@ -1,3 +1,8 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../utils');
+
 'use strict';
 
 /**
@@ -11,7 +16,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { program } = require('commander');
 const {
   exportStaticSite,
@@ -26,13 +30,11 @@ describe('Static Site Export & Prerendering (core/export)', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-export-test-'));
+    tmpDir = createTempDir('webspresso-export-test');
   });
 
   afterEach(() => {
-    if (tmpDir && fs.existsSync(tmpDir)) {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    cleanupDir(tmpDir);
   });
 
   describe('urlToFilePath', () => {

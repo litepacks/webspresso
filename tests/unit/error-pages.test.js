@@ -1,3 +1,7 @@
+const {
+  createTempDir,
+  cleanupDir
+} = require('../utils');
 /**
  * Error Pages Configuration Tests
  */
@@ -6,7 +10,6 @@ const { createApp } = require('../../src/server');
 const path = require('path');
 const request = require('supertest');
 const fs = require('fs');
-const os = require('os');
 
 describe('Error Pages', () => {
   const pagesDir = path.join(__dirname, '../fixtures/pages');
@@ -181,7 +184,7 @@ describe('Error Pages', () => {
     let autoViewsDir;
 
     beforeEach(() => {
-      autoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-auto-404-'));
+      autoDir = createTempDir('webspresso-auto-404');
       autoPagesDir = path.join(autoDir, 'pages');
       autoViewsDir = path.join(autoDir, 'views');
       fs.mkdirSync(autoPagesDir, { recursive: true });
@@ -189,7 +192,7 @@ describe('Error Pages', () => {
     });
 
     afterEach(() => {
-      fs.rmSync(autoDir, { recursive: true, force: true });
+      cleanupDir(autoDir);
     });
 
     it('should auto-discover views/404.njk when errorPages.notFound is not explicitly passed', async () => {
