@@ -10,6 +10,7 @@ const fsUtils = require('./fs');
 const asyncUtils = require('./async');
 const serverUtils = require('./server');
 const serviceUtils = require('./services');
+const adminUtils = require('./admin');
 
 module.exports = {
   ...http,
@@ -18,4 +19,5 @@ module.exports = {
   ...asyncUtils,
   ...serverUtils,
   ...serviceUtils,
+  ...adminUtils,
 };

@@ -3,25 +3,7 @@
  */
 const { registerModule } = require('../../../plugins/admin-panel/core/admin-module');
 const { AdminRegistry } = require('../../../plugins/admin-panel/core/registry');
-
-function createMockDeps(registryOverride) {
-  const registry = registryOverride || new AdminRegistry();
-  const routes = [];
-
-  return {
-    registry,
-    adminPath: '/_admin',
-    ctx: {
-      addRoute: (method, path, ...handlers) => {
-        routes.push({ method, path, handlers });
-      },
-    },
-    requireAuth: function requireAuth(req, res, next) { next(); },
-    optionalAuth: function optionalAuth(req, res, next) { next(); },
-    serveAdminPanel: function serveAdminPanel(req, res) { res.send('ok'); },
-    _routes: routes,
-  };
-}
+const { createMockAdminDeps: createMockDeps } = require('../../utils');
 
 describe('registerModule', () => {
   describe('validation', () => {

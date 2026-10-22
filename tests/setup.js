@@ -67,6 +67,9 @@ const {
   createMockServiceContext,
   createMockServiceRegistry,
   defineMockService,
+  createMockAdminRegistry,
+  createMockAdminDeps,
+  createMockPluginContext,
 } = require('./utils');
 
 /**
@@ -177,6 +180,9 @@ module.exports = {
   createMockServiceContext,
   createMockServiceRegistry,
   defineMockService,
+  createMockAdminRegistry,
+  createMockAdminDeps,
+  createMockPluginContext,
 };
 
 // Make utilities available globally in tests

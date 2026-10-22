@@ -17,24 +17,7 @@ const emailPlugin = require('../../../plugins/email');
 const auditLogPlugin = require('../../../plugins/audit-log');
 const ormCacheAdminPlugin = require('../../../plugins/orm-cache-admin');
 const appScript = require('../../../plugins/admin-panel/app');
-
-function createMockDeps() {
-  const registry = new AdminRegistry();
-  const routes = [];
-  return {
-    registry,
-    adminPath: '/_admin',
-    ctx: {
-      addRoute: (method, path, ...handlers) => {
-        routes.push({ method, path, handlers });
-      },
-    },
-    requireAuth: () => {},
-    optionalAuth: () => {},
-    serveAdminPanel: () => {},
-    _routes: routes,
-  };
-}
+const { createMockAdminDeps: createMockDeps } = require('../../utils');
 
 describe('Admin Panel Page Title Support', () => {
   describe('AdminRegistry title settings & methods', () => {

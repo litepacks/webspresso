@@ -2,26 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { registerModule, registerPageDir, loadPagesFromDir, formatClientComponent } = require('../../../plugins/admin-panel/core/admin-module');
 const { AdminRegistry } = require('../../../plugins/admin-panel/core/registry');
-const { createTempDir, cleanupDir } = require('../../utils/fs');
-
-function createMockDeps(registryOverride) {
-  const registry = registryOverride || new AdminRegistry();
-  const routes = [];
-
-  return {
-    registry,
-    adminPath: '/_admin',
-    ctx: {
-      addRoute: (method, path, ...handlers) => {
-        routes.push({ method, path, handlers });
-      },
-    },
-    requireAuth: function requireAuth(req, res, next) { next(); },
-    optionalAuth: function optionalAuth(req, res, next) { next(); },
-    serveAdminPanel: function serveAdminPanel(req, res) { res.send('ok'); },
-    _routes: routes,
-  };
-}
+const { createTempDir, cleanupDir, createMockAdminDeps: createMockDeps } = require('../../utils');
 
 describe('admin-module file and folder custom pages', () => {
   let tmpDir;
