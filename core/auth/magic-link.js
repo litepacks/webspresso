@@ -88,10 +88,14 @@ function createMagicLinkVerifyMiddleware(authManager, options = {}) {
   } = options;
 
   return async function magicLinkVerifyMiddleware(req, res, next) {
-    const rawToken = req.query?.[tokenParam] || req.body?.[tokenParam];
+    let rawToken = req.query?.[tokenParam] || req.body?.[tokenParam];
+    if (Array.isArray(rawToken)) {
+      rawToken = rawToken[0];
+    }
+    const token = typeof rawToken === 'string' ? rawToken.trim() : null;
     const isHtml = req.accepts && req.accepts('html') && req.method === 'GET';
 
-    if (!rawToken) {
+    if (!token) {
       if (isHtml) {
         return res.redirect(failureRedirect);
       }
@@ -99,7 +103,7 @@ function createMagicLinkVerifyMiddleware(authManager, options = {}) {
     }
 
     try {
-      const { user } = await authManager.verifyMagicLink(rawToken, { markEmailVerified });
+      const { user } = await authManager.verifyMagicLink(token, { markEmailVerified });
 
       if (req.auth && typeof req.auth.login === 'function') {
         await req.auth.login(user);
@@ -139,21 +143,35 @@ function createMagicLinkVerifyMiddleware(authManager, options = {}) {
  * 
  * @param {import('./manager').AuthManager} authManager 
  * @param {Object} [options]
+ * @param {number} [options.tokenTtlMs]
+ * @param {boolean} [options.hideUserNotFound=true]
  * @returns {Function} Express route handler
  */
 function createMagicLinkRequestHandler(authManager, options = {}) {
   return async function magicLinkRequestHandler(req, res) {
-    const identifier = req.body?.email || req.body?.identifier || req.query?.email;
+    const raw = req.body?.email || req.body?.identifier || req.query?.email;
+    const identifier = typeof raw === 'string' ? raw.trim() : raw;
     if (!identifier) {
       return res.status(400).json({ error: 'Email or identifier is required' });
     }
 
     try {
       const result = await authManager.requestMagicLink(identifier, options);
+
+      if (options.hideUserNotFound === false && result?.userFound === false) {
+        return res.status(404).json({
+          error: 'User not found',
+          code: 'USER_NOT_FOUND',
+        });
+      }
+
+      const tokenTtlMs = options.tokenTtlMs ?? (authManager?.config?.magicLink?.tokenTtlMs || 15 * 60 * 1000);
+      const expiresAt = result.expiresAt || new Date(Date.now() + tokenTtlMs);
+
       return res.status(200).json({
         ok: true,
         message: 'If the account exists, a magic link has been sent.',
-        expiresAt: result.expiresAt,
+        expiresAt,
       });
     } catch (err) {
       return res.status(500).json({ error: err.message || 'Failed to send magic link' });
