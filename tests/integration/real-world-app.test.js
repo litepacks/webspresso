@@ -961,7 +961,10 @@ describe.sequential('Comprehensive Real-World Application: Express & Hono Runtim
       expect(auditLog[auditLog.length - 1].title).toBe('Microservices & Core Decoupling');
 
       // Allow background worker to process job
-      await new Promise((r) => setTimeout(r, 100));
+      for (let i = 0; i < 20; i++) {
+        if (queuedJobs.length >= initialQueueCount + 1) break;
+        await new Promise((r) => setTimeout(r, 5));
+      }
       expect(queuedJobs.length).toBeGreaterThanOrEqual(initialQueueCount + 1);
       const enqueued = queuedJobs.find((j) => j.title === 'Microservices & Core Decoupling');
       expect(enqueued).toBeDefined();
@@ -1570,7 +1573,10 @@ describe.sequential('Comprehensive Real-World Application: Express & Hono Runtim
       expect(auditLog[auditLog.length - 1].title).toBe('High-Throughput Hono Worker');
 
       // Allow background worker to process job
-      await new Promise((r) => setTimeout(r, 100));
+      for (let i = 0; i < 20; i++) {
+        if (queuedJobs.length >= initialQueueCount + 1) break;
+        await new Promise((r) => setTimeout(r, 5));
+      }
       expect(queuedJobs.length).toBeGreaterThanOrEqual(initialQueueCount + 1);
       const enqueued = queuedJobs.find((j) => j.title === 'High-Throughput Hono Worker');
       expect(enqueued).toBeDefined();
