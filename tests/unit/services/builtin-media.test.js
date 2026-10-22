@@ -1,10 +1,10 @@
 const fs = require('fs/promises');
 const path = require('path');
 const os = require('os');
-const { createServiceRegistry } = require('../../src/services');
-const { createMediaServices } = require('../../src/services/builtins/media');
-const { createApp } = require('../../src/server');
-const { uploadPlugin } = require('../../plugins/upload');
+const { createServiceRegistry } = require('../../../src/services');
+const { createMediaServices } = require('../../../src/services/builtins/media');
+const { createApp } = require('../../../src/server');
+const { uploadPlugin } = require('../../../plugins/upload');
 
 describe('Built-in Media Services (media.*)', () => {
   let tmpDir;
@@ -120,7 +120,7 @@ describe('Built-in Media Services (media.*)', () => {
   describe('uploadPlugin automatic registration', () => {
     it('should auto-register media.* services into serviceRegistry when uploadPlugin is used in createApp', async () => {
       const { app } = createApp({
-        pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
+        pagesDir: path.join(__dirname, '../../fixtures/empty-pages'),
         cache: false,
         lazyRoutes: true,
         plugins: [

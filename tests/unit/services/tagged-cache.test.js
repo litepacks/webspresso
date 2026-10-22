@@ -2,7 +2,7 @@ const {
   memoize,
   ServiceRegistry,
   createServiceRegistry,
-} = require('../../index');
+} = require('../../../index');
 
 describe('Services Tagged & Distributed Cache Integration', () => {
   describe('memoize with static tags', () => {
@@ -433,7 +433,7 @@ describe('Services Tagged & Distributed Cache Integration', () => {
 
   describe('App and Req context service helper decorations', () => {
     it('decorates core app service and ctx.service with tag invalidation methods', async () => {
-      const { createCoreApp } = require('../../core');
+      const { createCoreApp } = require('../../../core');
       const app = createCoreApp();
 
       expect(typeof app.service.invalidateByTag).toBe('function');

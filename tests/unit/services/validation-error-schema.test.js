@@ -15,7 +15,7 @@ const {
   createServiceValidationError,
   normalizeValidationIssues,
   formatZodErrors,
-} = require('../../src/services');
+} = require('../../../src/services');
 
 describe('Services Zod & Validation Error Schema Integrity (Item 6)', () => {
   describe('Zod Schema Validation Failure Integrity', () => {

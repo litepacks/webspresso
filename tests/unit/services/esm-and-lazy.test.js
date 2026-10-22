@@ -11,8 +11,8 @@ const {
   loadModuleSync,
   loadModuleAsync,
   extractModuleExport,
-} = require('../../src/services');
-const { ConfigurationError, NotFoundError } = require('../../core/errors');
+} = require('../../../src/services');
+const { ConfigurationError, NotFoundError } = require('../../../core/errors');
 
 describe('Services ESM, Dynamic Import & Lazy Loading', () => {
   let tempDir;

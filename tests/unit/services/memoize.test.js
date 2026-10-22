@@ -4,7 +4,7 @@ const {
   stableCacheKey,
   createServiceRegistry,
   ServiceRegistry,
-} = require('../../index');
+} = require('../../../index');
 
 describe('Services Memoize & Caching (Hardened)', () => {
   describe('parseTtlMs helper', () => {

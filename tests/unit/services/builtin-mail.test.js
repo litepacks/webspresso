@@ -1,9 +1,9 @@
-const { TemplateRegistry } = require('../../plugins/email/template-registry');
-const { createEmailService } = require('../../plugins/email/service');
-const { createServiceRegistry } = require('../../src/services');
-const { createMailServices } = require('../../src/services/builtins/mail');
-const { createApp } = require('../../src/server');
-const { emailPlugin } = require('../../plugins/email');
+const { TemplateRegistry } = require('../../../plugins/email/template-registry');
+const { createEmailService } = require('../../../plugins/email/service');
+const { createServiceRegistry } = require('../../../src/services');
+const { createMailServices } = require('../../../src/services/builtins/mail');
+const { createApp } = require('../../../src/server');
+const { emailPlugin } = require('../../../plugins/email');
 
 describe('Built-in Mail Services (mail.*)', () => {
   let registry;
@@ -110,7 +110,7 @@ describe('Built-in Mail Services (mail.*)', () => {
     it('should auto-register mail.* services into serviceRegistry when emailPlugin is used in createApp', async () => {
       const path = require('path');
       const { app } = createApp({
-        pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
+        pagesDir: path.join(__dirname, '../../fixtures/empty-pages'),
         cache: false,
         lazyRoutes: true,
         plugins: [

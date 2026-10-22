@@ -2,7 +2,7 @@ const {
   ServiceRegistry,
   createServiceRegistry,
   WebspressoError,
-} = require('../../index');
+} = require('../../../index');
 
 describe('Services Execution & Lifecycle Edge Cases (Section 2 Hardened)', () => {
   describe('Timeout Handling', () => {

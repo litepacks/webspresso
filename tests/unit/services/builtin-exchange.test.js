@@ -1,11 +1,11 @@
 const path = require('path');
 const z = require('zod');
-const { createDatabase } = require('../../core/orm');
-const { defineModel, clearRegistry } = require('../../core/orm/model');
-const { createServiceRegistry } = require('../../src/services');
-const { createExchangeServices } = require('../../src/services/builtins/exchange');
-const { createApp } = require('../../src/server');
-const { dataExchangePlugin } = require('../../plugins/data-exchange');
+const { createDatabase } = require('../../../core/orm');
+const { defineModel, clearRegistry } = require('../../../core/orm/model');
+const { createServiceRegistry } = require('../../../src/services');
+const { createExchangeServices } = require('../../../src/services/builtins/exchange');
+const { createApp } = require('../../../src/server');
+const { dataExchangePlugin } = require('../../../plugins/data-exchange');
 
 describe('Built-in Exchange Services (exchange.*)', () => {
   let db;
@@ -133,7 +133,7 @@ describe('Built-in Exchange Services (exchange.*)', () => {
   describe('dataExchangePlugin automatic registration', () => {
     it('should auto-register exchange.* services in createApp when plugin is loaded', async () => {
       const { app } = createApp({
-        pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
+        pagesDir: path.join(__dirname, '../../fixtures/empty-pages'),
         cache: false,
         lazyRoutes: true,
         db,

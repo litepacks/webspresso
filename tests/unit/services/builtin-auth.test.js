@@ -1,10 +1,10 @@
 const z = require('zod');
 const knexLib = require('knex');
-const { createDatabase } = require('../../core/orm');
-const { defineModel, clearRegistry } = require('../../core/orm/model');
-const { createAuthTokensTable, dropAuthTokensTable } = require('../../core/auth/tokens');
-const { createServiceRegistry } = require('../../src/services');
-const { createAuthServices } = require('../../src/services/builtins/auth');
+const { createDatabase } = require('../../../core/orm');
+const { defineModel, clearRegistry } = require('../../../core/orm/model');
+const { createAuthTokensTable, dropAuthTokensTable } = require('../../../core/auth/tokens');
+const { createServiceRegistry } = require('../../../src/services');
+const { createAuthServices } = require('../../../src/services/builtins/auth');
 
 describe('Built-in Auth Services (auth.*)', () => {
   let db;
@@ -232,7 +232,7 @@ describe('Built-in Auth Services (auth.*)', () => {
       const user = await knex('users').where({ email: 'john@example.com' }).first();
       expect(user.email_verified_at).toBeNull();
 
-      const { createAuthToken, createKnexAuthTokensAdapter, TOKEN_TYPES } = require('../../core/auth/tokens');
+      const { createAuthToken, createKnexAuthTokensAdapter, TOKEN_TYPES } = require('../../../core/auth/tokens');
       const adapter = createKnexAuthTokensAdapter(knex);
       const { rawToken } = await createAuthToken(adapter, TOKEN_TYPES.EMAIL_VERIFY, user.id, 60000);
 

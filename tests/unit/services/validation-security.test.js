@@ -3,8 +3,8 @@ const {
   sanitizeInput,
   ServiceRegistry,
   ValidationError,
-} = require('../../index');
-const { maskSensitiveData } = require('../../src/services/executor');
+} = require('../../../index');
+const { maskSensitiveData } = require('../../../src/services/executor');
 const z = require('zod');
 
 describe('Services Validation & Security Edge Cases (Section 3 Hardened)', () => {

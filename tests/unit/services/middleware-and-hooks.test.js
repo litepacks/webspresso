@@ -5,8 +5,8 @@ const {
   createServiceRegistry,
   defineService,
   composeMiddleware,
-} = require('../../src/services');
-const { WebspressoError, NotFoundError } = require('../../core/errors');
+} = require('../../../src/services');
+const { WebspressoError, NotFoundError } = require('../../../core/errors');
 
 describe('Services Middleware & Lifecycle Hooks', () => {
   describe('1. composeMiddleware Engine', () => {

@@ -16,11 +16,11 @@ const {
   WebspressoError,
   getServiceRegistry,
   hasServiceRegistry,
-} = require('../../index');
+} = require('../../../index');
 
-const FIXTURES_SERVICES_DIR = path.join(__dirname, '../fixtures/services');
-const FIXTURES_PAGES_DIR = path.join(__dirname, '../fixtures/pages');
-const FIXTURES_VIEWS_DIR = path.join(__dirname, '../fixtures/views');
+const FIXTURES_SERVICES_DIR = path.join(__dirname, '../../fixtures/services');
+const FIXTURES_PAGES_DIR = path.join(__dirname, '../../fixtures/pages');
+const FIXTURES_VIEWS_DIR = path.join(__dirname, '../../fixtures/views');
 
 describe('Webspresso Services Layer', () => {
   describe('Service Discovery & File-to-Name Mapping', () => {

@@ -2,7 +2,7 @@ const {
   ServiceRegistry,
   UnauthorizedError,
   ForbiddenError,
-} = require('../../index');
+} = require('../../../index');
 
 describe('Services Authorization & RBAC (Section 5 Hardened)', () => {
   describe('auth: true (Authentication Required)', () => {

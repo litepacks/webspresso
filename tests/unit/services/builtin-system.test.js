@@ -1,11 +1,11 @@
 const path = require('path');
 const z = require('zod');
-const { createDatabase } = require('../../core/orm');
-const { defineModel, clearRegistry } = require('../../core/orm/model');
-const { createAuthTokensTable, createAuthToken, createKnexAuthTokensAdapter, TOKEN_TYPES, dropAuthTokensTable } = require('../../core/auth/tokens');
-const { createServiceRegistry } = require('../../src/services');
-const { createSystemServices } = require('../../src/services/builtins/system');
-const { createApp } = require('../../src/server');
+const { createDatabase } = require('../../../core/orm');
+const { defineModel, clearRegistry } = require('../../../core/orm/model');
+const { createAuthTokensTable, createAuthToken, createKnexAuthTokensAdapter, TOKEN_TYPES, dropAuthTokensTable } = require('../../../core/auth/tokens');
+const { createServiceRegistry } = require('../../../src/services');
+const { createSystemServices } = require('../../../src/services/builtins/system');
+const { createApp } = require('../../../src/server');
 
 describe('Built-in System Services (system.*)', () => {
   let db;
@@ -123,7 +123,7 @@ describe('Built-in System Services (system.*)', () => {
   describe('createApp automatic registration', () => {
     it('should auto-register system.* services in createApp', async () => {
       const { app } = createApp({
-        pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
+        pagesDir: path.join(__dirname, '../../fixtures/empty-pages'),
         cache: false,
         lazyRoutes: true,
         db,

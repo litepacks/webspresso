@@ -3,7 +3,7 @@ const {
   toCamelCase,
   createServiceRegistry,
   ServiceRegistry,
-} = require('../../index');
+} = require('../../../index');
 
 describe('Services Discovery & Portability Edge Cases (Section 4 Hardened)', () => {
   describe('Cross-Platform Path Normalization (Windows \\ vs Linux /)', () => {

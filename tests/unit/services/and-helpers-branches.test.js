@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 describe('Services & Helpers Branch Coverage', () => {
   describe('plugins/admin-panel/api.js comprehensive branch coverage', () => {
-    const { createApiHandlers } = require('../../plugins/admin-panel/api.js');
+    const { createApiHandlers } = require('../../../plugins/admin-panel/api.js');
 
     it('exercises admin auth endpoints (check, setup, login, logout, me, updateProfile)', async () => {
       const mockAdminRepo = {
@@ -389,7 +389,7 @@ describe('Services & Helpers Branch Coverage', () => {
   });
 
   describe('core/auth/manager.js comprehensive branch coverage', () => {
-    const { AuthManager } = require('../../core/auth/manager.js');
+    const { AuthManager } = require('../../../core/auth/manager.js');
 
     it('exercises registration, tokens, passwords, verification, and remember-me', async () => {
       const mockUsers = new Map();
@@ -485,7 +485,7 @@ describe('Services & Helpers Branch Coverage', () => {
   });
 
   describe('plugins/admin-panel/modules/admin-users.js comprehensive branch coverage', () => {
-    const { createAdminUsersApiHandlers } = require('../../plugins/admin-panel/modules/admin-users.js');
+    const { createAdminUsersApiHandlers } = require('../../../plugins/admin-panel/modules/admin-users.js');
 
     it('exercises full admin CRUD: list, get, create, update, delete with security constraints', async () => {
       const admins = new Map([
@@ -633,7 +633,7 @@ describe('Services & Helpers Branch Coverage', () => {
       getFileType,
       getMimeType,
       sanitizeName,
-    } = require('../../plugins/file-manager/core.js');
+    } = require('../../../plugins/file-manager/core.js');
 
     it('exercises resolveSafePath edge cases, categories, mimes, and sanitizers', () => {
       const base = '/tmp/uploads';
@@ -671,7 +671,7 @@ describe('Services & Helpers Branch Coverage', () => {
     const {
       allowedImportColumns,
       buildPayloadForRow,
-    } = require('../../plugins/data-exchange/import.js');
+    } = require('../../../plugins/data-exchange/import.js');
 
     it('exercises allowedImportColumns and buildPayloadForRow', () => {
       const model = {
@@ -708,7 +708,7 @@ describe('Services & Helpers Branch Coverage', () => {
       hasColumnMeta,
       getColumnMeta,
       extractColumnsFromSchema,
-    } = require('../../core/orm/schema-helpers.js');
+    } = require('../../../core/orm/schema-helpers.js');
 
     it('exercises zdb schema builders and helper methods', () => {
       const zdb = createSchemaHelpers(z);
@@ -750,7 +750,7 @@ describe('Services & Helpers Branch Coverage', () => {
   });
 
   describe('core/queue/adapters/redis.js branch coverage', () => {
-    const { RedisQueueAdapter } = require('../../core/queue/adapters/redis.js');
+    const { RedisQueueAdapter } = require('../../../core/queue/adapters/redis.js');
 
     it('exercises redis queue methods with simulated client', async () => {
       const mockStorage = new Map();
@@ -783,7 +783,7 @@ describe('Services & Helpers Branch Coverage', () => {
   });
 
   describe('src/plugin-manager.js branch coverage', () => {
-    const { PluginManager } = require('../../src/plugin-manager.js');
+    const { PluginManager } = require('../../../src/plugin-manager.js');
 
     it('exercises plugin registration, hooks, dependency ordering and errors', async () => {
       const pm = new PluginManager();
@@ -842,8 +842,8 @@ describe('Services & Helpers Branch Coverage', () => {
       parseTtlMs,
       stableCacheKey,
       safeClone,
-    } = require('../../src/services/memoize.js');
-    const { ServiceRegistry } = require('../../src/services/registry.js');
+    } = require('../../../src/services/memoize.js');
+    const { ServiceRegistry } = require('../../../src/services/registry.js');
 
     it('exercises parseTtlMs durations and edge cases', () => {
       expect(parseTtlMs('5s')).toBe(5000);
@@ -954,9 +954,9 @@ describe('Services & Helpers Branch Coverage', () => {
   });
 
   describe('src/services/builtins/auth.js and file-manager.js branch coverage', () => {
-    const { createAuthServices } = require('../../src/services/builtins/auth.js');
-    const { createFileManagerServices } = require('../../src/services/builtins/file-manager.js');
-    const { hash } = require('../../core/auth/hash');
+    const { createAuthServices } = require('../../../src/services/builtins/auth.js');
+    const { createFileManagerServices } = require('../../../src/services/builtins/file-manager.js');
+    const { hash } = require('../../../core/auth/hash');
 
     it('exercises auth builtin services (change-password, verify-email)', async () => {
       const hashedPw = await hash('correct_pw');
@@ -1011,7 +1011,7 @@ describe('Services & Helpers Branch Coverage', () => {
     });
 
     it('exercises fileManager builtin services (mkdir, rename, delete, move, upload)', async () => {
-      const tmpBase = path.join(__dirname, '../../tmp/test-file-manager-services');
+      const tmpBase = path.join(__dirname, '../../../tmp/test-file-manager-services');
       await fs.rm(tmpBase, { recursive: true, force: true });
       await fs.mkdir(tmpBase, { recursive: true });
 
@@ -1080,12 +1080,12 @@ describe('Services & Helpers Branch Coverage', () => {
   });
 
   describe('src/server.js nunjucks filters, wrapAsync, and HTTP method wrapper branches', () => {
-    const { createApp } = require('../../src/server.js');
+    const { createApp } = require('../../../src/server.js');
     const request = require('supertest');
 
     it('exercises nunjucks json, t, and date filters with all parameters', () => {
       const { nunjucksEnv } = createApp({
-        pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
+        pagesDir: path.join(__dirname, '../../fixtures/empty-pages'),
         helmet: false,
       });
 
@@ -1117,7 +1117,7 @@ describe('Services & Helpers Branch Coverage', () => {
 
     it('exercises wrapAsync with rejected promises, synchronous errors, and all HTTP methods', async () => {
       const { app } = createApp({
-        pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
+        pagesDir: path.join(__dirname, '../../fixtures/empty-pages'),
         helmet: false,
         setupRoutes: (a) => {
           // Promise rejection

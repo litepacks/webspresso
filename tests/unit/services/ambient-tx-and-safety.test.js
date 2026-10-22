@@ -2,7 +2,7 @@ const {
   ServiceRegistry,
   createServiceRegistry,
   createCoreApp,
-} = require('../../index');
+} = require('../../../index');
 
 describe('Services Ambient Transaction Safety & Ergonomics', () => {
   describe('ctx.service.call and ctx.service.execute delegation', () => {
