@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../../utils');
+
 /**
  * Tests for Services Layer Zod & Validation Error Schema Integrity
  * Verifies code = 'VALIDATION_ERROR', statusCode = 400, service = serviceName,
@@ -91,7 +95,7 @@ describe('Services Zod & Validation Error Schema Integrity (Item 6)', () => {
     it('should attach standardized error attributes on async refinement failures', async () => {
       const asyncSchema = z.object({
         email: z.string().email().refine(async (val) => {
-          await new Promise((r) => setTimeout(r, 5));
+          await wait(5);
           return val !== 'taken@example.com';
         }, { message: 'Email address already in use' }),
       });
@@ -156,7 +160,7 @@ describe('Services Zod & Validation Error Schema Integrity (Item 6)', () => {
 
     it('should standardize errors when custom validator resolves to false (async)', async () => {
       const asyncValidator = async (input) => {
-        await new Promise((r) => setTimeout(r, 2));
+        await wait(2);
         return Boolean(input.token && input.token === 'valid_secret');
       };
 

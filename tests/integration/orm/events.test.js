@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../../utils');
+
 /**
  * ORM Events/Signals Integration Tests
  * Tests signal integration with repository operations
@@ -450,7 +454,7 @@ describe('ORM Events Integration', () => {
       const order = [];
 
       ModelEvents.on('EventTest.beforeCreate', async (data) => {
-        await new Promise((r) => setTimeout(r, 10));
+        await wait(10);
         order.push('async');
         data.name = 'Modified by async';
       });
@@ -467,7 +471,7 @@ describe('ORM Events Integration', () => {
 
     it('should handle async hook errors', async () => {
       ModelEvents.on('EventTest.beforeCreate', async () => {
-        await new Promise((r) => setTimeout(r, 10));
+        await wait(10);
         throw new Error('Async validation failed');
       });
 

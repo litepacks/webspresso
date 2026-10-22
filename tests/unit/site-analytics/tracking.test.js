@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../../utils');
+
 /**
  * Tracking Middleware Unit Tests
  */
@@ -76,7 +80,7 @@ describe('Tracking Middleware', () => {
 
     await middleware(req, {}, next);
     // Give async code time to execute
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
     expect(inserted.length).toBe(0);
   });
 
@@ -87,7 +91,7 @@ describe('Tracking Middleware', () => {
     for (const ext of ['.js', '.css', '.png', '.jpg', '.ico', '.woff2', '.svg']) {
       await middleware(mockReq({ path: '/assets/file' + ext }), {}, next);
     }
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
     expect(inserted.length).toBe(0);
   });
 
@@ -96,7 +100,7 @@ describe('Tracking Middleware', () => {
     const next = vi.fn();
 
     await middleware(mockReq({ path: '/_admin/dashboard' }), {}, next);
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
     expect(inserted.length).toBe(0);
   });
 
@@ -105,7 +109,7 @@ describe('Tracking Middleware', () => {
     const next = vi.fn();
 
     await middleware(mockReq({ path: '/api/users' }), {}, next);
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
     expect(inserted.length).toBe(0);
   });
 
@@ -115,7 +119,7 @@ describe('Tracking Middleware', () => {
 
     await middleware(mockReq({ path: '/health' }), {}, next);
     await middleware(mockReq({ path: '/robots.txt' }), {}, next);
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
     expect(inserted.length).toBe(0);
   });
 
@@ -125,7 +129,7 @@ describe('Tracking Middleware', () => {
     const req = mockReq({ path: '/blog/hello' });
 
     await middleware(req, {}, next);
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
 
     expect(inserted.length).toBe(1);
     expect(inserted[0].path).toBe('/blog/hello');
@@ -144,7 +148,7 @@ describe('Tracking Middleware', () => {
     });
 
     await middleware(req, {}, next);
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
 
     expect(inserted.length).toBe(1);
     expect(inserted[0].is_bot).toBe(true);
@@ -160,7 +164,7 @@ describe('Tracking Middleware', () => {
     });
 
     await middleware(req, {}, next);
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
     expect(inserted.length).toBe(0);
   });
 
@@ -176,7 +180,7 @@ describe('Tracking Middleware', () => {
     });
 
     await middleware(req, {}, next);
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
 
     expect(inserted.length).toBe(1);
     expect(inserted[0].country).toBe('TR');
@@ -188,7 +192,7 @@ describe('Tracking Middleware', () => {
     const req = mockReq({ path: '/page', ip: '192.168.1.100' });
 
     await middleware(req, {}, next);
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
 
     expect(inserted.length).toBe(1);
     expect(inserted[0].ip_hash).toBeTruthy();
@@ -207,7 +211,7 @@ describe('Tracking Middleware', () => {
     });
 
     await middleware(req, {}, next);
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
 
     expect(inserted.length).toBe(1);
     // IP should be hashed from the first forwarded IP
@@ -221,9 +225,9 @@ describe('Tracking Middleware', () => {
     const req2 = mockReq({ path: '/page2', ip: '1.2.3.4' });
 
     await middleware(req1, {}, next);
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
     await middleware(req2, {}, next);
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
 
     expect(inserted.length).toBe(2);
     expect(inserted[0].visitor_id).toBe(inserted[1].visitor_id);
@@ -236,9 +240,9 @@ describe('Tracking Middleware', () => {
     const req2 = mockReq({ path: '/page2', ip: '1.2.3.4' });
 
     await middleware(req1, {}, next);
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
     await middleware(req2, {}, next);
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
 
     expect(inserted.length).toBe(2);
     expect(inserted[0].session_id).toBe(inserted[1].session_id);
@@ -257,7 +261,7 @@ describe('Tracking Middleware', () => {
     });
 
     await middleware(req, {}, next);
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
 
     expect(inserted.length).toBe(1);
     expect(inserted[0].user_agent.length).toBeLessThanOrEqual(1000);
@@ -272,7 +276,7 @@ describe('Tracking Middleware', () => {
     const next = vi.fn();
 
     await middleware(mockReq({ path: '/page' }), {}, next);
-    await new Promise(r => setTimeout(r, 5));
+    await wait(5);
 
     expect(knex.schema.hasTable).toHaveBeenCalledWith('analytics_page_views');
     expect(knex.schema.createTable).toHaveBeenCalled();
@@ -334,7 +338,7 @@ describe('Tracking Middleware', () => {
 
       const middleware = createTrackingMiddleware(trackingOpts({ batchSize: 1 }));
       await middleware(mockReq({ path: '/page1' }), {}, vi.fn());
-      await new Promise(r => setTimeout(r, 10));
+      await wait(10);
 
       // Batch was dropped immediately, queue must be empty
       expect(middleware.getQueue().length).toBe(0);
@@ -452,7 +456,7 @@ describe('Tracking Middleware', () => {
       knex.__chainable.insert = vi.fn().mockRejectedValue(new Error('SQLITE_FULL: disk full'));
 
       await middleware(mockReq({ path: '/fail' }), {}, vi.fn());
-      await new Promise(r => setTimeout(r, 10));
+      await wait(10);
       expect(middleware.getFailureCount()).toBeGreaterThan(0);
 
       // Now a crawler bot visits during the failure
@@ -477,7 +481,7 @@ describe('Tracking Middleware', () => {
 
       const middleware = createTrackingMiddleware(trackingOpts({ batchSize: 1 }));
       await middleware(mockReq({ path: '/clean-row' }), {}, vi.fn());
-      await new Promise(r => setTimeout(r, 10));
+      await wait(10);
 
       expect(insertedPayload).toBeTruthy();
       expect(insertedPayload[0]._retries).toBeUndefined();

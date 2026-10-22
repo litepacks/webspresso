@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../utils');
+
 'use strict';
 
 /**
@@ -673,7 +677,7 @@ describe.sequential('Comprehensive Real-World Application: Express & Hono Runtim
       findUserById: async (id) => db.getRepository('User').findById(id),
       findUserByCredentials: async (email, password) => {
         const user = await db.getRepository('User').findOne({ email });
-        if (user && await verify(password, user.password)) return user;
+        if (user && (await verify(password, user.password))) return user;
         return null;
       },
     });
@@ -963,7 +967,7 @@ describe.sequential('Comprehensive Real-World Application: Express & Hono Runtim
       // Allow background worker to process job
       for (let i = 0; i < 20; i++) {
         if (queuedJobs.length >= initialQueueCount + 1) break;
-        await new Promise((r) => setTimeout(r, 5));
+        await wait(5);
       }
       expect(queuedJobs.length).toBeGreaterThanOrEqual(initialQueueCount + 1);
       const enqueued = queuedJobs.find((j) => j.title === 'Microservices & Core Decoupling');
@@ -1575,7 +1579,7 @@ describe.sequential('Comprehensive Real-World Application: Express & Hono Runtim
       // Allow background worker to process job
       for (let i = 0; i < 20; i++) {
         if (queuedJobs.length >= initialQueueCount + 1) break;
-        await new Promise((r) => setTimeout(r, 5));
+        await wait(5);
       }
       expect(queuedJobs.length).toBeGreaterThanOrEqual(initialQueueCount + 1);
       const enqueued = queuedJobs.find((j) => j.title === 'High-Throughput Hono Worker');

@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../utils');
+
 /**
  * Unit & Integration tests for Dev Error Overlay (Terminal-Free In-Browser Error Frame)
  * Tests:
@@ -97,7 +101,7 @@ describe('Dev Error Overlay (Browser Dev Overlay)', () => {
       app.broadcastDevReload('error', errorPayload);
 
       // Wait for delivery
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await wait(80);
 
       const errChunk = messages.find((m) => m.includes('"type":"error"'));
       expect(errChunk).toBeDefined();
@@ -108,7 +112,7 @@ describe('Dev Error Overlay (Browser Dev Overlay)', () => {
 
       // 2. Broadcast clear-error event
       app.broadcastDevReload('clear-error');
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await wait(80);
 
       const clearChunk = messages.find((m) => m.includes('"type":"clear-error"'));
       expect(clearChunk).toBeDefined();

@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../utils');
+
 /**
  * Unit & Integration tests for Enhanced Dev Live Reload (Templates, Views, Pages & Cache Invalidation)
  */
@@ -11,7 +15,7 @@ async function waitFor(fn, timeout = 8000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     if (fn()) return true;
-    await new Promise((r) => setTimeout(r, 25));
+    await wait(25);
   }
   return fn();
 }
@@ -92,7 +96,7 @@ describe('Enhanced Dev Live Reload (Template & View Watching)', () => {
     };
 
     // Allow initial directory settlement before tracking events
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await wait(200);
     receivedEvents.length = 0;
 
     // Modify pages/index.njk
@@ -129,7 +133,7 @@ describe('Enhanced Dev Live Reload (Template & View Watching)', () => {
     };
 
     // Allow initial directory settlement before tracking events
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await wait(200);
     receivedEvents.length = 0;
 
     // Add a css file inside testViewsDir
@@ -170,7 +174,7 @@ describe('Enhanced Dev Live Reload (Template & View Watching)', () => {
     };
 
     // Allow initial directory settlement before tracking events
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await wait(200);
     receivedEvents.length = 0;
 
     // Modify file inside extra directory
@@ -201,7 +205,7 @@ describe('Enhanced Dev Live Reload (Template & View Watching)', () => {
     });
 
     // Allow initial directory settlement before tracking events
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await wait(250);
 
     const receivedEvents = [];
     app.devReloadHub.broadcast = (type, payload) => {
@@ -213,7 +217,7 @@ describe('Enhanced Dev Live Reload (Template & View Watching)', () => {
     fs.writeFileSync(path.join(testPagesDir, '.index.njk.swp'), 'swap');
     fs.writeFileSync(path.join(testPagesDir, 'index.test.js'), '// test');
 
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await wait(150);
 
     expect(receivedEvents.length).toBe(0);
 
@@ -255,11 +259,11 @@ describe('Enhanced Dev Live Reload (Template & View Watching)', () => {
     hub.broadcast = (t, p) => events.push({ t, p });
 
     hub.triggerTemplateReload('layout.njk', 'manual');
-    await new Promise((r) => setTimeout(r, 70));
+    await wait(70);
     expect(events.some((e) => e.t === 'full')).toBe(true);
 
     hub.triggerCssReload('custom.css');
-    await new Promise((r) => setTimeout(r, 70));
+    await wait(70);
     expect(events.some((e) => e.t === 'css' && e.p.file === 'custom.css')).toBe(true);
 
     hub.close();

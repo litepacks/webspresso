@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../utils');
+
 /**
  * Unit & Integration tests for Dev Live & Hot Reload (SSE-based CSS Hot Reload)
  * Tests:
@@ -107,7 +111,7 @@ describe('Dev Live & Hot Reload (SSE CSS Hot Reload)', () => {
         const start = Date.now();
         while (Date.now() - start < timeoutMs) {
           if (messages.some(predicate)) return true;
-          await new Promise((r) => setTimeout(r, 20));
+          await wait(20);
         }
         return false;
       };
@@ -212,7 +216,7 @@ describe('Dev Live & Hot Reload (SSE CSS Hot Reload)', () => {
     };
 
     // Wait for fs.watch (FSEvents on macOS) to bind
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await wait(200);
 
     // Modify the CSS file in tempPublicDir/css/style.css
     const targetFile = path.join(tempPublicDir, 'css', 'style.css');
@@ -221,7 +225,7 @@ describe('Dev Live & Hot Reload (SSE CSS Hot Reload)', () => {
     // Wait for debounce and fs.watch notification
     for (let i = 0; i < 40; i++) {
       if (receivedEvents.length > 0) break;
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await wait(50);
     }
 
     expect(receivedEvents.length).toBeGreaterThan(0);

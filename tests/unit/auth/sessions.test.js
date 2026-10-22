@@ -1,3 +1,4 @@
+import { wait } from '../../utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 const knex = require('knex');
 const {
@@ -238,7 +239,7 @@ describe('Active Devices & Session Management (core/auth/sessions)', () => {
       const before = await tracker.get('sess-touch');
 
       // Small sleep to ensure timestamp differs
-      await new Promise((r) => setTimeout(r, 10));
+      await wait(10);
       const touched = await tracker.touch('sess-touch');
       expect(touched).toBe(true);
 

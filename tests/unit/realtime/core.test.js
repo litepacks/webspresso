@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../../utils');
+
 /**
  * Comprehensive Unit Tests for Realtime Core
  * Validates all 28 core requirements and lifecycle behaviors
@@ -143,7 +147,7 @@ describe('Realtime Core', () => {
     });
 
     rt.browserReady();
-    await new Promise((r) => setTimeout(r, 10));
+    await wait(10);
     expect(adapter.connectCallCount).toBeGreaterThanOrEqual(1);
     expect(rt.isConnected()).toBe(true);
   });
@@ -535,7 +539,7 @@ describe('Realtime Core', () => {
     adapter.emit('disconnected', { code: 1006, reason: 'Abnormal Closure' });
 
     // Wait for backoff
-    await new Promise((r) => setTimeout(r, 50));
+    await wait(50);
 
     expect(reconnectingEvents.length).toBeGreaterThanOrEqual(1);
     expect(adapter.connectCallCount).toBe(2);
@@ -594,7 +598,7 @@ describe('Realtime Core', () => {
   // Scenario 28: App destroy during active connection
   it('28. safely cancels and cleans up if destroyed during connection attempt', async () => {
     const adapter = createMockAdapter();
-    adapter.connect = () => new Promise((resolve) => setTimeout(resolve, 15));
+    adapter.connect = () => wait(15);
 
     const rt = createRealtime({ adapter, isBrowser: true, autoConnect: false });
 

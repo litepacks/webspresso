@@ -1,4 +1,8 @@
 const {
+  wait
+} = require('../../utils');
+
+const {
   ServiceRegistry,
   createServiceRegistry,
   WebspressoError,
@@ -12,7 +16,7 @@ describe('Services Execution & Lifecycle Edge Cases (Section 2 Hardened)', () =>
       registry.register('slow.service', {
         timeout: '20ms',
         async handler() {
-          await new Promise((resolve) => setTimeout(resolve, 60));
+          await wait(60);
           return { ok: true };
         },
       });
@@ -49,7 +53,7 @@ describe('Services Execution & Lifecycle Edge Cases (Section 2 Hardened)', () =>
 
       registry.register('configurable.service', {
         async handler() {
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          await wait(50);
           return 'done';
         },
       });
@@ -164,7 +168,7 @@ describe('Services Execution & Lifecycle Edge Cases (Section 2 Hardened)', () =>
 
       registry.register('shared.worker', {
         async handler({ id }) {
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          await wait(10);
           sharedCount++;
           return { id, sharedCount };
         },

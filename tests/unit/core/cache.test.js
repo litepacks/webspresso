@@ -1,3 +1,4 @@
+import { wait } from '../../utils';
 'use strict';
 
 /**
@@ -174,7 +175,7 @@ describe('High-Performance Cache Engine (core/cache)', () => {
       expect(cache.has('temp')).toBe(true);
       expect(cache.get('temp')).toBe('value');
 
-      await new Promise((r) => setTimeout(r, 35));
+      await wait(35);
 
       // Passive check
       expect(cache.has('temp')).toBe(false);
@@ -184,7 +185,7 @@ describe('High-Performance Cache Engine (core/cache)', () => {
       // Test active pruneExpired()
       cache.set('short1', 1, { ttlMs: 10 });
       cache.set('short2', 2, { ttlMs: 10 });
-      await new Promise((r) => setTimeout(r, 20));
+      await wait(20);
 
       const pruned = cache.pruneExpired();
       expect(pruned).toBe(2);
@@ -198,7 +199,7 @@ describe('High-Performance Cache Engine (core/cache)', () => {
 
       const expensiveFactory = async (key) => {
         factoryCalls++;
-        await new Promise((r) => setTimeout(r, 20));
+        await wait(20);
         return `result_for_${key}`;
       };
 

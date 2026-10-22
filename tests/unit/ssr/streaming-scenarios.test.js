@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../../utils');
+
 /**
  * Extended Scenarios & Edge Cases for SSR Streaming & Chunked Transfer
  * (core/ssr/stream.js)
@@ -174,7 +178,7 @@ describe.sequential('SSR Streaming Scenarios & Edge Cases', () => {
 
       // Resolve slow promise after destroy - must not crash or push to destroyed stream
       triggerSlow({ title: 'Ignored' });
-      await new Promise((r) => setTimeout(r, 20));
+      await wait(20);
     });
 
     it('handles slot rejection after stream is destroyed without unhandled rejection', async () => {
@@ -200,7 +204,7 @@ describe.sequential('SSR Streaming Scenarios & Edge Cases', () => {
 
       // Rejection occurs after destruction
       rejectSlow(new Error('Backend offline'));
-      await new Promise((r) => setTimeout(r, 20));
+      await wait(20);
     });
   });
 

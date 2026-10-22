@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../../utils');
+
 /**
  * Unit Tests for QueueManager (core/queue/manager.js)
  */
@@ -117,9 +121,9 @@ describe('QueueManager Core Engine', () => {
 
     queue.define('test.progress', async (job) => {
       job.progress(25, 'Step 1');
-      await new Promise((r) => setTimeout(r, 2));
+      await wait(2);
       job.progress(75, 'Step 2');
-      await new Promise((r) => setTimeout(r, 2));
+      await wait(2);
       return 'done';
     });
 
@@ -154,7 +158,7 @@ describe('QueueManager Core Engine', () => {
     queue.pause();
     expect(queue.isPaused).toBe(true);
 
-    await new Promise((r) => setTimeout(r, 15));
+    await wait(15);
     expect(executed).toBe(false);
 
     queue.resume();
@@ -173,7 +177,7 @@ describe('QueueManager Core Engine', () => {
     expect(queue._currentPollInterval).toBe(50);
 
     // Allow multiple idle ticks to back off
-    await new Promise((r) => setTimeout(r, 80));
+    await wait(80);
     expect(queue._currentPollInterval).toBeGreaterThan(50);
 
     // Dispatching a job should immediately reset to base pollInterval

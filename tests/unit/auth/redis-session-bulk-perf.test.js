@@ -1,4 +1,8 @@
 const {
+  wait
+} = require('../../utils');
+
+const {
   createRedisSessionTracker,
   createRedisSessionStore,
   InMemoryRedisClient,
@@ -124,7 +128,7 @@ describe('Redis Session Tracker & Store Bulk Performance', () => {
           maxConcurrency = concurrentCalls;
         }
         // Small delay to simulate async network latency and verify overlap
-        await new Promise((r) => setTimeout(r, 10));
+        await wait(10);
         const res = await originalGet(...args);
         concurrentCalls--;
         return res;
@@ -182,7 +186,7 @@ describe('Redis Session Tracker & Store Bulk Performance', () => {
         if (concurrentCalls > maxConcurrency) {
           maxConcurrency = concurrentCalls;
         }
-        await new Promise((r) => setTimeout(r, 10));
+        await wait(10);
         const res = await originalGet(...args);
         concurrentCalls--;
         return res;

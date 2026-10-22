@@ -1,3 +1,4 @@
+import { wait } from '../utils';
 import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
@@ -279,7 +280,7 @@ describe('Webspresso Framework Exceptions & Error Handling', () => {
     it('17. handles asynchronous route throws', async () => {
       const { app } = setupApp((a) => {
         a.get('/api/async-error', async () => {
-          await new Promise((r) => setTimeout(r, 5));
+          await wait(5);
           throw new ForbiddenError('Access Denied');
         });
       });

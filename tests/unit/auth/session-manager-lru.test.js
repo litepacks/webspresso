@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../../utils');
+
 const { SessionManager } = require('../../../core/auth/session-manager');
 const { createMemorySessionTracker } = require('../../../core/auth/sessions');
 const { createAuth } = require('../../../core/auth');
@@ -53,7 +57,7 @@ describe('SessionManager Bounded LRU Cache & Memory Leak Hardening', () => {
     await sm.track('sess-C', 3, { headers: {}, ip: '127.0.0.1' });
 
     // Touch sess-A after throttle window so it becomes the most recently used
-    await new Promise((r) => setTimeout(r, 20));
+    await wait(20);
     await sm.touch('sess-A');
 
     // Adding sess-D should now evict sess-B (oldest), NOT sess-A

@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../../utils');
+
 const { PassThrough } = require('stream');
 const { McpServer } = require('../../../plugins/mcp/server');
 const { startStdioTransport, redirectConsoleToStderr, restoreConsole } = require('../../../plugins/mcp/transports/stdio');
@@ -37,7 +41,7 @@ describe('MCP Transports & Security', () => {
       );
 
       // Wait a tick
-      await new Promise((r) => setTimeout(r, 50));
+      await wait(50);
 
       const lines = outputData.trim().split('\n').map((l) => JSON.parse(l));
       expect(lines).toHaveLength(1);
@@ -54,7 +58,7 @@ describe('MCP Transports & Security', () => {
         }) + '\n'
       );
 
-      await new Promise((r) => setTimeout(r, 50));
+      await wait(50);
 
       const allLines = outputData.trim().split('\n').map((l) => JSON.parse(l));
       expect(allLines).toHaveLength(2);

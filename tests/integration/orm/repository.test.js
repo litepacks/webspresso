@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../../utils');
+
 /**
  * Repository Integration Tests
  * Uses SQLite in-memory database
@@ -207,7 +211,7 @@ describe('Repository Integration', () => {
       const before = await UserRepo.findById(1);
       
       // Wait a tick to ensure different timestamp
-      await new Promise(r => setTimeout(r, 1));
+      await wait(1);
       
       const updated = await UserRepo.update(1, { name: 'Newer Name' });
 

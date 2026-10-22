@@ -1,3 +1,4 @@
+import { wait } from '../../utils';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   CircuitBreaker,
@@ -227,7 +228,7 @@ describe('Webspresso Enterprise Resilience Engine (core/resilience)', () => {
 
       await expect(
         breaker.execute(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 150));
+          await wait(150);
           return 'late';
         })
       ).rejects.toThrow(CircuitBreakerTimeoutError);

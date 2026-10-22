@@ -1,4 +1,8 @@
 const {
+  wait
+} = require('../../utils');
+
+const {
   memoize,
   ServiceRegistry,
   createServiceRegistry,
@@ -380,7 +384,7 @@ describe('Services Tagged & Distributed Cache Integration', () => {
       let slowCalls = 0;
       const slowFn = async ({ key }) => {
         slowCalls++;
-        await new Promise((resolve) => setTimeout(resolve, 30));
+        await wait(30);
         return { key, computed: slowCalls };
       };
 

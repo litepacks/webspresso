@@ -1,4 +1,8 @@
 const {
+  wait
+} = require('../../utils');
+
+const {
   memoize,
   parseTtlMs,
   stableCacheKey,
@@ -66,7 +70,7 @@ describe('Services Memoize & Caching (Hardened)', () => {
 
       const slowDbQuery = async ({ category }) => {
         backendCalls++;
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await wait(50);
         return { category, data: [1, 2, 3], fetchedAt: Date.now() };
       };
 

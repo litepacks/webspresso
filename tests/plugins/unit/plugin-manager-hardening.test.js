@@ -1,4 +1,8 @@
 const {
+  wait
+} = require('../../utils');
+
+const {
   createPluginManager,
 } = require('../../../src/plugin-manager');
 
@@ -200,7 +204,7 @@ describe('Plugin Manager Hardening & Optimization', () => {
         name: 'async-plugin',
         version: '1.0.0',
         async register() {
-          await new Promise((r) => setTimeout(r, 10));
+          await wait(10);
           resolved = true;
         },
       };

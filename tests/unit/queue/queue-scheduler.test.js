@@ -1,4 +1,4 @@
-import { createTempDir, cleanupDir } from '../../utils';
+import { createTempDir, cleanupDir, wait } from '../../utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
@@ -205,7 +205,7 @@ describe('TaskScheduler & QueueManager Recurring Jobs', () => {
     await queue.scheduler.trigger(schedule.id);
 
     // Wait for queue worker to process
-    await new Promise((r) => setTimeout(r, 80));
+    await wait(80);
 
     expect(executedPayload).toEqual({ region: 'EU' });
     expect(schedule.runsCount).toBe(1);
@@ -249,7 +249,7 @@ describe('TaskScheduler & QueueManager Recurring Jobs', () => {
 
     // Trigger first run (running)
     const run1 = queue.scheduler.trigger(s.id);
-    await new Promise((r) => setTimeout(r, 40));
+    await wait(40);
     expect(s.isRunning).toBe(true);
 
     // Attempt concurrent trigger while first is still running
@@ -260,13 +260,13 @@ describe('TaskScheduler & QueueManager Recurring Jobs', () => {
     // Complete the first run
     finishJob();
     await run1;
-    await new Promise((r) => setTimeout(r, 40));
+    await wait(40);
 
     expect(s.isRunning).toBe(false);
 
     // Subsequent trigger now proceeds
     await queue.scheduler.trigger(s.id);
-    await new Promise((r) => setTimeout(r, 40));
+    await wait(40);
     expect(runCount).toBe(2);
 
     finishJob();
@@ -283,11 +283,11 @@ describe('TaskScheduler & QueueManager Recurring Jobs', () => {
     const s = queue.schedule('*/5 * * * *', 'limited.task', {}, { maxRuns: 2 });
 
     await queue.scheduler.trigger(s.id);
-    await new Promise((r) => setTimeout(r, 40));
+    await wait(40);
     expect(queue.getSchedule(s.id)).toBeDefined();
 
     await queue.scheduler.trigger(s.id);
-    await new Promise((r) => setTimeout(r, 40));
+    await wait(40);
 
     expect(counter).toBe(2);
     expect(queue.getSchedule(s.id)).toBeNull(); // Auto-unscheduled!
@@ -304,7 +304,7 @@ describe('TaskScheduler & QueueManager Recurring Jobs', () => {
 
     queue.schedule('@daily', 'immediate.job', {}, { runImmediately: true });
 
-    await new Promise((r) => setTimeout(r, 80));
+    await wait(80);
     expect(ran).toBe(true);
   });
 
@@ -335,11 +335,11 @@ describe('TaskScheduler & QueueManager Recurring Jobs', () => {
 
     const s = queue.schedule('@daily', 'call.test');
     await queue.triggerSchedule(s.id);
-    await new Promise((r) => setTimeout(r, 40));
+    await wait(40);
     expect(calls).toBe(1);
 
     await queue.triggerCron(s.id);
-    await new Promise((r) => setTimeout(r, 40));
+    await wait(40);
     expect(calls).toBe(2);
   });
 
@@ -374,11 +374,11 @@ describe('TaskScheduler & QueueManager Recurring Jobs', () => {
 
     // Trigger run 1
     const p1 = queue.triggerSchedule(s.id);
-    await new Promise((r) => setTimeout(r, 30));
+    await wait(30);
 
     // Trigger run 2 concurrently
     const p2 = queue.triggerSchedule(s.id);
-    await new Promise((r) => setTimeout(r, 30));
+    await wait(30);
 
     expect(s.isRunning).toBe(true);
     expect(s.activeJobIds.size).toBe(2);
@@ -386,7 +386,7 @@ describe('TaskScheduler & QueueManager Recurring Jobs', () => {
     // Resolve first job
     resolvers[0]({ done: 1 });
     await p1;
-    await new Promise((r) => setTimeout(r, 30));
+    await wait(30);
 
     // Schedule should still be running because run 2 is in-flight
     expect(s.isRunning).toBe(true);
@@ -395,7 +395,7 @@ describe('TaskScheduler & QueueManager Recurring Jobs', () => {
     // Resolve second job
     resolvers[1]({ done: 2 });
     await p2;
-    await new Promise((r) => setTimeout(r, 30));
+    await wait(30);
 
     // Now all settled
     expect(s.isRunning).toBe(false);

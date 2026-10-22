@@ -1,5 +1,6 @@
 const {
-  cleanupDir
+  cleanupDir,
+  wait
 } = require('../utils');
 
 'use strict';
@@ -730,7 +731,7 @@ describe('Security & Queue Branch Coverage', () => {
       // Write empty line
       input.write('   \n');
 
-      await new Promise((r) => setTimeout(r, 50));
+      await wait(50);
       expect(outputData).toContain('pong');
       expect(outputData).toContain('Parse error');
 

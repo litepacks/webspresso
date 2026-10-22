@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../../utils');
+
 'use strict';
 
 const http = require('http');
@@ -143,11 +147,11 @@ describe('Core Isolation and Lifecycle Hardening', () => {
       const sm = new ShutdownManager({ timeout: 60, logger: null });
 
       const slowAdapter1 = {
-        close: vi.fn(() => new Promise((resolve) => setTimeout(resolve, 200))),
+        close: vi.fn(() => wait(200)),
         forceClose: vi.fn(),
       };
       const slowAdapter2 = {
-        close: vi.fn(() => new Promise((resolve) => setTimeout(resolve, 200))),
+        close: vi.fn(() => wait(200)),
         forceClose: vi.fn(),
       };
 

@@ -1,3 +1,4 @@
+import { wait } from '../../utils';
 /**
  * Unit tests for Webspresso ORM Model Events System
  * @vitest-environment node
@@ -210,7 +211,7 @@ describe('ModelEvents & Lifecycle Signals System', () => {
       const trace = [];
 
       bus.on('Order.beforeCreate', async (data, ctx) => {
-        await new Promise((r) => setTimeout(r, 10));
+        await wait(10);
         trace.push('step1');
         ctx.cancel('Stock depleted');
       });

@@ -1,4 +1,4 @@
-import { createTempDir, cleanupDir } from '../../utils';
+import { createTempDir, cleanupDir, wait } from '../../utils';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
@@ -182,7 +182,7 @@ describe('Cascading Middleware & Nested Layouts', () => {
           next();
         },
         async (req, res, next) => {
-          await new Promise((r) => setTimeout(r, 10));
+          await wait(10);
           executionOrder.push('mw2');
           next();
         },

@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../utils');
+
 /**
  * Comprehensive Vitest tests for Webspresso Graceful Shutdown, Force Close,
  * Shutdown Hooks, and Plugin Disposal Lifecycle.
@@ -165,7 +169,7 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
       setupRoutes(expressApp) {
         expressApp.get('/slow-work', async (req, res) => {
           if (resolveStarted) resolveStarted();
-          await new Promise((r) => setTimeout(r, 20));
+          await wait(20);
           requestFinished = true;
           res.json({ ok: true });
         });
@@ -281,7 +285,7 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
     });
 
     app.onShutdown(async () => {
-      await new Promise((r) => setTimeout(r, 50));
+      await wait(50);
       asyncFinished = true;
     });
 
@@ -389,7 +393,7 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
       name: 'async-plugin',
       register(ctx) {
         return async () => {
-          await new Promise((r) => setTimeout(r, 40));
+          await wait(40);
           asyncDisposed = true;
         };
       },

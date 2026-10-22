@@ -1,4 +1,4 @@
-import { createTempDir, cleanupDir } from '../utils';
+import { createTempDir, cleanupDir, wait } from '../utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import path from 'path';
 import fs from 'fs';
@@ -139,7 +139,7 @@ describe('Decoupled Events & Signals System (AdonisJS Events & Django Signals-in
     it('emitSerial runs async listeners in sequence', async () => {
       const timeline = [];
       dispatcher.on('step', async () => {
-        await new Promise((r) => setTimeout(r, 1));
+        await wait(1);
         timeline.push('first');
         return 1;
       });

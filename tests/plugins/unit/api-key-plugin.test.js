@@ -1,3 +1,7 @@
+const {
+  wait
+} = require('../../utils');
+
 /**
  * Tests for apiKeyPlugin & API Key Authentication Middleware
  */
@@ -503,7 +507,7 @@ describe('apiKeyPlugin', () => {
       expect(req.apiKey.name).toBe('Mobile SDK Client');
 
       // Wait a tick for non-blocking setImmediate last_used_at write
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await wait(50);
 
       const updatedRow = await db(testTable).where({ id: created.record.id }).first();
       expect(updatedRow.last_used_at).not.toBeNull();

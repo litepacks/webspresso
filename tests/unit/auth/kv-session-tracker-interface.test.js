@@ -1,4 +1,8 @@
 const {
+  wait
+} = require('../../utils');
+
+const {
   createKvSessionTracker,
   SessionManager,
 } = require('../../../core/auth');
@@ -60,7 +64,7 @@ describe('createKvSessionTracker Interface Alignment & SessionManager Compatibil
     it('implements list() with sorting and is_current marking', async () => {
       await tracker.track('sess_old', 'user_abc', { ip: '10.0.0.1' });
       // Small pause to guarantee different timestamps
-      await new Promise((r) => setTimeout(r, 10));
+      await wait(10);
       await tracker.track('sess_new', 'user_abc', { ip: '10.0.0.2' });
 
       const list = await tracker.list('user_abc', 'sess_new');

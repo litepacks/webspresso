@@ -1,3 +1,4 @@
+import { wait } from '../utils';
 'use strict';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -391,7 +392,7 @@ describe('core/rate-limit: RateLimiter (Express Middleware)', () => {
     finishCallback();
 
     // Give microtask queue time to run decrement
-    await new Promise((r) => setTimeout(r, 10));
+    await wait(10);
 
     const infoAfter = await store.increment('10.0.0.5', 60000);
     expect(infoAfter.totalHits).toBe(2); // 2 - 1 (decremented) + 1 = 2

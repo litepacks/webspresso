@@ -1,5 +1,6 @@
 const {
-  cleanupDir
+  cleanupDir,
+  wait
 } = require('../utils');
 
 'use strict';
@@ -84,7 +85,7 @@ describe('Routing Table & Scan Routes Branch Coverage', () => {
       );
 
       // Small delay for promise resolution
-      await new Promise((r) => setTimeout(r, 40));
+      await wait(40);
       expect(insertedRows.length).toBeGreaterThanOrEqual(2);
     });
 
@@ -117,7 +118,7 @@ describe('Routing Table & Scan Routes Branch Coverage', () => {
         vi.fn()
       );
 
-      await new Promise((r) => setTimeout(r, 20));
+      await wait(20);
       consoleSpy.mockRestore();
     });
   });
