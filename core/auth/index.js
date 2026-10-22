@@ -16,7 +16,7 @@ function getMiddleware() {
   return _middleware;
 }
 const { hash, verify, needsRehash, generateToken, hashToken } = require('./hash');
-const { signJwt, verifyJwt, decodeJwt } = require('./jwt');
+const { signJwt, verifyJwt, decodeJwt, clearJwtCache, HS256_HEADER_BASE64URL, MAX_PAYLOAD_SIZE } = require('./jwt');
 const {
   TOKEN_TYPES,
   createAuthTokensTable,
@@ -271,6 +271,9 @@ module.exports = {
   signJwt,
   verifyJwt,
   decodeJwt,
+  clearJwtCache,
+  HS256_HEADER_BASE64URL,
+  MAX_PAYLOAD_SIZE,
   
   // Migration helpers
   createRememberTokensTable,
