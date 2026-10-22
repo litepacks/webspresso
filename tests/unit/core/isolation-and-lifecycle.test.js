@@ -158,9 +158,11 @@ describe('Core Isolation and Lifecycle Hardening', () => {
       await sm.close();
       const elapsed = Date.now() - start;
 
-      // Both adapters combined must respect the shared budget (~60ms + grace), well below unshared 400ms
-      expect(elapsed).toBeLessThan(200);
+      // Both adapters combined must respect the shared budget (~60ms)…
+      expect(elapsed).toBeLessThan(150);
       expect(sm.isClosed).toBe(true);
+      expect(slowAdapter1.forceClose).toHaveBeenCalled();
+      expect(slowAdapter2.forceClose).toHaveBeenCalled();
     });
   });
 

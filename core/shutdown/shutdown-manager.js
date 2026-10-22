@@ -283,46 +283,68 @@ class ShutdownManager {
       // 2. Close HTTP server adapters (gracefully drain in-flight HTTP requests)
       if (this._adapters.length > 0) {
         this._log('info', 'Closing HTTP server');
+        const remainingMs = getRemainingTime();
 
-        for (const adapter of this._adapters) {
-          const remainingMs = getRemainingTime();
-
-          if (isForce || (deadline > 0 && remainingMs <= 0)) {
-            // Force mode or deadline expired: immediately forceClose
+        if (isForce || (deadline > 0 && remainingMs <= 0)) {
+          // Force mode or deadline expired: immediately forceClose all adapters
+          for (const adapter of this._adapters) {
             try {
               if (typeof adapter.forceClose === 'function') {
                 adapter.forceClose();
               }
-              const closeRes = adapter.close();
-              if (closeRes && typeof closeRes.then === 'function') {
-                await Promise.race([
-                  Promise.resolve(closeRes),
-                  new Promise(r => {
-                    const t = setTimeout(r, 25);
-                    if (typeof t.unref === 'function') t.unref();
-                  })
-                ]);
-              }
             } catch (err) {
               this._log('error', 'Error force closing adapter:', err);
             }
-          } else {
-            // Graceful mode: close idle connections, close server, and force close on timeout
+          }
+          await Promise.all(
+            this._adapters.map(async (adapter) => {
+              try {
+                if (typeof adapter.close === 'function') {
+                  const closeRes = adapter.close();
+                  if (closeRes && typeof closeRes.then === 'function') {
+                    await Promise.race([
+                      Promise.resolve(closeRes),
+                      new Promise((r) => {
+                        const t = setTimeout(r, 25);
+                        if (typeof t.unref === 'function') t.unref();
+                      }),
+                    ]);
+                  }
+                }
+              } catch (err) {
+                this._log('error', 'Error closing adapter:', err);
+              }
+            })
+          );
+        } else {
+          // Graceful mode: close idle connections, close servers, and force close on timeout
+          for (const adapter of this._adapters) {
             try {
               if (typeof adapter.closeIdleConnections === 'function') {
                 adapter.closeIdleConnections();
               }
             } catch (e) {}
+          }
 
+          const closePromises = this._adapters.map(async (adapter) => {
+            try {
+              if (typeof adapter.close === 'function') {
+                await adapter.close();
+              }
+            } catch (err) {
+              this._log('error', 'Error closing server adapter:', err);
+            }
+          });
+          const allClosePromise = Promise.all(closePromises);
+
+          if (deadline > 0) {
+            const adapterTimeout = getRemainingTime();
             let timer = null;
-            const closePromise = adapter.close();
-
-            if (deadline > 0) {
-              const adapterTimeout = getRemainingTime();
-              const timeoutPromise = new Promise((resolve) => {
-                timer = setTimeout(() => {
-                  this._log('warn', `Graceful shutdown timed out with ${adapterTimeout}ms remaining budget`);
-                  this._log('info', 'Force closing active connections');
+            const timeoutPromise = new Promise((resolve) => {
+              timer = setTimeout(() => {
+                this._log('warn', `Graceful shutdown timed out with ${adapterTimeout}ms remaining budget`);
+                this._log('info', 'Force closing active connections');
+                for (const adapter of this._adapters) {
                   try {
                     if (typeof adapter.forceClose === 'function') {
                       adapter.forceClose();
@@ -330,25 +352,22 @@ class ShutdownManager {
                   } catch (err) {
                     this._log('error', 'Error force closing connections after timeout:', err);
                   }
-                  resolve();
-                }, adapterTimeout);
-
-                if (typeof timer.unref === 'function') {
-                  timer.unref();
                 }
-              });
+                resolve();
+              }, adapterTimeout);
 
-              await Promise.race([closePromise, timeoutPromise]);
-            } else {
-              await closePromise;
-            }
+              if (typeof timer.unref === 'function') {
+                timer.unref();
+              }
+            });
+
+            await Promise.race([allClosePromise, timeoutPromise]);
 
             if (timer) {
               clearTimeout(timer);
             }
-
-            // Prevent unhandled rejection without blocking shutdown if timeout won
-            closePromise.catch(() => {});
+          } else {
+            await allClosePromise;
           }
         }
       }
