@@ -167,17 +167,23 @@ describe('Admin Panel Lifecycle Hooks (Admin Hooks DX)', () => {
     app = result.app;
     request = supertest(app);
 
-    // Setup admin user
-    const setupRes = await request
-      .post('/_admin/api/auth/setup')
+    await db.knex('admin_users').insert({
+      email: 'hooks_admin@test.com',
+      password: '$2b$04$N/d4yPWhY79UBNMVL9BHluQkbufRToZLdzI3VWmz0Aa3Fr9mvMcK2',
+      name: 'Hooks Admin',
+      role: 'admin',
+      active: true,
+    });
+
+    const loginRes = await request
+      .post('/_admin/api/auth/login')
       .send({
         email: 'hooks_admin@test.com',
         password: 'Password123!',
-        name: 'Hooks Admin',
       })
       .expect(200);
 
-    adminCookie = setupRes.headers['set-cookie'];
+    adminCookie = loginRes.headers['set-cookie'];
   });
 
   beforeEach(() => {

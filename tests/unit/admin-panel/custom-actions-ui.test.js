@@ -139,17 +139,23 @@ describe('Admin Panel Custom Actions & Bulk Actions UI Integration', () => {
     app = result.app;
     request = supertest(app);
 
-    // Setup admin user
-    const setupRes = await request
-      .post('/_admin/api/auth/setup')
+    await db.knex('admin_users').insert({
+      email: 'admin@action-test.com',
+      password: '$2b$04$N/d4yPWhY79UBNMVL9BHluQkbufRToZLdzI3VWmz0Aa3Fr9mvMcK2',
+      name: 'Action Admin',
+      role: 'admin',
+      active: true,
+    });
+
+    const loginRes = await request
+      .post('/_admin/api/auth/login')
       .send({
         email: 'admin@action-test.com',
         password: 'Password123!',
-        name: 'Action Admin',
       })
       .expect(200);
 
-    adminCookie = setupRes.headers['set-cookie'];
+    adminCookie = loginRes.headers['set-cookie'];
   });
 
   describe('Model Actions Declarative Definition & Normalization', () => {

@@ -34,6 +34,7 @@ describe('Transaction Integration', () => {
     db.registerModel(Post);
 
     await createTestSchema(db.knex);
+    await seedTestData(db.knex);
   });
 
   afterAll(async () => {
@@ -41,11 +42,19 @@ describe('Transaction Integration', () => {
     clearRegistry();
   });
 
+  let dirty = false;
   beforeEach(async () => {
-    await db.knex('posts').del();
-    await db.knex('users').del();
-    await db.knex('companies').del();
-    await seedTestData(db.knex);
+    if (dirty) {
+      await db.knex('posts').del();
+      await db.knex('users').del();
+      await db.knex('companies').del();
+      await seedTestData(db.knex);
+      dirty = false;
+    }
+  });
+
+  afterEach(() => {
+    dirty = true;
   });
 
   describe('successful transaction', () => {

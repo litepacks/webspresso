@@ -106,7 +106,14 @@ describe.sequential('Admin file upload fields', () => {
       table.timestamp('updated_at');
     });
 
-    console.time('createApp');
+    await db.knex('admin_users').insert({
+      email: 'admin@example.com',
+      password: '$2b$04$Wuy3PNKivlnz5etS8gSaoeMqE7OUaMbnKcBRjSD0AxL.Qrd5hTAAK',
+      name: 'Admin User',
+      role: 'admin',
+      active: true,
+    });
+
     const result = createApp({
       pagesDir: emptyPagesDir,
       viewsDir: './tests/fixtures/views',
@@ -128,7 +135,14 @@ describe.sequential('Admin file upload fields', () => {
       ],
     });
     app = result.app;
-    authCookie = await loginCookie();
+
+    const loginRes = await request(app)
+      .post('/_admin/api/auth/login')
+      .send({
+        email: 'admin@example.com',
+        password: 'password123',
+      });
+    authCookie = loginRes.headers['set-cookie'];
   });
 
   afterAll(async () => {

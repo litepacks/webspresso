@@ -82,6 +82,14 @@ export async function createContentTestApp(options = {}) {
   await createContentTables(db.knex);
   await createAdminUsersTable(db.knex);
 
+  await db.knex('admin_users').insert({
+    email: 'admin@example.com',
+    password: '$2b$04$Wuy3PNKivlnz5etS8gSaoeMqE7OUaMbnKcBRjSD0AxL.Qrd5hTAAK',
+    name: 'Admin',
+    role: 'admin',
+    active: true,
+  });
+
   const contentPluginInstance = contentPlugin({
     db,
     adminPath: '/_admin',
@@ -116,19 +124,19 @@ export async function createContentTestApp(options = {}) {
  * @param {import('express').Application} app
  */
 export async function loginAdmin(request, app) {
+  const loginRes = await request(app).post('/_admin/api/auth/login').send({
+    email: 'admin@example.com',
+    password: 'password123',
+  });
+  if (loginRes.headers['set-cookie'] && loginRes.headers['set-cookie'].length > 0) {
+    return loginRes.headers['set-cookie'];
+  }
   const setupRes = await request(app).post('/_admin/api/auth/setup').send({
     email: 'admin@example.com',
     password: 'password123',
     name: 'Admin',
   });
-  if (setupRes.headers['set-cookie'] && setupRes.headers['set-cookie'].length > 0) {
-    return setupRes.headers['set-cookie'];
-  }
-  const loginRes = await request(app).post('/_admin/api/auth/login').send({
-    email: 'admin@example.com',
-    password: 'password123',
-  });
-  return loginRes.headers['set-cookie'] || [];
+  return setupRes.headers['set-cookie'] || [];
 }
 
 /**

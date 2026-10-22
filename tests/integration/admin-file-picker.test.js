@@ -111,14 +111,21 @@ describe('Admin Media Library / File Manager Picker in Model Forms', () => {
     });
     app = result.app;
 
-    const setupRes = await request(app)
-      .post('/_admin/api/auth/setup')
+    await db.knex('admin_users').insert({
+      email: 'admin@example.com',
+      password: '$2b$04$Wuy3PNKivlnz5etS8gSaoeMqE7OUaMbnKcBRjSD0AxL.Qrd5hTAAK',
+      name: 'Admin User',
+      role: 'admin',
+      active: true,
+    });
+
+    const loginRes = await request(app)
+      .post('/_admin/api/auth/login')
       .send({
         email: 'admin@example.com',
         password: 'password123',
-        name: 'Admin User',
       });
-    sharedCookie = setupRes.headers['set-cookie'];
+    sharedCookie = loginRes.headers['set-cookie'];
   });
 
   afterAll(async () => {
@@ -338,6 +345,13 @@ describe('Admin Media Library / File Manager Picker in Model Forms', () => {
       const headlessApp = createApp({
         pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
         viewsDir: './tests/fixtures/views',
+        silent: true,
+        helmet: false,
+        compression: false,
+        cache: false,
+        healthCheck: false,
+        metrics: false,
+        lazyRoutes: true,
         plugins: [
           fileManagerPlugin({
             baseDir: uploadDir,

@@ -13,9 +13,37 @@ const {
   isCascadeEnabled,
 } = require('../../../core/orm');
 
+describe('isCascadeEnabled helper', () => {
+  it('handles boolean true and false', () => {
+    expect(isCascadeEnabled({ cascade: true }, 'delete')).toBe(true);
+    expect(isCascadeEnabled({ cascade: true }, 'restore')).toBe(true);
+    expect(isCascadeEnabled({ cascade: false }, 'delete')).toBe(false);
+    expect(isCascadeEnabled({ cascade: false }, 'restore')).toBe(false);
+    expect(isCascadeEnabled({}, 'delete')).toBe(false);
+  });
+
+  it('handles string modes ("delete", "restore", "all")', () => {
+    expect(isCascadeEnabled({ cascade: 'delete' }, 'delete')).toBe(true);
+    expect(isCascadeEnabled({ cascade: 'delete' }, 'restore')).toBe(false);
+    expect(isCascadeEnabled({ cascade: 'restore' }, 'restore')).toBe(true);
+    expect(isCascadeEnabled({ cascade: 'restore' }, 'delete')).toBe(false);
+    expect(isCascadeEnabled({ cascade: 'all' }, 'delete')).toBe(true);
+    expect(isCascadeEnabled({ cascade: 'all' }, 'restore')).toBe(true);
+  });
+
+  it('handles array and object configurations', () => {
+    expect(isCascadeEnabled({ cascade: ['delete'] }, 'delete')).toBe(true);
+    expect(isCascadeEnabled({ cascade: ['delete'] }, 'restore')).toBe(false);
+    expect(isCascadeEnabled({ cascade: ['delete', 'restore'] }, 'restore')).toBe(true);
+    expect(isCascadeEnabled({ cascade: { delete: true, restore: false } }, 'delete')).toBe(true);
+    expect(isCascadeEnabled({ cascade: { delete: true, restore: false } }, 'restore')).toBe(false);
+  });
+});
+
 describe('ORM Relational Cascade Soft-Delete & Restore', () => {
   let db;
   let AuthorRepo, PostRepo, CommentRepo, ProfileRepo, CircularARepo, CircularBRepo;
+  let dirty = false;
 
   beforeAll(async () => {
     clearRegistry();
@@ -283,44 +311,24 @@ describe('ORM Relational Cascade Soft-Delete & Restore', () => {
   });
 
   beforeEach(async () => {
-    await db.knex('cascade_comments').del();
-    await db.knex('cascade_posts').del();
-    await db.knex('cascade_profiles').del();
-    await db.knex('cascade_authors').del();
-    await db.knex('circular_b').del();
-    await db.knex('circular_a').del();
-    await db.knex('delete_only_children').del();
-    await db.knex('delete_only_parents').del();
-    if (db.cache) {
-      db.cache.purge();
+    if (dirty) {
+      await db.knex('cascade_comments').del();
+      await db.knex('cascade_posts').del();
+      await db.knex('cascade_profiles').del();
+      await db.knex('cascade_authors').del();
+      await db.knex('circular_b').del();
+      await db.knex('circular_a').del();
+      await db.knex('delete_only_children').del();
+      await db.knex('delete_only_parents').del();
+      if (db.cache) {
+        db.cache.purge();
+      }
+      dirty = false;
     }
   });
 
-  describe('isCascadeEnabled helper', () => {
-    it('handles boolean true and false', () => {
-      expect(isCascadeEnabled({ cascade: true }, 'delete')).toBe(true);
-      expect(isCascadeEnabled({ cascade: true }, 'restore')).toBe(true);
-      expect(isCascadeEnabled({ cascade: false }, 'delete')).toBe(false);
-      expect(isCascadeEnabled({ cascade: false }, 'restore')).toBe(false);
-      expect(isCascadeEnabled({}, 'delete')).toBe(false);
-    });
-
-    it('handles string modes ("delete", "restore", "all")', () => {
-      expect(isCascadeEnabled({ cascade: 'delete' }, 'delete')).toBe(true);
-      expect(isCascadeEnabled({ cascade: 'delete' }, 'restore')).toBe(false);
-      expect(isCascadeEnabled({ cascade: 'restore' }, 'restore')).toBe(true);
-      expect(isCascadeEnabled({ cascade: 'restore' }, 'delete')).toBe(false);
-      expect(isCascadeEnabled({ cascade: 'all' }, 'delete')).toBe(true);
-      expect(isCascadeEnabled({ cascade: 'all' }, 'restore')).toBe(true);
-    });
-
-    it('handles array and object configurations', () => {
-      expect(isCascadeEnabled({ cascade: ['delete'] }, 'delete')).toBe(true);
-      expect(isCascadeEnabled({ cascade: ['delete'] }, 'restore')).toBe(false);
-      expect(isCascadeEnabled({ cascade: ['delete', 'restore'] }, 'restore')).toBe(true);
-      expect(isCascadeEnabled({ cascade: { delete: true, restore: false } }, 'delete')).toBe(true);
-      expect(isCascadeEnabled({ cascade: { delete: true, restore: false } }, 'restore')).toBe(false);
-    });
+  afterEach(() => {
+    dirty = true;
   });
 
   describe('Soft-delete cascading', () => {

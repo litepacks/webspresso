@@ -63,6 +63,14 @@ describe.sequential('Data exchange plugin', () => {
       table.timestamp('updated_at');
     });
 
+    await db.knex('admin_users').insert({
+      email: 'admin@example.com',
+      password: '$2b$04$Wuy3PNKivlnz5etS8gSaoeMqE7OUaMbnKcBRjSD0AxL.Qrd5hTAAK',
+      name: 'Admin',
+      role: 'admin',
+      active: true,
+    });
+
     const result = createApp({
       pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
@@ -82,7 +90,11 @@ describe.sequential('Data exchange plugin', () => {
     });
 
     app = result.app;
-    cachedCookie = await fetchLoginCookie();
+    const loginRes = await request(app).post('/_admin/api/auth/login').send({
+      email: 'admin@example.com',
+      password: 'password123',
+    });
+    cachedCookie = loginRes.headers['set-cookie'];
   });
 
   afterAll(async () => {
@@ -94,24 +106,8 @@ describe.sequential('Data exchange plugin', () => {
     await db.knex('test_models').delete();
   });
 
-  async function fetchLoginCookie() {
-    const setupRes = await request(app).post('/_admin/api/auth/setup').send({
-      email: 'admin@example.com',
-      password: 'password123',
-      name: 'Admin',
-    });
-    if (setupRes.headers['set-cookie']) {
-      return setupRes.headers['set-cookie'];
-    }
-    const loginRes = await request(app).post('/_admin/api/auth/login').send({
-      email: 'admin@example.com',
-      password: 'password123',
-    });
-    return loginRes.headers['set-cookie'];
-  }
-
   async function loginCookie() {
-    return cachedCookie || fetchLoginCookie();
+    return cachedCookie;
   }
 
   it('rejects export without auth', async () => {
@@ -212,8 +208,9 @@ describe.sequential('Data exchange plugin', () => {
 describe.sequential('Data exchange export with soft delete', () => {
   let app;
   let db;
+  let cachedCookie;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     db = createDatabase({
       client: 'better-sqlite3',
       connection: ':memory:',
@@ -252,10 +249,25 @@ describe.sequential('Data exchange export with soft delete', () => {
       table.timestamp('updated_at');
     });
 
+    await db.knex('admin_users').insert({
+      email: 'admin@example.com',
+      password: '$2b$04$Wuy3PNKivlnz5etS8gSaoeMqE7OUaMbnKcBRjSD0AxL.Qrd5hTAAK',
+      name: 'Admin',
+      role: 'admin',
+      active: true,
+    });
+
     const result = createApp({
       pagesDir: './tests/fixtures/empty-pages',
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
+      silent: true,
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
       db,
       plugins: [
         adminPanelPlugin({ path: '/_admin', db }),
@@ -264,26 +276,19 @@ describe.sequential('Data exchange export with soft delete', () => {
     });
 
     app = result.app;
-  });
-
-  afterEach(async () => {
-    if (db) await db.destroy();
-  });
-
-  async function loginCookie() {
-    const setupRes = await request(app).post('/_admin/api/auth/setup').send({
-      email: 'admin@example.com',
-      password: 'password123',
-      name: 'Admin',
-    });
-    if (setupRes.headers['set-cookie']) {
-      return setupRes.headers['set-cookie'];
-    }
     const loginRes = await request(app).post('/_admin/api/auth/login').send({
       email: 'admin@example.com',
       password: 'password123',
     });
-    return loginRes.headers['set-cookie'];
+    cachedCookie = loginRes.headers['set-cookie'];
+  });
+
+  afterAll(async () => {
+    if (db) await db.destroy();
+  });
+
+  async function loginCookie() {
+    return cachedCookie;
   }
 
   it('exports only active rows by default; trashed=only exports deleted rows', async () => {
@@ -331,8 +336,9 @@ describe.sequential('Data exchange export with soft delete', () => {
 describe.sequential('Admin panel built-in data exchange', () => {
   let app;
   let db;
+  let cachedCookie;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     db = createDatabase({
       client: 'better-sqlite3',
       connection: ':memory:',
@@ -375,6 +381,14 @@ describe.sequential('Admin panel built-in data exchange', () => {
       table.timestamp('updated_at');
     });
 
+    await db.knex('admin_users').insert({
+      email: 'admin@example.com',
+      password: '$2b$04$Wuy3PNKivlnz5etS8gSaoeMqE7OUaMbnKcBRjSD0AxL.Qrd5hTAAK',
+      name: 'Admin',
+      role: 'admin',
+      active: true,
+    });
+
     // NOTE: only adminPanelPlugin, NO dataExchangePlugin!
     const result = createApp({
       pagesDir: './tests/fixtures/empty-pages',
@@ -394,26 +408,19 @@ describe.sequential('Admin panel built-in data exchange', () => {
     });
 
     app = result.app;
-  });
-
-  afterEach(async () => {
-    if (db) await db.destroy();
-  });
-
-  async function loginCookie() {
-    const setupRes = await request(app).post('/_admin/api/auth/setup').send({
-      email: 'admin@example.com',
-      password: 'password123',
-      name: 'Admin',
-    });
-    if (setupRes.headers['set-cookie']) {
-      return setupRes.headers['set-cookie'];
-    }
     const loginRes = await request(app).post('/_admin/api/auth/login').send({
       email: 'admin@example.com',
       password: 'password123',
     });
-    return loginRes.headers['set-cookie'];
+    cachedCookie = loginRes.headers['set-cookie'];
+  });
+
+  afterAll(async () => {
+    if (db) await db.destroy();
+  });
+
+  async function loginCookie() {
+    return cachedCookie;
   }
 
   it('works out of the box with only adminPanelPlugin registered', async () => {

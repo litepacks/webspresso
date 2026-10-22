@@ -49,6 +49,14 @@ describe('Security: Admin Panel Filter Column Injection', () => {
       table.timestamp('updated_at');
     });
 
+    await db.knex('admin_users').insert({
+      email: 'admin@sec.com',
+      password: '$2b$04$Wuy3PNKivlnz5etS8gSaoeMqE7OUaMbnKcBRjSD0AxL.Qrd5hTAAK',
+      name: 'Admin',
+      role: 'admin',
+      active: true,
+    });
+
     await db.knex('sec_products').insert([
       { id: 1, title: 'Safe Item', price: 100 },
       { id: 2, title: 'Secret Item', price: 200 },
@@ -83,11 +91,9 @@ describe('Security: Admin Panel Filter Column Injection', () => {
   it('should ignore malicious / non-existent filter column names and not inject them into query', async () => {
     const agent = request.agent(app);
 
-    // Setup first admin user
-    await agent.post('/_admin/api/auth/setup').send({
+    await agent.post('/_admin/api/auth/login').send({
       email: 'admin@sec.com',
       password: 'password123',
-      name: 'Admin',
     }).expect(200);
 
     // Send request with an injected filter parameter on a non-existent column

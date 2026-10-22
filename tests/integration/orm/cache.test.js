@@ -46,18 +46,7 @@ describe('ORM cache integration', () => {
       t.increments('id').primary();
       t.string('name', 100);
     });
-  });
 
-  afterAll(async () => {
-    await db.destroy();
-    clearRegistry();
-  });
-
-  beforeEach(async () => {
-    await db.knex('cache_widgets').del();
-    await db.knex('smart_widgets').del();
-    db.cache.purge();
-    db.cache.resetMetrics();
     await db.knex('cache_widgets').insert([
       { id: 1, name: 'A' },
       { id: 2, name: 'B' },
@@ -66,6 +55,30 @@ describe('ORM cache integration', () => {
       { id: 1, name: 'S1' },
       { id: 2, name: 'S2' },
     ]);
+  });
+
+  afterAll(async () => {
+    await db.destroy();
+    clearRegistry();
+  });
+
+  let dirty = false;
+  beforeEach(async () => {
+    if (dirty) {
+      await db.knex('cache_widgets').del();
+      await db.knex('smart_widgets').del();
+      await db.knex('cache_widgets').insert([
+        { id: 1, name: 'A' },
+        { id: 2, name: 'B' },
+      ]);
+      await db.knex('smart_widgets').insert([
+        { id: 1, name: 'S1' },
+        { id: 2, name: 'S2' },
+      ]);
+      dirty = false;
+    }
+    db.cache.purge();
+    db.cache.resetMetrics();
   });
 
   it('exposes db.cache API when enabled', () => {
@@ -95,6 +108,7 @@ describe('ORM cache integration', () => {
   });
 
   it('invalidates on update (auto)', async () => {
+    dirty = true;
     const repo = db.getRepository('CacheWidget');
     await repo.findById(1);
     await repo.update(1, { name: 'A2' });
@@ -106,6 +120,7 @@ describe('ORM cache integration', () => {
   });
 
   it('smart: updating other row keeps pk cache for first row', async () => {
+    dirty = true;
     const repo = db.getRepository('SmartWidget');
     await repo.findById(1);
     await repo.findById(1);
@@ -120,6 +135,7 @@ describe('ORM cache integration', () => {
   });
 
   it('smart: updating same row busts pk cache', async () => {
+    dirty = true;
     const repo = db.getRepository('SmartWidget');
     await repo.findById(1);
     await repo.update(1, { name: 'S1x' });
@@ -148,6 +164,7 @@ describe('ORM cache integration', () => {
   });
 
   it('auto: findAll is cached then invalidated by create', async () => {
+    dirty = true;
     const repo = db.getRepository('CacheWidget');
     await repo.findAll();
     await repo.findAll();
@@ -162,6 +179,7 @@ describe('ORM cache integration', () => {
   });
 
   it('auto: delete invalidates cached reads', async () => {
+    dirty = true;
     const repo = db.getRepository('CacheWidget');
     await repo.findById(2);
     await repo.findById(2);
@@ -177,6 +195,7 @@ describe('ORM cache integration', () => {
   });
 
   it('auto: updateWhere invalidates cache', async () => {
+    dirty = true;
     const repo = db.getRepository('CacheWidget');
     await repo.findAll();
     await repo.findAll();
@@ -210,6 +229,7 @@ describe('ORM cache integration', () => {
   });
 
   it('auto: mutating SmartWidget does not clear CacheWidget cache', async () => {
+    dirty = true;
     const rAuto = db.getRepository('CacheWidget');
     const rSmart = db.getRepository('SmartWidget');
     await rAuto.findById(1);
@@ -223,6 +243,7 @@ describe('ORM cache integration', () => {
   });
 
   it('auto: forceDelete invalidates cache', async () => {
+    dirty = true;
     await db.knex('cache_widgets').insert({ id: 99, name: 'Z' });
     const repo = db.getRepository('CacheWidget');
     await repo.findById(99);

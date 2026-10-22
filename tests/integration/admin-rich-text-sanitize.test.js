@@ -20,6 +20,15 @@ describe.sequential('Admin rich-text sanitization API', () => {
 
   async function loginCookie(application) {
     const a = application || app;
+    const loginRes = await request(a)
+      .post('/_admin/api/auth/login')
+      .send({
+        email: 'admin@example.com',
+        password: 'password123',
+      });
+    if (loginRes.headers['set-cookie'] && loginRes.headers['set-cookie'].length > 0) {
+      return loginRes.headers['set-cookie'];
+    }
     const setupRes = await request(a)
       .post('/_admin/api/auth/setup')
       .send({
@@ -27,16 +36,7 @@ describe.sequential('Admin rich-text sanitization API', () => {
         password: 'password123',
         name: 'Admin User',
       });
-    if (setupRes.headers['set-cookie']) {
-      return setupRes.headers['set-cookie'];
-    }
-    const loginRes = await request(a)
-      .post('/_admin/api/auth/login')
-      .send({
-        email: 'admin@example.com',
-        password: 'password123',
-      });
-    return loginRes.headers['set-cookie'] || [];
+    return setupRes.headers['set-cookie'] || [];
   }
 
   async function bootstrapApp({ sanitizeRichText }) {
@@ -97,6 +97,14 @@ describe.sequential('Admin rich-text sanitization API', () => {
       table.boolean('active').defaultTo(true);
       table.timestamp('created_at');
       table.timestamp('updated_at');
+    });
+
+    await db.knex('admin_users').insert({
+      email: 'admin@example.com',
+      password: '$2b$04$Wuy3PNKivlnz5etS8gSaoeMqE7OUaMbnKcBRjSD0AxL.Qrd5hTAAK',
+      name: 'Admin User',
+      role: 'admin',
+      active: true,
     });
 
     const result = createApp({

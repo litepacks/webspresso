@@ -137,7 +137,7 @@ describe('Security: File Manager Hardening & Threat Mitigations', () => {
         table.timestamp('updated_at');
       });
 
-      const hashedPassword = await hash('password123', 4);
+      const hashedPassword = '$2b$04$Wuy3PNKivlnz5etS8gSaoeMqE7OUaMbnKcBRjSD0AxL.Qrd5hTAAK'; // 'password123'
       await db.knex('admin_users').insert({
         email: 'admin@example.com',
         password: hashedPassword,

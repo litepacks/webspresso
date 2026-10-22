@@ -174,26 +174,21 @@ describe('Admin Panel Relational Fields & Performance DX', { timeout: 120000 }, 
 
     app = result.app;
 
-    // Admin Auth Setup
-    const setupRes = await supertest(app)
-      .post('/_admin/api/auth/setup')
+    await db.knex('admin_users').insert({
+      email: 'rel_admin@example.com',
+      password: '$2b$04$Wuy3PNKivlnz5etS8gSaoeMqE7OUaMbnKcBRjSD0AxL.Qrd5hTAAK',
+      name: 'Rel Admin',
+      role: 'admin',
+      active: true,
+    });
+
+    const loginRes = await supertest(app)
+      .post('/_admin/api/auth/login')
       .send({
         email: 'rel_admin@example.com',
         password: 'password123',
-        name: 'Rel Admin',
       });
-
-    if (setupRes.headers['set-cookie']) {
-      adminCookie = setupRes.headers['set-cookie'];
-    } else {
-      const loginRes = await supertest(app)
-        .post('/_admin/api/auth/login')
-        .send({
-          email: 'rel_admin@example.com',
-          password: 'password123',
-        });
-      adminCookie = loginRes.headers['set-cookie'];
-    }
+    adminCookie = loginRes.headers['set-cookie'];
   });
 
   afterAll(async () => {
