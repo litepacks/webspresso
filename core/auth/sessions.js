@@ -102,29 +102,65 @@ function createKnexSessionTracker(db, options = {}) {
         };
       }
 
-      const [id] = await knex(tableName).insert({
-        session_id: sessionId,
-        user_id: userId,
-        ip_address: ip,
-        user_agent: ua ? ua.slice(0, 1000) : null,
-        browser,
-        os,
-        device,
-        last_active_at: now,
-        created_at: now,
-      });
+      try {
+        const [id] = await knex(tableName).insert({
+          session_id: sessionId,
+          user_id: userId,
+          ip_address: ip,
+          user_agent: ua ? ua.slice(0, 1000) : null,
+          browser,
+          os,
+          device,
+          last_active_at: now,
+          created_at: now,
+        });
 
-      return {
-        id,
-        session_id: sessionId,
-        user_id: userId,
-        ip_address: ip,
-        browser,
-        os,
-        device,
-        last_active_at: now,
-        created_at: now,
-      };
+        return {
+          id,
+          session_id: sessionId,
+          user_id: userId,
+          ip_address: ip,
+          browser,
+          os,
+          device,
+          last_active_at: now,
+          created_at: now,
+        };
+      } catch (insertErr) {
+        // Handle concurrent insert race condition gracefully across database engines
+        const isUniqueConstraint =
+          insertErr.code === 'SQLITE_CONSTRAINT' ||
+          insertErr.code === '23505' || // PostgreSQL
+          insertErr.code === 'ER_DUP_ENTRY' || // MySQL
+          insertErr.errno === 19 || // SQLite
+          insertErr.errno === 1062 || // MySQL
+          (typeof insertErr.message === 'string' && /unique|duplicate|constraint/i.test(insertErr.message));
+
+        if (!isUniqueConstraint) {
+          throw insertErr;
+        }
+
+        await knex(tableName).where({ session_id: sessionId }).update({
+          user_id: userId,
+          ip_address: ip,
+          user_agent: ua ? ua.slice(0, 1000) : null,
+          browser,
+          os,
+          device,
+          last_active_at: now,
+        });
+
+        const record = await knex(tableName).where({ session_id: sessionId }).first();
+        return record || {
+          session_id: sessionId,
+          user_id: userId,
+          ip_address: ip,
+          browser,
+          os,
+          device,
+          last_active_at: now,
+        };
+      }
     },
 
     /**
