@@ -1,3 +1,4 @@
+import { createTempDir } from '../utils';
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import express from 'express';
@@ -391,7 +392,7 @@ describe.sequential('Webspresso HTTP Response Compression', () => {
 
     it('32. streams large JS files with res.sendFile handling backpressure and drain', async () => {
       const fs = require('fs');
-      const tempJsPath = path.resolve(__dirname, '../fixtures/temp-comp-large.js');
+      const tempJsPath = path.join(createTempDir('temp-comp-large'), 'temp-comp-large.js');
       const largeJsContent = 'console.log("Webspresso Streaming JS");\n'.repeat(3000); // ~120 KB
       fs.writeFileSync(tempJsPath, largeJsContent);
 

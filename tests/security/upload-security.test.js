@@ -1,3 +1,7 @@
+const {
+  createTempDir
+} = require('../utils');
+
 const request = require('supertest');
 const { createApp } = require('../../src/server');
 const { uploadPlugin } = require('../../plugins/upload');
@@ -6,7 +10,7 @@ const fs = require('fs');
 
 const PAGES_DIR = path.join(__dirname, '../fixtures/route-order/pages');
 const VIEWS_DIR = path.join(__dirname, '../fixtures/route-order/views');
-const TEMP_UPLOAD_DIR = path.join(__dirname, '../fixtures/temp-security-uploads');
+const TEMP_UPLOAD_DIR = createTempDir('temp-security-uploads');
 
 describe('Security: File Upload Plugin', () => {
   beforeAll(() => {

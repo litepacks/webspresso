@@ -1,4 +1,4 @@
-import { cleanupDir } from '../../utils';
+import { cleanupDir, createTempDir } from '../../utils';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import path from 'path';
 import fs from 'fs';
@@ -187,7 +187,7 @@ describe('API Validation i18n & Error Translation', () => {
   });
 
   describe('Full HTTP Integration with createApp & defineApi', () => {
-    const tempDir = path.join(__dirname, '../../fixtures/temp-api-i18n-test');
+    const tempDir = createTempDir('temp-api-i18n-test');
     let origSupported;
 
     let app;

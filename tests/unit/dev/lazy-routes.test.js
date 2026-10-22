@@ -1,4 +1,4 @@
-import { cleanupDir } from '../../utils';
+import { cleanupDir, createTempDir } from '../../utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import fs from 'fs';
@@ -6,7 +6,7 @@ import request from 'supertest';
 import { createApp } from '../../../src/server';
 
 describe('Dev Mode On-Demand (Lazy) Route Evaluation', () => {
-  const tempDir = path.join(__dirname, '../../fixtures/temp-lazy-routes-' + Date.now());
+  const tempDir = createTempDir('temp-lazy-routes');
   const origEnv = process.env.NODE_ENV;
 
   beforeEach(() => {

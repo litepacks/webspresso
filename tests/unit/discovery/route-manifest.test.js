@@ -1,4 +1,4 @@
-import { cleanupDir } from '../../utils';
+import { cleanupDir, createTempDir } from '../../utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import fs from 'fs';
@@ -11,7 +11,7 @@ import {
 import { createApp } from '../../../src/server';
 
 describe('AOT Route Manifest (Production Manifest & Zero-Scan Boot)', () => {
-  const tempDir = path.join(__dirname, '../../fixtures/temp-manifest-' + Date.now());
+  const tempDir = createTempDir('temp-manifest');
 
   beforeEach(() => {
     cleanupDir(tempDir);

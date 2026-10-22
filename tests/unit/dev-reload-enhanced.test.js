@@ -1,5 +1,6 @@
 const {
-  wait
+  wait,
+  createTempDir
 } = require('../utils');
 
 /**
@@ -21,7 +22,7 @@ async function waitFor(fn, timeout = 8000) {
 }
 
 describe('Enhanced Dev Live Reload (Template & View Watching)', () => {
-  const baseFixtureDir = path.resolve(__dirname, '../fixtures/temp-dev-reload-test-' + Date.now());
+  const baseFixtureDir = createTempDir('temp-dev-reload-test');
 
   beforeAll(() => {
     fs.mkdirSync(baseFixtureDir, { recursive: true });

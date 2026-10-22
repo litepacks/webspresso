@@ -1,4 +1,4 @@
-import { cleanupDir } from '../../utils';
+import { cleanupDir, createTempDir } from '../../utils';
 import { describe, it, expect, vi } from 'vitest';
 import path from 'path';
 import fs from 'fs';
@@ -38,7 +38,7 @@ describe('discoverAppRoutes Unified Scanner', () => {
   });
 
   it('should avoid redundant filesystem scanning when createApp mounts pages', () => {
-    const tempDir = path.join(__dirname, '../../fixtures/temp-unified-test-' + Date.now());
+    const tempDir = createTempDir('temp-unified-test');
     fs.mkdirSync(path.join(tempDir, 'pages', 'api'), { recursive: true });
     fs.writeFileSync(path.join(tempDir, 'pages', 'index.njk'), '<h1>Home</h1>');
     fs.writeFileSync(path.join(tempDir, 'pages', 'about.njk'), '<h1>About</h1>');
@@ -70,7 +70,7 @@ describe('discoverAppRoutes Unified Scanner', () => {
   });
 
   it('should emit warnings for uppercase paths and dynamic route collisions during discovery', () => {
-    const tempDir = path.join(__dirname, '../../fixtures/temp-unified-warn-' + Date.now());
+    const tempDir = createTempDir('temp-unified-warn');
     fs.mkdirSync(path.join(tempDir, 'pages', 'Products'), { recursive: true });
     fs.writeFileSync(path.join(tempDir, 'pages', 'Products', '[id].njk'), 'id');
     fs.writeFileSync(path.join(tempDir, 'pages', 'Products', '[slug].njk'), 'slug');

@@ -1,5 +1,6 @@
 const {
-  cleanupDir
+  cleanupDir,
+  createTempDir
 } = require('../utils');
 
 /**
@@ -356,7 +357,7 @@ describe('file-router.js', () => {
   describe('mountPages startup warnings', () => {
     const fs = require('fs');
     const express = require('express');
-    const tempDir = path.join(__dirname, '../fixtures/temp-mountpages-test');
+    const tempDir = createTempDir('temp-mountpages-test');
 
     beforeEach(() => {
       cleanupDir(tempDir);

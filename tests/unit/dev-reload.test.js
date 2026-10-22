@@ -1,5 +1,6 @@
 const {
-  wait
+  wait,
+  createTempDir
 } = require('../utils');
 
 /**
@@ -24,7 +25,7 @@ const { createHelpers, utils } = require('../../src/helpers');
 const { createDevReloadHub } = require('../../src/dev-reload');
 
 describe('Dev Live & Hot Reload (SSE CSS Hot Reload)', () => {
-  const tempPublicDir = path.resolve(__dirname, '../fixtures/temp-dev-reload-public');
+  const tempPublicDir = createTempDir('temp-dev-reload-public');
 
   beforeAll(() => {
     fs.mkdirSync(path.join(tempPublicDir, 'css'), { recursive: true });
