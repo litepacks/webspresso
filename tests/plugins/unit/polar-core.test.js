@@ -4,6 +4,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 import crypto from 'node:crypto';
 
+import { createMockSpyNext } from '../../utils';
+
 const { getPolarApiBase, polarApiRequest } = require('../../../plugins/polar/src/api');
 const {
   getPolarCheckoutUrl,
@@ -416,7 +418,7 @@ describe('polar core modules', () => {
       const mw = createWebhookRawBodyMiddleware('/hook');
       const req = new EventEmitter();
       req.path = '/hook';
-      const next = vi.fn();
+      const next = createMockSpyNext();
       mw(req, {}, next);
       req.emit('data', Buffer.from('{"a":1}'));
       req.emit('end');
@@ -427,7 +429,7 @@ describe('polar core modules', () => {
     it('createWebhookRawBodyMiddleware skips unrelated paths', () => {
       const mw = createWebhookRawBodyMiddleware('/hook');
       const req = { path: '/other' };
-      const next = vi.fn();
+      const next = createMockSpyNext();
       mw(req, {}, next);
       expect(next).toHaveBeenCalled();
       expect(req.rawBody).toBeUndefined();
@@ -441,14 +443,14 @@ describe('polar core modules', () => {
       const cfg = baseConfig({ db: { knex } });
       const mw = polarSyncMiddleware(cfg, { when: () => true });
       const req = { user: { id: 4 }, query: {} };
-      const next = vi.fn();
+      const next = createMockSpyNext();
       await mw(req, {}, next);
       expect(next).toHaveBeenCalled();
     });
 
     it('polarSyncMiddleware skips without user', async () => {
       const mw = polarSyncMiddleware(baseConfig(), { when: () => true });
-      const next = vi.fn();
+      const next = createMockSpyNext();
       await mw({ query: {} }, {}, next);
       expect(next).toHaveBeenCalled();
     });
@@ -458,7 +460,7 @@ describe('polar core modules', () => {
       const knex = vi.fn(() => { throw new Error('db down'); });
       const cfg = baseConfig({ db: { knex } });
       const mw = polarSyncMiddleware(cfg, { when: () => true });
-      const next = vi.fn();
+      const next = createMockSpyNext();
       await mw({ user: { id: 1 } }, {}, next);
       expect(next).toHaveBeenCalled();
       errSpy.mockRestore();

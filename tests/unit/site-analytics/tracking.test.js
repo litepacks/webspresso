@@ -1,5 +1,6 @@
 const {
-  wait
+  wait,
+  createMockSpyNext
 } = require('../../utils');
 
 /**
@@ -66,7 +67,7 @@ describe('Tracking Middleware', () => {
 
   it('should call next() immediately (non-blocking)', async () => {
     const middleware = createTrackingMiddleware(trackingOpts());
-    const next = vi.fn();
+    const next = createMockSpyNext();
     const req = mockReq();
 
     await middleware(req, {}, next);
@@ -75,7 +76,7 @@ describe('Tracking Middleware', () => {
 
   it('should skip non-GET requests', async () => {
     const middleware = createTrackingMiddleware(trackingOpts());
-    const next = vi.fn();
+    const next = createMockSpyNext();
     const req = mockReq({ method: 'POST' });
 
     await middleware(req, {}, next);
@@ -86,7 +87,7 @@ describe('Tracking Middleware', () => {
 
   it('should skip static file extensions', async () => {
     const middleware = createTrackingMiddleware(trackingOpts());
-    const next = vi.fn();
+    const next = createMockSpyNext();
 
     for (const ext of ['.js', '.css', '.png', '.jpg', '.ico', '.woff2', '.svg']) {
       await middleware(mockReq({ path: '/assets/file' + ext }), {}, next);
@@ -97,7 +98,7 @@ describe('Tracking Middleware', () => {
 
   it('should skip admin paths by default', async () => {
     const middleware = createTrackingMiddleware(trackingOpts());
-    const next = vi.fn();
+    const next = createMockSpyNext();
 
     await middleware(mockReq({ path: '/_admin/dashboard' }), {}, next);
     await wait(5);
@@ -106,7 +107,7 @@ describe('Tracking Middleware', () => {
 
   it('should skip API paths by default', async () => {
     const middleware = createTrackingMiddleware(trackingOpts());
-    const next = vi.fn();
+    const next = createMockSpyNext();
 
     await middleware(mockReq({ path: '/api/users' }), {}, next);
     await wait(5);
@@ -115,7 +116,7 @@ describe('Tracking Middleware', () => {
 
   it('should skip custom excludePaths', async () => {
     const middleware = createTrackingMiddleware(trackingOpts({ excludePaths: ['/health', '/robots'] }));
-    const next = vi.fn();
+    const next = createMockSpyNext();
 
     await middleware(mockReq({ path: '/health' }), {}, next);
     await middleware(mockReq({ path: '/robots.txt' }), {}, next);
@@ -125,7 +126,7 @@ describe('Tracking Middleware', () => {
 
   it('should record a page view for valid GET request', async () => {
     const middleware = createTrackingMiddleware(trackingOpts());
-    const next = vi.fn();
+    const next = createMockSpyNext();
     const req = mockReq({ path: '/blog/hello' });
 
     await middleware(req, {}, next);
@@ -141,7 +142,7 @@ describe('Tracking Middleware', () => {
 
   it('should detect bots and set is_bot and bot_name', async () => {
     const middleware = createTrackingMiddleware(trackingOpts());
-    const next = vi.fn();
+    const next = createMockSpyNext();
     const req = mockReq({
       path: '/page',
       headers: { 'user-agent': 'Googlebot/2.1' },
@@ -157,7 +158,7 @@ describe('Tracking Middleware', () => {
 
   it('should skip bots when trackBots is false', async () => {
     const middleware = createTrackingMiddleware(trackingOpts({ trackBots: false }));
-    const next = vi.fn();
+    const next = createMockSpyNext();
     const req = mockReq({
       path: '/page',
       headers: { 'user-agent': 'Googlebot/2.1' },
@@ -170,7 +171,7 @@ describe('Tracking Middleware', () => {
 
   it('should detect country from headers', async () => {
     const middleware = createTrackingMiddleware(trackingOpts());
-    const next = vi.fn();
+    const next = createMockSpyNext();
     const req = mockReq({
       path: '/page',
       headers: {
@@ -188,7 +189,7 @@ describe('Tracking Middleware', () => {
 
   it('should hash IP address (not store raw IP)', async () => {
     const middleware = createTrackingMiddleware(trackingOpts());
-    const next = vi.fn();
+    const next = createMockSpyNext();
     const req = mockReq({ path: '/page', ip: '192.168.1.100' });
 
     await middleware(req, {}, next);
@@ -201,7 +202,7 @@ describe('Tracking Middleware', () => {
 
   it('should get IP from x-forwarded-for header', async () => {
     const middleware = createTrackingMiddleware(trackingOpts());
-    const next = vi.fn();
+    const next = createMockSpyNext();
     const req = mockReq({
       path: '/page',
       headers: {
@@ -220,7 +221,7 @@ describe('Tracking Middleware', () => {
 
   it('should generate same visitor_id for same IP+UA combination', async () => {
     const middleware = createTrackingMiddleware(trackingOpts());
-    const next = vi.fn();
+    const next = createMockSpyNext();
     const req1 = mockReq({ path: '/page1', ip: '1.2.3.4' });
     const req2 = mockReq({ path: '/page2', ip: '1.2.3.4' });
 
@@ -235,7 +236,7 @@ describe('Tracking Middleware', () => {
 
   it('should reuse session_id within 30min window', async () => {
     const middleware = createTrackingMiddleware(trackingOpts());
-    const next = vi.fn();
+    const next = createMockSpyNext();
     const req1 = mockReq({ path: '/page1', ip: '1.2.3.4' });
     const req2 = mockReq({ path: '/page2', ip: '1.2.3.4' });
 
@@ -250,7 +251,7 @@ describe('Tracking Middleware', () => {
 
   it('should truncate long referrer and user_agent', async () => {
     const middleware = createTrackingMiddleware(trackingOpts());
-    const next = vi.fn();
+    const next = createMockSpyNext();
     const longStr = 'x'.repeat(2000);
     const req = mockReq({
       path: '/page',
@@ -273,7 +274,7 @@ describe('Tracking Middleware', () => {
     knex.schema.createTable = vi.fn().mockResolvedValue(undefined);
 
     const middleware = createTrackingMiddleware(trackingOpts());
-    const next = vi.fn();
+    const next = createMockSpyNext();
 
     await middleware(mockReq({ path: '/page' }), {}, next);
     await wait(5);

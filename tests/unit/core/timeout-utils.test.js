@@ -14,6 +14,8 @@ import {
 } from '../../../core/errors/http';
 import { createApp } from '../../../src/server';
 
+import { createMockSpyNext } from '../../utils';
+
 describe('Centralized Timeout Management & Utilities', () => {
   describe('DEFAULT_TIMEOUTS', () => {
     it('has standard expected default thresholds', () => {
@@ -229,7 +231,7 @@ describe('Centralized Timeout Management & Utilities', () => {
       const mw = createTimeoutMiddleware(false);
       const req = {};
       const res = {};
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       mw(req, res, next);
       expect(req.timedout).toBe(false);
@@ -245,7 +247,7 @@ describe('Centralized Timeout Management & Utilities', () => {
       const res = {
         once: vi.fn(),
       };
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       mw(req, res, next);
       expect(req.timedout).toBe(false);
@@ -259,7 +261,7 @@ describe('Centralized Timeout Management & Utilities', () => {
       const mw = createTimeoutMiddleware(30);
       const req = { emit: vi.fn() };
       const res = { once: vi.fn() };
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       mw(req, res, next);
       req.clearTimeout();

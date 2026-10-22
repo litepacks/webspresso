@@ -2,6 +2,7 @@ const {
   createMockRequest,
   createMockResponse,
   createMockNext,
+  createMockSpyNext,
   createMockReq,
   createMockRes,
 } = require('../utils/http');
@@ -230,6 +231,14 @@ describe('Test Utilities - HTTP Mocks (Step 1)', () => {
       expect(next).toHaveBeenCalledWith('err');
       expect(next.called).toBe(true);
       expect(next.error).toBe('err');
+    });
+
+    it('createMockSpyNext creates a spy-wrapped next function', () => {
+      const next = createMockSpyNext();
+      next('custom-err');
+      expect(next).toHaveBeenCalledWith('custom-err');
+      expect(next.called).toBe(true);
+      expect(next.error).toBe('custom-err');
     });
   });
 });

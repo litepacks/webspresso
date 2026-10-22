@@ -333,10 +333,15 @@ function createMockSpyRes(options = {}) {
   return createMockResponse({ ...options, spy: true });
 }
 
+function createMockSpyNext(options = {}) {
+  return createMockNext({ ...options, spy: true });
+}
+
 module.exports = {
   createMockRequest,
   createMockResponse,
   createMockNext,
+  createMockSpyNext,
   // Convenient short aliases
   createMockReq: createMockRequest,
   createMockRes: createMockResponse,

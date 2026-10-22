@@ -1,4 +1,4 @@
-import { wait } from '../../utils';
+import { wait, createMockSpyNext } from '../../utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 const knex = require('knex');
 const {
@@ -647,7 +647,7 @@ describe('Active Devices & Session Management (core/auth/sessions)', () => {
         headers: {},
       };
       const res = {};
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await auth.sessionManager.track('valid-sess-token', 1, req);
 
@@ -667,7 +667,7 @@ describe('Active Devices & Session Management (core/auth/sessions)', () => {
         headers: {},
       };
       const res = {};
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       // Track then revoke
       await auth.sessionManager.track('revoked-sess-token', 1, req);

@@ -1,4 +1,4 @@
-import { createMockSpyRes } from '../../utils';
+import { createMockSpyRes, createMockSpyNext } from '../../utils';
 import { describe, it, expect, vi } from 'vitest';
 import {
   signJwt,
@@ -137,7 +137,7 @@ describe('Zero-Dependency JWT Core Module', () => {
         },
       };
       const res = {};
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await middleware.authenticate(req, res, next);
 
@@ -180,7 +180,7 @@ describe('Zero-Dependency JWT Core Module', () => {
         session: { userId: 99 }, // Different session user
       };
       const res = {};
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await middleware.authenticate(req, res, next);
       expect(req.user.id).toBe(7); // JWT user takes precedence
@@ -194,7 +194,7 @@ describe('Zero-Dependency JWT Core Module', () => {
         session: { userId: 7 },
       };
       const res = {};
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await middleware.authenticate(req, res, next);
       expect(req.user).toEqual(sessionUser);
@@ -205,7 +205,7 @@ describe('Zero-Dependency JWT Core Module', () => {
       const refreshToken = authManager.generateRefreshToken(mockUser);
       const req = { headers: { authorization: `Bearer ${refreshToken}` } };
       const res = createMockSpyRes();
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await middleware.requireJwt()(req, res, next);
       expect(res.status).toHaveBeenCalledWith(401);

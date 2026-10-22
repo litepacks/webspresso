@@ -1,5 +1,6 @@
 const {
-  createMockSpyRes
+  createMockSpyRes,
+  createMockSpyNext
 } = require('../utils');
 
 'use strict';
@@ -179,7 +180,7 @@ describe('Template Helpers & Injector Branch Coverage', () => {
       const mockDb = { name: 'knex-mock' };
       const mw = createInjectDb(mockDb);
       const req = {};
-      const next = vi.fn();
+      const next = createMockSpyNext();
       mw(req, {}, next);
       expect(req.db).toBe(mockDb);
       expect(next).toHaveBeenCalled();

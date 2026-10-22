@@ -1,7 +1,8 @@
 const {
   createTempDir,
   cleanupDir,
-  createMockSpyRes
+  createMockSpyRes,
+  createMockSpyNext
 } = require('../utils');
 
 'use strict';
@@ -39,7 +40,7 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
 
       const req = { headers: {} };
       const res = {};
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       appContext.attachDbMiddleware(req, res, next);
       expect(next).toHaveBeenCalled();
@@ -390,7 +391,7 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
 
       const req = { method: 'GET', path: '/api/auto', headers: {}, id: 'req_123' };
       const res = { headersSent: false, json: vi.fn(), setHeader: vi.fn() };
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await handler(req, res, next);
       expect(res.json).toHaveBeenCalledWith({ autoJson: true });

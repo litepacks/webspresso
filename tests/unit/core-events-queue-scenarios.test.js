@@ -1,4 +1,4 @@
-import { createTempDir, cleanupDir } from '../utils';
+import { createTempDir, cleanupDir, createMockSpyNext } from '../utils';
 /**
  * Targeted Unit Tests for Branch & Function Coverage Across Missing Paths
  *
@@ -326,7 +326,7 @@ describe('core/forms/flash.js edge cases and branches', () => {
       clearCookie: vi.fn(),
     };
 
-    const next = vi.fn();
+    const next = createMockSpyNext();
     middleware(req, res, next);
 
     expect(next).toHaveBeenCalled();
@@ -387,7 +387,7 @@ describe('core/forms/flash.js edge cases and branches', () => {
       clearCookie: vi.fn(),
     };
 
-    const next = vi.fn();
+    const next = createMockSpyNext();
     middleware(req, res, next);
 
     expect(res.clearCookie).toHaveBeenCalledWith('__custom_flash', { path: '/' });

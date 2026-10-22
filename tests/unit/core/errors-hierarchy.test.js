@@ -40,7 +40,11 @@ const {
   renderDefaultErrorHtml,
   createCentralErrorHandler,
 } = require('../../../core/errors/middleware');
-const { createMockReq, createMockSpyRes: createMockRes } = require('../../utils');
+const {
+  createMockReq,
+  createMockSpyRes: createMockRes,
+  createMockSpyNext
+} = require('../../utils');
 
 describe('Error Hierarchy & Domain Exceptions', () => {
   describe('WebspressoError & Base Classes', () => {
@@ -320,7 +324,7 @@ describe('Error Hierarchy & Domain Exceptions', () => {
       const req = createMockReq();
       const res = createMockRes();
       res.headersSent = true;
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       const err = new Error('Already started');
       await middleware(err, req, res, next);
@@ -333,7 +337,7 @@ describe('Error Hierarchy & Domain Exceptions', () => {
       const middleware = createCentralErrorHandler();
       const req = createMockReq({ aborted: true });
       const res = createMockRes();
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await middleware(new RequestAbortedError(), req, res, next);
       expect(res.status).not.toHaveBeenCalled();
@@ -348,7 +352,7 @@ describe('Error Hierarchy & Domain Exceptions', () => {
 
       const req = createMockReq();
       const res = createMockRes();
-      const next = vi.fn();
+      const next = createMockSpyNext();
       const err = new BadRequestError('Bad parameter');
 
       await middleware(err, req, res, next);
@@ -364,7 +368,7 @@ describe('Error Hierarchy & Domain Exceptions', () => {
 
       const req = createMockReq({ path: '/api/test' });
       const res = createMockRes();
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await middleware(new BadRequestError('Bad parameter'), req, res, next);
       expect(res.status).toHaveBeenCalledWith(400);
@@ -375,7 +379,7 @@ describe('Error Hierarchy & Domain Exceptions', () => {
       const middleware = createCentralErrorHandler({ isDev: false });
       const req = createMockReq({ path: '/api/v1/resource' });
       const res = createMockRes();
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       const err = new HttpError(401, 'Unauthorized access', {
         headers: { 'WWW-Authenticate': 'Bearer' },
@@ -399,7 +403,7 @@ describe('Error Hierarchy & Domain Exceptions', () => {
 
       const req = createMockReq({ path: '/profile' });
       const res = createMockRes();
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await middleware(new NotFoundError('User not found'), req, res, next);
       expect(renderHtml).toHaveBeenCalled();

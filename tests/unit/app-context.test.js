@@ -1,3 +1,7 @@
+const {
+  createMockSpyNext
+} = require('../utils');
+
 /**
  * @vitest-environment node
  */
@@ -48,7 +52,7 @@ describe('app-context', () => {
     const marker = { k: 1 };
     setAppContext({ db: marker });
     const req = {};
-    const next = vi.fn();
+    const next = createMockSpyNext();
     attachDbMiddleware(req, {}, next);
     expect(req.db).toBe(marker);
     expect(next).toHaveBeenCalled();

@@ -1,4 +1,4 @@
-import { createMockSpyRes } from '../../utils';
+import { createMockSpyRes, createMockSpyNext } from '../../utils';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 const {
   PolicyManager,
@@ -373,7 +373,7 @@ describe('core/auth/bouncer.js', () => {
       const middleware = createBouncerMiddleware({ policyManager });
       const req1 = { user: { id: 10 } };
       const res = {};
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       middleware(req1, res, next);
       expect(req1.bouncer).toBeInstanceOf(Bouncer);

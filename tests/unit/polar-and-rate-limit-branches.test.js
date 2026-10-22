@@ -1,5 +1,6 @@
 const {
-  cleanupDir
+  cleanupDir,
+  createMockSpyNext
 } = require('../utils');
 
 'use strict';
@@ -49,7 +50,7 @@ describe('Polar Billing & Rate Limiting Branch Coverage', () => {
 
       const paths = ['/health', '/robots.txt', '/favicon.ico', '/custom-skip/test', '/explicit-user-skip', '/normal-route'];
       for (const p of paths) {
-        const next = vi.fn();
+        const next = createMockSpyNext();
         await globalMiddleware({ ip: '127.0.0.1', path: p, headers: {} }, res1, next);
         expect(next).toHaveBeenCalled();
       }

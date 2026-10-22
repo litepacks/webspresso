@@ -1,4 +1,4 @@
-import { createMockSpyRes } from '../../utils';
+import { createMockSpyRes, createMockSpyNext } from '../../utils';
 import { describe, it, expect, vi } from 'vitest';
 const { isCompressible } = require('../../../core/compression/compressible');
 const {
@@ -271,7 +271,7 @@ describe('core/compression/middleware.js', () => {
         method: 'GET',
       };
       const res = createMockSpyRes();
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       middleware(req, res, next);
 
@@ -294,7 +294,7 @@ describe('core/compression/middleware.js', () => {
       const headers = { 'content-encoding': 'gzip' };
       const res = createMockSpyRes();
       const req = { headers: {}, method: 'GET' };
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       middleware(req, res, next);
 

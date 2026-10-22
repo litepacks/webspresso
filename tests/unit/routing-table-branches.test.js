@@ -1,7 +1,8 @@
 const {
   cleanupDir,
   wait,
-  createMockSpyRes
+  createMockSpyRes,
+  createMockSpyNext
 } = require('../utils');
 
 'use strict';
@@ -33,7 +34,7 @@ describe('Routing Table & Scan Routes Branch Coverage', () => {
         excludePaths: ['/admin', '/api/internal'],
       });
 
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       // 1. Non-GET request
       await mw({ method: 'POST', path: '/contact', headers: {} }, {}, next);

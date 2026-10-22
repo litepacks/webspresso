@@ -1,6 +1,7 @@
 const {
   wait,
-  createMockSpyRes
+  createMockSpyRes,
+  createMockSpyNext
 } = require('../../utils');
 
 /**
@@ -185,7 +186,7 @@ describe('apiKeyPlugin', () => {
       const res = createMockSpyRes({
         statusCode: null
       });
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await mw(req, res, next);
 
@@ -204,7 +205,7 @@ describe('apiKeyPlugin', () => {
 
       const req = { headers: {}, path: '/api/v1/public-or-private' };
       const res = {};
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await mw(req, res, next);
 
@@ -221,7 +222,7 @@ describe('apiKeyPlugin', () => {
       const res = createMockSpyRes({
         statusCode: null
       });
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await mw(req, res, next);
 
@@ -290,7 +291,7 @@ describe('apiKeyPlugin', () => {
 
       const req = { headers: { 'x-api-key': 'wsp_live_valid123' }, path: '/api/v1/orders' };
       const res = {};
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await mw(req, res, next);
 
@@ -316,7 +317,7 @@ describe('apiKeyPlugin', () => {
       const res = createMockSpyRes({
         statusCode: null
       });
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await mw(req, res, next);
 
@@ -343,7 +344,7 @@ describe('apiKeyPlugin', () => {
 
       const req = { headers: { 'x-api-key': 'wsp_live_admin_key' }, path: '/api/v1/orders' };
       const res = {};
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await mw(req, res, next);
 
@@ -486,7 +487,7 @@ describe('apiKeyPlugin', () => {
 
       const mw = plugin.api.createMiddleware();
       const req = { headers: { 'x-api-key': created.key }, path: '/api/v1/sync' };
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await mw(req, {}, next);
       expect(next).toHaveBeenCalled();

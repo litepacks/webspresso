@@ -1,5 +1,6 @@
 const {
-  createMockSpyRes
+  createMockSpyRes,
+  createMockSpyNext
 } = require('../../utils');
 
 /**
@@ -88,7 +89,7 @@ describe('basicAuthPlugin', () => {
       const res = createMockSpyRes({
         statusCode: null
       });
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await mw(req, res, next);
 
@@ -108,7 +109,7 @@ describe('basicAuthPlugin', () => {
       const res = createMockSpyRes({
         statusCode: null
       });
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await mw(req, res, next);
 
@@ -126,7 +127,7 @@ describe('basicAuthPlugin', () => {
         headers: { authorization: `Basic ${token}` },
       };
       const res = createMockSpyRes();
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await mw(req, res, next);
 
@@ -148,7 +149,7 @@ describe('basicAuthPlugin', () => {
       const res = createMockSpyRes({
         statusCode: null
       });
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await mw(req, res, next);
 
@@ -173,7 +174,7 @@ describe('basicAuthPlugin', () => {
         headers: { authorization: `Basic ${token}` },
       };
       const res = createMockSpyRes();
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await mw(req, res, next);
 

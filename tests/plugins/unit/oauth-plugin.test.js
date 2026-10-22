@@ -6,6 +6,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import oauthPlugin, { OAuthClient, OAuthError, createOAuthClient } from '../../../plugins/oauth/index';
 
+import { createMockSpyNext } from '../../utils';
+
 describe('OAuth Plugin Definition & Utilities', () => {
   it('exports plugin factory and OAuthClient classes', () => {
     expect(typeof oauthPlugin).toBe('function');
@@ -83,7 +85,7 @@ describe('OAuth Plugin Definition & Utilities', () => {
         headers: { host: 'app.example.com' },
       };
       const res = {};
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       middlewareFn(req, res, next);
       expect(next).toHaveBeenCalled();
@@ -113,7 +115,7 @@ describe('OAuth Plugin Definition & Utilities', () => {
       expect(typeof mockMiddlewares.oauth).toBe('function');
       const routeMw = mockMiddlewares.oauth('github');
       const req = {};
-      const next = vi.fn();
+      const next = createMockSpyNext();
       routeMw(req, {}, next);
       expect(req.oauthProvider).toBe('github');
       expect(next).toHaveBeenCalled();
@@ -171,7 +173,7 @@ describe('OAuth Plugin Definition & Utilities', () => {
 
       const handler = routes['GET /auth/:provider'];
       const req = { params: { provider: 'unknown' } };
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await handler(req, {}, next);
       expect(next).toHaveBeenCalled();
@@ -204,7 +206,7 @@ describe('OAuth Plugin Definition & Utilities', () => {
           redirectedUrl = url;
         },
       };
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await handler(req, res, next);
       expect(redirectedUrl).toContain('https://provider.test/oauth/authorize');
@@ -218,7 +220,7 @@ describe('OAuth Plugin Definition & Utilities', () => {
 
       const handler = routes['GET /auth/:provider/callback'];
       const req = { params: { provider: 'unknown' } };
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       await handler(req, {}, next);
       expect(next).toHaveBeenCalled();

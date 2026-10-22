@@ -15,6 +15,8 @@ import { createApp } from '../../../src/server';
 import { createPageHandler } from '../../../src/pages/page-loader';
 import { startTestServer } from '../../utils/server';
 
+import { createMockSpyNext } from '../../utils';
+
 describe('HTTP 103 Early Hints - Core Utilities', () => {
   describe('inferAsType', () => {
     it('infers style for .css', () => {
@@ -237,7 +239,7 @@ describe('HTTP 103 Early Hints - Core Utilities', () => {
         headersSent: false,
         writeEarlyHints: vi.fn(),
       };
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       mw(req, res, next);
       expect(next).toHaveBeenCalled();
@@ -260,7 +262,7 @@ describe('HTTP 103 Early Hints - Core Utilities', () => {
         headersSent: false,
         writeEarlyHints: vi.fn(),
       };
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       mw(req, res, next);
       expect(next).toHaveBeenCalled();
@@ -280,7 +282,7 @@ describe('HTTP 103 Early Hints - Core Utilities', () => {
         headersSent: false,
         writeEarlyHints: vi.fn(),
       };
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       mw(req, res, next);
       expect(next).toHaveBeenCalled();

@@ -1,4 +1,4 @@
-import { cleanupDir } from '../../utils';
+import { cleanupDir, createMockSpyNext } from '../../utils';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 const path = require('path');
 const fs = require('fs');
@@ -86,7 +86,7 @@ describe('src/app-context.js', () => {
 
     const req = { context: { customKey: 123 } };
     const res = {};
-    const next = vi.fn();
+    const next = createMockSpyNext();
 
     attachDbMiddleware(req, res, next);
 

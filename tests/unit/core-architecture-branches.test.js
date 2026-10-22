@@ -1,5 +1,6 @@
 const {
-  createMockSpyRes
+  createMockSpyRes,
+  createMockSpyNext
 } = require('../utils');
 
 'use strict';
@@ -59,7 +60,7 @@ describe('Core Architecture Branch Coverage', () => {
       });
 
       const mw = plugin.api.createMiddleware();
-      const next = vi.fn();
+      const next = createMockSpyNext();
       const res = createMockSpyRes();
 
       // Glob **
@@ -135,7 +136,7 @@ describe('Core Architecture Branch Coverage', () => {
         accepts: vi.fn().mockReturnValue(false),
       };
       const res = createMockSpyRes();
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       mw(req, res, next);
       expect(next).toHaveBeenCalled();
@@ -383,7 +384,7 @@ describe('Core Architecture Branch Coverage', () => {
 
       const req = { method: 'GET', headers: { 'x-request-id': 'req-999' }, params: {}, query: {} };
       const res = createMockSpyRes();
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       const mwRunner = async (mws, req, res, next) => {
         try {
@@ -727,7 +728,7 @@ describe('Core Architecture Branch Coverage', () => {
       const mw = createCsvMiddleware({ delimiter: ',' });
       const req = { headers: {} };
       const res = createMockSpyRes();
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       mw(req, res, next);
       expect(typeof res.csv).toBe('function');
@@ -1403,7 +1404,7 @@ describe('Core Architecture Branch Coverage', () => {
       const mw = createXlsxMiddleware();
       const req = { headers: {} };
       const res = createMockSpyRes();
-      const next = vi.fn();
+      const next = createMockSpyNext();
 
       mw(req, res, next);
       expect(typeof res.xlsx).toBe('function');
