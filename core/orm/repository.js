@@ -366,13 +366,33 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     }
 
     // Insert and return the record
-    const [id] = await getActiveKnex()(model.table).insert(insertData).returning(model.primaryKey);
+    let record = null;
+    let insertedResult = null;
 
-    // For databases that don't support returning (SQLite), id might be the row itself
-    const insertedId = typeof id === 'object' ? id[model.primaryKey] : id;
+    try {
+      insertedResult = await getActiveKnex()(model.table).insert(insertData).returning('*');
+    } catch (_) {
+      try {
+        insertedResult = await getActiveKnex()(model.table).insert(insertData).returning(model.primaryKey);
+      } catch (_2) {
+        insertedResult = await getActiveKnex()(model.table).insert(insertData);
+      }
+    }
 
-    // Fetch the created record (without emitting find events)
-    const record = await findById(insertedId, {}, false);
+    const firstRow = Array.isArray(insertedResult) ? insertedResult[0] : insertedResult;
+    const hasFullRow = firstRow &&
+      typeof firstRow === 'object' &&
+      (model.columns ? Object.keys(firstRow).length >= Math.min(model.columns.size, 2) : Object.keys(firstRow).length > 1);
+
+    if (hasFullRow) {
+      record = { ...firstRow };
+      if (hasJson) {
+        deserializeJsonFields(record, jsonColumns);
+      }
+    } else {
+      const insertedId = (firstRow && typeof firstRow === 'object') ? firstRow[model.primaryKey] : firstRow;
+      record = await findById(insertedId, {}, false);
+    }
 
     // Emit afterCreate
     ModelEvents.emit(model.name, Hooks.AFTER_CREATE, record, ctx);
@@ -719,22 +739,53 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     }
 
     // Update the record
-    const updated = await baseQuery('update', updateData)
-      .where(model.primaryKey, id)
-      .update(updateData);
+    let record = null;
+    let updateResult = null;
 
-    if (updated === 0) {
-      return null;
+    try {
+      updateResult = await baseQuery('update', updateData)
+        .where(model.primaryKey, id)
+        .update(updateData)
+        .returning('*');
+    } catch (_) {
+      updateResult = await baseQuery('update', updateData)
+        .where(model.primaryKey, id)
+        .update(updateData);
     }
 
-    // Fetch and return the updated record (without emitting find events)
-    const record = await findById(id, {}, false);
+    if (Array.isArray(updateResult)) {
+      if (updateResult.length === 0) {
+        return null;
+      }
+      const firstRow = updateResult[0];
+      const hasFullRow = firstRow &&
+        typeof firstRow === 'object' &&
+        (model.columns ? Object.keys(firstRow).length >= Math.min(model.columns.size, 2) : Object.keys(firstRow).length > 1);
+
+      if (hasFullRow) {
+        record = { ...firstRow };
+        if (hasJson) {
+          deserializeJsonFields(record, jsonColumns);
+        }
+      } else {
+        record = await findById(id, {}, false);
+      }
+    } else {
+      if (updateResult === 0) {
+        return null;
+      }
+      record = await findById(id, {}, false);
+    }
 
     // Emit afterUpdate
     ModelEvents.emit(model.name, Hooks.AFTER_UPDATE, record, ctx);
 
     // Emit afterSave
     ModelEvents.emit(model.name, Hooks.AFTER_SAVE, record, ctx);
+
+    if (cacheLayer) {
+      cacheLayer.invalidateModelAll(model);
+    }
 
     return record;
   }
