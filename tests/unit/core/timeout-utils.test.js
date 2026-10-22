@@ -271,10 +271,19 @@ describe('Centralized Timeout Management & Utilities', () => {
   });
 
   describe('Express & createApp integration with timeouts', () => {
+    const baseAppOpts = {
+      pagesDir: './tests/fixtures/empty-pages',
+      silent: true,
+      lazyRoutes: true,
+      server: { port: 0, shutdown: { enabled: false } },
+      healthCheck: false,
+      metrics: false,
+      cache: false,
+    };
+
     it('populates app.get("timeouts") and returns timeouts in createApp()', () => {
       const { app, timeouts } = createApp({
-        rootDir: process.cwd(),
-        pages: 'pages',
+        ...baseAppOpts,
         timeouts: {
           request: '20s',
           service: '8s',
@@ -292,8 +301,7 @@ describe('Centralized Timeout Management & Utilities', () => {
       let capturedTimeouts = null;
 
       const { app } = createApp({
-        rootDir: process.cwd(),
-        pages: 'pages',
+        ...baseAppOpts,
         timeout: false,
         timeouts: {
           service: '11s',
@@ -314,14 +322,13 @@ describe('Centralized Timeout Management & Utilities', () => {
 
     it('handles request timeout with 503 response when request exceeds timeout threshold', async () => {
       const { app } = createApp({
-        rootDir: process.cwd(),
-        pages: 'pages',
+        ...baseAppOpts,
         timeouts: {
           request: '40ms',
         },
         setupRoutes: (a) => {
           a.get('/__slow_route', async (req, res) => {
-            await new Promise((resolve) => setTimeout(resolve, 150));
+            await new Promise((resolve) => setTimeout(resolve, 80));
             if (!res.headersSent) {
               res.send('too late');
             }
@@ -336,14 +343,13 @@ describe('Centralized Timeout Management & Utilities', () => {
 
     it('returns JSON 503 on timeout when Accept is application/json', async () => {
       const { app } = createApp({
-        rootDir: process.cwd(),
-        pages: 'pages',
+        ...baseAppOpts,
         timeouts: {
           request: '40ms',
         },
         setupRoutes: (a) => {
           a.get('/__slow_api', async (req, res) => {
-            await new Promise((resolve) => setTimeout(resolve, 150));
+            await new Promise((resolve) => setTimeout(resolve, 80));
             if (!res.headersSent) {
               res.json({ too: 'late' });
             }
@@ -362,8 +368,7 @@ describe('Centralized Timeout Management & Utilities', () => {
 
     it('allows fast requests to complete normally without timing out', async () => {
       const { app } = createApp({
-        rootDir: process.cwd(),
-        pages: 'pages',
+        ...baseAppOpts,
         timeouts: {
           request: '500ms',
         },

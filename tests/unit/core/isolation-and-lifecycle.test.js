@@ -113,7 +113,7 @@ describe('Core Isolation and Lifecycle Hardening', () => {
 
   describe('3. ShutdownManager Deadline Budgeting & Hung Resource Protection', () => {
     it('does not hang indefinitely when a plugin disposer hangs', async () => {
-      const sm = new ShutdownManager({ timeout: 200, logger: null });
+      const sm = new ShutdownManager({ timeout: 50, logger: null });
 
       let normalDisposerExecuted = false;
       let hookExecuted = false;
@@ -140,14 +140,14 @@ describe('Core Isolation and Lifecycle Hardening', () => {
     });
 
     it('does not multiply total shutdown timeout across multiple server adapters', async () => {
-      const sm = new ShutdownManager({ timeout: 250, logger: null });
+      const sm = new ShutdownManager({ timeout: 60, logger: null });
 
       const slowAdapter1 = {
-        close: vi.fn(() => new Promise((resolve) => setTimeout(resolve, 600))),
+        close: vi.fn(() => new Promise((resolve) => setTimeout(resolve, 200))),
         forceClose: vi.fn(),
       };
       const slowAdapter2 = {
-        close: vi.fn(() => new Promise((resolve) => setTimeout(resolve, 600))),
+        close: vi.fn(() => new Promise((resolve) => setTimeout(resolve, 200))),
         forceClose: vi.fn(),
       };
 
@@ -158,8 +158,8 @@ describe('Core Isolation and Lifecycle Hardening', () => {
       await sm.close();
       const elapsed = Date.now() - start;
 
-      // Both adapters combined must respect the shared budget (~250ms), NOT 250 + 250 = 500ms
-      expect(elapsed).toBeLessThan(450);
+      // Both adapters combined must respect the shared budget (~60ms), NOT 60 + 60 = 120ms
+      expect(elapsed).toBeLessThan(150);
       expect(sm.isClosed).toBe(true);
     });
   });

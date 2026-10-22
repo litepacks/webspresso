@@ -318,7 +318,7 @@ describe.sequential('SSR Streaming Scenarios & Edge Cases', () => {
       const renderPromise = renderStream(mockRes, 'page.njk', {}, {
         env,
         defer: {
-          feed: new Promise((r) => setTimeout(r, 200)),
+          feed: new Promise(() => {}),
         },
       });
 
