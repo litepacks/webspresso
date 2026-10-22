@@ -2,7 +2,7 @@
  * @vitest-environment node
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createDatabase, clearRegistry } from '../../../index.js';
 import { createContentService } from '../../../core/content/index.js';
 import { createContentTypeModel } from '../../../plugins/content/models/content-type.js';
@@ -39,7 +39,7 @@ describe('content service', () => {
   let db;
   let service;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     clearRegistry();
     db = createDatabase({
       client: 'better-sqlite3',
@@ -51,12 +51,17 @@ describe('content service', () => {
     db.registerModel(createContentTypeModel());
     db.registerModel(createContentEntryModel());
     await createContentTables(db.knex);
-    service = createContentService(db);
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (db) await db.destroy();
     clearRegistry();
+  });
+
+  beforeEach(async () => {
+    await db.knex('content_entries').del();
+    await db.knex('content_types').del();
+    service = createContentService(db);
   });
 
   it('creates types and entries', async () => {

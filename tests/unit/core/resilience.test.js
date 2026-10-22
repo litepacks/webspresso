@@ -522,7 +522,15 @@ describe('Webspresso Enterprise Resilience Engine (core/resilience)', () => {
 
   describe('Webspresso Server & App Integration', () => {
     it('should expose app.breakers, app.getBreaker, and req.breaker/req.retry', () => {
-      const { app } = createApp({ rootDir: process.cwd() });
+      const { app } = createApp({
+        silent: true,
+        lazyRoutes: true,
+        pagesDir: './tests/fixtures/empty-pages',
+        server: { port: 0, shutdown: { enabled: false } },
+        healthCheck: false,
+        metrics: false,
+        cache: false,
+      });
 
       expect(app.breakers).toBeDefined();
       expect(typeof app.getBreaker).toBe('function');

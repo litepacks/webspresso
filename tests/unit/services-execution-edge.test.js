@@ -10,15 +10,15 @@ describe('Services Execution & Lifecycle Edge Cases (Section 2 Hardened)', () =>
       const registry = new ServiceRegistry();
 
       registry.register('slow.service', {
-        timeout: '40ms',
+        timeout: '20ms',
         async handler() {
-          await new Promise((resolve) => setTimeout(resolve, 150));
+          await new Promise((resolve) => setTimeout(resolve, 60));
           return { ok: true };
         },
       });
 
       await expect(registry.call('slow.service')).rejects.toThrow(
-        /Service 'slow.service' timed out after 40ms/
+        /Service 'slow.service' timed out after 20ms/
       );
 
       try {
@@ -49,14 +49,14 @@ describe('Services Execution & Lifecycle Edge Cases (Section 2 Hardened)', () =>
 
       registry.register('configurable.service', {
         async handler() {
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 50));
           return 'done';
         },
       });
 
       await expect(
-        registry.call('configurable.service', {}, {}, { timeout: 30 })
-      ).rejects.toThrow(/timed out after 30ms/);
+        registry.call('configurable.service', {}, {}, { timeout: 15 })
+      ).rejects.toThrow(/timed out after 15ms/);
     });
   });
 

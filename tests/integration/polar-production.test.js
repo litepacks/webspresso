@@ -118,6 +118,7 @@ describe('Polar production readiness', () => {
           healthCheck: false,
           metrics: false,
           lazyRoutes: true,
+          server: { port: 0, shutdown: { enabled: false } },
           db,
           auth,
           plugins: [
@@ -192,6 +193,7 @@ describe('Polar production readiness', () => {
         healthCheck: false,
         metrics: false,
         lazyRoutes: true,
+        server: { port: 0, shutdown: { enabled: false } },
         db,
         auth,
         plugins: [

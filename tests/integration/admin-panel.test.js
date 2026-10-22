@@ -107,6 +107,7 @@ describe.sequential('Admin Panel Integration', () => {
       healthCheck: false,
       metrics: false,
       lazyRoutes: true,
+      server: { port: 0, shutdown: { enabled: false } },
       plugins: [
         adminPanelPlugin({
           path: '/_admin',

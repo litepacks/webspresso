@@ -162,6 +162,7 @@ describe('Security: File Manager Hardening & Threat Mitigations', () => {
         healthCheck: false,
         metrics: false,
         lazyRoutes: true,
+        server: { port: 0, shutdown: { enabled: false } },
         plugins: [
           fileManagerPlugin({
             baseDir: uploadDir,

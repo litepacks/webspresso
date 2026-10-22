@@ -19,8 +19,7 @@ describe('ORM Enhancements: Schema Diff (Django-inspired) & Model Factory (Adoni
     let rawKnex;
     let tempDir;
 
-    beforeEach(() => {
-      clearRegistry();
+    beforeAll(() => {
       tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-diff-test-'));
       rawKnex = knex({
         client: 'better-sqlite3',
@@ -31,7 +30,7 @@ describe('ORM Enhancements: Schema Diff (Django-inspired) & Model Factory (Adoni
       });
     });
 
-    afterEach(async () => {
+    afterAll(async () => {
       if (db) {
         await db.destroy().catch(() => {});
         db = null;
@@ -44,6 +43,22 @@ describe('ORM Enhancements: Schema Diff (Django-inspired) & Model Factory (Adoni
         fs.rmSync(tempDir, { recursive: true, force: true });
       }
       clearRegistry();
+    });
+
+    beforeEach(async () => {
+      clearRegistry();
+      if (db) {
+        await db.destroy().catch(() => {});
+        db = null;
+      }
+      if (fs.existsSync(tempDir)) {
+        for (const file of fs.readdirSync(tempDir)) {
+          fs.rmSync(path.join(tempDir, file), { recursive: true, force: true });
+        }
+      }
+      await rawKnex.schema.dropTableIfExists('users');
+      await rawKnex.schema.dropTableIfExists('posts');
+      await rawKnex.schema.dropTableIfExists('tags');
     });
     it('detects missing table and proposes create_table migration', async () => {
       const PostModel = defineModel({
