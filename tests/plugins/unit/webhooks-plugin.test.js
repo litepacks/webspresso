@@ -10,6 +10,7 @@ const path = require('path');
 const request = require('supertest');
 const knex = require('knex');
 const { createApp } = require('../../../src/server');
+const { startTestServer } = require('../../utils');
 const {
   webhooksPlugin,
   WebhookDispatcher,
@@ -131,52 +132,45 @@ describe('Webhooks Plugin', () => {
   });
 
   describe('3. HTTP Delivery Sender', () => {
-    let server;
+    let serverCtx;
     let serverUrl;
     let lastReceivedRequest = null;
     let shouldFail = false;
     let delayMs = 0;
 
     beforeAll(async () => {
-      await new Promise((resolve) => {
-        server = http.createServer((req, res) => {
-          let body = '';
-          req.on('data', (chunk) => { body += chunk; });
-          req.on('end', () => {
-            lastReceivedRequest = {
-              method: req.method,
-              headers: req.headers,
-              body: body ? JSON.parse(body) : null,
-            };
+      serverCtx = await startTestServer((req, res) => {
+        let body = '';
+        req.on('data', (chunk) => { body += chunk; });
+        req.on('end', () => {
+          lastReceivedRequest = {
+            method: req.method,
+            headers: req.headers,
+            body: body ? JSON.parse(body) : null,
+          };
 
-            const sendResponse = () => {
-              if (shouldFail) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Server crashed' }));
-              } else {
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ received: true }));
-              }
-            };
-
-            if (delayMs > 0) {
-              setTimeout(sendResponse, delayMs);
+          const sendResponse = () => {
+            if (shouldFail) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Server crashed' }));
             } else {
-              sendResponse();
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ received: true }));
             }
-          });
-        });
+          };
 
-        server.listen(0, '127.0.0.1', () => {
-          const port = server.address().port;
-          serverUrl = `http://127.0.0.1:${port}/webhook`;
-          resolve();
+          if (delayMs > 0) {
+            setTimeout(sendResponse, delayMs);
+          } else {
+            sendResponse();
+          }
         });
       });
+      serverUrl = serverCtx.url('/webhook');
     });
 
     afterAll(async () => {
-      await new Promise((resolve) => server.close(resolve));
+      if (serverCtx) await serverCtx.close();
     });
 
     beforeEach(() => {

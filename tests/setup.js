@@ -59,6 +59,11 @@ const {
   waitForCondition,
   waitFor,
   withTimeout,
+  startTestServer,
+  closeServer,
+  fetchJson,
+  fetchText,
+  withTestServer,
 } = require('./utils');
 
 /**
@@ -161,6 +166,11 @@ module.exports = {
   waitForCondition,
   waitFor,
   withTimeout,
+  startTestServer,
+  closeServer,
+  fetchJson,
+  fetchText,
+  withTestServer,
 };
 
 // Make utilities available globally in tests

@@ -13,6 +13,7 @@ import {
 } from '../../../core/early-hints';
 import { createApp } from '../../../src/server';
 import { createPageHandler } from '../../../src/pages/page-loader';
+import { startTestServer } from '../../utils/server';
 
 describe('HTTP 103 Early Hints - Core Utilities', () => {
   describe('inferAsType', () => {
@@ -323,9 +324,8 @@ describe('HTTP 103 Early Hints - Wire & App Integration', () => {
       res.send('<h1>Hello Early Hints</h1>');
     });
 
-    const server = http.createServer(app);
-    await new Promise((resolve) => server.listen(0, resolve));
-    const port = server.address().port;
+    const testServer = await startTestServer(app);
+    const port = testServer.port;
 
     const rawChunks = [];
     await new Promise((resolve, reject) => {
@@ -342,7 +342,7 @@ describe('HTTP 103 Early Hints - Wire & App Integration', () => {
       client.on('error', reject);
     });
 
-    await new Promise((resolve) => server.close(resolve));
+    await testServer.close();
 
     const fullResponse = rawChunks.join('');
     expect(fullResponse).toContain('HTTP/1.1 103 Early Hints');
