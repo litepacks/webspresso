@@ -5076,6 +5076,7 @@ export function createUserSessionsTable(knex: any): Promise<void>;
 export function dropUserSessionsTable(knex: any): Promise<void>;
 export function createKnexSessionTracker(db: any, options?: { tableName?: string }): SessionTracker;
 export function createMemorySessionTracker(): SessionTracker;
+export function createKvSessionTracker(kv: any, options?: { prefix?: string; ttlSeconds?: number }): SessionTracker;
 export function createListSessionsHandler(authManager: any): (req: any, res: any) => Promise<any>;
 export function createRevokeSessionHandler(authManager: any): (req: any, res: any) => Promise<any>;
 
@@ -5121,6 +5122,7 @@ export namespace sessions {
     dropUserSessionsTable,
     createKnexSessionTracker,
     createMemorySessionTracker,
+    createKvSessionTracker,
     createRedisSessionStore,
     createRedisSessionTracker,
     RedisSessionStore,

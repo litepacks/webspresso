@@ -145,7 +145,7 @@ class AuthManager extends EventEmitter {
 
     // Session tracking and revocation manager
     const { SessionManager } = require('./session-manager');
-    const { createKnexSessionTracker, createMemorySessionTracker } = require('./sessions');
+    const { createKnexSessionTracker, createMemorySessionTracker, createKvSessionTracker } = require('./sessions');
 
     let tracker = config.sessionTracker || null;
     if (!tracker && (config.sessionTracking || config.trackSessions)) {
@@ -160,6 +160,11 @@ class AuthManager extends EventEmitter {
           url: redisUrl,
           client: config.session?.redisClient,
           prefix: config.session?.redisPrefix || 'sess:',
+        });
+      } else if (config.session?.storeType === 'kv' || config.session?.kv) {
+        tracker = createKvSessionTracker(config.session?.kv, {
+          prefix: config.session?.kvPrefix || 'sess:',
+          ttlSeconds: config.session?.ttl,
         });
       } else if (config.db || this.config.db) {
         tracker = createKnexSessionTracker(config.db || this.config.db);

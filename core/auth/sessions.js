@@ -451,24 +451,78 @@ function createKvSessionTracker(kv, options = {}) {
       return record;
     },
 
-    listUserSessions: async (userId) => {
-      // If list is supported by KV
-      if (typeof kv.list === 'function') {
-        const listRes = await kv.list({ prefix });
-        const keys = listRes.keys || [];
-        const results = [];
-        for (const k of keys) {
-          const item = await kvGet(k.name);
-          if (item && String(item.user_id) === String(userId)) {
-            results.push(item);
-          }
-        }
-        return results;
-      }
-      return [];
+    /**
+     * Touch session to update last_active_at and refresh expiration
+     * @param {string} sessionId
+     * @returns {Promise<boolean>}
+     */
+    touch: async (sessionId) => {
+      if (!sessionId) return false;
+      const record = await kvGet(`${prefix}${sessionId}`);
+      if (!record) return false;
+      record.last_active_at = new Date().toISOString();
+      await kvPut(`${prefix}${sessionId}`, record, defaultTtl);
+      return true;
     },
 
-    validate: async (sessionId, userId) => {
+    /**
+     * Get session record by session_id
+     * @param {string} sessionId
+     * @returns {Promise<Object|null>}
+     */
+    get: async (sessionId) => {
+      if (!sessionId) return null;
+      return (await kvGet(`${prefix}${sessionId}`)) || null;
+    },
+
+    /**
+     * List all active sessions for a user, marking current session
+     * @param {string|number} userId
+     * @param {string} [currentSessionId]
+     * @returns {Promise<Array<Object>>}
+     */
+    list: async (userId, currentSessionId = null) => {
+      if (!userId) return [];
+      if (typeof kv.list !== 'function') return [];
+      const listRes = await kv.list({ prefix });
+      const keys = listRes.keys || [];
+      const items = await Promise.all(
+        keys.map((k) => kvGet(k.name).catch(() => null))
+      );
+      const results = [];
+      for (const item of items) {
+        if (item && String(item.user_id) === String(userId)) {
+          results.push({
+            ...item,
+            is_current: Boolean(currentSessionId && item.session_id === currentSessionId),
+          });
+        }
+      }
+      return results.sort((a, b) => new Date(b.last_active_at).getTime() - new Date(a.last_active_at).getTime());
+    },
+
+    /**
+     * Legacy alias for list()
+     * @param {string|number} userId
+     * @returns {Promise<Array<Object>>}
+     */
+    listUserSessions: async (userId) => {
+      if (!userId || typeof kv.list !== 'function') return [];
+      const listRes = await kv.list({ prefix });
+      const keys = listRes.keys || [];
+      const items = await Promise.all(
+        keys.map((k) => kvGet(k.name).catch(() => null))
+      );
+      return items.filter((item) => item && String(item.user_id) === String(userId));
+    },
+
+    /**
+     * Check if a session exists and belongs to the given user
+     * @param {string} sessionId
+     * @param {string|number} [userId]
+     * @returns {Promise<boolean>}
+     */
+    isSessionValid: async (sessionId, userId = null) => {
       if (!sessionId) return false;
       const record = await kvGet(`${prefix}${sessionId}`);
       if (!record) return false;
@@ -476,38 +530,78 @@ function createKvSessionTracker(kv, options = {}) {
       return true;
     },
 
+    /**
+     * Legacy alias for isSessionValid()
+     * @param {string} sessionId
+     * @param {string|number} [userId]
+     * @returns {Promise<boolean>}
+     */
+    validate: async (sessionId, userId = null) => {
+      if (!sessionId) return false;
+      const record = await kvGet(`${prefix}${sessionId}`);
+      if (!record) return false;
+      if (userId && String(record.user_id) !== String(userId)) return false;
+      return true;
+    },
+
+    /**
+     * Revoke a single session
+     * @param {string} sessionId
+     * @returns {Promise<boolean>}
+     */
     revoke: async (sessionId) => {
       if (!sessionId) return false;
       await kvDelete(`${prefix}${sessionId}`);
       return true;
     },
 
+    /**
+     * Revoke all other sessions for user, keeping the current session active
+     * @param {string|number} userId
+     * @param {string} currentSessionId
+     * @returns {Promise<number>} Number of revoked sessions
+     */
     revokeOthers: async (userId, currentSessionId) => {
-      if (typeof kv.list !== 'function') return 0;
+      if (!userId || typeof kv.list !== 'function') return 0;
       const listRes = await kv.list({ prefix });
-      let count = 0;
-      for (const k of listRes.keys || []) {
-        const item = await kvGet(k.name);
-        if (item && String(item.user_id) === String(userId) && item.session_id !== currentSessionId) {
-          await kvDelete(k.name);
-          count++;
+      const keys = listRes.keys || [];
+      const items = await Promise.all(
+        keys.map((k) => kvGet(k.name).then((item) => ({ key: k.name, item })).catch(() => null))
+      );
+      const toDelete = [];
+      for (const entry of items) {
+        if (entry?.item && String(entry.item.user_id) === String(userId) && entry.item.session_id !== currentSessionId) {
+          toDelete.push(entry.key);
         }
       }
-      return count;
+      if (toDelete.length > 0) {
+        await Promise.all(toDelete.map((k) => kvDelete(k)));
+      }
+      return toDelete.length;
     },
 
+    /**
+     * Revoke all sessions for a user (force logout from all devices)
+     * @param {string|number} userId
+     * @returns {Promise<number>} Number of revoked sessions
+     */
     revokeAll: async (userId) => {
-      if (typeof kv.list !== 'function') return 0;
+      if (!userId || typeof kv.list !== 'function') return 0;
       const listRes = await kv.list({ prefix });
-      let count = 0;
-      for (const k of listRes.keys || []) {
-        const item = await kvGet(k.name);
-        if (item && String(item.user_id) === String(userId)) {
-          await kvDelete(k.name);
-          count++;
+      const keys = listRes.keys || [];
+      const items = await Promise.all(
+        keys.map((k) => kvGet(k.name).then((item) => ({ key: k.name, item })).catch(() => null))
+      );
+      const toDelete = [];
+      for (const entry of items) {
+        if (entry?.item && String(entry.item.user_id) === String(userId)) {
+          toDelete.push(entry.key);
         }
       }
-      return count;
+      if (toDelete.length > 0) {
+        await Promise.all(toDelete.map((k) => kvDelete(k)));
+      }
+      return toDelete.length;
     },
 
     purgeExpired: async () => {
