@@ -15,15 +15,41 @@ class SessionManager {
    * @param {Object} [options.tracker] - Session tracker adapter (knex or memory)
    * @param {Object} [options.sessionStore] - Optional express-session store instance
    * @param {number} [options.touchThrottleMs=60000] - Throttle last_active_at updates (default 1 min)
+   * @param {number} [options.maxTouchEntries=5000] - Max entries in memory-bounded last touch map
    * @param {import('events').EventEmitter} [options.emitter] - AuthManager instance for event dispatching
    */
   constructor(options = {}) {
     this.tracker = options.tracker || createMemorySessionTracker();
     this.sessionStore = options.sessionStore || null;
     this.touchThrottleMs = options.touchThrottleMs ?? 60000;
+    this.maxTouchEntries = options.maxTouchEntries ?? 5000;
     this.emitter = options.emitter || null;
     /** @type {Map<string, number>} */
     this._lastTouchMap = new Map();
+  }
+
+  /**
+   * Record touch timestamp with bounded LRU eviction
+   * @param {string} sessionId
+   * @param {number} [timestamp=Date.now()]
+   * @private
+   */
+  _recordTouch(sessionId, timestamp = Date.now()) {
+    if (!sessionId) return;
+    if (this._lastTouchMap.has(sessionId)) {
+      this._lastTouchMap.delete(sessionId);
+    } else if (this._lastTouchMap.size >= this.maxTouchEntries) {
+      const oldestKey = this._lastTouchMap.keys().next().value;
+      this._lastTouchMap.delete(oldestKey);
+    }
+    this._lastTouchMap.set(sessionId, timestamp);
+  }
+
+  /**
+   * Clear touch throttle cache
+   */
+  clearTouchCache() {
+    this._lastTouchMap.clear();
   }
 
   /**
@@ -48,7 +74,7 @@ class SessionManager {
       device: parsed.device,
     });
 
-    this._lastTouchMap.set(sessionId, Date.now());
+    this._recordTouch(sessionId, Date.now());
 
     if (this.emitter) {
       this.emitter.emit('session:created', {
@@ -79,7 +105,7 @@ class SessionManager {
       return false; // Throttled
     }
 
-    this._lastTouchMap.set(sessionId, now);
+    this._recordTouch(sessionId, now);
     return await this.tracker.touch(sessionId);
   }
 

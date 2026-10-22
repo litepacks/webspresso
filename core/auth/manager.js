@@ -173,6 +173,7 @@ class AuthManager extends EventEmitter {
         tracker: tracker || createMemorySessionTracker(),
         sessionStore: config.sessionStore || this.config.session?.store,
         touchThrottleMs: config.sessionTouchThrottleMs,
+        maxTouchEntries: config.sessionMaxTouchEntries,
         emitter: this,
       });
     } else {
