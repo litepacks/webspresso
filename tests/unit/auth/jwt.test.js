@@ -1,3 +1,4 @@
+import { createMockSpyRes } from '../../utils';
 import { describe, it, expect, vi } from 'vitest';
 import {
   signJwt,
@@ -159,10 +160,7 @@ describe('Zero-Dependency JWT Core Module', () => {
 
       // Missing token request
       const reqInvalid = { headers: {} };
-      const resInvalid = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const resInvalid = createMockSpyRes();
       const nextInvalid = vi.fn();
 
       await middleware.requireJwt()(reqInvalid, resInvalid, nextInvalid);
@@ -206,10 +204,7 @@ describe('Zero-Dependency JWT Core Module', () => {
     it('should reject refresh token in requireJwt middleware', async () => {
       const refreshToken = authManager.generateRefreshToken(mockUser);
       const req = { headers: { authorization: `Bearer ${refreshToken}` } };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
       const next = vi.fn();
 
       await middleware.requireJwt()(req, res, next);

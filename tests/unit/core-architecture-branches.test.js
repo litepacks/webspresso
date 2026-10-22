@@ -1,3 +1,7 @@
+const {
+  createMockSpyRes
+} = require('../utils');
+
 'use strict';
 
 /**
@@ -56,12 +60,7 @@ describe('Core Architecture Branch Coverage', () => {
 
       const mw = plugin.api.createMiddleware();
       const next = vi.fn();
-      const res = {
-        cookie: vi.fn(),
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-        send: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       // Glob **
       const req1 = { path: '/api/v1/users', method: 'POST', cookies: { _csrf: 'valid' }, headers: {} };
@@ -135,11 +134,7 @@ describe('Core Architecture Branch Coverage', () => {
         query: {},
         accepts: vi.fn().mockReturnValue(false),
       };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-        cookie: vi.fn(),
-      };
+      const res = createMockSpyRes();
       const next = vi.fn();
 
       mw(req, res, next);
@@ -156,11 +151,7 @@ describe('Core Architecture Branch Coverage', () => {
         query: {},
         accepts: vi.fn((type) => type === 'html'),
       };
-      const resInvalid = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-        cookie: vi.fn(),
-      };
+      const resInvalid = createMockSpyRes();
       const nextInvalid = vi.fn();
 
       mw(reqInvalid, resInvalid, nextInvalid);
@@ -391,7 +382,7 @@ describe('Core Architecture Branch Coverage', () => {
       };
 
       const req = { method: 'GET', headers: { 'x-request-id': 'req-999' }, params: {}, query: {} };
-      const res = { headersSent: false, status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const res = createMockSpyRes();
       const next = vi.fn();
 
       const mwRunner = async (mws, req, res, next) => {
@@ -1468,17 +1459,17 @@ describe('Core Architecture Branch Coverage', () => {
       const handler = createErrorReportHandler({ knex: mockKnex });
 
       // Non-POST method
-      const resGet = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resGet = createMockSpyRes();
       await handler({ method: 'GET' }, resGet);
       expect(resGet.status).toHaveBeenCalledWith(405);
 
       // Missing message and stack
-      const resMissing = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resMissing = createMockSpyRes();
       await handler({ method: 'POST', body: {} }, resMissing);
       expect(resMissing.status).toHaveBeenCalledWith(400);
 
       // Valid message and stack with all fields
-      const resOk = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resOk = createMockSpyRes();
       await handler({
         method: 'POST',
         body: {
@@ -1499,7 +1490,7 @@ describe('Core Architecture Branch Coverage', () => {
       mockKnex.mockReturnValueOnce({
         insert: vi.fn().mockRejectedValue(new Error('DB Error')),
       });
-      const resErr = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resErr = createMockSpyRes();
       await handler({
         method: 'POST',
         body: { message: 'Something broke' },
@@ -1912,7 +1903,7 @@ describe('Core Architecture Branch Coverage', () => {
       expect(resCheck.json).toHaveBeenCalledWith({ exists: false });
 
       // Test meHandler
-      const resMe = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resMe = createMockSpyRes();
       handlers.meHandler({ session: { adminUser: { id: 1, name: 'Admin' } } }, resMe);
       expect(resMe.json).toHaveBeenCalledWith({ user: { id: 1, name: 'Admin' } });
 
@@ -1929,14 +1920,14 @@ describe('Core Architecture Branch Coverage', () => {
       });
 
       // Test model metadata
-      const resModelMeta = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resModelMeta = createMockSpyRes();
       handlers.modelHandler({ params: { model: 'Post' } }, resModelMeta);
       expect(resModelMeta.json).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'Post', softDelete: true })
       );
 
       // Test recordsListHandler with filters and trashed
-      const resList = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resList = createMockSpyRes();
       const reqList = {
         params: { model: 'Post' },
         query: {
@@ -2036,32 +2027,32 @@ describe('Core Architecture Branch Coverage', () => {
 
       // RBAC Denied
       const reqDenied = { session: { adminUser: { role: 'editor' } }, query: {} };
-      const resDenied = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resDenied = createMockSpyRes();
       await handlers.list(reqDenied, resDenied);
       expect(resDenied.status).toHaveBeenCalledWith(403);
       expect(resDenied.json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.stringContaining('Permission denied') }));
 
       // Missing path on create directory (mkdir)
       const reqCreateEmpty = { session: { adminUser: { role: 'admin' } }, body: {} };
-      const resCreateEmpty = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resCreateEmpty = createMockSpyRes();
       await handlers.mkdir(reqCreateEmpty, resCreateEmpty);
       expect(resCreateEmpty.status).toHaveBeenCalledWith(400);
 
       // Missing names on rename
       const reqRenameEmpty = { session: { adminUser: { role: 'admin' } }, body: {} };
-      const resRenameEmpty = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resRenameEmpty = createMockSpyRes();
       await handlers.rename(reqRenameEmpty, resRenameEmpty);
       expect(resRenameEmpty.status).toHaveBeenCalledWith(400);
 
       // Missing target on move
       const reqMoveEmpty = { session: { adminUser: { role: 'admin' } }, body: {} };
-      const resMoveEmpty = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resMoveEmpty = createMockSpyRes();
       await handlers.move(reqMoveEmpty, resMoveEmpty);
       expect(resMoveEmpty.status).toHaveBeenCalledWith(400);
 
       // Missing item on delete
       const reqDeleteEmpty = { session: { adminUser: { role: 'superadmin' } }, body: {} };
-      const resDeleteEmpty = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resDeleteEmpty = createMockSpyRes();
       await handlers.delete(reqDeleteEmpty, resDeleteEmpty);
       expect(resDeleteEmpty.status).toHaveBeenCalledWith(400);
     });
@@ -2263,12 +2254,12 @@ describe('Core Architecture Branch Coverage', () => {
       });
 
       // configHandler
-      const resConfig = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resConfig = createMockSpyRes();
       handlers.configHandler({}, resConfig);
       expect(resConfig.json).toHaveBeenCalled();
 
       // widgetDataHandler success & 404
-      const resWidget = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resWidget = createMockSpyRes();
       await handlers.widgetDataHandler({ params: { widgetId: 'w1' } }, resWidget);
       expect(resWidget.json).toHaveBeenCalledWith({ data: { value: 42 } });
 
@@ -2276,12 +2267,12 @@ describe('Core Architecture Branch Coverage', () => {
       expect(resWidget.status).toHaveBeenCalledWith(404);
 
       // actionHandler
-      const resAction = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resAction = createMockSpyRes();
       await handlers.actionHandler({ params: { actionId: 'a1', model: 'Post', id: '1' } }, resAction);
       expect(resAction.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 
       // bulkActionHandler
-      const resBulk = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resBulk = createMockSpyRes();
       await handlers.bulkActionHandler({ params: { actionId: 'b1', model: 'Post' }, body: { ids: [1, 2] } }, resBulk);
       expect(resBulk.json).toHaveBeenCalled();
 
@@ -2291,7 +2282,7 @@ describe('Core Architecture Branch Coverage', () => {
       expect(resSys.json).toHaveBeenCalledWith(expect.objectContaining({ nodeVersion: process.version }));
 
       // bulkFieldsHandler
-      const resBulkFields = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resBulkFields = createMockSpyRes();
       handlers.bulkFieldsHandler({ params: { model: 'Post' } }, resBulkFields);
       expect(resBulkFields.json).toHaveBeenCalled();
     });
@@ -2356,12 +2347,12 @@ describe('Core Architecture Branch Coverage', () => {
       });
 
       // listAdmins
-      const resList = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resList = createMockSpyRes();
       await handlers.listAdmins({}, resList);
       expect(resList.json).toHaveBeenCalled();
 
       // getAdmin success & 404
-      const resGet = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resGet = createMockSpyRes();
       await handlers.getAdmin({ params: { id: '1' } }, resGet);
       expect(resGet.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 
@@ -2369,7 +2360,7 @@ describe('Core Architecture Branch Coverage', () => {
       expect(resGet.status).toHaveBeenCalledWith(404);
 
       // createAdmin missing fields & duplicate
-      const resCreate = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resCreate = createMockSpyRes();
       await handlers.createAdmin({ body: { name: 'New' } }, resCreate);
       expect(resCreate.status).toHaveBeenCalledWith(400);
 
@@ -2380,12 +2371,12 @@ describe('Core Architecture Branch Coverage', () => {
       expect(resCreate.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 
       // updateAdmin
-      const resUpdate = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resUpdate = createMockSpyRes();
       await handlers.updateAdmin({ params: { id: '1' }, body: { name: 'Updated 1', newPassword: 'newpassword123', active: true } }, resUpdate);
       expect(resUpdate.json).toHaveBeenCalled();
 
       // deleteAdmin
-      const resDelete = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resDelete = createMockSpyRes();
       await handlers.deleteAdmin({ params: { id: '2' }, session: { adminUser: { id: 1 } } }, resDelete);
       expect(resDelete.json).toHaveBeenCalled();
     });
@@ -2513,7 +2504,7 @@ describe('Core Architecture Branch Coverage', () => {
 
       // requireAuth
       const authApiMw = mwStack.requireAuth({ api: true });
-      const resUnauthorized = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resUnauthorized = createMockSpyRes();
       authApiMw({ user: null }, resUnauthorized, nextFn);
       expect(resUnauthorized.status).toHaveBeenCalledWith(401);
 

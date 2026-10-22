@@ -1,6 +1,7 @@
 const {
   createTempDir,
-  cleanupDir
+  cleanupDir,
+  createMockSpyRes
 } = require('../utils');
 
 'use strict';
@@ -121,7 +122,7 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
     it('covers createWebhookHandler error branches and signatures', async () => {
       // 1. Missing secret
       const hNoSecret = createWebhookHandler({});
-      const res1 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const res1 = createMockSpyRes();
       await hNoSecret({}, res1);
       expect(res1.status).toHaveBeenCalledWith(500);
 
@@ -130,7 +131,7 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
         webhookSecret: 'secret_123',
         db: { raw: vi.fn() },
       });
-      const res2 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const res2 = createMockSpyRes();
       await hWithSecret(
         {
           headers: {},
@@ -152,7 +153,7 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
         db: null,
       });
 
-      const res3 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const res3 = createMockSpyRes();
       await hNoKnex(
         {
           headers: { 'webhook-signature': sig },
@@ -192,12 +193,12 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
       expect(res1.redirect).toHaveBeenCalledWith('/login');
 
       // Unauthenticated JSON -> 401
-      const res2 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const res2 = createMockSpyRes();
       await checkoutHandler({ headers: { accept: 'application/json' }, is: () => true }, res2);
       expect(res2.status).toHaveBeenCalledWith(401);
 
       // Authenticated and already paid
-      const res3 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const res3 = createMockSpyRes();
       await checkoutHandler(
         {
           user: mockPaidUser,
@@ -233,7 +234,7 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
       const statusHandler = createStatusHandler(config);
 
       // Unauthenticated -> 401
-      const res1 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const res1 = createMockSpyRes();
       await statusHandler({ user: null }, res1, vi.fn());
       expect(res1.status).toHaveBeenCalledWith(401);
 
@@ -265,7 +266,7 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
       defaultAuth({ user: { id: 1 } }, {}, nextFallback);
       expect(nextFallback).toHaveBeenCalled();
 
-      const resUnauthorized = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resUnauthorized = createMockSpyRes();
       defaultAuth({ user: null, path: '/api/something', headers: {}, is: () => true }, resUnauthorized, vi.fn());
       expect(resUnauthorized.status).toHaveBeenCalledWith(401);
     });
@@ -303,7 +304,7 @@ describe('Server Lifecycle & Auth Tokens Branch Coverage', () => {
         file: null,
         files: [],
       };
-      const res1 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const res1 = createMockSpyRes();
       routeHandler(req1, res1);
     });
   });

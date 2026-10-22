@@ -1,3 +1,7 @@
+const {
+  createMockSpyRes
+} = require('../utils');
+
 'use strict';
 
 /**
@@ -494,7 +498,7 @@ describe('Cloud Native Queue Adapters', () => {
       });
 
       // Missing message payload -> 400
-      const res1 = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      const res1 = createMockSpyRes();
       const missingRes = await adapter.processPushRequest({ body: {} }, res1, queueManager);
       expect(missingRes).toBe(false);
       expect(res1.status).toHaveBeenCalledWith(400);
@@ -512,7 +516,7 @@ describe('Cloud Native Queue Adapters', () => {
       expect(res2.status).toHaveBeenCalledWith(204);
 
       // Failing handler -> 500 & throws so Cloud Run / Pub/Sub retries with backoff
-      const res3 = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      const res3 = createMockSpyRes();
       await expect(adapter.processPushRequest({
         body: {
           message: {

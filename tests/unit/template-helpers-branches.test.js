@@ -1,3 +1,7 @@
+const {
+  createMockSpyRes
+} = require('../utils');
+
 'use strict';
 
 const path = require('path');
@@ -201,10 +205,7 @@ describe('Template Helpers & Injector Branch Coverage', () => {
       const handler = createStatusHandler(config);
 
       // 1. Unauthorized
-      const res401 = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res401 = createMockSpyRes();
       await handler({ user: null }, res401, vi.fn());
       expect(res401.status).toHaveBeenCalledWith(401);
 
@@ -289,10 +290,7 @@ describe('Template Helpers & Injector Branch Coverage', () => {
 
       // 4. Default fallback: API unauthorized (401)
       const reqNoUserApi = { path: '/api/checkout', headers: { accept: 'application/json' }, is: () => true };
-      const res401 = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res401 = createMockSpyRes();
       mwDefault(reqNoUserApi, res401, vi.fn());
       expect(res401.status).toHaveBeenCalledWith(401);
 

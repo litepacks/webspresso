@@ -1,3 +1,7 @@
+const {
+  createMockSpyRes
+} = require('../utils');
+
 'use strict';
 
 const path = require('path');
@@ -142,49 +146,49 @@ describe('Upload & REST Resources Branch Coverage', () => {
 
       // 1. POST /api/v1/products - create success & error
       const postHandler = registeredRoutes['POST /api/v1/products'];
-      const resPost1 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resPost1 = createMockSpyRes();
       await postHandler({ body: { name: 'Widget', price: 10 } }, resPost1);
       expect(resPost1.status).toHaveBeenCalledWith(201);
 
-      const resPost2 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resPost2 = createMockSpyRes();
       await postHandler({ body: { name: 'error' } }, resPost2);
       expect(resPost2.status).toHaveBeenCalledWith(400);
 
       // 2. GET /api/v1/products/:id - found & not found
       const getOneHandler = registeredRoutes['GET /api/v1/products/:id'];
-      const resGet1 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resGet1 = createMockSpyRes();
       await getOneHandler({ params: { id: '1' }, query: {} }, resGet1);
       expect(resGet1.json).toHaveBeenCalled();
 
-      const resGet2 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resGet2 = createMockSpyRes();
       await getOneHandler({ params: { id: '999' }, query: {} }, resGet2);
       expect(resGet2.status).toHaveBeenCalledWith(404);
 
       // 3. PATCH /api/v1/products/:id - update success, not found, and error
       const patchHandler = registeredRoutes['PATCH /api/v1/products/:id'];
-      const resPatch1 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resPatch1 = createMockSpyRes();
       await patchHandler({ params: { id: '1' }, body: { price: 20 } }, resPatch1);
       expect(resPatch1.json).toHaveBeenCalled();
 
-      const resPatch2 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resPatch2 = createMockSpyRes();
       await patchHandler({ params: { id: '999' }, body: { price: 20 } }, resPatch2);
       expect(resPatch2.status).toHaveBeenCalledWith(404);
 
-      const resPatch3 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resPatch3 = createMockSpyRes();
       await patchHandler({ params: { id: '1' }, body: { name: 'error' } }, resPatch3);
       expect(resPatch3.status).toHaveBeenCalledWith(400);
 
       // 4. DELETE /api/v1/products/:id - delete success, not found, and error
       const deleteHandler = registeredRoutes['DELETE /api/v1/products/:id'];
-      const resDel1 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resDel1 = createMockSpyRes();
       await deleteHandler({ params: { id: '1' } }, resDel1);
       expect(resDel1.json).toHaveBeenCalledWith({ success: true });
 
-      const resDel2 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resDel2 = createMockSpyRes();
       await deleteHandler({ params: { id: '999' } }, resDel2);
       expect(resDel2.status).toHaveBeenCalledWith(404);
 
-      const resDel3 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resDel3 = createMockSpyRes();
       await deleteHandler({ params: { id: '9999' } }, resDel3);
       expect(resDel3.status).toHaveBeenCalledWith(400);
     });
@@ -355,10 +359,7 @@ describe('Upload & REST Resources Branch Coverage', () => {
           },
         },
       };
-      const res = {
-        json: vi.fn(),
-        status: vi.fn(() => res),
-      };
+      const res = createMockSpyRes();
 
       await listRoute.handler(req, res);
       expect(res.json).toHaveBeenCalled();

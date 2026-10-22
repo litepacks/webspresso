@@ -1,3 +1,4 @@
+import { createMockSpyRes } from '../../utils';
 /**
  * Profile API Handler Tests
  * @vitest-environment node
@@ -45,10 +46,7 @@ describe('Admin Panel Profile API', () => {
   describe('updateProfileHandler', () => {
     it('should return 401 if user is not authenticated', async () => {
       const req = { session: {} };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.updateProfileHandler(req, res);
 
@@ -72,10 +70,7 @@ describe('Admin Panel Profile API', () => {
         },
       };
 
-      const res = {
-        json: vi.fn(),
-        status: vi.fn().mockReturnThis(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.updateProfileHandler(req, res);
 
@@ -109,10 +104,7 @@ describe('Admin Panel Profile API', () => {
         body: { email: 'taken@example.com' },
       };
 
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.updateProfileHandler(req, res);
 
@@ -130,10 +122,7 @@ describe('Admin Panel Profile API', () => {
         body: { newPassword: 'newsecretpass' },
       };
 
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.updateProfileHandler(req, res);
 
@@ -151,10 +140,7 @@ describe('Admin Panel Profile API', () => {
         body: { currentPassword: 'wrongpassword', newPassword: 'newsecretpass' },
       };
 
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.updateProfileHandler(req, res);
 
@@ -175,10 +161,7 @@ describe('Admin Panel Profile API', () => {
         body: { currentPassword: 'correctoldpass', newPassword: 'newsecretpassword' },
       };
 
-      const res = {
-        json: vi.fn(),
-        status: vi.fn().mockReturnThis(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.updateProfileHandler(req, res);
 

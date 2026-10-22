@@ -1,3 +1,4 @@
+import { createMockSpyRes } from '../../utils';
 /**
  * Admin Users API & Management Tests
  * @vitest-environment node
@@ -92,10 +93,7 @@ describe('Admin User Management Module', () => {
       mockAdminUserRepo.query.mockReturnValue(queryChain);
 
       const req = { query: {} };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.listAdmins(req, res);
 
@@ -119,10 +117,7 @@ describe('Admin User Management Module', () => {
       mockAdminUserRepo.findById.mockResolvedValue(null);
 
       const req = { params: { id: 99 } };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.getAdmin(req, res);
 
@@ -141,10 +136,7 @@ describe('Admin User Management Module', () => {
       });
 
       const req = { params: { id: 1 } };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.getAdmin(req, res);
 
@@ -163,10 +155,7 @@ describe('Admin User Management Module', () => {
 
   describe('createAdmin', () => {
     it('validates required fields', async () => {
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       // Missing email
       await apiHandlers.createAdmin({ body: { name: 'A', password: 'password123' } }, res);
@@ -203,10 +192,7 @@ describe('Admin User Management Module', () => {
           name: 'Existing Admin',
         },
       };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.createAdmin(req, res);
 
@@ -239,10 +225,7 @@ describe('Admin User Management Module', () => {
           active: true,
         },
       };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.createAdmin(req, res);
 
@@ -284,10 +267,7 @@ describe('Admin User Management Module', () => {
         params: { id: 1 },
         body: { active: false },
       };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.updateAdmin(req, res);
 
@@ -315,10 +295,7 @@ describe('Admin User Management Module', () => {
         params: { id: 2 },
         body: { active: false },
       };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.updateAdmin(req, res);
 
@@ -363,10 +340,7 @@ describe('Admin User Management Module', () => {
           password: 'newpassword123',
         },
       };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.updateAdmin(req, res);
 
@@ -397,10 +371,7 @@ describe('Admin User Management Module', () => {
         session: { adminUser: { id: 1, email: 'admin@example.com' } },
         params: { id: 1 },
       };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.deleteAdmin(req, res);
 
@@ -426,10 +397,7 @@ describe('Admin User Management Module', () => {
         session: { adminUser: { id: 1, email: 'me@example.com' } },
         params: { id: 2 },
       };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.deleteAdmin(req, res);
 
@@ -455,10 +423,7 @@ describe('Admin User Management Module', () => {
         session: { adminUser: { id: 1, email: 'me@example.com' } },
         params: { id: 2 },
       };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await apiHandlers.deleteAdmin(req, res);
 

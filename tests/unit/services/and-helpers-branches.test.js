@@ -1,3 +1,4 @@
+import { createMockSpyRes } from '../../utils';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import path from 'path';
 import fs from 'fs/promises';
@@ -45,7 +46,7 @@ describe('Services & Helpers Branch Coverage', () => {
       });
 
       // 1. checkHandler
-      const resCheck1 = { json: vi.fn(), status: vi.fn().mockReturnThis() };
+      const resCheck1 = createMockSpyRes();
       mockAdminRepo.query.mockReturnValue({
         count: vi.fn().mockResolvedValue([{ count: 1 }]),
       });
@@ -59,11 +60,11 @@ describe('Services & Helpers Branch Coverage', () => {
       expect(resCheck2.json).toHaveBeenCalledWith({ exists: false });
 
       // 2. setupHandler
-      const resSetupErr1 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resSetupErr1 = createMockSpyRes();
       await handlersNoRepo.setupHandler({ body: {} }, resSetupErr1);
       expect(resSetupErr1.status).toHaveBeenCalledWith(500);
 
-      const resSetupErr2 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resSetupErr2 = createMockSpyRes();
       await handlers.setupHandler({ body: { email: '' } }, resSetupErr2);
       expect(resSetupErr2.status).toHaveBeenCalledWith(400);
 
@@ -78,11 +79,11 @@ describe('Services & Helpers Branch Coverage', () => {
       expect(resSetupOk.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 
       // 3. loginHandler
-      const resLoginErr1 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resLoginErr1 = createMockSpyRes();
       await handlersNoRepo.loginHandler({ body: {} }, resLoginErr1);
       expect(resLoginErr1.status).toHaveBeenCalledWith(500);
 
-      const resLoginErr2 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resLoginErr2 = createMockSpyRes();
       await handlers.loginHandler({ body: { email: 'admin@test.com' } }, resLoginErr2);
       expect(resLoginErr2.status).toHaveBeenCalledWith(400);
 
@@ -91,7 +92,7 @@ describe('Services & Helpers Branch Coverage', () => {
         where: vi.fn().mockReturnThis(),
         first: vi.fn().mockResolvedValue({ id: 1, password: 'hashed_pw', active: true }),
       });
-      const resLogin401 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resLogin401 = createMockSpyRes();
       await handlers.loginHandler({ body: { email: 'admin@test.com', password: 'wrong' }, session: {} }, resLogin401);
       expect(resLogin401.status).toHaveBeenCalledWith(401);
 
@@ -112,7 +113,7 @@ describe('Services & Helpers Branch Coverage', () => {
       expect(resLogout.json).toHaveBeenCalledWith({ success: true });
 
       // 5. meHandler
-      const resMe401 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resMe401 = createMockSpyRes();
       handlers.meHandler({ session: {} }, resMe401);
       expect(resMe401.status).toHaveBeenCalledWith(401);
 
@@ -121,17 +122,17 @@ describe('Services & Helpers Branch Coverage', () => {
       expect(resMeOk.json).toHaveBeenCalledWith({ user: { id: 1, name: 'Admin' } });
 
       // 6. updateProfileHandler
-      const resProf401 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resProf401 = createMockSpyRes();
       await handlers.updateProfileHandler({ session: {} }, resProf401);
       expect(resProf401.status).toHaveBeenCalledWith(401);
 
-      const resProf500 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resProf500 = createMockSpyRes();
       await handlersNoRepo.updateProfileHandler({ session: { adminUser: { id: 1 } } }, resProf500);
       expect(resProf500.status).toHaveBeenCalledWith(500);
 
       // user not found
       mockAdminRepo.findById.mockResolvedValueOnce(null);
-      const resProf404 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resProf404 = createMockSpyRes();
       await handlers.updateProfileHandler({ session: { adminUser: { id: 999 } }, body: {} }, resProf404);
       expect(resProf404.status).toHaveBeenCalledWith(404);
 
@@ -142,7 +143,7 @@ describe('Services & Helpers Branch Coverage', () => {
         whereNot: vi.fn().mockReturnThis(),
         first: vi.fn().mockResolvedValueOnce({ id: 2 }),
       });
-      const resProfDup = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resProfDup = createMockSpyRes();
       await handlers.updateProfileHandler(
         { session: { adminUser: { id: 1 } }, body: { email: 'other@test.com' } },
         resProfDup
@@ -150,7 +151,7 @@ describe('Services & Helpers Branch Coverage', () => {
       expect(resProfDup.status).toHaveBeenCalledWith(400);
 
       // password change missing current
-      const resProfNoCurPw = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resProfNoCurPw = createMockSpyRes();
       await handlers.updateProfileHandler(
         { session: { adminUser: { id: 1 } }, body: { newPassword: 'newpassword123' } },
         resProfNoCurPw
@@ -158,7 +159,7 @@ describe('Services & Helpers Branch Coverage', () => {
       expect(resProfNoCurPw.status).toHaveBeenCalledWith(400);
 
       // password change incorrect current
-      const resProfWrongPw = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resProfWrongPw = createMockSpyRes();
       await handlers.updateProfileHandler(
         { session: { adminUser: { id: 1 } }, body: { currentPassword: 'wrong', newPassword: 'newpassword123' } },
         resProfWrongPw
@@ -166,7 +167,7 @@ describe('Services & Helpers Branch Coverage', () => {
       expect(resProfWrongPw.status).toHaveBeenCalledWith(400);
 
       // password change too short
-      const resProfShortPw = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resProfShortPw = createMockSpyRes();
       await handlers.updateProfileHandler(
         { session: { adminUser: { id: 1 } }, body: { currentPassword: 'current_secret', newPassword: '123' } },
         resProfShortPw
@@ -179,7 +180,7 @@ describe('Services & Helpers Branch Coverage', () => {
         session: { adminUser: { id: 1, name: 'Old' } },
         body: { name: 'New Name', currentPassword: 'current_secret', newPassword: 'newpassword123' },
       };
-      const resProfSuccess = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resProfSuccess = createMockSpyRes();
       await handlers.updateProfileHandler(reqProfSuccess, resProfSuccess);
       expect(resProfSuccess.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
       expect(reqProfSuccess.session.adminUser.name).toBe('New Name');
@@ -263,7 +264,7 @@ describe('Services & Helpers Branch Coverage', () => {
       });
 
       // 2. modelHandler (found vs not found vs disabled)
-      const resModel404 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resModel404 = createMockSpyRes();
       handlers.modelHandler({ params: { model: 'Unknown' } }, resModel404);
       expect(resModel404.status).toHaveBeenCalledWith(404);
 
@@ -315,7 +316,7 @@ describe('Services & Helpers Branch Coverage', () => {
       expect(mockQueryBuilder.withTrashed).toHaveBeenCalled();
 
       // 4. recordHandler (found vs 404)
-      const resRecord404 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resRecord404 = createMockSpyRes();
       mockRepo.findById.mockResolvedValueOnce(null);
       await handlers.recordHandler({ params: { model: 'Post', id: '999' } }, resRecord404);
       expect(resRecord404.status).toHaveBeenCalledWith(404);
@@ -326,7 +327,7 @@ describe('Services & Helpers Branch Coverage', () => {
       expect(resRecordOk.json).toHaveBeenCalled();
 
       // 5. createRecordHandler with rich text sanitization & validation error extraction
-      const resCreateOk = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resCreateOk = createMockSpyRes();
       await handlers.createRecordHandler(
         { params: { model: 'Post' }, body: { title: 'New', content: '<script>alert(1)</script><p>Hi</p>' } },
         resCreateOk
@@ -338,20 +339,20 @@ describe('Services & Helpers Branch Coverage', () => {
       mockRepo.create.mockRejectedValueOnce({
         issues: [{ path: ['title'], message: 'Title is required' }],
       });
-      const resCreateValErr = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resCreateValErr = createMockSpyRes();
       await handlers.createRecordHandler({ params: { model: 'Post' }, body: {} }, resCreateValErr);
       expect(resCreateValErr.status).toHaveBeenCalledWith(400);
 
       // 6. updateRecordHandler (not found, validation error with fields map, success)
       mockRepo.update.mockResolvedValueOnce(null);
-      const resUp404 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resUp404 = createMockSpyRes();
       await handlers.updateRecordHandler({ params: { model: 'Post', id: '99' }, body: {} }, resUp404);
       expect(resUp404.status).toHaveBeenCalledWith(404);
 
       mockRepo.update.mockRejectedValueOnce({
         errors: [{ path: ['views'], message: 'Must be positive' }],
       });
-      const resUpValErr = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resUpValErr = createMockSpyRes();
       await handlers.updateRecordHandler({ params: { model: 'Post', id: '1' }, body: { views: -5 } }, resUpValErr);
       expect(resUpValErr.status).toHaveBeenCalledWith(400);
 
@@ -362,7 +363,7 @@ describe('Services & Helpers Branch Coverage', () => {
 
       // 7. deleteRecordHandler
       mockRepo.delete.mockResolvedValueOnce(false);
-      const resDel404 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resDel404 = createMockSpyRes();
       await handlers.deleteRecordHandler({ params: { model: 'Post', id: '99' } }, resDel404);
       expect(resDel404.status).toHaveBeenCalledWith(404);
 
@@ -377,11 +378,11 @@ describe('Services & Helpers Branch Coverage', () => {
       expect(resRestoreOk.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 
       // 9. queryHandler (found vs not found)
-      const resQuery404 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resQuery404 = createMockSpyRes();
       await handlers.queryHandler({ params: { model: 'Post', query: 'nonexistent' } }, resQuery404);
       expect(resQuery404.status).toHaveBeenCalledWith(404);
 
-      const resQueryOk = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resQueryOk = createMockSpyRes();
       await handlers.queryHandler({ params: { model: 'Post', query: 'published' } }, resQueryOk);
       expect(mockPostModel.admin.queries.published).toHaveBeenCalled();
       expect(resQueryOk.json).toHaveBeenCalled();
@@ -551,7 +552,7 @@ describe('Services & Helpers Branch Coverage', () => {
       expect(resList.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, total: 2 }));
 
       // 2. getAdmin (404 vs found)
-      const resGet404 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resGet404 = createMockSpyRes();
       await handlers.getAdmin({ params: { id: '999' } }, resGet404);
       expect(resGet404.status).toHaveBeenCalledWith(404);
 
@@ -563,24 +564,24 @@ describe('Services & Helpers Branch Coverage', () => {
       }));
 
       // 3. createAdmin validations (missing email, bad email, short pw, missing name, duplicate)
-      const resCrNoEmail = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resCrNoEmail = createMockSpyRes();
       await handlers.createAdmin({ body: {} }, resCrNoEmail);
       expect(resCrNoEmail.status).toHaveBeenCalledWith(400);
 
-      const resCrBadEmail = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resCrBadEmail = createMockSpyRes();
       await handlers.createAdmin({ body: { email: 'invalid_email' } }, resCrBadEmail);
       expect(resCrBadEmail.status).toHaveBeenCalledWith(400);
 
-      const resCrShortPw = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resCrShortPw = createMockSpyRes();
       await handlers.createAdmin({ body: { email: 'a@b.com', password: 'short' } }, resCrShortPw);
       expect(resCrShortPw.status).toHaveBeenCalledWith(400);
 
-      const resCrNoName = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resCrNoName = createMockSpyRes();
       await handlers.createAdmin({ body: { email: 'a@b.com', password: 'validpassword123' } }, resCrNoName);
       expect(resCrNoName.status).toHaveBeenCalledWith(400);
 
       // createAdmin success
-      const resCrOk = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resCrOk = createMockSpyRes();
       await handlers.createAdmin(
         { body: { email: 'new@admin.com', password: 'validpassword123', name: 'New Admin', role: 'admin', active: true } },
         resCrOk
@@ -588,16 +589,16 @@ describe('Services & Helpers Branch Coverage', () => {
       expect(resCrOk.status).toHaveBeenCalledWith(201);
 
       // 4. updateAdmin (not found, empty name, self-deactivation protection, last active admin protection, success)
-      const resUp404 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resUp404 = createMockSpyRes();
       await handlers.updateAdmin({ params: { id: '999' }, body: {} }, resUp404);
       expect(resUp404.status).toHaveBeenCalledWith(404);
 
-      const resUpEmptyName = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resUpEmptyName = createMockSpyRes();
       await handlers.updateAdmin({ params: { id: '1' }, body: { name: '   ' } }, resUpEmptyName);
       expect(resUpEmptyName.status).toHaveBeenCalledWith(400);
 
       // Self-deactivation prevention
-      const resUpSelfDeact = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resUpSelfDeact = createMockSpyRes();
       await handlers.updateAdmin(
         { params: { id: '1' }, session: { adminUser: { id: 1 } }, body: { active: false } },
         resUpSelfDeact
@@ -613,11 +614,11 @@ describe('Services & Helpers Branch Coverage', () => {
       expect(resUpOk.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 
       // 5. deleteAdmin (not found, self-delete prevention, last active admin, success)
-      const resDel404 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resDel404 = createMockSpyRes();
       await handlers.deleteAdmin({ params: { id: '999' } }, resDel404);
       expect(resDel404.status).toHaveBeenCalledWith(404);
 
-      const resDelSelf = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resDelSelf = createMockSpyRes();
       await handlers.deleteAdmin({ params: { id: '1' }, session: { adminUser: { id: 1 } } }, resDelSelf);
       expect(resDelSelf.status).toHaveBeenCalledWith(400);
 

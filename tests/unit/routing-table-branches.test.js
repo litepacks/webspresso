@@ -1,6 +1,7 @@
 const {
   cleanupDir,
-  wait
+  wait,
+  createMockSpyRes
 } = require('../utils');
 
 'use strict';
@@ -177,11 +178,7 @@ describe('Routing Table & Scan Routes Branch Coverage', () => {
       // Invoke 404 route if mounted
       const handler404 = routes['GET /404'];
       if (handler404) {
-        const res404 = {
-          status: vi.fn(),
-          send: vi.fn(),
-          setHeader: vi.fn(),
-        };
+        const res404 = createMockSpyRes();
         const req404 = { path: '/404', query: {}, params: {}, headers: {}, get: () => null };
         await handler404(req404, res404, vi.fn());
         expect(res404.status).toHaveBeenCalledWith(404);

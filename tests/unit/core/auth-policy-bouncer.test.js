@@ -1,3 +1,4 @@
+import { createMockSpyRes } from '../../utils';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 const {
   PolicyManager,
@@ -621,10 +622,7 @@ describe('core/auth/magic-link.js', () => {
 
       // API request (missing token)
       const reqApi = { query: {}, accepts: () => false };
-      const resApi = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const resApi = createMockSpyRes();
       await middleware(reqApi, resApi);
       expect(resApi.status).toHaveBeenCalledWith(400);
       expect(resApi.json).toHaveBeenCalledWith({ error: 'Missing magic link token' });
@@ -645,10 +643,7 @@ describe('core/auth/magic-link.js', () => {
         query: { token: 'valid-token' },
         auth: { login: vi.fn().mockResolvedValue() },
       };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await middleware(req, res);
 
@@ -692,10 +687,7 @@ describe('core/auth/magic-link.js', () => {
 
       // API request failure
       const reqApi = { query: { token: 'expired' } };
-      const resApi = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const resApi = createMockSpyRes();
       await middleware(reqApi, resApi);
       expect(resApi.status).toHaveBeenCalledWith(400);
       expect(resApi.json).toHaveBeenCalledWith({
@@ -727,10 +719,7 @@ describe('core/auth/magic-link.js', () => {
     it('returns 400 when email or identifier is missing', async () => {
       const handler = createMagicLinkRequestHandler(mockAuthManager);
       const req = { body: {}, query: {} };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await handler(req, res);
       expect(res.status).toHaveBeenCalledWith(400);
@@ -743,10 +732,7 @@ describe('core/auth/magic-link.js', () => {
 
       const handler = createMagicLinkRequestHandler(mockAuthManager, { ttl: 900 });
       const req = { body: { email: 'test@example.com' } };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await handler(req, res);
       expect(mockAuthManager.requestMagicLink).toHaveBeenCalledWith('test@example.com', { ttl: 900 });
@@ -763,10 +749,7 @@ describe('core/auth/magic-link.js', () => {
 
       const handler = createMagicLinkRequestHandler(mockAuthManager);
       const req = { query: { email: 'fail@example.com' } };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await handler(req, res);
       expect(res.status).toHaveBeenCalledWith(500);

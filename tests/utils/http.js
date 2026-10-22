@@ -299,6 +299,8 @@ function createMockResponse(options = {}) {
     res.redirect = vi.fn(res.redirect.bind(res));
     res.setHeader = vi.fn(res.setHeader.bind(res));
     res.render = vi.fn(res.render.bind(res));
+    res.cookie = vi.fn(res.cookie.bind(res));
+    res.clearCookie = vi.fn(res.clearCookie.bind(res));
   }
 
   return res;

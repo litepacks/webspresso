@@ -1,6 +1,7 @@
 const {
   cleanupDir,
-  wait
+  wait,
+  createMockSpyRes
 } = require('../utils');
 
 'use strict';
@@ -504,10 +505,7 @@ describe('Security & Queue Branch Coverage', () => {
       }, mockApiContext);
 
       // Validation failure (ZodError)
-      const res400 = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res400 = createMockSpyRes();
       await handler({ body: { age: 15 }, params: {}, query: {} }, res400, vi.fn());
       expect(res400.status).toHaveBeenCalledWith(400);
       expect(res400.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Validation Error' }));
@@ -640,10 +638,7 @@ describe('Security & Queue Branch Coverage', () => {
 
     it('exercises requireCache 503 fallback when db.cache is missing', async () => {
       const handlers = createOrmCacheAdminHandlers({ db: {} });
-      const res503 = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res503 = createMockSpyRes();
       await handlers.getStats({}, res503);
       expect(res503.status).toHaveBeenCalledWith(503);
       expect(res503.json).toHaveBeenCalledWith({ error: 'ORM cache is not enabled on this database' });
@@ -659,10 +654,7 @@ describe('Security & Queue Branch Coverage', () => {
       };
       const handlers = createOrmCacheAdminHandlers({ db: { cache: mockCache } });
 
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       // getStats
       await handlers.getStats({}, res);
@@ -782,11 +774,7 @@ describe('Security & Queue Branch Coverage', () => {
 
       // 2. Trigger POST /_mcp/messages
       const msgHandler = routes['POST /_mcp/messages'];
-      const resMsg = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-        send: vi.fn(),
-      };
+      const resMsg = createMockSpyRes();
 
       // Missing sessionId
       await msgHandler({ query: {} }, resMsg);
@@ -805,11 +793,7 @@ describe('Security & Queue Branch Coverage', () => {
 
       // 3. Trigger direct POST /_mcp
       const directPostHandler = routes['POST /_mcp'];
-      const resDirect = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-        end: vi.fn(),
-      };
+      const resDirect = createMockSpyRes();
       await directPostHandler({ body: { jsonrpc: '2.0', id: 3, method: 'tools/call' } }, resDirect);
       expect(resDirect.json).toHaveBeenCalledWith(expect.objectContaining({ result: 'ok' }));
 

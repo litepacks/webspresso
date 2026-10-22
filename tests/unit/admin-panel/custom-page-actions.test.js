@@ -1,3 +1,7 @@
+const {
+  createMockSpyRes
+} = require('../../utils');
+
 const { createCustomPageApiHandlers } = require('../../../plugins/admin-panel/modules/custom-pages');
 const { AdminRegistry } = require('../../../plugins/admin-panel/core/registry');
 
@@ -30,10 +34,7 @@ describe('Custom Page Actions API Handlers', () => {
 
   it('should return 404 if page does not exist', async () => {
     const req = { params: { pageId: 'unknown', actionId: 'save' } };
-    const res = {
-      status: vi.fn().mockReturnThis(),
-      json: vi.fn(),
-    };
+    const res = createMockSpyRes();
 
     await pageHandlers.executePageAction(req, res);
 
@@ -43,10 +44,7 @@ describe('Custom Page Actions API Handlers', () => {
 
   it('should return 404 if action does not exist on page', async () => {
     const req = { params: { pageId: 'test-page', actionId: 'unknown' } };
-    const res = {
-      status: vi.fn().mockReturnThis(),
-      json: vi.fn(),
-    };
+    const res = createMockSpyRes();
 
     await pageHandlers.executePageAction(req, res);
 
@@ -61,10 +59,7 @@ describe('Custom Page Actions API Handlers', () => {
       body: { code: 'PT' },
       session: { adminUser: { id: 1, email: 'admin@test.com' } },
     };
-    const res = {
-      status: vi.fn().mockReturnThis(),
-      json: vi.fn(),
-    };
+    const res = createMockSpyRes();
 
     await pageHandlers.executePageAction(req, res);
 

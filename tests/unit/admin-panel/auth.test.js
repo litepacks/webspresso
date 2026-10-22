@@ -1,3 +1,4 @@
+import { createMockSpyRes } from '../../utils';
 /**
  * Admin Panel Auth Tests
  * @vitest-environment node
@@ -220,10 +221,7 @@ describe('Admin Panel Auth', () => {
         session: {},
         path: '/api/test',
       };
-      const mockRes = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const mockRes = createMockSpyRes();
       const mockNext = vi.fn();
 
       requireAuth(mockReq, mockRes, mockNext);

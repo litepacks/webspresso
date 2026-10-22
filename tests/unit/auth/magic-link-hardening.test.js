@@ -1,4 +1,8 @@
 const {
+  createMockSpyRes
+} = require('../../utils');
+
+const {
   createMagicLinkRequestHandler,
   createMagicLinkVerifyMiddleware,
 } = require('../../../core/auth/magic-link');
@@ -27,10 +31,7 @@ describe('Magic Link Security Hardening & Anti-Enumeration', () => {
 
       const handler = createMagicLinkRequestHandler(mockAuthManager);
       const req = { body: { email: 'nonexistent@example.com' } };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await handler(req, res);
 
@@ -53,10 +54,7 @@ describe('Magic Link Security Hardening & Anti-Enumeration', () => {
 
       const handler = createMagicLinkRequestHandler(mockAuthManager, { hideUserNotFound: false });
       const req = { body: { email: 'ghost@example.com' } };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await handler(req, res);
 
@@ -70,10 +68,7 @@ describe('Magic Link Security Hardening & Anti-Enumeration', () => {
     it('rejects whitespace-only identifier with 400', async () => {
       const handler = createMagicLinkRequestHandler(mockAuthManager);
       const req = { body: { email: '   ' } };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await handler(req, res);
 
@@ -91,10 +86,7 @@ describe('Magic Link Security Hardening & Anti-Enumeration', () => {
 
       const handler = createMagicLinkRequestHandler(mockAuthManager);
       const req = { body: { email: '   user@example.com   ' } };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await handler(req, res);
 
@@ -120,10 +112,7 @@ describe('Magic Link Security Hardening & Anti-Enumeration', () => {
       const req = {
         query: { token: ['token-primary', 'token-injected'] },
       };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await middleware(req, res);
 
@@ -137,10 +126,7 @@ describe('Magic Link Security Hardening & Anti-Enumeration', () => {
       const req = {
         query: { token: '   ' },
       };
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      };
+      const res = createMockSpyRes();
 
       await middleware(req, res);
 

@@ -1,3 +1,4 @@
+import { createMockSpyRes } from '../utils';
 import { describe, it, expect, vi } from 'vitest';
 import path from 'path';
 import fs from 'fs';
@@ -82,17 +83,17 @@ describe('Admin Panel & Storage Branch Coverage', () => {
       });
 
       // 1. bulkUpdateFieldHandler - boolean, enum, datetime, errors
-      const resBulk1 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resBulk1 = createMockSpyRes();
       await handlers.bulkUpdateFieldHandler({ params: { model: 'Product' }, body: {} }, resBulk1);
       expect(resBulk1.status).toHaveBeenCalledWith(400);
 
       // Model not found
-      const resBulk2 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resBulk2 = createMockSpyRes();
       await handlers.bulkUpdateFieldHandler({ params: { model: 'Unknown' }, body: { field: 'status' } }, resBulk2);
       expect(resBulk2.status).toHaveBeenCalledWith(404);
 
       // Non-updatable field
-      const resBulk3 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resBulk3 = createMockSpyRes();
       await handlers.bulkUpdateFieldHandler(
         { params: { model: 'Product' }, body: { field: 'created_at', value: 'now' } },
         resBulk3
@@ -100,7 +101,7 @@ describe('Admin Panel & Storage Branch Coverage', () => {
       expect(resBulk3.status).toHaveBeenCalledWith(400);
 
       // Enum invalid value
-      const resBulk4 = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resBulk4 = createMockSpyRes();
       await handlers.bulkUpdateFieldHandler(
         { params: { model: 'Product' }, body: { field: 'status', value: 'invalid_enum' } },
         resBulk4
@@ -163,7 +164,7 @@ describe('Admin Panel & Storage Branch Coverage', () => {
       expect(resExpJson.json).toHaveBeenCalledWith(expect.objectContaining({ model: 'Product' }));
 
       // 5. activityLogHandler
-      const resAct = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resAct = createMockSpyRes();
       await handlers.activityLogHandler({ query: { page: 1, perPage: 10 } }, resAct);
       expect(resAct.json).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.any(Array),
