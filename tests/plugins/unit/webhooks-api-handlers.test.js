@@ -5,6 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createWebhookApiHandlers } from '../../../plugins/webhooks/api-handlers';
+import { createMockSpyRes as createMockRes } from '../../utils';
 
 describe('Webhooks Admin API Handlers', () => {
   let mockDispatcher;
@@ -28,14 +29,6 @@ describe('Webhooks Admin API Handlers', () => {
 
     handlers = createWebhookApiHandlers(mockDispatcher);
   });
-
-  function createMockRes() {
-    const res = {
-      status: vi.fn().mockReturnThis(),
-      json: vi.fn().mockReturnThis(),
-    };
-    return res;
-  }
 
   describe('Endpoints handlers', () => {
     it('listEndpointsHandler lists endpoints without knex enrichment', async () => {

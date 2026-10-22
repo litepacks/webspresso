@@ -40,6 +40,7 @@ const {
   renderDefaultErrorHtml,
   createCentralErrorHandler,
 } = require('../../../core/errors/middleware');
+const { createMockReq, createMockSpyRes: createMockRes } = require('../../utils');
 
 describe('Error Hierarchy & Domain Exceptions', () => {
   describe('WebspressoError & Base Classes', () => {
@@ -296,39 +297,6 @@ describe('Error Hierarchy & Domain Exceptions', () => {
   });
 
   describe('Central Error Handler Middleware', () => {
-    function createMockReq(overrides = {}) {
-      return {
-        path: '/test',
-        method: 'GET',
-        headers: {},
-        ...overrides,
-      };
-    }
-
-    function createMockRes() {
-      const res = {
-        headersSent: false,
-        statusCode: 200,
-        headers: {},
-        status: vi.fn().mockImplementation((s) => {
-          res.statusCode = s;
-          return res;
-        }),
-        setHeader: vi.fn().mockImplementation((k, v) => {
-          res.headers[k] = v;
-        }),
-        json: vi.fn().mockImplementation((d) => {
-          res.body = d;
-          return res;
-        }),
-        send: vi.fn().mockImplementation((h) => {
-          res.body = h;
-          return res;
-        }),
-      };
-      return res;
-    }
-
     it('preferJsonErrorResponse detects /api/, /_admin/api/, json accept, and xhr', () => {
       expect(preferJsonErrorResponse(createMockReq({ path: '/api/users' }))).toBe(true);
       expect(preferJsonErrorResponse(createMockReq({ path: '/_admin/api/files' }))).toBe(true);

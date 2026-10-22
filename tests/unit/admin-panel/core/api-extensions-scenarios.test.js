@@ -15,22 +15,7 @@ import {
   formatBytes,
   createExtensionApiHandlers,
 } from '../../../../plugins/admin-panel/core/api-extensions.js';
-
-function createMockRes() {
-  const res = {
-    statusCode: 200,
-    data: null,
-    status(code) {
-      res.statusCode = code;
-      return res;
-    },
-    json(payload) {
-      res.data = payload;
-      return res;
-    },
-  };
-  return res;
-}
+import { createMockRes } from '../../../utils';
 
 describe.sequential('Admin Panel API Extensions Scenarios', () => {
   let db;

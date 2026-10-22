@@ -8,6 +8,7 @@ import {
   createFileManagerApiHandlers,
   isActionAllowed,
 } from '../../../plugins/file-manager/api-handlers';
+import { createMockSpyRes as createMockRes } from '../../utils';
 
 const coreMod = require('../../../plugins/file-manager/core');
 
@@ -65,13 +66,6 @@ describe('File Manager API Handlers & RBAC', () => {
     afterEach(() => {
       vi.restoreAllMocks();
     });
-
-    function createMockRes() {
-      return {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn().mockReturnThis(),
-      };
-    }
 
     it('list handler executes listFiles and returns results', async () => {
       listFilesSpy.mockResolvedValue({ items: [{ name: 'file.txt' }], total: 1 });
@@ -179,22 +173,6 @@ describe('File Manager API Handlers & RBAC', () => {
 
   describe('Upload API Handler', () => {
     const multer = require('multer');
-
-    function createMockRes() {
-      let resolveFn;
-      const done = new Promise((resolve) => {
-        resolveFn = resolve;
-      });
-      const res = {
-        done,
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn().mockImplementation((data) => {
-          resolveFn(data);
-          return res;
-        }),
-      };
-      return res;
-    }
 
     it('rejects upload when user lacks upload permissions', async () => {
       const handlers = createFileManagerApiHandlers({

@@ -9,6 +9,7 @@ const {
   ValidationError,
   RequestAbortedError,
 } = require('../../core/errors');
+const { createMockRes } = require('../utils');
 
 describe('Central Error Handler Middleware (core/errors/middleware)', () => {
   describe('preferJsonErrorResponse', () => {
@@ -53,34 +54,6 @@ describe('Central Error Handler Middleware (core/errors/middleware)', () => {
   });
 
   describe('createCentralErrorHandler', () => {
-    function createMockRes() {
-      const res = {
-        statusCode: 200,
-        headers: {},
-        headersSent: false,
-        body: null,
-        status(code) {
-          this.statusCode = code;
-          return this;
-        },
-        setHeader(k, v) {
-          this.headers[k.toLowerCase()] = v;
-          return this;
-        },
-        json(data) {
-          this.body = data;
-          this.headersSent = true;
-          return this;
-        },
-        send(data) {
-          this.body = data;
-          this.headersSent = true;
-          return this;
-        },
-      };
-      return res;
-    }
-
     it('should delegate to next(err) if res.headersSent is true', async () => {
       const handler = createCentralErrorHandler();
       const res = createMockRes();

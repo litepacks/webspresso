@@ -86,16 +86,19 @@ describe('Test Utilities - HTTP Mocks (Step 1)', () => {
       expect(res.statusCode).toBe(201);
     });
 
-    it('records json output in body, jsonData, and _json', () => {
+    it('records json output in body, payload, data, jsonData, and _json', async () => {
       const res = createMockRes();
       res.json({ success: true, count: 5 });
 
       expect(res.headers['content-type']).toBe('application/json');
       expect(res.jsonData).toEqual({ success: true, count: 5 });
+      expect(res.data).toEqual({ success: true, count: 5 });
+      expect(res.payload).toEqual({ success: true, count: 5 });
       expect(res._json).toEqual({ success: true, count: 5 });
-      expect(JSON.parse(res.body)).toEqual({ success: true, count: 5 });
+      expect(res.body).toEqual({ success: true, count: 5 });
       expect(res._ended).toBe(true);
       expect(res.headersSent).toBe(true);
+      await expect(res.done).resolves.toBe(res);
     });
 
     it('handles headers via set, setHeader, getHeader, hasHeader, removeHeader, getHeaders', () => {

@@ -93,16 +93,23 @@ function createMockResponse(options = {}) {
   if (options.headers) {
     for (const [key, value] of Object.entries(options.headers)) {
       headers[key.toLowerCase()] = value;
+      headers[key] = value;
     }
   }
 
   const listeners = {};
+
+  let resolveDone;
+  const donePromise = new Promise((resolve) => {
+    resolveDone = resolve;
+  });
 
   const res = {
     statusCode: options.statusCode || 200,
     headers,
     locals: options.locals ? { ...options.locals } : {},
     body: null,
+    payload: null,
     jsonData: null,
     data: null,
     _json: null,
@@ -112,6 +119,7 @@ function createMockResponse(options = {}) {
     redirectUrl: null,
     renderedView: null,
     renderedData: null,
+    done: donePromise,
 
     status(code) {
       this.statusCode = code;
@@ -122,6 +130,7 @@ function createMockResponse(options = {}) {
       this.statusCode = code;
       this._ended = true;
       this.headersSent = true;
+      if (resolveDone) resolveDone(this);
       return this;
     },
 
@@ -129,20 +138,23 @@ function createMockResponse(options = {}) {
       if (typeof nameOrObj === 'object' && nameOrObj !== null) {
         for (const [k, v] of Object.entries(nameOrObj)) {
           this.headers[k.toLowerCase()] = String(v);
+          this.headers[k] = String(v);
         }
       } else if (typeof nameOrObj === 'string') {
         this.headers[nameOrObj.toLowerCase()] = String(val);
+        this.headers[nameOrObj] = String(val);
       }
       return this;
     },
 
     setHeader(name, val) {
       this.headers[name.toLowerCase()] = val;
+      this.headers[name] = val;
       return this;
     },
 
     getHeader(name) {
-      return this.headers[name.toLowerCase()];
+      return this.headers[name.toLowerCase()] || this.headers[name];
     },
 
     getHeaders() {
@@ -150,11 +162,15 @@ function createMockResponse(options = {}) {
     },
 
     hasHeader(name) {
-      return Object.prototype.hasOwnProperty.call(this.headers, name.toLowerCase());
+      return (
+        Object.prototype.hasOwnProperty.call(this.headers, name.toLowerCase()) ||
+        Object.prototype.hasOwnProperty.call(this.headers, name)
+      );
     },
 
     removeHeader(name) {
       delete this.headers[name.toLowerCase()];
+      delete this.headers[name];
       return this;
     },
 
@@ -163,6 +179,7 @@ function createMockResponse(options = {}) {
       this.headersSent = true;
       for (const [k, v] of Object.entries(headersObj)) {
         this.headers[k.toLowerCase()] = v;
+        this.headers[k] = v;
       }
       return this;
     },
@@ -176,6 +193,7 @@ function createMockResponse(options = {}) {
       this.body = body;
       this._ended = true;
       this.headersSent = true;
+      if (resolveDone) resolveDone(this);
       return this;
     },
 
@@ -183,10 +201,12 @@ function createMockResponse(options = {}) {
       this.headers['content-type'] = 'application/json';
       this.jsonData = data;
       this.data = data;
+      this.payload = data;
       this._json = data;
-      this.body = typeof data === 'string' ? data : JSON.stringify(data);
+      this.body = data;
       this._ended = true;
       this.headersSent = true;
+      if (resolveDone) resolveDone(this);
       return this;
     },
 
@@ -196,6 +216,7 @@ function createMockResponse(options = {}) {
       }
       this._ended = true;
       this.headersSent = true;
+      if (resolveDone) resolveDone(this);
       return this;
     },
 
@@ -220,6 +241,7 @@ function createMockResponse(options = {}) {
       this._redirect = this.redirectUrl;
       this._ended = true;
       this.headersSent = true;
+      if (resolveDone) resolveDone(this);
       return this;
     },
 

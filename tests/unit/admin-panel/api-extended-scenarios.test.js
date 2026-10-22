@@ -14,22 +14,7 @@ import crypto from 'crypto';
 import { defineModel, clearRegistry } from '../../../core/orm/model.js';
 import { createDatabase, zdb } from '../../../core/orm/index.js';
 import { createApiHandlers } from '../../../plugins/admin-panel/api.js';
-
-function createMockRes() {
-  const res = {
-    statusCode: 200,
-    data: null,
-    status(code) {
-      res.statusCode = code;
-      return res;
-    },
-    json(payload) {
-      res.data = payload;
-      return res;
-    },
-  };
-  return res;
-}
+import { createMockRes } from '../../utils';
 
 describe.sequential('Admin Panel API Extended Scenarios', () => {
   let db;

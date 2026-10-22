@@ -11,6 +11,7 @@ import {
   createMulter,
   createImportHandler,
 } from '../../../plugins/data-exchange/import.js';
+import { createMockSpyRes as createMockRes } from '../../utils';
 
 describe('data-exchange import unit tests', () => {
   describe('allowedImportColumns', () => {
@@ -224,27 +225,6 @@ describe('data-exchange import unit tests', () => {
   });
 
   describe('createImportHandler', () => {
-    function createMockRes() {
-      let resolveDone;
-      const done = new Promise((resolve) => {
-        resolveDone = resolve;
-      });
-      const res = {
-        done,
-        statusCode: 200,
-        status: vi.fn((code) => {
-          res.statusCode = code;
-          return res;
-        }),
-        json: vi.fn((body) => {
-          res.body = body;
-          resolveDone(res);
-          return res;
-        }),
-      };
-      return res;
-    }
-
     const testModel = {
       name: 'Item',
       primaryKey: 'id',

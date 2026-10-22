@@ -8,25 +8,7 @@ const {
   coerceBulkTemporalValue,
 } = require('../../plugins/admin-panel/core/api-extensions');
 const { AdminRegistry } = require('../../plugins/admin-panel/core/registry');
-
-function createMockRes() {
-  return {
-    statusCode: 200,
-    payload: null,
-    headers: {},
-    status(n) {
-      this.statusCode = n;
-      return this;
-    },
-    json(o) {
-      this.payload = o;
-      return this;
-    },
-    setHeader(k, v) {
-      this.headers[k] = v;
-    },
-  };
-}
+const { createMockRes } = require('../utils');
 
 function createQueryChain(listResult) {
   const calls = [];

@@ -2,6 +2,7 @@ const knexLib = require('knex');
 const auditLogPlugin = require('../../../plugins/audit-log');
 const { createAuditLogHandlers } = require('../../../plugins/audit-log/api-handlers');
 const { generateAuditLogComponent } = require('../../../plugins/audit-log/admin-component');
+const { createMockRes } = require('../../utils');
 
 describe('Audit Log Timeline & Record History (plugins/audit-log)', () => {
   let knex;
@@ -89,21 +90,6 @@ describe('Audit Log Timeline & Record History (plugins/audit-log)', () => {
   afterAll(async () => {
     await knex.destroy();
   });
-
-  function createMockRes() {
-    return {
-      statusCode: 200,
-      body: null,
-      status(code) {
-        this.statusCode = code;
-        return this;
-      },
-      json(data) {
-        this.body = data;
-        return this;
-      },
-    };
-  }
 
   describe('timelineHandler', () => {
     it('returns 400 if model or recordId is missing', async () => {

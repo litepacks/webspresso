@@ -6,6 +6,7 @@ const {
 } = require('../../plugins/admin-panel/modules/user-management');
 const { defineModel, clearRegistry } = require('../../core/orm/model');
 const { createDatabase } = require('../../core/orm');
+const { createMockRes } = require('../utils');
 
 describe('Admin Panel User Management Module (plugins/admin-panel/modules/user-management)', () => {
   let db;
@@ -156,21 +157,6 @@ describe('Admin Panel User Management Module (plugins/admin-panel/modules/user-m
         auth: { rememberTokens: {} },
       });
     });
-
-    function createMockRes() {
-      return {
-        statusCode: 200,
-        body: null,
-        status(code) {
-          this.statusCode = code;
-          return this;
-        },
-        json(data) {
-          this.body = data;
-          return this;
-        },
-      };
-    }
 
     it('createUser should validate email and hash password', async () => {
       // Missing email
