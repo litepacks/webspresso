@@ -5,6 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createContentApiHandlers } from '../../../plugins/content/api-handlers';
+import { createMockSpyRes } from '../../utils/http.js';
 
 describe('Content API Handlers', () => {
   let mockContentService;
@@ -29,13 +30,7 @@ describe('Content API Handlers', () => {
     handlers = createContentApiHandlers({ contentService: mockContentService });
   });
 
-  function createMockRes() {
-    const res = {
-      status: vi.fn().mockReturnThis(),
-      json: vi.fn().mockReturnThis(),
-    };
-    return res;
-  }
+  const createMockRes = () => createMockSpyRes();
 
   describe('Content Types API Handlers', () => {
     it('listTypesHandler returns data array on success', async () => {

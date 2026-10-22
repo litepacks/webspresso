@@ -39,94 +39,14 @@ if (typeof afterEach === 'function') {
 const FIXTURES_PATH = path.join(__dirname, 'fixtures');
 const FIXTURES_PAGES_PATH = path.join(FIXTURES_PATH, 'pages');
 
-/**
- * Create a mock Express request object
- * @param {Object} options - Request options
- * @returns {Object} Mock request
- */
-function createMockRequest(options = {}) {
-  return {
-    path: options.path || '/',
-    originalUrl: options.originalUrl || options.path || '/',
-    query: options.query || {},
-    params: options.params || {},
-    body: options.body || {},
-    headers: options.headers || {},
-    get: function(name) {
-      return this.headers[name.toLowerCase()] || null;
-    },
-    accepts: function(type) {
-      const accept = this.headers['accept'] || '';
-      return accept.includes(type);
-    },
-    ...options
-  };
-}
-
-/**
- * Create a mock Express response object
- * @returns {Object} Mock response with tracking
- */
-function createMockResponse() {
-  const res = {
-    statusCode: 200,
-    headers: {},
-    locals: {},
-    body: null,
-    _ended: false,
-    
-    status(code) {
-      this.statusCode = code;
-      return this;
-    },
-    
-    set(name, value) {
-      this.headers[name.toLowerCase()] = value;
-      return this;
-    },
-    
-    send(body) {
-      this.body = body;
-      this._ended = true;
-      return this;
-    },
-    
-    json(data) {
-      this.headers['content-type'] = 'application/json';
-      this.body = JSON.stringify(data);
-      this._ended = true;
-      return this;
-    },
-    
-    render(view, data, callback) {
-      this.renderedView = view;
-      this.renderedData = data;
-      if (callback) callback(null, '<html></html>');
-      return this;
-    },
-    
-    on(event, callback) {
-      // Mock event listener
-      return this;
-    }
-  };
-  
-  return res;
-}
-
-/**
- * Create a mock Express next function
- * @returns {Function} Mock next function with tracking
- */
-function createMockNext() {
-  const next = (err) => {
-    next.called = true;
-    next.error = err || null;
-  };
-  next.called = false;
-  next.error = null;
-  return next;
-}
+const {
+  createMockRequest,
+  createMockResponse,
+  createMockNext,
+  createMockReq,
+  createMockRes,
+  createMockSpyRes,
+} = require('./utils/http');
 
 /**
  * Create a test context object
@@ -217,6 +137,9 @@ module.exports = {
   createMockRequest,
   createMockResponse,
   createMockNext,
+  createMockReq,
+  createMockRes,
+  createMockSpyRes,
   createTestContext,
   wait,
   createTempFile,

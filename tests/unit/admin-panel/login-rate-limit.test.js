@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 const { LoginRateLimiter } = require('../../../plugins/admin-panel/lib/login-rate-limiter');
 const { createApiHandlers } = require('../../../plugins/admin-panel/api');
+const { createMockRes } = require('../../utils/http');
 
 describe('LoginRateLimiter', () => {
   let limiter;
@@ -145,25 +146,6 @@ describe('createApiHandlers with LoginRateLimiter', () => {
     });
   });
 
-  function createMockRes() {
-    const res = {
-      statusCode: 200,
-      headers: {},
-      jsonData: null,
-      status(code) {
-        this.statusCode = code;
-        return this;
-      },
-      json(data) {
-        this.jsonData = data;
-        return this;
-      },
-      setHeader(k, v) {
-        this.headers[k] = v;
-      },
-    };
-    return res;
-  }
 
   it('returns 401 on bad credentials and blocks with 429 on reaching max attempts', async () => {
     // Admin user exists in DB
