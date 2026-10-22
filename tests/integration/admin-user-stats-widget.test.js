@@ -103,6 +103,7 @@ describe('Admin User Statistics widget', () => {
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
       silent: true,
+      server: { port: 0, shutdown: { enabled: false } },
       helmet: false,
       compression: false,
       cache: false,
