@@ -46,7 +46,10 @@ const {
   createMockReq,
   createMockRes,
   createMockSpyRes,
-} = require('./utils/http');
+  createMockRepo,
+  createMockDb,
+  createMockQueryBuilder,
+} = require('./utils');
 
 /**
  * Create a test context object
@@ -140,6 +143,9 @@ module.exports = {
   createMockReq,
   createMockRes,
   createMockSpyRes,
+  createMockRepo,
+  createMockDb,
+  createMockQueryBuilder,
   createTestContext,
   wait,
   createTempFile,

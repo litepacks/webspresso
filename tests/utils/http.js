@@ -217,6 +217,7 @@ function createMockResponse(options = {}) {
         this.redirectUrl = statusOrUrl;
       }
       this.headers['location'] = this.redirectUrl;
+      this._redirect = this.redirectUrl;
       this._ended = true;
       this.headersSent = true;
       return this;
@@ -237,6 +238,7 @@ function createMockResponse(options = {}) {
     render(view, data, callback) {
       this.renderedView = view;
       this.renderedData = data;
+      this._rendered = { tpl: view, data };
       if (typeof callback === 'function') {
         callback(null, '<html></html>');
       }

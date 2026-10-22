@@ -15,18 +15,7 @@ const {
   getRestoreData,
   createScopeContext,
 } = require('../../../core/orm/scopes');
-
-// Mock Knex query builder
-function createMockQueryBuilder() {
-  const calls = [];
-  const qb = {
-    whereNull: (col) => { calls.push({ method: 'whereNull', col }); return qb; },
-    whereNotNull: (col) => { calls.push({ method: 'whereNotNull', col }); return qb; },
-    where: (col, val) => { calls.push({ method: 'where', col, val }); return qb; },
-    getCalls: () => calls,
-  };
-  return qb;
-}
+const { createMockQueryBuilder } = require('../../utils/orm');
 
 // Mock model definitions
 const modelWithSoftDelete = {

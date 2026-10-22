@@ -5,7 +5,9 @@
  */
 
 const http = require('./http');
+const orm = require('./orm');
 
 module.exports = {
   ...http,
+  ...orm,
 };
