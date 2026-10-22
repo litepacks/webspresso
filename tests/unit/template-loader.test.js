@@ -1,8 +1,8 @@
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
 const { createApp } = require('../../src/server');
 const request = require('supertest');
+const { createTempDir, cleanupDir } = require('../utils/fs');
 
 describe('Nunjucks Template Loader & Extension Guard', () => {
   let tempDir;
@@ -10,7 +10,7 @@ describe('Nunjucks Template Loader & Extension Guard', () => {
   let viewsDir;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-tpl-test-'));
+    tempDir = createTempDir('webspresso-tpl-test-');
     pagesDir = path.join(tempDir, 'pages');
     viewsDir = path.join(tempDir, 'views');
     fs.mkdirSync(pagesDir, { recursive: true });
@@ -18,7 +18,7 @@ describe('Nunjucks Template Loader & Extension Guard', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    cleanupDir(tempDir);
   });
 
   it('should detect self-extension in template and throw friendly error without stack overflow', async () => {

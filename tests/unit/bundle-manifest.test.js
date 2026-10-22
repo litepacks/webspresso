@@ -4,7 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
+const { createTempDir, cleanupDir } = require('../utils/fs');
 const { Command } = require('commander');
 const {
   generateManifest,
@@ -89,13 +89,11 @@ describe('esbuild Metafile Manifest & AssetManager Integration', () => {
   let tempDir;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-manifest-test-'));
+    tempDir = createTempDir('webspresso-manifest-test-');
   });
 
   afterEach(() => {
-    try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch (_) {}
+    cleanupDir(tempDir);
   });
 
   it('generateManifest extracts entrypoints, outputs, and creates multi-key mappings', () => {

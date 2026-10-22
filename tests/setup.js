@@ -49,6 +49,9 @@ const {
   createMockRepo,
   createMockDb,
   createMockQueryBuilder,
+  createTempDir,
+  createTempSandbox,
+  withTempDir,
 } = require('./utils');
 
 /**
@@ -150,7 +153,10 @@ module.exports = {
   wait,
   createTempFile,
   removeTempFile,
-  cleanupTempDir
+  cleanupTempDir,
+  createTempDir,
+  createTempSandbox,
+  withTempDir,
 };
 
 // Make utilities available globally in tests

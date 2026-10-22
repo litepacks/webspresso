@@ -1,23 +1,21 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 
 import { walkDirectory, walkDirectoryDetailed, DEFAULT_TEST_SUFFIXES } from '../../../core/utils/fs';
 import walkReexport from '../../../core/utils/walk';
 import { utils, walkDirectory as indexWalkDirectory, walkDirectoryDetailed as indexWalkDetailed } from '../../../index';
+import { createTempDir, cleanupDir } from '../../utils/fs';
 
 describe('core/utils/fs - Directory Walking & Discovery', () => {
   let tempDir;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-walk-test-'));
+    tempDir = createTempDir('webspresso-walk-test-');
   });
 
   afterEach(() => {
-    if (tempDir && fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    cleanupDir(tempDir);
   });
 
   it('returns empty array when directory does not exist or is invalid', () => {

@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { registerModule, registerPageDir, loadPagesFromDir, formatClientComponent } = require('../../../plugins/admin-panel/core/admin-module');
 const { AdminRegistry } = require('../../../plugins/admin-panel/core/registry');
+const { createTempDir, cleanupDir } = require('../../utils/fs');
 
 function createMockDeps(registryOverride) {
   const registry = registryOverride || new AdminRegistry();
@@ -27,11 +27,11 @@ describe('admin-module file and folder custom pages', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webspresso-admin-pages-test-'));
+    tmpDir = createTempDir('webspresso-admin-pages-test-');
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanupDir(tmpDir);
   });
 
   describe('formatClientComponent', () => {
