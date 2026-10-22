@@ -7,9 +7,11 @@
 const http = require('./http');
 const orm = require('./orm');
 const fsUtils = require('./fs');
+const asyncUtils = require('./async');
 
 module.exports = {
   ...http,
   ...orm,
   ...fsUtils,
+  ...asyncUtils,
 };

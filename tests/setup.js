@@ -52,6 +52,13 @@ const {
   createTempDir,
   createTempSandbox,
   withTempDir,
+  wait,
+  sleep,
+  deferredPromise,
+  createDeferred,
+  waitForCondition,
+  waitFor,
+  withTimeout,
 } = require('./utils');
 
 /**
@@ -81,15 +88,6 @@ function createTestContext(options = {}) {
     fsy: options.fsy || {},
     ...options
   };
-}
-
-/**
- * Wait for a specified time
- * @param {number} ms - Milliseconds to wait
- * @returns {Promise}
- */
-function wait(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
@@ -150,13 +148,19 @@ module.exports = {
   createMockDb,
   createMockQueryBuilder,
   createTestContext,
-  wait,
   createTempFile,
   removeTempFile,
   cleanupTempDir,
   createTempDir,
   createTempSandbox,
   withTempDir,
+  wait,
+  sleep,
+  deferredPromise,
+  createDeferred,
+  waitForCondition,
+  waitFor,
+  withTimeout,
 };
 
 // Make utilities available globally in tests

@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { QueueManager } = require('../../../core/queue/manager');
 const { MemoryQueueAdapter } = require('../../../core/queue/adapters/memory');
+const { wait, createTempDir, cleanupDir } = require('../../utils');
 
 describe('QueueManager Deep Scenarios & Branch Coverage', () => {
   let manager;
@@ -100,7 +100,7 @@ describe('QueueManager Deep Scenarios & Branch Coverage', () => {
 
       await manager.dispatch('quick.task', { foo: 'bar' });
       // Wait a short moment while paused
-      await new Promise((r) => setTimeout(r, 25));
+      await wait(25);
       expect(processed).toBe(false);
 
       const completedPromise = new Promise((resolve) => {
@@ -120,13 +120,13 @@ describe('QueueManager Deep Scenarios & Branch Coverage', () => {
       let jobFinished = false;
 
       manager.define('slow.task', async () => {
-        await new Promise((r) => setTimeout(r, 30));
+        await wait(30);
         jobFinished = true;
       });
 
       await manager.dispatch('slow.task', {});
       // Wait for job to start running
-      await new Promise((r) => setTimeout(r, 15));
+      await wait(15);
 
       const drainPromise = manager.drain(1000);
       expect(manager.isDraining).toBe(true);
@@ -210,7 +210,7 @@ describe('QueueManager Deep Scenarios & Branch Coverage', () => {
       manager.define(
         'timeout.job',
         async (job) => {
-          await new Promise((r) => setTimeout(r, 60));
+          await wait(60);
         },
         { timeout: 20, attempts: 1 }
       );
@@ -224,7 +224,7 @@ describe('QueueManager Deep Scenarios & Branch Coverage', () => {
 
   describe('Directory Job Discovery', () => {
     it('loads job files from directory exporting { handler, options }', () => {
-      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-jobs-'));
+      const tempDir = createTempDir('wsp-jobs-');
       const jobFilePath = path.join(tempDir, 'send-email.js');
 
       fs.writeFileSync(
@@ -239,7 +239,7 @@ describe('QueueManager Deep Scenarios & Branch Coverage', () => {
       expect(manager.handlers.has('send-email')).toBe(true);
       expect(manager.handlers.get('send-email').options.attempts).toBe(4);
 
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      cleanupDir(tempDir);
     });
   });
 });

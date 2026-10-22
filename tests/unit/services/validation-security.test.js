@@ -5,6 +5,7 @@ const {
   ValidationError,
 } = require('../../../index');
 const { maskSensitiveData } = require('../../../src/services/executor');
+const { wait } = require('../../utils/async');
 const z = require('zod');
 
 describe('Services Validation & Security Edge Cases (Section 3 Hardened)', () => {
@@ -13,7 +14,7 @@ describe('Services Validation & Security Edge Cases (Section 3 Hardened)', () =>
       const asyncSchema = z.object({
         email: z.string().email().refine(async (val) => {
           // Simulate DB lookup
-          await new Promise((r) => setTimeout(r, 10));
+          await wait(10);
           return val !== 'taken@example.com';
         }, { message: 'Email is already registered' }),
       });
@@ -28,7 +29,7 @@ describe('Services Validation & Security Edge Cases (Section 3 Hardened)', () =>
 
     it('should support async custom validator functions', async () => {
       const asyncValidator = async (input) => {
-        await new Promise((r) => setTimeout(r, 5));
+        await wait(5);
         return input.token === 'valid_secret';
       };
 
