@@ -9,6 +9,7 @@ const fs = require('fs');
 const { createSchemaHelpers, extractColumnsFromSchema, getColumnMeta } = require('./schema-helpers');
 const { defineModel, getModel, getAllModels, hasModel, clearRegistry, resolveModelName, isCascadeEnabled } = require('./model');
 const { createRepository } = require('./repository');
+const { createQueryBuilder, QueryBuilder } = require('./query-builder');
 const { createMigrationManager } = require('./migrations');
 const { createSeeder } = require('./seeder');
 const { createScopeContext } = require('./scopes');
@@ -278,9 +279,8 @@ function createDatabase(config) {
    */
   function query(modelName, scopeContext) {
     const model = getModelInstance(modelName);
-    const ctx = scopeContext || createScopeContext();
-    const repo = createRepository(model, knexInstance, ctx, ormCacheLayer);
-    return repo.query();
+    const ctx = scopeContext ? { ...scopeContext } : createScopeContext();
+    return createQueryBuilder(model, knexInstance, ctx, ormCacheLayer);
   }
 
   /**
@@ -324,6 +324,11 @@ function createDatabase(config) {
         createRepository(model, sContext) {
           const ctx = sContext || currentScope;
           return createRepository(model, trx, ctx, ormCacheLayer);
+        },
+        query(modelName, sContext) {
+          const model = getModelInstance(modelName);
+          const ctx = sContext ? { ...sContext } : currentScope;
+          return createQueryBuilder(model, trx, ctx, ormCacheLayer);
         },
         forTenant(tenantId) {
           currentScope = { ...currentScope, tenantId };
@@ -472,6 +477,9 @@ const zdb = z ? createSchemaHelpers(z) : null;
 module.exports = {
   // Main factory
   createDatabase,
+  // Query builder
+  createQueryBuilder,
+  QueryBuilder,
   // ORM cache (provider + layer utilities)
   createMemoryCacheProvider: require('./cache/memory-provider').createMemoryCacheProvider,
   OrmCacheLayer: require('./cache/layer').OrmCacheLayer,
