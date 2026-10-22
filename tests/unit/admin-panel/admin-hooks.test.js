@@ -154,6 +154,7 @@ describe('Admin Panel Lifecycle Hooks (Admin Hooks DX)', () => {
       viewsDir: path.join(__dirname, '../../fixtures/views'),
       publicDir: path.join(__dirname, '../../../public'),
       silent: true,
+      server: { port: 0, shutdown: { enabled: false } },
       helmet: false,
       compression: false,
       cache: false,

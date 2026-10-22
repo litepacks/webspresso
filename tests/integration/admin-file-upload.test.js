@@ -109,6 +109,7 @@ describe.sequential('Admin file upload fields', () => {
       viewsDir: './tests/fixtures/views',
       publicDir: path.join(tmpDir, 'public'),
       silent: true,
+      server: { port: 0, shutdown: { enabled: false } },
       helmet: false,
       compression: false,
       cache: false,

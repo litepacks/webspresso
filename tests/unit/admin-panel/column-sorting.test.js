@@ -92,6 +92,7 @@ describe('Admin Panel Column Sorting (3-State & Configuration)', () => {
       viewsDir: './tests/fixtures/views',
       publicDir: './public',
       silent: true,
+      server: { port: 0, shutdown: { enabled: false } },
       helmet: false,
       compression: false,
       cache: false,
