@@ -9,6 +9,14 @@
  */
 const { globToRegExp } = require('../core/utils/regex');
 
+let scriptInjectorGetter = null;
+function getCachedScriptInjector() {
+  if (!scriptInjectorGetter) {
+    scriptInjectorGetter = require('./helpers').getScriptInjector;
+  }
+  return scriptInjectorGetter();
+}
+
 const semverCache = new Map();
 
 const semver = {
@@ -131,13 +139,48 @@ class PluginManager {
     this.pluginAPIs = new Map();        // name -> exposed API
     this.registeredHelpers = new Map(); // name -> helper function
     this.registeredFilters = new Map(); // name -> filter function
+    this.requestHelpers = [];           // Array<Function (req) => Record<string, any>>
     this.routes = [];                   // Collected route metadata
     this.customRoutes = [];             // Routes added by plugins
     this.cspDirectives = new Map();     // directive -> Set of sources (from plugins)
     this.disposers = [];                // Array<{ name: string, fn: Function }>
+    this._cachedHelpers = null;         // Cached helpers object
+    this.pendingAsyncOperations = [];   // Track background promises
     this.app = null;
     this.nunjucksEnv = null;
     this.shutdownManager = null;
+  }
+
+  /**
+   * Bind API methods to instance and extract prototype properties (classes)
+   * @private
+   */
+  _extractAndBindAPI(api, pluginName) {
+    if (!api || typeof api !== 'object') return api;
+    const bound = {};
+    const proto = Object.getPrototypeOf(api);
+    const keys = new Set([
+      ...Object.keys(api),
+      ...Object.getOwnPropertyNames(api),
+      ...(proto && proto !== Object.prototype ? Object.getOwnPropertyNames(proto) : [])
+    ]);
+
+    for (const key of keys) {
+      if (key === 'constructor') continue;
+      const desc = Object.getOwnPropertyDescriptor(api, key) || (proto ? Object.getOwnPropertyDescriptor(proto, key) : null);
+      if (desc && (desc.get || desc.set)) {
+        Object.defineProperty(bound, key, {
+          get: desc.get ? desc.get.bind(api) : undefined,
+          set: desc.set ? desc.set.bind(api) : undefined,
+          enumerable: true,
+          configurable: true,
+        });
+      } else {
+        const val = api[key];
+        bound[key] = typeof val === 'function' ? val.bind(api) : val;
+      }
+    }
+    return bound;
   }
 
   /**
@@ -292,16 +335,12 @@ class PluginManager {
     const ctx = this._createPluginContext(plugin, context);
 
     // Store plugin
+    // Store plugin
     this.plugins.set(plugin.name, plugin);
 
     // Store API if provided
     if (plugin.api) {
-      // Bind API methods to plugin instance
-      const boundAPI = {};
-      for (const [key, value] of Object.entries(plugin.api)) {
-        boundAPI[key] = typeof value === 'function' ? value.bind(plugin) : value;
-      }
-      this.pluginAPIs.set(plugin.name, boundAPI);
+      this.pluginAPIs.set(plugin.name, this._extractAndBindAPI(plugin.api, plugin.name));
     }
 
     // Collect CSP requirements from plugin
@@ -452,12 +491,7 @@ class PluginManager {
 
     // Store API if provided
     if (plugin.api) {
-      // Bind API methods to plugin instance
-      const boundAPI = {};
-      for (const [key, value] of Object.entries(plugin.api)) {
-        boundAPI[key] = typeof value === 'function' ? value.bind(plugin) : value;
-      }
-      this.pluginAPIs.set(plugin.name, boundAPI);
+      this.pluginAPIs.set(plugin.name, this._extractAndBindAPI(plugin.api, plugin.name));
     }
 
     // Collect CSP requirements from plugin
@@ -474,6 +508,11 @@ class PluginManager {
         if (typeof result === 'function') {
           this.registerDisposer(plugin.name, result);
           hasDisposer = true;
+        } else if (result && typeof result.then === 'function') {
+          this.pendingAsyncOperations.push(result);
+          result.catch(err => {
+            console.warn(`[plugin-manager] Plugin "${plugin.name}" async setup() failed:`, err?.message || err);
+          });
         }
       } catch (err) {
         console.warn(`[plugin-manager] Plugin "${plugin.name}" setup() failed:`, err.message);
@@ -482,13 +521,18 @@ class PluginManager {
       }
     }
 
-    // Call register hook (sync - if plugin has async register, it won't wait)
+    // Call register hook (sync - if plugin has async register, it won't block, but promises are safely caught)
     if (typeof plugin.register === 'function') {
       try {
         const result = plugin.register(ctx);
         if (typeof result === 'function') {
           this.registerDisposer(plugin.name, result);
           hasDisposer = true;
+        } else if (result && typeof result.then === 'function') {
+          this.pendingAsyncOperations.push(result);
+          result.catch(err => {
+            console.warn(`[plugin-manager] Plugin "${plugin.name}" async register() failed:`, err?.message || err);
+          });
         }
       } catch (err) {
         console.warn(`[plugin-manager] Plugin "${plugin.name}" register() failed:`, err.message);
@@ -545,22 +589,22 @@ class PluginManager {
    */
   _createPluginContext(plugin, context) {
     const self = this;
-    // Import script injector
-    const { getScriptInjector } = require('./helpers');
+    const pluginName = plugin?.name || 'unknown';
 
     return {
-      app: context.app,
+      app: context.app || self.app,
       core: context.core || null,
       http: context.http || null,
-      shutdown: context.shutdown || context.shutdownManager || null,
-      shutdownManager: context.shutdownManager || context.shutdown || null,
+      shutdown: context.shutdown || context.shutdownManager || self.shutdownManager || null,
+      shutdownManager: context.shutdownManager || context.shutdown || self.shutdownManager || null,
       services: context.services || context.serviceRegistry || null,
       serviceRegistry: context.serviceRegistry || context.services || null,
       events: context.events || null,
       cache: context.cache || null,
-      options: plugin._options || {},
-      nunjucksEnv: context.nunjucksEnv,
+      options: plugin?._options || {},
+      nunjucksEnv: context.nunjucksEnv || self.nunjucksEnv,
       db: context.options?.db ?? context.db ?? null,
+      pagesDir: context.pagesDir || null,
       /** @type {Record<string, unknown>} Named middleware registry (same reference as createApp → mountPages) */
       middlewares: context.middlewares ?? {},
 
@@ -568,28 +612,43 @@ class PluginManager {
        * Get another plugin's API
        */
       usePlugin(name) {
-        return self.pluginAPIs.get(name) || null;
+        return self.getPluginAPI(name) || null;
       },
 
       /**
        * Add a template helper (available as fsy.helperName())
        */
       addHelper(name, fn) {
-        self.registeredHelpers.set(name, fn);
+        self.addHelper(name, fn, pluginName);
       },
 
       /**
        * Add a Nunjucks filter
        */
       addFilter(name, fn) {
-        self.registeredFilters.set(name, fn);
+        self.addFilter(name, fn, pluginName);
+      },
+
+      /**
+       * Add a request-scoped helper provider (called on each SSR request)
+       */
+      addRequestHelper(fn) {
+        self.addRequestHelper(fn);
       },
 
       /**
        * Add a custom route
        */
       addRoute(method, path, ...handlers) {
-        self.customRoutes.push({ method: method.toLowerCase(), path, handlers });
+        const httpMethod = method.toLowerCase();
+        if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
+          console.log(`  ${method.toUpperCase().padEnd(6)} ${path}`);
+        }
+        if (self.app && typeof self.app[httpMethod] === 'function') {
+          self.app[httpMethod](path, ...handlers);
+        } else {
+          self.customRoutes.push({ method: httpMethod, path, handlers });
+        }
       },
 
       /**
@@ -625,7 +684,7 @@ class PluginManager {
        * @param {Object} options - { priority: number, id: string }
        */
       injectHead(content, options = {}) {
-        getScriptInjector().addHead(content, options);
+        getCachedScriptInjector().addHead(content, options);
       },
 
       /**
@@ -634,7 +693,7 @@ class PluginManager {
        * @param {Object} options - { priority: number, id: string }
        */
       injectBody(content, options = {}) {
-        getScriptInjector().addBody(content, options);
+        getCachedScriptInjector().addBody(content, options);
       },
 
       /**
@@ -643,7 +702,7 @@ class PluginManager {
        * @param {Object} options - { id: string }
        */
       injectStyle(css, options = {}) {
-        getScriptInjector().addStyle(css, options);
+        getCachedScriptInjector().addStyle(css, options);
       },
 
       /**
@@ -651,14 +710,14 @@ class PluginManager {
        * @param {Object} link - { name, path, icon, description }
        */
       registerDevLink(link) {
-        getScriptInjector().registerPlugin(link);
+        getCachedScriptInjector().registerPlugin(link);
       },
 
       /**
        * Get the script injector instance for advanced usage
        */
       getScriptInjector() {
-        return getScriptInjector();
+        return getCachedScriptInjector();
       }
     };
   }
@@ -707,12 +766,79 @@ class PluginManager {
   /**
    * Get all registered helpers (to be merged with fsy)
    */
-  getHelpers() {
-    const helpers = {};
-    for (const [name, fn] of this.registeredHelpers) {
-      helpers[name] = fn;
+  /**
+   * Register a template helper (available as fsy.helperName())
+   * @param {string} name
+   * @param {Function} fn
+   * @param {string} [pluginName]
+   */
+  addHelper(name, fn, pluginName = 'unknown') {
+    if (this.registeredHelpers.has(name)) {
+      console.warn(`[plugin-manager] Helper "${name}" registered by "${pluginName}" overwrites existing helper.`);
     }
-    return helpers;
+    this.registeredHelpers.set(name, fn);
+    this._cachedHelpers = null;
+  }
+
+  /**
+   * Register a Nunjucks filter
+   * @param {string} name
+   * @param {Function} fn
+   * @param {string} [pluginName]
+   */
+  addFilter(name, fn, pluginName = 'unknown') {
+    if (this.registeredFilters.has(name)) {
+      console.warn(`[plugin-manager] Filter "${name}" registered by "${pluginName}" overwrites existing filter.`);
+    }
+    this.registeredFilters.set(name, fn);
+    if (this.nunjucksEnv && typeof this.nunjucksEnv.addFilter === 'function') {
+      this.nunjucksEnv.addFilter(name, fn);
+    }
+  }
+
+  /**
+   * Register a request-scoped helper provider (called on each SSR request)
+   * @param {Function} fn - (req) => Record<string, any>
+   */
+  addRequestHelper(fn) {
+    if (typeof fn === 'function') {
+      this.requestHelpers.push(fn);
+    }
+  }
+
+  /**
+   * Get all request-scoped helpers for a request
+   * @param {Object} req
+   * @returns {Object|null}
+   */
+  getRequestHelpers(req) {
+    if (!this.requestHelpers || this.requestHelpers.length === 0) return null;
+    const result = {};
+    for (const fn of this.requestHelpers) {
+      try {
+        const helpers = fn(req);
+        if (helpers && typeof helpers === 'object') {
+          Object.assign(result, helpers);
+        }
+      } catch (err) {
+        console.warn('[plugin-manager] Error executing request helper:', err.message);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Get all registered helpers (to be merged with fsy)
+   */
+  getHelpers() {
+    if (!this._cachedHelpers) {
+      const helpers = {};
+      for (const [name, fn] of this.registeredHelpers) {
+        helpers[name] = fn;
+      }
+      this._cachedHelpers = helpers;
+    }
+    return this._cachedHelpers;
   }
 
   /**
@@ -726,21 +852,64 @@ class PluginManager {
    * Mount custom routes added by plugins
    */
   mountCustomRoutes() {
-    for (const { method, path, handlers } of this.customRoutes) {
-      if (this.app && this.app[method]) {
+    if (!this.app || this.customRoutes.length === 0) return;
+    const unmounted = this.customRoutes.splice(0, this.customRoutes.length);
+    for (const { method, path, handlers } of unmounted) {
+      if (typeof this.app[method] === 'function') {
         this.app[method](path, ...handlers);
       }
     }
   }
 
   /**
-   * Call onRoutesReady hook on all plugins
+   * Call onRoutesReady hook on all plugins (async)
    */
   async onRoutesReady(context) {
+    if (context) {
+      if (context.app) this.app = context.app;
+      if (context.nunjucksEnv) this.nunjucksEnv = context.nunjucksEnv;
+      if (context.shutdownManager) this.shutdownManager = context.shutdownManager;
+    }
+
     for (const [name, plugin] of this.plugins) {
       if (typeof plugin.onRoutesReady === 'function') {
         const ctx = this._createPluginContext(plugin, context);
-        await plugin.onRoutesReady(ctx);
+        try {
+          await plugin.onRoutesReady(ctx);
+        } catch (err) {
+          console.warn(`[plugin-manager] Plugin "${name}" onRoutesReady() failed:`, err.message);
+        }
+      }
+    }
+
+    // Mount any routes added during onRoutesReady
+    this.mountCustomRoutes();
+  }
+
+  /**
+   * Call onRoutesReady hook on all plugins synchronously (tracking async promises)
+   */
+  onRoutesReadySync(context) {
+    if (context) {
+      if (context.app) this.app = context.app;
+      if (context.nunjucksEnv) this.nunjucksEnv = context.nunjucksEnv;
+      if (context.shutdownManager) this.shutdownManager = context.shutdownManager;
+    }
+
+    for (const [name, plugin] of this.plugins) {
+      if (typeof plugin.onRoutesReady === 'function') {
+        const ctx = this._createPluginContext(plugin, context);
+        try {
+          const res = plugin.onRoutesReady(ctx);
+          if (res && typeof res.then === 'function') {
+            this.pendingAsyncOperations.push(res);
+            res.catch(err => {
+              console.warn(`[plugin-manager] Plugin "${name}" async onRoutesReady() failed:`, err?.message || err);
+            });
+          }
+        } catch (err) {
+          console.warn(`[plugin-manager] Plugin "${name}" onRoutesReady() failed:`, err.message);
+        }
       }
     }
 
@@ -755,8 +924,45 @@ class PluginManager {
     for (const [name, plugin] of this.plugins) {
       if (typeof plugin.onReady === 'function') {
         const ctx = this._createPluginContext(plugin, context);
-        await plugin.onReady(ctx);
+        try {
+          await plugin.onReady(ctx);
+        } catch (err) {
+          console.warn(`[plugin-manager] Plugin "${name}" onReady() failed:`, err.message);
+        }
       }
+    }
+  }
+
+  /**
+   * Call onReady hook on all plugins synchronously (tracking async promises)
+   */
+  onReadySync(context) {
+    for (const [name, plugin] of this.plugins) {
+      if (typeof plugin.onReady === 'function') {
+        const ctx = this._createPluginContext(plugin, context);
+        try {
+          const res = plugin.onReady(ctx);
+          if (res && typeof res.then === 'function') {
+            this.pendingAsyncOperations.push(res);
+            res.catch(err => {
+              console.warn(`[plugin-manager] Plugin "${name}" async onReady() failed:`, err?.message || err);
+            });
+          }
+        } catch (err) {
+          console.warn(`[plugin-manager] Plugin "${name}" onReady() failed:`, err.message);
+        }
+      }
+    }
+  }
+
+  /**
+   * Wait for all pending asynchronous plugin operations to settle
+   * @returns {Promise<void>}
+   */
+  async whenReady() {
+    if (this.pendingAsyncOperations.length > 0) {
+      const ops = this.pendingAsyncOperations.slice();
+      await Promise.allSettled(ops);
     }
   }
 
@@ -775,11 +981,7 @@ class PluginManager {
     if (plugin && plugin.isLazy && typeof plugin.hydrate === 'function' && !plugin.isHydrated) {
       const real = plugin.hydrate();
       if (real && real.api) {
-        const boundAPI = {};
-        for (const [key, value] of Object.entries(real.api)) {
-          boundAPI[key] = typeof value === 'function' ? value.bind(real) : value;
-        }
-        this.pluginAPIs.set(name, boundAPI);
+        this.pluginAPIs.set(name, this._extractAndBindAPI(real.api, name));
       }
       return this.pluginAPIs.get(name) || (real && real.api) || plugin.api;
     }
@@ -802,19 +1004,32 @@ class PluginManager {
   }
 
   /**
-   * Execute all registered plugin disposers in reverse registration order
+   * Execute all registered plugin disposers in reverse registration order with timeout protection
+   * @param {number} [timeoutMs=5000]
    * @returns {Promise<void>}
    */
-  async dispose() {
+  async dispose(timeoutMs = 5000) {
     const reverseDisposers = this.disposers.slice().reverse();
     for (const { name, fn } of reverseDisposers) {
       try {
-        await fn();
+        let timer = null;
+        const disposerPromise = Promise.resolve().then(() => fn());
+        const timeoutPromise = new Promise((_, reject) => {
+          timer = setTimeout(() => {
+            reject(new Error(`Disposer for "${name}" timed out after ${timeoutMs}ms`));
+          }, timeoutMs);
+        });
+
+        await Promise.race([disposerPromise, timeoutPromise]).finally(() => {
+          if (timer) clearTimeout(timer);
+        });
       } catch (err) {
         console.warn(`[plugin-manager] Plugin "${name}" disposer failed:`, err.message);
       }
     }
     this.disposers = [];
+    this.requestHelpers = [];
+    this._cachedHelpers = null;
   }
 
   /**

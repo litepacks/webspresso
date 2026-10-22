@@ -1576,12 +1576,19 @@ function mountPages(app, options) {
         
         // Create context with plugin helpers merged
         const baseHelpers = createHelpers({ req, res, locale, t });
-        const pluginHelpers = pluginManager ? pluginManager.getHelpers() : EMPTY_OBJECT;
+        const pluginStaticHelpers = pluginManager ? pluginManager.getHelpers() : EMPTY_OBJECT;
+        let pluginDynamicHelpers = null;
         if (pluginManager) {
           const contentApi = pluginManager.getPluginAPI('content');
           if (contentApi?.createRequestHelpers) {
             const buildHelpers = contentApi.createRequestHelpers();
-            pluginHelpers.content = buildHelpers(req);
+            pluginDynamicHelpers = { content: buildHelpers(req) };
+          }
+          if (typeof pluginManager.getRequestHelpers === 'function') {
+            const reqHelpers = pluginManager.getRequestHelpers(req);
+            if (reqHelpers) {
+              pluginDynamicHelpers = Object.assign(pluginDynamicHelpers || {}, reqHelpers);
+            }
           }
         }
         
@@ -1612,7 +1619,9 @@ function mountPages(app, options) {
             canonical: null,
             ...njkTpl.metaPatch,
           },
-          fsy: { ...baseHelpers, ...pluginHelpers },
+          fsy: pluginDynamicHelpers
+            ? { ...baseHelpers, ...pluginStaticHelpers, ...pluginDynamicHelpers }
+            : { ...baseHelpers, ...pluginStaticHelpers },
           clientRuntime,
         };
         

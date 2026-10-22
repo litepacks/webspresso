@@ -699,6 +699,7 @@ function createApp(options = {}) {
   app.core = core;
   app.serviceRegistry = serviceRegistry;
   app.pluginManager = pluginManager;
+  app.whenReady = () => pluginManager.whenReady();
   app.events = eventDispatcher;
   app.cache = appCache;
   app.breakers = appBreakers;
@@ -1654,39 +1655,11 @@ function createApp(options = {}) {
   const allRouteMeta = [...discoveredMeta, ...classicRouteMeta];
   pluginManager.setRoutes(allRouteMeta);
   
-  // Call onRoutesReady hook synchronously (plugins should not be async in this phase)
-  // and mount any custom routes added by plugins
-  for (const [name, plugin] of pluginManager.plugins) {
-    if (typeof plugin.onRoutesReady === 'function') {
-      const ctx = {
-        app,
-        pagesDir,
-        nunjucksEnv,
-        options,
-        middlewares,
-        db: options.db ?? null,
-        routes: pluginManager.routes,
-        usePlugin: (n) => pluginManager.getPluginAPI(n),
-        addHelper: (n, fn) => pluginManager.registeredHelpers.set(n, fn),
-        addFilter: (n, fn) => pluginManager.registeredFilters.set(n, fn),
-        addRoute: (method, path, ...handlers) => {
-          // Log route for debugging (only in development)
-          if (process.env.NODE_ENV !== 'production' && !isTest) {
-            console.log(`  ${method.toUpperCase().padEnd(6)} ${path}`);
-          }
-          app[method.toLowerCase()](path, ...handlers);
-        }
-      };
-      try {
-        plugin.onRoutesReady(ctx);
-      } catch (err) {
-        console.warn(`[plugin-manager] Plugin "${name}" onRoutesReady() failed:`, err.message);
-      }
-    }
-  }
-
-  // Mount any custom routes registered via pluginManager
-  pluginManager.mountCustomRoutes();
+  // Call onRoutesReady hook on plugins with full unified context and mount routes
+  pluginManager.onRoutesReadySync({
+    ...pluginContext,
+    pagesDir,
+  });
 
   if (typeof setupRoutes === 'function') {
     setupRoutes(app, {
