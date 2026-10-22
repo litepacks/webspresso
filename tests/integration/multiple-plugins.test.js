@@ -66,12 +66,23 @@ describe('Multiple Plugins Integration', () => {
       table.timestamp('updated_at');
     });
 
+    await db.knex('admin_users').insert({
+      email: 'admin@example.com',
+      password: '$2b$04$Wuy3PNKivlnz5etS8gSaoeMqE7OUaMbnKcBRjSD0AxL.Qrd5hTAAK', // bcrypt('password123', 4)
+      name: 'Admin User',
+      role: 'admin',
+      active: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
     const result = createApp({
       rootDir: path.join(__dirname, '../..'),
       pagesDir: path.join(__dirname, '../fixtures/empty-pages'),
       viewsDir: path.join(__dirname, '../fixtures/views'),
       publicDir: path.join(__dirname, '../../public'),
       silent: true,
+      server: { port: 0, shutdown: { enabled: false } },
       helmet: false,
       compression: false,
       cache: false,
@@ -167,27 +178,15 @@ describe('Multiple Plugins Integration', () => {
     });
 
     it('should not interfere with each other', async () => {
-      // Setup admin user
-      const setupRes = await request(app)
-        .post('/_admin/api/auth/setup')
+      // Login with pre-inserted admin user
+      const loginRes = await request(app)
+        .post('/_admin/api/auth/login')
         .send({
           email: 'admin@example.com',
           password: 'password123',
-          name: 'Admin User',
         })
         .expect(200);
-
-      let adminCookie = setupRes.headers['set-cookie'];
-      if (!adminCookie) {
-        const loginRes = await request(app)
-          .post('/_admin/api/auth/login')
-          .send({
-            email: 'admin@example.com',
-            password: 'password123',
-          })
-          .expect(200);
-        adminCookie = loginRes.headers['set-cookie'];
-      }
+      const adminCookie = loginRes.headers['set-cookie'];
 
       // Admin panel should work
       const adminRes = await request(app)
