@@ -7,7 +7,12 @@
 const { ServiceRegistry } = require('./registry');
 const { discoverServices, filePathToServiceName, toCamelCase } = require('./discovery');
 const { validateServiceInput, sanitizeInput } = require('./validator');
-const { executeService, SERVICE_CALL_STACK_SYMBOL, maskSensitiveData } = require('./executor');
+const {
+  executeService,
+  composeMiddleware,
+  SERVICE_CALL_STACK_SYMBOL,
+  maskSensitiveData,
+} = require('./executor');
 
 const { memoize, parseTtlMs, stableCacheKey } = require('./memoize');
 const {
@@ -87,6 +92,7 @@ module.exports = {
   filePathToServiceName,
   validateServiceInput,
   executeService,
+  composeMiddleware,
   SERVICE_CALL_STACK_SYMBOL,
   loadModuleSync,
   loadModuleAsync,

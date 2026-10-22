@@ -45,6 +45,41 @@ class ServiceRegistry {
 
     /** @type {Map<string, Object>} Deferred lazy service registrations */
     this.lazyServices = new Map();
+
+    /** @type {Function[]} Global middlewares executed in onion order */
+    this.middlewares = [];
+    if (Array.isArray(options.middlewares)) {
+      this.middlewares.push(...options.middlewares);
+    } else if (typeof options.middleware === 'function') {
+      this.middlewares.push(options.middleware);
+    }
+
+    /** @type {Function[]} Global before-hooks */
+    this.beforeHooks = [];
+    if (Array.isArray(options.before)) {
+      this.beforeHooks.push(...options.before);
+    } else if (typeof options.before === 'function') {
+      this.beforeHooks.push(options.before);
+    }
+
+    /** @type {Function[]} Global after-hooks */
+    this.afterHooks = [];
+    if (Array.isArray(options.after)) {
+      this.afterHooks.push(...options.after);
+    } else if (typeof options.after === 'function') {
+      this.afterHooks.push(options.after);
+    }
+
+    /** @type {Function[]} Global onError-hooks */
+    this.onErrorHooks = [];
+    if (Array.isArray(options.onError)) {
+      this.onErrorHooks.push(...options.onError);
+    } else if (typeof options.onError === 'function') {
+      this.onErrorHooks.push(options.onError);
+    }
+
+    /** @type {Object|null} Optional event dispatcher */
+    this.events = options.events || null;
   }
 
   /**
@@ -95,6 +130,18 @@ class ServiceRegistry {
       transaction: definition.transaction,
       circuitBreaker: definition.circuitBreaker,
       retry: definition.retry,
+      before: Array.isArray(definition.before)
+        ? definition.before
+        : (typeof definition.before === 'function' ? [definition.before] : []),
+      after: Array.isArray(definition.after)
+        ? definition.after
+        : (typeof definition.after === 'function' ? [definition.after] : []),
+      onError: Array.isArray(definition.onError)
+        ? definition.onError
+        : (typeof definition.onError === 'function' ? [definition.onError] : []),
+      middleware: Array.isArray(definition.middleware)
+        ? definition.middleware
+        : (typeof definition.middleware === 'function' ? [definition.middleware] : (Array.isArray(definition.middlewares) ? definition.middlewares : [])),
     };
   }
 
@@ -477,6 +524,68 @@ class ServiceRegistry {
    */
   execute(name, input = {}, ctx = {}, options = {}) {
     return this.call(name, input, ctx, options);
+  }
+
+  /**
+   * Register a global service middleware following the async onion model
+   * @param {Function} middleware - ({ name, input, ctx, serviceDef, options, registry }, next) => Promise<any>
+   * @returns {ServiceRegistry}
+   */
+  use(middleware) {
+    if (typeof middleware !== 'function') {
+      throw new WebspressoError('Service middleware must be a function');
+    }
+    this.middlewares.push(middleware);
+    return this;
+  }
+
+  /**
+   * Register a global pre-execution hook
+   * @param {Function} hook - ({ name, input, ctx, serviceDef, options }) => Promise<any>|void
+   * @returns {ServiceRegistry}
+   */
+  before(hook) {
+    if (typeof hook !== 'function') {
+      throw new WebspressoError('Service before hook must be a function');
+    }
+    this.beforeHooks.push(hook);
+    return this;
+  }
+
+  /**
+   * Register a global post-execution hook
+   * @param {Function} hook - ({ name, result, input, ctx, serviceDef, duration, options }) => Promise<any>|void
+   * @returns {ServiceRegistry}
+   */
+  after(hook) {
+    if (typeof hook !== 'function') {
+      throw new WebspressoError('Service after hook must be a function');
+    }
+    this.afterHooks.push(hook);
+    return this;
+  }
+
+  /**
+   * Register a global error interception hook
+   * @param {Function} hook - ({ name, error, input, ctx, serviceDef, duration, options }) => Promise<any>|void
+   * @returns {ServiceRegistry}
+   */
+  onError(hook) {
+    if (typeof hook !== 'function') {
+      throw new WebspressoError('Service onError hook must be a function');
+    }
+    this.onErrorHooks.push(hook);
+    return this;
+  }
+
+  /**
+   * Attach an EventDispatcher instance to emit service lifecycle events
+   * @param {Object} events - EventDispatcher instance
+   * @returns {ServiceRegistry}
+   */
+  setEventDispatcher(events) {
+    this.events = events;
+    return this;
   }
 
   /**

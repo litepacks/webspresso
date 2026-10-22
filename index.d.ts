@@ -231,6 +231,43 @@ export type ServiceHandler<TInput = unknown, TOutput = unknown> = (
   ctx: ServiceContext
 ) => Promise<TOutput> | TOutput;
 
+export interface ServiceMiddlewareContext<TInput = unknown> {
+  name: string;
+  input: TInput;
+  ctx: ServiceContext;
+  serviceDef: ServiceDefinition<TInput, any>;
+  options: unknown;
+  registry: ServiceRegistry;
+}
+
+export interface ServiceBeforeContext<TInput = unknown> {
+  name: string;
+  input: TInput;
+  ctx: ServiceContext;
+  serviceDef: ServiceDefinition<TInput, any>;
+  options: unknown;
+}
+
+export interface ServiceAfterContext<TInput = unknown, TOutput = unknown> {
+  name: string;
+  result: TOutput;
+  input: TInput;
+  ctx: ServiceContext;
+  serviceDef: ServiceDefinition<TInput, TOutput>;
+  duration: number;
+  options: unknown;
+}
+
+export interface ServiceErrorContext<TInput = unknown> {
+  name: string;
+  error: Error;
+  input: TInput;
+  ctx: ServiceContext;
+  serviceDef: ServiceDefinition<TInput, any>;
+  duration: number;
+  options: unknown;
+}
+
 export interface ServiceDefinition<TInput = unknown, TOutput = unknown> {
   schema?: import('zod').ZodType<any> | Record<string, unknown> | ((input: unknown) => unknown) | null;
   handler: ServiceHandler<TInput, TOutput>;
@@ -248,6 +285,10 @@ export interface ServiceDefinition<TInput = unknown, TOutput = unknown> {
   transaction?: boolean;
   circuitBreaker?: boolean | string | CircuitBreakerOptions | CircuitBreaker;
   retry?: boolean | number | RetryOptions;
+  before?: ((input: TInput, ctx: ServiceContext) => unknown) | Array<(input: TInput, ctx: ServiceContext) => unknown>;
+  after?: ((result: TOutput, input: TInput, ctx: ServiceContext) => unknown) | Array<(result: TOutput, input: TInput, ctx: ServiceContext) => unknown>;
+  onError?: ((error: Error, input: TInput, ctx: ServiceContext) => unknown) | Array<(error: Error, input: TInput, ctx: ServiceContext) => unknown>;
+  middleware?: ((context: ServiceMiddlewareContext<TInput>, next: () => Promise<unknown>) => Promise<unknown>) | Array<(context: ServiceMiddlewareContext<TInput>, next: () => Promise<unknown>) => Promise<unknown>>;
   [key: string]: unknown;
 }
 
@@ -259,10 +300,20 @@ export class ServiceRegistry {
     timeouts?: unknown;
     timeout?: number | string;
     lazy?: boolean;
+    middlewares?: Array<(context: ServiceMiddlewareContext, next: () => Promise<unknown>) => Promise<unknown>>;
+    middleware?: (context: ServiceMiddlewareContext, next: () => Promise<unknown>) => Promise<unknown>;
+    before?: Array<(context: ServiceBeforeContext) => unknown> | ((context: ServiceBeforeContext) => unknown);
+    after?: Array<(context: ServiceAfterContext) => unknown> | ((context: ServiceAfterContext) => unknown);
+    onError?: Array<(context: ServiceErrorContext) => unknown> | ((context: ServiceErrorContext) => unknown);
+    events?: unknown;
   });
   readonly services: Map<string, ServiceDefinition>;
   readonly lazyServices: Map<string, unknown>;
   readonly aliases: Map<string, string>;
+  readonly middlewares: Array<(context: ServiceMiddlewareContext, next: () => Promise<unknown>) => Promise<unknown>>;
+  readonly beforeHooks: Array<(context: ServiceBeforeContext) => unknown>;
+  readonly afterHooks: Array<(context: ServiceAfterContext) => unknown>;
+  readonly onErrorHooks: Array<(context: ServiceErrorContext) => unknown>;
   load(): this;
   loadAsync(): Promise<this>;
   register(name: string, definition: ServiceDefinition | ServiceHandler, options?: { overwrite?: boolean; aliases?: string[] }): this;
@@ -271,6 +322,11 @@ export class ServiceRegistry {
     loader: (() => Promise<unknown> | unknown) | string,
     options?: { overwrite?: boolean; aliases?: string[]; filePath?: string }
   ): this;
+  use(middleware: (context: ServiceMiddlewareContext, next: () => Promise<unknown>) => Promise<unknown>): this;
+  before(hook: (context: ServiceBeforeContext) => unknown): this;
+  after(hook: (context: ServiceAfterContext) => unknown): this;
+  onError(hook: (context: ServiceErrorContext) => unknown): this;
+  setEventDispatcher(events: unknown): this;
   get(name: string): ServiceDefinition | undefined;
   getAsync(name: string): Promise<ServiceDefinition | undefined>;
   has(name: string): boolean;
@@ -293,6 +349,12 @@ export function createServiceRegistry(options?: {
   lazy?: boolean;
   timeouts?: unknown;
   timeout?: number | string;
+  middlewares?: Array<(context: ServiceMiddlewareContext, next: () => Promise<unknown>) => Promise<unknown>>;
+  middleware?: (context: ServiceMiddlewareContext, next: () => Promise<unknown>) => Promise<unknown>;
+  before?: Array<(context: ServiceBeforeContext) => unknown> | ((context: ServiceBeforeContext) => unknown);
+  after?: Array<(context: ServiceAfterContext) => unknown> | ((context: ServiceAfterContext) => unknown);
+  onError?: Array<(context: ServiceErrorContext) => unknown> | ((context: ServiceErrorContext) => unknown);
+  events?: unknown;
 }): ServiceRegistry;
 
 export function createServiceRegistryAsync(options?: {
@@ -303,8 +365,15 @@ export function createServiceRegistryAsync(options?: {
   lazy?: boolean;
   timeouts?: unknown;
   timeout?: number | string;
+  middlewares?: Array<(context: ServiceMiddlewareContext, next: () => Promise<unknown>) => Promise<unknown>>;
+  middleware?: (context: ServiceMiddlewareContext, next: () => Promise<unknown>) => Promise<unknown>;
+  before?: Array<(context: ServiceBeforeContext) => unknown> | ((context: ServiceBeforeContext) => unknown);
+  after?: Array<(context: ServiceAfterContext) => unknown> | ((context: ServiceAfterContext) => unknown);
+  onError?: Array<(context: ServiceErrorContext) => unknown> | ((context: ServiceErrorContext) => unknown);
+  events?: unknown;
 }): Promise<ServiceRegistry>;
 
+export function composeMiddleware(middlewares: Function[]): (context: unknown, next?: Function) => Promise<unknown>;
 export function loadModuleSync(filePath: string, options?: { isDev?: boolean }): unknown;
 export function loadModuleAsync(filePath: string, options?: { isDev?: boolean }): Promise<unknown>;
 export function extractModuleExport(mod: unknown): unknown;

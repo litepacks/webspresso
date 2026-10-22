@@ -16,6 +16,7 @@ describe('Core Services Layer & Export Parity (core/services)', () => {
       expect(typeof coreServices.createServiceRegistry).toBe('function');
       expect(typeof coreServices.ServiceRegistry).toBe('function');
       expect(typeof coreServices.executeService).toBe('function');
+      expect(typeof coreServices.composeMiddleware).toBe('function');
       expect(typeof coreServices.discoverServices).toBe('function');
       expect(typeof coreServices.filePathToServiceName).toBe('function');
       expect(typeof coreServices.toCamelCase).toBe('function');
@@ -54,6 +55,7 @@ describe('Core Services Layer & Export Parity (core/services)', () => {
       expect(core.createServiceRegistry).toBe(coreServices.createServiceRegistry);
       expect(core.ServiceRegistry).toBe(coreServices.ServiceRegistry);
       expect(core.executeService).toBe(coreServices.executeService);
+      expect(core.composeMiddleware).toBe(coreServices.composeMiddleware);
       expect(core.discoverServices).toBe(coreServices.discoverServices);
       expect(core.filePathToServiceName).toBe(coreServices.filePathToServiceName);
       expect(core.toCamelCase).toBe(coreServices.toCamelCase);

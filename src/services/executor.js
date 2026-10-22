@@ -242,6 +242,16 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
     ? null
     : (options.retry !== undefined ? options.retry : serviceDef.retry);
 
+  // Compose middlewares and hooks
+  const globalMiddlewares = registry.middlewares || [];
+  const serviceMiddlewares = serviceDef.middleware || [];
+  const allMiddlewares = [...globalMiddlewares, ...serviceMiddlewares];
+
+  const beforeHooks = [...(registry.beforeHooks || []), ...(serviceDef.before || [])];
+  const afterHooks = [...(serviceDef.after || []), ...(registry.afterHooks || [])];
+  const onErrorHooks = [...(serviceDef.onError || []), ...(registry.onErrorHooks || [])];
+  const eventDispatcher = registry.events || executionContext.events || ctx.events || null;
+
   const runWithRetry = async (fn) => {
     if (!retryConfig) {
       return await fn();
@@ -253,57 +263,86 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
     return await retry((attempt) => fn(attempt), retryOpts);
   };
 
-  const runWithBreaker = async (fn) => {
+  const runWithBreaker = async (fn, currentInputPayload) => {
     if (!breaker) {
-      return await fn(validatedInput, executionContext);
+      return await fn(currentInputPayload, executionContext);
     }
-    return await breaker.execute(fn, validatedInput, executionContext);
+    return await breaker.execute(fn, currentInputPayload, executionContext);
   };
 
-  // Helper to execute handler with optional database transaction
-  const executeHandler = async (activeCtx) => {
-    const shouldUseTx = (options.transaction === true || serviceDef.transaction === true);
-    const db = activeCtx.db;
+  const runCoreOperation = async (effectiveInput) => {
+    let currentInput = effectiveInput;
 
-    // Check if knex or transaction-capable database is present
-    const knexInstance = db && (db.knex || (typeof db.transaction === 'function' ? db : null));
-    const alreadyInTx = Boolean(activeCtx.trx || hasAmbientTransaction());
+    // 1. Run before hooks (can transform/enrich input)
+    for (const hook of beforeHooks) {
+      const hookRes = hook.length >= 2
+        ? await hook(currentInput, executionContext)
+        : await hook({
+            name,
+            input: currentInput,
+            ctx: executionContext,
+            serviceDef,
+            options,
+          });
+      if (hookRes !== undefined) {
+        currentInput = hookRes;
+      }
+    }
 
-    if (shouldUseTx && knexInstance && !alreadyInTx) {
-      return await knexInstance.transaction(async (trx) => {
-        return await runWithAmbientTransaction(trx, async () => {
-          const txCtx = Object.create(activeCtx);
-          txCtx.trx = trx;
-          if (activeCtx.db && typeof activeCtx.db.getRepository === 'function') {
-            const { createRepository } = require('../../core/orm/repository');
-            txCtx.db = Object.assign(Object.create(activeCtx.db), {
-              knex: trx,
-              getRepository: (modelName, scopeCtx) => {
-                const origRepo = activeCtx.db.getRepository(modelName, scopeCtx);
-                return createRepository(origRepo.model, trx, scopeCtx);
-              },
-            });
-          } else {
-            txCtx.db = trx;
-          }
-          txCtx.service = (subName, subInput, subOpts) =>
-            executeService(registry, subName, subInput, txCtx, subOpts);
-          txCtx.service.invalidate = (subName, subInput, subCtx) =>
-            registry.invalidate(subName, subInput, subCtx || txCtx);
-          txCtx.service.clearCache = (subName) =>
-            registry.clearCache(subName);
-          txCtx.breaker = (bName, bOpts) =>
-            circuitBreakerRegistry.getBreaker(bName, bOpts);
-          txCtx.retry = retry;
-          return await serviceDef.handler(validatedInput, txCtx);
+    // 2. Emit service:before event if dispatcher is present
+    if (eventDispatcher && typeof eventDispatcher.emit === 'function') {
+      try {
+        eventDispatcher.emit('service:before', {
+          name,
+          input: currentInput,
+          ctx: executionContext,
         });
-      });
+      } catch (_) {}
     }
 
-    return await serviceDef.handler(validatedInput, activeCtx);
-  };
+    // Helper to execute handler with optional database transaction
+    const executeHandler = async (activeCtx) => {
+      const shouldUseTx = (options.transaction === true || serviceDef.transaction === true);
+      const db = activeCtx.db;
 
-  try {
+      // Check if knex or transaction-capable database is present
+      const knexInstance = db && (db.knex || (typeof db.transaction === 'function' ? db : null));
+      const alreadyInTx = Boolean(activeCtx.trx || hasAmbientTransaction());
+
+      if (shouldUseTx && knexInstance && !alreadyInTx) {
+        return await knexInstance.transaction(async (trx) => {
+          return await runWithAmbientTransaction(trx, async () => {
+            const txCtx = Object.create(activeCtx);
+            txCtx.trx = trx;
+            if (activeCtx.db && typeof activeCtx.db.getRepository === 'function') {
+              const { createRepository } = require('../../core/orm/repository');
+              txCtx.db = Object.assign(Object.create(activeCtx.db), {
+                knex: trx,
+                getRepository: (modelName, scopeCtx) => {
+                  const origRepo = activeCtx.db.getRepository(modelName, scopeCtx);
+                  return createRepository(origRepo.model, trx, scopeCtx);
+                },
+              });
+            } else {
+              txCtx.db = trx;
+            }
+            txCtx.service = (subName, subInput, subOpts) =>
+              executeService(registry, subName, subInput, txCtx, subOpts);
+            txCtx.service.invalidate = (subName, subInput, subCtx) =>
+              registry.invalidate(subName, subInput, subCtx || txCtx);
+            txCtx.service.clearCache = (subName) =>
+              registry.clearCache(subName);
+            txCtx.breaker = (bName, bOpts) =>
+              circuitBreakerRegistry.getBreaker(bName, bOpts);
+            txCtx.retry = retry;
+            return await serviceDef.handler(currentInput, txCtx);
+          });
+        });
+      }
+
+      return await serviceDef.handler(currentInput, activeCtx);
+    };
+
     const invokeOperation = () => {
       if (timeoutMs && timeoutMs > 0) {
         let timerId;
@@ -333,16 +372,105 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
       return executeHandler(executionContext);
     };
 
-    const result = await runWithBreaker(() => runWithRetry(invokeOperation));
+    let currentResult = await runWithBreaker(() => runWithRetry(invokeOperation), currentInput);
+
+    // 3. Run after hooks (can transform/enrich result)
+    for (const hook of afterHooks) {
+      const hookRes = hook.length >= 2
+        ? await hook(currentResult, currentInput, executionContext)
+        : await hook({
+            name,
+            result: currentResult,
+            input: currentInput,
+            ctx: executionContext,
+            serviceDef,
+            duration: Date.now() - startTime,
+            options,
+          });
+      if (hookRes !== undefined) {
+        currentResult = hookRes;
+      }
+    }
+
+    // 4. Emit service:after event
+    if (eventDispatcher && typeof eventDispatcher.emit === 'function') {
+      try {
+        eventDispatcher.emit('service:after', {
+          name,
+          result: currentResult,
+          input: currentInput,
+          ctx: executionContext,
+          duration: Date.now() - startTime,
+        });
+      } catch (_) {}
+    }
+
+    return currentResult;
+  };
+
+  try {
+    let finalResult;
+
+    if (allMiddlewares.length === 0) {
+      finalResult = await runCoreOperation(validatedInput);
+    } else {
+      const hookContext = {
+        name,
+        input: validatedInput,
+        ctx: executionContext,
+        serviceDef,
+        options,
+        registry,
+      };
+
+      finalResult = await composeMiddleware(allMiddlewares)(hookContext, async () => {
+        return await runCoreOperation(hookContext.input);
+      });
+    }
 
     const duration = Date.now() - startTime;
     if (logger && typeof logger.debug === 'function') {
       logger.debug(`[service] ${name} executed successfully (${duration}ms)`);
     }
 
-    return result;
+    return finalResult;
   } catch (err) {
     const duration = Date.now() - startTime;
+
+    // Run onError hooks
+    for (const hook of onErrorHooks) {
+      try {
+        const recovery = hook.length >= 2
+          ? await hook(err, validatedInput, executionContext)
+          : await hook({
+              name,
+              error: err,
+              input: validatedInput,
+              ctx: executionContext,
+              serviceDef,
+              duration,
+              options,
+            });
+        if (recovery && typeof recovery === 'object' && recovery.recover === true) {
+          return recovery.result;
+        }
+      } catch (hookErr) {
+        err = hookErr;
+      }
+    }
+
+    // Emit service:error event
+    if (eventDispatcher && typeof eventDispatcher.emit === 'function') {
+      try {
+        eventDispatcher.emit('service:error', {
+          name,
+          error: err,
+          input: validatedInput,
+          ctx: executionContext,
+          duration,
+        });
+      } catch (_) {}
+    }
 
     if (logger && typeof logger.error === 'function' && !(err instanceof ValidationError)) {
       logger.error(`[service] ${name} execution failed (${duration}ms): ${err.message}`);
@@ -357,9 +485,44 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
   }
 }
 
+/**
+ * Compose an array of middleware functions into a single executable function
+ * following the standard async onion model.
+ * Supports both (context, next) and (input, ctx, next) signatures.
+ * @param {Function[]} middlewares
+ * @returns {Function}
+ */
+function composeMiddleware(middlewares) {
+  if (!Array.isArray(middlewares)) {
+    throw new TypeError('Middlewares must be an array');
+  }
+
+  return function (context, next) {
+    let index = -1;
+    function dispatch(i) {
+      if (i <= index) {
+        return Promise.reject(new Error('next() called multiple times in service middleware'));
+      }
+      index = i;
+      const fn = i === middlewares.length ? next : middlewares[i];
+      if (!fn) return Promise.resolve();
+      try {
+        if (fn.length >= 3) {
+          return Promise.resolve(fn(context.input, context.ctx, () => dispatch(i + 1)));
+        }
+        return Promise.resolve(fn(context, () => dispatch(i + 1)));
+      } catch (err) {
+        return Promise.reject(err);
+      }
+    }
+    return dispatch(0);
+  };
+}
+
 module.exports = {
   SERVICE_CALL_STACK_SYMBOL,
   maskSensitiveData,
   checkServiceAuth,
   executeService,
+  composeMiddleware,
 };
