@@ -298,7 +298,7 @@ class ShutdownManager {
                 await Promise.race([
                   Promise.resolve(closeRes),
                   new Promise(r => {
-                    const t = setTimeout(r, 100);
+                    const t = setTimeout(r, 25);
                     if (typeof t.unref === 'function') t.unref();
                   })
                 ]);
