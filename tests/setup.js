@@ -64,6 +64,9 @@ const {
   fetchJson,
   fetchText,
   withTestServer,
+  createMockServiceContext,
+  createMockServiceRegistry,
+  defineMockService,
 } = require('./utils');
 
 /**
@@ -171,6 +174,9 @@ module.exports = {
   fetchJson,
   fetchText,
   withTestServer,
+  createMockServiceContext,
+  createMockServiceRegistry,
+  defineMockService,
 };
 
 // Make utilities available globally in tests

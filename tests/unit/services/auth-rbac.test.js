@@ -3,16 +3,17 @@ const {
   UnauthorizedError,
   ForbiddenError,
 } = require('../../../index');
+const { createMockServiceRegistry, createMockServiceContext } = require('../../utils');
 
 describe('Services Authorization & RBAC (Section 5 Hardened)', () => {
   describe('auth: true (Authentication Required)', () => {
     it('should reject unauthenticated caller with 401 UnauthorizedError', async () => {
-      const registry = new ServiceRegistry();
-
-      registry.register('profile.get', {
-        auth: true,
-        async handler(input, ctx) {
-          return { id: ctx.user.id };
+      const registry = createMockServiceRegistry({
+        'profile.get': {
+          auth: true,
+          async handler(input, ctx) {
+            return { id: ctx.user.id };
+          },
         },
       });
 
@@ -28,34 +29,34 @@ describe('Services Authorization & RBAC (Section 5 Hardened)', () => {
     });
 
     it('should allow authenticated caller with ctx.user', async () => {
-      const registry = new ServiceRegistry();
-
-      registry.register('profile.get', {
-        auth: true,
-        async handler(input, ctx) {
-          return { userId: ctx.user.id, name: ctx.user.name };
+      const registry = createMockServiceRegistry({
+        'profile.get': {
+          auth: true,
+          async handler(input, ctx) {
+            return { userId: ctx.user.id, name: ctx.user.name };
+          },
         },
       });
 
-      const res = await registry.call('profile.get', {}, { user: { id: 10, name: 'Alice' } });
+      const res = await registry.call('profile.get', {}, createMockServiceContext({ user: { id: 10, name: 'Alice' } }));
       expect(res.userId).toBe(10);
     });
   });
 
   describe('auth: "admin" (Single Role Requirement)', () => {
     it('should reject non-admin user with 403 ForbiddenError', async () => {
-      const registry = new ServiceRegistry();
-
-      registry.register('admin.dashboard', {
-        auth: 'admin',
-        async handler() {
-          return { secretStats: 42 };
+      const registry = createMockServiceRegistry({
+        'admin.dashboard': {
+          auth: 'admin',
+          async handler() {
+            return { secretStats: 42 };
+          },
         },
       });
 
       // Regular user
       await expect(
-        registry.call('admin.dashboard', {}, { user: { id: 2, role: 'member' } })
+        registry.call('admin.dashboard', {}, createMockServiceContext({ user: { id: 2, role: 'member' } }))
       ).rejects.toThrow(ForbiddenError);
     });
 

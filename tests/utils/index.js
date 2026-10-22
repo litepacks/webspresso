@@ -9,6 +9,7 @@ const orm = require('./orm');
 const fsUtils = require('./fs');
 const asyncUtils = require('./async');
 const serverUtils = require('./server');
+const serviceUtils = require('./services');
 
 module.exports = {
   ...http,
@@ -16,4 +17,5 @@ module.exports = {
   ...fsUtils,
   ...asyncUtils,
   ...serverUtils,
+  ...serviceUtils,
 };
