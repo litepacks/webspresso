@@ -694,9 +694,11 @@ class RedisSessionStore extends BaseStore {
         if (!Array.isArray(keys) || keys.length === 0) {
           return callback(null, []);
         }
+        const rawResults = await Promise.all(
+          keys.map((k) => invokeRedis(this.client, 'get', [k]).catch(() => null))
+        );
         const sessions = [];
-        for (const k of keys) {
-          const raw = await invokeRedis(this.client, 'get', [k]);
+        for (const raw of rawResults) {
           if (raw) {
             try {
               sessions.push(this.serializer.parse(raw));
@@ -882,11 +884,18 @@ function createRedisSessionTracker(options = {}) {
       const sids = await invokeRedis(client, 'smembers', [userKey(userId)]);
       if (!Array.isArray(sids) || sids.length === 0) return [];
 
+      const rawResults = await Promise.all(
+        sids.map((sid) =>
+          invokeRedis(client, 'get', [deviceKey(sid)])
+            .then((raw) => ({ sid, raw }))
+            .catch(() => ({ sid, raw: null }))
+        )
+      );
+
       const list = [];
       const expiredSids = [];
 
-      for (const sid of sids) {
-        const raw = await invokeRedis(client, 'get', [deviceKey(sid)]);
+      for (const { sid, raw } of rawResults) {
         if (!raw) {
           expiredSids.push(sid);
           continue;
@@ -966,22 +975,14 @@ function createRedisSessionTracker(options = {}) {
       const sids = await invokeRedis(client, 'smembers', [userKey(userId)]);
       if (!Array.isArray(sids) || sids.length === 0) return 0;
 
-      let count = 0;
-      const toRemove = [];
+      const toRemove = sids.filter((sid) => sid !== currentSessionId);
+      if (toRemove.length === 0) return 0;
 
-      for (const sid of sids) {
-        if (sid !== currentSessionId) {
-          await invokeRedis(client, 'del', [deviceKey(sid)]);
-          toRemove.push(sid);
-          count++;
-        }
-      }
+      const keysToDel = toRemove.map((sid) => deviceKey(sid));
+      await invokeRedis(client, 'del', keysToDel);
+      await invokeRedis(client, 'srem', [userKey(userId), ...toRemove]);
 
-      if (toRemove.length > 0) {
-        await invokeRedis(client, 'srem', [userKey(userId), ...toRemove]);
-      }
-
-      return count;
+      return toRemove.length;
     },
 
     /**
@@ -994,11 +995,10 @@ function createRedisSessionTracker(options = {}) {
       const sids = await invokeRedis(client, 'smembers', [userKey(userId)]);
       if (!Array.isArray(sids) || sids.length === 0) return 0;
 
-      for (const sid of sids) {
-        await invokeRedis(client, 'del', [deviceKey(sid)]);
-      }
+      const keysToDel = sids.map((sid) => deviceKey(sid));
+      keysToDel.push(userKey(userId));
+      await invokeRedis(client, 'del', keysToDel);
 
-      await invokeRedis(client, 'del', [userKey(userId)]);
       return sids.length;
     },
 
