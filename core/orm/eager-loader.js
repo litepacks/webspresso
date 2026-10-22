@@ -8,6 +8,60 @@ const { resolveRelationModel, getRelationKeys } = require('./model');
 const { applyScopes, createScopeContext } = require('./scopes');
 const { getJsonColumns, deserializeJsonFields } = require('./json-fields');
 
+const RELATION_TREE_CACHE_LIMIT = 512;
+const relationTreeCache = new Map();
+
+/**
+ * Generate a deterministic cache key for relation names specifications
+ * @param {string|Array|Object} relationNames
+ * @returns {string|null}
+ */
+function getRelationTreeCacheKey(relationNames) {
+  if (typeof relationNames === 'string') {
+    return 's:' + relationNames;
+  }
+  if (Array.isArray(relationNames)) {
+    for (let i = 0; i < relationNames.length; i++) {
+      if (typeof relationNames[i] !== 'string') {
+        try {
+          return 'o:' + JSON.stringify(relationNames);
+        } catch (_) {
+          return null;
+        }
+      }
+    }
+    return 'a:' + relationNames.join('|');
+  }
+  if (relationNames && typeof relationNames === 'object') {
+    try {
+      return 'o:' + JSON.stringify(relationNames);
+    } catch (_) {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Clone a relation tree Map to prevent external mutation from poisoning cache
+ * @param {Map<string, string[]>} tree
+ * @returns {Map<string, string[]>}
+ */
+function cloneRelationTree(tree) {
+  const copy = new Map();
+  for (const [k, v] of tree.entries()) {
+    copy.set(k, v.slice());
+  }
+  return copy;
+}
+
+/**
+ * Clear the internal relation tree cache
+ */
+function clearRelationTreeCache() {
+  relationTreeCache.clear();
+}
+
 /**
  * Parse relation specifications into a grouped structure: Map<topLevelRelation, string[]>
  * Supports dot notation ('author.profile'), arrays (['author', 'comments.author']),
@@ -17,6 +71,21 @@ const { getJsonColumns, deserializeJsonFields } = require('./json-fields');
  * @returns {Map<string, string[]>}
  */
 function parseRelationTree(relationNames) {
+  if (relationNames instanceof Map) {
+    return cloneRelationTree(relationNames);
+  }
+
+  const cacheKey = getRelationTreeCacheKey(relationNames);
+  if (cacheKey) {
+    const cached = relationTreeCache.get(cacheKey);
+    if (cached) {
+      // Refresh LRU order
+      relationTreeCache.delete(cacheKey);
+      relationTreeCache.set(cacheKey, cached);
+      return cloneRelationTree(cached);
+    }
+  }
+
   const tree = new Map();
 
   function addPath(top, nested) {
@@ -81,6 +150,15 @@ function parseRelationTree(relationNames) {
     processItem(item);
   }
 
+  if (cacheKey) {
+    if (relationTreeCache.size >= RELATION_TREE_CACHE_LIMIT) {
+      const firstKey = relationTreeCache.keys().next().value;
+      relationTreeCache.delete(firstKey);
+    }
+    relationTreeCache.set(cacheKey, tree);
+    return cloneRelationTree(tree);
+  }
+
   return tree;
 }
 
@@ -99,7 +177,7 @@ async function loadRelations(records, relationNames, model, knex, scopeContext) 
   }
 
   const context = scopeContext || createScopeContext();
-  const tree = parseRelationTree(relationNames);
+  const tree = relationNames instanceof Map ? relationNames : parseRelationTree(relationNames);
 
   // Process each relation grouped by top-level
   for (const [relationName, nestedPaths] of tree.entries()) {
@@ -402,4 +480,6 @@ module.exports = {
   loadHasOne,
   queryInChunks,
   parseRelationTree,
+  clearRelationTreeCache,
+  getRelationTreeCacheKey,
 };

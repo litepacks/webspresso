@@ -519,6 +519,7 @@ module.exports = {
   loadRelations: require('./eager-loader').loadRelations,
   loadRelation: require('./eager-loader').loadRelation,
   parseRelationTree: require('./eager-loader').parseRelationTree,
+  clearRelationTreeCache: require('./eager-loader').clearRelationTreeCache,
   // Query Complexity & DoS Protection
   QueryComplexityError: require('./complexity').QueryComplexityError,
   validateQueryComplexity: require('./complexity').validateQueryComplexity,
