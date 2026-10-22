@@ -111,6 +111,8 @@ async function executeApiPipeline(params) {
     req.service = (name, input, opts) => {
       return serviceRegistry.call(name, input, baseContext, opts);
     };
+    req.service.call = (name, input, opts) => req.service(name, input, opts);
+    req.service.execute = (name, input, opts) => req.service(name, input, opts);
     req.service.invalidate = (name, input, ctx) =>
       serviceRegistry.invalidate(name, input, ctx || baseContext);
     req.service.clearCache = (name) =>
@@ -271,6 +273,8 @@ async function executePagePipeline(params) {
     const baseContext = req.context || { req, res, db, user: req.user, session: req.session };
     req.service = (name, input, opts) =>
       serviceRegistry.call(name, input, baseContext, opts);
+    req.service.call = (name, input, opts) => req.service(name, input, opts);
+    req.service.execute = (name, input, opts) => req.service(name, input, opts);
     req.service.invalidate = (name, input, ctx) =>
       serviceRegistry.invalidate(name, input, ctx || baseContext);
     req.service.clearCache = (name) =>

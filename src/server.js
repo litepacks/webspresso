@@ -706,6 +706,8 @@ function createApp(options = {}) {
   app.getBreaker = (name, opts) => core.getBreaker(name, opts);
   app.breaker = (name, opts) => core.breaker(name, opts);
   app.service = (name, input, opts) => core.service(name, input, opts);
+  app.service.call = (name, input, opts) => app.service(name, input, opts);
+  app.service.execute = (name, input, opts) => app.service(name, input, opts);
   app.service.invalidate = (name, input, ctx) => serviceRegistry.invalidate(name, input, ctx);
   app.service.clearCache = (name) => serviceRegistry.clearCache(name);
   app.service.invalidateByTag = (tag, serviceName) => serviceRegistry.invalidateByTag(tag, serviceName);
@@ -766,6 +768,8 @@ function createApp(options = {}) {
     });
     req.service = (name, input, opts) =>
       core.service(name, input, req.context, opts);
+    req.service.call = (name, input, opts) => req.service(name, input, opts);
+    req.service.execute = (name, input, opts) => req.service(name, input, opts);
     req.service.invalidate = (name, input, ctx) =>
       serviceRegistry.invalidate(name, input, ctx || req.context);
     req.service.clearCache = (name) =>

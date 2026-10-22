@@ -190,6 +190,8 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
   executionContext[SERVICE_CALL_STACK_SYMBOL] = [...activeStack, name];
   executionContext.service = (subName, subInput, subOpts) =>
     executeService(registry, subName, subInput, executionContext, subOpts);
+  executionContext.service.call = executionContext.service;
+  executionContext.service.execute = executionContext.service;
   executionContext.service.invalidate = (subName, subInput, subCtx) =>
     registry.invalidate(subName, subInput, subCtx || executionContext);
   executionContext.service.clearCache = (subName) =>
@@ -322,11 +324,36 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
             txCtx.trx = trx;
             if (activeCtx.db && typeof activeCtx.db.getRepository === 'function') {
               const { createRepository } = require('../../core/orm/repository');
+              const { createQueryBuilder } = require('../../core/orm/query-builder');
               txCtx.db = Object.assign(Object.create(activeCtx.db), {
                 knex: trx,
+                trx,
                 getRepository: (modelName, scopeCtx) => {
                   const origRepo = activeCtx.db.getRepository(modelName, scopeCtx);
-                  return createRepository(origRepo.model, trx, scopeCtx);
+                  if (!origRepo || !origRepo.model) {
+                    return origRepo || null;
+                  }
+                  return createRepository(
+                    origRepo.model,
+                    trx,
+                    scopeCtx,
+                    origRepo.cacheLayer || activeCtx.db.ormCacheLayer || null
+                  );
+                },
+                query: (modelName, scopeCtx) => {
+                  if (typeof activeCtx.db.query === 'function') {
+                    const origRepo = activeCtx.db.getRepository(modelName, scopeCtx);
+                    if (origRepo && origRepo.model) {
+                      return createQueryBuilder(
+                        origRepo.model,
+                        trx,
+                        scopeCtx,
+                        origRepo.cacheLayer || activeCtx.db.ormCacheLayer || null
+                      );
+                    }
+                    return activeCtx.db.query(modelName, scopeCtx);
+                  }
+                  return null;
                 },
               });
             } else {
@@ -334,6 +361,8 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
             }
             txCtx.service = (subName, subInput, subOpts) =>
               executeService(registry, subName, subInput, txCtx, subOpts);
+            txCtx.service.call = txCtx.service;
+            txCtx.service.execute = txCtx.service;
             txCtx.service.invalidate = (subName, subInput, subCtx) =>
               registry.invalidate(subName, subInput, subCtx || txCtx);
             txCtx.service.clearCache = (subName) =>

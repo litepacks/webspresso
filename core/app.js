@@ -132,6 +132,10 @@ class CoreApp {
     });
     this.services = this.serviceRegistry;
 
+    this.service.call = (name, input, ctxOrOpts, maybeOpts) =>
+      this.service(name, input, ctxOrOpts, maybeOpts);
+    this.service.execute = (name, input, ctxOrOpts, maybeOpts) =>
+      this.service(name, input, ctxOrOpts, maybeOpts);
     this.service.invalidate = (name, input, ctx) =>
       this.serviceRegistry.invalidate(name, input, ctx || this.context);
     this.service.clearCache = (name) =>
@@ -360,6 +364,8 @@ class CoreApp {
     Object.assign(ctx, extra);
     ctx.service = (subName, subInput, subOpts) =>
       this.service(subName, subInput, ctx, subOpts);
+    ctx.service.call = ctx.service;
+    ctx.service.execute = ctx.service;
     ctx.service.invalidate = (subName, subInput, subCtx) =>
       this.serviceRegistry.invalidate(subName, subInput, subCtx || ctx);
     ctx.service.clearCache = (subName) =>

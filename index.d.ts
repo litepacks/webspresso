@@ -218,8 +218,14 @@ export interface ServiceContext {
   t?: unknown;
   service?: {
     <T = unknown>(name: string, input?: unknown, options?: unknown): Promise<T>;
+    call?: <T = unknown>(name: string, input?: unknown, options?: unknown) => Promise<T>;
+    execute?: <T = unknown>(name: string, input?: unknown, options?: unknown) => Promise<T>;
     invalidate?: (name: string, input?: unknown, ctx?: unknown) => boolean;
     clearCache?: (name?: string) => boolean;
+    invalidateByTag?: (tag: string, serviceName?: string) => number | Promise<number>;
+    invalidateByTags?: (tags: string | string[], serviceName?: string) => number | Promise<number>;
+    invalidateTag?: (tag: string, serviceName?: string) => number | Promise<number>;
+    invalidateTags?: (tags: string | string[], serviceName?: string) => number | Promise<number>;
   };
   breaker?: (name: string, options?: CircuitBreakerOptions) => CircuitBreaker;
   retry?: typeof retry;
