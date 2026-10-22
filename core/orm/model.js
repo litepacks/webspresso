@@ -194,6 +194,10 @@ function defineModel(options) {
     ? rlsConfig
     : null;
 
+  const resolvedDeletedCol = (columns && columns.has('deletedAt')) ? 'deletedAt' : 'deleted_at';
+  const resolvedCreatedCol = (columns && columns.has('createdAt')) ? 'createdAt' : 'created_at';
+  const resolvedUpdatedCol = (columns && columns.has('updatedAt')) ? 'updatedAt' : 'updated_at';
+
   // Create model definition
   const model = {
     name,
@@ -201,6 +205,9 @@ function defineModel(options) {
     schema: normalizedSchema,
     _partialSchema: typeof normalizedSchema?.partial === 'function' ? normalizedSchema.partial() : normalizedSchema,
     primaryKey,
+    _deletedCol: resolvedDeletedCol,
+    _createdCol: resolvedCreatedCol,
+    _updatedCol: resolvedUpdatedCol,
     relations: normalizedRelations,
     scopes: {
       softDelete: Boolean(softDeleteConfig),

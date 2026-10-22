@@ -12,7 +12,46 @@ const { generateNanoid } = require('./utils/nanoid');
  * @returns {string} Column name ('deletedAt' or 'deleted_at')
  */
 function getSoftDeleteColumn(model) {
-  return (model && model.columns && model.columns.has('deletedAt')) ? 'deletedAt' : 'deleted_at';
+  if (model && model._deletedCol) {
+    return model._deletedCol;
+  }
+  const col = (model && model.columns && model.columns.has('deletedAt')) ? 'deletedAt' : 'deleted_at';
+  if (model) {
+    model._deletedCol = col;
+  }
+  return col;
+}
+
+/**
+ * Determine the created at timestamp column name for a model
+ * @param {import('./types').ModelDefinition} model - Model definition
+ * @returns {string} Column name ('createdAt' or 'created_at')
+ */
+function getCreatedAtColumn(model) {
+  if (model && model._createdCol) {
+    return model._createdCol;
+  }
+  const col = (model && model.columns && model.columns.has('createdAt')) ? 'createdAt' : 'created_at';
+  if (model) {
+    model._createdCol = col;
+  }
+  return col;
+}
+
+/**
+ * Determine the updated at timestamp column name for a model
+ * @param {import('./types').ModelDefinition} model - Model definition
+ * @returns {string} Column name ('updatedAt' or 'updated_at')
+ */
+function getUpdatedAtColumn(model) {
+  if (model && model._updatedCol) {
+    return model._updatedCol;
+  }
+  const col = (model && model.columns && model.columns.has('updatedAt')) ? 'updatedAt' : 'updated_at';
+  if (model) {
+    model._updatedCol = col;
+  }
+  return col;
 }
 
 /**
@@ -397,8 +436,8 @@ function applyInsertTimestamps(data, model) {
   }
 
   const now = new Date();
-  const createdCol = (model.columns && model.columns.has('createdAt')) ? 'createdAt' : 'created_at';
-  const updatedCol = (model.columns && model.columns.has('updatedAt')) ? 'updatedAt' : 'updated_at';
+  const createdCol = model._createdCol || ((model.columns && model.columns.has('createdAt')) ? 'createdAt' : 'created_at');
+  const updatedCol = model._updatedCol || ((model.columns && model.columns.has('updatedAt')) ? 'updatedAt' : 'updated_at');
 
   return {
     ...data,
@@ -418,7 +457,7 @@ function applyUpdateTimestamps(data, model) {
     return data;
   }
 
-  const updatedCol = (model.columns && model.columns.has('updatedAt')) ? 'updatedAt' : 'updated_at';
+  const updatedCol = model._updatedCol || ((model.columns && model.columns.has('updatedAt')) ? 'updatedAt' : 'updated_at');
 
   return {
     ...data,
@@ -558,6 +597,8 @@ module.exports = {
   getSoftDeleteData,
   getRestoreData,
   getSoftDeleteColumn,
+  getCreatedAtColumn,
+  getUpdatedAtColumn,
   createScopeContext,
 };
 

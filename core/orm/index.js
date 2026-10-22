@@ -551,6 +551,11 @@ module.exports = {
   getUserId: require('./scopes').getUserId,
   getTenantId: require('./scopes').getTenantId,
   createScopeContext: require('./scopes').createScopeContext,
+  getSoftDeleteColumn: require('./scopes').getSoftDeleteColumn,
+  getCreatedAtColumn: require('./scopes').getCreatedAtColumn,
+  getUpdatedAtColumn: require('./scopes').getUpdatedAtColumn,
+  applyInsertTimestamps: require('./scopes').applyInsertTimestamps,
+  applyUpdateTimestamps: require('./scopes').applyUpdateTimestamps,
   // Cloudflare D1 Native Edge Dialect (lazy getters to avoid eager dialect loading)
   get createD1Knex() { return require('./d1').createD1Knex; },
   get Client_D1() { return require('./d1').Client_D1; },
