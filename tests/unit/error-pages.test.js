@@ -115,10 +115,7 @@ describe('Error Pages', () => {
     });
     
     afterAll(() => {
-      // Cleanup
-      if (fs.existsSync(errorViewsDir)) {
-        fs.rmSync(errorViewsDir, { recursive: true });
-      }
+      cleanupDir(errorViewsDir);
     });
 
     it('should use custom 404 template', async () => {

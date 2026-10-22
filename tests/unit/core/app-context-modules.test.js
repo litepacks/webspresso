@@ -273,9 +273,7 @@ describe('src/modules/module-discovery.js', () => {
       );
     } finally {
       warnSpy.mockRestore();
-      if (fs.existsSync(tempModDir)) {
-        fs.rmSync(tempModDir, { recursive: true, force: true });
-      }
+      cleanupDir(tempModDir);
     }
   });
 

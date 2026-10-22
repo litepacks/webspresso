@@ -1,5 +1,6 @@
 const {
-  createMockSpyRes
+  createMockSpyRes,
+  cleanupDir
 } = require('../utils');
 
 'use strict';
@@ -26,7 +27,7 @@ describe('Upload & REST Resources Branch Coverage', () => {
         req: {},
       });
       expect(resPut.publicUrl).toContain('/uploads/');
-      fs.rmSync(uploadDir, { recursive: true, force: true });
+      cleanupDir(uploadDir);
 
       // Test uploadPlugin with multiple=true and allowlists
       const plugin = uploadPlugin({
@@ -246,7 +247,7 @@ describe('Upload & REST Resources Branch Coverage', () => {
         })
       ).rejects.toThrow('No file content provided');
 
-      fs.rmSync(baseDir, { recursive: true, force: true });
+      cleanupDir(baseDir);
     });
   });
 

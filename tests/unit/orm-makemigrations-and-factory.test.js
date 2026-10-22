@@ -51,7 +51,7 @@ describe('ORM Enhancements: Schema Diff (Django-inspired) & Model Factory (Adoni
       }
       if (fs.existsSync(tempDir)) {
         for (const file of fs.readdirSync(tempDir)) {
-          fs.rmSync(path.join(tempDir, file), { recursive: true, force: true });
+          cleanupDir(path.join(tempDir, file));
         }
       }
       await rawKnex.schema.dropTableIfExists('users');

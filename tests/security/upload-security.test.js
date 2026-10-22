@@ -1,5 +1,6 @@
 const {
-  createTempDir
+  createTempDir,
+  cleanupDir
 } = require('../utils');
 
 const request = require('supertest');
@@ -20,9 +21,7 @@ describe('Security: File Upload Plugin', () => {
   });
 
   afterAll(() => {
-    if (fs.existsSync(TEMP_UPLOAD_DIR)) {
-      fs.rmSync(TEMP_UPLOAD_DIR, { recursive: true, force: true });
-    }
+    cleanupDir(TEMP_UPLOAD_DIR);
   });
 
   it('should prevent path traversal in originalName and save strictly inside upload dir', async () => {

@@ -1,3 +1,7 @@
+const {
+  cleanupDir
+} = require('../utils');
+
 /**
  * CLI Tests
  * Tests for webspresso CLI commands
@@ -242,9 +246,7 @@ async function runCommandInProcess(registerFn, args, options = {}) {
 // Helper to clean up test projects
 function cleanup(projectName) {
   const projectPath = path.join(TEST_DIR, projectName);
-  if (fs.existsSync(projectPath)) {
-    fs.rmSync(projectPath, { recursive: true, force: true });
-  }
+  cleanupDir(projectPath);
 }
 
 // Ensure test directory exists
@@ -259,12 +261,8 @@ beforeAll(() => {
 
 // Clean up after all tests
 afterAll(() => {
-  if (fs.existsSync(TEST_DIR)) {
-    fs.rmSync(TEST_DIR, { recursive: true, force: true });
-  }
-  if (fs.existsSync(FAVICON_TEST_DIR)) {
-    fs.rmSync(FAVICON_TEST_DIR, { recursive: true, force: true });
-  }
+  cleanupDir(TEST_DIR);
+  cleanupDir(FAVICON_TEST_DIR);
 });
 
 // CLI tests must run sequentially to avoid directory conflicts
@@ -677,9 +675,7 @@ describe('CLI', () => {
     it('should scaffold into current directory when project name is .', async () => {
       const dirName = 'dot-dir-scaffold';
       const projectPath = path.join(TEST_DIR, dirName);
-      if (fs.existsSync(projectPath)) {
-        fs.rmSync(projectPath, { recursive: true, force: true });
-      }
+      cleanupDir(projectPath);
       fs.mkdirSync(projectPath, { recursive: true });
       fs.writeFileSync(path.join(projectPath, 'README.md'), '# existing\n');
 
@@ -690,7 +686,7 @@ describe('CLI', () => {
       const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf-8'));
       expect(pkg.name).toBe(dirName);
 
-      fs.rmSync(projectPath, { recursive: true, force: true });
+      cleanupDir(projectPath);
     });
 
     it('should fail if project directory already exists', async () => {
@@ -716,12 +712,12 @@ describe('CLI', () => {
       fs.mkdirSync(tempProjectDir, { recursive: true });
       fs.writeFileSync(path.join(tempProjectDir, 'server.js'), '// test');
       fs.mkdirSync(path.join(tempProjectDir, 'pages'), { recursive: true });
-      
+
       // Try to create new project in this directory (simulating interactive mode)
       // This should fail because it already has Webspresso files
       // Note: We can't easily test the interactive prompt, but we can test the validation
       const result = await runCommandInProcess(registerNew, `new test-in-existing --yes`, { cwd: tempProjectDir });
-      
+
       // Should succeed if we provide a new name, but fail if we try to use current dir
       // Since we're providing a name, it should work - check that project was created
       const newProjectPath = path.join(tempProjectDir, 'test-in-existing');
@@ -729,12 +725,9 @@ describe('CLI', () => {
         // Project was created successfully
         expect(fs.existsSync(path.join(newProjectPath, 'pages'))).toBe(true);
       }
-      
-      // Cleanup
-      if (fs.existsSync(newProjectPath)) {
-        fs.rmSync(newProjectPath, { recursive: true, force: true });
-      }
-      fs.rmSync(tempProjectDir, { recursive: true, force: true });
+
+      cleanupDir(newProjectPath);
+      cleanupDir(tempProjectDir);
     });
   });
 
@@ -831,15 +824,13 @@ describe('CLI', () => {
     it('should fail if models directory does not exist', async () => {
       // Remove models directory
       const modelsDir = path.join(projectPath, 'models');
-      if (fs.existsSync(modelsDir)) {
-        fs.rmSync(modelsDir, { recursive: true, force: true });
-      }
-      
+      cleanupDir(modelsDir);
+
       const result = await runCommandInProcess(registerSeed, 'seed', { cwd: projectPath });
-      
+
       expect(result.exitCode).toBe(1);
       expect(result.stderr || result.stdout).toContain('models/ directory not found');
-      
+
       // Restore models directory
       fs.mkdirSync(modelsDir, { recursive: true });
     });
@@ -847,12 +838,10 @@ describe('CLI', () => {
     it('should fail if seeds/index.js does not exist', async () => {
       // Ensure seeds directory doesn't exist
       const seedsDir = path.join(projectPath, 'seeds');
-      if (fs.existsSync(seedsDir)) {
-        fs.rmSync(seedsDir, { recursive: true, force: true });
-      }
-      
+      cleanupDir(seedsDir);
+
       const result = await runCommandInProcess(registerSeed, 'seed', { cwd: projectPath });
-      
+
       expect(result.exitCode).toBe(1);
       const output = result.stderr || result.stdout;
       // Main check: should mention seeds/index.js not found
@@ -862,18 +851,15 @@ describe('CLI', () => {
     it('should create seed files with --setup flag', async () => {
       const seedsDir = path.join(projectPath, 'seeds');
       const seedIndexPath = path.join(seedsDir, 'index.js');
-      
-      // Remove seeds directory if exists
-      if (fs.existsSync(seedsDir)) {
-        fs.rmSync(seedsDir, { recursive: true, force: true });
-      }
-      
+
+      cleanupDir(seedsDir);
+
       const result = await runCommandInProcess(registerSeed, 'seed --setup', { cwd: projectPath });
-      
+
       // Check that seed files were created
       expect(fs.existsSync(seedsDir)).toBe(true);
       expect(fs.existsSync(seedIndexPath)).toBe(true);
-      
+
       // Check seed file content
       const seedContent = fs.readFileSync(seedIndexPath, 'utf-8');
       expect(seedContent).toContain('createDatabase');
@@ -901,16 +887,12 @@ describe('CLI', () => {
     }, 60000);
 
     afterAll(() => {
-      if (fs.existsSync(doctorTestDir)) {
-        fs.rmSync(doctorTestDir, { recursive: true, force: true });
-      }
+      cleanupDir(doctorTestDir);
     });
 
     beforeEach(() => {
       const pagesPath = path.join(doctorTestDir, 'pages');
-      if (fs.existsSync(pagesPath)) {
-        fs.rmSync(pagesPath, { recursive: true, force: true });
-      }
+      cleanupDir(pagesPath);
       fs.mkdirSync(pagesPath, { recursive: true });
     });
 
@@ -972,9 +954,7 @@ describe('CLI', () => {
     }, 60000);
 
     afterAll(() => {
-      if (fs.existsSync(FAVICON_TEST_DIR)) {
-        fs.rmSync(FAVICON_TEST_DIR, { recursive: true, force: true });
-      }
+      cleanupDir(FAVICON_TEST_DIR);
     });
 
     beforeEach(() => {
@@ -983,9 +963,7 @@ describe('CLI', () => {
       const partialsDir = path.join(faviconTestDir, 'views', 'partials');
       const layoutPath = path.join(faviconTestDir, 'views', 'layout.njk');
 
-      if (fs.existsSync(publicDir)) {
-        fs.rmSync(publicDir, { recursive: true, force: true });
-      }
+      cleanupDir(publicDir);
       if (fs.existsSync(partialsDir)) {
         fs.unlinkSync(path.join(partialsDir, 'favicons.njk'));
         if (fs.readdirSync(partialsDir).length === 0) {

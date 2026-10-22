@@ -1,6 +1,7 @@
 const {
   wait,
-  createTempDir
+  createTempDir,
+  cleanupDir
 } = require('../utils');
 
 /**
@@ -29,9 +30,7 @@ describe('Enhanced Dev Live Reload (Template & View Watching)', () => {
   });
 
   afterAll(() => {
-    try {
-      fs.rmSync(baseFixtureDir, { recursive: true, force: true });
-    } catch (_) {}
+    cleanupDir(baseFixtureDir);
   });
 
   it('watches viewsDir and triggers full reload when .njk layout is modified', async () => {

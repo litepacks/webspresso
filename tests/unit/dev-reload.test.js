@@ -1,6 +1,7 @@
 const {
   wait,
-  createTempDir
+  createTempDir,
+  cleanupDir
 } = require('../utils');
 
 /**
@@ -33,9 +34,7 @@ describe('Dev Live & Hot Reload (SSE CSS Hot Reload)', () => {
   });
 
   afterAll(() => {
-    try {
-      fs.rmSync(tempPublicDir, { recursive: true, force: true });
-    } catch (_) {}
+    cleanupDir(tempPublicDir);
   });
 
   it('createDevReloadHub returns null when enabled is false', () => {

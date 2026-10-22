@@ -145,9 +145,7 @@ describe('admin:password CLI', () => {
     if (db) {
       await db.destroy();
     }
-    if (fs.existsSync(TEST_DIR)) {
-      fs.rmSync(TEST_DIR, { recursive: true, force: true });
-    }
+    cleanupDir(TEST_DIR);
   });
 
   it('should show help for admin:password', async () => {

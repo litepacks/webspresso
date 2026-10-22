@@ -1,3 +1,7 @@
+const {
+  cleanupDir
+} = require('../utils');
+
 /**
  * E2E: createApp({ pageAssets }) — per-route load() stylesheets in <head> and real CSS in browser
  */
@@ -103,7 +107,7 @@ test.describe('pageAssets e2e', () => {
     const tempOff = path.join(os.tmpdir(), 'webspresso-page-assets-e2e-off');
     const tempOn = path.join(os.tmpdir(), 'webspresso-page-assets-e2e-on');
     for (const t of [tempOff, tempOn]) {
-      if (fs.existsSync(t)) fs.rmSync(t, { recursive: true, force: true });
+      cleanupDir(t);
     }
 
     for (const temp of [tempOff, tempOn]) {

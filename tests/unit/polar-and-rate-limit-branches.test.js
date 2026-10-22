@@ -1,3 +1,7 @@
+const {
+  cleanupDir
+} = require('../utils');
+
 'use strict';
 
 const path = require('path');
@@ -122,7 +126,7 @@ describe('Polar Billing & Rate Limiting Branch Coverage', () => {
       result.registerDynamicFileRoutes();
       expect(result.routeMetadata.length).toBeGreaterThanOrEqual(2);
 
-      fs.rmSync(tmpPages, { recursive: true, force: true });
+      cleanupDir(tmpPages);
     });
 
     it('exercises SSR streaming mode and frontmatter string rendering in file-router', async () => {
@@ -181,7 +185,7 @@ describe('Polar Billing & Rate Limiting Branch Coverage', () => {
         if (err) throw err;
       });
 
-      fs.rmSync(tmpPages, { recursive: true, force: true });
+      cleanupDir(tmpPages);
     });
   });
 

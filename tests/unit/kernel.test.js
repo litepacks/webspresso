@@ -1,3 +1,7 @@
+const {
+  cleanupDir
+} = require('../utils');
+
 /**
  * Application kernel unit tests (event bus, repository hooks, flows, views).
  */
@@ -341,7 +345,7 @@ describe('kernel view resolver', () => {
       fs.unlinkSync(path.join(themeRoot, 'page.html'));
       expect(view.renderView('demo::page', {})).toBe('INLINE');
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      cleanupDir(tmp);
     }
   });
 

@@ -1,3 +1,7 @@
+const {
+  cleanupDir
+} = require('../utils');
+
 /**
  * Auth System E2E Tests
  */
@@ -23,10 +27,7 @@ test.describe('Auth E2E Tests', () => {
     const pagesDir = path.join(tempDir, 'pages');
     const viewsDir = path.join(tempDir, 'views');
 
-    // Clean and create directories
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    cleanupDir(tempDir);
     fs.mkdirSync(pagesDir, { recursive: true });
     fs.mkdirSync(viewsDir, { recursive: true });
 
@@ -85,7 +86,7 @@ test.describe('Auth E2E Tests', () => {
       findUserById: async (id) => await UserRepo.findById(id),
       findUserByCredentials: async (email, password) => {
         const user = await UserRepo.findOne({ email });
-        if (user && await verify(password, user.password)) {
+        if (user && (await verify(password, user.password))) {
           return user;
         }
         return null;

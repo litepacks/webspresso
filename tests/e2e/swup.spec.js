@@ -1,3 +1,7 @@
+const {
+  cleanupDir
+} = require('../utils');
+
 /**
  * clientRuntime: Alpine + swup E2E (HTMX-free)
  */
@@ -88,7 +92,7 @@ test.describe('clientRuntime swup + Alpine', () => {
     const tempOff = path.join(os.tmpdir(), 'webspresso-swup-e2e-off');
     const tempOn = path.join(os.tmpdir(), 'webspresso-swup-e2e-on');
     for (const t of [tempOff, tempOn]) {
-      if (fs.existsSync(t)) fs.rmSync(t, { recursive: true, force: true });
+      cleanupDir(t);
     }
 
     const pagesOff = path.join(tempOff, 'pages');
