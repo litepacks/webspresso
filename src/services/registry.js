@@ -1,14 +1,23 @@
 /**
  * Webspresso Service Registry
- * Central registry holding discovered and programmatically registered services
+ * Central registry holding discovered and programmatically registered services.
+ * Supports CommonJS and ESM native dynamic import, on-demand lazy loading,
+ * and dev-mode hot reloading.
  * @module src/services/registry
  */
+
+'use strict';
 
 const path = require('path');
 const { ConfigurationError, WebspressoError } = require('../../core/errors');
 const { discoverServices } = require('./discovery');
 const { executeService } = require('./executor');
 const { memoize } = require('./memoize');
+const {
+  loadModuleSync,
+  loadModuleAsync,
+  extractModuleExport,
+} = require('./loader');
 
 class ServiceRegistry {
   /**
@@ -16,6 +25,9 @@ class ServiceRegistry {
    * @param {string} [options.servicesDir] - Path to services directory
    * @param {boolean} [options.isDev=false] - Whether in development mode
    * @param {Object} [options.logger] - Logger instance
+   * @param {Object} [options.timeouts] - Global timeouts configuration
+   * @param {number|string} [options.timeout] - Default execution timeout
+   * @param {boolean} [options.lazy=false] - Whether to defer module loading until invocation
    */
   constructor(options = {}) {
     this.servicesDir = options.servicesDir ? path.resolve(options.servicesDir) : null;
@@ -23,16 +35,73 @@ class ServiceRegistry {
     this.logger = options.logger || null;
     this.timeouts = options.timeouts || null;
     this.timeout = options.timeout !== undefined ? options.timeout : null;
+    this.lazy = Boolean(options.lazy);
 
-    /** @type {Map<string, Object>} */
+    /** @type {Map<string, Object>} Materialized service definitions */
     this.services = new Map();
 
-    /** @type {Map<string, string>} */
+    /** @type {Map<string, string>} Aliases mapping to primary service names */
     this.aliases = new Map();
+
+    /** @type {Map<string, Object>} Deferred lazy service registrations */
+    this.lazyServices = new Map();
   }
 
   /**
-   * Discover and load all services from servicesDir
+   * Normalize raw module export or definition into a standardized ServiceDefinition
+   * @param {string} name - Service name
+   * @param {any} raw - Raw module or object
+   * @param {string|null} [filePath=null] - Origin file path if discovered from disk
+   * @returns {Object} Standardized service definition
+   * @private
+   */
+  _normalizeDefinition(name, raw, filePath = null) {
+    const extracted = extractModuleExport(raw);
+    const definition = typeof extracted === 'function' ? { handler: extracted } : extracted;
+
+    if (!definition || typeof definition !== 'object') {
+      const target = filePath ? `Service file '${filePath}'` : `Service '${name}'`;
+      throw new ConfigurationError(`${target} must export an object or handler function`);
+    }
+
+    if (typeof definition.handler !== 'function') {
+      const target = filePath ? `Service '${name}' in '${filePath}'` : `Service '${name}'`;
+      throw new ConfigurationError(`${target} must provide a handler function`);
+    }
+
+    let handler = definition.handler;
+    let memoizeFn = null;
+
+    if (definition.cache) {
+      const memoizeOpts = typeof definition.cache === 'object' && definition.cache !== null
+        ? definition.cache
+        : { ttl: definition.cache };
+      memoizeFn = memoize(definition.handler, memoizeOpts);
+      handler = memoizeFn;
+    }
+
+    return {
+      name,
+      filePath: filePath || definition.filePath || null,
+      schema: definition.schema || null,
+      handler,
+      rawHandler: definition.handler,
+      memoize: memoizeFn,
+      metadata: definition.metadata || {},
+      description: definition.description || definition.metadata?.description || '',
+      auth: definition.auth,
+      cache: definition.cache,
+      timeout: definition.timeout,
+      transaction: definition.transaction,
+      circuitBreaker: definition.circuitBreaker,
+      retry: definition.retry,
+    };
+  }
+
+  /**
+   * Discover and synchronously load all services from servicesDir.
+   * If a file is an ES Module (or options.lazy is true), it is automatically
+   * registered as lazy to be resolved asynchronously on invocation.
    * @returns {ServiceRegistry}
    */
   load() {
@@ -46,77 +115,97 @@ class ServiceRegistry {
       const { name, aliases, filePath } = item;
 
       // Duplicate check
-      if (this.services.has(name)) {
-        const existing = this.services.get(name);
+      if (this.services.has(name) || this.lazyServices.has(name)) {
+        const existing = this.services.get(name) || this.lazyServices.get(name);
         throw new ConfigurationError(
           `Duplicate service registered: ${name} (files: ${existing.filePath} and ${filePath})`
         );
       }
 
-      // In dev mode, ensure fresh require
-      if (this.isDev) {
-        try {
-          const resolved = require.resolve(filePath);
-          delete require.cache[resolved];
-        } catch (e) {}
+      for (const alias of aliases) {
+        this.aliases.set(alias, name);
       }
 
-      let mod;
+      const isMjs = filePath.endsWith('.mjs');
+
+      // If lazy mode or .mjs file, register lazily
+      if (this.lazy || isMjs) {
+        this.lazyServices.set(name, {
+          name,
+          aliases,
+          filePath,
+          isMjs,
+        });
+        continue;
+      }
+
       try {
-        mod = require(filePath);
+        const mod = loadModuleSync(filePath, { isDev: this.isDev });
+        const serviceDef = this._normalizeDefinition(name, mod, filePath);
+        this.services.set(name, serviceDef);
+      } catch (err) {
+        // If file is an ES Module (ERR_REQUIRE_ESM), fall back to lazy async evaluation
+        if (err.code === 'ERR_REQUIRE_ESM' || err.message?.includes('ERR_REQUIRE_ESM')) {
+          this.lazyServices.set(name, {
+            name,
+            aliases,
+            filePath,
+            isMjs: true,
+          });
+        } else {
+          throw new ConfigurationError(`Failed to load service file '${filePath}': ${err.message}`, {
+            cause: err,
+          });
+        }
+      }
+    }
+
+    return this;
+  }
+
+  /**
+   * Discover and asynchronously load all services from servicesDir, supporting both CJS and native ESM.
+   * @returns {Promise<ServiceRegistry>}
+   */
+  async loadAsync() {
+    if (!this.servicesDir) {
+      return this;
+    }
+
+    const discovered = discoverServices(this.servicesDir);
+
+    for (const item of discovered) {
+      const { name, aliases, filePath } = item;
+
+      if (this.services.has(name) || this.lazyServices.has(name)) {
+        const existing = this.services.get(name) || this.lazyServices.get(name);
+        throw new ConfigurationError(
+          `Duplicate service registered: ${name} (files: ${existing.filePath} and ${filePath})`
+        );
+      }
+
+      for (const alias of aliases) {
+        this.aliases.set(alias, name);
+      }
+
+      if (this.lazy) {
+        this.lazyServices.set(name, {
+          name,
+          aliases,
+          filePath,
+          isMjs: filePath.endsWith('.mjs'),
+        });
+        continue;
+      }
+
+      try {
+        const mod = await loadModuleAsync(filePath, { isDev: this.isDev });
+        const serviceDef = this._normalizeDefinition(name, mod, filePath);
+        this.services.set(name, serviceDef);
       } catch (err) {
         throw new ConfigurationError(`Failed to load service file '${filePath}': ${err.message}`, {
           cause: err,
         });
-      }
-
-      const raw = mod && mod.__esModule && mod.default ? mod.default : (mod && mod.default ? mod.default : mod);
-      const definition = typeof raw === 'function' ? { handler: raw } : raw;
-
-      if (!definition || typeof definition !== 'object') {
-        throw new ConfigurationError(
-          `Service file '${filePath}' must export an object or handler function`
-        );
-      }
-
-      if (typeof definition.handler !== 'function') {
-        throw new ConfigurationError(
-          `Service '${name}' in '${filePath}' must provide a handler function`
-        );
-      }
-
-      let handler = definition.handler;
-      let memoizeFn = null;
-
-      if (definition.cache) {
-        const memoizeOpts = typeof definition.cache === 'object' && definition.cache !== null
-          ? definition.cache
-          : { ttl: definition.cache };
-        memoizeFn = memoize(definition.handler, memoizeOpts);
-        handler = memoizeFn;
-      }
-
-      const serviceDef = {
-        name,
-        filePath,
-        schema: definition.schema || null,
-        handler,
-        rawHandler: definition.handler,
-        memoize: memoizeFn,
-        metadata: definition.metadata || {},
-        description: definition.description || definition.metadata?.description || '',
-        auth: definition.auth,
-        cache: definition.cache,
-        timeout: definition.timeout,
-        transaction: definition.transaction,
-        circuitBreaker: definition.circuitBreaker,
-        retry: definition.retry,
-      };
-
-      this.services.set(name, serviceDef);
-
-      for (const alias of aliases) {
-        this.aliases.set(alias, name);
       }
     }
 
@@ -125,8 +214,9 @@ class ServiceRegistry {
 
   /**
    * Programmatically register a service
-   * @param {string} name - Service name (e.g. 'user.get')
-   * @param {Object|Function} definition - Service definition or handler function
+   * @param {string|Object} nameOrDef - Service name or definition object
+   * @param {Object|Function} [maybeDef] - Service definition or handler function
+   * @param {Object} [options={}] - Options (e.g. { overwrite: true, aliases: [] })
    * @returns {ServiceRegistry}
    */
   register(nameOrDef, maybeDef, options = {}) {
@@ -142,45 +232,58 @@ class ServiceRegistry {
       throw new WebspressoError('Service name must be a non-empty string');
     }
 
-    if (this.services.has(name) && !options.overwrite) {
+    if ((this.services.has(name) || this.lazyServices.has(name)) && !options.overwrite) {
       throw new ConfigurationError(`Duplicate service registered: ${name}`);
     }
 
-    const def = typeof definition === 'function' ? { handler: definition } : definition;
-
-    if (!def || typeof def !== 'object' || typeof def.handler !== 'function') {
-      throw new ConfigurationError(`Service '${name}' must provide a handler function`);
-    }
-
-    let handler = def.handler;
-    let memoizeFn = null;
-
-    if (def.cache) {
-      const memoizeOpts = typeof def.cache === 'object' && def.cache !== null
-        ? def.cache
-        : { ttl: def.cache };
-      memoizeFn = memoize(def.handler, memoizeOpts);
-      handler = memoizeFn;
-    }
-
-    const serviceDef = {
-      name,
-      filePath: def.filePath || null,
-      schema: def.schema || null,
-      handler,
-      rawHandler: def.handler,
-      memoize: memoizeFn,
-      metadata: def.metadata || {},
-      description: def.description || def.metadata?.description || '',
-      auth: def.auth,
-      cache: def.cache,
-      timeout: def.timeout,
-      transaction: def.transaction,
-      circuitBreaker: def.circuitBreaker,
-      retry: def.retry,
-    };
-
+    const serviceDef = this._normalizeDefinition(name, definition, definition?.filePath || null);
     this.services.set(name, serviceDef);
+    this.lazyServices.delete(name);
+
+    if (Array.isArray(options.aliases)) {
+      for (const alias of options.aliases) {
+        this.aliases.set(alias, name);
+      }
+    }
+
+    return this;
+  }
+
+  /**
+   * Programmatically register a lazy service with a custom loader function or file path
+   * @param {string} name - Service name
+   * @param {Function|string} loader - Async loader function or file path
+   * @param {Object} [options={}] - Registration options
+   * @returns {ServiceRegistry}
+   */
+  registerLazy(name, loader, options = {}) {
+    if (!name || typeof name !== 'string') {
+      throw new WebspressoError('Service name must be a non-empty string');
+    }
+
+    if (typeof loader !== 'function' && typeof loader !== 'string') {
+      throw new ConfigurationError(
+        `Lazy service loader for '${name}' must be an async loader function or file path string`
+      );
+    }
+
+    if ((this.services.has(name) || this.lazyServices.has(name)) && !options.overwrite) {
+      throw new ConfigurationError(`Duplicate service registered: ${name}`);
+    }
+
+    this.lazyServices.set(name, {
+      name,
+      loader: typeof loader === 'function' ? loader : null,
+      filePath: typeof loader === 'string' ? loader : (options.filePath || null),
+      options,
+    });
+
+    if (Array.isArray(options.aliases)) {
+      for (const alias of options.aliases) {
+        this.aliases.set(alias, name);
+      }
+    }
+
     return this;
   }
 
@@ -191,11 +294,15 @@ class ServiceRegistry {
    */
   unregister(name) {
     if (!name || typeof name !== 'string') return false;
-    return this.services.delete(name);
+    const removedService = this.services.delete(name);
+    const removedLazy = this.lazyServices.delete(name);
+    return removedService || removedLazy;
   }
 
   /**
-   * Get a service definition by name or alias
+   * Get a service definition by name or alias (synchronous).
+   * If the service is registered as lazy CommonJS, it will be loaded and cached synchronously.
+   * If the service is an ES Module, call getAsync() or execute() instead.
    * @param {string} name - Service name
    * @returns {Object|undefined}
    */
@@ -209,28 +316,102 @@ class ServiceRegistry {
     }
 
     const aliasedName = this.aliases.get(name);
-    if (aliasedName && this.services.has(aliasedName)) {
-      return this.services.get(aliasedName);
+    const targetName = (aliasedName && (this.services.has(aliasedName) || this.lazyServices.has(aliasedName)))
+      ? aliasedName
+      : name;
+
+    if (this.services.has(targetName)) {
+      return this.services.get(targetName);
+    }
+
+    if (this.lazyServices.has(targetName)) {
+      const lazyItem = this.lazyServices.get(targetName);
+      // Attempt synchronous require if it is a CJS file path
+      if (lazyItem.filePath && !lazyItem.isMjs) {
+        try {
+          const mod = loadModuleSync(lazyItem.filePath, { isDev: this.isDev });
+          const serviceDef = this._normalizeDefinition(targetName, mod, lazyItem.filePath);
+          this.services.set(targetName, serviceDef);
+          this.lazyServices.delete(targetName);
+          return serviceDef;
+        } catch (err) {
+          if (err.code !== 'ERR_REQUIRE_ESM' && !err.message?.includes('ERR_REQUIRE_ESM')) {
+            throw err;
+          }
+        }
+      }
     }
 
     return undefined;
   }
 
   /**
-   * Check if a service exists
+   * Asynchronously get or load a service definition by name or alias.
+   * Seamlessly resolves lazy CJS, ESM dynamic imports, and custom loader functions.
+   * @param {string} name - Service name
+   * @returns {Promise<Object|undefined>}
+   */
+  async getAsync(name) {
+    if (!name || typeof name !== 'string') {
+      return undefined;
+    }
+
+    if (this.services.has(name)) {
+      return this.services.get(name);
+    }
+
+    const aliasedName = this.aliases.get(name);
+    const targetName = (aliasedName && (this.services.has(aliasedName) || this.lazyServices.has(aliasedName)))
+      ? aliasedName
+      : name;
+
+    if (this.services.has(targetName)) {
+      return this.services.get(targetName);
+    }
+
+    if (this.lazyServices.has(targetName)) {
+      const lazyItem = this.lazyServices.get(targetName);
+      let mod;
+      if (typeof lazyItem.loader === 'function') {
+        mod = await lazyItem.loader();
+      } else if (lazyItem.filePath) {
+        mod = await loadModuleAsync(lazyItem.filePath, { isDev: this.isDev });
+      }
+
+      const serviceDef = this._normalizeDefinition(targetName, mod, lazyItem.filePath);
+      this.services.set(targetName, serviceDef);
+      this.lazyServices.delete(targetName);
+      return serviceDef;
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Check if a service exists (either materialized or registered lazily)
    * @param {string} name - Service name
    * @returns {boolean}
    */
   has(name) {
-    return this.get(name) !== undefined;
+    if (!name || typeof name !== 'string') return false;
+    if (this.services.has(name) || this.lazyServices.has(name)) return true;
+    const aliasedName = this.aliases.get(name);
+    if (aliasedName) {
+      return this.services.has(aliasedName) || this.lazyServices.has(aliasedName);
+    }
+    return false;
   }
 
   /**
-   * List all registered service names
+   * List all registered service names (including lazy services)
    * @returns {string[]}
    */
   list() {
-    return Array.from(this.services.keys());
+    const names = new Set(this.services.keys());
+    for (const name of this.lazyServices.keys()) {
+      names.add(name);
+    }
+    return Array.from(names);
   }
 
   /**
@@ -299,13 +480,25 @@ class ServiceRegistry {
   }
 
   /**
-   * Reload services from disk (useful in development)
+   * Reload services from disk synchronously (useful in development)
    * @returns {ServiceRegistry}
    */
   reload() {
     this.services.clear();
+    this.lazyServices.clear();
     this.aliases.clear();
     return this.load();
+  }
+
+  /**
+   * Reload services from disk asynchronously (useful in development for ESM)
+   * @returns {Promise<ServiceRegistry>}
+   */
+  async reloadAsync() {
+    this.services.clear();
+    this.lazyServices.clear();
+    this.aliases.clear();
+    return this.loadAsync();
   }
 }
 

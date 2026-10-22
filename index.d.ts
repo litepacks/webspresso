@@ -252,17 +252,37 @@ export interface ServiceDefinition<TInput = unknown, TOutput = unknown> {
 }
 
 export class ServiceRegistry {
-  constructor(options?: { servicesDir?: string; isDev?: boolean; logger?: unknown });
+  constructor(options?: {
+    servicesDir?: string;
+    isDev?: boolean;
+    logger?: unknown;
+    timeouts?: unknown;
+    timeout?: number | string;
+    lazy?: boolean;
+  });
   readonly services: Map<string, ServiceDefinition>;
+  readonly lazyServices: Map<string, unknown>;
+  readonly aliases: Map<string, string>;
   load(): this;
-  register(name: string, definition: ServiceDefinition | ServiceHandler): this;
+  loadAsync(): Promise<this>;
+  register(name: string, definition: ServiceDefinition | ServiceHandler, options?: { overwrite?: boolean; aliases?: string[] }): this;
+  registerLazy(
+    name: string,
+    loader: (() => Promise<unknown> | unknown) | string,
+    options?: { overwrite?: boolean; aliases?: string[]; filePath?: string }
+  ): this;
   get(name: string): ServiceDefinition | undefined;
+  getAsync(name: string): Promise<ServiceDefinition | undefined>;
   has(name: string): boolean;
   list(): string[];
+  unregister(name: string): boolean;
   invalidate(name: string, input?: unknown, ctx?: unknown): boolean;
   clearCache(name?: string): boolean;
+  clearAllCaches(): boolean;
   call<T = unknown>(name: string, input?: unknown, ctx?: unknown, options?: unknown): Promise<T>;
+  execute<T = unknown>(name: string, input?: unknown, ctx?: unknown, options?: unknown): Promise<T>;
   reload(): this;
+  reloadAsync(): Promise<this>;
 }
 
 export function createServiceRegistry(options?: {
@@ -270,7 +290,24 @@ export function createServiceRegistry(options?: {
   isDev?: boolean;
   logger?: unknown;
   autoLoad?: boolean;
+  lazy?: boolean;
+  timeouts?: unknown;
+  timeout?: number | string;
 }): ServiceRegistry;
+
+export function createServiceRegistryAsync(options?: {
+  servicesDir?: string;
+  isDev?: boolean;
+  logger?: unknown;
+  autoLoad?: boolean;
+  lazy?: boolean;
+  timeouts?: unknown;
+  timeout?: number | string;
+}): Promise<ServiceRegistry>;
+
+export function loadModuleSync(filePath: string, options?: { isDev?: boolean }): unknown;
+export function loadModuleAsync(filePath: string, options?: { isDev?: boolean }): Promise<unknown>;
+export function extractModuleExport(mod: unknown): unknown;
 
 export type InferServiceInput<T> = T extends ServiceDefinition<infer TInput, any>
   ? TInput

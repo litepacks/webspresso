@@ -22,7 +22,15 @@ function isValidServiceFile(filename) {
   if (filename.startsWith('.') || filename.startsWith('_')) {
     return false;
   }
-  if (filename.endsWith('.test.js') || filename.endsWith('.spec.js') || filename.endsWith('.d.ts')) {
+  if (
+    filename.endsWith('.test.js') ||
+    filename.endsWith('.spec.js') ||
+    filename.endsWith('.test.mjs') ||
+    filename.endsWith('.spec.mjs') ||
+    filename.endsWith('.test.cjs') ||
+    filename.endsWith('.spec.cjs') ||
+    filename.endsWith('.d.ts')
+  ) {
     return false;
   }
   const ext = path.extname(filename);

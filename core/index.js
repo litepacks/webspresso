@@ -11,6 +11,7 @@
 const { CoreApp, createCoreApp } = require('./app');
 const {
   createServiceRegistry,
+  createServiceRegistryAsync,
   defineService,
   ServiceRegistry,
   executeService,
@@ -23,6 +24,9 @@ const {
   stableCacheKey,
   sanitizeInput,
   maskSensitiveData,
+  loadModuleSync,
+  loadModuleAsync,
+  extractModuleExport,
 } = require('./services');
 
 const { ShutdownManager } = require('./shutdown');
@@ -56,6 +60,7 @@ module.exports = {
   // Services Layer
   services: require('./services'),
   createServiceRegistry,
+  createServiceRegistryAsync,
   defineService,
   service: defineService,
   ServiceRegistry,
@@ -69,6 +74,9 @@ module.exports = {
   stableCacheKey,
   sanitizeInput,
   maskSensitiveData,
+  loadModuleSync,
+  loadModuleAsync,
+  extractModuleExport,
 
   // Route & Endpoint Declarations
   defineApi: require('../src/api/define-api').defineApi,

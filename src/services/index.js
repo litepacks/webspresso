@@ -10,6 +10,12 @@ const { validateServiceInput, sanitizeInput } = require('./validator');
 const { executeService, SERVICE_CALL_STACK_SYMBOL, maskSensitiveData } = require('./executor');
 
 const { memoize, parseTtlMs, stableCacheKey } = require('./memoize');
+const {
+  loadModuleSync,
+  loadModuleAsync,
+  extractModuleExport,
+  nativeImport,
+} = require('./loader');
 
 /**
  * Define a service definition with optional schema and metadata
@@ -24,12 +30,13 @@ function defineService(definition) {
 }
 
 /**
- * Factory function to create and optionally load a ServiceRegistry
+ * Factory function to create and optionally load a ServiceRegistry synchronously
  * @param {Object} [options]
  * @param {string} [options.servicesDir] - Path to services directory
  * @param {boolean} [options.isDev=false] - Whether development mode is active
  * @param {Object} [options.logger] - Optional logger
  * @param {boolean} [options.autoLoad=true] - Whether to load immediately if servicesDir exists
+ * @param {boolean} [options.lazy=false] - Whether to defer loading until invocation
  * @returns {ServiceRegistry}
  */
 function createServiceRegistry(options = {}) {
@@ -40,9 +47,28 @@ function createServiceRegistry(options = {}) {
   return registry;
 }
 
+/**
+ * Async factory function to create and asynchronously load a ServiceRegistry (supports native ESM & dynamic import)
+ * @param {Object} [options]
+ * @param {string} [options.servicesDir] - Path to services directory
+ * @param {boolean} [options.isDev=false] - Whether development mode is active
+ * @param {Object} [options.logger] - Optional logger
+ * @param {boolean} [options.autoLoad=true] - Whether to load immediately if servicesDir exists
+ * @param {boolean} [options.lazy=false] - Whether to defer loading until invocation
+ * @returns {Promise<ServiceRegistry>}
+ */
+async function createServiceRegistryAsync(options = {}) {
+  const registry = new ServiceRegistry(options);
+  if (options.autoLoad !== false && options.servicesDir) {
+    await registry.loadAsync();
+  }
+  return registry;
+}
+
 module.exports = {
   ServiceRegistry,
   createServiceRegistry,
+  createServiceRegistryAsync,
   defineService,
   service: defineService, // alias
   get createAuthServices() { return require('./builtins/auth').createAuthServices; },
@@ -62,4 +88,8 @@ module.exports = {
   validateServiceInput,
   executeService,
   SERVICE_CALL_STACK_SYMBOL,
+  loadModuleSync,
+  loadModuleAsync,
+  extractModuleExport,
+  nativeImport,
 };

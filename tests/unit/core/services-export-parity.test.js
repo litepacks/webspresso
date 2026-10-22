@@ -25,6 +25,10 @@ describe('Core Services Layer & Export Parity (core/services)', () => {
       expect(typeof coreServices.stableCacheKey).toBe('function');
       expect(typeof coreServices.sanitizeInput).toBe('function');
       expect(typeof coreServices.maskSensitiveData).toBe('function');
+      expect(typeof coreServices.createServiceRegistryAsync).toBe('function');
+      expect(typeof coreServices.loadModuleSync).toBe('function');
+      expect(typeof coreServices.loadModuleAsync).toBe('function');
+      expect(typeof coreServices.extractModuleExport).toBe('function');
     });
 
     it('core/services provides lazy getters for all built-in service creators', () => {
@@ -59,6 +63,10 @@ describe('Core Services Layer & Export Parity (core/services)', () => {
       expect(core.stableCacheKey).toBe(coreServices.stableCacheKey);
       expect(core.sanitizeInput).toBe(coreServices.sanitizeInput);
       expect(core.maskSensitiveData).toBe(coreServices.maskSensitiveData);
+      expect(core.createServiceRegistryAsync).toBe(coreServices.createServiceRegistryAsync);
+      expect(core.loadModuleSync).toBe(coreServices.loadModuleSync);
+      expect(core.loadModuleAsync).toBe(coreServices.loadModuleAsync);
+      expect(core.extractModuleExport).toBe(coreServices.extractModuleExport);
     });
 
     it('root index.js re-exports services namespace and top-level helpers with exact identity', () => {

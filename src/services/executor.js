@@ -156,7 +156,10 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
     throw new WebspressoError('Service name must be a non-empty string');
   }
 
-  const serviceDef = registry.get(name);
+  let serviceDef = registry.get(name);
+  if (!serviceDef && typeof registry.getAsync === 'function') {
+    serviceDef = await registry.getAsync(name);
+  }
 
   if (!serviceDef) {
     const notFoundErr = new NotFoundError(`Service not found: ${name}`);
