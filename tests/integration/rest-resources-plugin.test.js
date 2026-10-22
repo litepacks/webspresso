@@ -42,7 +42,13 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
       pagesDir: FIXTURES_PAGES,
       viewsDir: FIXTURES_VIEWS,
       db,
+      silent: true,
+      server: { port: 0, shutdown: { enabled: false } },
+      helmet: false,
+      compression: false,
       cache: false,
+      healthCheck: false,
+      metrics: false,
       lazyRoutes: true,
       plugins: [restResourcePlugin({ path: '/api/rest' })],
     });
@@ -98,7 +104,13 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
       pagesDir: FIXTURES_PAGES,
       viewsDir: FIXTURES_VIEWS,
       db,
+      silent: true,
+      server: { port: 0, shutdown: { enabled: false } },
+      helmet: false,
+      compression: false,
       cache: false,
+      healthCheck: false,
+      metrics: false,
       lazyRoutes: true,
       plugins: [
         restResourcePlugin({

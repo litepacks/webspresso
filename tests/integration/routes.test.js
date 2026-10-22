@@ -18,6 +18,7 @@ describe.sequential('SSR Routes Integration', () => {
       pagesDir: PAGES_DIR,
       viewsDir: VIEWS_DIR,
       silent: true,
+      server: { port: 0, shutdown: { enabled: false } },
       helmet: false,
       compression: false,
       cache: false,

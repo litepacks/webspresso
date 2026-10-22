@@ -17,7 +17,15 @@ describe.sequential('API Routes Integration', () => {
     const result = createApp({
       rootDir: path.join(__dirname, '../..'),
       pagesDir: PAGES_DIR,
-      viewsDir: VIEWS_DIR
+      viewsDir: VIEWS_DIR,
+      silent: true,
+      server: { port: 0, shutdown: { enabled: false } },
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
     });
     app = result.app;
   });

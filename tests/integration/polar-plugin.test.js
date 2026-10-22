@@ -107,7 +107,7 @@ describe.sequential('Polar plugin integration', () => {
     const UserRepo = db.getRepository('User');
     const user = await UserRepo.create({
       email: testEmail,
-      password: await hash('Password123!'),
+      password: '$2b$04$Wuy3PNKivlnz5etS8gSaoeMqE7OUaMbnKcBRjSD0AxL.Qrd5hTAAK',
       public_id: `pub_${Date.now()}`,
       tier: 'free',
     });
@@ -118,6 +118,14 @@ describe.sequential('Polar plugin integration', () => {
     ({ app } = createApp({
       pagesDir: FIXTURES_PAGES,
       viewsDir: FIXTURES_VIEWS,
+      silent: true,
+      server: { port: 0, shutdown: { enabled: false } },
+      helmet: false,
+      compression: false,
+      cache: false,
+      healthCheck: false,
+      metrics: false,
+      lazyRoutes: true,
       db,
       auth,
       plugins: [

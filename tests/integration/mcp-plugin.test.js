@@ -56,6 +56,7 @@ describe('MCP Plugin Full Integration', () => {
     const serverInstance = createApp({
       pagesDir: './tests/fixtures/empty-pages',
       silent: true,
+      server: { port: 0, shutdown: { enabled: false } },
       helmet: false,
       compression: false,
       cache: false,

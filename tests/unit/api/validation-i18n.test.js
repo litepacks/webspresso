@@ -258,6 +258,7 @@ describe('API Validation i18n & Error Translation', () => {
         rootDir: tempDir,
         pagesDir: path.join(tempDir, 'pages'),
         silent: true,
+        server: { port: 0, shutdown: { enabled: false } },
         helmet: false,
         compression: false,
         cache: false,

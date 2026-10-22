@@ -209,8 +209,13 @@ describe('Route Groups `(group)` Syntax', () => {
 
       const serverInstance = createApp({
         pagesDir: path.join(tmpDir, 'pages'),
-        logging: false,
+        silent: true,
+        server: { port: 0, shutdown: { enabled: false } },
+        helmet: false,
+        compression: false,
         cache: false,
+        healthCheck: false,
+        metrics: false,
         lazyRoutes: true,
       });
       app = serverInstance.app;
