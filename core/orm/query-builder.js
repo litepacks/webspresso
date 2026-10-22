@@ -465,7 +465,13 @@ class QueryBuilder {
    * @returns {import('knex').Knex.QueryBuilder}
    */
   toKnex(options = {}) {
-    const { includeLimitOffset = true, action = this.action || 'read', mutationData = null } = options;
+    const {
+      includeLimitOffset = true,
+      includeOrderBy = true,
+      includeSelect = true,
+      action = this.action || 'read',
+      mutationData = null,
+    } = options;
     const activeKnex = this.getActiveKnex();
     let qb = activeKnex(this.model.table);
 
@@ -473,7 +479,7 @@ class QueryBuilder {
     qb = applyScopes(qb, this.scopeContext, this.model, action, mutationData);
 
     // Apply selects
-    if (this.state.selects.length > 0) {
+    if (includeSelect && this.state.selects.length > 0) {
       qb = qb.select(this.state.selects);
     }
 
@@ -516,11 +522,13 @@ class QueryBuilder {
     }
 
     // Apply order by
-    for (const orderBy of this.state.orderBys) {
-      if (orderBy.raw) {
-        qb = qb.orderByRaw(orderBy.sql, orderBy.bindings);
-      } else {
-        qb = qb.orderBy(orderBy.column, orderBy.direction);
+    if (includeOrderBy) {
+      for (const orderBy of this.state.orderBys) {
+        if (orderBy.raw) {
+          qb = qb.orderByRaw(orderBy.sql, orderBy.bindings);
+        } else {
+          qb = qb.orderBy(orderBy.column, orderBy.direction);
+        }
       }
     }
 
@@ -718,7 +726,7 @@ class QueryBuilder {
 
     async function loadFromDb() {
       const result = await self
-        .toKnex({ includeLimitOffset: false })
+        .toKnex({ includeLimitOffset: false, includeOrderBy: false, includeSelect: false })
         .count('* as count')
         .first();
       return parseInt(result?.count || 0, 10);
@@ -787,15 +795,25 @@ class QueryBuilder {
         }
       }
 
-      const base = self.toKnex({ includeLimitOffset: false });
-
-      const countResult = await base.clone().count('* as count').first();
-      const total = parseInt(countResult?.count || 0, 10);
-
       const offset = (page - 1) * perPage;
-      const data = await base.clone().limit(perPage).offset(offset);
 
-      if (self.jsonColumns.size > 0) {
+      // Execute count query (without ORDER BY, LIMIT, OFFSET, or SELECT projections)
+      // and data query (with pagination) in parallel to halve database latency
+      const countPromise = self
+        .toKnex({ includeLimitOffset: false, includeOrderBy: false, includeSelect: false })
+        .count('* as count')
+        .first();
+
+      const dataPromise = self
+        .toKnex({ includeLimitOffset: false })
+        .limit(perPage)
+        .offset(offset);
+
+      const [countResult, rawData] = await Promise.all([countPromise, dataPromise]);
+      const total = parseInt(countResult?.count || 0, 10);
+      const data = total === 0 ? [] : rawData;
+
+      if (data.length > 0 && self.jsonColumns.size > 0) {
         for (const record of data) {
           deserializeJsonFields(record, self.jsonColumns);
         }
@@ -806,7 +824,7 @@ class QueryBuilder {
         await loadRelations(data, ensureArray(withs), self.model, self.getActiveKnex(), self.scopeContext);
       }
 
-      if (shouldEmit) {
+      if (shouldEmit && data.length > 0) {
         for (const record of data) {
           ModelEvents.emit(self.model.name, Hooks.AFTER_FIND, record, ctx);
         }
