@@ -3,8 +3,6 @@
  * @module core/orm/json-fields
  */
 
-const { safeJsonParse } = require('../utils/json');
-
 /**
  * Get JSON column names from model
  * @param {import('./types').ModelDefinition} model - Model definition
@@ -12,6 +10,14 @@ const { safeJsonParse } = require('../utils/json');
  */
 function getJsonColumns(model) {
   if (model && model._jsonColumns) {
+    if (!model._jsonColumns._array) {
+      Object.defineProperty(model._jsonColumns, '_array', {
+        value: Array.from(model._jsonColumns),
+        writable: true,
+        configurable: true,
+        enumerable: false,
+      });
+    }
     return model._jsonColumns;
   }
   const jsonCols = new Set();
@@ -40,6 +46,12 @@ function getJsonColumns(model) {
       }
     }
   }
+  Object.defineProperty(jsonCols, '_array', {
+    value: Array.from(jsonCols),
+    writable: true,
+    configurable: true,
+    enumerable: false,
+  });
   if (model) {
     model._jsonColumns = jsonCols;
   }
@@ -49,17 +61,22 @@ function getJsonColumns(model) {
 /**
  * Serialize JSON fields for database storage
  * @param {Object} data - Data to serialize
- * @param {Set<string>} jsonColumns - JSON column names
+ * @param {Set<string>|Array<string>} jsonColumns - JSON column names
  * @returns {Object} Serialized data
  */
 function serializeJsonFields(data, jsonColumns) {
-  if (jsonColumns.size === 0) return data;
+  if (!data || !jsonColumns) return data;
+  const size = jsonColumns.size !== undefined ? jsonColumns.size : jsonColumns.length;
+  if (size === 0) return data;
 
+  const cols = jsonColumns._array || (Array.isArray(jsonColumns) ? jsonColumns : Array.from(jsonColumns));
   const serialized = { ...data };
-  for (const col of jsonColumns) {
-    if (col in serialized && serialized[col] !== null && serialized[col] !== undefined) {
-      if (typeof serialized[col] !== 'string') {
-        serialized[col] = JSON.stringify(serialized[col]);
+  for (let i = 0; i < cols.length; i++) {
+    const col = cols[i];
+    if (col in serialized) {
+      const val = serialized[col];
+      if (val !== null && val !== undefined && typeof val !== 'string') {
+        serialized[col] = JSON.stringify(val);
       }
     }
   }
@@ -69,15 +86,28 @@ function serializeJsonFields(data, jsonColumns) {
 /**
  * Deserialize JSON fields from database
  * @param {Object} record - Record from database
- * @param {Set<string>} jsonColumns - JSON column names
+ * @param {Set<string>|Array<string>} jsonColumns - JSON column names
  * @returns {Object} Deserialized record
  */
 function deserializeJsonFields(record, jsonColumns) {
-  if (!record || jsonColumns.size === 0) return record;
+  if (!record || !jsonColumns) return record;
+  const size = jsonColumns.size !== undefined ? jsonColumns.size : jsonColumns.length;
+  if (size === 0) return record;
 
-  for (const col of jsonColumns) {
-    if (col in record && record[col] !== null && record[col] !== undefined) {
-      record[col] = safeJsonParse(record[col], record[col]);
+  const cols = jsonColumns._array || (Array.isArray(jsonColumns) ? jsonColumns : Array.from(jsonColumns));
+  for (let i = 0; i < cols.length; i++) {
+    const col = cols[i];
+    if (col in record) {
+      const val = record[col];
+      // If already parsed (object, array, number, boolean) or null/undefined, skip parsing
+      if (typeof val === 'string') {
+        if (val.length === 0) continue;
+        try {
+          record[col] = JSON.parse(val);
+        } catch (_) {
+          // Keep raw string if parsing fails
+        }
+      }
     }
   }
   return record;
@@ -88,3 +118,4 @@ module.exports = {
   serializeJsonFields,
   deserializeJsonFields,
 };
+

@@ -8,6 +8,7 @@ const z = require('zod');
 const { trimUrlPathSlashes } = require('../url-path-normalize');
 const { createSchemaHelpers, extractColumnsFromSchema } = require('./schema-helpers');
 const { ModelEvents, Hooks } = require('./events');
+const { getJsonColumns } = require('./json-fields');
 const zdb = z ? createSchemaHelpers(z) : null;
 
 /**
@@ -258,6 +259,9 @@ function defineModel(options) {
     hooks: {},
     cache: cacheOption,
   };
+
+  // Precompute JSON column metadata
+  getJsonColumns(model);
 
   // Register model
   modelRegistry.set(name, model);

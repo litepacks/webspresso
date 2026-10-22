@@ -88,5 +88,30 @@ describe('json-fields', () => {
       deserializeJsonFields(record, new Set(['meta']));
       expect(record.meta).toBeNull();
     });
+
+    it('skips empty strings without throwing', () => {
+      const record = { meta: '' };
+      deserializeJsonFields(record, new Set(['meta']));
+      expect(record.meta).toBe('');
+    });
+
+    it('handles already parsed driver arrays without JSON.parse', () => {
+      const record = { tags: ['admin', 'editor'] };
+      deserializeJsonFields(record, ['tags']);
+      expect(record.tags).toEqual(['admin', 'editor']);
+    });
+
+    it('works seamlessly with Array or Set with cached _array property', () => {
+      const model = {
+        columns: new Map([['meta', { type: 'json' }]]),
+      };
+      const jsonCols = getJsonColumns(model);
+      expect(jsonCols._array).toEqual(['meta']);
+
+      const record = { meta: '{"active":true}' };
+      deserializeJsonFields(record, jsonCols);
+      expect(record.meta).toEqual({ active: true });
+    });
   });
 });
+
