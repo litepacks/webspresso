@@ -504,7 +504,7 @@ describe('Cloud Native Queue Adapters', () => {
       expect(res1.status).toHaveBeenCalledWith(400);
 
       // Unhandled job name -> 204 (acknowledged so Pub/Sub does not spam redelivery)
-      const res2 = { status: vi.fn().mockReturnThis(), end: vi.fn() };
+      const res2 = createMockSpyRes();
       const unhandledRes = await adapter.processPushRequest({
         body: {
           message: {

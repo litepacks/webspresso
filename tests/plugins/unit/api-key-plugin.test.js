@@ -1,5 +1,6 @@
 const {
-  wait
+  wait,
+  createMockSpyRes
 } = require('../../utils');
 
 /**
@@ -181,12 +182,9 @@ describe('apiKeyPlugin', () => {
       });
 
       const req = { headers: {}, path: '/api/v1/orders' };
-      const res = {
-        statusCode: null,
-        headers: {},
-        setHeader(name, val) { this.headers[name] = val; },
-        end: vi.fn(),
-      };
+      const res = createMockSpyRes({
+        statusCode: null
+      });
       const next = vi.fn();
 
       await mw(req, res, next);
@@ -220,12 +218,9 @@ describe('apiKeyPlugin', () => {
       });
 
       const req = { headers: { 'x-api-key': 'wsp_live_invalid' }, path: '/api/v1/orders' };
-      const res = {
-        statusCode: null,
-        headers: {},
-        setHeader(name, val) { this.headers[name] = val; },
-        end: vi.fn(),
-      };
+      const res = createMockSpyRes({
+        statusCode: null
+      });
       const next = vi.fn();
 
       await mw(req, res, next);
@@ -247,12 +242,9 @@ describe('apiKeyPlugin', () => {
       });
 
       const req = { headers: { 'x-api-key': 'wsp_live_revoked' }, path: '/api/v1/orders' };
-      const res = {
-        statusCode: null,
-        headers: {},
-        setHeader(name, val) { this.headers[name] = val; },
-        end: vi.fn(),
-      };
+      const res = createMockSpyRes({
+        statusCode: null
+      });
 
       await mw(req, res, vi.fn());
 
@@ -272,12 +264,9 @@ describe('apiKeyPlugin', () => {
       });
 
       const req = { headers: { 'x-api-key': 'wsp_live_expired' }, path: '/api/v1/orders' };
-      const res = {
-        statusCode: null,
-        headers: {},
-        setHeader(name, val) { this.headers[name] = val; },
-        end: vi.fn(),
-      };
+      const res = createMockSpyRes({
+        statusCode: null
+      });
 
       await mw(req, res, vi.fn());
 
@@ -324,12 +313,9 @@ describe('apiKeyPlugin', () => {
       });
 
       const req = { headers: { 'x-api-key': 'wsp_live_read_only' }, path: '/api/v1/orders' };
-      const res = {
-        statusCode: null,
-        headers: {},
-        setHeader(name, val) { this.headers[name] = val; },
-        end: vi.fn(),
-      };
+      const res = createMockSpyRes({
+        statusCode: null
+      });
       const next = vi.fn();
 
       await mw(req, res, next);
@@ -532,7 +518,9 @@ describe('apiKeyPlugin', () => {
 
       // Middleware rejects revoked key with 401
       const mw = plugin.api.createMiddleware();
-      const res = { statusCode: null, headers: {}, setHeader() {}, end: vi.fn() };
+      const res = createMockSpyRes({
+        statusCode: null
+      });
       await mw({ headers: { 'x-api-key': created.key }, path: '/api/v1/test' }, res, vi.fn());
       expect(res.statusCode).toBe(401);
       expect(res.end).toHaveBeenCalledWith(expect.stringContaining('revoked'));

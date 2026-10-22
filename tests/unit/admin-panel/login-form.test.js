@@ -1,3 +1,7 @@
+const {
+  createMockSpyRes
+} = require('../../utils');
+
 /**
  * Admin Panel Login and Setup Form Unit Tests
  */
@@ -244,20 +248,7 @@ describe('Admin Panel Login & Setup Form Error Handling', () => {
         session: {},
       };
 
-      const res = {
-        status(code) {
-          responseCode = code;
-          return this;
-        },
-        json(body) {
-          responseBody = body;
-          return this;
-        },
-        redirect(url) {
-          redirectUrl = url;
-          return this;
-        },
-      };
+      const res = createMockSpyRes();
 
       await handlers.loginHandler(req, res);
 

@@ -105,7 +105,7 @@ function createMockResponse(options = {}) {
   });
 
   const res = {
-    statusCode: options.statusCode || 200,
+    statusCode: options.statusCode !== undefined ? options.statusCode : 200,
     headers,
     locals: options.locals ? { ...options.locals } : {},
     body: null,

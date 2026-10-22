@@ -1,3 +1,4 @@
+import { createMockSpyRes } from '../../utils';
 /**
  * Coverage Boost Branches Test
  * Specifically targets branches in plugins/webhooks, plugins/admin-panel,
@@ -585,7 +586,7 @@ describe('Coverage Boost: API Key Middleware Branches', () => {
     expect(customFn).toHaveBeenCalled();
 
     // sendUnauthorized object response
-    const res2 = { statusCode: 200, end: vi.fn(), setHeader: vi.fn() };
+    const res2 = createMockSpyRes();
     sendUnauthorized({}, res2, { unauthorizedResponse: { custom: 'unauth' } });
     expect(res2.end).toHaveBeenCalledWith(JSON.stringify({ custom: 'unauth' }));
 
@@ -636,7 +637,7 @@ describe('Coverage Boost: API Key Middleware Branches', () => {
 
     // 2. Missing key
     const req2 = { path: '/api/data', headers: {} };
-    const res2 = { statusCode: 200, end: vi.fn(), setHeader: vi.fn() };
+    const res2 = createMockSpyRes();
     const next2 = vi.fn();
     await mw(req2, res2, next2);
     expect(res2.statusCode).toBe(401);

@@ -1,3 +1,7 @@
+const {
+  createMockSpyRes
+} = require('../../utils');
+
 /**
  * Tests for basicAuthPlugin & Basic Authentication Middleware
  */
@@ -81,14 +85,9 @@ describe('basicAuthPlugin', () => {
       });
 
       const req = { headers: {}, path: '/dashboard' };
-      const res = {
-        statusCode: null,
-        headers: {},
-        setHeader(name, val) {
-          this.headers[name] = val;
-        },
-        end: vi.fn(),
-      };
+      const res = createMockSpyRes({
+        statusCode: null
+      });
       const next = vi.fn();
 
       await mw(req, res, next);
@@ -106,14 +105,9 @@ describe('basicAuthPlugin', () => {
       });
 
       const req = { headers: {} };
-      const res = {
-        statusCode: null,
-        headers: {},
-        setHeader(name, val) {
-          this.headers[name] = val;
-        },
-        end: vi.fn(),
-      };
+      const res = createMockSpyRes({
+        statusCode: null
+      });
       const next = vi.fn();
 
       await mw(req, res, next);
@@ -131,7 +125,7 @@ describe('basicAuthPlugin', () => {
       const req = {
         headers: { authorization: `Basic ${token}` },
       };
-      const res = { setHeader: vi.fn(), end: vi.fn() };
+      const res = createMockSpyRes();
       const next = vi.fn();
 
       await mw(req, res, next);
@@ -151,14 +145,9 @@ describe('basicAuthPlugin', () => {
       const req = {
         headers: { authorization: `Basic ${token}` },
       };
-      const res = {
-        statusCode: null,
-        headers: {},
-        setHeader(name, val) {
-          this.headers[name] = val;
-        },
-        end: vi.fn(),
-      };
+      const res = createMockSpyRes({
+        statusCode: null
+      });
       const next = vi.fn();
 
       await mw(req, res, next);
@@ -183,7 +172,7 @@ describe('basicAuthPlugin', () => {
       const req = {
         headers: { authorization: `Basic ${token}` },
       };
-      const res = { setHeader: vi.fn(), end: vi.fn() };
+      const res = createMockSpyRes();
       const next = vi.fn();
 
       await mw(req, res, next);
@@ -201,16 +190,9 @@ describe('basicAuthPlugin', () => {
 
       const req = { headers: {} };
       let body = '';
-      const res = {
-        statusCode: null,
-        headers: {},
-        setHeader(name, val) {
-          this.headers[name] = val;
-        },
-        end(data) {
-          body = data;
-        },
-      };
+      const res = createMockSpyRes({
+        statusCode: null
+      });
 
       await mw(req, res, vi.fn());
 

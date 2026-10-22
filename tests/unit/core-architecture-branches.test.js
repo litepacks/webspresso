@@ -726,10 +726,7 @@ describe('Core Architecture Branch Coverage', () => {
     it('exercises res.csv and req.parseCsv middleware branches', async () => {
       const mw = createCsvMiddleware({ delimiter: ',' });
       const req = { headers: {} };
-      const res = {
-        setHeader: vi.fn(),
-        end: vi.fn(),
-      };
+      const res = createMockSpyRes();
       const next = vi.fn();
 
       mw(req, res, next);
@@ -1405,10 +1402,7 @@ describe('Core Architecture Branch Coverage', () => {
     it('exercises res.xlsx and req.parseXlsx middleware branches', async () => {
       const mw = createXlsxMiddleware();
       const req = { headers: {} };
-      const res = {
-        setHeader: vi.fn(),
-        end: vi.fn(),
-      };
+      const res = createMockSpyRes();
       const next = vi.fn();
 
       mw(req, res, next);
@@ -2492,7 +2486,7 @@ describe('Core Architecture Branch Coverage', () => {
       // requireGuest
       const guestMw = mwStack.requireGuest({ redirectTo: '/dashboard' });
       const reqAuthUser = { user: { id: 1 } };
-      const resRedirect = { redirect: vi.fn(), status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const resRedirect = createMockSpyRes();
       const nextFn = vi.fn();
 
       guestMw(reqAuthUser, resRedirect, nextFn);

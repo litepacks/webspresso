@@ -1,3 +1,4 @@
+import { createMockSpyRes } from '../../utils';
 import { describe, it, expect, vi } from 'vitest';
 const { isCompressible } = require('../../../core/compression/compressible');
 const {
@@ -269,15 +270,7 @@ describe('core/compression/middleware.js', () => {
         headers: { 'accept-encoding': 'gzip' },
         method: 'GET',
       };
-      const res = {
-        getHeader: vi.fn(),
-        setHeader: vi.fn(),
-        locals: {},
-        on: vi.fn(),
-        once: vi.fn(),
-        emit: vi.fn(),
-        end: vi.fn(),
-      };
+      const res = createMockSpyRes();
       const next = vi.fn();
 
       middleware(req, res, next);
@@ -299,17 +292,7 @@ describe('core/compression/middleware.js', () => {
     it('prevents Content-Length override if Content-Encoding is set', () => {
       const middleware = createCompressionMiddleware();
       const headers = { 'content-encoding': 'gzip' };
-      const res = {
-        getHeader: (k) => headers[k.toLowerCase()],
-        setHeader: (k, v) => {
-          headers[k.toLowerCase()] = v;
-        },
-        locals: {},
-        on: vi.fn(),
-        once: vi.fn(),
-        emit: vi.fn(),
-        end: vi.fn(),
-      };
+      const res = createMockSpyRes();
       const req = { headers: {}, method: 'GET' };
       const next = vi.fn();
 
