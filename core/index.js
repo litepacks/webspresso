@@ -23,7 +23,7 @@ const {
   stableCacheKey,
   sanitizeInput,
   maskSensitiveData,
-} = require('../src/services');
+} = require('./services');
 
 const { ShutdownManager } = require('./shutdown');
 const errors = require('./errors');
@@ -54,6 +54,7 @@ module.exports = {
   createCoreApp,
 
   // Services Layer
+  services: require('./services'),
   createServiceRegistry,
   defineService,
   service: defineService,

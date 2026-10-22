@@ -18,7 +18,15 @@
     "./plugins/polar/src/*": "./plugins/polar/src/*.js",
     "./plugins/*": "./plugins/*/index.js",
     "./realtime": "./core/realtime/index.js",
+    "./services": {
+      "types": "./index.d.ts",
+      "default": "./core/services/index.js"
+    },
     "./core": "./core/index.js",
+    "./core/services": {
+      "types": "./index.d.ts",
+      "default": "./core/services/index.js"
+    },
     "./core/auth": "./core/auth/index.js",
     "./core/auth/*": "./core/auth/*.js",
     "./core/errors": "./core/errors/index.js",

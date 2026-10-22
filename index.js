@@ -117,6 +117,7 @@ module.exports = {
   setAppContext,
 
   // Services Layer
+  services: require('./core/services'),
   createServiceRegistry,
   defineService,
   service: defineService,
