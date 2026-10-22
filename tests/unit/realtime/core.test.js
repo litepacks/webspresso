@@ -594,7 +594,7 @@ describe('Realtime Core', () => {
   // Scenario 28: App destroy during active connection
   it('28. safely cancels and cleans up if destroyed during connection attempt', async () => {
     const adapter = createMockAdapter();
-    adapter.connect = () => new Promise((resolve) => setTimeout(resolve, 100));
+    adapter.connect = () => new Promise((resolve) => setTimeout(resolve, 15));
 
     const rt = createRealtime({ adapter, isBrowser: true, autoConnect: false });
 
