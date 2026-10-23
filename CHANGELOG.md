@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.107] - 2026-10-23
+
+### Added
+- **Core Services Architecture Enhancements (`core/services/`)**:
+  - Established dedicated `core/services` entrypoint and subpath export in `package.json`.
+  - Added native ESM dynamic import support and lazy on-demand service loader (`async registry`).
+  - Added service middleware pipeline, lifecycle hooks (`before`, `after`, `onError`), and event emission.
+  - Added tagged cache invalidation and pluggable provider support.
+  - Added ambient transaction repository safety, query builder wrapping, and nested `service.call` delegation.
+- **Centralized Test Utilities & Harness (`tests/utils/`)**:
+  - Added centralized mock builders and lifecycle helpers (`createMockRequest`, `createMockResponse`, `createMockNext`, `createMockSpyRes`, `createMockRepo`, `createMockDb`, `createMockQueryBuilder`, `createTempDir`, `withTempDir`, `createMockServiceContext`, `createMockAdminRegistry`, `createMockPluginContext`).
+  - Consolidated duplicate test helpers and mock implementations across the test suite.
+
+### Changed
+- **Validation Error HTTP Status Standard (`core/errors/`, `src/services/`)**:
+  - Standardized `ValidationError` HTTP status code to `422` (Unprocessable Entity) across the services layer and error boundaries.
+  - Enriched validation errors with schema attributes, error codes, and structured issue details.
+- **Enhanced Developer Dashboard Dynamic Services Discovery (`plugins/dashboard/`)**:
+  - Updated `collectServices` and dashboard API endpoints to resolve dynamic service definitions from the app instance registry (`app.serviceRegistry`).
+
+### Fixed
+- **Process Context & Worker Isolation (`src/app-context.js`, `tests/setup.js`)**:
+  - Added `resetAppContext()` cleanup in `afterEach` test hook, preventing global shutdown manager and context leakage across parallel Vitest workers.
+- **Auth & Session Security & Memory Hardening (`core/auth/`)**:
+  - Hardened magic link verification against timing attacks, user enumeration side-channels, and token parameter pollution.
+  - Aligned `createKvSessionTracker` with `SessionTracker` interface and enhanced `SessionManager` compatibility.
+  - Prevented unique constraint race conditions in `createKnexSessionTracker` under concurrent session insertions.
+  - Added bounded LRU eviction and `clearTouchCache` to `SessionManager` to prevent memory leaks.
+  - Fixed prototype pollution vulnerabilities in admin-panel filter query parsing.
+- **Graceful Shutdown Adapter Concurrency (`core/server/shutdown.js`)**:
+  - Bound server adapter force-close grace periods to strictly respect the shared shutdown timeout budget across concurrent adapters.
+
+### Performance
+- **ORM & Query Engine Optimizations (`core/orm/`)**:
+  - Added bounded LRU caching to `parseRelationTree` and optimized relation loading.
+  - Pre-cached soft-delete and timestamp column names to eliminate repetitive Map lookups.
+  - Optimized JSON serialization and deserialization with fast-path string checks and cached column definitions.
+  - Direct `QueryBuilder` instantiation in `db.query` avoiding redundant repository allocations.
+  - Streamlined `create` and `update` queries with direct `RETURNING` clauses to eliminate redundant SELECT roundtrips.
+  - Parallelized `paginate` execution and stripped unnecessary `orderBy` and projections from count queries.
+- **Authentication Fast-Path (`core/auth/`)**:
+  - Optimized `verifyJwt` with fast-path HS256 header decoding, bounded LRU verification cache, and payload size guards.
+  - Optimized Redis session tracker with parallel retrieval and bulk deletions.
+
 ## [0.0.106] - 2026-10-21
 
 ### Added
