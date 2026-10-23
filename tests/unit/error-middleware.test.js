@@ -9,7 +9,10 @@ const {
   ValidationError,
   RequestAbortedError,
 } = require('../../core/errors');
-const { createMockRes } = require('../utils');
+const {
+  createMockRes,
+  createMockNext
+} = require('../utils');
 
 describe('Central Error Handler Middleware (core/errors/middleware)', () => {
   describe('preferJsonErrorResponse', () => {
@@ -73,7 +76,7 @@ describe('Central Error Handler Middleware (core/errors/middleware)', () => {
       const res = createMockRes();
       const req = { path: '/test', headers: {}, socket: { destroyed: true } };
 
-      await handler(new RequestAbortedError(), req, res, () => {});
+      await handler(new RequestAbortedError(), req, res, createMockNext());
       expect(res.headersSent).toBe(false);
       expect(res.body).toBeNull();
     });
@@ -87,7 +90,7 @@ describe('Central Error Handler Middleware (core/errors/middleware)', () => {
         headers: { 'Retry-After': '120', 'X-RateLimit': '0' },
       });
 
-      await handler(err, req, res, () => {});
+      await handler(err, req, res, createMockNext());
 
       expect(res.statusCode).toBe(429);
       expect(res.headers['retry-after']).toBe('120');
@@ -106,7 +109,7 @@ describe('Central Error Handler Middleware (core/errors/middleware)', () => {
       });
 
       const res = createMockRes();
-      await handler(new Error('Tea'), { path: '/api/tea', headers: {} }, res, () => {});
+      await handler(new Error('Tea'), { path: '/api/tea', headers: {} }, res, createMockNext());
 
       expect(customCalled).toBe(true);
       expect(res.statusCode).toBe(418);
@@ -121,7 +124,7 @@ describe('Central Error Handler Middleware (core/errors/middleware)', () => {
       });
 
       const res = createMockRes();
-      await handler(new Error('Original error'), { path: '/api/data', headers: {} }, res, () => {});
+      await handler(new Error('Original error'), { path: '/api/data', headers: {} }, res, createMockNext());
 
       expect(res.statusCode).toBe(500);
       expect(res.body.error).toBe('Internal Server Error');
@@ -135,7 +138,7 @@ describe('Central Error Handler Middleware (core/errors/middleware)', () => {
       });
 
       const res = createMockRes();
-      await handler(new NotFoundError('Not here'), { path: '/missing', headers: {} }, res, () => {});
+      await handler(new NotFoundError('Not here'), { path: '/missing', headers: {} }, res, createMockNext());
 
       expect(res.statusCode).toBe(404);
       expect(res.body).toBe('<div id="custom-404">404</div>');
@@ -149,7 +152,7 @@ describe('Central Error Handler Middleware (core/errors/middleware)', () => {
       });
 
       const res = createMockRes();
-      await handler(new NotFoundError('Not here'), { path: '/missing', headers: {} }, res, () => {});
+      await handler(new NotFoundError('Not here'), { path: '/missing', headers: {} }, res, createMockNext());
 
       expect(res.statusCode).toBe(404);
       expect(res.body).toContain('Error 404');
@@ -169,7 +172,7 @@ describe('Central Error Handler Middleware (core/errors/middleware)', () => {
       err.phase = 'handler';
       err.requestId = 'req_trace_999';
 
-      await handler(err, req, res, () => {});
+      await handler(err, req, res, createMockNext());
 
       expect(res.statusCode).toBe(500);
       expect(res.body.trace).toBeDefined();

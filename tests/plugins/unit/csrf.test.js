@@ -7,6 +7,8 @@ import { describe, it, expect, vi } from 'vitest';
 import crypto from 'crypto';
 import csrfPlugin from '../../../plugins/csrf/index';
 
+import { createMockNext } from '../../utils';
+
 describe('CSRF Protection Plugin (plugins/csrf)', () => {
   it('exercises CSRF ignore patterns: prefix, single-star glob, double-star glob, regex, and predicate function', () => {
     const plugin = csrfPlugin({
@@ -93,7 +95,7 @@ describe('CSRF Protection Plugin (plugins/csrf)', () => {
     csrfMiddleware(
       { method: 'POST', path: '/protected', headers: {}, cookies: {}, body: {} },
       resBlocked,
-      () => {}
+      createMockNext()
     );
     expect(blocked).toBe(true);
   });
@@ -143,7 +145,7 @@ describe('CSRF Protection Plugin (plugins/csrf)', () => {
       cookie: vi.fn(),
     };
 
-    csrfMiddleware(req, res, () => {});
+    csrfMiddleware(req, res, createMockNext());
     expect(res.statusCode).toBe(418);
     expect(jsonOutput.error).toBe('Custom CSRF Failure');
 

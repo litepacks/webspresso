@@ -1,6 +1,7 @@
 const {
   createMockSpyRes,
-  createMockSpyNext
+  createMockSpyNext,
+  createMockNext
 } = require('../utils');
 
 'use strict';
@@ -1553,7 +1554,7 @@ describe('Core Architecture Branch Coverage', () => {
         set: vi.fn(),
         use: vi.fn((mw) => {
           const req = {};
-          mw(req, {}, () => {});
+          mw(req, {}, createMockNext());
           expect(req.queue).toBeDefined();
         }),
       };

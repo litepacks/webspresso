@@ -1,4 +1,4 @@
-import { createTempDir, cleanupDir, wait } from '../../utils';
+import { createTempDir, cleanupDir, wait, createMockNext } from '../../utils';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
@@ -164,9 +164,9 @@ describe('Cascading Middleware & Nested Layouts', () => {
 
       const req = {};
       const res = {};
-      resolved[0](req, res, () => {});
-      resolved[1](req, res, () => {});
-      resolved[2](req, res, () => {});
+      resolved[0](req, res, createMockNext());
+      resolved[1](req, res, createMockNext());
+      resolved[2](req, res, createMockNext());
 
       expect(req.authenticated).toBe(true);
       expect(req.rateLimitMax).toBe(5);

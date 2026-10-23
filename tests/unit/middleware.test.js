@@ -1,3 +1,7 @@
+const {
+  createMockNext
+} = require('../utils');
+
 /**
  * Middleware Configuration Tests
  */
@@ -99,7 +103,7 @@ describe('Middleware Configuration', () => {
       };
       const resolved = resolveMiddlewares(['auth'], registry);
       const req = {};
-      resolved[0](req, {}, () => {});
+      resolved[0](req, {}, createMockNext());
       expect(req._opts).toEqual({});
     });
 

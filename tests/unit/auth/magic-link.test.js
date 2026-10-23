@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
+import { createMockNext } from '../../utils';
 const knex = require('knex');
 const {
   createAuth,
@@ -382,7 +383,7 @@ describe('Magic Link Authentication (core/auth/magic-link)', () => {
           json: (data) => { responseJson = data; return res; },
         };
 
-        await mw(req, res, () => {});
+        await mw(req, res, createMockNext());
         expect(status).toBe(400);
         expect(responseJson.error).toContain('Missing magic link token');
       });
@@ -396,7 +397,7 @@ describe('Magic Link Authentication (core/auth/magic-link)', () => {
           redirect: (url) => { redirectedUrl = url; },
         };
 
-        await mw(req, res, () => {});
+        await mw(req, res, createMockNext());
         expect(redirectedUrl).toBe('/custom-fail');
       });
 
@@ -419,7 +420,7 @@ describe('Magic Link Authentication (core/auth/magic-link)', () => {
           redirect: (url) => { redirected = url; },
         };
 
-        await mw(req, res, () => {});
+        await mw(req, res, createMockNext());
         expect(loggedIn).not.toBeNull();
         expect(loggedIn.email).toBe('bob@example.com');
         expect(redirected).toBe('/dashboard');
@@ -446,7 +447,7 @@ describe('Magic Link Authentication (core/auth/magic-link)', () => {
           json: (data) => { responseJson = data; return res; },
         };
 
-        await mw(req, res, () => {});
+        await mw(req, res, createMockNext());
         expect(status).toBe(200);
         expect(responseJson.ok).toBe(true);
         expect(responseJson.user.email).toBe('alice@example.com');
@@ -470,7 +471,7 @@ describe('Magic Link Authentication (core/auth/magic-link)', () => {
           json: (data) => { responseJson = data; return res; },
         };
 
-        await mw(req, res, () => {});
+        await mw(req, res, createMockNext());
         expect(status).toBe(400);
         expect(responseJson.code).toBe('INVALID_MAGIC_LINK');
       });
@@ -652,7 +653,7 @@ describe('Magic Link Authentication (core/auth/magic-link)', () => {
           auth: { login: vi.fn() },
         },
         resHtml,
-        () => {}
+        createMockNext()
       );
       expect(redirectedUrl).toBe('/dashboard');
 
@@ -679,7 +680,7 @@ describe('Magic Link Authentication (core/auth/magic-link)', () => {
           auth: { login: vi.fn() },
         },
         resJson,
-        () => {}
+        createMockNext()
       );
       expect(statusCode).toBe(200);
       expect(jsonPayload.ok).toBe(true);

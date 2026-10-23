@@ -1,4 +1,4 @@
-import { wait } from '../utils';
+import { wait, createMockNext } from '../utils';
 'use strict';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -288,11 +288,11 @@ describe('core/rate-limit: RateLimiter (Express Middleware)', () => {
     const req = { ip: '10.0.0.1' };
 
     // Request 1: OK
-    await limiter.middleware(req, createRes(), () => {});
+    await limiter.middleware(req, createRes(), createMockNext());
     expect(statusSent).toBeNull();
 
     // Request 2: OK
-    await limiter.middleware(req, createRes(), () => {});
+    await limiter.middleware(req, createRes(), createMockNext());
     expect(statusSent).toBeNull();
 
     // Request 3: Exceeded -> 429
@@ -316,7 +316,7 @@ describe('core/rate-limit: RateLimiter (Express Middleware)', () => {
       },
     };
 
-    await limiter.middleware({ ip: '10.0.0.2' }, res, () => {});
+    await limiter.middleware({ ip: '10.0.0.2' }, res, createMockNext());
 
     expect(headers['x-ratelimit-limit']).toBe('10');
     expect(headers['x-ratelimit-remaining']).toBe('9');
@@ -360,8 +360,8 @@ describe('core/rate-limit: RateLimiter (Express Middleware)', () => {
       status: () => ({ json: () => {} }),
     };
 
-    await limiter.middleware({ ip: '10.0.0.4' }, res, () => {});
-    await limiter.middleware({ ip: '10.0.0.4' }, res, () => {});
+    await limiter.middleware({ ip: '10.0.0.4' }, res, createMockNext());
+    await limiter.middleware({ ip: '10.0.0.4' }, res, createMockNext());
 
     expect(customHandlerCalled).toBe(true);
   });
@@ -384,7 +384,7 @@ describe('core/rate-limit: RateLimiter (Express Middleware)', () => {
       },
     };
 
-    await limiter.middleware({ ip: '10.0.0.5' }, res, () => {});
+    await limiter.middleware({ ip: '10.0.0.5' }, res, createMockNext());
     const infoBefore = await store.increment('10.0.0.5', 60000);
     expect(infoBefore.totalHits).toBe(2);
 

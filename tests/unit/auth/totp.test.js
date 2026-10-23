@@ -21,6 +21,8 @@ import {
   createAuthMiddleware,
 } from '../../../index';
 
+import { createMockNext } from '../../utils';
+
 describe('Zero-Dependency Two-Factor Authentication (2FA / TOTP)', () => {
   describe('RFC 4648 Base32 Encoding & Decoding', () => {
     // Official test vectors from RFC 4648 Section 10
@@ -450,7 +452,7 @@ describe('Zero-Dependency Two-Factor Authentication (2FA / TOTP)', () => {
         },
       };
 
-      middleware.require2Fa({ api: true })(req, res, () => {});
+      middleware.require2Fa({ api: true })(req, res, createMockNext());
 
       expect(statusSent).toBe(401);
       expect(jsonSent).toEqual({
@@ -480,7 +482,7 @@ describe('Zero-Dependency Two-Factor Authentication (2FA / TOTP)', () => {
       let redirectUrl = null;
       const res = { redirect: (url) => { redirectUrl = url; } };
 
-      middleware.require2Fa()(req, res, () => {});
+      middleware.require2Fa()(req, res, createMockNext());
 
       expect(redirectUrl).toBe('/2fa');
       expect(req.session.intendedUrl).toBe('/secure-vault');
@@ -501,7 +503,7 @@ describe('Zero-Dependency Two-Factor Authentication (2FA / TOTP)', () => {
         },
       };
 
-      middleware.require2Fa({ api: true })(req, res, () => {});
+      middleware.require2Fa({ api: true })(req, res, createMockNext());
 
       expect(statusSent).toBe(403);
       expect(jsonSent).toEqual({

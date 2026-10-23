@@ -1,3 +1,7 @@
+const {
+  createMockNext
+} = require('../../utils');
+
 const { redirectPlugin } = require('../../../plugins/redirect');
 
 describe('Redirect Plugin (plugins/redirect)', () => {
@@ -42,7 +46,7 @@ describe('Redirect Plugin (plugins/redirect)', () => {
     // Test regex match
     redirectedStatus = null;
     redirectedLocation = null;
-    middleware({ path: '/blog/old-post-1', method: 'GET', url: '/blog/old-post-1' }, res, () => {});
+    middleware({ path: '/blog/old-post-1', method: 'GET', url: '/blog/old-post-1' }, res, createMockNext());
     expect(redirectedStatus).toBe(302);
     expect(redirectedLocation).toBe('/posts');
   });
@@ -70,7 +74,7 @@ describe('Redirect Plugin (plugins/redirect)', () => {
       plugin2.register({ app: { use: (fn) => { middleware = fn; } } });
 
       let loc = null;
-      middleware({ path: '/docs', method: 'GET' }, { redirect: (_, l) => { loc = l; } }, () => {});
+      middleware({ path: '/docs', method: 'GET' }, { redirect: (_, l) => { loc = l; } }, createMockNext());
       expect(loc).toBe('https://example.com/docs');
     } finally {
       console.warn = origWarn;
@@ -87,7 +91,7 @@ describe('Redirect Plugin (plugins/redirect)', () => {
     pluginStrip.register({ app: { use: fn => { mwStrip = fn; } } });
 
     let loc = null;
-    mwStrip({ path: '/products/', method: 'GET' }, { redirect: (_, l) => { loc = l; } }, () => {});
+    mwStrip({ path: '/products/', method: 'GET' }, { redirect: (_, l) => { loc = l; } }, createMockNext());
     expect(loc).toBe('/items');
 
     // Add mode
@@ -99,7 +103,7 @@ describe('Redirect Plugin (plugins/redirect)', () => {
     pluginAdd.register({ app: { use: fn => { mwAdd = fn; } } });
 
     loc = null;
-    mwAdd({ path: '/products', method: 'GET' }, { redirect: (_, l) => { loc = l; } }, () => {});
+    mwAdd({ path: '/products', method: 'GET' }, { redirect: (_, l) => { loc = l; } }, createMockNext());
     expect(loc).toBe('/items');
   });
 
@@ -119,11 +123,11 @@ describe('Redirect Plugin (plugins/redirect)', () => {
     expect(nextCalled).toBe(true);
 
     let postRedirect = false;
-    mw({ path: '/submit', method: 'POST' }, { redirect: () => { postRedirect = true; } }, () => {});
+    mw({ path: '/submit', method: 'POST' }, { redirect: () => { postRedirect = true; } }, createMockNext());
     expect(postRedirect).toBe(true);
 
     let anyRedirect = false;
-    mw({ path: '/any', method: 'DELETE' }, { redirect: () => { anyRedirect = true; } }, () => {});
+    mw({ path: '/any', method: 'DELETE' }, { redirect: () => { anyRedirect = true; } }, createMockNext());
     expect(anyRedirect).toBe(true);
   });
 

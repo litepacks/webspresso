@@ -1,6 +1,7 @@
 'use strict';
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { createMockNext } from '../../utils';
 const knexLib = require('knex');
 const { z } = require('zod');
 const { defineModel, clearRegistry } = require('../../../core/orm/model');
@@ -759,7 +760,7 @@ describe('Dynamic Model Row-Level Security (RLS)', () => {
         db,
       };
 
-      mw(req, {}, () => {});
+      mw(req, {}, createMockNext());
 
       const notes = await req.db.getRepository('MwNote').findAll();
       expect(notes).toHaveLength(2);
