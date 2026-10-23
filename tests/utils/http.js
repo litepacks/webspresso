@@ -109,6 +109,7 @@ function createMockResponse(options = {}) {
     headers,
     locals: options.locals ? { ...options.locals } : {},
     body: null,
+    _body: null,
     payload: null,
     jsonData: null,
     data: null,
@@ -191,6 +192,7 @@ function createMockResponse(options = {}) {
 
     send(body) {
       this.body = body;
+      this._body = body;
       this._ended = true;
       this.headersSent = true;
       if (resolveDone) resolveDone(this);
@@ -204,6 +206,7 @@ function createMockResponse(options = {}) {
       this.payload = data;
       this._json = data;
       this.body = data;
+      this._body = data;
       this._ended = true;
       this.headersSent = true;
       if (resolveDone) resolveDone(this);

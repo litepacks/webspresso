@@ -1,4 +1,4 @@
-import { createMockSpyRes } from '../../utils';
+import { createMockSpyRes, createMockRes } from '../../utils';
 /**
  * Coverage Boost Branches Test
  * Specifically targets branches in plugins/webhooks, plugins/admin-panel,
@@ -23,27 +23,6 @@ import * as xlsxEngine from '../../../plugins/xlsx/engine.js';
 import { createAuthMiddleware } from '../../../core/auth/middleware.js';
 import { createContentService } from '../../../core/content/service.js';
 import { Readable, Writable } from 'stream';
-
-function mockRes() {
-  const res = {
-    statusCode: 200,
-    headers: {},
-    _json: null,
-    status(code) {
-      res.statusCode = code;
-      return res;
-    },
-    json(data) {
-      res._json = data;
-      return res;
-    },
-    setHeader(k, v) {
-      res.headers[k] = v;
-      return res;
-    },
-  };
-  return res;
-}
 
 describe('Coverage Boost: Webhooks API Handlers', () => {
   let mockDispatcher;
@@ -70,7 +49,7 @@ describe('Coverage Boost: Webhooks API Handlers', () => {
   it('listEndpointsHandler: handles filters and knex delivery stats aggregation', async () => {
     // 1. Without knex
     const req1 = { query: { active: 'true', q: 'test' } };
-    const res1 = mockRes();
+    const res1 = createMockRes();
     mockDispatcher.listEndpoints.mockResolvedValueOnce([{ id: '1', name: 'ep1' }]);
     await handlers.listEndpointsHandler(req1, res1);
     expect(res1.statusCode).toBe(200);
@@ -90,7 +69,7 @@ describe('Coverage Boost: Webhooks API Handlers', () => {
     mockDispatcher.listEndpoints.mockResolvedValueOnce([{ id: '1', name: 'ep1' }, { id: '2', name: 'ep2' }]);
 
     const req2 = { query: { active: 'false', search: 'ep' } };
-    const res2 = mockRes();
+    const res2 = createMockRes();
     await handlers.listEndpointsHandler(req2, res2);
     expect(res2.statusCode).toBe(200);
     expect(res2._json.items[0].stats.total).toBe(10);
@@ -100,7 +79,7 @@ describe('Coverage Boost: Webhooks API Handlers', () => {
     // 3. Error branch
     mockDispatcher.listEndpoints.mockRejectedValueOnce(new Error('DB failure'));
     const req3 = { query: {} };
-    const res3 = mockRes();
+    const res3 = createMockRes();
     await handlers.listEndpointsHandler(req3, res3);
     expect(res3.statusCode).toBe(500);
     expect(res3._json.error).toBe('DB failure');
@@ -109,13 +88,13 @@ describe('Coverage Boost: Webhooks API Handlers', () => {
   it('createEndpointHandler: handles validation, creation, and errors', async () => {
     // Missing fields
     const req1 = { body: { name: 'Only name' } };
-    const res1 = mockRes();
+    const res1 = createMockRes();
     await handlers.createEndpointHandler(req1, res1);
     expect(res1.statusCode).toBe(400);
 
     // Success
     const req2 = { body: { name: 'Valid', url: 'https://example.com/hook' } };
-    const res2 = mockRes();
+    const res2 = createMockRes();
     await handlers.createEndpointHandler(req2, res2);
     expect(res2.statusCode).toBe(201);
     expect(res2._json.id).toBe(1);
@@ -123,7 +102,7 @@ describe('Coverage Boost: Webhooks API Handlers', () => {
     // Rejection
     mockDispatcher.createEndpoint.mockRejectedValueOnce(new Error('Invalid URL format'));
     const req3 = { body: { name: 'Valid', url: 'not-url' } };
-    const res3 = mockRes();
+    const res3 = createMockRes();
     await handlers.createEndpointHandler(req3, res3);
     expect(res3.statusCode).toBe(400);
     expect(res3._json.error).toBe('Invalid URL format');
@@ -131,42 +110,42 @@ describe('Coverage Boost: Webhooks API Handlers', () => {
 
   it('getEndpointHandler, updateEndpointHandler, deleteEndpointHandler: 404 and success branches', async () => {
     // get 404
-    const res1 = mockRes();
+    const res1 = createMockRes();
     await handlers.getEndpointHandler({ params: { id: 99 } }, res1);
     expect(res1.statusCode).toBe(404);
 
     // get 200
     mockDispatcher.getEndpoint.mockResolvedValueOnce({ id: 1, name: 'Found' });
-    const res2 = mockRes();
+    const res2 = createMockRes();
     await handlers.getEndpointHandler({ params: { id: 1 } }, res2);
     expect(res2.statusCode).toBe(200);
 
     // delete 404
-    const res3 = mockRes();
+    const res3 = createMockRes();
     await handlers.deleteEndpointHandler({ params: { id: 99 } }, res3);
     expect(res3.statusCode).toBe(404);
 
     // delete 200
     mockDispatcher.deleteEndpoint.mockResolvedValueOnce(true);
-    const res4 = mockRes();
+    const res4 = createMockRes();
     await handlers.deleteEndpointHandler({ params: { id: 1 } }, res4);
     expect(res4.statusCode).toBe(200);
     expect(res4._json.success).toBe(true);
 
     // ping success and failure
-    const res5 = mockRes();
+    const res5 = createMockRes();
     await handlers.pingEndpointHandler({ params: { id: 1 } }, res5);
     expect(res5.statusCode).toBe(200);
 
     mockDispatcher.pingEndpoint.mockRejectedValueOnce(new Error('Connection timed out'));
-    const res6 = mockRes();
+    const res6 = createMockRes();
     await handlers.pingEndpointHandler({ params: { id: 2 } }, res6);
     expect(res6.statusCode).toBe(400);
     expect(res6._json.error).toBe('Connection timed out');
   });
 
   it('listDeliveriesHandler, getDeliveryHandler, retryDeliveryHandler, purgeDeliveriesHandler', async () => {
-    const res1 = mockRes();
+    const res1 = createMockRes();
     await handlers.listDeliveriesHandler(
       { query: { endpoint_id: '1', event: 'user.created', success: 'true', page: '2', perPage: '15' } },
       res1
@@ -174,33 +153,33 @@ describe('Coverage Boost: Webhooks API Handlers', () => {
     expect(res1.statusCode).toBe(200);
 
     // getDelivery 404 and 200
-    const res2 = mockRes();
+    const res2 = createMockRes();
     await handlers.getDeliveryHandler({ params: { id: 10 } }, res2);
     expect(res2.statusCode).toBe(404);
 
     mockDispatcher.getDelivery.mockResolvedValueOnce({ id: 10, status: 'delivered' });
-    const res3 = mockRes();
+    const res3 = createMockRes();
     await handlers.getDeliveryHandler({ params: { id: 10 } }, res3);
     expect(res3.statusCode).toBe(200);
 
     // retryDelivery 200 and error
-    const res4 = mockRes();
+    const res4 = createMockRes();
     await handlers.retryDeliveryHandler({ params: { id: 10 } }, res4);
     expect(res4.statusCode).toBe(200);
 
     mockDispatcher.retryDelivery.mockRejectedValueOnce(new Error('Retry failed'));
-    const res5 = mockRes();
+    const res5 = createMockRes();
     await handlers.retryDeliveryHandler({ params: { id: 10 } }, res5);
     expect(res5.statusCode).toBe(400);
 
     // purgeDeliveries 200 and error
-    const res6 = mockRes();
+    const res6 = createMockRes();
     await handlers.purgeDeliveriesHandler({ body: { days: 60 } }, res6);
     expect(res6.statusCode).toBe(200);
     expect(res6._json.purged).toBe(5);
 
     mockDispatcher.purgeDeliveries.mockRejectedValueOnce(new Error('Purge failed'));
-    const res7 = mockRes();
+    const res7 = createMockRes();
     await handlers.purgeDeliveriesHandler({ body: {} }, res7);
     expect(res7.statusCode).toBe(500);
   });
@@ -274,19 +253,19 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
   });
 
   it('inlineListHandler: retrieves inlines or returns 404 for missing models', async () => {
-    const res1 = mockRes();
+    const res1 = createMockRes();
     await adminApi.inlineListHandler({ params: { model: 'Order', id: 1, inlineModel: 'OrderItem' } }, res1);
     expect(res1.statusCode).toBe(200);
     expect(res1._json.data).toHaveLength(1);
 
-    const res2 = mockRes();
+    const res2 = createMockRes();
     await adminApi.inlineListHandler({ params: { model: 'NonExistent', id: 1, inlineModel: 'OrderItem' } }, res2);
     expect(res2.statusCode).toBe(404);
   });
 
   it('inlineCreateHandler, inlineUpdateHandler, inlineDeleteHandler: execution and error branches', async () => {
     // create 201
-    const res1 = mockRes();
+    const res1 = createMockRes();
     await adminApi.inlineCreateHandler(
       { params: { model: 'Order', id: 1, inlineModel: 'OrderItem' }, body: { product: 'New Widget', price: 25 } },
       res1
@@ -295,7 +274,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
     expect(res1._json.data.product).toBe('New Widget');
 
     // update 200
-    const res2 = mockRes();
+    const res2 = createMockRes();
     await adminApi.inlineUpdateHandler(
       { params: { model: 'Order', id: 1, inlineModel: 'OrderItem', inlineId: 101 }, body: { price: 30 } },
       res2
@@ -306,7 +285,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
     mockDb.getRepository.mockReturnValueOnce({
       update: vi.fn().mockResolvedValue(null),
     });
-    const res3 = mockRes();
+    const res3 = createMockRes();
     await adminApi.inlineUpdateHandler(
       { params: { model: 'Order', id: 1, inlineModel: 'OrderItem', inlineId: 999 }, body: { price: 30 } },
       res3
@@ -314,7 +293,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
     expect(res3.statusCode).toBe(404);
 
     // delete 200
-    const res4 = mockRes();
+    const res4 = createMockRes();
     await adminApi.inlineDeleteHandler(
       { params: { model: 'Order', id: 1, inlineModel: 'OrderItem', inlineId: 101 } },
       res4
@@ -323,7 +302,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
     expect(res4._json.success).toBe(true);
 
     // delete 404
-    const res5 = mockRes();
+    const res5 = createMockRes();
     await adminApi.inlineDeleteHandler(
       { params: { model: 'Order', id: 1, inlineModel: 'UnknownModel', inlineId: 101 } },
       res5
@@ -333,7 +312,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
 
   it('quickEditHandler: enforces permissions, listEditable whitelist, and performs updates', async () => {
     // 1. Success on listEditable column
-    const res1 = mockRes();
+    const res1 = createMockRes();
     await adminApi.quickEditHandler(
       { params: { model: 'Order', id: 42 }, body: { status: 'shipped' } },
       res1
@@ -343,7 +322,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
     expect(res1._json.data.status).toBe('shipped');
 
     // 2. Disallowed column
-    const res2 = mockRes();
+    const res2 = createMockRes();
     await adminApi.quickEditHandler(
       { params: { model: 'Order', id: 42 }, body: { total: 500 } },
       res2
@@ -352,7 +331,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
     expect(res2._json.error).toContain('not list-editable');
 
     // 3. Model not found
-    const res3 = mockRes();
+    const res3 = createMockRes();
     await adminApi.quickEditHandler(
       { params: { model: 'Ghost', id: 42 }, body: { status: 'shipped' } },
       res3
@@ -363,7 +342,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
     mockDb.getRepository.mockReturnValueOnce({
       update: vi.fn().mockResolvedValue(null),
     });
-    const res4 = mockRes();
+    const res4 = createMockRes();
     await adminApi.quickEditHandler(
       { params: { model: 'Order', id: 999 }, body: { status: 'shipped' } },
       res4
@@ -374,7 +353,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
   it('batchEditHandler: handles batch inline updates and errors', async () => {
     // 1. Non-array payload
     // 1. Non-array payload
-    const res1 = mockRes();
+    const res1 = createMockRes();
     await adminApi.batchEditHandler(
       { params: { model: 'Order' }, body: { updates: 'not-array' } },
       res1
@@ -382,7 +361,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
     expect(res1.statusCode).toBe(400);
 
     // 2. Batch update
-    const res2 = mockRes();
+    const res2 = createMockRes();
     await adminApi.batchEditHandler(
       {
         params: { model: 'Order' },
@@ -401,7 +380,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
   });
 
   it('recordsListHandler: exercises all filter operators, search, and sorting branches', async () => {
-    const listRes = mockRes();
+    const listRes = createMockRes();
     const mockQuery = {
       whereNull: vi.fn().mockReturnThis(),
       whereNotNull: vi.fn().mockReturnThis(),
@@ -421,7 +400,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
     });
 
     // 1. Model not found or not enabled
-    const notFoundRes = mockRes();
+    const notFoundRes = createMockRes();
     await adminApi.recordsListHandler({ params: { model: 'Unknown' }, query: {} }, notFoundRes);
     expect(notFoundRes.statusCode).toBe(404);
 
@@ -463,7 +442,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
       total_lte: { col: 'total', filter: { op: 'lte', value: 90 } },
       status_contains: { col: 'status', filter: { op: 'contains', value: 'pend' } },
     })) {
-      const res = mockRes();
+      const res = createMockRes();
       await adminApi.recordsListHandler(
         {
           params: { model: 'Order' },
@@ -477,7 +456,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
 
   it('recordHandler, create, update, delete, restore, facets, actions: covers admin CRUD branches', async () => {
     // 1. recordHandler
-    const recRes = mockRes();
+    const recRes = createMockRes();
     mockDb.getRepository.mockReturnValueOnce({
       findById: vi.fn().mockResolvedValue({ id: 1, status: 'pending' }),
       query: vi.fn().mockReturnValue({
@@ -491,7 +470,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
     // 2. createRecordHandler read-only model
     const orderModel = mockDb.getModel('Order');
     orderModel.admin.readOnly = true;
-    const createRes1 = mockRes();
+    const createRes1 = createMockRes();
     await adminApi.createRecordHandler({ params: { model: 'Order' }, body: {} }, createRes1);
     expect(createRes1.statusCode).toBe(403);
     orderModel.admin.readOnly = false;
@@ -500,7 +479,7 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
     mockDb.getRepository.mockReturnValueOnce({
       update: vi.fn().mockResolvedValue(null),
     });
-    const updateRes1 = mockRes();
+    const updateRes1 = createMockRes();
     await adminApi.updateRecordHandler({ params: { model: 'Order', id: 999 }, body: {} }, updateRes1);
     expect(updateRes1.statusCode).toBe(404);
 
@@ -508,17 +487,17 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
     mockDb.getRepository.mockReturnValueOnce({
       delete: vi.fn().mockResolvedValue(false),
     });
-    const delRes1 = mockRes();
+    const delRes1 = createMockRes();
     await adminApi.deleteRecordHandler({ params: { model: 'Order', id: 999 } }, delRes1);
     expect(delRes1.statusCode).toBe(404);
 
     // 5. restoreRecordHandler when softDelete not configured
-    const restoreRes1 = mockRes();
+    const restoreRes1 = createMockRes();
     await adminApi.restoreRecordHandler({ params: { model: 'Order', id: 1 } }, restoreRes1);
     expect(restoreRes1.statusCode).toBe(400);
 
     // 6. filterFacetsHandler
-    const facetsRes = mockRes();
+    const facetsRes = createMockRes();
     mockDb.getRepository.mockReturnValueOnce({
       query: vi.fn().mockReturnValue({
         whereNotNull: vi.fn().mockReturnThis(),
@@ -531,11 +510,11 @@ describe('Coverage Boost: Admin Panel Inlines & Quick Edit Handlers', () => {
     expect(facetsRes._json.facets.status).toBeDefined();
 
     // 7. modelActionHandler
-    const actionRes1 = mockRes();
+    const actionRes1 = createMockRes();
     await adminApi.modelActionHandler({ params: { model: 'Order', actionId: 'test' }, body: { ids: 'invalid' } }, actionRes1);
     expect(actionRes1.statusCode).toBe(400);
 
-    const actionRes2 = mockRes();
+    const actionRes2 = createMockRes();
     await adminApi.modelActionHandler({ params: { model: 'Order', actionId: 'missing' }, body: { ids: [1] } }, actionRes2);
     expect(actionRes2.statusCode).toBe(404);
   });
@@ -1364,7 +1343,7 @@ describe('Coverage Boost: Auth Middleware Deep Branches', () => {
   it('requireAuth, requireJwt, requireGuest, requireRole, requireVerified, require2Fa branches', async () => {
     // 1. requireAuth: API vs HTML redirect
     const apiMw = mw.requireAuth({ api: true });
-    const res1 = mockRes();
+    const res1 = createMockRes();
     apiMw({ user: null }, res1, vi.fn());
     expect(res1.statusCode).toBe(401);
 
@@ -1377,12 +1356,12 @@ describe('Coverage Boost: Auth Middleware Deep Branches', () => {
 
     // 2. requireJwt: missing header, invalid token, valid token
     const jwtMw = mw.requireJwt();
-    const resJwt1 = mockRes();
+    const resJwt1 = createMockRes();
     await jwtMw({ headers: {} }, resJwt1, vi.fn());
     expect(resJwt1.statusCode).toBe(401);
 
     mockAuthManager.verifyJwt.mockImplementationOnce(() => { throw new Error('Bad token'); });
-    const resJwt2 = mockRes();
+    const resJwt2 = createMockRes();
     await jwtMw({ headers: { authorization: 'Bearer bad' } }, resJwt2, vi.fn());
     expect(resJwt2.statusCode).toBe(401);
 
@@ -1406,7 +1385,7 @@ describe('Coverage Boost: Auth Middleware Deep Branches', () => {
 
     // 4. requireVerified: unauthenticated, unverified API/HTML, verified
     const verMw = mw.requireVerified({ redirectTo: '/verify' });
-    const resVer1 = mockRes();
+    const resVer1 = createMockRes();
     verMw({ user: { email_verified_at: null }, xhr: true, headers: {} }, resVer1, vi.fn());
     expect(resVer1.statusCode).toBe(403);
 
@@ -1620,14 +1599,14 @@ describe('Coverage Boost: User Management API Full CRUD Branches', () => {
     });
 
     // 1. createUser: email required
-    const cRes1 = mockRes();
+    const cRes1 = createMockRes();
     await userApi.createUser({ body: {} }, cRes1);
     expect(cRes1.statusCode).toBe(400);
     expect(cRes1._json.error).toBe('Email is required');
 
     // 2. createUser: duplicate email
     mockRepo.findOne.mockResolvedValueOnce({ id: 1, email: 'alice@test.com' });
-    const cRes2 = mockRes();
+    const cRes2 = createMockRes();
     await userApi.createUser({ body: { email: 'alice@test.com' } }, cRes2);
     expect(cRes2.statusCode).toBe(400);
     expect(cRes2._json.error).toBe('Email already exists');
@@ -1635,21 +1614,21 @@ describe('Coverage Boost: User Management API Full CRUD Branches', () => {
     // 3. createUser: success with hashed password
     mockRepo.findOne.mockResolvedValueOnce(null);
     mockRepo.create.mockResolvedValueOnce({ id: 10, email: 'alice@test.com', password: 'hashed' });
-    const cRes3 = mockRes();
+    const cRes3 = createMockRes();
     await userApi.createUser({ body: { email: 'alice@test.com', password: 'plain' } }, cRes3);
     expect(cRes3.statusCode).toBe(201);
     expect(cRes3._json.data.password).toBeUndefined();
 
     // 4. updateUser: user not found
     mockRepo.findById.mockResolvedValueOnce(null);
-    const uRes1 = mockRes();
+    const uRes1 = createMockRes();
     await userApi.updateUser({ params: { id: 99 }, body: {} }, uRes1);
     expect(uRes1.statusCode).toBe(404);
 
     // 5. updateUser: email conflict
     mockRepo.findById.mockResolvedValueOnce({ id: 10, email: 'old@test.com' });
     mockRepo.findOne.mockResolvedValueOnce({ id: 20, email: 'new@test.com' });
-    const uRes2 = mockRes();
+    const uRes2 = createMockRes();
     await userApi.updateUser({ params: { id: 10 }, body: { email: 'new@test.com' } }, uRes2);
     expect(uRes2.statusCode).toBe(400);
     expect(uRes2._json.error).toBe('Email already exists');
@@ -1658,47 +1637,47 @@ describe('Coverage Boost: User Management API Full CRUD Branches', () => {
     mockRepo.findById.mockResolvedValueOnce({ id: 10, email: 'old@test.com' });
     mockRepo.findOne.mockResolvedValueOnce(null);
     mockRepo.update.mockResolvedValueOnce({ id: 10, email: 'new@test.com', password: 'hash' });
-    const uRes3 = mockRes();
+    const uRes3 = createMockRes();
     await userApi.updateUser({ params: { id: 10 }, body: { email: 'new@test.com', password: 'newsecret' } }, uRes3);
     expect(uRes3.statusCode).toBe(200);
 
     // 7. deleteUser: not found vs success
     mockRepo.delete.mockResolvedValueOnce(false);
-    const dRes1 = mockRes();
+    const dRes1 = createMockRes();
     await userApi.deleteUser({ params: { id: 99 } }, dRes1);
     expect(dRes1.statusCode).toBe(404);
 
     mockRepo.delete.mockResolvedValueOnce(true);
-    const dRes2 = mockRes();
+    const dRes2 = createMockRes();
     await userApi.deleteUser({ params: { id: 10 } }, dRes2);
     expect(dRes2.statusCode).toBe(200);
     expect(dRes2._json.success).toBe(true);
 
     // 8. getSessions: with and without auth.rememberTokens
     const userApiNoAuth = createUserManagementApiHandlers({ db: mockDb, config: {} });
-    const sRes1 = mockRes();
+    const sRes1 = createMockRes();
     await userApiNoAuth.getSessions({}, sRes1);
     expect(sRes1._json.message).toContain('not enabled');
 
-    const sRes2 = mockRes();
+    const sRes2 = createMockRes();
     await userApi.getSessions({}, sRes2);
     expect(sRes2._json.data).toBeDefined();
 
     // 9. revokeSession: with and without auth.rememberTokens
-    const rRes1 = mockRes();
+    const rRes1 = createMockRes();
     await userApiNoAuth.revokeSession({ params: { token: 't' } }, rRes1);
     expect(rRes1.statusCode).toBe(400);
 
-    const rRes2 = mockRes();
+    const rRes2 = createMockRes();
     await userApi.revokeSession({ params: { token: 't' } }, rRes2);
     expect(rRes2._json.success).toBe(true);
 
     // 10. revokeUserSessions: with and without auth.rememberTokens
-    const ruRes1 = mockRes();
+    const ruRes1 = createMockRes();
     await userApiNoAuth.revokeUserSessions({ params: { userId: '1' } }, ruRes1);
     expect(ruRes1.statusCode).toBe(400);
 
-    const ruRes2 = mockRes();
+    const ruRes2 = createMockRes();
     await userApi.revokeUserSessions({ params: { userId: '1' } }, ruRes2);
     expect(ruRes2._json.success).toBe(true);
   });
@@ -1774,7 +1753,7 @@ describe('Coverage Boost: Admin Panel Advanced Filtering and Permissions', () =>
         },
       },
     };
-    const res1 = mockRes();
+    const res1 = createMockRes();
     await adminApi.recordsListHandler(req1, res1);
     expect(res1.statusCode).toBe(200);
 
@@ -1791,7 +1770,7 @@ describe('Coverage Boost: Admin Panel Advanced Filtering and Permissions', () =>
         },
       },
     };
-    const res2 = mockRes();
+    const res2 = createMockRes();
     await adminApi.recordsListHandler(req2, res2);
     expect(res2.statusCode).toBe(200);
 
@@ -1805,7 +1784,7 @@ describe('Coverage Boost: Admin Panel Advanced Filtering and Permissions', () =>
         },
       },
     };
-    const res3 = mockRes();
+    const res3 = createMockRes();
     await adminApi.recordsListHandler(req3, res3);
     expect(res3.statusCode).toBe(200);
 
@@ -1818,7 +1797,7 @@ describe('Coverage Boost: Admin Panel Advanced Filtering and Permissions', () =>
         },
       },
     };
-    const res4 = mockRes();
+    const res4 = createMockRes();
     await adminApi.recordsListHandler(req4, res4);
     expect(res4.statusCode).toBe(200);
 
@@ -1831,28 +1810,28 @@ describe('Coverage Boost: Admin Panel Advanced Filtering and Permissions', () =>
         },
       },
     };
-    const res5 = mockRes();
+    const res5 = createMockRes();
     await adminApi.recordsListHandler(req5, res5);
     expect(res5.statusCode).toBe(200);
 
     // 2. Permission checks: readOnly and permissions.edit = false
     mockModel.admin.readOnly = true;
-    const updateResReadOnly = mockRes();
+    const updateResReadOnly = createMockRes();
     await adminApi.updateRecordHandler({ params: { model: 'AdvancedItem', id: 1 }, body: {} }, updateResReadOnly);
     expect(updateResReadOnly.statusCode).toBe(403);
 
-    const delResReadOnly = mockRes();
+    const delResReadOnly = createMockRes();
     await adminApi.deleteRecordHandler({ params: { model: 'AdvancedItem', id: 1 } }, delResReadOnly);
     expect(delResReadOnly.statusCode).toBe(403);
 
     mockModel.admin.readOnly = false;
     mockModel.admin.permissions.edit = false;
-    const updateResNoEdit = mockRes();
+    const updateResNoEdit = createMockRes();
     await adminApi.updateRecordHandler({ params: { model: 'AdvancedItem', id: 1 }, body: {} }, updateResNoEdit);
     expect(updateResNoEdit.statusCode).toBe(403);
 
     mockModel.admin.permissions.delete = false;
-    const delResNoDel = mockRes();
+    const delResNoDel = createMockRes();
     await adminApi.deleteRecordHandler({ params: { model: 'AdvancedItem', id: 1 } }, delResNoDel);
     expect(delResNoDel.statusCode).toBe(403);
   });

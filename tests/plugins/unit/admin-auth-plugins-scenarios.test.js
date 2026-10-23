@@ -22,7 +22,7 @@ import { createRepository } from '../../../core/orm/repository.js';
 import { z } from 'zod';
 import { ModelEvents } from '../../../core/orm/events.js';
 import { WebhookDispatcher, generateDeliveryId } from '../../../plugins/webhooks/dispatcher.js';
-import { createMockRes as mockRes, createMockRepo } from '../../utils/index.js';
+import { createMockRes, createMockRepo } from '../../utils/index.js';
 
 describe('Coverage Boost: JWT Helper Branches', () => {
   it('covers parseDuration with all branches', () => {
@@ -235,17 +235,17 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
   it('covers checkHandler and setupHandler error and success branches', async () => {
     // 1. checkHandler without AdminUserRepo
     const uninitHandlers = createApiHandlers({ path: '/_admin', db: null });
-    const resCheckNoRepo = mockRes();
+    const resCheckNoRepo = createMockRes();
     await uninitHandlers.checkHandler({}, resCheckNoRepo);
     expect(resCheckNoRepo._json.exists).toBe(false);
 
     // 2. setupHandler without AdminUserRepo
-    const resSetupNoRepo = mockRes();
+    const resSetupNoRepo = createMockRes();
     await uninitHandlers.setupHandler({ body: {} }, resSetupNoRepo);
     expect(resSetupNoRepo.statusCode).toBe(500);
 
     // 3. setupHandler missing fields
-    const resSetupMissing = mockRes();
+    const resSetupMissing = createMockRes();
     await handlers.setupHandler({ body: { email: 'a@b.com' } }, resSetupMissing);
     expect(resSetupMissing.statusCode).toBe(400);
 
@@ -254,7 +254,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
       body: { email: 'new@admin.com', password: 'secretpassword', name: 'New Admin' },
       session: {},
     };
-    const resSetup = mockRes();
+    const resSetup = createMockRes();
     await handlers.setupHandler(reqSetup, resSetup);
     expect(resSetup._json.success).toBe(true);
     expect(reqSetup.session.adminUser).toBeDefined();
@@ -271,52 +271,52 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
         isBlocked: vi.fn().mockReturnValue({ blocked: true, message: 'Too many attempts', retryAfter: 60 }),
       },
     });
-    const resRateLimit = mockRes();
+    const resRateLimit = createMockRes();
     await rateLimitedHandlers.loginHandler({ ip: '1.2.3.4' }, resRateLimit);
     expect(resRateLimit.statusCode).toBe(429);
     expect(resRateLimit.headers['Retry-After']).toBe('60');
 
     // Missing email or password
-    const resMissing = mockRes();
+    const resMissing = createMockRes();
     await handlers.loginHandler({ body: {} }, resMissing);
     expect(resMissing.statusCode).toBe(400);
 
     // Invalid credentials
-    const resInvalid = mockRes();
+    const resInvalid = createMockRes();
     await handlers.loginHandler({ body: { email: 'admin@webspresso.com', password: 'wrong' }, session: {} }, resInvalid);
     expect(resInvalid.statusCode).toBe(401);
 
     // Success
     const reqSuccess = { body: { email: 'admin@webspresso.com', password: 'secret' }, session: {} };
-    const resSuccess = mockRes();
+    const resSuccess = createMockRes();
     await handlers.loginHandler(reqSuccess, resSuccess);
     expect(resSuccess._json.success).toBe(true);
     expect(reqSuccess.session.adminUser.email).toBe('admin@webspresso.com');
 
     // Logout
-    const resLogout = mockRes();
+    const resLogout = createMockRes();
     await handlers.logoutHandler({ session: { destroy: vi.fn((cb) => cb()) } }, resLogout);
     expect(resLogout._json.success).toBe(true);
   });
 
   it('covers meHandler and updateProfileHandler branches', async () => {
     // meHandler unauthenticated
-    const resMeUnauth = mockRes();
+    const resMeUnauth = createMockRes();
     handlers.meHandler({}, resMeUnauth);
     expect(resMeUnauth.statusCode).toBe(401);
 
     // meHandler authenticated
-    const resMeAuth = mockRes();
+    const resMeAuth = createMockRes();
     handlers.meHandler({ session: { adminUser: { id: 1, email: 'admin@test.com' } } }, resMeAuth);
     expect(resMeAuth._json.user.id).toBe(1);
 
     // updateProfileHandler unauthenticated
-    const resProfUnauth = mockRes();
+    const resProfUnauth = createMockRes();
     await handlers.updateProfileHandler({}, resProfUnauth);
     expect(resProfUnauth.statusCode).toBe(401);
 
     // User not found
-    const resProfNotFound = mockRes();
+    const resProfNotFound = createMockRes();
     await handlers.updateProfileHandler({ session: { adminUser: { id: 999 } } }, resProfNotFound);
     expect(resProfNotFound.statusCode).toBe(404);
 
@@ -327,7 +327,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
       whereNot: vi.fn().mockReturnThis(),
       first: vi.fn().mockResolvedValue({ id: 2, email: 'taken@webspresso.com' }),
     });
-    const resConflict = mockRes();
+    const resConflict = createMockRes();
     await handlers.updateProfileHandler({
       session: { adminUser: { id: 1 } },
       body: { email: 'taken@webspresso.com' },
@@ -335,21 +335,21 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resConflict.statusCode).toBe(400);
 
     // Password validation errors
-    const resMissingCurrentPass = mockRes();
+    const resMissingCurrentPass = createMockRes();
     await handlers.updateProfileHandler({
       session: { adminUser: { id: 1 } },
       body: { newPassword: 'new' },
     }, resMissingCurrentPass);
     expect(resMissingCurrentPass.statusCode).toBe(400);
 
-    const resInvalidCurrentPass = mockRes();
+    const resInvalidCurrentPass = createMockRes();
     await handlers.updateProfileHandler({
       session: { adminUser: { id: 1 } },
       body: { currentPassword: 'wrong', newPassword: 'newvalidpassword' },
     }, resInvalidCurrentPass);
     expect(resInvalidCurrentPass.statusCode).toBe(400);
 
-    const resShortNewPass = mockRes();
+    const resShortNewPass = createMockRes();
     await handlers.updateProfileHandler({
       session: { adminUser: { id: 1 } },
       body: { currentPassword: 'secret', newPassword: '123' },
@@ -366,7 +366,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
       session: { adminUser: { id: 1, email: 'admin@webspresso.com', name: 'Admin' } },
       body: { name: 'Super Admin', currentPassword: 'secret', newPassword: 'brandnewpassword' },
     };
-    const resProfOk = mockRes();
+    const resProfOk = createMockRes();
     await handlers.updateProfileHandler(reqProfOk, resProfOk);
     expect(resProfOk._json.success).toBe(true);
     expect(reqProfOk.session.adminUser.name).toBe('Super Admin');
@@ -374,23 +374,23 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
 
   it('covers modelsHandler and modelHandler branches', async () => {
     // modelsHandler
-    const resModels = mockRes();
+    const resModels = createMockRes();
     handlers.modelsHandler({}, resModels);
     expect(resModels._json.models.some((m) => m.name === 'Article')).toBe(true);
     expect(resModels._json.models.some((m) => m.name === 'Secret')).toBe(false);
 
     // modelHandler 404
-    const resModel404 = mockRes();
+    const resModel404 = createMockRes();
     handlers.modelHandler({ params: { model: 'NonExistent' } }, resModel404);
     expect(resModel404.statusCode).toBe(404);
 
     // modelHandler 403 not enabled
-    const resModel403 = mockRes();
+    const resModel403 = createMockRes();
     handlers.modelHandler({ params: { model: 'Secret' } }, resModel403);
     expect(resModel403.statusCode).toBe(403);
 
     // modelHandler success with sortable, hidden columns, badges, custom actions
-    const resModelOk = mockRes();
+    const resModelOk = createMockRes();
     handlers.modelHandler({ params: { model: 'Article' } }, resModelOk);
     expect(resModelOk._json.name).toBe('Article');
     expect(resModelOk._json.columns.find((c) => c.name === 'id').sortable).toBe(true);
@@ -401,35 +401,35 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
 
   it('covers recordsListHandler filters, search, sort, and date hierarchy', async () => {
     // 404 for missing/disabled model
-    const res404 = mockRes();
+    const res404 = createMockRes();
     await handlers.recordsListHandler({ params: { model: 'Fake' }, query: {} }, res404);
     expect(res404.statusCode).toBe(404);
 
     // trashed only and include
-    const resTrashedOnly = mockRes();
+    const resTrashedOnly = createMockRes();
     await handlers.recordsListHandler({ params: { model: 'Article' }, query: { trashed: 'only' } }, resTrashedOnly);
     expect(resTrashedOnly.statusCode).toBe(200);
 
-    const resTrashedInclude = mockRes();
+    const resTrashedInclude = createMockRes();
     await handlers.recordsListHandler({ params: { model: 'Article' }, query: { trashed: 'include' } }, resTrashedInclude);
     expect(resTrashedInclude.statusCode).toBe(200);
 
     // date hierarchy query variants: year, year+month, year+month+day, date_from, date_to
-    const resDateHier = mockRes();
+    const resDateHier = createMockRes();
     await handlers.recordsListHandler({
       params: { model: 'Article' },
       query: { year: '2026', month: '5', day: '10', date_from: '2026-01-01', date_to: '2026-12-31' },
     }, resDateHier);
     expect(resDateHier.statusCode).toBe(200);
 
-    const resDateMonthOnly = mockRes();
+    const resDateMonthOnly = createMockRes();
     await handlers.recordsListHandler({
       params: { model: 'Article' },
       query: { year: '2026', month: '5' },
     }, resDateMonthOnly);
     expect(resDateMonthOnly.statusCode).toBe(200);
 
-    const resDateYearOnly = mockRes();
+    const resDateYearOnly = createMockRes();
     await handlers.recordsListHandler({
       params: { model: 'Article' },
       query: { year: '2026' },
@@ -437,7 +437,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resDateYearOnly.statusCode).toBe(200);
 
     // All filter operators: is_null, is_not_null, boolean true/false, between, in, contains, equals, starts_with, ends_with, gt, gte, lt, lte, eq
-    const resFilters = mockRes();
+    const resFilters = createMockRes();
     await handlers.recordsListHandler({
       params: { model: 'Article' },
       query: {
@@ -456,7 +456,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resFilters.statusCode).toBe(200);
 
     // Filters edge cases: between only from, between only to, is_not_null, gte, lt, lte, equals
-    const resFilters2 = mockRes();
+    const resFilters2 = createMockRes();
     await handlers.recordsListHandler({
       params: { model: 'Article' },
       query: {
@@ -470,7 +470,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     }, resFilters2);
     expect(resFilters2.statusCode).toBe(200);
 
-    const resFilters3 = mockRes();
+    const resFilters3 = createMockRes();
     await handlers.recordsListHandler({
       params: { model: 'Article' },
       query: {
@@ -484,7 +484,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resFilters3.statusCode).toBe(200);
 
     // Search query & sort branches
-    const resSearch = mockRes();
+    const resSearch = createMockRes();
     await handlers.recordsListHandler({
       params: { model: 'Article' },
       query: { search: 'Post', sort: 'title', order: 'asc' },
@@ -492,7 +492,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resSearch.statusCode).toBe(200);
 
     // Sort by non-sortable column falls back to primary key
-    const resSortFallback = mockRes();
+    const resSortFallback = createMockRes();
     await handlers.recordsListHandler({
       params: { model: 'Article' },
       query: { sort: 'json_col' },
@@ -502,18 +502,18 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
 
   it('covers recordHandler, createRecordHandler, and updateRecordHandler with rich text and inlines', async () => {
     // recordHandler 404
-    const resRec404 = mockRes();
+    const resRec404 = createMockRes();
     await handlers.recordHandler({ params: { model: 'Article', id: 999 } }, resRec404);
     expect(resRec404.statusCode).toBe(404);
 
     // recordHandler success with inlines auto-loading
-    const resRecOk = mockRes();
+    const resRecOk = createMockRes();
     await handlers.recordHandler({ params: { model: 'Article', id: 1 }, session: {} }, resRecOk);
     expect(resRecOk._json.data.id).toBe(1);
     expect(resRecOk._json.data._inlines.Comment).toBeDefined();
 
     // createRecordHandler validation and inlines sync
-    const resCreate = mockRes();
+    const resCreate = createMockRes();
     await handlers.createRecordHandler({
       params: { model: 'Article' },
       body: {
@@ -530,7 +530,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resCreate.statusCode).toBe(201);
 
     // updateRecordHandler with inline item updates and deletions
-    const resUpdate = mockRes();
+    const resUpdate = createMockRes();
     await handlers.updateRecordHandler({
       params: { model: 'Article', id: 1 },
       body: {
@@ -547,43 +547,43 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resUpdate.statusCode).toBe(200);
 
     // updateRecordHandler 404
-    const resUp404 = mockRes();
+    const resUp404 = createMockRes();
     await handlers.updateRecordHandler({ params: { model: 'Article', id: 999 }, body: {} }, resUp404);
     expect(resUp404.statusCode).toBe(404);
 
     // deleteRecordHandler
-    const resDel = mockRes();
+    const resDel = createMockRes();
     await handlers.deleteRecordHandler({ params: { model: 'Article', id: 2 }, session: {} }, resDel);
     expect(resDel._json.success).toBe(true);
 
     // deleteRecordHandler 404
-    const resDel404 = mockRes();
+    const resDel404 = createMockRes();
     await handlers.deleteRecordHandler({ params: { model: 'Article', id: 999 } }, resDel404);
     expect(resDel404.statusCode).toBe(404);
 
     // restoreRecordHandler
-    const resRestore = mockRes();
+    const resRestore = createMockRes();
     await handlers.restoreRecordHandler({ params: { model: 'Article', id: 2 }, session: {} }, resRestore);
     expect(resRestore._json.success).toBe(true);
 
     // restoreRecordHandler on model without softDelete
-    const resRestoreNoSD = mockRes();
+    const resRestoreNoSD = createMockRes();
     await handlers.restoreRecordHandler({ params: { model: 'Comment', id: 101 } }, resRestoreNoSD);
     expect(resRestoreNoSD.statusCode).toBe(400);
   });
 
   it('covers relationHandler, queryHandler, and custom actions', async () => {
     // relationHandler 404s
-    const resRel404Model = mockRes();
+    const resRel404Model = createMockRes();
     await handlers.relationHandler({ params: { model: 'Fake', relation: 'comments' }, query: {} }, resRel404Model);
     expect(resRel404Model.statusCode).toBe(404);
 
-    const resRel404Rel = mockRes();
+    const resRel404Rel = createMockRes();
     await handlers.relationHandler({ params: { model: 'Article', relation: 'nonexistent' }, query: {} }, resRel404Rel);
     expect(resRel404Rel.statusCode).toBe(404);
 
     // relationHandler search, all, and selectedId inclusion
-    const resRelOk = mockRes();
+    const resRelOk = createMockRes();
     await handlers.relationHandler({
       params: { model: 'Article', relation: 'comments' },
       query: { search: 'Nice', all: 'true', selected: '101' },
@@ -592,20 +592,20 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resRelOk._json.data).toBeDefined();
 
     // queryHandler
-    const resQuery404 = mockRes();
+    const resQuery404 = createMockRes();
     await handlers.queryHandler({ params: { model: 'Article', query: 'unknown' } }, resQuery404);
     expect(resQuery404.statusCode).toBe(404);
 
-    const resQueryOk = mockRes();
+    const resQueryOk = createMockRes();
     await handlers.queryHandler({ params: { model: 'Article', query: 'trending' } }, resQueryOk);
     expect(resQueryOk._json.data[0].title).toBe('Trending 1');
 
     // modelActionHandler
-    const resActionMissingIds = mockRes();
+    const resActionMissingIds = createMockRes();
     await handlers.modelActionHandler({ params: { model: 'Article', actionId: 'archive-article' }, body: {} }, resActionMissingIds);
     expect(resActionMissingIds.statusCode).toBe(400);
 
-    const resActionOk = mockRes();
+    const resActionOk = createMockRes();
     await handlers.modelActionHandler({
       params: { model: 'Article', actionId: 'archive-article' },
       body: { ids: [1] },
@@ -613,7 +613,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     }, resActionOk);
     expect(resActionOk._json.success).toBe(true);
 
-    const resAction404 = mockRes();
+    const resAction404 = createMockRes();
     await handlers.modelActionHandler({
       params: { model: 'Article', actionId: 'missing-action' },
       body: { ids: [1] },
@@ -623,12 +623,12 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
 
   it('covers inline sub-resource handlers (list, create, update, delete)', async () => {
     // inlineListHandler
-    const resInList = mockRes();
+    const resInList = createMockRes();
     await handlers.inlineListHandler({ params: { model: 'Article', id: 1, inlineModel: 'Comment' } }, resInList);
     expect(resInList.statusCode).toBe(200);
 
     // inlineCreateHandler
-    const resInCreate = mockRes();
+    const resInCreate = createMockRes();
     await handlers.inlineCreateHandler({
       params: { model: 'Article', id: 1, inlineModel: 'Comment' },
       body: { body: 'Inline sub comment' },
@@ -636,7 +636,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resInCreate.statusCode).toBe(201);
 
     // inlineUpdateHandler
-    const resInUpdate = mockRes();
+    const resInUpdate = createMockRes();
     await handlers.inlineUpdateHandler({
       params: { inlineModel: 'Comment', inlineId: 101 },
       body: { body: 'Updated text inline' },
@@ -644,7 +644,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resInUpdate.statusCode).toBe(200);
 
     // inlineDeleteHandler
-    const resInDel = mockRes();
+    const resInDel = createMockRes();
     await handlers.inlineDeleteHandler({
       params: { inlineModel: 'Comment', inlineId: 101 },
     }, resInDel);
@@ -653,7 +653,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
 
   it('covers quickEditHandler and batchEditHandler', async () => {
     // quickEdit disallowed column
-    const resDisallowed = mockRes();
+    const resDisallowed = createMockRes();
     await handlers.quickEditHandler({
       params: { model: 'Article', id: 1 },
       body: { views: 999 }, // not in listEditable ['title', 'status']
@@ -661,7 +661,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resDisallowed.statusCode).toBe(400);
 
     // quickEdit success
-    const resQuickOk = mockRes();
+    const resQuickOk = createMockRes();
     await handlers.quickEditHandler({
       params: { model: 'Article', id: 1 },
       body: { status: 'published' },
@@ -669,12 +669,12 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resQuickOk._json.success).toBe(true);
 
     // batchEditHandler empty updates
-    const resBatchEmpty = mockRes();
+    const resBatchEmpty = createMockRes();
     await handlers.batchEditHandler({ params: { model: 'Article' }, body: {} }, resBatchEmpty);
     expect(resBatchEmpty.statusCode).toBe(400);
 
     // batchEditHandler success
-    const resBatchOk = mockRes();
+    const resBatchOk = createMockRes();
     await handlers.batchEditHandler({
       params: { model: 'Article' },
       body: {
@@ -689,7 +689,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
 
   it('covers dateHierarchyHandler and filterFacetsHandler', async () => {
     // dateHierarchyHandler drilldown to days
-    const resDays = mockRes();
+    const resDays = createMockRes();
     await handlers.dateHierarchyHandler({
       params: { model: 'Article' },
       query: { year: '2026', month: '5' },
@@ -697,7 +697,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resDays._json.level).toBe('days');
 
     // dateHierarchyHandler drilldown to months
-    const resMonths = mockRes();
+    const resMonths = createMockRes();
     await handlers.dateHierarchyHandler({
       params: { model: 'Article' },
       query: { year: '2026' },
@@ -705,7 +705,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resMonths._json.level).toBe('months');
 
     // dateHierarchyHandler top level years
-    const resYears = mockRes();
+    const resYears = createMockRes();
     await handlers.dateHierarchyHandler({
       params: { model: 'Article' },
       query: {},
@@ -713,7 +713,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resYears._json.level).toBe('years');
 
     // filterFacetsHandler
-    const resFacets = mockRes();
+    const resFacets = createMockRes();
     await handlers.filterFacetsHandler({
       params: { model: 'Article' },
       query: {},
@@ -762,20 +762,20 @@ describe('Coverage Boost: Auth Middleware Branches', () => {
     // 1. Valid JWT with user in DB
     const req1 = { headers: { authorization: 'Bearer valid-user-token' } };
     const next1 = vi.fn();
-    await middleware.authenticate(req1, mockRes(), next1);
+    await middleware.authenticate(req1, createMockRes(), next1);
     expect(req1.user.name).toBe('Test User');
     expect(next1).toHaveBeenCalled();
 
     // 2. Valid JWT payload only
     const req2 = { headers: { authorization: 'Bearer valid-payload-token' } };
     const next2 = vi.fn();
-    await middleware.authenticate(req2, mockRes(), next2);
+    await middleware.authenticate(req2, createMockRes(), next2);
     expect(req2.user.role).toBe('service');
 
     // 3. Invalid JWT header
     const req3 = { headers: { authorization: 'Bearer expired-bad-token' } };
     const next3 = vi.fn();
-    await middleware.authenticate(req3, mockRes(), next3);
+    await middleware.authenticate(req3, createMockRes(), next3);
     expect(req3.user).toBeNull();
   });
 
@@ -783,54 +783,54 @@ describe('Coverage Boost: Auth Middleware Branches', () => {
     // Active valid session
     const req1 = { sessionID: 'valid-sess', session: { userId: 1 } };
     const next1 = vi.fn();
-    await middleware.authenticate(req1, mockRes(), next1);
+    await middleware.authenticate(req1, createMockRes(), next1);
     expect(req1.user.id).toBe(1);
 
     // Revoked session
     const destroyFn = vi.fn((cb) => cb());
     const req2 = { sessionID: 'revoked-session', session: { userId: 1, destroy: destroyFn } };
     const next2 = vi.fn();
-    await middleware.authenticate(req2, mockRes(), next2);
+    await middleware.authenticate(req2, createMockRes(), next2);
     expect(req2.session.userId).toBeUndefined();
     expect(destroyFn).toHaveBeenCalled();
 
     // Remember me cookie fallback
     const req3 = { headers: { cookie: 'remember_token=abc' }, session: {} };
     const next3 = vi.fn();
-    await middleware.authenticate(req3, mockRes(), next3);
+    await middleware.authenticate(req3, createMockRes(), next3);
     expect(req3.user.name).toBe('Remembered');
     expect(req3.session.userId).toBe(1);
   });
 
   it('covers requireAuth, requireJwt, and requireGuest', async () => {
     // requireAuth without user: API 401 vs HTML redirect
-    const resAuthApi = mockRes();
+    const resAuthApi = createMockRes();
     middleware.requireAuth({ api: true })({}, resAuthApi, vi.fn());
     expect(resAuthApi.statusCode).toBe(401);
 
-    const resAuthHtml = mockRes();
+    const resAuthHtml = createMockRes();
     const reqHtml = { session: {}, originalUrl: '/protected' };
     middleware.requireAuth()(reqHtml, resAuthHtml, vi.fn());
     expect(resAuthHtml._redirect).toBe('/login');
     expect(reqHtml.session.intendedUrl).toBe('/protected');
 
     // requireJwt without header vs valid header
-    const resJwtMissing = mockRes();
+    const resJwtMissing = createMockRes();
     await middleware.requireJwt()({}, resJwtMissing, vi.fn());
     expect(resJwtMissing.statusCode).toBe(401);
 
     const reqJwtOk = { headers: { authorization: 'Bearer valid-user-token' } };
     const nextJwtOk = vi.fn();
-    await middleware.requireJwt()(reqJwtOk, mockRes(), nextJwtOk);
+    await middleware.requireJwt()(reqJwtOk, createMockRes(), nextJwtOk);
     expect(nextJwtOk).toHaveBeenCalled();
 
     // requireGuest: redirect when user present vs next when guest
-    const resGuestRedirect = mockRes();
+    const resGuestRedirect = createMockRes();
     middleware.requireGuest()({ user: { id: 1 } }, resGuestRedirect, vi.fn());
     expect(resGuestRedirect._redirect).toBe('/dashboard');
 
     const nextGuest = vi.fn();
-    middleware.requireGuest()({}, mockRes(), nextGuest);
+    middleware.requireGuest()({}, createMockRes(), nextGuest);
     expect(nextGuest).toHaveBeenCalled();
   });
 
@@ -840,36 +840,36 @@ describe('Coverage Boost: Auth Middleware Branches', () => {
       auth: { can: vi.fn(() => false) },
       headers: { accept: 'application/json' },
     };
-    const resCanJson = mockRes();
+    const resCanJson = createMockRes();
     await middleware.requireCan('edit', 'post')(reqCan, resCanJson, vi.fn());
     expect(resCanJson.statusCode).toBe(403);
 
     // requireVerified: missing verification
     const reqUnver = { user: { id: 1 }, headers: { accept: 'application/json' } };
-    const resUnver = mockRes();
+    const resUnver = createMockRes();
     middleware.requireVerified()(reqUnver, resUnver, vi.fn());
     expect(resUnver.statusCode).toBe(403);
 
     // requireVerified: verified user
     const reqVer = { user: { id: 1, email_verified_at: '2026-01-01' } };
     const nextVer = vi.fn();
-    middleware.requireVerified()(reqVer, mockRes(), nextVer);
+    middleware.requireVerified()(reqVer, createMockRes(), nextVer);
     expect(nextVer).toHaveBeenCalled();
   });
 
   it('covers require2Fa branches', () => {
     // 1. Unauthenticated -> 401
-    const res2faUnauth = mockRes();
+    const res2faUnauth = createMockRes();
     middleware.require2Fa({ api: true })({}, res2faUnauth, vi.fn());
     expect(res2faUnauth.statusCode).toBe(401);
 
     // 2. User without 2FA enabled -> passes
     const nextNo2Fa = vi.fn();
-    middleware.require2Fa()({ user: { id: 1 } }, mockRes(), nextNo2Fa);
+    middleware.require2Fa()({ user: { id: 1 } }, createMockRes(), nextNo2Fa);
     expect(nextNo2Fa).toHaveBeenCalled();
 
     // 3. User with 2FA enabled but not verified -> 403
-    const res2faRequired = mockRes();
+    const res2faRequired = createMockRes();
     middleware.require2Fa({ api: true })({ user: { id: 1, two_factor_enabled: true } }, res2faRequired, vi.fn());
     expect(res2faRequired.statusCode).toBe(403);
 
@@ -878,7 +878,7 @@ describe('Coverage Boost: Auth Middleware Branches', () => {
     middleware.require2Fa()({
       user: { id: 1, two_factor_enabled: true },
       session: { twoFactorVerified: true },
-    }, mockRes(), next2FaVerified);
+    }, createMockRes(), next2FaVerified);
     expect(next2FaVerified).toHaveBeenCalled();
   });
 
@@ -908,27 +908,27 @@ describe('Coverage Boost: File Manager API Handlers Branches', () => {
 
     // 1. Permission denied for delete action
     const reqUser = { session: { adminUser: { role: 'viewer' } } };
-    const resDenied = mockRes();
+    const resDenied = createMockRes();
     await handlers.delete(reqUser, resDenied);
     expect(resDenied.statusCode).toBe(403);
 
     // 2. Missing targetPath on delete
     const reqAdmin = { session: { adminUser: { role: 'admin' } }, body: {} };
-    const resMissingTarget = mockRes();
+    const resMissingTarget = createMockRes();
     await handlers.delete(reqAdmin, resMissingTarget);
     expect(resMissingTarget.statusCode).toBe(400);
 
     // 3. Missing name on mkdir
-    const resMissingName = mockRes();
+    const resMissingName = createMockRes();
     await handlers.mkdir({ session: { adminUser: { role: 'admin' } }, body: {} }, resMissingName);
     expect(resMissingName.statusCode).toBe(400);
 
     // 4. Missing paths on rename and move
-    const resMissingRename = mockRes();
+    const resMissingRename = createMockRes();
     await handlers.rename({ session: { adminUser: { role: 'admin' } }, body: {} }, resMissingRename);
     expect(resMissingRename.statusCode).toBe(400);
 
-    const resMissingMove = mockRes();
+    const resMissingMove = createMockRes();
     await handlers.move({ session: { adminUser: { role: 'admin' } }, body: {} }, resMissingMove);
     expect(resMissingMove.statusCode).toBe(400);
   });
@@ -947,15 +947,15 @@ describe('Coverage Boost: Site Analytics and Audit Log Branches', () => {
     const handlers = createAnalyticsApiHandlers({ knex: mockKnex });
 
     // Days query parameter: default, lower bound, upper bound
-    const res1 = mockRes();
+    const res1 = createMockRes();
     await handlers.getStats({ query: {} }, res1);
     expect(res1._json.days).toBe(30);
 
-    const res2 = mockRes();
+    const res2 = createMockRes();
     await handlers.getStats({ query: { days: '500' } }, res2);
     expect(res2._json.days).toBe(365);
 
-    const res3 = mockRes();
+    const res3 = createMockRes();
     await handlers.getStats({ query: { days: '-5' } }, res3);
     expect(res3._json.days).toBe(1);
   });
@@ -997,33 +997,33 @@ describe('Coverage Boost: Site Analytics and Audit Log Branches', () => {
         search: 'Article',
       },
     };
-    const resList = mockRes();
+    const resList = createMockRes();
     await handlers.listHandler(reqList, resList);
     expect(resList._json.meta.total).toBe(1);
 
     // 2. Timeline handler: missing params 400
-    const resTimelineMissing = mockRes();
+    const resTimelineMissing = createMockRes();
     await handlers.timelineHandler({ query: {} }, resTimelineMissing);
     expect(resTimelineMissing.statusCode).toBe(400);
 
     // 3. Timeline handler success
-    const resTimelineOk = mockRes();
+    const resTimelineOk = createMockRes();
     await handlers.timelineHandler({ query: { model: 'Article', id: '1' } }, resTimelineOk);
     expect(resTimelineOk.statusCode).toBe(200);
     expect(resTimelineOk._json.timeline[0].id).toBe(1);
 
     // 4. Purge handler invalid days
-    const resPurgeInvalid = mockRes();
+    const resPurgeInvalid = createMockRes();
     await handlers.purgeHandler({ body: { days: -1 } }, resPurgeInvalid);
     expect(resPurgeInvalid.statusCode).toBe(400);
 
     // 5. Purge handler invalid date
-    const resPurgeBadDate = mockRes();
+    const resPurgeBadDate = createMockRes();
     await handlers.purgeHandler({ body: { olderThan: 'not-a-date' } }, resPurgeBadDate);
     expect(resPurgeBadDate.statusCode).toBe(400);
 
     // 6. Purge handler success
-    const resPurgeOk = mockRes();
+    const resPurgeOk = createMockRes();
     await handlers.purgeHandler({ body: { days: 30 } }, resPurgeOk);
     expect(resPurgeOk._json.ok).toBe(true);
 
@@ -1136,7 +1136,7 @@ describe('Coverage Boost: ORM Repository & Scopes Branches', () => {
     // 10. Hook cancellation branch
     const { createRequire } = await import('module');
     const reqCjs = createRequire(import.meta.url);
-    const { ModelEvents: cjsModelEvents } = reqCjs('../../core/orm/events.js');
+    const { ModelEvents: cjsModelEvents } = reqCjs('../../../core/orm/events.js');
     const cancelHandler = (data, ctx) => {
       ctx.cancel('Cancelled by test');
     };

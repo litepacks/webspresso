@@ -1,28 +1,16 @@
+const {
+  createMockRes
+} = require('../../utils');
+
 /**
  * ORM cache admin API handlers
  */
 const { createOrmCacheAdminHandlers } = require('../../../plugins/orm-cache-admin/api-handlers');
 
-function mockRes() {
-  const res = {
-    statusCode: 200,
-    _body: null,
-    status(n) {
-      this.statusCode = n;
-      return this;
-    },
-    json(b) {
-      this._body = b;
-      return this;
-    },
-  };
-  return res;
-}
-
 describe('orm-cache-admin handlers', () => {
   it('getStats returns 503 when cache off', async () => {
     const handlers = createOrmCacheAdminHandlers({ db: { cache: null } });
-    const res = mockRes();
+    const res = createMockRes();
     await handlers.getStats({}, res);
     expect(res.statusCode).toBe(503);
   });
@@ -38,7 +26,7 @@ describe('orm-cache-admin handlers', () => {
         },
       },
     });
-    const res = mockRes();
+    const res = createMockRes();
     await handlers.postPurge({}, res);
     expect(purged).toBe(true);
     expect(res._body.ok).toBe(true);
@@ -55,7 +43,7 @@ describe('orm-cache-admin handlers', () => {
         },
       },
     });
-    const res = mockRes();
+    const res = createMockRes();
     await handlers.postInvalidate({ body: { model: 'User' } }, res);
     expect(modelArg).toBe('User');
     expect(res._body.ok).toBe(true);

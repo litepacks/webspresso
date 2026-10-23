@@ -1,3 +1,7 @@
+const {
+  createMockRes
+} = require('../../utils');
+
 /**
  * Analytics API Handlers Unit Tests
  * Uses in-memory SQLite for realistic query testing
@@ -58,16 +62,6 @@ describe('Analytics API Handlers', () => {
     }
   });
 
-  function mockRes() {
-    const res = {
-      statusCode: 200,
-      _body: null,
-      status(code) { res.statusCode = code; return res; },
-      json(data) { res._body = data; return res; },
-    };
-    return res;
-  }
-
   function mockReq(query = {}) {
     return { query };
   }
@@ -92,7 +86,7 @@ describe('Analytics API Handlers', () => {
   describe('getStats', () => {
     it('should return zero stats for empty table', async () => {
       const req = mockReq({ days: '30' });
-      const res = mockRes();
+      const res = createMockRes();
 
       await handlers.getStats(req, res);
 
@@ -111,7 +105,7 @@ describe('Analytics API Handlers', () => {
         { path: '/a', visitor_id: 'v2', session_id: 's2' },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getStats(mockReq({ days: '30' }), res);
 
       expect(res._body.views).toBe(3);
@@ -128,7 +122,7 @@ describe('Analytics API Handlers', () => {
         { path: '/b', is_bot: true, bot_name: 'Google' },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getStats(mockReq({ days: '30' }), res);
 
       expect(res._body.views).toBe(1);
@@ -141,7 +135,7 @@ describe('Analytics API Handlers', () => {
         { path: '/c', referrer: 'https://example.com/landing' },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getStats(mockReq({ days: '30' }), res);
 
       expect(res._body.views).toBe(3);
@@ -158,20 +152,20 @@ describe('Analytics API Handlers', () => {
         { path: '/old', created_at: old.toISOString() },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getStats(mockReq({ days: '30' }), res);
 
       expect(res._body.views).toBe(1);
     });
 
     it('should default to 30 days if no days param', async () => {
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getStats(mockReq({}), res);
       expect(res._body.days).toBe(30);
     });
 
     it('should clamp days to max 365', async () => {
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getStats(mockReq({ days: '999' }), res);
       expect(res._body.days).toBe(365);
     });
@@ -181,7 +175,7 @@ describe('Analytics API Handlers', () => {
     it('should return daily data with gap-filling', async () => {
       await seedPageViews([{ path: '/a' }]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getViewsOverTime(mockReq({ days: '7' }), res);
 
       expect(Array.isArray(res._body)).toBe(true);
@@ -204,14 +198,14 @@ describe('Analytics API Handlers', () => {
       ]);
 
       // Verify bot filtering: top-pages should only count human views
-      const pagesRes = mockRes();
+      const pagesRes = createMockRes();
       await handlers.getTopPages(mockReq({ days: '7' }), pagesRes);
       expect(pagesRes._body.length).toBe(1);
       expect(pagesRes._body[0].path).toBe('/a');
       expect(pagesRes._body[0].views).toBe(2);
 
       // Verify bots appear in bot activity
-      const botRes = mockRes();
+      const botRes = createMockRes();
       await handlers.getBotActivity(mockReq({ days: '7' }), botRes);
       expect(botRes._body.length).toBe(1);
       expect(botRes._body[0].name).toBe('Google');
@@ -221,7 +215,7 @@ describe('Analytics API Handlers', () => {
 
   describe('getTopPages', () => {
     it('should return empty array for no data', async () => {
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getTopPages(mockReq({ days: '30' }), res);
       expect(res._body).toEqual([]);
     });
@@ -234,7 +228,7 @@ describe('Analytics API Handlers', () => {
         { path: '/less-popular' },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getTopPages(mockReq({ days: '30' }), res);
 
       expect(res._body[0].path).toBe('/popular');
@@ -248,7 +242,7 @@ describe('Analytics API Handlers', () => {
         { path: '/a' }, { path: '/b' }, { path: '/c' },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getTopPages(mockReq({ days: '30', limit: '2' }), res);
       expect(res._body.length).toBe(2);
     });
@@ -259,7 +253,7 @@ describe('Analytics API Handlers', () => {
         { path: '/bot', is_bot: true },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getTopPages(mockReq({ days: '30' }), res);
       expect(res._body.length).toBe(1);
       expect(res._body[0].path).toBe('/human');
@@ -270,7 +264,7 @@ describe('Analytics API Handlers', () => {
     it('should return empty array when no referrer data', async () => {
       await seedPageViews([{ path: '/', referrer: null }, { path: '/a' }]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getReferrerSources(mockReq({ days: '30' }), res);
 
       expect(res._body).toEqual([]);
@@ -283,7 +277,7 @@ describe('Analytics API Handlers', () => {
         { path: '/z', referrer: 'https://news.example.org/article' },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getReferrerSources(mockReq({ days: '30' }), res);
 
       expect(res._body.length).toBe(2);
@@ -299,7 +293,7 @@ describe('Analytics API Handlers', () => {
         { path: '/', referrer: 'https://twitter.com/y', is_bot: true },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getReferrerSources(mockReq({ days: '30' }), res);
 
       expect(res._body.length).toBe(1);
@@ -310,7 +304,7 @@ describe('Analytics API Handlers', () => {
 
   describe('getBotActivity', () => {
     it('should return empty array for no bots', async () => {
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getBotActivity(mockReq({ days: '30' }), res);
       expect(res._body).toEqual([]);
     });
@@ -322,7 +316,7 @@ describe('Analytics API Handlers', () => {
         { path: '/', is_bot: true, bot_name: 'curl' },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getBotActivity(mockReq({ days: '30' }), res);
 
       expect(res._body.length).toBe(2);
@@ -335,7 +329,7 @@ describe('Analytics API Handlers', () => {
 
   describe('getCountries', () => {
     it('should return empty array for no country data', async () => {
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getCountries(mockReq({ days: '30' }), res);
       expect(res._body).toEqual([]);
     });
@@ -347,7 +341,7 @@ describe('Analytics API Handlers', () => {
         { path: '/', country: 'DE' },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getCountries(mockReq({ days: '30' }), res);
 
       expect(res._body.length).toBe(2);
@@ -363,7 +357,7 @@ describe('Analytics API Handlers', () => {
         { path: '/', country: 'CN', is_bot: true },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getCountries(mockReq({ days: '30' }), res);
 
       expect(res._body.length).toBe(1);
@@ -373,7 +367,7 @@ describe('Analytics API Handlers', () => {
 
   describe('getClientErrors', () => {
     it('should return empty array when no errors', async () => {
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getClientErrors(mockReq({ days: '30' }), res);
       expect(res._body).toEqual([]);
     });
@@ -384,7 +378,7 @@ describe('Analytics API Handlers', () => {
         { error_type: 'unhandledrejection', message: 'Failed to fetch', path: '/about', created_at: new Date().toISOString() },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getClientErrors(mockReq({ days: '30' }), res);
 
       expect(res._body.length).toBe(2);
@@ -404,7 +398,7 @@ describe('Analytics API Handlers', () => {
         created_at: oldDate.toISOString(),
       });
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getClientErrors(mockReq({ days: '30' }), res);
       expect(res._body).toEqual([]);
     });
@@ -412,7 +406,7 @@ describe('Analytics API Handlers', () => {
 
   describe('getRecent', () => {
     it('should return empty array for no data', async () => {
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getRecent(mockReq({}), res);
       expect(res._body).toEqual([]);
     });
@@ -426,7 +420,7 @@ describe('Analytics API Handlers', () => {
         { path: '/newer', created_at: now.toISOString() },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getRecent(mockReq({}), res);
 
       expect(res._body.length).toBe(2);
@@ -439,7 +433,7 @@ describe('Analytics API Handlers', () => {
         { path: '/bot', is_bot: true },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getRecent(mockReq({}), res);
 
       expect(res._body.length).toBe(1);
@@ -451,7 +445,7 @@ describe('Analytics API Handlers', () => {
         { path: '/a' }, { path: '/b' }, { path: '/c' },
       ]);
 
-      const res = mockRes();
+      const res = createMockRes();
       await handlers.getRecent(mockReq({ limit: '2' }), res);
       expect(res._body.length).toBe(2);
     });
