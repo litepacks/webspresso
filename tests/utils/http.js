@@ -89,13 +89,43 @@ function createMockRequest(options = {}) {
  * @returns {Object} Mock Response
  */
 function createMockResponse(options = {}) {
-  const headers = {};
+  const rawHeaders = {};
   if (options.headers) {
     for (const [key, value] of Object.entries(options.headers)) {
-      headers[key.toLowerCase()] = value;
-      headers[key] = value;
+      rawHeaders[key.toLowerCase()] = value;
     }
   }
+
+  const headers = new Proxy(rawHeaders, {
+    get(target, prop) {
+      if (typeof prop === 'string') {
+        const lower = prop.toLowerCase();
+        if (lower in target) return target[lower];
+      }
+      return target[prop];
+    },
+    set(target, prop, val) {
+      if (typeof prop === 'string') {
+        target[prop.toLowerCase()] = val;
+      } else {
+        target[prop] = val;
+      }
+      return true;
+    },
+    has(target, prop) {
+      if (typeof prop === 'string') {
+        return prop.toLowerCase() in target;
+      }
+      return prop in target;
+    },
+    deleteProperty(target, prop) {
+      if (typeof prop === 'string') {
+        delete target[prop.toLowerCase()];
+      }
+      delete target[prop];
+      return true;
+    },
+  });
 
   const listeners = {};
 
@@ -139,23 +169,20 @@ function createMockResponse(options = {}) {
       if (typeof nameOrObj === 'object' && nameOrObj !== null) {
         for (const [k, v] of Object.entries(nameOrObj)) {
           this.headers[k.toLowerCase()] = String(v);
-          this.headers[k] = String(v);
         }
       } else if (typeof nameOrObj === 'string') {
         this.headers[nameOrObj.toLowerCase()] = String(val);
-        this.headers[nameOrObj] = String(val);
       }
       return this;
     },
 
     setHeader(name, val) {
       this.headers[name.toLowerCase()] = val;
-      this.headers[name] = val;
       return this;
     },
 
     getHeader(name) {
-      return this.headers[name.toLowerCase()] || this.headers[name];
+      return this.headers[name.toLowerCase()];
     },
 
     getHeaders() {
@@ -163,15 +190,11 @@ function createMockResponse(options = {}) {
     },
 
     hasHeader(name) {
-      return (
-        Object.prototype.hasOwnProperty.call(this.headers, name.toLowerCase()) ||
-        Object.prototype.hasOwnProperty.call(this.headers, name)
-      );
+      return Object.prototype.hasOwnProperty.call(this.headers, name.toLowerCase());
     },
 
     removeHeader(name) {
       delete this.headers[name.toLowerCase()];
-      delete this.headers[name];
       return this;
     },
 
@@ -180,7 +203,6 @@ function createMockResponse(options = {}) {
       this.headersSent = true;
       for (const [k, v] of Object.entries(headersObj)) {
         this.headers[k.toLowerCase()] = v;
-        this.headers[k] = v;
       }
       return this;
     },
@@ -200,7 +222,9 @@ function createMockResponse(options = {}) {
     },
 
     json(data) {
-      this.headers['content-type'] = 'application/json';
+      if (!this.getHeader('content-type')) {
+        this.setHeader('content-type', 'application/json');
+      }
       this.jsonData = data;
       this.data = data;
       this.payload = data;
@@ -318,17 +342,31 @@ function createMockResponse(options = {}) {
  * @returns {Function}
  */
 function createMockNext(options = {}) {
+  let fn;
   const next = (err) => {
+    const errorVal = err !== undefined ? err : null;
     next.called = true;
     next.callCount++;
-    next.error = err || null;
+    next.error = errorVal;
+    if (fn && fn !== next) {
+      fn.called = true;
+      fn.callCount++;
+      fn.error = errorVal;
+    }
   };
   next.called = false;
   next.callCount = 0;
+  next.error = null;
+
   if (options.spy && typeof vi !== 'undefined' && typeof vi.fn === 'function') {
-    return vi.fn(next);
+    fn = vi.fn(next);
+    fn.called = false;
+    fn.callCount = 0;
+    fn.error = null;
+    return fn;
   }
 
+  fn = next;
   return next;
 }
 

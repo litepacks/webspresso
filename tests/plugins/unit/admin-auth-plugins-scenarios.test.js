@@ -193,7 +193,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
       Article: createMockRepo([
         { id: 1, title: 'Post 1', content: '<p>Content 1</p>', status: 'draft', published: false, views: 10, created_at: '2026-05-10T12:00:00Z' },
         { id: 2, title: 'Post 2', content: '<p>Content 2</p>', status: 'active', published: true, views: 50, created_at: '2026-05-15T12:00:00Z' },
-      ]),
+      ], { softDelete: true }),
       Comment: createMockRepo([
         { id: 101, article_id: 1, body: 'Nice post!' },
       ]),
@@ -250,6 +250,7 @@ describe('Coverage Boost: Admin Panel API Endpoints Exhaustive', () => {
     expect(resSetupMissing.statusCode).toBe(400);
 
     // 4. setupHandler success
+    mockRepos.AdminUser.items.length = 0;
     const reqSetup = {
       body: { email: 'new@admin.com', password: 'secretpassword', name: 'New Admin' },
       session: {},

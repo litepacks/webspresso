@@ -32,6 +32,10 @@ if (typeof afterEach === 'function') {
       const { clearCascadingCaches } = require('../src/routing/cascading');
       clearCascadingCaches();
     } catch (_) {}
+    try {
+      const { resetAppContext } = require('../src/app-context');
+      resetAppContext();
+    } catch (_) {}
   });
 }
 

@@ -291,8 +291,9 @@ describe('core/compression/middleware.js', () => {
 
     it('prevents Content-Length override if Content-Encoding is set', () => {
       const middleware = createCompressionMiddleware();
-      const headers = { 'content-encoding': 'gzip' };
-      const res = createMockSpyRes();
+      const res = createMockSpyRes({
+        headers: { 'content-encoding': 'gzip' },
+      });
       const req = { headers: {}, method: 'GET' };
       const next = createMockSpyNext();
 
@@ -300,11 +301,11 @@ describe('core/compression/middleware.js', () => {
 
       // Attempting to set Content-Length when compressed should be ignored
       res.setHeader('Content-Length', '1000');
-      expect(headers['content-length']).toBeUndefined();
+      expect(res.getHeader('content-length')).toBeUndefined();
 
       // Setting other headers should proceed
       res.setHeader('X-Custom-Header', 'test-val');
-      expect(headers['x-custom-header']).toBe('test-val');
+      expect(res.getHeader('x-custom-header')).toBe('test-val');
     });
 
     it('handles HTTP requests with compression, opt-outs, and custom filters', async () => {

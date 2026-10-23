@@ -123,13 +123,17 @@ class CoreApp {
           ? path.join(process.cwd(), 'services')
           : null));
 
-    this.serviceRegistry = createServiceRegistry({
-      servicesDir: resolvedServicesDir,
-      isDev: this.isDev,
-      logger: this.logger,
-      timeouts: this.timeouts,
-      cacheProvider: options.cacheProvider || (options.cache && typeof options.cache === 'object' && options.cache.provider ? options.cache.provider : null),
-    });
+    this.serviceRegistry = (options.serviceRegistry && typeof options.serviceRegistry.call === 'function')
+      ? options.serviceRegistry
+      : ((options.services && typeof options.services.call === 'function')
+        ? options.services
+        : createServiceRegistry({
+            servicesDir: resolvedServicesDir,
+            isDev: this.isDev,
+            logger: this.logger,
+            timeouts: this.timeouts,
+            cacheProvider: options.cacheProvider || (options.cache && typeof options.cache === 'object' && options.cache.provider ? options.cache.provider : null),
+          }));
     this.services = this.serviceRegistry;
 
     this.service.call = (name, input, ctxOrOpts, maybeOpts) =>

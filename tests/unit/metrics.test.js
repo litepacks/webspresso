@@ -232,13 +232,13 @@ describe('Cloud Metrics & Distributed Tracing (core/metrics)', () => {
       const app = express();
       setupMetricsMiddleware(app, true);
 
-      app.get('/test-route', (req, res) => {
+      app.get('/metrics-test-trace-route', (req, res) => {
         expect(req.traceId).toBeDefined();
         expect(req.spanId).toBeDefined();
         res.json({ ok: true, traceId: req.traceId });
       });
 
-      const res = await request(app).get('/test-route');
+      const res = await request(app).get('/metrics-test-trace-route');
       expect(res.status).toBe(200);
       expect(res.headers['x-trace-id']).toBeDefined();
       expect(res.headers['traceparent']).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
@@ -273,25 +273,26 @@ describe('Cloud Metrics & Distributed Tracing (core/metrics)', () => {
         res.status(200).send('users list');
       });
 
-      // Hit an instrumented endpoint
-      await request(app).get('/api/users');
-      await request(app).get('/api/users');
+      // Hit an instrumented endpoint using persistent agent
+      const agent = request(app);
+      await agent.get('/api/users');
+      await agent.get('/api/users');
 
       // 1. Scrape Prometheus
-      const promRes = await request(app).get('/metrics');
+      const promRes = await agent.get('/metrics');
       expect(promRes.status).toBe(200);
       expect(promRes.headers['content-type']).toContain('text/plain');
       expect(promRes.text).toContain('webspresso_http_requests_total');
       expect(promRes.text).toContain('nodejs_heap_size_used_bytes');
 
       // 2. Scrape JSON via path
-      const jsonRes = await request(app).get('/metrics.json');
+      const jsonRes = await agent.get('/metrics.json');
       expect(jsonRes.status).toBe(200);
       expect(jsonRes.headers['content-type']).toContain('application/json');
       expect(jsonRes.body.webspresso_http_requests_total).toBeDefined();
 
       // 3. Scrape JSON via Accept header
-      const acceptJsonRes = await request(app)
+      const acceptJsonRes = await agent
         .get('/metrics')
         .set('Accept', 'application/json');
       expect(acceptJsonRes.status).toBe(200);

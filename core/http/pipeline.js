@@ -107,14 +107,24 @@ async function executeApiPipeline(params) {
   // 1. Injections
   if (db && !req.db) req.db = db;
   if (!req.service && serviceRegistry) {
-    const baseContext = req.context || { req, res, db, user: req.user, session: req.session };
+    const getCallContext = (explicitCtx) => {
+      if (explicitCtx) return explicitCtx;
+      const ctx = req.context ? { ...req.context } : { req, res, db: req.db || db };
+      if (!ctx.req) ctx.req = req;
+      if (!ctx.res) ctx.res = res;
+      if (!ctx.db) ctx.db = req.db || db;
+      if (req.user !== undefined) ctx.user = req.user;
+      if (req.auth !== undefined) ctx.auth = req.auth;
+      if (req.session !== undefined) ctx.session = req.session;
+      return ctx;
+    };
     req.service = (name, input, opts) => {
-      return serviceRegistry.call(name, input, baseContext, opts);
+      return serviceRegistry.call(name, input, getCallContext(opts?.ctx), opts);
     };
     req.service.call = (name, input, opts) => req.service(name, input, opts);
     req.service.execute = (name, input, opts) => req.service(name, input, opts);
     req.service.invalidate = (name, input, ctx) =>
-      serviceRegistry.invalidate(name, input, ctx || baseContext);
+      serviceRegistry.invalidate(name, input, getCallContext(ctx));
     req.service.clearCache = (name) =>
       serviceRegistry.clearCache(name);
     req.service.invalidateByTag = (tag, serviceName) =>

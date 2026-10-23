@@ -190,7 +190,6 @@ describe('basicAuthPlugin', () => {
       });
 
       const req = { headers: {} };
-      let body = '';
       const res = createMockSpyRes({
         statusCode: null
       });
@@ -198,7 +197,7 @@ describe('basicAuthPlugin', () => {
       await mw(req, res, vi.fn());
 
       expect(res.statusCode).toBe(401);
-      expect(JSON.parse(body)).toEqual({ status: 'failed', code: 'AUTH_REQUIRED' });
+      expect(JSON.parse(res.body)).toEqual({ status: 'failed', code: 'AUTH_REQUIRED' });
     });
 
     it('skips authentication for skipPaths and skip function', async () => {

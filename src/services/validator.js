@@ -195,11 +195,19 @@ function formatZodErrors(zodError, serviceName) {
  */
 function normalizeValidationIssues(issues) {
   if (!Array.isArray(issues)) return [];
-  return issues.map((issue) => ({
-    path: Array.isArray(issue.path) ? issue.path.join('.') : (issue.path ? String(issue.path) : '_root'),
-    message: issue.message || 'invalid value',
-    code: issue.code || 'invalid_type',
-  }));
+  return issues.map((issue) => {
+    let p = '_root';
+    if (Array.isArray(issue.path)) {
+      p = issue.path.length > 0 ? issue.path.join('.') : '_root';
+    } else if (issue.path) {
+      p = String(issue.path);
+    }
+    return {
+      path: p,
+      message: issue.message || 'invalid value',
+      code: issue.code || 'invalid_type',
+    };
+  });
 }
 
 /**
@@ -220,7 +228,7 @@ function createServiceValidationError(message, {
   fieldErrors = {},
   details = [],
   cause = null,
-  status = 400,
+  status = 422,
 } = {}) {
   const normalizedIssues = normalizeValidationIssues(details);
 
@@ -293,7 +301,7 @@ function validateServiceInput(schema, input, serviceName, options = {}) {
           fields,
           fieldErrors,
           details: result.error.issues,
-          status: 400,
+          status: 422,
         });
       }
       return result.data;
@@ -311,7 +319,7 @@ function validateServiceInput(schema, input, serviceName, options = {}) {
               fields,
               fieldErrors,
               details: asyncResult.error.issues,
-              status: 400,
+              status: 422,
             });
           }
           return asyncResult.data;
@@ -319,8 +327,8 @@ function validateServiceInput(schema, input, serviceName, options = {}) {
           if (asyncErr instanceof ValidationError) {
             if (!asyncErr.service) asyncErr.service = serviceName;
             if (!asyncErr.code) asyncErr.code = 'VALIDATION_ERROR';
-            if (asyncErr.statusCode === undefined) asyncErr.statusCode = asyncErr.status || 400;
-            if (asyncErr.status === undefined) asyncErr.status = 400;
+            if (asyncErr.statusCode === undefined) asyncErr.statusCode = asyncErr.status || 422;
+            if (asyncErr.status === undefined) asyncErr.status = 422;
             throw asyncErr;
           }
           throw createServiceValidationError(`Invalid service input for ${serviceName}: ${asyncErr.message}`, {
@@ -329,7 +337,7 @@ function validateServiceInput(schema, input, serviceName, options = {}) {
             fieldErrors: { _root: [asyncErr.message] },
             details: [{ path: [], message: asyncErr.message }],
             cause: asyncErr,
-            status: 400,
+            status: 422,
           });
         });
       }
@@ -349,7 +357,7 @@ function validateServiceInput(schema, input, serviceName, options = {}) {
               fields: { _root: 'custom validation rejected input' },
               fieldErrors: { _root: ['custom validation rejected input'] },
               details: [{ path: [], message: 'custom validation rejected input' }],
-              status: 400,
+              status: 422,
             });
           }
           return typeof asyncRes === 'object' && asyncRes !== null ? asyncRes : sanitized;
@@ -357,8 +365,8 @@ function validateServiceInput(schema, input, serviceName, options = {}) {
           if (asyncErr instanceof ValidationError) {
             if (!asyncErr.service) asyncErr.service = serviceName;
             if (!asyncErr.code) asyncErr.code = 'VALIDATION_ERROR';
-            if (asyncErr.statusCode === undefined) asyncErr.statusCode = asyncErr.status || 400;
-            if (asyncErr.status === undefined) asyncErr.status = 400;
+            if (asyncErr.statusCode === undefined) asyncErr.statusCode = asyncErr.status || 422;
+            if (asyncErr.status === undefined) asyncErr.status = 422;
             throw asyncErr;
           }
           throw createServiceValidationError(`Invalid service input for ${serviceName}: ${asyncErr.message}`, {
@@ -367,7 +375,7 @@ function validateServiceInput(schema, input, serviceName, options = {}) {
             fieldErrors: { _root: [asyncErr.message] },
             details: [{ path: [], message: asyncErr.message }],
             cause: asyncErr,
-            status: 400,
+            status: 422,
           });
         });
       }
@@ -377,7 +385,7 @@ function validateServiceInput(schema, input, serviceName, options = {}) {
           fields: { _root: 'custom validation rejected input' },
           fieldErrors: { _root: ['custom validation rejected input'] },
           details: [{ path: [], message: 'custom validation rejected input' }],
-          status: 400,
+          status: 422,
         });
       }
       return typeof res === 'object' && res !== null ? res : sanitized;
@@ -385,8 +393,8 @@ function validateServiceInput(schema, input, serviceName, options = {}) {
       if (err instanceof ValidationError) {
         if (!err.service) err.service = serviceName;
         if (!err.code) err.code = 'VALIDATION_ERROR';
-        if (err.statusCode === undefined) err.statusCode = err.status || 400;
-        if (err.status === undefined) err.status = 400;
+        if (err.statusCode === undefined) err.statusCode = err.status || 422;
+        if (err.status === undefined) err.status = 422;
         throw err;
       }
       throw createServiceValidationError(`Invalid service input for ${serviceName}: ${err.message}`, {
@@ -395,7 +403,7 @@ function validateServiceInput(schema, input, serviceName, options = {}) {
         fieldErrors: { _root: [err.message] },
         details: [{ path: [], message: err.message }],
         cause: err,
-        status: 400,
+        status: 422,
       });
     }
   }
@@ -412,4 +420,5 @@ module.exports = {
   validateServiceInput,
   createServiceValidationError,
   normalizeValidationIssues,
+  ValidationError,
 };

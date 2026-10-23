@@ -783,10 +783,6 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     // Emit afterSave
     ModelEvents.emit(model.name, Hooks.AFTER_SAVE, record, ctx);
 
-    if (cacheLayer) {
-      cacheLayer.invalidateModelAll(model);
-    }
-
     return record;
   }
 

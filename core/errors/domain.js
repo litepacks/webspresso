@@ -42,8 +42,10 @@ class ValidationError extends HttpError {
     if (options.fieldErrors) {
       this.fieldErrors = options.fieldErrors;
     }
-    this.issues = options.issues || options.details || [];
-    this.details = options.details || this.issues;
+    if (options.issues !== undefined || options.details !== undefined) {
+      this.issues = options.issues !== undefined ? options.issues : (options.details || []);
+      this.details = options.details !== undefined ? options.details : this.issues;
+    }
     if (options.service) {
       this.service = options.service;
     }

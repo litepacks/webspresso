@@ -33,7 +33,7 @@ describe('db.query() Direct QueryBuilder Instantiation & Allocations', () => {
       }),
       scopes: {
         tenant: 'tenant_id',
-        softDelete: true,
+        softDelete: 'snake',
       },
     });
 

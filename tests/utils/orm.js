@@ -233,10 +233,11 @@ function createMockQueryBuilder(options = {}) {
  * @param {Array<Object>|Object} [optionsOrItems=[]] - Initial items array or repository options
  * @returns {Object} Mock Repository
  */
-function createMockRepo(optionsOrItems = []) {
+function createMockRepo(optionsOrItems = [], maybeOptions = {}) {
   const isArray = Array.isArray(optionsOrItems);
   const initialItems = isArray ? optionsOrItems : optionsOrItems.items || [];
-  const options = isArray ? {} : optionsOrItems;
+  const options = isArray ? (maybeOptions || {}) : optionsOrItems;
+  const { items: _ignoredItems, ...restOptions } = options;
 
   const items = initialItems.map((it) => ({ ...it }));
   let nextId = items.reduce((max, it) => Math.max(max, typeof it.id === 'number' ? it.id : 0), 0) + 1;
@@ -364,7 +365,7 @@ function createMockRepo(optionsOrItems = []) {
       return repo;
     }),
 
-    ...options,
+    ...restOptions,
   };
 
   return repo;

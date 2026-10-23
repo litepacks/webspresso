@@ -60,7 +60,7 @@ class InMemoryRedisClient extends EventEmitter {
   }
 
   async del(...keys) {
-    const flatKeys = keys.flat();
+    const flatKeys = keys.flat().filter((k) => typeof k !== 'function');
     let count = 0;
     for (const k of flatKeys) {
       const sk = String(k);
@@ -100,6 +100,7 @@ class InMemoryRedisClient extends EventEmitter {
     }
     let added = 0;
     for (const m of members.flat()) {
+      if (typeof m === 'function') continue;
       const sm = String(m);
       if (!set.has(sm)) {
         set.add(sm);
@@ -115,6 +116,7 @@ class InMemoryRedisClient extends EventEmitter {
     if (!set) return 0;
     let removed = 0;
     for (const m of members.flat()) {
+      if (typeof m === 'function') continue;
       if (set.delete(String(m))) removed++;
     }
     if (set.size === 0) {
@@ -535,11 +537,18 @@ async function invokeRedis(client, method, args) {
     }
   }
 
+  if (client instanceof InMemoryRedisClient || client instanceof MiniRedisClient || typeof client.sendCommand === 'function') {
+    return await fn.call(client, ...args);
+  }
+
   // Handle callback vs Promise-based clients
   return new Promise((resolve, reject) => {
+    let called = false;
     let result;
     try {
       result = fn.call(client, ...args, (err, val) => {
+        if (called) return;
+        called = true;
         if (err) return reject(err);
         resolve(val);
       });
@@ -548,7 +557,20 @@ async function invokeRedis(client, method, args) {
     }
 
     if (result && typeof result.then === 'function') {
-      result.then(resolve, reject);
+      result.then(
+        (val) => {
+          if (!called) {
+            called = true;
+            resolve(val);
+          }
+        },
+        (err) => {
+          if (!called) {
+            called = true;
+            reject(err);
+          }
+        }
+      );
     }
   });
 }

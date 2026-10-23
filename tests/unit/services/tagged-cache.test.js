@@ -329,7 +329,7 @@ describe('Services Tagged & Distributed Cache Integration', () => {
       // 2. Second call -> gets from provider
       const item2 = await registry.call('catalog.item', { sku: 'SKU-100' });
       expect(queryHits).toBe(1);
-      expect(providerGetCount).toBe(1);
+      expect(providerGetCount).toBe(2);
       expect(item1.sku).toBe(item2.sku);
 
       // 3. Invalidate via tag

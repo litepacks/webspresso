@@ -12,6 +12,24 @@ const { extendZ, generateNanoid, zodNanoid } = require('../orm/utils/nanoid');
  */
 const zExtended = extendZ(z);
 
+// Ensure asynchronous refinements and superRefinements never leak dangling unhandled rejections
+// if evaluated during a synchronous parse attempt before falling back to async parsing.
+if (z.ZodType && z.ZodType.prototype && typeof z.ZodType.prototype._refinement === 'function' && !z.ZodType.prototype._refinement.__webspresso_wrapped) {
+  const origRefinement = z.ZodType.prototype._refinement;
+  const wrappedRefinement = function (refinement) {
+    const wrapped = (val, ctx) => {
+      const res = refinement(val, ctx);
+      if (res && typeof res.catch === 'function') {
+        res.catch(() => {});
+      }
+      return res;
+    };
+    return origRefinement.call(this, wrapped);
+  };
+  wrappedRefinement.__webspresso_wrapped = true;
+  z.ZodType.prototype._refinement = wrappedRefinement;
+}
+
 /**
  * Check if an object contains dangerous prototype pollution keys
  * @param {*} obj

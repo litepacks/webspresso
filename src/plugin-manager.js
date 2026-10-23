@@ -674,6 +674,14 @@ class PluginManager {
        * Alias for onDispose
        * @param {Function} fn
        */
+      addDisposer(fn) {
+        self.registerDisposer(plugin.name, fn);
+      },
+
+      /**
+       * Alias for onDispose
+       * @param {Function} fn
+       */
       onShutdown(fn) {
         self.registerDisposer(plugin.name, fn);
       },
@@ -774,7 +782,7 @@ class PluginManager {
    */
   addHelper(name, fn, pluginName = 'unknown') {
     if (this.registeredHelpers.has(name)) {
-      console.warn(`[plugin-manager] Helper "${name}" registered by "${pluginName}" overwrites existing helper.`);
+      console.warn(`[plugin-manager] Helper "${name}" is already registered (registered by "${pluginName}" overwrites existing helper).`);
     }
     this.registeredHelpers.set(name, fn);
     this._cachedHelpers = null;
@@ -788,7 +796,7 @@ class PluginManager {
    */
   addFilter(name, fn, pluginName = 'unknown') {
     if (this.registeredFilters.has(name)) {
-      console.warn(`[plugin-manager] Filter "${name}" registered by "${pluginName}" overwrites existing filter.`);
+      console.warn(`[plugin-manager] Filter "${name}" is already registered (registered by "${pluginName}" overwrites existing filter).`);
     }
     this.registeredFilters.set(name, fn);
     if (this.nunjucksEnv && typeof this.nunjucksEnv.addFilter === 'function') {
@@ -850,13 +858,15 @@ class PluginManager {
 
   /**
    * Mount custom routes added by plugins
+   * @param {Object} [app] - Optional target app (defaults to this.app)
    */
-  mountCustomRoutes() {
-    if (!this.app || this.customRoutes.length === 0) return;
+  mountCustomRoutes(app = null) {
+    const targetApp = app || this.app;
+    if (!targetApp || this.customRoutes.length === 0) return;
     const unmounted = this.customRoutes.splice(0, this.customRoutes.length);
     for (const { method, path, handlers } of unmounted) {
-      if (typeof this.app[method] === 'function') {
-        this.app[method](path, ...handlers);
+      if (typeof targetApp[method] === 'function') {
+        targetApp[method](path, ...handlers);
       }
     }
   }

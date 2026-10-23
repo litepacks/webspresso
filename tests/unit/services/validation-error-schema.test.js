@@ -40,8 +40,8 @@ describe('Services Zod & Validation Error Schema Integrity (Item 6)', () => {
       expect(caughtErr).toBeInstanceOf(ValidationError);
       expect(caughtErr.name).toBe('ValidationError');
       expect(caughtErr.code).toBe('VALIDATION_ERROR');
-      expect(caughtErr.statusCode).toBe(400);
-      expect(caughtErr.status).toBe(400);
+      expect(caughtErr.statusCode).toBe(422);
+      expect(caughtErr.status).toBe(422);
       expect(caughtErr.service).toBe('user.register');
 
       // Fields map
@@ -83,7 +83,7 @@ describe('Services Zod & Validation Error Schema Integrity (Item 6)', () => {
       expect(caught).toBeInstanceOf(ValidationError);
       expect(caught.service).toBe('coupon.verify');
       expect(caught.code).toBe('VALIDATION_ERROR');
-      expect(caught.statusCode).toBe(400);
+      expect(caught.statusCode).toBe(422);
       expect(caught.fields.code).toBe('Minimum 5 characters');
       expect(caught.fieldErrors.code.length).toBe(2);
       expect(caught.fieldErrors.code).toContain('Minimum 5 characters');
@@ -110,8 +110,8 @@ describe('Services Zod & Validation Error Schema Integrity (Item 6)', () => {
       expect(caught).toBeInstanceOf(ValidationError);
       expect(caught.name).toBe('ValidationError');
       expect(caught.code).toBe('VALIDATION_ERROR');
-      expect(caught.statusCode).toBe(400);
-      expect(caught.status).toBe(400);
+      expect(caught.statusCode).toBe(422);
+      expect(caught.status).toBe(422);
       expect(caught.service).toBe('auth.register');
       expect(caught.fields.email).toBe('Email address already in use');
       expect(caught.details.length).toBe(1);
@@ -133,7 +133,7 @@ describe('Services Zod & Validation Error Schema Integrity (Item 6)', () => {
 
       expect(caught).toBeInstanceOf(ValidationError);
       expect(caught.code).toBe('VALIDATION_ERROR');
-      expect(caught.statusCode).toBe(400);
+      expect(caught.statusCode).toBe(422);
       expect(caught.service).toBe('user.check');
       expect(caught.message).toContain('Database connection failed in validator');
     });
@@ -152,8 +152,8 @@ describe('Services Zod & Validation Error Schema Integrity (Item 6)', () => {
 
       expect(caught).toBeInstanceOf(ValidationError);
       expect(caught.code).toBe('VALIDATION_ERROR');
-      expect(caught.statusCode).toBe(400);
-      expect(caught.status).toBe(400);
+      expect(caught.statusCode).toBe(422);
+      expect(caught.status).toBe(422);
       expect(caught.service).toBe('account.activate');
       expect(caught.fields._root).toContain('custom validation rejected input');
     });
@@ -173,7 +173,7 @@ describe('Services Zod & Validation Error Schema Integrity (Item 6)', () => {
 
       expect(caught).toBeInstanceOf(ValidationError);
       expect(caught.code).toBe('VALIDATION_ERROR');
-      expect(caught.statusCode).toBe(400);
+      expect(caught.statusCode).toBe(422);
       expect(caught.service).toBe('token.inspect');
       expect(caught.fields._root).toBeDefined();
     });
@@ -192,7 +192,7 @@ describe('Services Zod & Validation Error Schema Integrity (Item 6)', () => {
 
       expect(caught).toBeInstanceOf(ValidationError);
       expect(caught.code).toBe('VALIDATION_ERROR');
-      expect(caught.statusCode).toBe(400);
+      expect(caught.statusCode).toBe(422);
       expect(caught.service).toBe('order.submit');
       expect(caught.cause).toBeInstanceOf(TypeError);
     });
@@ -252,8 +252,8 @@ describe('Services Zod & Validation Error Schema Integrity (Item 6)', () => {
 
       expect(err).toBeInstanceOf(ValidationError);
       expect(err.code).toBe('VALIDATION_ERROR');
-      expect(err.status).toBe(400);
-      expect(err.statusCode).toBe(400);
+      expect(err.status).toBe(422);
+      expect(err.statusCode).toBe(422);
       expect(err.service).toBe('test.svc');
       expect(err.fields.name).toBe('Name required');
       expect(err.normalizedIssues[0]).toEqual({
@@ -282,7 +282,7 @@ describe('Services Zod & Validation Error Schema Integrity (Item 6)', () => {
   });
 
   describe('Service Registry & Executor Integration', () => {
-    it('should propagate code=VALIDATION_ERROR, statusCode=400, and service on registry.call()', async () => {
+    it('should propagate code=VALIDATION_ERROR, statusCode=422, and service on registry.call()', async () => {
       const registry = new ServiceRegistry();
 
       registry.register('billing.invoice', defineService({
@@ -304,8 +304,8 @@ describe('Services Zod & Validation Error Schema Integrity (Item 6)', () => {
 
       expect(caught).toBeInstanceOf(ValidationError);
       expect(caught.code).toBe('VALIDATION_ERROR');
-      expect(caught.statusCode).toBe(400);
-      expect(caught.status).toBe(400);
+      expect(caught.statusCode).toBe(422);
+      expect(caught.status).toBe(422);
       expect(caught.service).toBe('billing.invoice');
       expect(caught.fields.amount).toBe('Amount must be positive');
       expect(caught.fields.currency).toBe('Unsupported currency');
@@ -332,7 +332,7 @@ describe('Services Zod & Validation Error Schema Integrity (Item 6)', () => {
       expect(errorEvent).toBeDefined();
       expect(errorEvent.data.name).toBe('item.fetch');
       expect(errorEvent.data.error.code).toBe('VALIDATION_ERROR');
-      expect(errorEvent.data.error.statusCode).toBe(400);
+      expect(errorEvent.data.error.statusCode).toBe(422);
       expect(errorEvent.data.error.service).toBe('item.fetch');
     });
 

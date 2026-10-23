@@ -58,12 +58,17 @@ function collectModels() {
 
 /**
  * Safely collects all registered business services
+ * @param {Object} [explicitRegistry]
  * @returns {Array<Object>}
  */
-function collectServices() {
+function collectServices(explicitRegistry) {
   try {
-    if (!hasServiceRegistry()) return [];
-    const registry = getServiceRegistry();
+    let registry = explicitRegistry;
+    if (!registry || !registry.services) {
+      if (hasServiceRegistry()) {
+        registry = getServiceRegistry();
+      }
+    }
     const result = [];
     if (registry && registry.services) {
       for (const [name, def] of registry.services.entries()) {
@@ -156,9 +161,11 @@ function dashboardPlugin(options = {}) {
         }
       }
 
+      const appRegistry = ctx.serviceRegistry || app?.serviceRegistry || appOptions.serviceRegistry;
+
       // Collect models and services
       const models = collectModels();
-      const services = collectServices();
+      const services = collectServices(appRegistry);
 
       // Build config data
       const config = {
@@ -192,7 +199,20 @@ function dashboardPlugin(options = {}) {
 
       // 1. Dashboard HTML endpoint
       ctx.addRoute('get', dashboardPath, (req, res) => {
-        const data = { routes, plugins, config, models, services, overview };
+        const currentServices = collectServices(req.app?.serviceRegistry || appRegistry);
+        const currentModels = collectModels();
+        const data = {
+          routes,
+          plugins,
+          config,
+          models: currentModels,
+          services: currentServices,
+          overview: {
+            ...overview,
+            modelsCount: currentModels.length,
+            servicesCount: currentServices.length,
+          },
+        };
         res.type('text/html');
         res.send(generateDashboardHtml(data));
       });
@@ -215,14 +235,14 @@ function dashboardPlugin(options = {}) {
       });
 
       ctx.addRoute('get', `${dashboardPath}/api/services`, (req, res) => {
-        res.json(collectServices());
+        res.json(collectServices(req.app?.serviceRegistry || appRegistry));
       });
 
       ctx.addRoute('get', `${dashboardPath}/api/overview`, (req, res) => {
         res.json({
           routesCount: (ctx.routes || []).length,
           modelsCount: collectModels().length,
-          servicesCount: collectServices().length,
+          servicesCount: collectServices(req.app?.serviceRegistry || appRegistry).length,
           pluginsCount: plugins.length,
           nodeVersion: process.version,
           platform: process.platform,

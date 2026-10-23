@@ -13,6 +13,7 @@ const {
   normalizeValidationIssues,
   formatZodErrors,
   compileServiceSchema,
+  ValidationError,
 } = require('./validator');
 const {
   executeService,
@@ -109,4 +110,5 @@ module.exports = {
   loadModuleAsync,
   extractModuleExport,
   nativeImport,
+  ValidationError,
 };

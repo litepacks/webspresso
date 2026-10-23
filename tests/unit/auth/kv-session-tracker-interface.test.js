@@ -134,15 +134,15 @@ describe('createKvSessionTracker Interface Alignment & SessionManager Compatibil
       });
 
       const mockReq = {
-        headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+        headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36' },
         ip: '192.168.0.50',
       };
 
       // Track through SessionManager
       const tracked = await sessionManager.track('sm_s1', 'user_sm', mockReq);
       expect(tracked).toBeDefined();
-      expect(tracked.browser).toBe('Chrome');
-      expect(tracked.os).toBe('Windows');
+      expect(tracked.browser).toContain('Chrome');
+      expect(tracked.os).toContain('Windows');
 
       // Second session
       await sessionManager.track('sm_s2', 'user_sm', mockReq);

@@ -206,18 +206,7 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
     circuitBreakerRegistry.getBreaker(bName, bOpts);
   executionContext.retry = retry;
 
-  // Validate input
-  const validatedInput = await validateServiceInput(serviceDef.schema, input, name, serviceDef.validationOptions || options?.validation);
-  if (validatedInput && typeof validatedInput === 'object' && !('input' in validatedInput)) {
-    try {
-      Object.defineProperty(validatedInput, 'input', {
-        value: validatedInput,
-        enumerable: false,
-        configurable: true,
-      });
-    } catch (_) {}
-  }
-
+  let validatedInput = input;
   const startTime = Date.now();
   const logger = executionContext.logger || registry.logger || null;
 
@@ -450,6 +439,17 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
   };
 
   try {
+    validatedInput = await validateServiceInput(serviceDef.schema, input, name, serviceDef.validationOptions || options?.validation);
+    if (validatedInput && typeof validatedInput === 'object' && !('input' in validatedInput)) {
+      try {
+        Object.defineProperty(validatedInput, 'input', {
+          value: validatedInput,
+          enumerable: false,
+          configurable: true,
+        });
+      } catch (_) {}
+    }
+
     let finalResult;
 
     if (allMiddlewares.length === 0) {
@@ -519,8 +519,8 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
 
     if (err instanceof ValidationError) {
       if (!err.code) err.code = 'VALIDATION_ERROR';
-      if (err.statusCode === undefined) err.statusCode = err.status || 400;
-      if (err.status === undefined) err.status = 400;
+      if (err.statusCode === undefined) err.statusCode = err.status || 422;
+      if (err.status === undefined) err.status = 422;
     }
 
     // Attach service name to error if not present

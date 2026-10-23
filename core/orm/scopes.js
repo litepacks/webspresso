@@ -15,7 +15,10 @@ function getSoftDeleteColumn(model) {
   if (model && model._deletedCol) {
     return model._deletedCol;
   }
-  const col = (model && model.columns && model.columns.has('deletedAt')) ? 'deletedAt' : 'deleted_at';
+  const col = (model && (
+    (model.columns && model.columns.has('deletedAt')) ||
+    (model.schema && model.schema.shape && model.schema.shape.deletedAt)
+  )) ? 'deletedAt' : 'deleted_at';
   if (model) {
     model._deletedCol = col;
   }
@@ -31,7 +34,10 @@ function getCreatedAtColumn(model) {
   if (model && model._createdCol) {
     return model._createdCol;
   }
-  const col = (model && model.columns && model.columns.has('createdAt')) ? 'createdAt' : 'created_at';
+  const col = (model && (
+    (model.columns && model.columns.has('createdAt')) ||
+    (model.schema && model.schema.shape && model.schema.shape.createdAt)
+  )) ? 'createdAt' : 'created_at';
   if (model) {
     model._createdCol = col;
   }
@@ -47,7 +53,10 @@ function getUpdatedAtColumn(model) {
   if (model && model._updatedCol) {
     return model._updatedCol;
   }
-  const col = (model && model.columns && model.columns.has('updatedAt')) ? 'updatedAt' : 'updated_at';
+  const col = (model && (
+    (model.columns && model.columns.has('updatedAt')) ||
+    (model.schema && model.schema.shape && model.schema.shape.updatedAt)
+  )) ? 'updatedAt' : 'updated_at';
   if (model) {
     model._updatedCol = col;
   }

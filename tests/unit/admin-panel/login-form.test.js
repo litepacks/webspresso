@@ -248,7 +248,20 @@ describe('Admin Panel Login & Setup Form Error Handling', () => {
         session: {},
       };
 
-      const res = createMockSpyRes();
+      const res = {
+        status(code) {
+          responseCode = code;
+          return this;
+        },
+        json(body) {
+          responseBody = body;
+          return this;
+        },
+        redirect(url) {
+          redirectUrl = url;
+          return this;
+        },
+      };
 
       await handlers.loginHandler(req, res);
 

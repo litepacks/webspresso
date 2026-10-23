@@ -209,7 +209,7 @@ describe('Server-Sent Events (SSE) Engine', () => {
 
     it('streams via 1-liner res.sse(asyncGenerator)', async () => {
       const app = express();
-      app.use('/oneliner', async (req, res) => {
+      app.get('/oneliner', async (req, res) => {
         await createSseStream(req, res, async function* () {
           yield 'one';
           yield 'two';

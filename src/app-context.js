@@ -103,7 +103,15 @@ function hasEvents() {
  * Clear context (e.g. between tests).
  */
 function resetAppContext() {
-  context = { db: null, shutdownManager: null, serviceRegistry: null, events: null, mailer: null, cache: null };
+  context = {
+    db: null,
+    shutdownManager: null,
+    serviceRegistry: null,
+    events: null,
+    mailer: null,
+    cache: null,
+    breakers: circuitBreakerRegistry,
+  };
 }
 
 /**

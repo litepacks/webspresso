@@ -194,9 +194,10 @@ function defineModel(options) {
     ? rlsConfig
     : null;
 
-  const resolvedDeletedCol = (columns && columns.has('deletedAt')) ? 'deletedAt' : 'deleted_at';
-  const resolvedCreatedCol = (columns && columns.has('createdAt')) ? 'createdAt' : 'created_at';
-  const resolvedUpdatedCol = (columns && columns.has('updatedAt')) ? 'updatedAt' : 'updated_at';
+  const hasShape = normalizedSchema && normalizedSchema.shape;
+  const resolvedDeletedCol = ((columns && columns.has('deletedAt')) || (hasShape && normalizedSchema.shape.deletedAt)) ? 'deletedAt' : 'deleted_at';
+  const resolvedCreatedCol = ((columns && columns.has('createdAt')) || (hasShape && normalizedSchema.shape.createdAt)) ? 'createdAt' : 'created_at';
+  const resolvedUpdatedCol = ((columns && columns.has('updatedAt')) || (hasShape && normalizedSchema.shape.updatedAt)) ? 'updatedAt' : 'updated_at';
 
   // Create model definition
   const model = {

@@ -73,7 +73,7 @@ describe('QueryBuilder Paginate & Count Performance Optimization', () => {
       const countSql = qb.toKnex({ includeSelect: false }).count('* as count').toSQL();
       expect(countSql.sql).not.toContain('"title"');
       expect(countSql.sql).not.toContain('"content"');
-      expect(countSql.sql.toLowerCase()).toContain('count(*) as "count"');
+      expect(countSql.sql.toLowerCase()).toMatch(/count\(\*\)\s+as\s+[`"']?count[`"']?/i);
     });
   });
 
