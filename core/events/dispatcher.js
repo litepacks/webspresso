@@ -355,10 +355,19 @@ class EventDispatcher extends EventEmitter {
     const meta = { event, sender, timestamp: Date.now() };
 
     const promises = listeners.map(async (listener) => {
-      if (listener.isAny) {
-        return listener.handler(event, payload, meta);
+      try {
+        if (listener.isAny) {
+          return await listener.handler(event, payload, meta);
+        }
+        return await listener.handler(payload, meta);
+      } catch (err) {
+        if (this.listenerCount('error') > 0) {
+          super.emit('error', err);
+        } else if (this.logger && typeof this.logger.error === 'function') {
+          this.logger.error(`[EventDispatcher] Error in async listener for event "${event}":`, err);
+        }
+        throw err;
       }
-      return listener.handler(payload, meta);
     });
 
     return Promise.allSettled(promises);
@@ -399,10 +408,19 @@ class EventDispatcher extends EventEmitter {
     const results = [];
 
     for (const listener of listeners) {
-      const res = listener.isAny
-        ? await listener.handler(event, payload, meta)
-        : await listener.handler(payload, meta);
-      results.push(res);
+      try {
+        const res = listener.isAny
+          ? await listener.handler(event, payload, meta)
+          : await listener.handler(payload, meta);
+        results.push(res);
+      } catch (err) {
+        if (this.listenerCount('error') > 0) {
+          super.emit('error', err);
+        } else if (this.logger && typeof this.logger.error === 'function') {
+          this.logger.error(`[EventDispatcher] Error in serial listener for event "${event}":`, err);
+        }
+        throw err;
+      }
     }
 
     return results;
@@ -429,16 +447,111 @@ class EventDispatcher extends EventEmitter {
     let currentData = payload;
 
     for (const listener of listeners) {
-      const res = listener.isAny
-        ? await listener.handler(event, currentData, meta)
-        : await listener.handler(currentData, meta);
+      try {
+        const res = listener.isAny
+          ? await listener.handler(event, currentData, meta)
+          : await listener.handler(currentData, meta);
 
-      if (res !== undefined) {
-        currentData = res;
+        if (res !== undefined) {
+          currentData = res;
+        }
+      } catch (err) {
+        if (this.listenerCount('error') > 0) {
+          super.emit('error', err);
+        } else if (this.logger && typeof this.logger.error === 'function') {
+          this.logger.error(`[EventDispatcher] Error in waterfall listener for event "${event}":`, err);
+        }
+        throw err;
       }
     }
 
     return currentData;
+  }
+
+  /**
+   * Asynchronously wait for a matching event to be emitted
+   * @param {string} event - Event name or pattern
+   * @param {Object|number|Function} [optionsOrTimeout=5000] - Timeout in ms, predicate, or options
+   * @param {number} [optionsOrTimeout.timeout=5000] - Timeout in ms (0 for indefinite)
+   * @param {Function} [optionsOrTimeout.filter] - Predicate (data, meta) => boolean
+   * @param {AbortSignal} [optionsOrTimeout.signal] - AbortSignal for cancellation
+   * @param {any} [optionsOrTimeout.sender] - Filter by sender
+   * @returns {Promise<{ data: any, meta: Object }>}
+   */
+  waitFor(event, optionsOrTimeout = {}) {
+    let timeoutMs = 5000;
+    let filter = null;
+    let signal = null;
+    let sender = undefined;
+
+    if (typeof optionsOrTimeout === 'number') {
+      timeoutMs = optionsOrTimeout;
+    } else if (typeof optionsOrTimeout === 'function') {
+      filter = optionsOrTimeout;
+    } else if (typeof optionsOrTimeout === 'object' && optionsOrTimeout !== null) {
+      if (optionsOrTimeout.timeout !== undefined) timeoutMs = optionsOrTimeout.timeout;
+      if (typeof optionsOrTimeout.filter === 'function') filter = optionsOrTimeout.filter;
+      if (optionsOrTimeout.signal) signal = optionsOrTimeout.signal;
+      if (optionsOrTimeout.sender !== undefined) sender = optionsOrTimeout.sender;
+    }
+
+    return new Promise((resolve, reject) => {
+      if (signal && signal.aborted) {
+        return reject(new Error(`waitFor('${event}') aborted before execution`));
+      }
+
+      let timeoutTimer = null;
+      let unsubscribe = null;
+      let abortHandler = null;
+
+      const cleanup = () => {
+        if (timeoutTimer) {
+          clearTimeout(timeoutTimer);
+          timeoutTimer = null;
+        }
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+          unsubscribe = null;
+        }
+        if (signal && abortHandler) {
+          signal.removeEventListener('abort', abortHandler);
+          abortHandler = null;
+        }
+      };
+
+      if (timeoutMs > 0) {
+        timeoutTimer = setTimeout(() => {
+          cleanup();
+          reject(new Error(`Timeout of ${timeoutMs}ms exceeded while waiting for event '${event}'`));
+        }, timeoutMs);
+        if (timeoutTimer && typeof timeoutTimer.unref === 'function') {
+          timeoutTimer.unref();
+        }
+      }
+
+      if (signal) {
+        abortHandler = () => {
+          cleanup();
+          reject(new Error(`waitFor('${event}') was aborted`));
+        };
+        signal.addEventListener('abort', abortHandler, { once: true });
+      }
+
+      const handler = (data, meta) => {
+        try {
+          if (filter && !filter(data, meta)) {
+            return;
+          }
+          cleanup();
+          resolve({ data, meta });
+        } catch (err) {
+          cleanup();
+          reject(err);
+        }
+      };
+
+      unsubscribe = this.on(event, handler, { sender });
+    });
   }
 
   /**
@@ -462,11 +575,27 @@ class EventDispatcher extends EventEmitter {
   listenAndQueue(event, jobName, queueOptions = {}) {
     return this.on(event, (data) => {
       if (!this.queue || typeof this.queue.dispatch !== 'function') {
-        throw new Error(
+        const err = new Error(
           `[EventDispatcher] Cannot queue job '${jobName}' for event '${event}'. No QueueManager is attached.`
         );
+        if (this.listenerCount('error') > 0) {
+          super.emit('error', err);
+        } else if (this.logger && typeof this.logger.error === 'function') {
+          this.logger.error(err.message);
+        }
+        return Promise.reject(err);
       }
-      return this.queue.dispatch(jobName, data, queueOptions);
+      const dispatchPromise = this.queue.dispatch(jobName, data, queueOptions);
+      if (dispatchPromise && typeof dispatchPromise.catch === 'function') {
+        dispatchPromise.catch((dispatchErr) => {
+          if (this.listenerCount('error') > 0) {
+            super.emit('error', dispatchErr);
+          } else if (this.logger && typeof this.logger.error === 'function') {
+            this.logger.error(`[EventDispatcher] Failed to dispatch queued job '${jobName}':`, dispatchErr);
+          }
+        });
+      }
+      return dispatchPromise;
     });
   }
 

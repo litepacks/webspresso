@@ -217,6 +217,10 @@ async function withTimeout(promiseOrFn, timeout, options = {}) {
       ? promiseOrFn(executionSignal)
       : promiseOrFn;
 
+    if (executionPromise && typeof executionPromise.catch === 'function') {
+      executionPromise.catch(() => {});
+    }
+
     if (options.signal) {
       const abortPromise = new Promise((_, reject) => {
         callerSignalListener = () => {

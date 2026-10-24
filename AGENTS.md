@@ -25,6 +25,7 @@ When tasked with a feature or bugfix, **immediately consult the corresponding to
 | **Cloud Migration Jobs (Zero-Downtime DB Deploy)** | [`.agents/MIGRATION_JOBS.md`](.agents/MIGRATION_JOBS.md) | `bin/commands/add-migration-job.js`, `core/orm/migrate-cloud.js` |
 | **Rate Limiting Engine (Zero-Dependency & Redis)** | [`.agents/RATE_LIMIT.md`](.agents/RATE_LIMIT.md) | `core/rate-limit/` |
 | **Feature Flags & Canary Splitter (`core/flags`)** | [`.agents/FLAGS.md`](.agents/FLAGS.md) | `core/flags/` |
+| **Ambient Context & Composable Hooks (`core/context`)** | [`.agents/CONTEXT.md`](.agents/CONTEXT.md) | `core/context/` |
 | **API Signatures & Types Verification** | [`index.d.ts`](index.d.ts) | **Canonical Ground Truth** |
 
 ---
@@ -51,6 +52,7 @@ Every coding agent working on Webspresso **MUST** follow this 4-step execution d
 | **SSR Rendering**| `res.render('profile.njk', data)` inside custom handlers | Companion loader `pages/profile.js` exporting `async function load()` |
 | **Exceptions** | `res.status(404).json({ error: 'Not found' })` | `throw new NotFoundError('User not found')` |
 | **Background** | `setTimeout(...)`, `npm i bullmq` | `jobs/user/welcome.js` → `req.queue.dispatch('user.welcome', data)` |
+| **Model Schemas** | `schema: z.object({ ... })` (raw zod wrapping in models) | `schema: { id: zdb.id(), ... }` or `schema: ({ zdb, z }) => ({ ... })` |
 
 ---
 
@@ -110,7 +112,7 @@ Every coding agent working on Webspresso **MUST** follow this 4-step execution d
     - Encapsulate domain features using `defineModule({ name, pages, api, services, middlewares })`.
     - Auto-registers routes (`/auth/login`, `/api/auth/login`), services (`'auth.login'`), and scoped middlewares without manual router glue.
 
-### 1.2 Services Layer (`services/`, `src/services/`)
+### 1.2 Services Layer (`services/`, `core/services/`)
 - **File-based Auto-Discovery**: Services located in `services/` map directly to dot-separated service names (e.g. `services/user/create.js` → `'user.create'`) and camelCase aliases (`'user.reset-password'` & `'user.resetPassword'`).
 - **Declarative Validation & Authorization**: Define optional Zod `schema`, `auth` (boolean, role string/array, predicate), `timeout` (ms), `transaction: true` (ACID transaction propagation across nested calls), and `cache: { ttl, key }`.
 - **Unified Invocation**: Consumed via `ctx.service('service.name', input)` from SSR loaders, `req.service()` in API routes, or standalone `createServiceRegistry()`.
@@ -126,8 +128,8 @@ Every coding agent working on Webspresso **MUST** follow this 4-step execution d
   - `await repo.delete(id)` *(respects soft deletes)*
   - `await repo.query().where('price', '>', 50).paginate({ page, limit })`
   - `await repo.query().include('user', 'tags').find()` *(eager loading)*
-- **Model Definition**: Defined in `models/*.js` using `defineModel({ name, table, schema, relations, scopes, hidden, admin, cache })`.
-- **Schema & Types**: Built with `zdb` schema builder (`zdb.id()`, `zdb.string()`, `zdb.integer()`, `zdb.boolean()`, `zdb.file()`, `zdb.json()`).
+- **Model Definition**: Defined in `models/*.js` using `defineModel({ name, table, schema, relations, scopes, hidden, admin, cache })`. Accepts clean plain object `schema: { ... }` or functional schema `schema: ({ zdb, z }) => ({ ... })`.
+- **`zdb` vs `z` Single Source of Truth**: NEVER wrap model schemas in `z.object({...})`. ALWAYS use `zdb.*` (`zdb.id()`, `zdb.string()`, `zdb.integer()`, `zdb.email()`, `zdb.boolean()`, `zdb.file()`, `zdb.json()`) to decorate models with SQL column types, Knex migrations, Admin UI metadata, and query filters. Use pure `z.*` ONLY for in-memory request/service payloads (`pages/api/...`, `services/...`). Access raw Zod primitives in models via `zdb.z` or functional schema without importing `zod`.
 - **Ambient Transactions**: Repositories automatically bind to ambient transactions (`AsyncLocalStorage`) inside `db.transaction()` and services (`transaction: true`) without manual `trx` passing.
 - **Query Caching**: Memory/provider query cache configured per database instance or model (`cache: 'auto'|'smart'|true`).
 - **Migrations**: Database schema changes managed via Knex migrations in `migrations/` (`webspresso db:migrate`).
@@ -198,3 +200,4 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 8. **Page Data Loaders (NO Manual `res.render()`)**: Never call `res.render()` inside custom handlers for web pages. Use companion loaders `pages/*.js` exporting `async function load({ req, res, db, ctx })`.
 9. **Semantic Exceptions (NO Generic Errors / Manual Responses)**: Never return manual `res.status(404).json(...)` inside services or loaders. Always throw semantic errors: `NotFoundError`, `ValidationError`, `UnauthorizedError`, `ForbiddenError`.
 10. **Background Jobs (NO BullMQ / `setTimeout`)**: Never use unmanaged `setTimeout` or external queues. Place job workers in `jobs/` and dispatch via `req.queue.dispatch()`.
+11. **`zdb` vs `z` Single Source of Truth (NO `schema: z.object` in Models)**: Never wrap model schemas in `z.object({...})`. Always use `zdb.*` for persistent database columns in `models/*.js`. Use pure `z.*` ONLY for in-memory request/service payloads (`pages/api/...`, `services/...`). Access raw Zod primitives in models via `zdb.z` or functional schema `schema: ({ zdb, z }) => ({ ... })` without importing `zod`.

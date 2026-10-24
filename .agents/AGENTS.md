@@ -25,6 +25,7 @@ When tasked with a feature or bugfix, **immediately consult the corresponding to
 | **Cloud Migration Jobs (Zero-Downtime DB Deploy)** | [`.agents/MIGRATION_JOBS.md`](MIGRATION_JOBS.md) | `bin/commands/add-migration-job.js`, `core/orm/migrate-cloud.js` |
 | **Rate Limiting Engine (Zero-Dependency & Redis)** | [`.agents/RATE_LIMIT.md`](RATE_LIMIT.md) | `core/rate-limit/` |
 | **Feature Flags & Canary Splitter (`core/flags`)** | [`.agents/FLAGS.md`](FLAGS.md) | `core/flags/` |
+| **Ambient Context & Composable Hooks (`core/context`)** | [`.agents/CONTEXT.md`](CONTEXT.md) | `core/context/` |
 | **API Signatures & Types Verification** | [`index.d.ts`](../index.d.ts) | **Canonical Ground Truth** |
 
 ---
@@ -51,7 +52,7 @@ This `.agents/` customization root is organized into modular topic guides:
 5. **[Graceful Shutdown & Lifecycle](.agents/SHUTDOWN.md)** — `ShutdownManager`, `NodeHttpAdapter`, connection draining, force close mode, and reverse-order plugin disposer cleanup.
 6. **[HTTP Response Compression](.agents/COMPRESSION.md)** — Native streaming zlib compression (`server.compression`), Brotli/Gzip/Deflate negotiation, threshold handling, and `res.compress(false)` route opt-out.
 7. **[Dual Authentication System](.agents/AUTH.md)** — Stateful Session + Cookie & Stateless HS256 JWT + Refresh Token Rotation, `req.auth` helpers, and `middleware: ['jwt']` guard integrations.
-8. **[ORM & Database Layer](.agents/ORM.md)** — Model definitions with `defineModel`, `zdb` schemas, Repositories API, Query Caching, Relations, Soft Delete, Scopes & Migrations.
+8. **[ORM & Database Layer](.agents/ORM.md)** — Model definitions with `defineModel`, `zdb` schemas, `zdb` vs `z` single source of truth, Repositories API, Query Caching, Relations, Soft Delete, Scopes & Migrations.
 9. **[Plugin Ecosystem Guide](.agents/PLUGINS.md)** — Lifecycle hooks (`register`, `onRoutesReady`), CSP headers, and detailed reference for all 20 built-in official plugins (including `webhooksPlugin`, `apiKeyPlugin`, `xlsxPlugin`, `csvPlugin`, `fileManagerPlugin`, `realtimePlugin`, and `basicAuthPlugin`).
 10. **[Realtime Layer & Adapters](.agents/REALTIME.md)** — Framework-agnostic realtime layer (`core/realtime`), generic WebSocket, SSE, and Socket.IO adapters, subscription identity, backoff reconnect, and auth lifecycle.
 11. **[Email Plugin Guide](.agents/EMAIL.md)** — MJML template compilation, Nodemailer transport, DB delivery logs, Auth Email bridge, and Admin UI.
@@ -75,6 +76,7 @@ This `.agents/` customization root is organized into modular topic guides:
 29. **[Cloud Migration Jobs & Zero-Downtime Database Deploy](.agents/MIGRATION_JOBS.md)** — Dedicated pre-deploy migration jobs for Cloud Run, AWS ECS, and Kubernetes (`webspresso add:migration-job`), connection retries, and stale lock auto-healing (`webspresso db:migrate --safe`).
 30. **[Native Zero-Dependency Rate Limiting Engine](.agents/RATE_LIMIT.md)** — Framework-agnostic rate limiter (`core/rate-limit`), sliding window in-memory & Redis stores, RFC 6585 standard headers (`RateLimit-*`, `Retry-After`), Express & Hono dual support, and `rateLimit({ window, limit })`.
 31. **[Feature Flags & Canary Traffic Splitter](.agents/FLAGS.md)** — Zero-dependency feature flag and canary rollout engine (`core/flags`), deterministic FNV-1a bucketing, targeting rules (users, roles, email domains), A/B variants, SSR template helpers (`fsy.hasFeature`), and declarative API guards (`defineApi({ flag })`).
+32. **[Ambient Context & Composable Hooks](.agents/CONTEXT.md)** — Zero-dependency execution context powered by `AsyncLocalStorage` (`core/context`), eliminating prop drilling across loaders, services, models, and workers with `useContext`, `useDb`, `useAuth`, `useUser`, `useService`, `useLogger`, `useReq`, `useRes`, `useParams`, `useQuery`, `useTransaction`, and `withContext`.
 
 ---
 
@@ -91,3 +93,4 @@ This `.agents/` customization root is organized into modular topic guides:
 - **Zero Regression Policy**: Always run Vitest tests (`npm test` or `npx vitest run`) before declaring any task complete.
 - **Strict Verification**: Inspect authoritative source files for function signatures and schema definitions before writing consuming code.
 - **Log & Traceback Inspection**: Base all bug fixes strictly on exact runtime error log tracebacks and empirical test output.
+- **`zdb` vs `z` Single Source of Truth (NO `schema: z.object` in Models)**: NEVER wrap model schemas in `z.object({...})`. Pass a clean plain object `schema: { ... }` or functional schema `schema: ({ zdb, z }) => ({ ... })`. ALWAYS use `zdb.*` for persistent database columns in `models/*.js` (`zdb.id()`, `zdb.string()`, `zdb.integer()`, `zdb.email()`, etc.) to generate migrations, query filters, and Admin UI controls. Use pure `z.*` ONLY for in-memory request/service payloads (`pages/api/...`, `services/...`). Access raw Zod primitives in models via `zdb.z` without importing `zod`.

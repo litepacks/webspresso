@@ -9,7 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { getAllModels } = require('../../core/orm/model');
-const { hasServiceRegistry, getServiceRegistry } = require('../../src/app-context');
+const { hasServiceRegistry, getServiceRegistry } = require('../../core/context');
 const { scanRoutes } = require('../../src/discovery/scan-routes');
 const { compileRouteTable } = require('../../src/routing/route-table');
 const { z } = require('../../core/validation');

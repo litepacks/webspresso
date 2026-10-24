@@ -83,6 +83,7 @@ class CircuitBreaker extends EventEmitter {
 
     /** @type {Array<{ time: number, success: boolean }>} Rolling window samples */
     this._samples = [];
+    this._failureCount = 0;
 
     this.metrics = {
       totalCalls: 0,
@@ -163,6 +164,7 @@ class CircuitBreaker extends EventEmitter {
     this.lastFailureTime = null;
     this.lastSuccessTime = null;
     this._samples = [];
+    this._failureCount = 0;
 
     this.metrics.totalCalls = 0;
     this.metrics.successfulCalls = 0;
@@ -179,9 +181,25 @@ class CircuitBreaker extends EventEmitter {
    * @private
    */
   _pruneSamples() {
+    if (this._samples.length === 0) return;
     const cutoff = Date.now() - this.rollingWindowMs;
-    while (this._samples.length > 0 && this._samples[0].time < cutoff) {
-      this._samples.shift();
+    if (this._samples[0].time >= cutoff) return;
+
+    let validIndex = 0;
+    const len = this._samples.length;
+    while (validIndex < len && this._samples[validIndex].time < cutoff) {
+      if (!this._samples[validIndex].success) {
+        this._failureCount--;
+      }
+      validIndex++;
+    }
+
+    if (validIndex >= len) {
+      this._samples = [];
+      this._failureCount = 0;
+    } else {
+      this._samples = this._samples.slice(validIndex);
+      if (this._failureCount < 0) this._failureCount = 0;
     }
   }
 
@@ -191,6 +209,9 @@ class CircuitBreaker extends EventEmitter {
    */
   _recordSample(success) {
     this._samples.push({ time: Date.now(), success });
+    if (!success) {
+      this._failureCount++;
+    }
     this._pruneSamples();
   }
 
@@ -200,13 +221,7 @@ class CircuitBreaker extends EventEmitter {
   getFailureRate() {
     this._pruneSamples();
     if (this._samples.length === 0) return 0;
-
-    let failures = 0;
-    for (let i = 0; i < this._samples.length; i++) {
-      if (!this._samples[i].success) failures++;
-    }
-
-    return failures / this._samples.length;
+    return this._failureCount / this._samples.length;
   }
 
   /**
@@ -308,8 +323,12 @@ class CircuitBreaker extends EventEmitter {
           if (typeof timerId?.unref === 'function') timerId.unref();
         });
 
+        const targetPromise = Promise.resolve().then(() => fn(...args));
+        // Attach catch handler to prevent unhandled rejection if fn rejects after timeout
+        targetPromise.catch(() => {});
+
         execPromise = Promise.race([
-          Promise.resolve().then(() => fn(...args)),
+          targetPromise,
           timeoutPromise,
         ]);
       } else {
@@ -317,13 +336,9 @@ class CircuitBreaker extends EventEmitter {
       }
 
       const result = await execPromise;
-      if (timerId) clearTimeout(timerId);
-
       this._onSuccess();
       return result;
     } catch (err) {
-      if (timerId) clearTimeout(timerId);
-
       const isCountedFailure = this.isFailure(err);
       if (isCountedFailure) {
         this._onFailure(err);
@@ -337,6 +352,11 @@ class CircuitBreaker extends EventEmitter {
       }
 
       throw err;
+    } finally {
+      if (timerId) {
+        clearTimeout(timerId);
+        timerId = null;
+      }
     }
   }
 

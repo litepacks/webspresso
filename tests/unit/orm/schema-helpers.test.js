@@ -710,6 +710,49 @@ describe('Schema Helpers', () => {
       const cols2 = extractColumnsFromSchema(schema);
       expect(cols2).toBe(cols1);
     });
+
+    it('should expose z and zod on zdb helpers', () => {
+      expect(zdb.z).toBe(z);
+      expect(zdb.zod).toBe(z);
+    });
+
+    it('should provide number() and email() helpers', () => {
+      const numBuilder = zdb.number({ nullable: true });
+      expect(numBuilder).toBeDefined();
+      const numFinal = numBuilder._finalize();
+      expect(getColumnMeta(numFinal).type).toBe('float');
+      expect(getColumnMeta(numFinal).nullable).toBe(true);
+
+      const emailBuilder = zdb.email();
+      expect(emailBuilder).toBeDefined();
+      const emailFinal = emailBuilder._finalize();
+      expect(getColumnMeta(emailFinal).type).toBe('string');
+      expect(() => emailFinal.parse('invalid-email')).toThrow();
+      expect(emailFinal.parse('valid@example.com')).toBe('valid@example.com');
+    });
+
+    it('should infer column metadata for raw Zod schemas in extractColumnsFromSchema', () => {
+      const rawSchema = z.object({
+        name: z.string(),
+        age: z.number().int(),
+        score: z.number(),
+        active: z.boolean().optional(),
+        birthday: z.date().nullable(),
+        status: z.enum(['pending', 'active']),
+        tags: z.array(z.string()),
+        meta: z.record(z.any()),
+      });
+
+      const cols = extractColumnsFromSchema(rawSchema);
+      expect(cols.get('name')).toEqual({ type: 'string', maxLength: 255, nullable: false });
+      expect(cols.get('age')).toEqual({ type: 'integer', nullable: false });
+      expect(cols.get('score')).toEqual({ type: 'float', nullable: false });
+      expect(cols.get('active')).toEqual({ type: 'boolean', nullable: true });
+      expect(cols.get('birthday')).toEqual({ type: 'timestamp', nullable: true });
+      expect(cols.get('status')).toEqual({ type: 'enum', enumValues: ['pending', 'active'], nullable: false });
+      expect(cols.get('tags')).toEqual({ type: 'files', nullable: false });
+      expect(cols.get('meta')).toEqual({ type: 'json', nullable: false });
+    });
   });
 });
 

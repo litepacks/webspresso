@@ -78,6 +78,63 @@ describe('Services ESM, Dynamic Import & Lazy Loading', () => {
       expect(extracted).toBe(def);
     });
 
+    it('normalizes handler aliases (execute and run)', () => {
+      const executeFn = async (input) => input.x * 3;
+      const mod1 = { execute: executeFn };
+      const extracted1 = extractModuleExport(mod1);
+      expect(extracted1.handler).toBe(executeFn);
+
+      const runFn = async (input) => input.y + 5;
+      const mod2 = { run: runFn };
+      const extracted2 = extractModuleExport(mod2);
+      expect(extracted2.handler).toBe(runFn);
+
+      const mod3 = { default: { execute: executeFn } };
+      const extracted3 = extractModuleExport(mod3);
+      expect(extracted3.handler).toBe(executeFn);
+    });
+
+    it('unwraps nested transpiled default.default export', () => {
+      const def = { handler: async () => 'nested-ok' };
+      const mod = { __esModule: true, default: { __esModule: true, default: def } };
+      const extracted = extractModuleExport(mod);
+      expect(extracted).toBe(def);
+    });
+
+    it('unwraps frozen ESM module namespace object to plain object', () => {
+      const frozenModule = Object.freeze({
+        __esModule: true,
+        default: Object.freeze({ handler: async () => 'frozen-ok' }),
+      });
+      const extracted = extractModuleExport(frozenModule);
+      expect(typeof extracted.handler).toBe('function');
+    });
+
+    it('normalizes named service export with execute or run alias', () => {
+      const execFn = async () => 'exec-ok';
+      const mod1 = { service: { execute: execFn } };
+      const extracted1 = extractModuleExport(mod1);
+      expect(extracted1.handler).toBe(execFn);
+
+      const runFn = async () => 'run-ok';
+      const mod2 = { service: { run: runFn } };
+      const extracted2 = extractModuleExport(mod2);
+      expect(extracted2.handler).toBe(runFn);
+    });
+
+    it('falls back to default export when default is not a handler object', () => {
+      const mod = { default: 'primitive-default' };
+      expect(extractModuleExport(mod)).toBe('primitive-default');
+    });
+
+    it('loadModuleAsync loads commonjs module with isDev: true', async () => {
+      const sampleFile = path.join(tempDir, 'dev-sample.cjs');
+      fs.writeFileSync(sampleFile, 'module.exports = { handler: async () => "dev-v1" };');
+      const loaded = await loadModuleAsync(sampleFile, { isDev: true });
+      expect(loaded).toBeDefined();
+      expect(typeof loaded.handler).toBe('function');
+    });
+
     it('handles null and undefined gracefully', () => {
       expect(extractModuleExport(null)).toBeNull();
       expect(extractModuleExport(undefined)).toBeUndefined();
@@ -117,6 +174,31 @@ describe('Services ESM, Dynamic Import & Lazy Loading', () => {
 
       // Direct synchronous get() now returns the materialized definition
       expect(registry.get('billing.calculateTax')).toBeDefined();
+    });
+
+    it('deduplicates concurrent getAsync calls on lazy services (stampede protection)', async () => {
+      const registry = new ServiceRegistry();
+      let loaderCalled = 0;
+
+      registry.registerLazy('concurrent.service', async () => {
+        loaderCalled++;
+        await new Promise((r) => setTimeout(r, 20));
+        return { handler: async (input) => `result-${input.val}` };
+      });
+
+      // Fire 5 concurrent requests simultaneously
+      const [res1, res2, res3, res4, res5] = await Promise.all([
+        registry.getAsync('concurrent.service'),
+        registry.getAsync('concurrent.service'),
+        registry.getAsync('concurrent.service'),
+        registry.getAsync('concurrent.service'),
+        registry.getAsync('concurrent.service'),
+      ]);
+
+      expect(loaderCalled).toBe(1);
+      expect(res1).toBe(res2);
+      expect(res2).toBe(res3);
+      expect(res1.name).toBe('concurrent.service');
     });
 
     it('registers lazy service with aliases', async () => {

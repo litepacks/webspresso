@@ -468,5 +468,28 @@ describe('Nested Eager Loading', () => {
       const post103 = paginated.data.find((p) => p.id === 103);
       expect(post103.author).toBeNull();
     });
+
+    it('should load multiple independent top-level relations concurrently in parallel', async () => {
+      // User has 3 independent top-level relations: company, profile, and posts
+      const user = await db.getRepository('User')
+        .query()
+        .where('id', 1)
+        .include('company', 'profile', 'posts')
+        .find();
+
+      expect(user.length).toBe(1);
+      const u = user[0];
+
+      // All three independent relations are properly populated
+      expect(u.company).not.toBeNull();
+      expect(u.company.name).toBe('Webspresso HQ');
+
+      expect(u.profile).not.toBeNull();
+      expect(u.profile.bio).toBe('Lead Developer');
+
+      expect(Array.isArray(u.posts)).toBe(true);
+      expect(u.posts.length).toBe(2);
+      expect(u.posts.map(p => p.id).sort()).toEqual([101, 102]);
+    });
   });
 });

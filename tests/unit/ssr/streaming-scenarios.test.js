@@ -21,6 +21,8 @@ describe.sequential('SSR Streaming Scenarios & Edge Cases', () => {
       'loading-global.njk': '<div class="skeleton">Loading content...</div>',
       'loading-feed.njk': '<div class="feed-spinner">Loading your feed...</div>',
       'feed-item.njk': '<div class="feed">{{ feed.title }}</div>',
+      'error-slot.njk': '<div class="error-fallback">Failed: {{ error.message }}</div>',
+      'stats-item.njk': '<div class="stats-count">{{ stats.count }}</div>',
       'layout-outer.njk': '<div class="outer">{% block content %}{{ content | safe }}{% endblock %}</div>',
       'layout-inner.njk': '<div class="inner">{% block content %}{{ content | safe }}{% endblock %}</div>',
     };
@@ -332,4 +334,109 @@ describe.sequential('SSR Streaming Scenarios & Edge Cases', () => {
       await expect(renderPromise).rejects.toThrow('ECONNRESET');
     });
   });
+
+  describe('Deferred Lazy Functions, Error Fallbacks & AbortSignal', () => {
+    it('supports lazy async functions in deferred slots', async () => {
+      let functionExecuted = false;
+      const stream = createHtmlStream({
+        env,
+        templatePath: 'page.njk',
+        defer: {
+          feed: async () => {
+            functionExecuted = true;
+            return { title: 'Lazy Executed Title' };
+          },
+        },
+      });
+
+      const chunks = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk.toString());
+      }
+
+      expect(functionExecuted).toBe(true);
+      const full = chunks.join('');
+      expect(full).toContain('Lazy Executed Title');
+    });
+
+    it('renders errorTemplate and invokes onError callback on slot rejection', async () => {
+      const capturedErrors = [];
+      const stream = createHtmlStream({
+        env,
+        templatePath: 'page.njk',
+        defer: {
+          feed: {
+            promise: Promise.reject(new Error('Slow query failed')),
+            errorTemplate: 'error-slot.njk',
+            onError: (err) => capturedErrors.push(err),
+          },
+        },
+      });
+
+      const chunks = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk.toString());
+      }
+
+      expect(capturedErrors.length).toBe(1);
+      expect(capturedErrors[0].message).toBe('Slow query failed');
+      const full = chunks.join('');
+      expect(full).toContain('<div class="error-fallback">Failed: Slow query failed</div>');
+      expect(full).toContain('data-stream-slot="feed"');
+    });
+
+    it('cancels HTML stream when AbortSignal is aborted', async () => {
+      const ac = new AbortController();
+      let slotResolved = false;
+
+      const stream = createHtmlStream({
+        env,
+        templatePath: 'page.njk',
+        signal: ac.signal,
+        defer: {
+          feed: async () => {
+            await new Promise((r) => setTimeout(r, 50));
+            slotResolved = true;
+            return { title: 'Should Not Render' };
+          },
+        },
+      });
+
+      // Abort immediately after stream creation
+      ac.abort();
+
+      const chunks = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk.toString());
+      }
+
+      expect(chunks.join('')).not.toContain('Should Not Render');
+    });
+
+    it('cancels renderStream when request is aborted by client', async () => {
+      const mockReq = new EventEmitter();
+      const mockRes = new EventEmitter();
+      mockRes.headersSent = false;
+      mockRes.status = () => mockRes;
+      mockRes.setHeader = () => mockRes;
+      mockRes.write = vi.fn();
+      mockRes.end = vi.fn();
+
+      const renderPromise = renderStream(mockRes, 'page.njk', {}, {
+        env,
+        req: mockReq,
+        defer: {
+          feed: new Promise((r) => setTimeout(() => r({ title: 'late' }), 100)),
+        },
+      });
+
+      // Client aborts the connection
+      mockReq.emit('aborted');
+
+      await renderPromise;
+      // No more writes after abort
+      expect(mockRes.write).toHaveBeenCalled();
+    });
+  });
 });
+

@@ -102,6 +102,80 @@ Instead of manually defining boilerplate timestamp and soft delete columns in `s
 
 *Note: All `zdb` types support chainable `.config({ sortable: boolean })` or options object `{ sortable: boolean }`.*
 
+### 1.1 `zdb` vs `z`: Understanding the Distinction (Single Source of Truth)
+
+It is common for developers new to Webspresso to ask: *"Why does `zdb` exist alongside `z` (Zod)? What is the difference between `zdb.string()` and `z.string()`?"*
+
+#### The Architectural Difference: Decorator over Validator
+
+| Dimension | `z.string()` (Pure Zod Validator) | `zdb.string()` (ORM Column Descriptor + Validator) |
+| :--- | :--- | :--- |
+| **Output Type** | Pure validation rule (`ZodString`) | Database column metadata + Zod validation (`SchemaBuilder`) |
+| **Database & SQL Knowledge** | **None.** Has no awareness of tables, SQL dialects, or migrations. | **Full.** Knows column type (`VARCHAR(255)`), max length, nullability, uniqueness, defaults. |
+| **Auto Migrations (`db:makemigrations`)** | Invisible. Ignored by `diffSchema`. | Generates Knex migrations (`table.string('name', 255)`). |
+| **Admin Panel SPA** | Cannot configure UI form controls. | Auto-renders `<input type="text">`, configures grid sortability, labels, placeholders. |
+| **REST & Query Filters** | Not indexed in column whitelist. | Whitelisted in `model.columns` for safe parameter filtering (`?name[like]=webspresso`). |
+| **JSON Auto-Hydration** | Manual JSON parsing needed. | Auto-serializes on insert/update and auto-deserializes on query. |
+
+#### Why `zdb` Exists: Eliminating 3x Schema Duplication
+In traditional Node.js setups, you must declare column definitions in three separate places:
+1. In a Knex/SQL migration (`table.string('title', 100).notNullable()`)
+2. In an ORM model/entity definition (`title: { type: DataTypes.STRING, ... }`)
+3. In a validation schema (`title: z.string().min(1).max(100)`)
+
+Webspresso uses `zdb` as a **Single Source of Truth**: by writing `title: zdb.string({ maxLength: 100 }).min(1)`, the ORM automatically handles validation, database column generation, query filtering, and admin UI rendering from a single declaration.
+
+#### 💡 The Golden Rule: When to Use Which
+* 🗄️ **Database Models (`models/*.js`):** **ALWAYS use `zdb.*`** (`zdb.id()`, `zdb.string()`, `zdb.integer()`, `zdb.email()`, etc.).
+* 🌐 **API Endpoints (`pages/api/...`) & Services (`services/...`):** **ALWAYS use `z.*`** (`z.object({ email: z.string().email() })`). Here you are validating incoming JSON payloads in RAM, not defining persistent database tables.
+
+#### Accessing Raw Zod Primitives in Models (`zdb.z` or Functional Schema)
+When you need raw Zod features in a model (such as `z.enum()`, `z.union()`, `z.literal()`), you **never need to `require('zod')`**:
+1. **Via Functional Schema (Recommended):**
+   ```javascript
+   module.exports = defineModel({
+     name: 'Article',
+     table: 'articles',
+     schema: ({ zdb, z }) => ({
+       id: zdb.id(),
+       title: zdb.string(),
+       status: z.enum(['draft', 'published', 'archived']),
+     }),
+   });
+   ```
+2. **Via `zdb.z`:**
+   ```javascript
+   const { defineModel, zdb } = require('webspresso');
+
+   module.exports = defineModel({
+     name: 'Article',
+     table: 'articles',
+     schema: {
+       id: zdb.id(),
+       title: zdb.string(),
+       status: zdb.z.enum(['draft', 'published', 'archived']),
+     },
+   });
+   ```
+
+#### ⚠️ Anti-Pattern: Never Wrap Model Schemas in `z.object({...})`
+```javascript
+// ❌ WRONG (Anti-Pattern: forces require('zod'), causes redundant schema wrapping)
+const { z } = require('zod');
+defineModel({
+  schema: z.object({
+    name: zdb.string(),
+  }),
+});
+
+// ✅ CORRECT (Webspresso standard: plain object or functional schema)
+defineModel({
+  schema: {
+    name: zdb.string(),
+  },
+});
+```
+
 ---
 
 ## 2. Repository API

@@ -84,7 +84,7 @@ function sanitizeInput(input) {
   return clean;
 }
 
-module.exports = {
+const validation = {
   z: zExtended,
   extendZ,
   generateNanoid,
@@ -92,3 +92,24 @@ module.exports = {
   hasDangerousKeys,
   sanitizeInput,
 };
+
+module.exports = validation;
+
+const compiler = require('./compiler');
+const apply = require('./apply');
+const cache = require('./cache');
+
+Object.assign(validation, {
+  // Schema compiler & cache
+  compileSchema: compiler.compileSchema,
+  invalidateSchema: compiler.invalidateSchema,
+  clearAllSchemas: compiler.clearAllSchemas,
+  applySchema: apply.applySchema,
+  translateValidationIssues: apply.translateValidationIssues,
+  schemaCache: cache,
+
+  compiler,
+  apply,
+  cache,
+});
+

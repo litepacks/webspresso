@@ -2,7 +2,7 @@ const { execSync } = require('child_process');
 const path = require('path');
 const { createCoreApp, CoreApp } = require('../../core/app');
 const { createApp } = require('../../src/server');
-const { defineService } = require('../../src/services');
+const { defineService } = require('../../core/services');
 const { UnauthorizedError, ForbiddenError, InvalidServiceInputError } = require('../../core/errors');
 
 describe('Core Decoupling & Framework Independence', () => {

@@ -300,4 +300,89 @@ describe('ORM Ambient Transaction Management', () => {
       expect((await userRepo.findOne({ email: 'u2@test.com' })).balance).toBe(150);
     });
   });
+
+  describe('Nested Transaction Context & Error Shielding', () => {
+    it('supports trxContext.transaction directly for nested savepoints', async () => {
+      const userRepo = db.getRepository('User');
+
+      await db.transaction(async (outerCtx) => {
+        expect(typeof outerCtx.transaction).toBe('function');
+        expect(typeof outerCtx.getRepository).toBe('function');
+        expect(typeof outerCtx.query).toBe('function');
+        expect(outerCtx.knex).toBeDefined();
+
+        await outerCtx.getRepository('User').create({ name: 'Committed User', email: 'committed@test.com' });
+
+        try {
+          await outerCtx.transaction(async (innerCtx) => {
+            expect(typeof innerCtx.transaction).toBe('function');
+            await innerCtx.getRepository('User').create({ name: 'Rolled Back User', email: 'rollback@test.com' });
+            throw new Error('Savepoint rollback test');
+          });
+        } catch (err) {
+          expect(err.message).toBe('Savepoint rollback test');
+        }
+
+        await outerCtx.getRepository('User').create({ name: 'Committed User 2', email: 'committed2@test.com' });
+      });
+
+      const users = await userRepo.findAll();
+      expect(users).toHaveLength(2);
+      expect(users.map(u => u.name).sort()).toEqual(['Committed User', 'Committed User 2']);
+    });
+
+    it('supports nested useTransaction composable hook with ambient context', async () => {
+      const { runWithContext, useTransaction: hookUseTransaction } = require('../../../core/context');
+      const userRepo = db.getRepository('User');
+
+      await runWithContext({ db }, async () => {
+        await hookUseTransaction(async (outerTrx) => {
+          await userRepo.create({ name: 'Hook User 1', email: 'hook1@test.com' });
+
+          await hookUseTransaction(async (innerTrx) => {
+            expect(innerTrx).toBeDefined();
+            await userRepo.create({ name: 'Hook User 2', email: 'hook2@test.com' });
+          });
+        });
+      });
+
+      const users = await userRepo.findAll();
+      expect(users).toHaveLength(2);
+      expect(users.map(u => u.name).sort()).toEqual(['Hook User 1', 'Hook User 2']);
+    });
+
+    it('preserves the original business error when secondary error occurs during rollback', async () => {
+      const { runTransaction } = require('../../../core/orm/transaction');
+
+      const mockRunner = {
+        transaction: async (cb) => {
+          const mockTrx = {
+            commit: async () => {},
+            rollback: async () => {
+              throw new Error('Secondary socket closed during rollback');
+            },
+          };
+          try {
+            await cb(mockTrx);
+          } catch (origErr) {
+            await mockTrx.rollback();
+            throw origErr;
+          }
+        },
+      };
+
+      const primaryError = new Error('Primary business validation error');
+
+      try {
+        await runTransaction(mockRunner, async () => {
+          throw primaryError;
+        });
+        expect.unreachable('Should have thrown error');
+      } catch (err) {
+        expect(err).toBe(primaryError);
+        expect(err.cause).toBeDefined();
+        expect(err.cause.message).toBe('Secondary socket closed during rollback');
+      }
+    });
+  });
 });

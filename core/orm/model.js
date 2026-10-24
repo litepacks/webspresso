@@ -23,7 +23,7 @@ const modelRegistry = new Map();
  * @returns {import('./types').ModelDefinition}
  */
 function defineModel(options) {
-  const {
+  let {
     name,
     table,
     schema,
@@ -43,6 +43,11 @@ function defineModel(options) {
     rls: rlsOpt,
     options: nestedOptions = {},
   } = options;
+
+  // Support functional schema definitions: schema: ({ zdb, z }) => ({ ... })
+  if (typeof schema === 'function') {
+    schema = schema({ zdb, z: zdb?.z || z });
+  }
 
   // Validate required fields
   if (!name || typeof name !== 'string') {

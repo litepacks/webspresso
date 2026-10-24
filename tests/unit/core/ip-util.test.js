@@ -2,7 +2,7 @@
 
 import { describe, it, expect } from 'vitest';
 const { getClientIp } = require('../../../core/utils/ip');
-const getClientIpAlias = require('../../../core/utils/get-client-ip');
+const { getClientIp: getClientIpFromUtilsIndex } = require('../../../core/utils');
 const { getClientIp: getClientIpFromIndex } = require('../../../index');
 const { getClientIp: getClientIpFromAuth } = require('../../../core/auth');
 const { getClientIp: getClientIpFromUserAgent } = require('../../../core/auth/user-agent');
@@ -12,8 +12,7 @@ describe('Universal getClientIp Utility', () => {
   describe('exports consistency', () => {
     it('exports identical functions across all public touchpoints', () => {
       expect(getClientIp).toBeTypeOf('function');
-      expect(getClientIpAlias).toBe(getClientIp);
-      expect(getClientIpAlias.getClientIp).toBe(getClientIp);
+      expect(getClientIpFromUtilsIndex).toBe(getClientIp);
       expect(getClientIpFromIndex).toBe(getClientIp);
       expect(getClientIpFromAuth).toBe(getClientIp);
       expect(getClientIpFromUserAgent).toBe(getClientIp);

@@ -1,16 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
 import crypto from 'crypto';
 import { safeCompare, timingSafeEqual } from '../../../core/utils/crypto';
-import safeCompareReExport from '../../../core/utils/safe-compare';
+import { safeCompare as utilsIndexSafeCompare } from '../../../core/utils';
 import { utils } from '../../../src/helpers';
 import webspresso from '../../../index';
 
 describe('Zero-Dependency safeCompare Utility (core/utils/crypto)', () => {
-  it('exports safeCompare across core, safe-compare re-export, helpers.utils, and root webspresso', () => {
+  it('exports safeCompare across core, core/utils index, helpers.utils, and root webspresso', () => {
     expect(typeof safeCompare).toBe('function');
     expect(typeof timingSafeEqual).toBe('function');
     expect(safeCompare).toBe(timingSafeEqual);
-    expect(typeof safeCompareReExport.safeCompare).toBe('function');
+    expect(typeof utilsIndexSafeCompare).toBe('function');
     expect(typeof utils.safeCompare).toBe('function');
     expect(typeof webspresso.safeCompare).toBe('function');
   });

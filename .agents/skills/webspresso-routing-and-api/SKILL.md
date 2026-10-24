@@ -52,6 +52,20 @@ module.exports = defineApi({
 });
 ```
 
+### Composable Hooks in API Endpoints:
+```javascript
+const { defineApi, useDb, useAuth, useService } = require('webspresso');
+
+module.exports = defineApi({
+  handler: async (req, res) => {
+    const db = useDb();
+    const user = useAuth();
+    const summary = await useService('analytics.userSummary', { userId: user.id });
+    return res.json({ user, summary });
+  },
+});
+```
+
 ---
 
 ## 2. SSR HTML Pages & Data Loaders (`pages/...`)
@@ -62,7 +76,7 @@ module.exports = defineApi({
 ### Companion Loader (`definePage`)
 
 ```javascript
-const { definePage } = require('webspresso');
+const { definePage, useDb, useParams } = require('webspresso');
 
 module.exports = definePage({
   middleware: ['auth'], // optional
@@ -70,7 +84,9 @@ module.exports = definePage({
     title: 'Product Details',
   },
   load: async ({ req, res, db, ctx }) => {
-    const product = await db.getRepository('Product').findById(req.params.id);
+    // Both parameter injection ({ req, db }) and hooks (useDb(), useParams()) are fully supported
+    const params = useParams();
+    const product = await (db || useDb()).getRepository('Product').findById(params.id);
     if (!product) {
       throw new ctx.errors.NotFoundError('Product not found');
     }

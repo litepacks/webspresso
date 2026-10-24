@@ -71,9 +71,29 @@ function parseAcceptEncoding(header) {
 
 const DEFAULT_SUPPORTED_ENCODINGS = Object.freeze(getDefaultSupportedEncodings());
 const DEFAULT_SUPPORTED_STRING = DEFAULT_SUPPORTED_ENCODINGS.join(',');
+const DEFAULT_PREFERRED_ENCODING = DEFAULT_SUPPORTED_ENCODINGS[0] || 'identity';
 
 const selectEncodingCache = new Map();
-const MAX_ENCODING_CACHE_SIZE = 128;
+const MAX_ENCODING_CACHE_SIZE = 256;
+
+function setSelectEncodingCache(key, value) {
+  if (selectEncodingCache.size >= MAX_ENCODING_CACHE_SIZE) {
+    const firstKey = selectEncodingCache.keys().next().value;
+    selectEncodingCache.delete(firstKey);
+  }
+  selectEncodingCache.set(key, value);
+}
+
+// Pre-fill common browser patterns for default configuration
+if (DEFAULT_SUPPORTED_ENCODINGS.includes('br')) {
+  selectEncodingCache.set('gzip, deflate, br', 'br');
+  selectEncodingCache.set('gzip, deflate, br, zstd', 'br');
+  selectEncodingCache.set('br;q=1.0, gzip;q=0.8, *;q=0.1', 'br');
+}
+selectEncodingCache.set('gzip, deflate', 'gzip');
+selectEncodingCache.set('gzip', 'gzip');
+selectEncodingCache.set('*', DEFAULT_PREFERRED_ENCODING);
+selectEncodingCache.set('identity', 'identity');
 
 /**
  * Select the best compression encoding given client header and server supported list
@@ -82,14 +102,17 @@ const MAX_ENCODING_CACHE_SIZE = 128;
  * @returns {string|null} The selected encoding ('br', 'gzip', 'deflate', 'identity', or null)
  */
 function selectEncoding(acceptEncoding, supportedEncodings) {
-  if (!acceptEncoding) {
+  if (!acceptEncoding || typeof acceptEncoding !== 'string') {
+    return 'identity';
+  }
+
+  const raw = acceptEncoding.trim();
+  if (!raw) {
     return 'identity';
   }
 
   const isDefault = !supportedEncodings || !Array.isArray(supportedEncodings) || supportedEncodings.length === 0;
-  const cacheKey = isDefault
-    ? `${acceptEncoding}|${DEFAULT_SUPPORTED_STRING}`
-    : `${acceptEncoding}|${supportedEncodings.join(',')}`;
+  const cacheKey = isDefault ? raw : `${raw}|${supportedEncodings.join(',')}`;
 
   const cached = selectEncodingCache.get(cacheKey);
   if (cached !== undefined) {
@@ -100,11 +123,9 @@ function selectEncoding(acceptEncoding, supportedEncodings) {
     ? DEFAULT_SUPPORTED_ENCODINGS
     : supportedEncodings.map(e => e.toLowerCase()).filter(e => e !== 'br' || supportsBrotli());
 
-  const clientPreferences = parseAcceptEncoding(acceptEncoding);
+  const clientPreferences = parseAcceptEncoding(raw);
   if (clientPreferences.length === 0) {
-    if (selectEncodingCache.size < MAX_ENCODING_CACHE_SIZE) {
-      selectEncodingCache.set(cacheKey, 'identity');
-    }
+    setSelectEncodingCache(cacheKey, 'identity');
     return 'identity';
   }
 
@@ -157,9 +178,7 @@ function selectEncoding(acceptEncoding, supportedEncodings) {
     result = wildcardQ > 0 ? 'identity' : null;
   }
 
-  if (selectEncodingCache.size < MAX_ENCODING_CACHE_SIZE) {
-    selectEncodingCache.set(cacheKey, result);
-  }
+  setSelectEncodingCache(cacheKey, result);
 
   return result;
 }

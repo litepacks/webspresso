@@ -15,7 +15,7 @@ const {
   omit,
   deepClone,
 } = require('../../../core/utils/object');
-const arrayUtils = require('../../../core/utils/array');
+const coreUtils = require('../../../core/utils');
 const webspresso = require('../../../index');
 const { utils } = require('../../../src/helpers');
 
@@ -214,10 +214,13 @@ describe('String & Object Utilities', () => {
     });
   });
 
-  describe('core/utils/array', () => {
-    it('re-exports ensureArray', () => {
-      expect(typeof arrayUtils.ensureArray).toBe('function');
-      expect(arrayUtils.ensureArray('test')).toEqual(['test']);
+  describe('core/utils barrel export', () => {
+    it('exports ensureArray, pick, omit, deepClone', () => {
+      expect(typeof coreUtils.ensureArray).toBe('function');
+      expect(coreUtils.ensureArray('test')).toEqual(['test']);
+      expect(typeof coreUtils.pick).toBe('function');
+      expect(typeof coreUtils.omit).toBe('function');
+      expect(typeof coreUtils.deepClone).toBe('function');
     });
   });
 

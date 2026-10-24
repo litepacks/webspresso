@@ -37,18 +37,31 @@ class MemoryRateLimitStore {
     const threshold = now - windowMs;
 
     let timestamps = this.hits.get(key);
-    if (!timestamps) {
-      timestamps = [];
-      this.hits.set(key, timestamps);
+    if (!timestamps || timestamps.length === 0) {
+      this.hits.set(key, [now]);
+      return {
+        totalHits: 1,
+        resetTime: new Date(now + windowMs),
+      };
     }
 
-    // Filter out expired timestamps
-    let validIndex = 0;
-    while (validIndex < timestamps.length && timestamps[validIndex] <= threshold) {
-      validIndex++;
-    }
-    if (validIndex > 0) {
-      timestamps.splice(0, validIndex);
+    // Filter out expired timestamps only if the oldest timestamp is expired
+    if (timestamps[0] <= threshold) {
+      let validIndex = 0;
+      const len = timestamps.length;
+      while (validIndex < len && timestamps[validIndex] <= threshold) {
+        validIndex++;
+      }
+      if (validIndex >= len) {
+        timestamps = [now];
+        this.hits.set(key, timestamps);
+        return {
+          totalHits: 1,
+          resetTime: new Date(now + windowMs),
+        };
+      }
+      timestamps = timestamps.slice(validIndex);
+      this.hits.set(key, timestamps);
     }
 
     timestamps.push(now);

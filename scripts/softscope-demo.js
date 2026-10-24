@@ -19,12 +19,11 @@ process.env.NODE_ENV = 'production';
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
-const { z } = require('zod');
 const knexFactory = require('knex');
 
 const { createApp } = require('../src/server');
 const { createDatabase, defineModel, zdb, clearRegistry } = require('../core/orm');
-const { defineService } = require('../src/services');
+const { defineService } = require('../core/services');
 
 const SQLITE_FILE = path.join(__dirname, 'softscope-demo.sqlite');
 
@@ -105,12 +104,12 @@ async function setupDatabase() {
   const User = defineModel({
     name: 'User',
     table: 'users',
-    schema: z.object({
+    schema: {
       id: zdb.id().optional(),
       name: zdb.string(),
-      email: zdb.string().email(),
+      email: zdb.email(),
       role: zdb.string().default('author'),
-    }),
+    },
     relations: {
       articles: {
         type: 'hasMany',
@@ -123,7 +122,7 @@ async function setupDatabase() {
   const Article = defineModel({
     name: 'Article',
     table: 'articles',
-    schema: z.object({
+    schema: {
       id: zdb.id().optional(),
       title: zdb.string(),
       slug: zdb.string(),
@@ -131,7 +130,7 @@ async function setupDatabase() {
       user_id: zdb.integer().optional(),
       views: zdb.integer().default(0),
       is_published: zdb.boolean().default(true),
-    }),
+    },
     relations: {
       user: {
         type: 'belongsTo',

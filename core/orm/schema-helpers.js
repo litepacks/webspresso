@@ -330,6 +330,8 @@ function createSchemaHelpers(z) {
   }
 
   const helpers = {
+    z,
+    zod: z,
     /**
      * Create a Zod object schema with database metadata
      * Automatically finalizes SchemaBuilder instances in the shape
@@ -527,6 +529,24 @@ function createSchemaHelpers(z) {
         nullable,
         ...rest,
       }, z);
+    },
+
+    /**
+     * Number column (alias for float)
+     * @param {Partial<import('./types').ColumnMeta>} [options={}]
+     * @returns {SchemaBuilder}
+     */
+    number(options = {}) {
+      return helpers.float(options);
+    },
+
+    /**
+     * Email column (alias for string with email validation)
+     * @param {Partial<import('./types').ColumnMeta>} [options={}]
+     * @returns {SchemaBuilder}
+     */
+    email(options = {}) {
+      return helpers.string(options).email();
     },
 
     /**
@@ -864,7 +884,11 @@ function extractColumnsFromSchema(schema) {
     
     // Unwrap optional/nullable wrappers to get to the base schema
     let current = schemaToCheck;
+    let isNullable = false;
     while (current && current._def) {
+      if (current._def.typeName === 'ZodNullable' || current._def.typeName === 'ZodOptional') {
+        isNullable = true;
+      }
       if (current._def.innerType) {
         current = current._def.innerType;
       } else if (current._def.schema) {
@@ -878,6 +902,41 @@ function extractColumnsFromSchema(schema) {
     const meta = getColumnMeta(schemaToCheck) || (current ? getColumnMeta(current) : null);
     if (meta) {
       columns.set(key, meta);
+    } else if (current && current._def && current._def.typeName) {
+      const typeName = current._def.typeName;
+      let inferred = null;
+      switch (typeName) {
+        case 'ZodString':
+          inferred = { type: 'string', maxLength: 255, nullable: isNullable };
+          break;
+        case 'ZodNumber': {
+          const isInt = current._def.checks?.some((c) => c.kind === 'int');
+          inferred = { type: isInt ? 'integer' : 'float', nullable: isNullable };
+          break;
+        }
+        case 'ZodBoolean':
+          inferred = { type: 'boolean', nullable: isNullable };
+          break;
+        case 'ZodDate':
+          inferred = { type: 'timestamp', nullable: isNullable };
+          break;
+        case 'ZodEnum':
+          inferred = { type: 'enum', enumValues: current._def.values || [], nullable: isNullable };
+          break;
+        case 'ZodArray':
+          inferred = { type: 'files', nullable: isNullable };
+          break;
+        case 'ZodObject':
+        case 'ZodRecord':
+          inferred = { type: 'json', nullable: isNullable };
+          break;
+        default:
+          inferred = { type: 'string', nullable: isNullable };
+          break;
+      }
+      if (inferred) {
+        columns.set(key, inferred);
+      }
     }
   }
 

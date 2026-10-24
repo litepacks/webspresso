@@ -45,7 +45,7 @@ module.exports = defineService({
     key: (input) => `refund:${input.userId}:${input.amount}`,
   },
 
-  // Execution Handler
+  // Execution Handler (aliases: handler, execute, run)
   handler: async (input, ctx) => {
     // ctx.db, ctx.service, ctx.user, ctx.logger are automatically injected
     const userRepo = ctx.db.getRepository('User');
@@ -78,13 +78,46 @@ module.exports = defineService({
 
 ---
 
-## 3. Invoking Services
+## 3. Composable Ambient Context Hooks (Zero-Prop-Drilling)
+
+Webspresso provides zero-dependency ambient context hooks via `AsyncLocalStorage`. You can access the database, authenticated user, logger, and other services directly without threading `ctx` through helper functions:
+
+```javascript
+const { useDb, useAuth, useService, useLogger, useTransaction } = require('webspresso');
+
+async function verifyAccountStatus(userId) {
+  const db = useDb();
+  const logger = useLogger();
+  logger.info('Verifying account status', { userId });
+  return await db.getRepository('Account').findOne({ userId });
+}
+
+module.exports = defineService({
+  handler: async (input) => {
+    // Zero-prop-drilling: helper functions access ambient db/logger directly
+    const account = await verifyAccountStatus(input.userId);
+    const currentUser = useAuth();
+    
+    // Invoke sibling services directly via hook
+    await useService('audit.log', { user: currentUser?.id });
+
+    return { account };
+  },
+});
+```
+
+---
+
+## 4. Invoking Services
 
 From SSR Companion Loaders:
 ```javascript
+// Via ctx.service or useService() hook
+const { useService } = require('webspresso');
+
 module.exports = definePage({
   load: async ({ ctx }) => {
-    const data = await ctx.service('order.summary', { userId: ctx.user.id });
+    const data = await useService('order.summary', { userId: ctx.user.id });
     return { data };
   },
 });

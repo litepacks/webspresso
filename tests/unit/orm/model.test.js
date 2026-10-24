@@ -59,6 +59,29 @@ describe('ORM Model Definition & Registry', () => {
       expect(mockCustomType._finalize).toHaveBeenCalled();
     });
 
+    it('supports functional schema definition ({ zdb, z }) => ({ ... })', () => {
+      const model = defineModel({
+        name: 'Product',
+        table: 'products',
+        schema: ({ zdb, z }) => ({
+          id: zdb.id(),
+          name: zdb.string(),
+          price: zdb.number(),
+          email: zdb.email(),
+          status: z.enum(['draft', 'active']),
+        }),
+      });
+
+      expect(model).toBeDefined();
+      expect(model.name).toBe('Product');
+      expect(model.columns.get('id').primary).toBe(true);
+      expect(model.columns.get('name').type).toBe('string');
+      expect(model.columns.get('price').type).toBe('float');
+      expect(model.columns.get('email').type).toBe('string');
+      expect(model.columns.get('status').type).toBe('enum');
+      expect(model.columns.get('status').enumValues).toEqual(['draft', 'active']);
+    });
+
     it('validates relation definitions thoroughly', () => {
       const schema = z.object({ id: z.number() });
 

@@ -171,6 +171,75 @@ function parseRelationTree(relationNames) {
  * @param {import('./types').ScopeContext} [scopeContext] - Scope context
  * @returns {Promise<Object[]>} Records with relations attached
  */
+/**
+ * Helper to load a single top-level relation and its nested relations
+ * @private
+ */
+async function loadSingleRelation(records, relationName, nestedPaths, model, knex, context) {
+  const relation = model.relations?.[relationName];
+  if (!relation) {
+    console.warn(`Relation "${relationName}" not found on model "${model.name}"`);
+    return;
+  }
+
+  const { localKey, foreignKey, relatedModel } = getRelationKeys(model, relationName);
+
+  switch (relation.type) {
+    case 'belongsTo':
+      await loadBelongsTo(records, relationName, localKey, foreignKey, relatedModel, knex, context);
+      break;
+    case 'hasMany':
+      await loadHasMany(records, relationName, localKey, foreignKey, relatedModel, knex, context);
+      break;
+    case 'hasOne':
+      await loadHasOne(records, relationName, localKey, foreignKey, relatedModel, knex, context);
+      break;
+    default:
+      console.warn(`Unsupported relation type "${relation.type}" for relation "${relationName}" on model "${model.name}"`);
+      return;
+  }
+
+  // Process nested relations if any
+  if (nestedPaths.length > 0) {
+    const childRecords = [];
+    const seenRefs = new Set();
+    const len = records.length;
+
+    for (let i = 0; i < len; i++) {
+      const child = records[i][relationName];
+      if (!child) continue;
+
+      if (Array.isArray(child)) {
+        for (let j = 0; j < child.length; j++) {
+          const item = child[j];
+          if (item && typeof item === 'object' && !seenRefs.has(item)) {
+            seenRefs.add(item);
+            childRecords.push(item);
+          }
+        }
+      } else if (typeof child === 'object' && !seenRefs.has(child)) {
+        seenRefs.add(child);
+        childRecords.push(child);
+      }
+    }
+
+    if (childRecords.length > 0) {
+      await loadRelations(childRecords, nestedPaths, relatedModel, knex, context);
+    }
+  }
+}
+
+/**
+ * Load relations for a set of records using batch queries (supports nested relations)
+ * Executes independent top-level relations concurrently via Promise.all.
+ *
+ * @param {Object[]} records - Records to load relations for
+ * @param {Array<string|Object>} relationNames - Names of relations to load (e.g. ['author.profile', 'comments.author'])
+ * @param {import('./types').ModelDefinition} model - Model definition
+ * @param {import('knex').Knex|import('knex').Knex.Transaction} knex - Knex instance
+ * @param {import('./types').ScopeContext} [scopeContext] - Scope context
+ * @returns {Promise<Object[]>} Records with relations attached
+ */
 async function loadRelations(records, relationNames, model, knex, scopeContext) {
   if (!records || !records.length || !relationNames || !relationNames.length) {
     return records;
@@ -178,60 +247,19 @@ async function loadRelations(records, relationNames, model, knex, scopeContext) 
 
   const context = scopeContext || createScopeContext();
   const tree = relationNames instanceof Map ? relationNames : parseRelationTree(relationNames);
+  const entries = Array.from(tree.entries());
 
-  // Process each relation grouped by top-level
-  for (const [relationName, nestedPaths] of tree.entries()) {
-    const relation = model.relations?.[relationName];
-    if (!relation) {
-      console.warn(`Relation "${relationName}" not found on model "${model.name}"`);
-      continue;
-    }
-
-    const { localKey, foreignKey, relatedModel } = getRelationKeys(model, relationName);
-
-    switch (relation.type) {
-      case 'belongsTo':
-        await loadBelongsTo(records, relationName, localKey, foreignKey, relatedModel, knex, context);
-        break;
-      case 'hasMany':
-        await loadHasMany(records, relationName, localKey, foreignKey, relatedModel, knex, context);
-        break;
-      case 'hasOne':
-        await loadHasOne(records, relationName, localKey, foreignKey, relatedModel, knex, context);
-        break;
-      default:
-        console.warn(`Unsupported relation type "${relation.type}" for relation "${relationName}" on model "${model.name}"`);
-        continue;
-    }
-
-    // Process nested relations if any
-    if (nestedPaths.length > 0) {
-      const childRecords = [];
-      const seenRefs = new Set();
-      const len = records.length;
-
-      for (let i = 0; i < len; i++) {
-        const child = records[i][relationName];
-        if (!child) continue;
-
-        if (Array.isArray(child)) {
-          for (let j = 0; j < child.length; j++) {
-            const item = child[j];
-            if (item && typeof item === 'object' && !seenRefs.has(item)) {
-              seenRefs.add(item);
-              childRecords.push(item);
-            }
-          }
-        } else if (typeof child === 'object' && !seenRefs.has(child)) {
-          seenRefs.add(child);
-          childRecords.push(child);
-        }
-      }
-
-      if (childRecords.length > 0) {
-        await loadRelations(childRecords, nestedPaths, relatedModel, knex, context);
-      }
-    }
+  if (entries.length === 1) {
+    // Fast path: single top-level relation without Promise.all allocation
+    const [relationName, nestedPaths] = entries[0];
+    await loadSingleRelation(records, relationName, nestedPaths, model, knex, context);
+  } else if (entries.length > 1) {
+    // Concurrent execution for independent top-level relations (eliminates sequential waterfalls)
+    await Promise.all(
+      entries.map(([relationName, nestedPaths]) =>
+        loadSingleRelation(records, relationName, nestedPaths, model, knex, context)
+      )
+    );
   }
 
   return records;
@@ -239,6 +267,8 @@ async function loadRelations(records, relationNames, model, knex, scopeContext) 
 
 /**
  * Execute whereIn query in chunks to prevent parameter limits and query planner degradation
+ * Executes multiple chunks concurrently via Promise.all.
+ *
  * @param {import('knex').Knex} knex
  * @param {string} table
  * @param {string} column
@@ -255,13 +285,18 @@ async function queryInChunks(knex, table, column, values, scopeContext, model, c
     return await qb;
   }
 
-  const results = [];
+  const chunkPromises = [];
   for (let i = 0; i < values.length; i += chunkSize) {
     const slice = values.slice(i, i + chunkSize);
     let qb = knex(table).whereIn(column, slice);
     qb = applyScopes(qb, scopeContext, model);
-    const chunkResults = await qb;
-    results.push(...chunkResults);
+    chunkPromises.push(qb);
+  }
+
+  const chunkResults = await Promise.all(chunkPromises);
+  const results = [];
+  for (let i = 0; i < chunkResults.length; i++) {
+    results.push(...chunkResults[i]);
   }
   return results;
 }

@@ -11,7 +11,56 @@ const COMPRESSIBLE_TYPE_REGEX = /^(?:text\/[a-z0-9.+_-]+|application\/(?:javascr
 const INCOMPRESSIBLE_TYPE_REGEX = /^(?:text\/event-stream|image\/(?:jpeg|png|gif|webp|avif|heic|heif)|video\/[a-z0-9.+_-]+|audio\/[a-z0-9.+_-]+|application\/(?:zip|gzip|x-gzip|x-bzip2|x-compress|x-7z-compressed|x-rar-compressed|pdf|wasm|octet-stream))$/i;
 
 const compressibleCache = new Map();
-const MAX_MIME_CACHE_SIZE = 256;
+const MAX_MIME_CACHE_SIZE = 512;
+
+// Pre-fill standard common web & API MIME types for zero-lookup warmup
+const PREFILLED_MIMES = [
+  ['text/html', true],
+  ['text/html; charset=utf-8', true],
+  ['text/plain', true],
+  ['text/plain; charset=utf-8', true],
+  ['text/css', true],
+  ['text/css; charset=utf-8', true],
+  ['text/javascript', true],
+  ['text/javascript; charset=utf-8', true],
+  ['application/javascript', true],
+  ['application/javascript; charset=utf-8', true],
+  ['application/json', true],
+  ['application/json; charset=utf-8', true],
+  ['application/ld+json', true],
+  ['application/manifest+json', true],
+  ['application/graphql+json', true],
+  ['application/geo+json', true],
+  ['application/xml', true],
+  ['application/atom+xml', true],
+  ['application/rss+xml', true],
+  ['application/xhtml+xml', true],
+  ['image/svg+xml', true],
+  ['text/event-stream', false],
+  ['image/png', false],
+  ['image/jpeg', false],
+  ['image/webp', false],
+  ['image/gif', false],
+  ['image/avif', false],
+  ['application/pdf', false],
+  ['application/zip', false],
+  ['application/gzip', false],
+  ['application/octet-stream', false],
+  ['video/mp4', false],
+  ['audio/mpeg', false],
+];
+
+for (const [mime, val] of PREFILLED_MIMES) {
+  compressibleCache.set(mime, val);
+}
+
+function setCompressibleCache(key, value) {
+  if (compressibleCache.size >= MAX_MIME_CACHE_SIZE) {
+    const firstKey = compressibleCache.keys().next().value;
+    compressibleCache.delete(firstKey);
+  }
+  compressibleCache.set(key, value);
+}
 
 /**
  * Determine if a Content-Type is compressible
@@ -33,13 +82,13 @@ function isCompressible(contentType) {
   const mime = (semiIndex !== -1 ? contentType.slice(0, semiIndex) : contentType).trim().toLowerCase();
 
   if (!mime) {
-    if (compressibleCache.size < MAX_MIME_CACHE_SIZE) compressibleCache.set(contentType, false);
+    setCompressibleCache(contentType, false);
     return false;
   }
 
   // Fast negative check
   if (INCOMPRESSIBLE_TYPE_REGEX.test(mime)) {
-    if (compressibleCache.size < MAX_MIME_CACHE_SIZE) compressibleCache.set(contentType, false);
+    setCompressibleCache(contentType, false);
     return false;
   }
 
@@ -51,9 +100,7 @@ function isCompressible(contentType) {
     result = true;
   }
 
-  if (compressibleCache.size < MAX_MIME_CACHE_SIZE) {
-    compressibleCache.set(contentType, result);
-  }
+  setCompressibleCache(contentType, result);
 
   return result;
 }

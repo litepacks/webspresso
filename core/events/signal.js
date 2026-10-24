@@ -79,6 +79,15 @@ class Signal {
   async dispatch(data, options = {}) {
     return this.sendAsync(data, options);
   }
+
+  /**
+   * Asynchronously wait for this signal to be emitted
+   * @param {Object|number|Function} [optionsOrTimeout]
+   * @returns {Promise<{ data: any, meta: Object }>}
+   */
+  waitFor(optionsOrTimeout) {
+    return this.dispatcher.waitFor(this.name, optionsOrTimeout);
+  }
 }
 
 /**

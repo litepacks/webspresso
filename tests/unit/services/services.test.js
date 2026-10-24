@@ -273,6 +273,45 @@ describe('Webspresso Services Layer', () => {
         expect(err.stack).toBeDefined();
       }
     });
+
+    it('should abort ctx.signal and suppress late rejection when service times out', async () => {
+      const registry = new ServiceRegistry();
+      let signalAborted = false;
+      let abortReason = null;
+
+      registry.register('timeout.test', {
+        timeout: 40,
+        handler: async (input, ctx) => {
+          if (ctx.signal) {
+            ctx.signal.addEventListener('abort', () => {
+              signalAborted = true;
+              abortReason = ctx.signal.reason;
+            });
+          }
+          await wait(80);
+          throw new Error('Late background service failure');
+        },
+      });
+
+      let unhandledEmitted = false;
+      const onUnhandled = () => {
+        unhandledEmitted = true;
+      };
+      process.on('unhandledRejection', onUnhandled);
+
+      try {
+        await expect(registry.call('timeout.test')).rejects.toThrow(/timed out after 40ms/);
+        expect(signalAborted).toBe(true);
+        expect(abortReason).toBeDefined();
+        expect(abortReason.code).toBe('SERVICE_TIMEOUT');
+
+        // Wait past 80ms to confirm the background rejection did not trigger unhandledRejection
+        await wait(60);
+        expect(unhandledEmitted).toBe(false);
+      } finally {
+        process.removeListener('unhandledRejection', onUnhandled);
+      }
+    });
   });
 
   describe('HTTP & SSR Integration with createApp', () => {

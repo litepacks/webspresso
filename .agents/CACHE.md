@@ -10,6 +10,7 @@ Webspresso includes a zero-dependency, memory-bounded, leak-free in-memory cache
 2. **Dual Capacity Boundaries**:
    - **`maxEntries`**: Restricts the maximum number of items stored.
    - **`maxBytes` / `maxMemoryMb`**: Enforces strict memory budgets using `approximateByteSize` to prevent process Out-Of-Memory (OOM) crashes under heavy or large payload loads.
+   - **Zero-Overhead Fast Path**: When `maxBytes` is 0 (unlimited byte budget, count-only LRU), deep recursive byte size calculations are automatically bypassed (`0` byte allocation overhead), maximizing throughput on large query and JSON payloads unless explicitly requested via `trackBytes: true`.
 3. **Symmetrical Tag Cleanup (Zero Leaks)**: When an item is evicted via LRU, expired via TTL, or deleted, all associated tag index sets are automatically pruned. Empty tag sets are deleted immediately, preventing the classic "dangling Set memory leak".
 4. **Stampede / Thundering Herd Protection**: `getOrSet(key, asyncFactory)` coalesces concurrent requests for the same missing key, invoking the expensive calculation or DB query exactly once.
 5. **Universal Integration**:

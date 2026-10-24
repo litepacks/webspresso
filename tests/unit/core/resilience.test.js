@@ -236,6 +236,34 @@ describe('Webspresso Enterprise Resilience Engine (core/resilience)', () => {
       expect(breaker.getStats().timedOutCalls).toBe(1);
     });
 
+    it('should not emit unhandled rejection when slow operation rejects after timeout', async () => {
+      const breaker = new CircuitBreaker({
+        name: 'dangling-rejection-service',
+        timeout: 30,
+      });
+
+      let unhandledEmitted = false;
+      const onUnhandled = () => {
+        unhandledEmitted = true;
+      };
+      process.on('unhandledRejection', onUnhandled);
+
+      try {
+        await expect(
+          breaker.execute(async () => {
+            await wait(60);
+            throw new Error('Late background error');
+          })
+        ).rejects.toThrow(CircuitBreakerTimeoutError);
+
+        // Wait past the 60ms mark to let the background rejection fire
+        await wait(60);
+        expect(unhandledEmitted).toBe(false);
+      } finally {
+        process.removeListener('unhandledRejection', onUnhandled);
+      }
+    });
+
     it('should return fallback result when breaker is OPEN or call fails', async () => {
       const breaker = new CircuitBreaker({
         name: 'fallback-service',

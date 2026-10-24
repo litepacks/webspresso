@@ -82,7 +82,8 @@ npx webspresso add tailwind --upgrade
 ## 🏗️ Core Architecture Overview
 
 - **`pages/` & `pages/api/`**: File-based SSR templates (`.njk`), companion data loaders (`.js`), and method-suffixed API endpoints (`.get.js`, `.post.js`).
-- **`services/`**: Auto-discovered domain services mapping to dot-separated names (`'user.create'`).
+- **`services/`**: Auto-discovered domain services mapping to dot-separated names (`'user.create'`), with declarative validation, RBAC, timeouts, and transaction propagation.
+- **Ambient Context & Composable Hooks (`core/context`)**: Zero-dependency `AsyncLocalStorage` hooks (`useContext`, `useDb`, `useAuth`, `useUser`, `useService`, `useLogger`, `useReq`, `useRes`, `useParams`, `useQuery`, `useTransaction`, `useBreaker`, `withContext`) eliminating prop drilling across services, loaders, and background jobs.
 - **`models/`**: Schema-driven ORM models with `zdb` definitions, repositories, relations, scopes, and query cache.
 - **`plugins/`**: Modular extension ecosystem (Admin Panel, Media Library, Polar Billing, CSV/XLSX, Realtime, CSRF, CORS, Basic Auth).
 - **`views/`**: Nunjucks layouts, partials, and `fsy` template helpers.

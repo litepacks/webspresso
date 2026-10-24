@@ -1,17 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import crypto from 'crypto';
 import { sha256, hashSha256 } from '../../../core/utils/crypto';
-import sha256ReExport from '../../../core/utils/sha256';
+import { sha256 as utilsIndexSha256 } from '../../../core/utils';
 import { utils } from '../../../src/helpers';
 import webspresso from '../../../index';
 
 describe('Zero-Dependency sha256 Utility (core/utils/crypto)', () => {
-  it('exports sha256 across core, sha256 re-export, helpers.utils, and root webspresso', () => {
+  it('exports sha256 across core, core/utils index, helpers.utils, and root webspresso', () => {
     expect(typeof sha256).toBe('function');
     expect(typeof hashSha256).toBe('function');
     expect(sha256).toBe(hashSha256);
-    expect(typeof sha256ReExport).toBe('function');
-    expect(typeof sha256ReExport.sha256).toBe('function');
+    expect(typeof utilsIndexSha256).toBe('function');
     expect(typeof utils.sha256).toBe('function');
     expect(typeof webspresso.sha256).toBe('function');
   });
@@ -67,6 +66,6 @@ describe('Zero-Dependency sha256 Utility (core/utils/crypto)', () => {
 
     expect(utils.sha256(val)).toBe(expected);
     expect(webspresso.sha256(val)).toBe(expected);
-    expect(sha256ReExport(val)).toBe(expected);
+    expect(utilsIndexSha256(val)).toBe(expected);
   });
 });

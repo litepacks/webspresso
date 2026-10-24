@@ -11,9 +11,7 @@ import {
   safeCompare,
   sha256,
 } from '../../../core/utils/crypto';
-import hmacReExport from '../../../core/utils/hmac';
-import { randomToken as rToken, randomId as rId, randomTimestampedId as rTsId } from '../../../core/utils/random';
-import { base64UrlEncode as b64UrlEnc, base64UrlDecode as b64UrlDec } from '../../../core/utils/base64url';
+import coreUtils from '../../../core/utils';
 import { utils } from '../../../src/helpers';
 import webspresso from '../../../index';
 
@@ -30,11 +28,10 @@ describe('Webspresso Unified Crypto & Security Utilities (core/utils/crypto)', (
       expect(result).toHaveLength(64);
     });
 
-    it('supports createHmacSha256 alias and hmac.js re-export', () => {
+    it('supports createHmacSha256 alias and core/utils export', () => {
       const expected = crypto.createHmac('sha256', secret).update(message).digest('hex');
       expect(createHmacSha256(message, secret)).toBe(expected);
-      expect(hmacReExport(message, secret)).toBe(expected);
-      expect(hmacReExport.hmacSha256(message, secret)).toBe(expected);
+      expect(coreUtils.hmacSha256(message, secret)).toBe(expected);
       expect(utils.hmacSha256(message, secret)).toBe(expected);
       expect(webspresso.hmacSha256(message, secret)).toBe(expected);
     });
@@ -124,10 +121,10 @@ describe('Webspresso Unified Crypto & Security Utilities (core/utils/crypto)', (
       expect(parts[2]).toHaveLength(12); // 6 bytes = 12 hex chars
     });
 
-    it('supports random.js re-exports and framework level exposure', () => {
-      expect(typeof rToken).toBe('function');
-      expect(typeof rId).toBe('function');
-      expect(typeof rTsId).toBe('function');
+    it('supports core/utils exports and framework level exposure', () => {
+      expect(typeof coreUtils.randomToken).toBe('function');
+      expect(typeof coreUtils.randomId).toBe('function');
+      expect(typeof coreUtils.randomTimestampedId).toBe('function');
       expect(typeof utils.randomToken).toBe('function');
       expect(typeof utils.randomId).toBe('function');
       expect(typeof webspresso.randomToken).toBe('function');
@@ -168,9 +165,9 @@ describe('Webspresso Unified Crypto & Security Utilities (core/utils/crypto)', (
       expect(base64UrlDecode('')).toBe('');
     });
 
-    it('supports base64url.js re-exports and framework level exposure', () => {
-      expect(typeof b64UrlEnc).toBe('function');
-      expect(typeof b64UrlDec).toBe('function');
+    it('supports core/utils exports and framework level exposure', () => {
+      expect(typeof coreUtils.base64UrlEncode).toBe('function');
+      expect(typeof coreUtils.base64UrlDecode).toBe('function');
       expect(typeof utils.base64UrlEncode).toBe('function');
       expect(typeof utils.base64UrlDecode).toBe('function');
       expect(typeof webspresso.base64UrlEncode).toBe('function');

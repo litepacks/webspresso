@@ -29,10 +29,12 @@ class TextStreamController extends EventEmitter {
     this.res = res;
     this.options = options;
     this.ndjson = options.ndjson === true;
+    this.signal = options.signal || (req && req.signal) || null;
 
     this.isOpen = true;
     this.isClosed = false;
     this._cleanupBound = this._handleClose.bind(this);
+    this._abortBound = null;
 
     this._init();
   }
@@ -42,6 +44,16 @@ class TextStreamController extends EventEmitter {
    * @private
    */
   _init() {
+    // 0. AbortSignal listener
+    if (this.signal) {
+      if (this.signal.aborted) {
+        this._handleClose();
+        return;
+      }
+      this._abortBound = () => this.close();
+      this.signal.addEventListener('abort', this._abortBound, { once: true });
+    }
+
     // 1. Opt out of compression (zlib buffers chunks and breaks LLM real-time streaming)
     if (typeof this.res.compress === 'function') {
       this.res.compress(false);
@@ -88,6 +100,7 @@ class TextStreamController extends EventEmitter {
     // 4. Listen for disconnect / termination
     if (this.req) {
       this.req.on('close', this._cleanupBound);
+      this.req.on('aborted', this._cleanupBound);
     }
     this.res.on('close', this._cleanupBound);
     this.res.on('finish', this._cleanupBound);
@@ -103,8 +116,14 @@ class TextStreamController extends EventEmitter {
     this.isOpen = false;
     this.isClosed = true;
 
+    if (this._abortBound && this.signal) {
+      this.signal.removeEventListener('abort', this._abortBound);
+      this._abortBound = null;
+    }
+
     if (this.req) {
       this.req.removeListener('close', this._cleanupBound);
+      this.req.removeListener('aborted', this._cleanupBound);
     }
     this.res.removeListener('close', this._cleanupBound);
     this.res.removeListener('finish', this._cleanupBound);
@@ -156,8 +175,25 @@ class TextStreamController extends EventEmitter {
         const canContinue = this.res.write(payload);
         this._flush();
 
-        if (!canContinue && !this.res.destroyed && !this.res.writableEnded) {
-          this.res.once('drain', () => resolve(true));
+        if (!canContinue && !this.res.destroyed && !this.res.writableEnded && this.isOpen) {
+          const onDrain = () => {
+            cleanup();
+            resolve(true);
+          };
+          const onClose = () => {
+            cleanup();
+            resolve(false);
+          };
+          const cleanup = () => {
+            if (this.res) {
+              this.res.removeListener('drain', onDrain);
+              this.res.removeListener('close', onClose);
+              this.res.removeListener('error', onClose);
+            }
+          };
+          this.res.once('drain', onDrain);
+          this.res.once('close', onClose);
+          this.res.once('error', onClose);
         } else {
           resolve(true);
         }
@@ -179,12 +215,17 @@ class TextStreamController extends EventEmitter {
 
     try {
       for await (const rawChunk of source) {
-        if (!this.isOpen || this.isClosed) break;
+        if (!this.isOpen || this.isClosed || this.res.destroyed || this.res.writableEnded) {
+          break;
+        }
 
         const chunk = typeof transform === 'function' ? transform(rawChunk) : rawChunk;
         if (chunk === undefined || chunk === null) continue;
 
-        await this.write(chunk);
+        const written = await this.write(chunk);
+        if (!written || !this.isOpen || this.isClosed) {
+          break;
+        }
       }
     } catch (err) {
       this.emit('error', err);

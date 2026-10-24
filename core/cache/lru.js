@@ -47,6 +47,7 @@ function safeClone(value) {
  * @property {string|number} [defaultTtl=0] - Default TTL in ms or string duration ('5m', '1h', 0 = no expiry)
  * @property {function(*, string): number} [sizeCalculation] - Custom byte sizer function
  * @property {boolean} [clone=false] - Whether to deep-clone items on read/write
+ * @property {boolean} [trackBytes=false] - Whether to track approximate bytes when maxBytes is 0
  * @property {function(string, *, 'evict'|'expire'|'delete'|'clear'): void} [onEvict] - Eviction callback
  */
 
@@ -70,6 +71,11 @@ class LruCache {
     this.sizeCalculation = typeof options.sizeCalculation === 'function' ? options.sizeCalculation : null;
     this.clone = options.clone === true;
     this.onEvict = typeof options.onEvict === 'function' ? options.onEvict : null;
+
+    // Track bytes only when explicit memory limit exists, custom sizer provided, or trackBytes is explicitly requested
+    this.trackBytes = options.trackBytes !== undefined
+      ? options.trackBytes === true
+      : (this.maxBytes > 0 || typeof options.sizeCalculation === 'function');
 
     /** @type {Map<string, { value: *, size: number, expiresAt: number }>} */
     this._store = new Map();
@@ -114,6 +120,10 @@ class LruCache {
     }
     if (this.sizeCalculation) {
       return Math.max(0, this.sizeCalculation(value, key));
+    }
+    // Fast path: if byte tracking is disabled, avoid expensive recursive object graph traversal
+    if (!this.trackBytes) {
+      return 0;
     }
     return Math.max(0, approximateByteSize(value));
   }

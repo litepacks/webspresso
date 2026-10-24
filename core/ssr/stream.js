@@ -25,7 +25,9 @@ function createHtmlStream(options = {}) {
     nonce: optionNonce,
     loadingTemplate,
     layouts = [],
+    signal: optionSignal,
   } = options;
+  const signal = optionSignal || context.signal || null;
   const nonce = optionNonce || context.nonce || context.cspNonce || '';
   const scriptTag = nonce ? `<script nonce="${nonce}">` : '<script>';
 
@@ -37,8 +39,24 @@ function createHtmlStream(options = {}) {
     read() {}, // No-op, data is pushed asynchronously
   });
 
+  if (signal) {
+    if (signal.aborted) {
+      stream.destroy(signal.reason || new Error('Aborted'));
+      return stream;
+    }
+    const onAbort = () => {
+      stream.destroy(signal.reason || new Error('Aborted'));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    stream.once('close', () => {
+      signal.removeEventListener('abort', onAbort);
+    });
+  }
+
   (async () => {
     try {
+      if (stream.destroyed || signal?.aborted) return;
+
       const deferredKeys = Object.keys(defer);
 
       if (deferredKeys.length === 0) {
@@ -48,8 +66,10 @@ function createHtmlStream(options = {}) {
           const { applyCascadingLayouts } = require('../../src/routing/cascading');
           html = applyCascadingLayouts(env, layouts, html, context);
         }
-        stream.push(html);
-        stream.push(null);
+        if (!stream.destroyed) {
+          stream.push(html);
+          stream.push(null);
+        }
         return;
       }
 
@@ -109,17 +129,41 @@ function createHtmlStream(options = {}) {
 
       // Check if template contains streaming slot markers, or split at first slot
       // We push the initial shell chunk immediately to start browser TTFB & CSS download
-      stream.push(shellHtml);
+      if (!stream.destroyed) {
+        stream.push(shellHtml);
+      }
 
       // Resolve deferred promises in parallel
       const resolutionPromises = deferredKeys.map(async (key) => {
         const deferredItem = defer[key];
-        const promise = deferredItem && typeof deferredItem.then === 'function' ? deferredItem : deferredItem.promise;
-        const slotTemplate = deferredItem.template || null;
+        let promise;
+        if (typeof deferredItem === 'function') {
+          try {
+            promise = deferredItem();
+          } catch (fnErr) {
+            promise = Promise.reject(fnErr);
+          }
+        } else if (deferredItem && typeof deferredItem.then === 'function') {
+          promise = deferredItem;
+        } else if (deferredItem && typeof deferredItem.promise === 'function') {
+          try {
+            promise = deferredItem.promise();
+          } catch (fnErr) {
+            promise = Promise.reject(fnErr);
+          }
+        } else if (deferredItem && deferredItem.promise) {
+          promise = deferredItem.promise;
+        } else {
+          promise = deferredItem;
+        }
+
+        const slotTemplate = (deferredItem && typeof deferredItem === 'object') ? deferredItem.template : null;
+        const errorTemplate = (deferredItem && typeof deferredItem === 'object') ? deferredItem.errorTemplate : null;
+        const onError = (deferredItem && typeof deferredItem === 'object') ? deferredItem.onError : null;
 
         try {
           const resolvedData = await promise;
-          if (stream.destroyed) {
+          if (stream.destroyed || signal?.aborted) {
             return;
           }
           let slotHtml = '';
@@ -146,10 +190,31 @@ ${scriptTag}
             stream.push(slotChunk);
           }
         } catch (slotErr) {
-          if (stream.destroyed) {
+          if (stream.destroyed || signal?.aborted) {
             return;
           }
-          const errorChunk = `
+          if (typeof onError === 'function') {
+            try { onError(slotErr); } catch (_) {}
+          }
+          let errorHtml = '';
+          if (errorTemplate) {
+            try {
+              errorHtml = env.render(errorTemplate, { ...context, error: slotErr, [key]: null });
+            } catch (_) {}
+          }
+
+          const errorChunk = errorHtml ? `
+<template data-stream-slot="${key}">${errorHtml}</template>
+${scriptTag}
+(function(){
+  var t = document.querySelector('template[data-stream-slot="${key}"]');
+  var target = document.querySelector('[data-stream-target="${key}"]') || document.getElementById('stream-target-${key}');
+  if (t && target) {
+    target.innerHTML = '';
+    target.appendChild(t.content.cloneNode(true));
+  }
+})();
+</script>` : `
 <template data-stream-slot="${key}">
   <!-- Slot Error (${key}): ${slotErr.message} -->
 </template>`;
@@ -164,7 +229,9 @@ ${scriptTag}
         stream.push(null); // End of stream
       }
     } catch (err) {
-      stream.destroy(err);
+      if (!stream.destroyed) {
+        stream.destroy(err);
+      }
     }
   })();
 
@@ -183,6 +250,7 @@ ${scriptTag}
  * @param {boolean} [options.flushImmediately=true] - Flush headers immediately
  * @param {string} [options.loadingTemplate] - Loading skeleton template
  * @param {Array<Object>} [options.layouts] - Cascading layouts
+ * @param {AbortSignal} [options.signal] - AbortSignal for cancellation
  * @returns {Promise<void>}
  */
 function renderStream(res, templatePath, context = {}, options = {}) {
@@ -195,7 +263,11 @@ function renderStream(res, templatePath, context = {}, options = {}) {
       nonce: optionNonce,
       loadingTemplate,
       layouts,
+      signal: optionSignal,
     } = options;
+
+    const req = options.req || res?.req || context?.req;
+    const signal = optionSignal || req?.signal || context?.signal;
 
     const nonce =
       optionNonce ||
@@ -229,6 +301,7 @@ function renderStream(res, templatePath, context = {}, options = {}) {
       nonce,
       loadingTemplate,
       layouts,
+      signal,
     });
 
     let finished = false;
@@ -241,8 +314,8 @@ function renderStream(res, templatePath, context = {}, options = {}) {
       resolve();
     };
 
-    res.on('close', cleanup);
     if (typeof res.on === 'function') {
+      res.on('close', cleanup);
       res.on('error', (err) => {
         if (!finished) {
           finished = true;
@@ -254,8 +327,13 @@ function renderStream(res, templatePath, context = {}, options = {}) {
       });
     }
 
+    if (req && typeof req.on === 'function') {
+      req.on('aborted', cleanup);
+      req.on('close', cleanup);
+    }
+
     stream.on('data', (chunk) => {
-      if (!finished && !res.writableEnded) {
+      if (!finished && !res.writableEnded && !res.destroyed) {
         res.write(chunk);
       }
     });
@@ -263,7 +341,9 @@ function renderStream(res, templatePath, context = {}, options = {}) {
     stream.on('end', () => {
       if (!finished) {
         finished = true;
-        res.end();
+        if (!res.writableEnded && !res.destroyed) {
+          res.end();
+        }
         resolve();
       }
     });
@@ -273,7 +353,7 @@ function renderStream(res, templatePath, context = {}, options = {}) {
         finished = true;
         if (!res.headersSent) {
           res.status(500).send('Streaming Render Error');
-        } else if (!res.writableEnded) {
+        } else if (!res.writableEnded && !res.destroyed) {
           res.write(`<!-- Streaming Error: ${err.message} -->`);
           res.end();
         }

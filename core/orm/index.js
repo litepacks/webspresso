@@ -309,45 +309,7 @@ function createDatabase(config) {
    * @returns {Promise<*>} Result of callback
    */
   async function transaction(callback, scopeContext) {
-    const ambientTrx = getAmbientTransaction();
-    const runner = (ambientTrx && typeof ambientTrx.transaction === 'function') ? ambientTrx : knexInstance;
-
-    return runner.transaction(async (trx) => {
-      let currentScope = scopeContext ? { ...scopeContext } : createScopeContext();
-      const trxContext = {
-        trx,
-        getRepository(modelName, sContext) {
-          const model = getModelInstance(modelName);
-          const ctx = sContext || currentScope;
-          return createRepository(model, trx, ctx, ormCacheLayer);
-        },
-        createRepository(model, sContext) {
-          const ctx = sContext || currentScope;
-          return createRepository(model, trx, ctx, ormCacheLayer);
-        },
-        query(modelName, sContext) {
-          const model = getModelInstance(modelName);
-          const ctx = sContext ? { ...sContext } : currentScope;
-          return createQueryBuilder(model, trx, ctx, ormCacheLayer);
-        },
-        forTenant(tenantId) {
-          currentScope = { ...currentScope, tenantId };
-          return this;
-        },
-        forUser(user) {
-          currentScope = { ...currentScope, user };
-          return this;
-        },
-        withoutRls() {
-          currentScope = { ...currentScope, rlsDisabled: true };
-          return this;
-        },
-        getScopeContext() {
-          return { ...currentScope };
-        },
-      };
-      return runWithAmbientTransaction(trx, () => callback(trxContext));
-    });
+    return runTransaction(knexInstance, callback, scopeContext, ormCacheLayer, getModelInstance);
   }
 
   /**
@@ -493,6 +455,8 @@ module.exports = {
   runTransaction,
   // Schema helpers
   zdb,
+  z,
+  zod: z,
   createSchemaHelpers,
   // Model utilities
   defineModel,

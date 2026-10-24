@@ -119,5 +119,23 @@ describe('Services Validation & Security Edge Cases (Section 3 Hardened)', () =>
       expect(masked.ssn).toBe('[REDACTED]');
       expect(masked.nationalId).toBe('[REDACTED]');
     });
+
+    it('should preserve Dates, Buffers, and efficiently mask large arrays', () => {
+      const now = new Date();
+      const buf = Buffer.from('hello');
+      const items = Array.from({ length: 100 }, (_, i) => ({
+        id: i,
+        password: `secret_${i}`,
+        created: now,
+        data: buf,
+      }));
+
+      const masked = maskSensitiveData(items);
+      expect(masked.length).toBe(100);
+      expect(masked[0].password).toBe('[REDACTED]');
+      expect(masked[0].id).toBe(0);
+      expect(masked[0].created).toBe(now);
+      expect(masked[0].data).toBe(buf);
+    });
   });
 });

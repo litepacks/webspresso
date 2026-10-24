@@ -541,4 +541,119 @@ describe.sequential('Webspresso Shutdown & Lifecycle Management', () => {
     await app.close();
     expect(app.shutdownManager.isClosed).toBe(true);
   });
+
+  // 21. parallel plugin disposers
+  it('21. supports parallel plugin disposers for concurrent teardown', async () => {
+    const started = [];
+    const finished = [];
+
+    const plugin1 = {
+      name: 'plugin-slow-1',
+      register() {
+        return async () => {
+          started.push('p1');
+          await wait(50);
+          finished.push('p1');
+        };
+      },
+    };
+
+    const plugin2 = {
+      name: 'plugin-slow-2',
+      register() {
+        return async () => {
+          started.push('p2');
+          await wait(50);
+          finished.push('p2');
+        };
+      },
+    };
+
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      plugins: [plugin1, plugin2],
+      shutdown: {
+        parallel: true,
+      },
+    });
+
+    const start = Date.now();
+    await app.close();
+    const duration = Date.now() - start;
+
+    // Both plugins were initiated (in reverse order: p2 then p1)
+    expect(started).toEqual(['p2', 'p1']);
+    expect(finished).toContain('p1');
+    expect(finished).toContain('p2');
+    // Running in parallel takes ~50ms rather than 100ms+ (serial)
+    expect(duration).toBeLessThan(120);
+    expect(app.shutdownManager.isClosed).toBe(true);
+  });
+
+  // 22. parallel shutdown hooks
+  it('22. supports parallel shutdown hooks for concurrent execution', async () => {
+    const started = [];
+    const finished = [];
+
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      shutdown: {
+        parallelHooks: true,
+      },
+    });
+
+    app.onShutdown(async () => {
+      started.push('h1');
+      await wait(50);
+      finished.push('h1');
+    });
+
+    app.onShutdown(async () => {
+      started.push('h2');
+      await wait(50);
+      finished.push('h2');
+    });
+
+    const start = Date.now();
+    await app.close();
+    const duration = Date.now() - start;
+
+    expect(started).toEqual(['h1', 'h2']);
+    expect(finished).toContain('h1');
+    expect(finished).toContain('h2');
+    expect(duration).toBeLessThan(120);
+    expect(app.shutdownManager.isClosed).toBe(true);
+  });
+
+  // 23. synchronous fast path
+  it('23. fast-path executes synchronous disposers and hooks immediately', async () => {
+    const executed = [];
+
+    const plugin = {
+      name: 'sync-plugin',
+      register() {
+        return () => {
+          executed.push('plugin-disposed');
+        };
+      },
+    };
+
+    const { app } = createApp({
+      pagesDir: FIXTURES_PAGES,
+      plugins: [plugin],
+    });
+
+    app.onShutdown(() => {
+      executed.push('hook-executed');
+    });
+
+    const start = Date.now();
+    await app.close();
+    const duration = Date.now() - start;
+
+    expect(executed).toEqual(['plugin-disposed', 'hook-executed']);
+    // Synchronous execution completes almost instantaneously (< 20ms)
+    expect(duration).toBeLessThan(50);
+    expect(app.shutdownManager.isClosed).toBe(true);
+  });
 });

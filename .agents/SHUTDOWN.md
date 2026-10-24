@@ -23,6 +23,9 @@ const { app } = createApp({
       mode: 'graceful',      // 'graceful' | 'force'
       timeout: 10_000,       // Max time in ms to wait for active requests (Default: 10000)
       signals: ['SIGINT', 'SIGTERM'],
+      parallel: false,       // Set true to execute async disposers & hooks concurrently (Default: false)
+      parallelDisposers: false, // Fine-grained control over plugin disposers
+      parallelHooks: false,     // Fine-grained control over app.onShutdown hooks
     },
   },
 });
@@ -31,6 +34,10 @@ const { app } = createApp({
 ### Shutdown Modes:
 - **`graceful` (Default)**: Rejects new connections, drains active in-flight requests, and closes idle/keep-alive connections.
 - **`force`**: Immediately destroys all active and idle sockets (`forceClose`). Recommended for rapid development/watch server reloads to avoid port lock.
+
+### Concurrency & Performance:
+- **Synchronous Fast-Path**: Synchronous disposers and shutdown hooks execute immediately without creating timers or `Promise.race` wrappers, eliminating microtask delays and timer allocations during exit.
+- **Parallel Mode (`parallel: true`)**: When enabled, asynchronous plugin disposers and hooks are initiated in reverse registration order and awaited concurrently via `Promise.allSettled`, drastically reducing shutdown latency for apps with multiple independent resources (DB, Redis, SQS, WebSockets).
 
 ---
 
@@ -64,4 +71,4 @@ const customPlugin = {
   },
 };
 ```
-During shutdown, plugin disposers are executed sequentially in **reverse dependency order**.
+During shutdown, plugin disposers are executed in **reverse dependency order** (`reverseDisposers`). When `parallel` is enabled, their initiation order is strictly preserved while awaiting resolution concurrently.

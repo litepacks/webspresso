@@ -127,6 +127,44 @@ describe('AI & LLM Streaming Engine (core/stream)', () => {
       expect(res.chunks).toEqual(['ONE ', 'TWO ', 'THREE ']);
       expect(res.writableEnded).toBe(true);
     });
+
+    it('respects AbortSignal and stops streaming when signal is aborted', async () => {
+      const res = new MockHttpResponse();
+      const ac = new AbortController();
+
+      const controller = streamText(null, res, { signal: ac.signal });
+      expect(controller.isOpen).toBe(true);
+
+      await controller.write('Initial chunk');
+      ac.abort();
+
+      expect(controller.isClosed).toBe(true);
+      expect(controller.isOpen).toBe(false);
+
+      const writeAfterAbort = await controller.write('Ignored chunk');
+      expect(writeAfterAbort).toBe(false);
+      expect(res.chunks).toEqual(['Initial chunk']);
+    });
+
+    it('resolves write(chunk) as false when client disconnects during backpressure', async () => {
+      const res = new MockHttpResponse();
+      let writeCount = 0;
+      res.write = () => {
+        writeCount++;
+        return false; // simulate backpressure buffer full
+      };
+
+      const controller = new TextStreamController(null, res, {});
+
+      const writePromise = controller.write('large-chunk');
+
+      // Socket closes before 'drain' ever fires
+      res.emit('close');
+
+      const result = await writePromise;
+      expect(result).toBe(false);
+      expect(controller.isClosed).toBe(true);
+    });
   });
 
   describe('streamJson (NDJSON)', () => {

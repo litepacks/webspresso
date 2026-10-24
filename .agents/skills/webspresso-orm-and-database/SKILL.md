@@ -69,6 +69,15 @@ module.exports = defineModel({
 
 ---
 
+## 1.1 `zdb` vs `z` Distinction & Best Practices
+
+- **`zdb.*` (Single Source of Truth for Models):** Decorates Zod with SQL column types, migration info, query filtering, and Admin UI controls. Always use `zdb` for persistent table columns in `models/*.js`.
+- **`z.*` (Pure Validation):** Use only for in-memory request/service validation (`pages/api/...`, `services/...`).
+- **Never wrap in `z.object({...})`:** Pass a plain object `schema: { ... }` or functional schema `schema: ({ zdb, z }) => ({ ... })`.
+- **Raw Zod Types in Models:** Access Zod primitives directly via `zdb.z` or functional schema without importing `zod`.
+
+---
+
 ## 2. Repositories API
 
 ```javascript

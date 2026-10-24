@@ -49,6 +49,8 @@ class QueueManager extends EventEmitter {
     this.isDraining = false;
     this.isRunning = false;
     this._timer = null;
+    /** @type {Set<Promise<any>>} */
+    this._activeJobPromises = new Set();
 
     // Retention configuration
     const retentionOption = options.retention;
@@ -258,18 +260,24 @@ class QueueManager extends EventEmitter {
       this.scheduler.stop();
     }
 
-    if (this.runningCount === 0) {
-      this.isDraining = false;
-      this.isRunning = false;
-      return;
-    }
+    if (this.runningCount > 0 && this._activeJobPromises.size > 0) {
+      let timer = null;
+      const timeoutPromise = new Promise((resolve) => {
+        timer = setTimeout(resolve, timeoutMs);
+        if (timer && typeof timer.unref === 'function') {
+          timer.unref();
+        }
+      });
+      const allJobsPromise = Promise.allSettled(Array.from(this._activeJobPromises));
 
-    const start = Date.now();
-    while (this.runningCount > 0) {
-      if (Date.now() - start > timeoutMs) {
-        break;
+      try {
+        await Promise.race([allJobsPromise, timeoutPromise]);
+      } finally {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
       }
-      await new Promise((res) => setTimeout(res, 50));
     }
 
     this.isDraining = false;
@@ -284,6 +292,10 @@ class QueueManager extends EventEmitter {
   async stop() {
     this.pause();
     this.isRunning = false;
+    if (this._timer) {
+      clearTimeout(this._timer);
+      this._timer = null;
+    }
     if (this.scheduler) {
       this.scheduler.stop();
     }
@@ -578,13 +590,18 @@ class QueueManager extends EventEmitter {
         this.emit('job:progress', j, percent, msg);
       };
 
-      this._executeJob(job).finally(() => {
+      const jobPromise = this._executeJob(job).finally(() => {
         this.runningCount--;
         this.activeJobs.delete(job.id);
-        if (this.isRunning && !this.isPaused) {
+        this._activeJobPromises.delete(jobPromise);
+        if (this.runningCount === 0) {
+          this.emit('idle');
+        }
+        if (this.isRunning && !this.isPaused && !this.isDraining) {
           this._scheduleNextTick(0);
         }
       });
+      this._activeJobPromises.add(jobPromise);
     }
 
     if (this.runningCount < this.concurrency) {
@@ -622,29 +639,40 @@ class QueueManager extends EventEmitter {
       }
     });
 
+    const handlerPromise = Promise.resolve().then(() => handler(job, { queue: this }));
+    if (typeof handlerPromise.catch === 'function') {
+      handlerPromise.catch(() => {});
+    }
+
     try {
       const result = await Promise.race([
-        handler(job, { queue: this }),
+        handlerPromise,
         timeoutPromise,
       ]);
-      if (timeoutTimer) {
-        clearTimeout(timeoutTimer);
-      }
 
-      const completedJob = await this.adapter.complete(job.id, result);
-      this.emit('job:completed', completedJob || job, result);
+      try {
+        const completedJob = await this.adapter.complete(job.id, result);
+        this.emit('job:completed', completedJob || job, result);
+      } catch (adapterErr) {
+        this.emit('error', adapterErr);
+      }
     } catch (err) {
+      try {
+        if (job.attempts < job.maxAttempts) {
+          const delayMs = job.getNextRetryDelay();
+          const retryingJob = await this.adapter.retry(job.id, delayMs, err);
+          this.emit('job:retrying', retryingJob || job, err, delayMs);
+        } else {
+          const failedJob = await this.adapter.fail(job.id, err);
+          this.emit('job:failed', failedJob || job, err);
+        }
+      } catch (adapterErr) {
+        this.emit('error', adapterErr);
+      }
+    } finally {
       if (timeoutTimer) {
         clearTimeout(timeoutTimer);
-      }
-
-      if (job.attempts < job.maxAttempts) {
-        const delayMs = job.getNextRetryDelay();
-        const retryingJob = await this.adapter.retry(job.id, delayMs, err);
-        this.emit('job:retrying', retryingJob || job, err, delayMs);
-      } else {
-        const failedJob = await this.adapter.fail(job.id, err);
-        this.emit('job:failed', failedJob || job, err);
+        timeoutTimer = null;
       }
     }
   }

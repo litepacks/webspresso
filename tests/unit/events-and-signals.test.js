@@ -207,6 +207,100 @@ describe('Decoupled Events & Signals System (AdonisJS Events & Django Signals-in
         { attempts: 5 }
       );
     });
+
+    it('catches and emits error when bridged queue dispatch rejects', async () => {
+      const errorEvents = [];
+      dispatcher.on('error', (err) => errorEvents.push(err));
+
+      const failingQueue = {
+        dispatch: vi.fn().mockRejectedValue(new Error('Queue storage unavailable')),
+      };
+      dispatcher.setQueue(failingQueue);
+      dispatcher.listenAndQueue('order.placed', 'process-order');
+
+      dispatcher.emit('order.placed', { id: 99 });
+      await wait(10);
+
+      expect(errorEvents.length).toBe(1);
+      expect(errorEvents[0].message).toBe('Queue storage unavailable');
+    });
+  });
+
+  describe('waitFor & Promise Lifecycle Resilience', () => {
+    it('waits for an event to be emitted and resolves with data and meta', async () => {
+      const waitPromise = dispatcher.waitFor('user.verified', 1000);
+
+      setTimeout(() => {
+        dispatcher.emit('user.verified', { userId: 42 });
+      }, 10);
+
+      const result = await waitPromise;
+      expect(result.data).toEqual({ userId: 42 });
+      expect(result.meta.event).toBe('user.verified');
+      expect(dispatcher.listenerCount('user.verified')).toBe(0);
+    });
+
+    it('filters events using predicate before resolving', async () => {
+      const waitPromise = dispatcher.waitFor('order.status', {
+        timeout: 1000,
+        filter: (data) => data.status === 'shipped',
+      });
+
+      dispatcher.emit('order.status', { orderId: 1, status: 'processing' });
+      dispatcher.emit('order.status', { orderId: 1, status: 'shipped' });
+
+      const result = await waitPromise;
+      expect(result.data).toEqual({ orderId: 1, status: 'shipped' });
+      expect(dispatcher.listenerCount('order.status')).toBe(0);
+    });
+
+    it('rejects on timeout and cleans up listener', async () => {
+      const waitPromise = dispatcher.waitFor('never.arrives', { timeout: 30 });
+
+      await expect(waitPromise).rejects.toThrow(/exceeded while waiting for event 'never.arrives'/);
+      expect(dispatcher.listenerCount('never.arrives')).toBe(0);
+    });
+
+    it('rejects on AbortSignal cancellation and cleans up listener', async () => {
+      const ac = new AbortController();
+      const waitPromise = dispatcher.waitFor('abort.test', {
+        timeout: 1000,
+        signal: ac.signal,
+      });
+
+      ac.abort();
+
+      await expect(waitPromise).rejects.toThrow(/was aborted/);
+      expect(dispatcher.listenerCount('abort.test')).toBe(0);
+    });
+
+    it('supports waitFor directly on declarative Signal objects', async () => {
+      const orderSignal = defineSignal('order_shipped', dispatcher);
+      const waitPromise = orderSignal.waitFor(500);
+
+      setTimeout(() => {
+        orderSignal.send({ trackingId: 'TRK-12345' });
+      }, 10);
+
+      const result = await waitPromise;
+      expect(result.data).toEqual({ trackingId: 'TRK-12345' });
+    });
+
+    it('emits error event on dispatcher when async listener throws in emitAsync', async () => {
+      const errorEvents = [];
+      dispatcher.on('error', (err) => errorEvents.push(err));
+
+      dispatcher.on('payment.process', async () => {
+        throw new Error('Payment gateway timeout');
+      });
+
+      const settled = await dispatcher.emitAsync('payment.process', { amount: 100 });
+      expect(settled).toHaveLength(1);
+      expect(settled[0].status).toBe('rejected');
+      expect(settled[0].reason.message).toBe('Payment gateway timeout');
+      expect(errorEvents).toHaveLength(1);
+      expect(errorEvents[0].message).toBe('Payment gateway timeout');
+    });
   });
 
   describe('Listener File Discovery (loadListeners)', () => {

@@ -42,7 +42,7 @@ const {
   createPluginManager,
   getPluginManager,
   resetPluginManager,
-} = require('../src/plugin-manager');
+} = require('./plugins');
 
 // Lazy-loaded ORM accessor
 let _orm = null;
@@ -57,6 +57,28 @@ module.exports = {
   // Core Application Container
   CoreApp,
   createCoreApp,
+
+  // Context Management Layer (App & Ambient Request Context)
+  context: require('./context'),
+  appContext: require('./context').appContext,
+  requestContext: require('./context').requestContext,
+  runWithContext: require('./context').runWithContext,
+  withContext: require('./context').withContext,
+  getContext: require('./context').getContext,
+  useContext: require('./context').useContext,
+  useDb: require('./context').useDb,
+  useAuth: require('./context').useAuth,
+  useUser: require('./context').useUser,
+  useLogger: require('./context').useLogger,
+  useReq: require('./context').useReq,
+  useRes: require('./context').useRes,
+  useParams: require('./context').useParams,
+  useQuery: require('./context').useQuery,
+  useService: require('./context').useService,
+  useQueue: require('./context').useQueue,
+  useCache: require('./context').useCache,
+  useBreaker: require('./context').useBreaker,
+  useTransaction: require('./context').useTransaction,
 
   // Services Layer
   services: require('./services'),
@@ -307,6 +329,7 @@ Object.defineProperties(module.exports, {
   executeApiPipeline: { get: () => require('./http').executeApiPipeline, enumerable: true, configurable: true },
   executePagePipeline: { get: () => require('./http').executePagePipeline, enumerable: true, configurable: true },
   runMiddlewares: { get: () => require('./http').runMiddlewares, enumerable: true, configurable: true },
+  createPipelineRunner: { get: () => require('./http').createPipelineRunner, enumerable: true, configurable: true },
   enrichRouteError: { get: () => require('./http').enrichRouteError, enumerable: true, configurable: true },
 
   // Authentication & Verification

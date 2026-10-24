@@ -721,6 +721,7 @@ function createApp(options = {}) {
   const { renderStream } = require('../core/ssr/stream');
   const { createSseStream } = require('../core/sse/stream');
   const { streamText, streamJson } = require('../core/stream/text-stream');
+  const { runWithContext } = require('../core/context/request');
   app.use((req, res, next) => {
     // 1. Request draining check during graceful shutdown (allow health/readiness probes through)
     const isHealthEndpoint = req.path === '/healthz' || req.path === '/readyz' || req.path === '/health' ||
@@ -803,7 +804,9 @@ function createApp(options = {}) {
       return streamJson(req, res, sourceOrCallback, maybeOptions);
     };
 
-    next();
+    runWithContext(req.context, () => {
+      next();
+    });
   });
 
   // Async handler wrapper helper for automatic promise rejection handling

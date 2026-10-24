@@ -72,6 +72,13 @@ describe('core/compression/compressible.js', () => {
     expect(isCompressible(mime)).toBe(true);
     expect(isCompressible(mime)).toBe(true); // cached hit
   });
+
+  it('handles cache eviction reliably when exceeding MAX_MIME_CACHE_SIZE', () => {
+    for (let i = 0; i < 600; i++) {
+      expect(isCompressible(`text/x-custom-${i}`)).toBe(true);
+    }
+    expect(isCompressible('text/html')).toBe(true);
+  });
 });
 
 describe('core/compression/negotiate.js', () => {
@@ -195,6 +202,13 @@ describe('core/compression/negotiate.js', () => {
       const res2 = selectEncoding(h);
       expect(res1).toBe('gzip');
       expect(res2).toBe('gzip');
+    });
+
+    it('handles cache eviction reliably when exceeding MAX_ENCODING_CACHE_SIZE', () => {
+      for (let i = 0; i < 300; i++) {
+        expect(selectEncoding(`gzip;q=${(i % 90 + 10) / 100}`)).toBe('gzip');
+      }
+      expect(selectEncoding('gzip, deflate')).toBe('gzip');
     });
   });
 });

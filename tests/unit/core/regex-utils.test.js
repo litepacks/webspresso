@@ -4,7 +4,7 @@ import {
   escapeRegex,
   globToRegExp,
 } from '../../../core/utils/regex';
-import escapeRegExpDirect from '../../../core/utils/escape-regexp';
+import coreUtils from '../../../core/utils';
 import {
   utils,
   escapeRegExp as indexEscapeRegExp,
@@ -45,11 +45,10 @@ describe('core/utils/regex - RegExp & Glob Utilities', () => {
       expect(escapeRegex('price (USD) * 1.2')).toBe('price \\(USD\\) \\* 1\\.2');
     });
 
-    it('exports via direct module core/utils/escape-regexp', () => {
-      expect(typeof escapeRegExpDirect).toBe('function');
-      expect(typeof escapeRegExpDirect.escapeRegExp).toBe('function');
-      expect(typeof escapeRegExpDirect.escapeRegex).toBe('function');
-      expect(escapeRegExpDirect('[tag]')).toBe('\\[tag\\]');
+    it('exports via core/utils barrel export', () => {
+      expect(typeof coreUtils.escapeRegExp).toBe('function');
+      expect(typeof coreUtils.escapeRegex).toBe('function');
+      expect(coreUtils.escapeRegExp('[tag]')).toBe('\\[tag\\]');
     });
 
     it('exports via index and utils', () => {

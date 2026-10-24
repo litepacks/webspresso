@@ -7,8 +7,7 @@ import {
   joinUrl,
   trimUrlPathSlashes,
 } from '../../../core/utils/url';
-import stripTrailingSlashDirect from '../../../core/utils/strip-trailing-slash';
-import ensureLeadingSlashDirect from '../../../core/utils/ensure-leading-slash';
+import coreUtils from '../../../core/utils';
 import {
   utils,
   stripTrailingSlash as indexStripTrailing,
@@ -119,10 +118,10 @@ describe('core/utils/url - URL & Path Formatting Utilities', () => {
 
   describe('Direct and Index Re-exports', () => {
     it('provides consistent functions across exports', () => {
-      expect(typeof stripTrailingSlashDirect).toBe('function');
-      expect(stripTrailingSlashDirect('/foo/')).toBe('/foo');
-      expect(typeof ensureLeadingSlashDirect).toBe('function');
-      expect(ensureLeadingSlashDirect('foo')).toBe('/foo');
+      expect(typeof coreUtils.stripTrailingSlash).toBe('function');
+      expect(coreUtils.stripTrailingSlash('/foo/')).toBe('/foo');
+      expect(typeof coreUtils.ensureLeadingSlash).toBe('function');
+      expect(coreUtils.ensureLeadingSlash('foo')).toBe('/foo');
 
       expect(typeof indexStripTrailing).toBe('function');
       expect(typeof indexEnsureLeading).toBe('function');

@@ -41,7 +41,7 @@ graph TD
     end
     
     subgraph "Domain & Business Logic Layer"
-        SSR --> Services["Services Layer (src/services)"]
+        SSR --> Services["Services Layer (core/services)"]
         API --> Services
         Services --> Pipeline["Service Pipeline (Sanitize → Validate → Auth → Trx → Cache)"]
     end
@@ -72,7 +72,7 @@ graph TD
   4. Catch-all wildcards (e.g. `/*`, `/docs/*`)
 - Manages the SSR `load({ req, res, db, ctx })` data prefetching lifecycle and global/route lifecycle hooks (`onRequest`, `onRoute`, `beforeMiddleware`, `beforeRender`, `afterRender`, `onError`).
 
-### 3.3 Services Layer (`src/services/`)
+### 3.3 Services Layer (`core/services/`)
 - Pure business logic layer decoupled from HTTP request objects.
 - Automatically maps filesystem paths to dot-separated service names (`services/billing/invoice.js` → `'billing.invoice'`).
 - Wraps handlers in declarative pipeline middleware: input sanitization against prototype pollution, Zod schema validation, auth role/predicate checks, automatic ACID transaction wrapping (`transaction: true`), and caching.

@@ -112,9 +112,15 @@ async function probeDatabase(db, timeoutMs = 3000) {
       timer = setTimeout(() => {
         reject(new Error(`Database ping timed out after ${timeoutMs}ms`));
       }, timeoutMs);
+      if (typeof timer?.unref === 'function') timer.unref();
     });
 
-    await Promise.race([knex.raw('SELECT 1'), timeoutPromise]);
+    const pingPromise = Promise.resolve(knex.raw('SELECT 1'));
+    if (typeof pingPromise.catch === 'function') {
+      pingPromise.catch(() => {});
+    }
+
+    await Promise.race([pingPromise, timeoutPromise]);
     const latencyMs = Date.now() - startTime;
     return { status: 'up', latencyMs };
   } catch (err) {
@@ -170,9 +176,13 @@ async function probeCustomChecks(checks = {}, context = {}, timeoutMs = 3000) {
     try {
       const timeoutPromise = new Promise((_, reject) => {
         timer = setTimeout(() => reject(new Error(`Health check "${name}" timed out after ${timeoutMs}ms`)), timeoutMs);
+        if (typeof timer?.unref === 'function') timer.unref();
       });
 
-      const res = await Promise.race([Promise.resolve(checkFn(context)), timeoutPromise]);
+      const checkPromise = Promise.resolve().then(() => checkFn(context));
+      checkPromise.catch(() => {});
+
+      const res = await Promise.race([checkPromise, timeoutPromise]);
       const latencyMs = Date.now() - startTime;
 
       if (res === false || (res && typeof res === 'object' && res.status === 'down')) {

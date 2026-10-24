@@ -541,6 +541,9 @@ export interface ShutdownOptions {
   signals?: string[];
   logger?: unknown;
   exitOnSignal?: boolean;
+  parallel?: boolean;
+  parallelDisposers?: boolean;
+  parallelHooks?: boolean;
 }
 
 export interface EarlyHintLink {
@@ -585,6 +588,7 @@ export class ShutdownManager {
   readonly isClosed: boolean;
   mode: 'graceful' | 'force';
   timeout: number;
+  parallel: boolean;
   onShutdown(fn: () => Promise<void> | void): this;
   registerDisposer(nameOrFn: string | (() => Promise<void> | void), maybeFn?: () => Promise<void> | void): this;
   registerAdapter(adapter: ServerAdapter): this;
@@ -714,6 +718,7 @@ export class HonoHttpAdapter extends HttpAdapter {
 export function createHonoHttpAdapter(app?: unknown, options?: Record<string, unknown>): HonoHttpAdapter;
 
 export function runMiddlewares(middlewares: unknown[], req: unknown, res: unknown): Promise<void>;
+export function createPipelineRunner(middlewares?: unknown[]): (req: unknown, res: unknown) => Promise<void>;
 export function enrichRouteError(err: unknown, descriptor: RouteDescriptor | Record<string, unknown>, req: unknown): unknown;
 export function executeApiPipeline(params: {
   descriptor: RouteDescriptor | Record<string, unknown>;
@@ -966,6 +971,8 @@ export interface LruCacheConfig {
   clone?: boolean;
   /** Custom byte sizer function (default: approximateByteSize) */
   sizeCalculation?: (value: unknown, key: string) => number;
+  /** Whether to compute and track approximate byte sizes when maxBytes/maxMemoryMb is not set (default: false when byte limit is 0) */
+  trackBytes?: boolean;
   /** Callback fired when an entry is evicted, expired, or deleted */
   onEvict?: (key: string, value: unknown, reason: 'evict' | 'expire' | 'delete' | 'clear') => void;
 }
@@ -976,6 +983,7 @@ export class LruCache<V = unknown> {
   readonly currentBytes: number;
   readonly maxBytes: number;
   readonly maxEntries: number;
+  readonly trackBytes: boolean;
   readonly hits: number;
   readonly misses: number;
   readonly hitRate: number;
@@ -1005,6 +1013,7 @@ export class TaggedLruCache<V = unknown> {
   readonly currentBytes: number;
   readonly maxBytes: number;
   readonly maxEntries: number;
+  readonly trackBytes: boolean;
   readonly hits: number;
   readonly misses: number;
   readonly hitRate: number;
@@ -1558,6 +1567,13 @@ export interface EventListenerOptions {
   once?: boolean;
 }
 
+export interface WaitForOptions {
+  timeout?: number;
+  filter?: (data: any, meta: any) => boolean;
+  signal?: AbortSignal;
+  sender?: any;
+}
+
 export class EventDispatcher {
   constructor(options?: { queue?: any; maxListeners?: number; logger?: any });
   on(event: string, handler: Function, options?: EventListenerOptions): () => void;
@@ -1569,6 +1585,7 @@ export class EventDispatcher {
   emitParallel(eventOrInstance: string | object, data?: any, options?: { sender?: any }): Promise<Array<{ status: 'fulfilled' | 'rejected'; value?: any; reason?: any }>>;
   emitSerial(eventOrInstance: string | object, data?: any, options?: { sender?: any }): Promise<any[]>;
   emitWaterfall(eventOrInstance: string | object, initialData: any, options?: { sender?: any }): Promise<any>;
+  waitFor(event: string, optionsOrTimeout?: WaitForOptions | number | ((data: any, meta: any) => boolean)): Promise<{ data: any; meta: Record<string, unknown> }>;
   listenAndQueue(event: string, jobName: string, queueOptions?: Record<string, unknown>): () => void;
   bridgeOrm(modelEvents?: any): () => void;
   setQueue(queueManager: any): this;
@@ -1591,6 +1608,7 @@ export class Signal {
   send(data?: any, options?: { sender?: any }): boolean;
   sendAsync(data?: any, options?: { sender?: any }): Promise<Array<{ status: 'fulfilled' | 'rejected'; value?: any; reason?: any }>>;
   sendSerial(data?: any, options?: { sender?: any }): Promise<any[]>;
+  waitFor(optionsOrTimeout?: WaitForOptions | number | ((data: any, meta: any) => boolean)): Promise<{ data: any; meta: Record<string, unknown> }>;
 }
 
 export function defineSignal(name: string, dispatcher?: EventDispatcher): Signal;
@@ -2008,7 +2026,7 @@ export type InferModelUpdate<T> = Partial<InferModel<T>>;
 export interface ModelOptions<TSchema = ZodObject<Record<string, ZodTypeAny>>> {
   name: string;
   table: string;
-  schema: TSchema | Record<string, any>;
+  schema: TSchema | Record<string, any> | ((ctx: { zdb: Zdb; z: typeof import('zod').z; zod: typeof import('zod').z }) => TSchema | Record<string, any>);
   primaryKey?: string;
   timestamps?: boolean | { createdAt?: string; updatedAt?: string; snakeCase?: boolean };
   softDelete?: boolean | { deletedAt?: string; snakeCase?: boolean };
@@ -2096,6 +2114,10 @@ export function isCascadeEnabled(relation: RelationDefinition, operation: 'delet
 
 /** zdb column helpers (id, string, timestamp, …) + `schema()` */
 export type Zdb = Record<string, any> & {
+  z: typeof import('zod').z;
+  zod: typeof import('zod').z;
+  number(options?: any): any;
+  email(options?: any): any;
   schema(shape: Record<string, any>): ZodObject<Record<string, ZodTypeAny>>;
   timestamps(options?: { snakeCase?: boolean; createdAt?: string; updatedAt?: string }): Record<string, any>;
   softDelete(options?: Record<string, any>): any;
@@ -2104,6 +2126,7 @@ export type Zdb = Record<string, any> & {
 
 export const zdb: Zdb;
 export const z: typeof import('zod').z;
+export const zod: typeof import('zod').z;
 
 export function createSchemaHelpers(z: typeof import('zod').z): Zdb;
 
@@ -4197,24 +4220,39 @@ export function queuePlugin(options?: {
 
 // --- SSR Streaming & Chunked Transfer ---
 
+export type DeferredSlot =
+  | Promise<unknown>
+  | (() => Promise<unknown> | unknown)
+  | {
+      promise?: Promise<unknown>;
+      fetch?: () => Promise<unknown> | unknown;
+      template?: string;
+      loadingTemplate?: string;
+      errorTemplate?: string;
+      onError?: (err: Error) => void;
+    };
+
 export interface HtmlStreamOptions {
   env: import('nunjucks').Environment;
   templatePath: string;
   context?: Record<string, unknown>;
-  defer?: Record<string, Promise<unknown> | { promise: Promise<unknown>; template?: string; loadingTemplate?: string }>;
+  defer?: Record<string, DeferredSlot>;
   nonce?: string;
   loadingTemplate?: string | null;
   layouts?: CascadingLayoutInfo[];
+  signal?: AbortSignal;
 }
 
 export interface RenderStreamOptions {
   env?: import('nunjucks').Environment;
-  defer?: Record<string, Promise<unknown> | { promise: Promise<unknown>; template?: string; loadingTemplate?: string }>;
+  defer?: Record<string, DeferredSlot>;
   status?: number;
   flushImmediately?: boolean;
   nonce?: string;
   loadingTemplate?: string | null;
   layouts?: CascadingLayoutInfo[];
+  signal?: AbortSignal;
+  req?: import('http').IncomingMessage | any;
 }
 
 export function createHtmlStream(options: HtmlStreamOptions): import('stream').Readable;
@@ -4322,6 +4360,7 @@ export interface TextStreamOptions {
   contentType?: string;
   headers?: Record<string, string>;
   map?: (chunk: any) => any;
+  signal?: AbortSignal;
 }
 
 export class TextStreamController extends EventEmitter {
@@ -5355,7 +5394,7 @@ export interface RlsPluginOptions {
   enabled?: boolean;
 }
 
-export function rlsPlugin(options?: RlsPluginOptions): import('./src/plugin-manager').Plugin;
+export function rlsPlugin(options?: RlsPluginOptions): import('./core/plugins').Plugin;
 export function createRlsMiddleware(options?: RlsPluginOptions): (req: any, res: any, next: (err?: any) => void) => void;
 
 // --- Structured Cloud Logging ---
@@ -5576,6 +5615,40 @@ export namespace repl {
     ConsoleSession,
   };
 }
+
+// --- Ambient Request & Execution Context (AsyncLocalStorage) ---
+export interface RequestContextStore {
+  req?: any;
+  res?: any;
+  db?: Database | any;
+  user?: any;
+  auth?: any;
+  session?: any;
+  logger?: any;
+  service?: (name: string, input?: any, opts?: any) => Promise<any>;
+  queue?: any;
+  cache?: any;
+  [key: string]: any;
+}
+
+export function runWithContext<T>(context: RequestContextStore, fn: () => T): T;
+export function withContext<T>(overrides: Partial<RequestContextStore>, fn: () => T): T;
+export function getContext(): RequestContextStore | null;
+export function useContext<T = RequestContextStore>(): T;
+export function useDb<T = Database>(): T | null;
+export function useAuth<T = any>(): T | null;
+export function useUser<T = any>(): T | null;
+export function useLogger(): any;
+export function useReq<T = any>(): T | null;
+export function useRes<T = any>(): T | null;
+export function useParams<T = Record<string, string>>(): T;
+export function useQuery<T = Record<string, any>>(): T;
+export function useService<T = any>(name: string, input?: any, opts?: any): Promise<T>;
+export function useQueue(): any;
+export function useCache(): any;
+export function useBreaker(name: string, options?: any): any;
+export function useTransaction<T = any>(callback: (trx: any) => Promise<T>): Promise<T>;
+
 
 
 

@@ -7,6 +7,41 @@
 
 const { parseDurationMs } = require('../utils/time');
 
+/**
+ * Safely races a target promise against a timeout.
+ * - Guarantees the timeout timer is always cleared in finally.
+ * - Attaches a rejection sink (.catch(() => {})) to the target promise to prevent
+ *   unhandled rejections if it rejects after timeout expiration.
+ *
+ * @param {Promise<any>|any} promise
+ * @param {number} timeoutMs
+ * @param {Function} [onTimeout]
+ * @returns {Promise<any>}
+ */
+async function raceWithTimeout(promise, timeoutMs, onTimeout) {
+  let timer = null;
+  const target = Promise.resolve(promise);
+  if (typeof target.catch === 'function') {
+    target.catch(() => {});
+  }
+
+  const timeoutPromise = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      if (typeof onTimeout === 'function') {
+        try { onTimeout(); } catch (_) {}
+      }
+      resolve();
+    }, timeoutMs);
+    if (typeof timer?.unref === 'function') timer.unref();
+  });
+
+  try {
+    return await Promise.race([target, timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 class ShutdownManager {
   /**
    * @param {Object} [options]
@@ -25,6 +60,9 @@ class ShutdownManager {
       signals: Array.isArray(options.signals) ? options.signals : ['SIGINT', 'SIGTERM'],
       logger: options.logger === null ? null : (options.logger || console),
       exitOnSignal: options.exitOnSignal !== false,
+      parallel: Boolean(options.parallel),
+      parallelDisposers: options.parallelDisposers !== undefined ? Boolean(options.parallelDisposers) : Boolean(options.parallel),
+      parallelHooks: options.parallelHooks !== undefined ? Boolean(options.parallelHooks) : Boolean(options.parallel),
     };
 
     this.isShuttingDown = false;
@@ -44,6 +82,17 @@ class ShutdownManager {
 
     /** @type {Map<string, Function>} */
     this._signalListeners = new Map();
+  }
+
+  get parallel() {
+    return this.options.parallel;
+  }
+
+  set parallel(value) {
+    const enabled = Boolean(value);
+    this.options.parallel = enabled;
+    this.options.parallelDisposers = enabled;
+    this.options.parallelHooks = enabled;
   }
 
   get mode() {
@@ -230,52 +279,58 @@ class ShutdownManager {
       if (this._disposers.length > 0) {
         this._log('info', `Disposing ${this._disposers.length} plugins`);
         const reverseDisposers = this._disposers.slice().reverse();
-        for (let i = 0; i < reverseDisposers.length; i++) {
-          const { name, fn } = reverseDisposers[i];
-          const remainingDisposers = reverseDisposers.length - i;
-          const remainingMs = getRemainingTime();
 
-          if (isForce || (deadline > 0 && remainingMs <= 0)) {
+        if (this.options.parallel || this.options.parallelDisposers) {
+          const remainingMs = getRemainingTime();
+          const disposerTimeout = remainingMs > 0 ? remainingMs : (isForce ? 50 : 1000);
+
+          await Promise.allSettled(
+            reverseDisposers.map(async ({ name, fn }) => {
+              try {
+                const res = fn();
+                if (res && typeof res.then === 'function') {
+                  await raceWithTimeout(res, disposerTimeout, () => {
+                    this._log('warn', `Plugin disposer "${name}" timed out after ${disposerTimeout}ms`);
+                  });
+                }
+              } catch (err) {
+                this._log('error', `Error in plugin disposer "${name}":`, err);
+              }
+            })
+          );
+        } else {
+          for (let i = 0; i < reverseDisposers.length; i++) {
+            const { name, fn } = reverseDisposers[i];
+            const remainingDisposers = reverseDisposers.length - i;
+            const remainingMs = getRemainingTime();
+
+            if (isForce || (deadline > 0 && remainingMs <= 0)) {
+              try {
+                const res = fn();
+                if (res && typeof res.then === 'function') {
+                  await raceWithTimeout(res, 50);
+                }
+              } catch (err) {
+                this._log('error', `Error in plugin disposer "${name}":`, err);
+              }
+              continue;
+            }
+
+            const perDisposerTimeout = Math.min(
+              remainingMs,
+              Math.max(100, Math.floor(remainingMs / Math.max(1, remainingDisposers)))
+            );
+
             try {
               const res = fn();
               if (res && typeof res.then === 'function') {
-                await Promise.race([
-                  Promise.resolve(res),
-                  new Promise(r => {
-                    const t = setTimeout(r, 50);
-                    if (typeof t.unref === 'function') t.unref();
-                  })
-                ]);
+                await raceWithTimeout(res, perDisposerTimeout, () => {
+                  this._log('warn', `Plugin disposer "${name}" timed out after ${perDisposerTimeout}ms`);
+                });
               }
             } catch (err) {
               this._log('error', `Error in plugin disposer "${name}":`, err);
             }
-            continue;
-          }
-
-          const perDisposerTimeout = Math.min(
-            remainingMs,
-            Math.max(100, Math.floor(remainingMs / (remainingDisposers + 1)))
-          );
-
-          let timer = null;
-          const timeoutPromise = new Promise((resolve) => {
-            timer = setTimeout(() => {
-              this._log('warn', `Plugin disposer "${name}" timed out after ${perDisposerTimeout}ms`);
-              resolve();
-            }, perDisposerTimeout);
-            if (typeof timer.unref === 'function') timer.unref();
-          });
-
-          try {
-            await Promise.race([
-              Promise.resolve().then(() => fn()),
-              timeoutPromise
-            ]);
-          } catch (err) {
-            this._log('error', `Error in plugin disposer "${name}":`, err);
-          } finally {
-            if (timer) clearTimeout(timer);
           }
         }
       }
@@ -302,13 +357,7 @@ class ShutdownManager {
                 if (typeof adapter.close === 'function') {
                   const closeRes = adapter.close();
                   if (closeRes && typeof closeRes.then === 'function') {
-                    await Promise.race([
-                      Promise.resolve(closeRes),
-                      new Promise((r) => {
-                        const t = setTimeout(r, 25);
-                        if (typeof t.unref === 'function') t.unref();
-                      }),
-                    ]);
+                    await raceWithTimeout(closeRes, 25);
                   }
                 }
               } catch (err) {
@@ -336,6 +385,9 @@ class ShutdownManager {
             }
           });
           const allClosePromise = Promise.all(closePromises);
+          if (typeof allClosePromise.catch === 'function') {
+            allClosePromise.catch(() => {});
+          }
 
           if (deadline > 0) {
             const adapterTimeout = getRemainingTime();
@@ -361,10 +413,13 @@ class ShutdownManager {
               }
             });
 
-            await Promise.race([allClosePromise, timeoutPromise]);
-
-            if (timer) {
-              clearTimeout(timer);
+            try {
+              await Promise.race([allClosePromise, timeoutPromise]);
+            } finally {
+              if (timer) {
+                clearTimeout(timer);
+                timer = null;
+              }
             }
           } else {
             await allClosePromise;
@@ -375,52 +430,58 @@ class ShutdownManager {
       // 3. Run application shutdown hooks (app.onShutdown)
       if (this._hooks.length > 0) {
         this._log('info', `Running ${this._hooks.length} shutdown hooks`);
-        for (let i = 0; i < this._hooks.length; i++) {
-          const hook = this._hooks[i];
-          const remainingHooks = this._hooks.length - i;
-          const remainingMs = getRemainingTime();
 
-          if (isForce || (deadline > 0 && remainingMs <= 0)) {
+        if (this.options.parallel || this.options.parallelHooks) {
+          const remainingMs = getRemainingTime();
+          const hookTimeout = remainingMs > 0 ? remainingMs : (isForce ? 50 : 1000);
+
+          await Promise.allSettled(
+            this._hooks.map(async (hook) => {
+              try {
+                const res = hook();
+                if (res && typeof res.then === 'function') {
+                  await raceWithTimeout(res, hookTimeout, () => {
+                    this._log('warn', `Shutdown hook timed out after ${hookTimeout}ms`);
+                  });
+                }
+              } catch (err) {
+                this._log('error', 'Error in shutdown hook:', err);
+              }
+            })
+          );
+        } else {
+          for (let i = 0; i < this._hooks.length; i++) {
+            const hook = this._hooks[i];
+            const remainingHooks = this._hooks.length - i;
+            const remainingMs = getRemainingTime();
+
+            if (isForce || (deadline > 0 && remainingMs <= 0)) {
+              try {
+                const res = hook();
+                if (res && typeof res.then === 'function') {
+                  await raceWithTimeout(res, 50);
+                }
+              } catch (err) {
+                this._log('error', 'Error in shutdown hook:', err);
+              }
+              continue;
+            }
+
+            const perHookTimeout = Math.min(
+              remainingMs,
+              Math.max(100, Math.floor(remainingMs / Math.max(1, remainingHooks)))
+            );
+
             try {
               const res = hook();
               if (res && typeof res.then === 'function') {
-                await Promise.race([
-                  Promise.resolve(res),
-                  new Promise(r => {
-                    const t = setTimeout(r, 50);
-                    if (typeof t.unref === 'function') t.unref();
-                  })
-                ]);
+                await raceWithTimeout(res, perHookTimeout, () => {
+                  this._log('warn', `Shutdown hook timed out after ${perHookTimeout}ms`);
+                });
               }
             } catch (err) {
               this._log('error', 'Error in shutdown hook:', err);
             }
-            continue;
-          }
-
-          const perHookTimeout = Math.min(
-            remainingMs,
-            Math.max(100, Math.floor(remainingMs / (remainingHooks + 1)))
-          );
-
-          let timer = null;
-          const timeoutPromise = new Promise((resolve) => {
-            timer = setTimeout(() => {
-              this._log('warn', `Shutdown hook timed out after ${perHookTimeout}ms`);
-              resolve();
-            }, perHookTimeout);
-            if (typeof timer.unref === 'function') timer.unref();
-          });
-
-          try {
-            await Promise.race([
-              Promise.resolve().then(() => hook()),
-              timeoutPromise
-            ]);
-          } catch (err) {
-            this._log('error', 'Error in shutdown hook:', err);
-          } finally {
-            if (timer) clearTimeout(timer);
           }
         }
       }

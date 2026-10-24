@@ -344,7 +344,7 @@ describe('High-Performance Cache Engine (core/cache)', () => {
     });
 
     it('returns combined getSizeStats() with tag metrics', () => {
-      const cache = createTaggedLruCache({ maxEntries: 50 });
+      const cache = createTaggedLruCache({ maxEntries: 50, trackBytes: true });
       cache.set('a', 1, { tags: ['tagA', 'shared'] });
       cache.set('b', 2, { tags: ['tagB', 'shared'] });
 
@@ -352,6 +352,36 @@ describe('High-Performance Cache Engine (core/cache)', () => {
       expect(stats.entries).toBe(2);
       expect(stats.tags).toBe(3); // tagA, tagB, shared
       expect(stats.currentBytes).toBeGreaterThan(0);
+    });
+
+    it('bypasses deep byte calculation when byte tracking is disabled (Fast Path)', () => {
+      const cache = createLruCache({ maxEntries: 50 });
+      expect(cache.trackBytes).toBe(false);
+
+      cache.set('heavy', { complex: Array(100).fill('data') });
+
+      expect(cache.currentBytes).toBe(0);
+      expect(cache.get('heavy')).toBeDefined();
+
+      const stats = cache.getStats();
+      expect(stats.currentBytes).toBe(0);
+    });
+
+    it('respects explicit size option even when trackBytes is false', () => {
+      const cache = createLruCache({ maxEntries: 50 });
+      cache.set('item', { foo: 'bar' }, { size: 128 });
+      expect(cache.currentBytes).toBe(128);
+    });
+
+    it('automatically enables trackBytes when maxBytes, maxMemoryMb, or sizeCalculation is configured', () => {
+      const cache1 = createLruCache({ maxBytes: 1000 });
+      expect(cache1.trackBytes).toBe(true);
+
+      const cache2 = createLruCache({ maxMemoryMb: 5 });
+      expect(cache2.trackBytes).toBe(true);
+
+      const cache3 = createLruCache({ sizeCalculation: () => 10 });
+      expect(cache3.trackBytes).toBe(true);
     });
   });
 

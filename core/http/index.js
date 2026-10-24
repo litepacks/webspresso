@@ -7,7 +7,14 @@
 
 const { HttpAdapter } = require('./adapter');
 const { ExpressHttpAdapter, createExpressHttpAdapter } = require('./express-adapter');
-const { runMiddlewares, enrichRouteError, executeApiPipeline, executePagePipeline } = require('./pipeline');
+const {
+  createPipelineRunner,
+  runMiddlewares,
+  enrichRouteError,
+  validateRequestInput,
+  executeApiPipeline,
+  executePagePipeline,
+} = require('./pipeline');
 
 let _honoModule = null;
 function getHonoModule() {
@@ -21,8 +28,10 @@ module.exports = {
   HttpAdapter,
   ExpressHttpAdapter,
   createExpressHttpAdapter,
+  createPipelineRunner,
   runMiddlewares,
   enrichRouteError,
+  validateRequestInput,
   executeApiPipeline,
   executePagePipeline,
 };

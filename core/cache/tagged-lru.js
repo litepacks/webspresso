@@ -60,6 +60,10 @@ class TaggedLruCache {
     return this.lru.maxBytes;
   }
 
+  get trackBytes() {
+    return this.lru.trackBytes;
+  }
+
   get maxEntries() {
     return this.lru.maxEntries;
   }

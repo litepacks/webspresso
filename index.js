@@ -27,12 +27,30 @@ const {
   hasCache,
   resetAppContext,
   setAppContext,
-} = require('./src/app-context');
+  requestContextStorage,
+  runWithContext,
+  withContext,
+  getContext,
+  useContext,
+  useDb,
+  useAuth,
+  useUser,
+  useLogger,
+  useReq,
+  useRes,
+  useParams,
+  useQuery,
+  useService,
+  useQueue,
+  useCache,
+  useBreaker,
+  useTransaction,
+} = require('./core/context');
 const {
   createServiceRegistry,
   defineService,
   ServiceRegistry,
-} = require('./src/services');
+} = require('./core/services');
 const { ShutdownManager, NodeHttpAdapter } = require('./core/shutdown');
 const compression = require('./core/compression');
 const earlyHints = require('./core/early-hints');
@@ -70,7 +88,7 @@ const {
   createPluginManager,
   getPluginManager,
   resetPluginManager
-} = require('./src/plugin-manager');
+} = require('./core/plugins');
 
 // Discovery, Pages, API, Modules & Routing primitives
 const { definePage } = require('./src/pages/define-page');
@@ -116,22 +134,45 @@ module.exports = {
   resetAppContext,
   setAppContext,
 
+  // Ambient Request & Execution Context (AsyncLocalStorage)
+  context: require('./core/context'),
+  appContext: require('./core/context').appContext,
+  requestContext: require('./core/context').requestContext,
+  requestContextStorage,
+  runWithContext,
+  withContext,
+  getContext,
+  useContext,
+  useDb,
+  useAuth,
+  useUser,
+  useLogger,
+  useReq,
+  useRes,
+  useParams,
+  useQuery,
+  useService,
+  useQueue,
+  useCache,
+  useBreaker,
+  useTransaction,
+
   // Services Layer
   services: require('./core/services'),
   createServiceRegistry,
   defineService,
   service: defineService,
   ServiceRegistry,
-  memoize: require('./src/services').memoize,
-  parseTtlMs: require('./src/services').parseTtlMs,
-  stableCacheKey: require('./src/services').stableCacheKey,
-  sanitizeInput: require('./src/services').sanitizeInput,
-  maskSensitiveData: require('./src/services').maskSensitiveData,
-  discoverServices: require('./src/services').discoverServices,
-  filePathToServiceName: require('./src/services').filePathToServiceName,
-  toCamelCase: require('./src/services').toCamelCase,
-  validateServiceInput: require('./src/services').validateServiceInput,
-  executeService: require('./src/services').executeService,
+  memoize: require('./core/services').memoize,
+  parseTtlMs: require('./core/services').parseTtlMs,
+  stableCacheKey: require('./core/services').stableCacheKey,
+  sanitizeInput: require('./core/services').sanitizeInput,
+  maskSensitiveData: require('./core/services').maskSensitiveData,
+  discoverServices: require('./core/services').discoverServices,
+  filePathToServiceName: require('./core/services').filePathToServiceName,
+  toCamelCase: require('./core/services').toCamelCase,
+  validateServiceInput: require('./core/services').validateServiceInput,
+  executeService: require('./core/services').executeService,
 
   // Shutdown & Lifecycle
   ShutdownManager,
@@ -282,6 +323,7 @@ module.exports = {
   HonoHttpAdapter: require('./core/http').HonoHttpAdapter,
   createHonoHttpAdapter: require('./core/http').createHonoHttpAdapter,
   runMiddlewares: require('./core/http').runMiddlewares,
+  createPipelineRunner: require('./core/http').createPipelineRunner,
   enrichRouteError: require('./core/http').enrichRouteError,
   executeApiPipeline: require('./core/http').executeApiPipeline,
   executePagePipeline: require('./core/http').executePagePipeline,
@@ -419,12 +461,12 @@ Object.defineProperties(module.exports, {
   ...Object.getOwnPropertyDescriptors(plugins),
 
   // Built-in Services Creators (lazy loaded)
-  createAuthServices: { get: () => require('./src/services').createAuthServices, enumerable: true, configurable: true },
-  createMailServices: { get: () => require('./src/services').createMailServices, enumerable: true, configurable: true },
-  createMediaServices: { get: () => require('./src/services').createMediaServices, enumerable: true, configurable: true },
-  createFileManagerServices: { get: () => require('./src/services').createFileManagerServices, enumerable: true, configurable: true },
-  createSystemServices: { get: () => require('./src/services').createSystemServices, enumerable: true, configurable: true },
-  createExchangeServices: { get: () => require('./src/services').createExchangeServices, enumerable: true, configurable: true },
+  createAuthServices: { get: () => require('./core/services').createAuthServices, enumerable: true, configurable: true },
+  createMailServices: { get: () => require('./core/services').createMailServices, enumerable: true, configurable: true },
+  createMediaServices: { get: () => require('./core/services').createMediaServices, enumerable: true, configurable: true },
+  createFileManagerServices: { get: () => require('./core/services').createFileManagerServices, enumerable: true, configurable: true },
+  createSystemServices: { get: () => require('./core/services').createSystemServices, enumerable: true, configurable: true },
+  createExchangeServices: { get: () => require('./core/services').createExchangeServices, enumerable: true, configurable: true },
 
   // ORM & Database Layer (lazy loaded)
   orm: { get: () => getOrm(), enumerable: true, configurable: true },
@@ -432,6 +474,8 @@ Object.defineProperties(module.exports, {
   createInMemoryDatabase: { get: () => getOrm().createInMemoryDatabase, enumerable: true, configurable: true },
   defineModel: { get: () => getOrm().defineModel, enumerable: true, configurable: true },
   zdb: { get: () => getOrm().zdb, enumerable: true, configurable: true },
+  z: { get: () => getOrm().z, enumerable: true, configurable: true },
+  zod: { get: () => getOrm().zod, enumerable: true, configurable: true },
   BaseRepository: { get: () => getOrm().BaseRepository, enumerable: true, configurable: true },
   Repository: { get: () => getOrm().Repository, enumerable: true, configurable: true },
   createRepository: { get: () => getOrm().createRepository, enumerable: true, configurable: true },

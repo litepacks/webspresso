@@ -22,8 +22,9 @@ const {
 } = require('./resilience');
 const { createTaggedLruCache } = require('./cache');
 const { createEventDispatcher, loadListeners } = require('./events');
-const { createPluginManager } = require('../src/plugin-manager');
-const { createServiceRegistry } = require('../src/services');
+const { createPluginManager } = require('./plugins');
+const { createServiceRegistry } = require('./services');
+const { getContext } = require('./context/request');
 
 let isWebspressoPackageCache = null;
 function checkIsWebspressoPackage() {
@@ -153,7 +154,7 @@ class CoreApp {
 
     // Auto-register built-in auth services if database is present
     if (options.db) {
-      const { createAuthServices } = require('../src/services/builtins/auth');
+      const { createAuthServices } = require('./services/builtins/auth');
       const authServices = createAuthServices({ db: options.db });
       for (const [name, def] of Object.entries(authServices)) {
         if (!this.serviceRegistry.has(name)) {
@@ -163,7 +164,7 @@ class CoreApp {
     }
 
     // Auto-register built-in system services (health, cleanup, cache flush, info)
-    const { createSystemServices } = require('../src/services/builtins/system');
+    const { createSystemServices } = require('./services/builtins/system');
     const systemServices = createSystemServices({
       db: options.db ?? null,
       serviceRegistry: this.serviceRegistry,
@@ -414,7 +415,8 @@ class CoreApp {
       callOpts = maybeOpts || {};
     } else {
       callOpts = ctxOrOpts || {};
-      const base = callOpts.context || callOpts.ctx || this.context;
+      const ambientStore = getContext();
+      const base = callOpts.context || callOpts.ctx || ambientStore || this.context;
       if (callOpts.user !== undefined || callOpts.auth !== undefined) {
         callCtx = Object.create(base);
         if (callOpts.user !== undefined) callCtx.user = callOpts.user;

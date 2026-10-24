@@ -1,16 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { escapeHtml, unescapeHtml } from '../../../core/utils/html';
-import escapeHtmlCallable from '../../../core/utils/escape-html';
+import coreUtils from '../../../core/utils';
 import { utils } from '../../../src/helpers';
 import webspresso from '../../../index';
 
 describe('Zero-Dependency HTML Utilities (core/utils/html)', () => {
-  it('exports escapeHtml and unescapeHtml across core, helpers.utils, and root webspresso', () => {
+  it('exports escapeHtml and unescapeHtml across core, core/utils index, helpers.utils, and root webspresso', () => {
     expect(typeof escapeHtml).toBe('function');
     expect(typeof unescapeHtml).toBe('function');
-    expect(typeof escapeHtmlCallable).toBe('function');
-    expect(typeof escapeHtmlCallable.escapeHtml).toBe('function');
-    expect(typeof escapeHtmlCallable.unescapeHtml).toBe('function');
+    expect(typeof coreUtils.escapeHtml).toBe('function');
+    expect(typeof coreUtils.unescapeHtml).toBe('function');
     expect(typeof utils.escapeHtml).toBe('function');
     expect(typeof utils.unescapeHtml).toBe('function');
     expect(typeof webspresso.escapeHtml).toBe('function');

@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { walkDirectory, walkDirectoryDetailed, DEFAULT_TEST_SUFFIXES } from '../../../core/utils/fs';
-import walkReexport from '../../../core/utils/walk';
+import coreUtils from "../../../core/utils";
 import { utils, walkDirectory as indexWalkDirectory, walkDirectoryDetailed as indexWalkDetailed } from '../../../index';
 import { createTempDir, cleanupDir } from '../../utils/fs';
 
@@ -171,9 +171,9 @@ describe('core/utils/fs - Directory Walking & Discovery', () => {
   });
 
   it('provides direct and index re-exports consistently', () => {
-    expect(typeof walkReexport).toBe('function');
-    expect(typeof walkReexport.walkDirectory).toBe('function');
-    expect(typeof walkReexport.walkDirectoryDetailed).toBe('function');
+    expect(typeof coreUtils.walkDirectory).toBe('function');
+    expect(typeof coreUtils.walkDirectory).toBe('function');
+    expect(typeof coreUtils.walkDirectoryDetailed).toBe('function');
 
     expect(typeof indexWalkDirectory).toBe('function');
     expect(typeof indexWalkDetailed).toBe('function');
