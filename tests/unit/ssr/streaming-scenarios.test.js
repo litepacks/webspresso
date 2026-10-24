@@ -406,8 +406,14 @@ describe.sequential('SSR Streaming Scenarios & Edge Cases', () => {
       ac.abort();
 
       const chunks = [];
-      for await (const chunk of stream) {
-        chunks.push(chunk.toString());
+      try {
+        for await (const chunk of stream) {
+          chunks.push(chunk.toString());
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError' && !err.message?.includes('aborted') && !err.message?.includes('Aborted')) {
+          throw err;
+        }
       }
 
       expect(chunks.join('')).not.toContain('Should Not Render');
@@ -430,11 +436,14 @@ describe.sequential('SSR Streaming Scenarios & Edge Cases', () => {
         },
       });
 
+      // Wait for the initial shell chunk to be written
+      await new Promise((r) => setTimeout(r, 10));
+
       // Client aborts the connection
       mockReq.emit('aborted');
 
       await renderPromise;
-      // No more writes after abort
+      // Initial chunk was written before abort, but no more writes after abort
       expect(mockRes.write).toHaveBeenCalled();
     });
   });

@@ -662,11 +662,16 @@ describe('HTTP Pipeline & Adapters Layer (core/http)', () => {
         setHeader: vi.fn(),
         write: (chunk) => writtenChunks.push(chunk.toString()),
         end: vi.fn(),
+        send: vi.fn(),
         on: vi.fn(),
       };
 
       const mockNunjucks = {
-        render: vi.fn((tpl, ctx, cb) => cb(null, '<main>shell</main>')),
+        render: vi.fn((tpl, ctx, cb) => {
+          const html = '<main>shell</main>';
+          if (typeof cb === 'function') return cb(null, html);
+          return html;
+        }),
       };
 
       const pageDef = {

@@ -597,7 +597,7 @@ Object.defineProperties(module.exports, {
   isServerlessEnvironment: { get: () => require('./core/orm').isServerlessEnvironment, enumerable: true, configurable: true },
 
   // Validation
-  z: { get: () => require('./core/validation').z, enumerable: true, configurable: true },
+  validation: { get: () => require('./core/validation'), enumerable: true, configurable: true },
 
   // Background jobs & queue
   queue: { get: () => require('./core/queue'), enumerable: true, configurable: true },

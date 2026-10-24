@@ -324,7 +324,7 @@ class EventDispatcher extends EventEmitter {
       } catch (err) {
         // Emit error on dispatcher or log
         if (this.listenerCount('error') > 0) {
-          super.emit('error', err);
+          this.emit('error', err);
         } else if (this.logger && typeof this.logger.error === 'function') {
           this.logger.error(`[EventDispatcher] Error in listener for event "${event}":`, err);
         }
@@ -362,7 +362,7 @@ class EventDispatcher extends EventEmitter {
         return await listener.handler(payload, meta);
       } catch (err) {
         if (this.listenerCount('error') > 0) {
-          super.emit('error', err);
+          this.emit('error', err);
         } else if (this.logger && typeof this.logger.error === 'function') {
           this.logger.error(`[EventDispatcher] Error in async listener for event "${event}":`, err);
         }
@@ -415,7 +415,7 @@ class EventDispatcher extends EventEmitter {
         results.push(res);
       } catch (err) {
         if (this.listenerCount('error') > 0) {
-          super.emit('error', err);
+          this.emit('error', err);
         } else if (this.logger && typeof this.logger.error === 'function') {
           this.logger.error(`[EventDispatcher] Error in serial listener for event "${event}":`, err);
         }
@@ -457,7 +457,7 @@ class EventDispatcher extends EventEmitter {
         }
       } catch (err) {
         if (this.listenerCount('error') > 0) {
-          super.emit('error', err);
+          this.emit('error', err);
         } else if (this.logger && typeof this.logger.error === 'function') {
           this.logger.error(`[EventDispatcher] Error in waterfall listener for event "${event}":`, err);
         }
@@ -579,7 +579,7 @@ class EventDispatcher extends EventEmitter {
           `[EventDispatcher] Cannot queue job '${jobName}' for event '${event}'. No QueueManager is attached.`
         );
         if (this.listenerCount('error') > 0) {
-          super.emit('error', err);
+          this.emit('error', err);
         } else if (this.logger && typeof this.logger.error === 'function') {
           this.logger.error(err.message);
         }
@@ -589,7 +589,7 @@ class EventDispatcher extends EventEmitter {
       if (dispatchPromise && typeof dispatchPromise.catch === 'function') {
         dispatchPromise.catch((dispatchErr) => {
           if (this.listenerCount('error') > 0) {
-            super.emit('error', dispatchErr);
+            this.emit('error', dispatchErr);
           } else if (this.logger && typeof this.logger.error === 'function') {
             this.logger.error(`[EventDispatcher] Failed to dispatch queued job '${jobName}':`, dispatchErr);
           }

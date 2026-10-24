@@ -36,7 +36,7 @@ export default defineConfig({
     include: ['tests/**/*.test.js'],
     exclude: ['node_modules', 'dist'],
     pool: 'forks',
-    maxForks: Math.max(1, (os.cpus()?.length || 4) - 1),
+    maxForks: Math.min(4, Math.max(1, (os.cpus()?.length || 4) - 1)),
     minForks: 1,
     coverage: {
       provider: 'v8',

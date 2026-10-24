@@ -352,10 +352,23 @@ function renderStream(res, templatePath, context = {}, options = {}) {
       if (!finished) {
         finished = true;
         if (!res.headersSent) {
-          res.status(500).send('Streaming Render Error');
+          if (typeof res.status === 'function') {
+            res.status(500);
+          } else {
+            res.statusCode = 500;
+          }
+          if (typeof res.send === 'function') {
+            res.send('Streaming Render Error');
+          } else if (typeof res.end === 'function') {
+            res.end('Streaming Render Error');
+          }
         } else if (!res.writableEnded && !res.destroyed) {
-          res.write(`<!-- Streaming Error: ${err.message} -->`);
-          res.end();
+          if (typeof res.write === 'function') {
+            res.write(`<!-- Streaming Error: ${err.message} -->`);
+          }
+          if (typeof res.end === 'function') {
+            res.end();
+          }
         }
         reject(err);
       }

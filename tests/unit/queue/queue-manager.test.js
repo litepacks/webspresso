@@ -233,12 +233,15 @@ describe('QueueManager Core Engine', () => {
       await wait(10);
     });
 
-    queue.on('idle', () => {
-      idleEmitted = true;
+    const idlePromise = new Promise((resolve) => {
+      queue.on('idle', () => {
+        idleEmitted = true;
+        resolve();
+      });
     });
 
     await queue.dispatch('test.idle', {});
-    await new Promise((resolve) => queue.on('job:completed', resolve));
+    await idlePromise;
 
     expect(idleEmitted).toBe(true);
   });
