@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.108] - 2026-10-24
+
+### Added
+- **Ambient Context & Composable Hooks (`core/context/`)**:
+  - Implemented zero-dependency execution context powered by `AsyncLocalStorage` (`app-context.js`, `request.js`).
+  - Added composable hooks: `useContext`, `useDb`, `useAuth`, `useUser`, `useService`, `useLogger`, `useReq`, `useRes`, `useParams`, `useQuery`, `useTransaction`, and `withContext` to eliminate prop-drilling across loaders, services, models, and workers.
+- **Dedicated Core Validation Module (`core/validation/`)**:
+  - Modularized schema compilation, application, and caching into `core/validation/compiler.js`, `core/validation/apply.js`, and `core/validation/cache.js`.
+  - Added unified `validation` export on framework root.
+
+### Changed
+- **Core Architecture Modularization (`core/services/`, `core/plugins/`)**:
+  - Migrated services architecture, discovery, loader, memoization, executor, validator, and built-ins (`auth`, `exchange`, `file-manager`, `mail`, `media`, `system`) into `core/services/`.
+  - Migrated `PluginManager` into `core/plugins/plugin-manager.js` for clean separation from legacy source paths.
+  - Aligned root export properties and unified `z` / `zdb` schemas.
+- **CI Test Suite & Worker Fork Stability (`vitest.config.mjs`)**:
+  - Capped `maxForks` to prevent worker starvation and process initialization timeouts under high V8 coverage concurrency.
+  - Adjusted test liveness probe tolerance under full-suite CPU loads in `tests/integration/real-world-app.test.js`.
+
+### Fixed
+- **Decoupled Events & Error Routing (`core/events/dispatcher.js`)**:
+  - Fixed error propagation in `EventDispatcher` by routing listener exceptions to `this.emit('error', ...)` instead of unhandled superclass emitter.
+- **SSR Streaming Defense (`core/ssr/stream.js`)**:
+  - Hardened error handling in `renderStream` with defensive checks for `res.status`, `res.send`, `res.end`, and `res.statusCode` across diverse server response environments.
+  - Handled `AbortError` and race conditions gracefully in streaming scenarios.
+- **Queue Manager Idle Race Condition (`tests/unit/queue/queue-manager.test.js`)**:
+  - Fixed idle event assertion race by awaiting queue idle event directly.
+- **HTTP Pipeline Synchronous Render Fallback (`core/http/pipeline.js`, `tests/unit/core/http-pipeline.test.js`)**:
+  - Supported synchronous 2-argument render calls alongside asynchronous 3-argument callbacks.
+
 ## [0.0.107] - 2026-10-23
 
 ### Added
