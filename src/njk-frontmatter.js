@@ -17,6 +17,30 @@ const FRONTMATTER_BLOCK = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
 
 /** @typedef {{ metaPatch: Record<string, unknown>, dataPatch: Record<string, unknown> }} Patch */
 
+/**
+ * Zero-allocation bounded Map LRU helpers
+ */
+function lruGet(map, key) {
+  const val = map.get(key);
+  if (val !== undefined) {
+    map.delete(key);
+    map.set(key, val);
+  }
+  return val;
+}
+
+function lruSet(map, key, val, maxSize) {
+  if (map.has(key)) {
+    map.delete(key);
+  } else if (map.size >= maxSize) {
+    const oldestKey = map.keys().next().value;
+    map.delete(oldestKey);
+  }
+  map.set(key, val);
+}
+
+const MAX_ROUTE_CACHE = 2000;
+
 const prodRouteCache = new Map();
 /** @type {Map<string, { mtimeMs: number, cached: LoadedNjk }>} */
 const devRouteCache = new Map();
@@ -117,7 +141,7 @@ function readAndParse(absPath, isDevLike = false) {
   if (isDevLike) {
     return loaded;
   }
-  prodRouteCache.set(absPath, loaded);
+  lruSet(prodRouteCache, absPath, loaded, MAX_ROUTE_CACHE);
   return loaded;
 }
 
@@ -127,7 +151,7 @@ function readAndParse(absPath, isDevLike = false) {
  */
 function loadNjkRouteTemplate(absPath, isDev) {
   if (!isDev) {
-    const cached = prodRouteCache.get(absPath);
+    const cached = lruGet(prodRouteCache, absPath);
     if (cached) {
       return cached;
     }
@@ -138,7 +162,7 @@ function loadNjkRouteTemplate(absPath, isDev) {
         metaPatch: {},
         dataPatch: {},
       };
-      prodRouteCache.set(absPath, empty);
+      lruSet(prodRouteCache, absPath, empty, MAX_ROUTE_CACHE);
       return empty;
     }
     return readAndParse(absPath, false);
@@ -156,10 +180,12 @@ function loadNjkRouteTemplate(absPath, isDev) {
   const stat = fs.statSync(absPath);
   const prev = devRouteCache.get(absPath);
   if (prev && prev.mtimeMs >= stat.mtimeMs) {
+    devRouteCache.delete(absPath);
+    devRouteCache.set(absPath, prev);
     return prev.cached;
   }
   const fresh = readAndParse(absPath, true);
-  devRouteCache.set(absPath, { mtimeMs: stat.mtimeMs, cached: fresh });
+  lruSet(devRouteCache, absPath, { mtimeMs: stat.mtimeMs, cached: fresh }, MAX_ROUTE_CACHE);
   return fresh;
 }
 

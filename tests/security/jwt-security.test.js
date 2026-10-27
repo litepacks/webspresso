@@ -51,4 +51,26 @@ describe('Security: JWT Implementation & Signature Verification', () => {
     // Mismatched audience
     expect(() => verifyJwt(token, SECRET, { audience: 'evil-audience' })).toThrow(/Invalid JWT audience/i);
   });
+
+  it('should reject tokens before nbf (not before) claim', () => {
+    const futureSec = Math.floor(Date.now() / 1000) + 120; // 2 minutes in future
+    const token = signJwt({ id: 99, nbf: futureSec }, SECRET);
+
+    expect(() => verifyJwt(token, SECRET)).toThrow(/not active yet/i);
+
+    // Should pass with sufficient leeway
+    const verified = verifyJwt(token, SECRET, { leeway: 150 });
+    expect(verified.id).toBe(99);
+  });
+
+  it('should respect clock tolerance / leeway for expired tokens', () => {
+    const pastSec = Math.floor(Date.now() / 1000) - 10; // expired 10s ago
+    const token = signJwt({ id: 100, exp: pastSec }, SECRET, { expiresIn: false });
+
+    expect(() => verifyJwt(token, SECRET)).toThrow(/expired/i);
+
+    // Should pass with 30s leeway
+    const verified = verifyJwt(token, SECRET, { leeway: 30 });
+    expect(verified.id).toBe(100);
+  });
 });

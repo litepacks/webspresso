@@ -84,21 +84,28 @@ webspresso --help
 If you are adding Webspresso to an existing Node.js project:
 
 ```bash
-npm install webspresso express nunjucks
+npm install webspresso
 ```
 
-Add optional peer dependencies as needed for your specific feature set:
+> **Note:** Express, Nunjucks, Knex, Zod, and Session management are built directly into Webspresso as bundled dependencies. You do not need to install them separately.
+
+Add optional database drivers or features as needed for your project:
 
 ```bash
-# For SQLite database support
-npm install better-sqlite3 knex zod
+# For SQLite database support (local / embedded)
+npm install better-sqlite3
 
 # For PostgreSQL database support
-npm install pg knex zod
+npm install pg
 
-# For Session authentication
-npm install express-session connect-sqlite3
+# For MySQL database support
+npm install mysql2
+
+# For image processing in file uploads (optional)
+npm install sharp
 ```
+
+> **Authentication Note:** Session management (`req.session`), JWT tokens (`core/auth/jwt`), and access control (`req.auth`) are handled natively by Webspresso. You do **not** need to install `express-session`, `connect-sqlite3`, or `passport`.
 
 ---
 

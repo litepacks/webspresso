@@ -118,10 +118,20 @@ function verifyJwt(token, secret, options = {}) {
       verifiedJwtCache.set(cacheKey, cached);
 
       const nowSec = Math.floor(Date.now() / 1000);
+      const leewaySec = typeof options.leeway === 'number'
+        ? options.leeway
+        : (typeof options.clockTolerance === 'number' ? options.clockTolerance : 0);
+
       if (!options.ignoreExpiration && typeof cached.exp === 'number') {
-        if (nowSec >= cached.exp) {
+        if (nowSec >= cached.exp + leewaySec) {
           verifiedJwtCache.delete(cacheKey);
           throw new Error('JWT token has expired');
+        }
+      }
+
+      if (typeof cached.nbf === 'number') {
+        if (nowSec + leewaySec < cached.nbf) {
+          throw new Error('JWT token is not active yet');
         }
       }
 
@@ -188,10 +198,19 @@ function verifyJwt(token, secret, options = {}) {
 
   // 4. Check claims
   const nowSec = Math.floor(Date.now() / 1000);
+  const leewaySec = typeof options.leeway === 'number'
+    ? options.leeway
+    : (typeof options.clockTolerance === 'number' ? options.clockTolerance : 0);
 
   if (!options.ignoreExpiration && typeof payload.exp === 'number') {
-    if (nowSec >= payload.exp) {
+    if (nowSec >= payload.exp + leewaySec) {
       throw new Error('JWT token has expired');
+    }
+  }
+
+  if (typeof payload.nbf === 'number') {
+    if (nowSec + leewaySec < payload.nbf) {
+      throw new Error('JWT token is not active yet');
     }
   }
 

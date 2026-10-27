@@ -1,6 +1,6 @@
 # Webspresso Project Guidelines & Rules
 
-Webspresso is a lightweight, zero-dependency-sprawl full-stack Node.js SSR & API framework featuring Next.js/Nuxt-style file-based routing, an intuitive Knex-based ORM, a modular plugin ecosystem, and a customizable Mithril.js SPA Admin Panel.
+Webspresso is a lightweight full-stack Node.js SSR & API framework featuring Next.js/Nuxt-style file-based routing, an intuitive Knex-based ORM, a modular plugin ecosystem, and a customizable Mithril.js SPA Admin Panel.
 
 ---
 
@@ -23,9 +23,11 @@ When tasked with a feature or bugfix, **immediately consult the corresponding to
 | **Cloud Secrets (GCP & AWS Secret Manager)** | [`.agents/SECRETS.md`](.agents/SECRETS.md) | `core/secrets/`, `bin/commands/secrets-pull.js` |
 | **Cloud Metrics & Distributed Tracing** | [`.agents/METRICS.md`](.agents/METRICS.md) | `core/metrics/`, `/metrics` |
 | **Cloud Migration Jobs (Zero-Downtime DB Deploy)** | [`.agents/MIGRATION_JOBS.md`](.agents/MIGRATION_JOBS.md) | `bin/commands/add-migration-job.js`, `core/orm/migrate-cloud.js` |
-| **Rate Limiting Engine (Zero-Dependency & Redis)** | [`.agents/RATE_LIMIT.md`](.agents/RATE_LIMIT.md) | `core/rate-limit/` |
+| **Rate Limiting Engine (In-Memory & Redis)** | [`.agents/RATE_LIMIT.md`](.agents/RATE_LIMIT.md) | `core/rate-limit/` |
 | **Feature Flags & Canary Splitter (`core/flags`)** | [`.agents/FLAGS.md`](.agents/FLAGS.md) | `core/flags/` |
 | **Ambient Context & Composable Hooks (`core/context`)** | [`.agents/CONTEXT.md`](.agents/CONTEXT.md) | `core/context/` |
+| **Form Builder, ModelForms & Flash (`core/forms`)** | [`.agents/FORMS.md`](.agents/FORMS.md) | `core/forms/`, `fsy.field`, `fsy.formFor` |
+| **AI Token Streaming & SSE (`core/stream`)** | [`.agents/STREAMING.md`](.agents/STREAMING.md) | `core/stream/`, `core/sse/`, `res.streamText` |
 | **API Signatures & Types Verification** | [`index.d.ts`](index.d.ts) | **Canonical Ground Truth** |
 
 ---
@@ -36,7 +38,7 @@ Every coding agent working on Webspresso **MUST** follow this 4-step execution d
 
 1. **Discover & Triage**: Identify the relevant topic guide above and inspect existing similar files in the workspace (e.g. `pages/api/`, `models/`, `services/`).
 2. **Contract Adherence**: Follow the exact module contract exported by the framework (`{ schema, middleware, handler }` for routes, `defineModel` for ORM, `defineService` for services).
-3. **Zero External Dependencies**: Use native Node.js standard modules (`crypto`, `path`, `fs`, `zlib`, `events`) and built-in framework utilities. NEVER install ad-hoc npm packages for auth, jwt, routing, or templating.
+3. **Minimal External Dependencies**: Rely on native Node.js standard modules (`crypto`, `path`, `fs`, `zlib`, `events`) and built-in framework utilities. NEVER install ad-hoc npm packages for auth, jwt, routing, or templating.
 4. **Targeted Verification**: Run the specific Vitest test file (`npx vitest run tests/...`) to confirm zero regressions before marking the task complete.
 
 ---
@@ -65,15 +67,15 @@ Every coding agent working on Webspresso **MUST** follow this 4-step execution d
 - **Asset Versioning & Cache-Busting**: Configured via `createApp({ assets: { version, manifestPath, prefix } })`. Supports query-string versioning (`?v=1.2.3`), Vite/Webpack manifest resolution (`.vite/manifest.json`), CDN prefixing, and `fsy.asset()`, `fsy.css()`, `fsy.js()`, `fsy.img()` template helpers.
 - **Framework Exceptions & Central Error Boundary**: Built-in exception hierarchy (`WebspressoError`, `HttpError`, `ValidationError`, `SecurityError`, `RequestAbortedError`, `ConfigurationError`, `PluginError`, `RouteNotFoundError`) and custom handler hook (`app.setErrorHandler`). Async route handlers automatically propagate rejected promises. Production responses mask 500 stack traces and error details.
 - **Graceful Shutdown & Lifecycle Management**: Configured via `createApp({ server: { shutdown: { enabled: true, mode: 'graceful'|'force', timeout: 10000 } } })`. Socket connection tracking, request draining with `Connection: close`, and reverse-order plugin disposer cleanup.
-- **HTTP Response Compression**: Zero-dependency streaming zlib compression configured via `createApp({ server: { compression: true } })` with Brotli (`br`), Gzip (`gzip`), Deflate (`deflate`), threshold buffering (1 KB), and route-level opt-out (`res.compress(false)`).
-- **HTTP 103 Early Hints & Critical Asset Preloading**: Zero-dependency RFC 8288 / RFC 8297 Early Hints dispatcher configured via `createApp({ earlyHints: true })` or per-page `definePage({ earlyHints })`. Emits informational 103 status code with route CSS/JS preloads before async `load()` finishes to minimize TTFB, FCP and LCP, with safe fallback and `res.earlyHints(links)` / `ctx.earlyHints(links)` helpers.
-- **Configurable Payload Size Limits & DoS Protection**: Zero-dependency body limit enforcement configured via `createApp({ limits: { json: '1mb', urlencoded: '1mb', raw: false, text: false, parameterLimit: 1000, captureRawBody: false } })` or shorthand `limits: '5mb'`, with automatic HTTP 413 `PayloadTooLargeError` and HTTP 400 `BadRequestError` mapping, route overrides (`limits.routes`), streaming bypass (`limits.exclude`), and raw body capture on `req.rawBody` for webhook signatures.
-- **Native Cloud & Kubernetes Health & Readiness Probes**: Zero-dependency RFC-compliant liveness (`/healthz`), readiness (`/readyz`), and combined diagnostic (`/health`) endpoints configured via `createApp({ healthCheck: true })`. Includes non-blocking event loop lag monitoring (`perf_hooks.monitorEventLoopDelay`), database/queue connectivity tests, and automatic HTTP 503 draining integration with `ShutdownManager` when pods enter graceful termination.
-- **High-Performance In-Memory LRU & Tagged Cache Engine**: Zero-dependency memory-bounded caching (`core/cache`) configured via `createApp({ cache: { maxEntries: 1000, maxMemoryMb: 50, defaultTtl: '15m' } })` or shorthand `cache: true|false`. Provides O(1) LRU eviction, byte budget constraints preventing OOM, leak-free tag invalidation (`TaggedLruCache`), stampede protection (`getOrSet`), and powers ORM query caching and Zod schema caching.
-- **Enterprise Resilience & Fault Tolerance (Circuit Breaker & Retry Engine)**: Zero-dependency resilience system (`core/resilience`) featuring a three-state `CircuitBreaker` (`CLOSED`, `OPEN`, `HALF_OPEN`), rolling window failure rate tracking, per-call execution timeouts, graceful fallbacks, and an exponential backoff retry engine (`retry`, `withRetry`) with randomized jitter and transient error detection (`ECONNRESET`, 429, 5xx). Seamlessly integrated into the Services Layer (`defineService({ circuitBreaker, retry })`) and exposed via `app.breakers`, `app.getBreaker()`, `req.breaker()`, and `req.retry()`.
-- **Stateless Scale-Out & Database Connection Pool Management**: Zero-dependency Redis session store (`createRedisSessionStore`), distributed device tracking (`createRedisSessionTracker`), lightweight RESP Redis client, serverless DB connection pool optimizer (`normalizeServerlessPoolConfig`), and scale-out audits in `webspresso deploy:check`. Automatically activates distributed sessions when `REDIS_URL` or `SESSION_STORE=redis` is configured.
-- **Enterprise Cloud Secrets Management**: Zero-dependency integration with Google Cloud Secret Manager & AWS Secrets Manager/SSM Parameter Store (`core/secrets`), in-memory caching with TTL (`cacheTtl: '5m'`), JSON secret bundle unpacking, dot-notation subkeys (`app.DB_PASSWORD`), bootstrap environment hydration (`loadSecrets()`), and local sync CLI (`webspresso secrets:pull`).
-- **Cloud Metrics & Distributed Tracing**: Zero-dependency Prometheus exposition format (`/metrics`), JSON telemetry (`/metrics.json`), HTTP latency histograms, Node.js event loop/memory/pool/cache collectors, and W3C `traceparent` & `x-trace-id` propagation (`core/metrics`) configured via `createApp({ metrics: true })`.
+- **HTTP Response Compression**: Built-in streaming zlib compression configured via `createApp({ server: { compression: true } })` with Brotli (`br`), Gzip (`gzip`), Deflate (`deflate`), threshold buffering (1 KB), and route-level opt-out (`res.compress(false)`).
+- **HTTP 103 Early Hints & Critical Asset Preloading**: Built-in RFC 8288 / RFC 8297 Early Hints dispatcher configured via `createApp({ earlyHints: true })` or per-page `definePage({ earlyHints })`. Emits informational 103 status code with route CSS/JS preloads before async `load()` finishes to minimize TTFB, FCP and LCP, with safe fallback and `res.earlyHints(links)` / `ctx.earlyHints(links)` helpers.
+- **Configurable Payload Size Limits & DoS Protection**: Built-in body limit enforcement configured via `createApp({ limits: { json: '1mb', urlencoded: '1mb', raw: false, text: false, parameterLimit: 1000, captureRawBody: false } })` or shorthand `limits: '5mb'`, with automatic HTTP 413 `PayloadTooLargeError` and HTTP 400 `BadRequestError` mapping, route overrides (`limits.routes`), streaming bypass (`limits.exclude`), and raw body capture on `req.rawBody` for webhook signatures.
+- **Native Cloud & Kubernetes Health & Readiness Probes**: Built-in RFC-compliant liveness (`/healthz`), readiness (`/readyz`), and combined diagnostic (`/health`) endpoints configured via `createApp({ healthCheck: true })`. Includes non-blocking event loop lag monitoring (`perf_hooks.monitorEventLoopDelay`), database/queue connectivity tests, and automatic HTTP 503 draining integration with `ShutdownManager` when pods enter graceful termination.
+- **High-Performance In-Memory LRU & Tagged Cache Engine**: Memory-bounded caching (`core/cache`) configured via `createApp({ cache: { maxEntries: 1000, maxMemoryMb: 50, defaultTtl: '15m' } })` or shorthand `cache: true|false`. Provides O(1) LRU eviction, byte budget constraints preventing OOM, leak-free tag invalidation (`TaggedLruCache`), stampede protection (`getOrSet`), and powers ORM query caching and Zod schema caching.
+- **Enterprise Resilience & Fault Tolerance (Circuit Breaker & Retry Engine)**: Built-in resilience system (`core/resilience`) featuring a three-state `CircuitBreaker` (`CLOSED`, `OPEN`, `HALF_OPEN`), rolling window failure rate tracking, per-call execution timeouts, graceful fallbacks, and an exponential backoff retry engine (`retry`, `withRetry`) with randomized jitter and transient error detection (`ECONNRESET`, 429, 5xx). Seamlessly integrated into the Services Layer (`defineService({ circuitBreaker, retry })`) and exposed via `app.breakers`, `app.getBreaker()`, `req.breaker()`, and `req.retry()`.
+- **Stateless Scale-Out & Database Connection Pool Management**: Redis session store (`createRedisSessionStore`), distributed device tracking (`createRedisSessionTracker`), lightweight RESP Redis client, serverless DB connection pool optimizer (`normalizeServerlessPoolConfig`), and scale-out audits in `webspresso deploy:check`. Automatically activates distributed sessions when `REDIS_URL` or `SESSION_STORE=redis` is configured.
+- **Enterprise Cloud Secrets Management**: Built-in integration with Google Cloud Secret Manager & AWS Secrets Manager/SSM Parameter Store (`core/secrets`), in-memory caching with TTL (`cacheTtl: '5m'`), JSON secret bundle unpacking, dot-notation subkeys (`app.DB_PASSWORD`), bootstrap environment hydration (`loadSecrets()`), and local sync CLI (`webspresso secrets:pull`).
+- **Cloud Metrics & Distributed Tracing**: Built-in Prometheus exposition format (`/metrics`), JSON telemetry (`/metrics.json`), HTTP latency histograms, Node.js event loop/memory/pool/cache collectors, and W3C `traceparent` & `x-trace-id` propagation (`core/metrics`) configured via `createApp({ metrics: true })`.
 - **Cloud Migration Jobs & Zero-Downtime Database Deploy**: Pre-deploy Cloud Run Jobs, AWS ECS Fargate one-off tasks, and Kubernetes Helm hooks (`add:migration-job`), safe retry connections, and automatic stale lock healing (`core/orm/migrate-cloud`, `webspresso db:migrate --safe`).
 - **Custom Error & 404 Pages**: Configured via `createApp({ errorPages: { notFound, serverError, timeout } })`. Supports template paths (e.g. `notFound: '404.njk'`) or custom handler functions, passing `{ fsy, locale, isDev, url, method }` to templates.
 - **Cold Start & High-Performance Optimizations**:
@@ -151,7 +153,7 @@ Every coding agent working on Webspresso **MUST** follow this 4-step execution d
 Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register(ctx)`, `onRoutesReady(ctx)`):
 - `adminPanelPlugin`: Model CRUD, custom pages, widgets, user management.
 - `fileManagerPlugin`: Media library, directory tree, file preview, and drag-and-drop uploads.
-- `basicAuthPlugin`: Zero-dependency HTTP Basic Authentication (RFC 7617) with named route middleware (`ctx.middlewares.basicAuth`) and global protection.
+- `basicAuthPlugin`: Built-in HTTP Basic Authentication (RFC 7617) with named route middleware (`ctx.middlewares.basicAuth`) and global protection.
 - `contentPlugin`: Schema-driven CMS with inline editing and headless API.
 - `uploadPlugin`: Multipart file uploads with local/cloud storage providers.
 - `redirectPlugin`: Configurable HTTP 301–308 redirects.
@@ -161,13 +163,13 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 - `polarPlugin`: Polar.sh subscription billing (checkout, portal, webhooks, Customer State sync). Requires `rateLimitPlugin` before polar for rate limiters. Supports `hooks.isPaidUser`, `syncBeforeCheckout`, `syncBillingForAppUser`. See `docs/guides/polar-production-checklist.md`.
 - `auditLogPlugin`: Admin mutation audit logging.
 - `ormCacheAdminPlugin`: Cache inspection and invalidation dashboard.
-- `corsPlugin`: Zero-dependency Cross-Origin Resource Sharing handler.
+- `corsPlugin`: Built-in Cross-Origin Resource Sharing handler.
 - `csrfPlugin`: CSRF token validation and Nunjucks form helpers.
 - `realtimePlugin`: Framework-agnostic, plugin-based realtime layer (`core/realtime`) with WebSocket, SSE, Socket.IO, and distributed Redis Pub/Sub adapters.
 - `restResourcePlugin`: Zero-boilerplate RESTful CRUD API generator directly from ORM models with eager loading, sanitization, filtering, pagination, and soft-delete scoping.
 - `xlsxPlugin`: Excel spreadsheet generation, parsing, ORM streaming export (`res.xlsx`), and built-in services (`xlsx.generate`, `xlsx.parse`, `xlsx.exportModel`).
 - `csvPlugin`: RFC 4180 CSV generator, parser, Excel UTF-8 BOM compatibility, formula sanitization, streaming writer (`res.csv`), and built-in services (`csv.generate`, `csv.parse`, `csv.exportModel`).
-- `apiKeyPlugin`: Zero-dependency B2B & Developer API Key Management with SHA-256 secure storage, constant-time verification, granular wildcard scopes, named route middleware (`ctx.middlewares.apiKey`), and non-blocking usage tracking.
+- `apiKeyPlugin`: Built-in B2B & Developer API Key Management with SHA-256 secure storage, constant-time verification, granular wildcard scopes, named route middleware (`ctx.middlewares.apiKey`), and non-blocking usage tracking.
 - `webhooksPlugin`: Outgoing Webhook Dispatcher with HMAC-SHA256 cryptographic signatures, wildcard event matching (`*`, `order.*`), automatic retries with exponential backoff, background job queue integration (`core/queue`), built-in services (`webhook.dispatch`, `webhook.ping`, `webhook.retry`), and Mithril.js Admin Panel management UI.
 
 ---

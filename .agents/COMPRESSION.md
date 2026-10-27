@@ -6,7 +6,7 @@
 
 ## 1. Overview
 
-Webspresso provides a zero-dependency, streaming-first HTTP response compression layer built entirely with native `node:zlib`. It transparently compresses compressible responses (HTML, JSON, JS, CSS, SVG, XML) using Brotli (`br`), Gzip (`gzip`), or Deflate (`deflate`).
+Webspresso provides a native, streaming-first HTTP response compression layer built entirely with `node:zlib`. It transparently compresses compressible responses (HTML, JSON, JS, CSS, SVG, XML) using Brotli (`br`), Gzip (`gzip`), or Deflate (`deflate`).
 
 ---
 

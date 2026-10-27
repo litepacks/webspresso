@@ -1,6 +1,6 @@
 # HTTP 103 Early Hints & Critical Asset Preloading
 
-Webspresso features built-in, zero-dependency support for **HTTP 103 Early Hints** (RFC 8288 / RFC 8297).
+Webspresso features built-in support for **HTTP 103 Early Hints** (RFC 8288 / RFC 8297).
 Early Hints allow Webspresso to send informational HTTP headers (containing CSS, JavaScript, and font preload instructions) to the client **before** server-side rendering (`load()`, database queries, external API calls) finishes, allowing the browser to download critical page assets in parallel.
 
 ---

@@ -6,7 +6,19 @@
  * @module plugins/xlsx/engine
  */
 
-const ExcelJS = require('exceljs');
+let ExcelJS = null;
+function getExcelJS() {
+  if (!ExcelJS) {
+    try {
+      ExcelJS = require('exceljs');
+    } catch {
+      throw new Error(
+        "The 'exceljs' package is required to use xlsxPlugin / XLSX services. Install it with: npm install exceljs"
+      );
+    }
+  }
+  return ExcelJS;
+}
 const { PassThrough } = require('stream');
 
 /**
@@ -125,7 +137,8 @@ function applyHeaderStyle(worksheet, style = {}) {
  * @returns {Promise<Buffer>}
  */
 async function generate(options = {}) {
-  const workbook = new ExcelJS.Workbook();
+  const Excel = getExcelJS();
+  const workbook = new Excel.Workbook();
   workbook.creator = options.creator || 'Webspresso';
   workbook.created = options.created || new Date();
   if (options.title) workbook.title = options.title;
@@ -225,7 +238,8 @@ async function generate(options = {}) {
  * @returns {Promise<Array<Object>|Object.<string, Array<Object>>>}
  */
 async function parse(input, options = {}) {
-  const workbook = new ExcelJS.Workbook();
+  const Excel = getExcelJS();
+  const workbook = new Excel.Workbook();
 
   if (Buffer.isBuffer(input)) {
     await workbook.xlsx.load(input);
@@ -378,7 +392,8 @@ async function fromModel(repository, filterOrQuery = {}, options = {}) {
  * @returns {ExcelJS.stream.xlsx.WorkbookWriter}
  */
 function createStreamWriter(outputStream, options = {}) {
-  return new ExcelJS.stream.xlsx.WorkbookWriter({
+  const Excel = getExcelJS();
+  return new Excel.stream.xlsx.WorkbookWriter({
     stream: outputStream,
     useStyles: options.useStyles !== false,
     useSharedStrings: options.useSharedStrings || false,

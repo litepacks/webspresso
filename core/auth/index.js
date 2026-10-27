@@ -15,7 +15,16 @@ function getMiddleware() {
   }
   return _middleware;
 }
-const { hash, verify, needsRehash, generateToken, hashToken } = require('./hash');
+const {
+  hash,
+  verify,
+  needsRehash,
+  hashScrypt,
+  verifyScrypt,
+  DEFAULT_SCRYPT_OPTIONS,
+  generateToken,
+  hashToken,
+} = require('./hash');
 const { signJwt, verifyJwt, decodeJwt, clearJwtCache, HS256_HEADER_BASE64URL, MAX_PAYLOAD_SIZE } = require('./jwt');
 const {
   TOKEN_TYPES,
@@ -264,6 +273,9 @@ module.exports = {
   hash,
   verify,
   needsRehash,
+  hashScrypt,
+  verifyScrypt,
+  DEFAULT_SCRYPT_OPTIONS,
   generateToken,
   hashToken,
 

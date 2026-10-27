@@ -37,17 +37,20 @@ function compileSchema(filePath, apiModule) {
     return null;
   }
 
-  // Schema must be a function
-  if (typeof schemaFn !== 'function') {
-    throw new Error(`Schema in ${filePath} must be a function`);
+  let compiled;
+  if (typeof schemaFn === 'function') {
+    // Call schema function with { z } (extended with z.nanoid, same as generateNanoid / zdb.nanoid)
+    compiled = schemaFn({ z: getZ() });
+  } else if (typeof schemaFn === 'object' && schemaFn !== null) {
+    // Direct schema object as documented in first-app.md and routing.md
+    compiled = schemaFn;
+  } else {
+    throw new Error(`Schema in ${filePath} must be a function or an object`);
   }
-
-  // Call schema function with { z } (extended with z.nanoid, same as generateNanoid / zdb.nanoid)
-  const compiled = schemaFn({ z: getZ() });
 
   // Validate compiled schema structure
   if (compiled !== null && typeof compiled !== 'object') {
-    throw new Error(`Schema function in ${filePath} must return an object or null`);
+    throw new Error(`Schema in ${filePath} must evaluate to an object or null`);
   }
 
   // Cache and return

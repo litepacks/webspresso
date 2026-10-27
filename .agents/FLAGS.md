@@ -1,6 +1,6 @@
 # Feature Flags & Canary Traffic Splitter (`core/flags`)
 
-Webspresso features an enterprise-grade, zero-dependency **Feature Flag & Canary Traffic Splitting Engine** in `core/flags/`. It enables gradual rollouts, multivariate A/B testing, user/role/domain targeting, and runtime overrides across Nunjucks SSR templates, API endpoints (`defineApi`), service layers, and Edge/Hono adapters.
+Webspresso features an enterprise-grade, built-in **Feature Flag & Canary Traffic Splitting Engine** in `core/flags/`. It enables gradual rollouts, multivariate A/B testing, user/role/domain targeting, and runtime overrides across Nunjucks SSR templates, API endpoints (`defineApi`), service layers, and Edge/Hono adapters.
 
 ---
 

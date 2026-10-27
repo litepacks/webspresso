@@ -348,8 +348,20 @@ function configureSafeNunjucks(templateDirs, options = {}) {
  */
 function getDefaultHelmetConfig(isDev) {
   return {
-    // Disable CSP in development for easier development (Nunjucks hot reload, etc.)
-    contentSecurityPolicy: isDev ? false : {
+    // In development: use reportOnly so developers are alerted to CSP violations without breaking local dev tools
+    contentSecurityPolicy: isDev ? {
+      reportOnly: true,
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for Tailwind / Dev reload
+        scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline scripts for client runtime / dev tools
+        imgSrc: ["'self'", "data:", "https:"],
+        fontSrc: ["'self'", "data:"],
+        connectSrc: ["'self'", "ws:", "wss:"], // WebSockets for dev live reload
+        frameSrc: ["'none'"],
+        objectSrc: ["'none'"],
+      }
+    } : {
       directives: {
         defaultSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for Tailwind
@@ -596,8 +608,8 @@ function haltOnTimedout(req, res, next) {
  * @returns {Object} { app, nunjucksEnv, pluginManager, authMiddleware }
  */
 function createApp(options = {}) {
-  const NODE_ENV = process.env.NODE_ENV || 'development';
-  const isDev = NODE_ENV !== 'production';
+  const NODE_ENV = process.env.NODE_ENV || 'production';
+  const isDev = options.isDev !== undefined ? Boolean(options.isDev) : (NODE_ENV === 'development');
   const isTest = NODE_ENV === 'test';
   
   const {

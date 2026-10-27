@@ -6,7 +6,7 @@
 
 ## 1. Overview
 
-Webspresso provides a zero-dependency **Dual Authentication** system (`webspresso/core/auth` — resolved via package exports, no `/index.js` suffix required):
+Webspresso provides a built-in **Dual Authentication** system (`webspresso/core/auth` — resolved via package exports, no `/index.js` suffix required):
 - **Stateful Session + Cookie**: Used for browser SSR routes and Admin Panel (`/`, `/_admin`).
 - **Stateless HS256 JWT + Refresh Tokens**: Used for REST APIs, Mobile Apps, and SPAs (`/api/*`).
 
@@ -108,9 +108,9 @@ module.exports = {
 
 ---
 
-## 5. Zero-Dependency OAuth 2.0 & Social Login (`plugins/oauth`, `core/auth/oauth`)
+## 5. Built-in OAuth 2.0 & Social Login (`plugins/oauth`, `core/auth/oauth`)
 
-Webspresso includes a built-in, zero-dependency OAuth 2.0 client and plugin with RFC 7636 PKCE, HMAC-SHA256 signed anti-CSRF state tokens, profile normalization, and seamless Dual Auth integration:
+Webspresso includes a built-in OAuth 2.0 client and plugin with RFC 7636 PKCE, HMAC-SHA256 signed anti-CSRF state tokens, profile normalization, and seamless Dual Auth integration:
 
 ### 5.1 Plugin Configuration
 ```javascript
@@ -162,9 +162,9 @@ In Nunjucks templates:
 
 ---
 
-## 6. Zero-Dependency Two-Factor Authentication (2FA / TOTP)
+## 6. Built-in Two-Factor Authentication (2FA / TOTP)
 
-Webspresso provides an enterprise-grade, zero-dependency 2FA/TOTP suite adhering strictly to **RFC 6238 (TOTP)**, **RFC 4226 (HOTP)**, and **RFC 4648 (Base32)**. It requires NO external npm libraries and features offline SVG QR code generation to prevent leaking secret keys to third-party APIs.
+Webspresso provides an enterprise-grade 2FA/TOTP suite adhering strictly to **RFC 6238 (TOTP)**, **RFC 4226 (HOTP)**, and **RFC 4648 (Base32)**. It requires NO external npm libraries and features offline SVG QR code generation to prevent leaking secret keys to third-party APIs.
 
 ### 6.1 Key Capabilities
 - **RFC 6238 Time-Based OTP**: Standard 30s step, 6/8 digits, HMAC-SHA1/SHA256/SHA512.
@@ -277,7 +277,7 @@ module.exports = {
 
 ## 7. Magic Link & Passwordless Authentication
 
-Webspresso includes zero-dependency, cryptographically secure **Magic Link / Passwordless Authentication**:
+Webspresso includes built-in, cryptographically secure **Magic Link / Passwordless Authentication**:
 - **Single-Use Timed Tokens**: 32-byte cryptographically secure random tokens stored hashed (`SHA-256`) in the `auth_tokens` table (`type = 'magic_link'`) with a default 15-minute TTL.
 - **Anti-Enumeration Protection**: `requestMagicLink` returns `{ sent: true, userFound: false }` for unknown emails by default so attackers cannot probe user existence.
 - **Auto-Verification**: Successfully signing in via a magic link automatically marks `email_verified_at` if the user is not yet verified.
@@ -387,7 +387,7 @@ authManager.on('magicLink:verified', ({ userId }) => {
 
 ## 8. Active Devices & Remote Session Revocation
 
-Webspresso provides a zero-dependency session management and device tracking system (`webspresso/core/auth`) allowing users to view all active logins, detect browser/OS/hardware types, and remotely revoke unwanted sessions.
+Webspresso provides a built-in session management and device tracking system (`webspresso/core/auth`) allowing users to view all active logins, detect browser/OS/hardware types, and remotely revoke unwanted sessions.
 
 ### 8.1 Database Migration
 Create the `user_sessions` table using the built-in migration helper:

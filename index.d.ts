@@ -2764,7 +2764,91 @@ export function defineLazyPlugin(
 
 export function adminPanelPlugin(options?: AdminPanelPluginOptions): WebspressoPlugin;
 
-export function dataExchangePlugin(options?: Record<string, unknown>): WebspressoPlugin;
+export interface DataExchangePluginOptions {
+  enabled?: boolean;
+  db?: any;
+  adminPath?: string;
+  maxRows?: number;
+  maxFileBytes?: number;
+  [key: string]: unknown;
+}
+
+export function dataExchangePlugin(options?: DataExchangePluginOptions): WebspressoPlugin;
+
+export interface SitemapDynamicSource {
+  model?: string;
+  query?: (db: any) => Promise<any[]>;
+  urlPattern: string;
+  fields?: Record<string, string>;
+  lastmodField?: string;
+  changefreq?: string;
+  priority?: number;
+  i18n?: boolean;
+  filter?: (record: any) => boolean;
+  transform?: (record: any) => any;
+}
+
+export interface SitemapPluginOptions {
+  hostname?: string;
+  exclude?: string[];
+  changefreq?: string;
+  priority?: number;
+  i18n?: boolean;
+  locales?: string[];
+  robots?: boolean;
+  robotsDisallow?: string[];
+  dynamicSources?: SitemapDynamicSource[];
+  db?: any;
+  cacheMaxAge?: number;
+  [key: string]: unknown;
+}
+
+export function sitemapPlugin(options?: SitemapPluginOptions): WebspressoPlugin;
+
+export interface SeoCheckerSettings {
+  [key: string]: any;
+}
+
+export interface SeoCheckerPluginOptions {
+  enabled?: boolean;
+  settings?: SeoCheckerSettings;
+  [key: string]: unknown;
+}
+
+export function seoCheckerPlugin(options?: SeoCheckerPluginOptions): WebspressoPlugin;
+
+export interface AnalyticsPluginOptions {
+  google?: {
+    measurementId?: string;
+    adsId?: string;
+    verificationCode?: string;
+  };
+  gtm?: {
+    containerId?: string;
+  };
+  yandex?: {
+    counterId?: string | number;
+    verificationCode?: string;
+    webvisor?: boolean;
+    clickmap?: boolean;
+    trackLinks?: boolean;
+    accurateTrackBounce?: boolean;
+  };
+  bing?: {
+    uetId?: string;
+    verificationCode?: string;
+  };
+  facebook?: {
+    pixelId?: string;
+    domainVerification?: string;
+  };
+  pinterest?: {
+    verificationCode?: string;
+  };
+  [key: string]: unknown;
+}
+
+export function analyticsPlugin(options?: AnalyticsPluginOptions): WebspressoPlugin;
 
 export interface SiteAnalyticsRetentionConfig {
   enabled?: boolean;
@@ -2985,7 +3069,17 @@ export class FileTransport {
   verify(): Promise<boolean>;
 }
 
-export function recaptchaPlugin(options?: Record<string, unknown>): WebspressoPlugin;
+export interface RecaptchaPluginOptions {
+  siteKey: string;
+  secretKey?: string;
+  version?: 'v2' | 'v3';
+  minScore?: number;
+  expectedAction?: string;
+  defaultV3Action?: string;
+  [key: string]: unknown;
+}
+
+export function recaptchaPlugin(options?: RecaptchaPluginOptions): WebspressoPlugin;
 
 export interface SwaggerPluginOptions {
   /** Base path for docs (default: '/_swagger') */
@@ -3028,7 +3122,16 @@ export function swaggerPlugin(options?: SwaggerPluginOptions): WebspressoPlugin;
 export function openapiPlugin(options?: SwaggerPluginOptions): WebspressoPlugin;
 export function apiDocsPlugin(options?: SwaggerPluginOptions): WebspressoPlugin;
 
-export function healthCheckPlugin(options?: Record<string, unknown>): WebspressoPlugin;
+export interface HealthCheckPluginOptions {
+  path?: string;
+  enabled?: boolean;
+  authorize?: (req: any) => boolean;
+  verbose?: boolean;
+  checks?: (context: { req: any; db: any; options: any }) => Promise<Record<string, string>> | Record<string, string>;
+  [key: string]: unknown;
+}
+
+export function healthCheckPlugin(options?: HealthCheckPluginOptions): WebspressoPlugin;
 
 export interface CorsPluginOptions {
   origin?:
@@ -4672,13 +4775,77 @@ export function definePage<TData = any, TParams = Record<string, string>, TQuery
   config: DefinePageOptions<TData, TParams, TQuery> | ((ctx: PageContext<TParams, TQuery>) => Promise<TData> | TData)
 ): DefinePageOptions<TData, TParams, TQuery>;
 
-export interface ApiContext<TBody = any, TParams = Record<string, string>, TQuery = Record<string, string>> {
-  req: import('express').Request;
-  res: import('express').Response;
+export interface ApiRequest<
+  TBody = any,
+  TParams = Record<string, string>,
+  TQuery = Record<string, string>,
+  THeaders = Record<string, string>
+> extends Request {
+  url?: string;
+  method?: string;
+  headers: import('http').IncomingHttpHeaders;
+  rawHeaders?: string[];
+  httpVersion?: string;
+  body: TBody;
+  params: TParams;
+  query: TQuery;
+  input: {
+    body: TBody;
+    params: TParams;
+    query: TQuery;
+    headers?: THeaders;
+  };
+  ctx: ApiContext<TBody, TParams, TQuery, THeaders>;
+  service: WebspressoServiceCaller;
+  db?: any;
+  user?: any;
+  auth?: any;
+  session?: any;
+  queue?: any;
+  cache?: any;
+  flags?: any;
+  hasFeature?: (key: string, customContext?: any) => boolean;
+  getVariant?: (key: string, customContext?: any) => string | null;
+}
+
+export interface ApiResponse<
+  TBody = any,
+  TParams = Record<string, string>,
+  TQuery = Record<string, string>,
+  THeaders = Record<string, string>
+> extends Response {
+  input: {
+    body: TBody;
+    params: TParams;
+    query: TQuery;
+    headers?: THeaders;
+  };
+  service: WebspressoServiceCaller;
+  module: string | null;
+  locale?: string;
+  t?: Translator;
+  flags?: any;
+  hasFeature?: (key: string, customContext?: any) => boolean;
+  getVariant?: (key: string, customContext?: any) => string | null;
+}
+
+export interface ApiContext<
+  TBody = any,
+  TParams = Record<string, string>,
+  TQuery = Record<string, string>,
+  THeaders = Record<string, string>
+> {
+  req: ApiRequest<TBody, TParams, TQuery, THeaders>;
+  res: ApiResponse<TBody, TParams, TQuery, THeaders>;
   params: TParams;
   query: TQuery;
   body: TBody;
-  input: { body?: TBody; params?: TParams; query?: TQuery; headers?: Record<string, string> };
+  input: {
+    body: TBody;
+    params: TParams;
+    query: TQuery;
+    headers?: THeaders;
+  };
   locale: string;
   t: Translator;
   service: WebspressoServiceCaller;
@@ -4694,25 +4861,157 @@ export interface ApiContext<TBody = any, TParams = Record<string, string>, TQuer
   streamJson?: (sourceOrCallback?: any, maybeOptions?: any) => any;
 }
 
-export interface DefineApiOptions<TResult = any, TBody = any, TParams = Record<string, string>, TQuery = Record<string, string>> {
+export type ApiSchemaObject = {
+  params?: import('zod').ZodType<any> | unknown;
+  query?: import('zod').ZodType<any> | unknown;
+  body?: import('zod').ZodType<any> | unknown;
+  headers?: import('zod').ZodType<any> | unknown;
+};
+
+export type ApiSchemaFunction = (helpers: { z: typeof import('zod').z }) => Record<string, unknown>;
+
+export type ApiSchemaDefinition = ApiSchemaObject | ApiSchemaFunction;
+
+type InferSchemaType<T, TFallback = any> = T extends import('zod').ZodTypeAny
+  ? import('zod').z.output<T>
+  : T extends { _output: infer O }
+    ? O
+    : T extends (...args: any[]) => any
+      ? ReturnType<T>
+      : TFallback;
+
+export type InferApiBody<T, TFallback = any> = T extends { schema: infer S }
+  ? InferApiBodyFromSchema<S, TFallback>
+  : InferApiBodyFromSchema<T, TFallback>;
+
+export type InferApiBodyFromSchema<S, TFallback = any> = S extends (helpers: any) => { body: infer B }
+  ? InferSchemaType<B, TFallback>
+  : S extends { body: infer B }
+    ? InferSchemaType<B, TFallback>
+    : TFallback;
+
+export type InferApiParams<T, TFallback = Record<string, string>> = T extends { schema: infer S }
+  ? InferApiParamsFromSchema<S, TFallback>
+  : InferApiParamsFromSchema<T, TFallback>;
+
+export type InferApiParamsFromSchema<S, TFallback = Record<string, string>> = S extends (helpers: any) => { params: infer P }
+  ? InferSchemaType<P, TFallback>
+  : S extends { params: infer P }
+    ? InferSchemaType<P, TFallback>
+    : TFallback;
+
+export type InferApiQuery<T, TFallback = Record<string, string>> = T extends { schema: infer S }
+  ? InferApiQueryFromSchema<S, TFallback>
+  : InferApiQueryFromSchema<T, TFallback>;
+
+export type InferApiQueryFromSchema<S, TFallback = Record<string, string>> = S extends (helpers: any) => { query: infer Q }
+  ? InferSchemaType<Q, TFallback>
+  : S extends { query: infer Q }
+    ? InferSchemaType<Q, TFallback>
+    : TFallback;
+
+export type InferApiHeaders<T, TFallback = Record<string, string>> = T extends { schema: infer S }
+  ? InferApiHeadersFromSchema<S, TFallback>
+  : InferApiHeadersFromSchema<T, TFallback>;
+
+export type InferApiHeadersFromSchema<S, TFallback = Record<string, string>> = S extends (helpers: any) => { headers: infer H }
+  ? InferSchemaType<H, TFallback>
+  : S extends { headers: infer H }
+    ? InferSchemaType<H, TFallback>
+    : TFallback;
+
+export type InferApiOutput<T> = T extends DefineApiOptions<infer TResult, any, any, any, any, any>
+  ? TResult
+  : T extends { handler: (...args: any[]) => Promise<infer TResult> }
+    ? TResult
+    : T extends { handler: (...args: any[]) => infer TResult }
+      ? TResult
+      : T extends (...args: any[]) => Promise<infer TResult>
+        ? TResult
+        : T extends (...args: any[]) => infer TResult
+          ? TResult
+          : any;
+
+export type InferApiInput<T> = {
+  body: InferApiBody<T>;
+  params: InferApiParams<T>;
+  query: InferApiQuery<T>;
+  headers?: InferApiHeaders<T>;
+};
+
+type ApiNoInfer<T> = [T][T extends any ? 0 : never];
+
+export interface DefineApiOptions<
+  TResult = any,
+  TBody = any,
+  TParams = Record<string, string>,
+  TQuery = Record<string, string>,
+  THeaders = Record<string, string>,
+  TSchema = unknown
+> {
   description?: string;
   tags?: string[];
   middleware?: (string | import('express').RequestHandler | [string, Record<string, unknown>])[];
   flag?: string | { key: string; statusCode?: number; message?: string };
-  schema?: {
-    params?: unknown;
-    query?: unknown;
-    body?: unknown;
-    headers?: unknown;
-  } | ((helpers: { z: typeof import('zod').z }) => Record<string, unknown>);
+  schema?: TSchema;
   response?: Record<number | string, unknown>;
-  handler: (req: import('express').Request, ctx: ApiContext<TBody, TParams, TQuery>) => Promise<TResult> | TResult;
+  handler: (
+    req: ApiRequest<TBody, TParams, TQuery, THeaders>,
+    res: ApiResponse<TBody, TParams, TQuery, THeaders>,
+    ctx: ApiContext<TBody, TParams, TQuery, THeaders>
+  ) => Promise<TResult> | TResult;
   [key: string]: unknown;
 }
 
-export function defineApi<TResult = any, TBody = any, TParams = Record<string, string>, TQuery = Record<string, string>>(
-  config: DefineApiOptions<TResult, TBody, TParams, TQuery> | ((req: import('express').Request, ctx: ApiContext<TBody, TParams, TQuery>) => Promise<TResult> | TResult)
-): DefineApiOptions<TResult, TBody, TParams, TQuery>;
+export function defineApi<
+  TSchema extends ApiSchemaDefinition,
+  TResult = any,
+  TBody = InferApiBodyFromSchema<TSchema>,
+  TParams = InferApiParamsFromSchema<TSchema>,
+  TQuery = InferApiQueryFromSchema<TSchema>,
+  THeaders = InferApiHeadersFromSchema<TSchema>
+>(
+  config: {
+    schema: TSchema;
+    description?: string;
+    tags?: string[];
+    middleware?: (string | import('express').RequestHandler | [string, Record<string, unknown>])[];
+    flag?: string | { key: string; statusCode?: number; message?: string };
+    response?: Record<number | string, unknown>;
+    handler: (
+      req: ApiRequest<ApiNoInfer<TBody>, ApiNoInfer<TParams>, ApiNoInfer<TQuery>, ApiNoInfer<THeaders>>,
+      res: ApiResponse<ApiNoInfer<TBody>, ApiNoInfer<TParams>, ApiNoInfer<TQuery>, ApiNoInfer<THeaders>>,
+      ctx: ApiContext<ApiNoInfer<TBody>, ApiNoInfer<TParams>, ApiNoInfer<TQuery>, ApiNoInfer<THeaders>>
+    ) => Promise<TResult> | TResult;
+    [key: string]: unknown;
+  }
+): DefineApiOptions<TResult, TBody, TParams, TQuery, THeaders, TSchema>;
+
+export function defineApi<
+  TResult = any,
+  TBody = any,
+  TParams = Record<string, string>,
+  TQuery = Record<string, string>,
+  THeaders = Record<string, string>
+>(
+  config: DefineApiOptions<TResult, TBody, TParams, TQuery, THeaders>
+): DefineApiOptions<TResult, TBody, TParams, TQuery, THeaders>;
+
+export function defineApi<
+  TResult = any,
+  TBody = any,
+  TParams = Record<string, string>,
+  TQuery = Record<string, string>,
+  THeaders = Record<string, string>
+>(
+  handler: (
+    req: ApiRequest<TBody, TParams, TQuery, THeaders>,
+    res: ApiResponse<TBody, TParams, TQuery, THeaders>,
+    ctx: ApiContext<TBody, TParams, TQuery, THeaders>
+  ) => Promise<TResult> | TResult
+): DefineApiOptions<TResult, TBody, TParams, TQuery, THeaders>;
+
+export const api: typeof defineApi;
 
 export interface DefineModuleOptions {
   name: string;

@@ -1,12 +1,12 @@
 # Cloud Secrets Management Guide (`core/secrets` & `secrets:pull`)
 
-Webspresso features an enterprise, zero-dependency Cloud Secrets Management system (`core/secrets`) designed to eliminate plain-text `.env` files and secret leakage in containerized and serverless environments (Google Cloud Run, AWS App Runner, ECS Fargate, Kubernetes).
+Webspresso features an enterprise, built-in Cloud Secrets Management system (`core/secrets`) designed to eliminate plain-text `.env` files and secret leakage in containerized and serverless environments (Google Cloud Run, AWS App Runner, ECS Fargate, Kubernetes).
 
 ---
 
 ## 🎯 Key Capabilities
 
-1. **Zero External Dependencies**:
+1. **Native Cloud Integrations**:
    - Interacts directly with cloud vault REST APIs using native Node.js standard libraries (`https`, `crypto`).
    - **Google Cloud Secret Manager**: Automatically acquires OAuth2 tokens from the local GCP Metadata Server in Cloud Run/GKE, exchanges RSA-SHA256 signed JWTs from `GOOGLE_APPLICATION_CREDENTIALS`, or uses static tokens.
    - **AWS Secrets Manager & SSM Parameter Store**: Employs an embedded, standards-compliant AWS Signature Version 4 (SigV4) signer with HMAC-SHA256.

@@ -13,7 +13,7 @@ description: Layered architecture, design principles, and component boundaries i
 
 Webspresso is designed around four core tenets:
 
-1. **Zero-Dependency Sprawl**: Core runtime features (Dual Authentication, JWT signing, Error handling, Streaming Compression, Graceful Shutdown, and Template Helpers) rely strictly on Node.js built-ins (`crypto`, `path`, `fs`, `events`, `zlib`, `async_hooks`) without bloated npm dependency trees.
+1. **Minimal Dependency Sprawl**: Core runtime features (Dual Authentication, JWT signing, Error handling, Streaming Compression, Graceful Shutdown, and Template Helpers) rely strictly on Node.js built-ins (`crypto`, `path`, `fs`, `events`, `zlib`, `async_hooks`) without bloated npm dependency trees.
 2. **File-Based Simplicity**: File structure explicitly reflects the application's URL routing (`pages/`), API endpoints (`pages/api/`), and domain business logic (`services/`).
 3. **Ambient Context & Transactions**: Leveraging Node.js `AsyncLocalStorage`, database transactions propagate seamlessly across nested services and repositories without manual parameter passing (`trx`).
 4. **Isolated Layer Boundaries**: The HTTP server layer, business logic services, data repositories, and client admin panel are strictly separated with predictable interfaces.
@@ -86,6 +86,10 @@ graph TD
 - Standalone single-page CRUD application mounted at configurable admin prefix (default `/_admin`).
 - Employs dedicated staff session isolation (`req.session.adminUser`) completely separated from public site authentication.
 - Automatically wraps custom pages in admin layout and breadcrumbs, supporting custom field renderers, widgets, and bulk table actions.
+
+### 3.6 Dual HTTP Transport Layer: Express 5 & Hono (`core/http/`)
+- **Express 5 (Default Engine)**: Full-featured Node.js server stack with streaming zlib compression, socket connection draining, and graceful shutdown lifecycle management.
+- **Hono Adapter (`core/http/hono-adapter.js`)**: High-performance, lightweight adapter that bridges Webspresso's unified request pipeline (`executeApiPipeline`, `executePagePipeline`) onto Hono. Enables running Webspresso on modern Edge environments (Cloudflare Workers, Deno, Bun) with zero Node socket overhead and ultra-low cold start latency.
 
 ---
 

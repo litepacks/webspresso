@@ -180,6 +180,37 @@ async function handleDirectoryErrorBoundary({
 }
 const EMPTY_ARRAY = Object.freeze([]);
 
+/**
+ * Zero-allocation bounded Map LRU helpers
+ */
+function lruGet(map, key) {
+  const val = map.get(key);
+  if (val !== undefined) {
+    map.delete(key);
+    map.set(key, val);
+  }
+  return val;
+}
+
+function lruSet(map, key, val, maxSize) {
+  if (map.has(key)) {
+    map.delete(key);
+  } else if (map.size >= maxSize) {
+    const oldestKey = map.keys().next().value;
+    map.delete(oldestKey);
+  }
+  map.set(key, val);
+}
+
+const MAX_INTL_CACHE = 500;
+const MAX_PARAM_REGEX_CACHE = 500;
+const MAX_FILE_ROUTE_CACHE = 5000;
+const MAX_I18N_CACHE = 500;
+const MAX_TRANSLATOR_CACHE = 1000;
+const MAX_KEY_PARTS_CACHE = 1000;
+const MAX_PLURAL_RULES_CACHE = 100;
+const MAX_CONFIG_CACHE = 1000;
+
 // Cache for i18n files (key: filePath, value: { mtime, data })
 const i18nCache = new Map();
 
@@ -195,6 +226,12 @@ function clearTranslatorCache() {
   intlDateTimeFormatCache.clear();
   intlRelativeTimeFormatCache.clear();
   filePathToRouteCache.clear();
+  i18nCache.clear();
+  mergedI18nCache.clear();
+  pluralRulesCache.clear();
+  KEY_PARTS_CACHE.clear();
+  paramRegexCache.clear();
+  configCache.clear();
 }
 
 // Cache for route configs in production
@@ -228,36 +265,30 @@ const intlRelativeTimeFormatCache = new Map();
 
 function getCachedNumberFormat(locale, opts) {
   const key = opts ? `${locale}::${JSON.stringify(opts)}` : locale;
-  let fmt = intlNumberFormatCache.get(key);
+  let fmt = lruGet(intlNumberFormatCache, key);
   if (!fmt) {
     fmt = new Intl.NumberFormat(locale, opts);
-    if (intlNumberFormatCache.size < 500) {
-      intlNumberFormatCache.set(key, fmt);
-    }
+    lruSet(intlNumberFormatCache, key, fmt, MAX_INTL_CACHE);
   }
   return fmt;
 }
 
 function getCachedDateTimeFormat(locale, opts) {
   const key = opts ? `${locale}::${JSON.stringify(opts)}` : locale;
-  let fmt = intlDateTimeFormatCache.get(key);
+  let fmt = lruGet(intlDateTimeFormatCache, key);
   if (!fmt) {
     fmt = new Intl.DateTimeFormat(locale, opts);
-    if (intlDateTimeFormatCache.size < 500) {
-      intlDateTimeFormatCache.set(key, fmt);
-    }
+    lruSet(intlDateTimeFormatCache, key, fmt, MAX_INTL_CACHE);
   }
   return fmt;
 }
 
 function getCachedRelativeTimeFormat(locale, opts) {
   const key = opts ? `${locale}::${JSON.stringify(opts)}` : locale;
-  let fmt = intlRelativeTimeFormatCache.get(key);
+  let fmt = lruGet(intlRelativeTimeFormatCache, key);
   if (!fmt) {
     fmt = new Intl.RelativeTimeFormat(locale, opts);
-    if (intlRelativeTimeFormatCache.size < 500) {
-      intlRelativeTimeFormatCache.set(key, fmt);
-    }
+    lruSet(intlRelativeTimeFormatCache, key, fmt, MAX_INTL_CACHE);
   }
   return fmt;
 }
@@ -449,7 +480,7 @@ function isApiRouteFile(file) {
  */
 function filePathToRoute(filePath, ext) {
   const cacheKey = filePath + '::' + ext;
-  const cached = filePathToRouteCache.get(cacheKey);
+  const cached = lruGet(filePathToRouteCache, cacheKey);
   if (cached !== undefined) {
     return cached;
   }
@@ -479,9 +510,7 @@ function filePathToRoute(filePath, ext) {
     route = '/' + route;
   }
   
-  if (filePathToRouteCache.size < 5000) {
-    filePathToRouteCache.set(cacheKey, route);
-  }
+  lruSet(filePathToRouteCache, cacheKey, route, MAX_FILE_ROUTE_CACHE);
 
   return route;
 }
@@ -734,22 +763,22 @@ function scanDirectory(dir, baseDir = dir) {
  */
 function loadI18nFile(filePath, isDev = (process.env.NODE_ENV !== 'production')) {
   if (!isDev) {
-    const cached = i18nCache.get(filePath);
+    const cached = lruGet(i18nCache, filePath);
     if (cached) {
       return cached.data;
     }
     if (!fs.existsSync(filePath)) {
-      i18nCache.set(filePath, { mtime: 0, data: EMPTY_OBJECT });
+      lruSet(i18nCache, filePath, { mtime: 0, data: EMPTY_OBJECT }, MAX_I18N_CACHE);
       return EMPTY_OBJECT;
     }
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
       const data = JSON.parse(content);
-      i18nCache.set(filePath, { mtime: 0, data });
+      lruSet(i18nCache, filePath, { mtime: 0, data }, MAX_I18N_CACHE);
       return data;
     } catch (err) {
       console.error('Error loading i18n file:', filePath, err.message);
-      i18nCache.set(filePath, { mtime: 0, data: EMPTY_OBJECT });
+      lruSet(i18nCache, filePath, { mtime: 0, data: EMPTY_OBJECT }, MAX_I18N_CACHE);
       return EMPTY_OBJECT;
     }
   }
@@ -760,7 +789,7 @@ function loadI18nFile(filePath, isDev = (process.env.NODE_ENV !== 'production'))
   
   try {
     const stats = fs.statSync(filePath);
-    const cached = i18nCache.get(filePath);
+    const cached = lruGet(i18nCache, filePath);
     
     if (cached && cached.mtime >= stats.mtimeMs) {
       return cached.data;
@@ -769,7 +798,7 @@ function loadI18nFile(filePath, isDev = (process.env.NODE_ENV !== 'production'))
     const content = fs.readFileSync(filePath, 'utf-8');
     const data = JSON.parse(content);
     
-    i18nCache.set(filePath, { mtime: stats.mtimeMs, data });
+    lruSet(i18nCache, filePath, { mtime: stats.mtimeMs, data }, MAX_I18N_CACHE);
     return data;
   } catch (err) {
     console.error('Error loading i18n file:', filePath, err.message);
@@ -789,7 +818,7 @@ function loadI18n(pagesDir, routeDir, locale, isDev = (process.env.NODE_ENV !== 
   const cacheKey = `${pagesDir}::${routeDir}::${locale}`;
 
   if (!isDev) {
-    const mergedCached = mergedI18nCache.get(cacheKey);
+    const mergedCached = lruGet(mergedI18nCache, cacheKey);
     if (mergedCached) {
       return mergedCached.data;
     }
@@ -807,31 +836,31 @@ function loadI18n(pagesDir, routeDir, locale, isDev = (process.env.NODE_ENV !== 
   const rEmpty = routeTranslations === EMPTY_OBJECT || !routeTranslations || Object.keys(routeTranslations).length === 0;
 
   if (gEmpty && rEmpty) {
-    if (!isDev) mergedI18nCache.set(cacheKey, { gm: 0, rm: 0, data: EMPTY_OBJECT });
+    if (!isDev) lruSet(mergedI18nCache, cacheKey, { gm: 0, rm: 0, data: EMPTY_OBJECT }, MAX_I18N_CACHE);
     return EMPTY_OBJECT;
   }
   if (gEmpty) {
-    if (!isDev) mergedI18nCache.set(cacheKey, { gm: 0, rm: 0, data: routeTranslations });
+    if (!isDev) lruSet(mergedI18nCache, cacheKey, { gm: 0, rm: 0, data: routeTranslations }, MAX_I18N_CACHE);
     return routeTranslations;
   }
   if (rEmpty) {
-    if (!isDev) mergedI18nCache.set(cacheKey, { gm: 0, rm: 0, data: globalTranslations });
+    if (!isDev) lruSet(mergedI18nCache, cacheKey, { gm: 0, rm: 0, data: globalTranslations }, MAX_I18N_CACHE);
     return globalTranslations;
   }
 
-  const gCached = i18nCache.get(globalPath);
-  const rCached = i18nCache.get(routePath);
+  const gCached = lruGet(i18nCache, globalPath);
+  const rCached = lruGet(i18nCache, routePath);
   const gm = gCached?.mtime ?? 0;
   const rm = rCached?.mtime ?? 0;
 
-  const mergedCached = mergedI18nCache.get(cacheKey);
+  const mergedCached = lruGet(mergedI18nCache, cacheKey);
   if (mergedCached && mergedCached.gm === gm && mergedCached.rm === rm) {
     return mergedCached.data;
   }
 
   // Merge: route-specific overrides global
   const data = { ...globalTranslations, ...routeTranslations };
-  mergedI18nCache.set(cacheKey, { gm, rm, data });
+  lruSet(mergedI18nCache, cacheKey, { gm, rm, data }, MAX_I18N_CACHE);
   return data;
 }
 
@@ -839,16 +868,14 @@ function loadI18n(pagesDir, routeDir, locale, isDev = (process.env.NODE_ENV !== 
 const pluralRulesCache = new Map();
 
 function getPluralRules(locale) {
-  let pr = pluralRulesCache.get(locale);
+  let pr = lruGet(pluralRulesCache, locale);
   if (!pr) {
     try {
       pr = new Intl.PluralRules(locale);
     } catch {
       pr = new Intl.PluralRules('en');
     }
-    if (pluralRulesCache.size < 100) {
-      pluralRulesCache.set(locale, pr);
-    }
+    lruSet(pluralRulesCache, locale, pr, MAX_PLURAL_RULES_CACHE);
   }
   return pr;
 }
@@ -860,12 +887,10 @@ function resolveTranslationValue(dict, key) {
   if (dict[key] !== undefined) return dict[key];
   if (!key.includes('.')) return undefined;
 
-  let parts = KEY_PARTS_CACHE.get(key);
+  let parts = lruGet(KEY_PARTS_CACHE, key);
   if (!parts) {
     parts = key.split('.');
-    if (KEY_PARTS_CACHE.size < 1000) {
-      KEY_PARTS_CACHE.set(key, parts);
-    }
+    lruSet(KEY_PARTS_CACHE, key, parts, MAX_KEY_PARTS_CACHE);
   }
 
   let curr = dict;
@@ -943,13 +968,11 @@ function createTranslator(translations = {}, options = EMPTY_OBJECT) {
     // Replace params like {{name}} in the translation (skip if no placeholders in template)
     if (value.includes('{{') && interpolationParams && interpolationParams !== EMPTY_OBJECT && Object.keys(interpolationParams).length > 0) {
       for (const [paramKey, paramValue] of Object.entries(interpolationParams)) {
-        let regex = paramRegexCache.get(paramKey);
+        let regex = lruGet(paramRegexCache, paramKey);
         if (regex === undefined) {
           const escaped = escapeRegExp(paramKey);
           regex = new RegExp(`{{\\s*${escaped}\\s*}}`, 'g');
-          if (paramRegexCache.size < 500) {
-            paramRegexCache.set(paramKey, regex);
-          }
+          lruSet(paramRegexCache, paramKey, regex, MAX_PARAM_REGEX_CACHE);
         }
         value = value.replace(regex, () => String(paramValue));
       }
@@ -1040,19 +1063,19 @@ function createTranslator(translations = {}, options = EMPTY_OBJECT) {
 function loadRouteConfig(configPath, isDev) {
   if (!isDev) {
     if (configCache.has(configPath)) {
-      return configCache.get(configPath);
+      return lruGet(configCache, configPath);
     }
     if (!fs.existsSync(configPath)) {
-      configCache.set(configPath, null);
+      lruSet(configCache, configPath, null, MAX_CONFIG_CACHE);
       return null;
     }
     try {
       const config = require(configPath);
-      configCache.set(configPath, config);
+      lruSet(configCache, configPath, config, MAX_CONFIG_CACHE);
       return config;
     } catch (err) {
       console.error('Error loading route config:', configPath, err.message);
-      configCache.set(configPath, null);
+      lruSet(configCache, configPath, null, MAX_CONFIG_CACHE);
       return null;
     }
   }
@@ -1537,7 +1560,7 @@ function mountPages(app, options) {
           let t;
           if (!isDev) {
             const transKey = `${absolutePagesDir}::${route.routeDir}::${locale}::${defaultLocale}`;
-            t = translatorCache.get(transKey);
+            t = lruGet(translatorCache, transKey);
             if (!t) {
               const translations = loadI18n(absolutePagesDir, route.routeDir, locale, false);
               const fallbackTranslations = (locale !== defaultLocale)
@@ -1548,7 +1571,7 @@ function mountPages(app, options) {
                 fallbackTranslations,
                 fallbackLocale: defaultLocale,
               });
-              translatorCache.set(transKey, t);
+              lruSet(translatorCache, transKey, t, MAX_TRANSLATOR_CACHE);
             }
           } else {
             const translations = loadI18n(absolutePagesDir, route.routeDir, locale, true);

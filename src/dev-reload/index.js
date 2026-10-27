@@ -1,6 +1,6 @@
 /**
  * Webspresso Development Live & Hot Reload Hub
- * Zero-dependency SSE-based CSS Hot Reload & Page Reload
+ * Built-in SSE-based CSS Hot Reload & Page Reload
  * @module dev-reload
  */
 

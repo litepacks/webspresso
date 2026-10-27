@@ -1,6 +1,6 @@
 /**
  * Webspresso Services Layer
- * Lightweight, reusable business logic services with zero dependency sprawl
+ * Lightweight, reusable business logic services
  * @module src/services
  */
 

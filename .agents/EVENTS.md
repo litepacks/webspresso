@@ -2,7 +2,7 @@
 
 [← Back to AGENTS.md](.agents/AGENTS.md)
 
-Webspresso provides an enterprise, zero-dependency **Decoupled Event & Signals System** (`core/events`), combining **AdonisJS Events** (wildcard matching, async parallel/serial/waterfall dispatch, queue bridging, and listener auto-discovery) with **Django Signals** (declarative `Signal` channels, sender filtering, and ORM model signals).
+Webspresso provides an enterprise, built-in **Decoupled Event & Signals System** (`core/events`), combining **AdonisJS Events** (wildcard matching, async parallel/serial/waterfall dispatch, queue bridging, and listener auto-discovery) with **Django Signals** (declarative `Signal` channels, sender filtering, and ORM model signals).
 
 ---
 

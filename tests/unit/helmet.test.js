@@ -38,8 +38,9 @@ describe.sequential('Helmet Configuration', () => {
         const { app } = createApp({ pagesDir, viewsDir });
         const res = await request(app).get('/');
 
-        // CSP should not be set in development
+        // Blocking CSP should not be set in development, but report-only should be present
         expect(res.headers['content-security-policy']).toBeUndefined();
+        expect(res.headers['content-security-policy-report-only']).toBeDefined();
       } finally {
         process.env.NODE_ENV = originalEnv;
       }

@@ -8,8 +8,15 @@ const { CLIENT_RUNTIME_BASE } = require('./constants');
 
 /** Resolve a file next to the package's resolved main entry (works with package "exports"). */
 function pkgFileFromMain(pkg, ...segments) {
-  const entry = require.resolve(pkg);
-  return path.join(path.dirname(entry), ...segments);
+  try {
+    const entry = require.resolve(pkg);
+    return path.join(path.dirname(entry), ...segments);
+  } catch (err) {
+    if (err && err.code === 'MODULE_NOT_FOUND') {
+      throw new Error(`[webspresso:client-runtime] Package "${pkg}" is required for clientRuntime. Install it via: npm install ${pkg}`);
+    }
+    throw err;
+  }
 }
 
 /**

@@ -31,7 +31,7 @@ description: Complete createApp() options — pagesDir, db, auth, plugins, compr
 | **`server.shutdown.enabled`** | `boolean` | `true` | Enable SIGINT/SIGTERM lifecycle management. |
 | **`server.shutdown.mode`** | `'graceful' \| 'force'` | `'graceful'` | Shutdown mode. `'graceful'` drains in-flight requests; `'force'` closes sockets immediately. |
 | **`server.shutdown.timeout`** | `number` | `10000` | Milliseconds to wait before force closing remaining connections. |
-| **`server.compression`** | `boolean` | `false` | Enable zero-dependency streaming zlib compression (Brotli, Gzip, Deflate). |
+| **`server.compression`** | `boolean` | `false` | Enable built-in streaming zlib compression (Brotli, Gzip, Deflate). |
 | **`assets`** | `AssetManagerOptions` | `{}` | Asset versioning, cache-busting, and CDN prefixing configuration. |
 | **`assets.version`** | `string` | `undefined` | Query string version tag (e.g. `?v=1.2.3`). |
 | **`assets.manifestPath`** | `string` | `undefined` | Absolute path to Vite/Webpack `.vite/manifest.json`. |

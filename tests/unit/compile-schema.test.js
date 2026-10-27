@@ -67,13 +67,22 @@ describe('compileSchema.js', () => {
       expect(callCount).toBe(1);
     });
 
-    it('should throw error when schema is not a function', () => {
+    it('should throw error when schema is neither a function nor an object', () => {
       const apiModule = {
-        schema: { body: {} }
+        schema: 'invalid-string'
       };
       
       expect(() => compileSchema('/path/to/api.js', apiModule))
-        .toThrow('Schema in /path/to/api.js must be a function');
+        .toThrow('Schema in /path/to/api.js must be a function or an object');
+    });
+
+    it('should accept object schema directly', () => {
+      const apiModule = {
+        schema: { body: { name: 'test' } }
+      };
+      
+      const result = compileSchema('/path/to/api-obj.js', apiModule);
+      expect(result).toEqual({ body: { name: 'test' } });
     });
 
     it('should throw error when schema function returns invalid type', () => {
@@ -82,7 +91,7 @@ describe('compileSchema.js', () => {
       };
       
       expect(() => compileSchema('/path/to/api.js', apiModule))
-        .toThrow('Schema function in /path/to/api.js must return an object or null');
+        .toThrow('Schema in /path/to/api.js must evaluate to an object or null');
     });
 
     it('should accept schema returning null', () => {

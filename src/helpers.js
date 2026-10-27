@@ -19,15 +19,43 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(customParseFormat);
 
+/**
+ * Zero-allocation bounded Map LRU helpers
+ */
+function lruGet(map, key) {
+  const val = map.get(key);
+  if (val !== undefined) {
+    map.delete(key);
+    map.set(key, val);
+  }
+  return val;
+}
+
+function lruSet(map, key, val, maxSize) {
+  if (map.has(key)) {
+    map.delete(key);
+  } else if (map.size >= maxSize) {
+    const oldestKey = map.keys().next().value;
+    map.delete(oldestKey);
+  }
+  map.set(key, val);
+}
+
 // Cache for isPath regex patterns
 const isPathRegexCache = new Map();
+const MAX_IS_PATH_CACHE = 1000;
 
 // Caches for manifest files and filesystem existence checks
 const manifestFileCache = new Map();
+const MAX_MANIFEST_CACHE = 50;
+
 const diskExistenceCache = new Map();
+const MAX_DISK_CACHE = 2000;
+
+const MAX_ASSET_CACHE = 2000;
 
 function cachedExistsSync(filePath) {
-  const cached = diskExistenceCache.get(filePath);
+  const cached = lruGet(diskExistenceCache, filePath);
   if (cached !== undefined) return cached;
   let exists = false;
   try {
@@ -35,9 +63,7 @@ function cachedExistsSync(filePath) {
   } catch (_) {
     exists = false;
   }
-  if (diskExistenceCache.size < 2000) {
-    diskExistenceCache.set(filePath, exists);
-  }
+  lruSet(diskExistenceCache, filePath, exists, MAX_DISK_CACHE);
   return exists;
 }
 
@@ -109,7 +135,7 @@ class AssetManager {
       if (fs.existsSync(fullPath)) {
         try {
           const stats = fs.statSync(fullPath);
-          const cached = manifestFileCache.get(fullPath);
+          const cached = lruGet(manifestFileCache, fullPath);
           if (cached && cached.mtimeMs === stats.mtimeMs && cached.size === stats.size) {
             this.manifest = cached.manifest;
             this._lookupIndex = cached.lookupIndex;
@@ -118,12 +144,12 @@ class AssetManager {
           const content = fs.readFileSync(fullPath, 'utf-8');
           this.manifest = JSON.parse(content);
           this._buildLookupIndex();
-          manifestFileCache.set(fullPath, {
+          lruSet(manifestFileCache, fullPath, {
             mtimeMs: stats.mtimeMs,
             size: stats.size,
             manifest: this.manifest,
             lookupIndex: this._lookupIndex,
-          });
+          }, MAX_MANIFEST_CACHE);
           return;
         } catch (_) {
           const content = fs.readFileSync(fullPath, 'utf-8');
@@ -145,7 +171,7 @@ class AssetManager {
    * @returns {string}
    */
   resolve(assetPath) {
-    const cached = this._resolveCache.get(assetPath);
+    const cached = lruGet(this._resolveCache, assetPath);
     if (cached !== undefined) return cached;
 
     // Remove leading slash for manifest lookup
@@ -188,9 +214,7 @@ class AssetManager {
           result = this.prefix ? (this.prefix + file).replace(/\/+/g, '/') : file;
         }
         if (result !== undefined) {
-          if (this._resolveCache.size < 2000) {
-            this._resolveCache.set(assetPath, result);
-          }
+          lruSet(this._resolveCache, assetPath, result, MAX_ASSET_CACHE);
           return result;
         }
       }
@@ -205,9 +229,7 @@ class AssetManager {
       finalPath += `${separator}v=${this.version}`;
     }
     
-    if (this._resolveCache.size < 2000) {
-      this._resolveCache.set(assetPath, finalPath);
-    }
+    lruSet(this._resolveCache, assetPath, finalPath, MAX_ASSET_CACHE);
     return finalPath;
   }
   
@@ -419,7 +441,7 @@ class AssetManager {
    */
   hasPageJs(name) {
     if (!name || typeof name !== 'string') return false;
-    const cached = this._hasJsCache.get(name);
+    const cached = lruGet(this._hasJsCache, name);
     if (cached !== undefined) return cached;
 
     let clean = String(name).trim().replace(/^\/+/, '');
@@ -440,7 +462,7 @@ class AssetManager {
         this.manifest['src/client/' + pagePath] ||
         this.manifest['client/' + pagePath]
       ) {
-        if (this._hasJsCache.size < 500) this._hasJsCache.set(name, true);
+        lruSet(this._hasJsCache, name, true, MAX_ASSET_CACHE);
         return true;
       }
     }
@@ -468,12 +490,12 @@ class AssetManager {
 
     for (const p of diskChecks) {
       if (cachedExistsSync(p)) {
-        if (this._hasJsCache.size < 500) this._hasJsCache.set(name, true);
+        lruSet(this._hasJsCache, name, true, MAX_ASSET_CACHE);
         return true;
       }
     }
 
-    if (this._hasJsCache.size < 500) this._hasJsCache.set(name, false);
+    lruSet(this._hasJsCache, name, false, MAX_ASSET_CACHE);
     return false;
   }
 
@@ -484,7 +506,7 @@ class AssetManager {
    */
   hasPageCss(name) {
     if (!name || typeof name !== 'string') return false;
-    const cached = this._hasCssCache.get(name);
+    const cached = lruGet(this._hasCssCache, name);
     if (cached !== undefined) return cached;
 
     let clean = String(name).trim().replace(/^\/+/, '');
@@ -505,7 +527,7 @@ class AssetManager {
         this.manifest['src/client/' + pagePath] ||
         this.manifest['client/' + pagePath]
       ) {
-        if (this._hasCssCache.size < 500) this._hasCssCache.set(name, true);
+        lruSet(this._hasCssCache, name, true, MAX_ASSET_CACHE);
         return true;
       }
     }
@@ -529,12 +551,12 @@ class AssetManager {
 
     for (const p of diskChecks) {
       if (cachedExistsSync(p)) {
-        if (this._hasCssCache.size < 500) this._hasCssCache.set(name, true);
+        lruSet(this._hasCssCache, name, true, MAX_ASSET_CACHE);
         return true;
       }
     }
 
-    if (this._hasCssCache.size < 500) this._hasCssCache.set(name, false);
+    lruSet(this._hasCssCache, name, false, MAX_ASSET_CACHE);
     return false;
   }
 
@@ -1054,12 +1076,10 @@ function createHelpers(ctx) {
       const currentPath = req.path;
       if (pattern === currentPath) return true;
       if (pattern.includes('*')) {
-        let regex = isPathRegexCache.get(pattern);
+        let regex = lruGet(isPathRegexCache, pattern);
         if (regex === undefined) {
           regex = globToRegExp(pattern, { separator: null });
-          if (isPathRegexCache.size < 500) {
-            isPathRegexCache.set(pattern, regex);
-          }
+          lruSet(isPathRegexCache, pattern, regex, MAX_IS_PATH_CACHE);
         }
         return regex.test(currentPath);
       }

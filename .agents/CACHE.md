@@ -1,6 +1,6 @@
 # High-Performance In-Memory LRU & Tagged Cache Engine (`core/cache`)
 
-Webspresso includes a zero-dependency, memory-bounded, leak-free in-memory cache engine featuring O(1) Least-Recently-Used (LRU) eviction, byte budget constraints (`maxBytes` / `maxMemoryMb`), TTL expiration, stampede protection (thundering herd prevention), and O(1) bidirectional tag-based invalidation.
+Webspresso includes a built-in, memory-bounded, leak-free in-memory cache engine featuring O(1) Least-Recently-Used (LRU) eviction, byte budget constraints (`maxBytes` / `maxMemoryMb`), TTL expiration, stampede protection (thundering herd prevention), and O(1) bidirectional tag-based invalidation.
 
 ---
 

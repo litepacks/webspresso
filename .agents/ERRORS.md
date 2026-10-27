@@ -19,7 +19,7 @@
 
 ## 1. Overview & Exception Hierarchy
 
-Webspresso features a centralized, lightweight, zero-dependency exception hierarchy inspired by Django's failure domain separation. Thrown synchronous and asynchronous exceptions are automatically caught by the global error boundary, normalized, and formatted as standardized JSON responses for API routes or styled HTML pages for web clients.
+Webspresso features a centralized, lightweight exception hierarchy inspired by Django's failure domain separation. Thrown synchronous and asynchronous exceptions are automatically caught by the global error boundary, normalized, and formatted as standardized JSON responses for API routes or styled HTML pages for web clients.
 
 ```text
 WebspressoError (base class with cause, code, details)

@@ -6,7 +6,13 @@
 let ExcelJS = null;
 function getExcelJS() {
   if (!ExcelJS) {
-    ExcelJS = require('exceljs');
+    try {
+      ExcelJS = require('exceljs');
+    } catch {
+      throw new Error(
+        "The 'exceljs' package is required for Excel export in dataExchangePlugin. Install it with: npm install exceljs"
+      );
+    }
   }
   return ExcelJS;
 }

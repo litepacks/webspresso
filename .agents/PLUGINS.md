@@ -64,7 +64,7 @@ Plugins can register route middlewares in `ctx.middlewares`:
 ## 2. Core & Official Plugins Reference
 
 ### 2.1 `basicAuthPlugin` (`plugins/basic-auth`)
-Zero-dependency HTTP Basic Authentication (RFC 7617) plugin with timing-safe equality checks (`crypto.timingSafeEqual`).
+Built-in HTTP Basic Authentication (RFC 7617) plugin with timing-safe equality checks (`crypto.timingSafeEqual`).
 - **Options**:
   - `global`: Boolean, whether to protect the entire application.
   - `users`: Key-value map `{ username: 'password' }`.
@@ -78,7 +78,7 @@ Zero-dependency HTTP Basic Authentication (RFC 7617) plugin with timing-safe equ
 - **Named Middleware**: Registers `ctx.middlewares.basicAuth` for route files.
 
 ### 2.2 `apiKeyPlugin` (`plugins/api-key`)
-Zero-dependency B2B & Developer API Key Management Plugin with standard prefix format (`wsp_live_...`), SHA-256 secure hash storage, timing-safe constant-time verification (`crypto.timingSafeEqual`), granular scopes/permissions with wildcard support, non-blocking `last_used_at` usage tracking, and programmatic creation/revocation APIs.
+Built-in B2B & Developer API Key Management Plugin with standard prefix format (`wsp_live_...`), SHA-256 secure hash storage, timing-safe constant-time verification (`crypto.timingSafeEqual`), granular scopes/permissions with wildcard support, non-blocking `last_used_at` usage tracking, and programmatic creation/revocation APIs.
 - **Options**:
   - `db` / `knex`: Webspresso Database or Knex instance.
   - `tableName`: Database table name (default `'api_keys'`).
@@ -113,7 +113,7 @@ Zero-dependency B2B & Developer API Key Management Plugin with standard prefix f
   - `createApiKeyModel(tableName)`: Webspresso ORM model definition with hidden `key_hash`.
 
 ### 2.3 `webhooksPlugin` (`plugins/webhooks`)
-Outgoing Webhook Dispatcher and Management Plugin with zero external dependencies. Dispatches events to subscribed external HTTP endpoints, signs payloads with HMAC-SHA256 (`X-Webspresso-Signature` and standard timestamped `webhook-signature`), filters events with wildcards (`*`, `order.*`), automatically retries failed deliveries using exponential backoff, hooks directly into Webspresso Queue (`core/queue`), and provides an interactive Mithril.js Admin Panel management UI.
+Outgoing Webhook Dispatcher and Management Plugin. Dispatches events to subscribed external HTTP endpoints, signs payloads with HMAC-SHA256 (`X-Webspresso-Signature` and standard timestamped `webhook-signature`), filters events with wildcards (`*`, `order.*`), automatically retries failed deliveries using exponential backoff, hooks directly into Webspresso Queue (`core/queue`), and provides an interactive Mithril.js Admin Panel management UI.
 - **Options**:
   - `db` / `knex`: Webspresso Database or Knex instance.
   - `endpointsTable`: Database table for endpoints (default `'webhook_endpoints'`).
@@ -155,12 +155,12 @@ Mithril.js SPA Admin Panel mounted at `/_admin`.
 - **Features**: Auto CRUD screens for ORM models, user staff auth, custom page registration, widgets, field renderers.
 - **On-Demand Hydration (`lazy: true`)**: When set to `true`, the admin panel plugin wraps itself with `lazyPlugin()`, deferring route mounting and internal setup until the first HTTP request hits `/_admin`.
 
-### 2.3 `contentPlugin` (`plugins/content`)
+### 2.5 `contentPlugin` (`plugins/content`)
 Schema-driven headless CMS & inline content editing.
 - **Options**: `{ db, adminPath: '/_admin', inlineEdit: true }`
 - **Features**: Dynamic content types & entries, public API (`/api/content/:type/:slug`), visual inline editor widget.
 
-### 2.4 `uploadPlugin` (`plugins/upload`)
+### 2.6 `uploadPlugin` (`plugins/upload`)
 Multipart file upload manager with local disk, AWS S3, Google Cloud Storage (GCS), and Cloudflare R2 drivers.
 - **Options**: `{ path: '/api/upload', provider, local: { destDir, publicBasePath }, maxBytes: 10000000, mimeAllowlist: ['image/png', 'image/jpeg'], presigned: true, presignedRoute: '/api/upload/presign' }`
 - **Supported Storage Drivers**:
@@ -174,7 +174,7 @@ Multipart file upload manager with local disk, AWS S3, Google Cloud Storage (GCS
 
 
 
-### 2.5 `fileManagerPlugin` (`plugins/file-manager`)
+### 2.7 `fileManagerPlugin` (`plugins/file-manager`)
 Filesystem-first media library, directory explorer, and modal asset picker for Admin Panel.
 - **Options**: `{ baseDir: './public/uploads', publicBasePath: '/uploads', apiPrefix: '/files', pageTitle: 'File Manager', maxUploadBytes: 10485760, allowedExtensions, allowedMimeTypes, includePage: true, lazy: false }`
 - **Features**:
@@ -187,24 +187,25 @@ Filesystem-first media library, directory explorer, and modal asset picker for A
   - "Choose from Media Library" modal picker integrated with `FileUploadField` and `zdb.file()` form fields.
   - Built-in services: `fileManager.list`, `fileManager.mkdir`, `fileManager.rename`, `fileManager.delete`, `fileManager.move`, `fileManager.upload`.
 
-### 2.6 `corsPlugin` (`plugins/cors`)
-Zero-dependency Cross-Origin Resource Sharing (CORS) handler.
+### 2.8 `corsPlugin` (`plugins/cors`)
+Built-in Cross-Origin Resource Sharing (CORS) handler.
 - **Options**: `{ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE'], credentials: true, maxAge: 86400 }`
 - **Features**: Native header management, preflight OPTIONS handling.
 
-### 2.6 `csrfPlugin` (`plugins/csrf`)
-Cross-Site Request Forgery token validation.
-- **Options**: `{ mode: 'session', secret: 'csrf-secret', ignorePaths: ['/api/*'] }`
+### 2.9 `csrfPlugin` (`plugins/csrf`)
+Cross-Site Request Forgery token validation with cookie/session storage and Nunjucks template helpers (`csrfToken()`, `csrfInput()`).
+- **Options**: `{ mode: 'session' | 'cookie', cookie?: boolean | object, sessionKey?: string, methods?: string[], ignorePaths?: (string|RegExp|Function)[], global?: boolean, errorMessage?: string, errorStatus?: number }`
+- **Features**: Double-submit cookie or session-backed token verification, `req.csrfToken()` injection, constant-time safe comparison.
 
-### 2.7 `redirectPlugin` (`plugins/redirect`)
+### 2.10 `redirectPlugin` (`plugins/redirect`)
 HTTP 301–308 URL redirect manager.
 - **Options**: `{ rules: [{ from: '/old-path', to: '/new-path', status: 301 }] }`
 
-### 2.8 `rateLimitPlugin` (`plugins/rate-limit`)
+### 2.11 `rateLimitPlugin` (`plugins/rate-limit`)
 Request rate limiting using express-rate-limit logic.
 - **Options**: `{ windowMs: 15 * 60 * 1000, max: 100 }`
 
-### 2.9 `siteAnalyticsPlugin` (`plugins/site-analytics`)
+### 2.12 `siteAnalyticsPlugin` (`plugins/site-analytics`)
 Self-hosted privacy-focused page view analytics, client error tracking, and automated retention cleanup.
 - **Options**:
   - `db`: Knex database instance.
@@ -230,7 +231,7 @@ Self-hosted privacy-focused page view analytics, client error tracking, and auto
   ```
 - **Lifecycle Integration**: Background timer uses `.unref()` to avoid keeping Node event loop open, and registers a framework disposer to clear timers on shutdown.
 
-### 2.10 `emailPlugin` (`plugins/email`)
+### 2.13 `emailPlugin` (`plugins/email`)
 Transactional email compiler (MJML) & Nodemailer transport integration with database delivery logging and auto-retention cleanup.
 - **Options**:
   - `transport` / `smtp`: Nodemailer transport or SMTP settings.
@@ -249,8 +250,8 @@ Transactional email compiler (MJML) & Nodemailer transport integration with data
   ```
 - **Admin Panel UI**: Includes log listing, test email dispatch, template preview, connection verification, and "Purge 90d" action.
 
-### 2.11 `polarPlugin` (`plugins/polar`)
-Polar.sh subscription billing — checkout, customer portal, webhooks, Customer State sync, tier columns. Zero extra deps (`crypto` + `fetch`).
+### 2.14 `polarPlugin` (`plugins/polar`)
+Polar.sh subscription billing — checkout, customer portal, webhooks, Customer State sync, tier columns. Pure native implementation (`crypto` + `fetch`).
 
 - **Import paths** (via `package.json` exports — no `/index.js` suffix):
   ```js
@@ -297,7 +298,7 @@ Polar.sh subscription billing — checkout, customer portal, webhooks, Customer 
   - [docs/guides/polar-billing.md](../docs/guides/polar-billing.md)
   - [docs/guides/polar-production-checklist.md](../docs/guides/polar-production-checklist.md)
 
-### 2.12 `auditLogPlugin` (`plugins/audit-log`)
+### 2.15 `auditLogPlugin` (`plugins/audit-log`)
 Admin mutation tracking, record change timeline, and audit history with scheduled retention and manual purge API.
 - **Options**:
   - `db`: Database instance (must expose `.knex`).
@@ -330,10 +331,10 @@ Admin mutation tracking, record change timeline, and audit history with schedule
   webspresso audit:prune --days 90
   ```
 
-### 2.13 `ormCacheAdminPlugin` (`plugins/orm-cache-admin`)
+### 2.16 `ormCacheAdminPlugin` (`plugins/orm-cache-admin`)
 ORM Cache inspection and invalidation dashboard.
 
-### 2.14 `schemaExplorerPlugin` (`plugins/schema-explorer`)
+### 2.17 `schemaExplorerPlugin` (`plugins/schema-explorer`)
 Interactive Database Schema & ER Diagram Explorer for both raw JSON/OpenAPI endpoints and Admin Panel SPA.
 - **Admin Panel Page (`/_admin/schema`)**:
   - Interactive Table & Column details (Primary Keys, Foreign Keys, Nullability, Types, Constraints, Scopes).
@@ -361,7 +362,7 @@ Interactive Database Schema & ER Diagram Explorer for both raw JSON/OpenAPI endp
   });
   ```
 
-### 2.15 `swaggerPlugin` / `openapiPlugin` (`plugins/swagger`)
+### 2.18 `swaggerPlugin` / `openapiPlugin` (`plugins/swagger`)
 Interactive OpenAPI 3.0 API documentation supporting both modern **Scalar API Reference** and classic **Swagger UI**, automated parameter/tag/summary inference, auth detection, Admin Panel embedding, and CLI export.
 
 - **Options**:
@@ -393,7 +394,7 @@ Interactive OpenAPI 3.0 API documentation supporting both modern **Scalar API Re
   });
   ```
 
-### 2.16 `realtimePlugin` (`plugins/realtime`, `core/realtime`)
+### 2.19 `realtimePlugin` (`plugins/realtime`, `core/realtime`)
 Framework-agnostic, plugin-based, and adapter-driven Realtime layer supporting WebSocket, SSE, Socket.IO, and distributed Redis Pub/Sub transports with zero SSR execution hazards.
 
 - **Architecture**:
@@ -483,7 +484,7 @@ app.realtime.destroy();
 await app.realtime.reauthenticate();
 ```
 
-### 2.17 `restResourcePlugin` (`plugins/rest-resources`)
+### 2.20 `restResourcePlugin` (`plugins/rest-resources`)
 Zero-boilerplate RESTful CRUD endpoint generator directly from Knex ORM models, complete with relationship eager-loading (`?include=...`), pagination, sorting, column filtering, soft-delete scopes, and recursive hidden field sanitization.
 
 - **Options**:
@@ -560,7 +561,7 @@ Zero-boilerplate RESTful CRUD endpoint generator directly from Knex ORM models, 
   });
   ```
 
-### 2.16 `mcpPlugin` (`plugins/mcp`)
+### 2.21 `mcpPlugin` (`plugins/mcp`)
 Model Context Protocol (MCP) server for connecting Webspresso applications directly to AI agents (Antigravity, Claude Desktop, Cursor, Zed, Windsurf).
 - **Options**:
   - `path`: URL mount path (default: `'/_mcp'`).
@@ -571,7 +572,7 @@ Model Context Protocol (MCP) server for connecting Webspresso applications direc
   - `discovery`: Boolean (default: `true`), scans project `mcp/` directory for custom tools, resources, and prompts.
 - **Dual Transport**: Supports HTTP/SSE inside Webspresso server and Stdio via `webspresso mcp` CLI.
 
-### 2.17 `xlsxPlugin` (`plugins/xlsx`)
+### 2.22 `xlsxPlugin` (`plugins/xlsx`)
 High-performance Excel spreadsheet generation, parsing, ORM model export, streaming writer, formula injection security, and Express `res.xlsx()` decorator.
 - **Options**:
   - `sanitizeFormulas`: Boolean (default `true`), escapes formula injection prefixes (`=`, `+`, `-`, `@`, `\t`, `\r`) to prevent spreadsheet macro exploits.
@@ -594,7 +595,7 @@ High-performance Excel spreadsheet generation, parsing, ORM model export, stream
   - `xlsx.createStreamWriter(stream, options)` → `ExcelJS.stream.xlsx.WorkbookWriter`
 - **Built-in Services**: `xlsx.generate`, `xlsx.parse`, `xlsx.exportModel` accessible via `ctx.service()` or `req.service()`.
 
-### 2.18 `csvPlugin` (`plugins/csv`)
+### 2.23 `csvPlugin` (`plugins/csv`)
 RFC 4180 compliant CSV generator, parser, ORM model export, streaming chunk writer, Excel UTF-8 BOM compatibility, and Express `res.csv()` decorator.
 - **Options**:
   - `delimiter`: String (default `','`), supports `;`, `\t`, `|`.
@@ -618,7 +619,7 @@ RFC 4180 compliant CSV generator, parser, ORM model export, streaming chunk writ
   - `csv.createStreamWriter(stream, options)` → `{ writeHeader, writeRow, writeRows, end }`
 - **Built-in Services**: `csv.generate`, `csv.parse`, `csv.exportModel` accessible via `ctx.service()` or `req.service()`.
 
-### 2.19 `dashboardPlugin` / `devToolbarPlugin` (`plugins/dashboard`)
+### 2.24 `dashboardPlugin` / `devToolbarPlugin` (`plugins/dashboard`)
 Interactive Webspresso Developer Dashboard SPA mounted at `/_webspresso` and Floating In-Page DevTools bar (`fsy.devToolbar()`) inspired by Django Debug Toolbar and Nuxt DevTools.
 
 - **Aliases**: `dashboardPlugin`, `devToolbarPlugin`, `devtoolsPlugin`.
@@ -653,8 +654,8 @@ Interactive Webspresso Developer Dashboard SPA mounted at `/_webspresso` and Flo
     - **💻 System Tab**: Process uptime, memory usage, environment, and Node platform metrics.
   - **Zero Production Overhead**: When `process.env.NODE_ENV === 'production'`, `devToolbar()` immediately returns `""` with zero overhead.
 
-### 2.19 `oauthPlugin` (`plugins/oauth`)
-Zero-dependency OAuth 2.0 & Social Login plugin supporting Google, GitHub, and custom providers with RFC 7636 PKCE, HMAC-signed anti-CSRF state tokens, and Dual Auth integration.
+### 2.25 `oauthPlugin` (`plugins/oauth`)
+Built-in OAuth 2.0 & Social Login plugin supporting Google, GitHub, and custom providers with RFC 7636 PKCE, HMAC-signed anti-CSRF state tokens, and Dual Auth integration.
 - **Options**:
   - `secret`: Secret key for HMAC state signing (`process.env.OAUTH_SECRET || process.env.SESSION_SECRET`).
   - `pathPrefix`: Base path for OAuth routes (default `'/auth'`).
@@ -671,8 +672,8 @@ Zero-dependency OAuth 2.0 & Social Login plugin supporting Google, GitHub, and c
   - `fsy.oauthUrl('google')` ➔ `"/auth/google"`
   - `fsy.oauthUrl('github', { returnTo: '/dashboard' })` ➔ `"/auth/github?returnTo=%2Fdashboard"`
 
-### 2.20 `lazyPlugin` / `defineLazyPlugin` (`plugins/lazy`)
-Zero-dependency on-demand plugin hydration wrapper that defers heavy plugin initialization, route mounting, and service registration until the first matching HTTP request or service invocation.
+### 2.26 `lazyPlugin` / `defineLazyPlugin` (`plugins/lazy`)
+Built-in on-demand plugin hydration wrapper that defers heavy plugin initialization, route mounting, and service registration until the first matching HTTP request or service invocation.
 - **Why**: Drastically slashes application cold start time and peak memory footprint when mounting heavy modules (such as admin panels, media libraries, documentation portals, or internal diagnostic tools) that are not needed on every server startup.
 - **Usage**:
   ```javascript
@@ -700,8 +701,8 @@ Zero-dependency on-demand plugin hydration wrapper that defers heavy plugin init
   - Stubs placeholder services into `ServiceRegistry` and proxy helpers into Nunjucks context.
   - Intercepts incoming requests/calls, executes the plugin factory function, runs `register(ctx)` and `onRoutesReady(ctx)`, replaces proxies seamlessly with the real router/services, and forwards the initial call with zero dropped requests.
 
-### 2.21 `rlsPlugin` (`plugins/rls`)
-Zero-dependency Dynamic Model Row-Level Security (RLS) plugin that bridges request authentication (`req.user`, `req.auth`, `req.tenantId`) to ORM repositories with automatic query scoping, role-based bypass, and route-level overrides.
+### 2.27 `rlsPlugin` (`plugins/rls`)
+Built-in Dynamic Model Row-Level Security (RLS) plugin that bridges request authentication (`req.user`, `req.auth`, `req.tenantId`) to ORM repositories with automatic query scoping, role-based bypass, and route-level overrides.
 - **Why**: Eliminates manual `where({ user_id: req.user.id })` boilerplate across all API endpoints, prevents accidental cross-tenant/cross-user data leakage, and provides declarative data access boundaries.
 - **Options**:
   - `bypassRoles`: Global roles that bypass RLS across all models (default: `['admin', 'superadmin']`). Set to `false` to disable.
@@ -726,4 +727,159 @@ Zero-dependency Dynamic Model Row-Level Security (RLS) plugin that bridges reque
   - Admins bypass filters automatically unless model specifies `bypassRoles: false`.
   - Endpoints can explicitly bypass RLS when needed via `req.db.getRepository('Model').withoutRls()`.
   - Named middleware `middleware: ['rls']` available for selective route application.
+
+### 2.28 `sitemapPlugin` (`plugins/sitemap.js`)
+Automatic XML sitemap generator (`/sitemap.xml`) and `robots.txt` responder with dynamic database source discovery and multi-language hreflang support.
+- **Why**: Eliminates manual sitemap maintenance and crawler management.
+- **Options**:
+  - `hostname`: Base URL (default: `process.env.BASE_URL || 'http://localhost:7331'`).
+  - `exclude`: Patterns to exclude (default: `['/api/*']`).
+  - `changefreq`: Default change frequency (`'always'`, `'hourly'`, `'daily'`, `'weekly'`, `'monthly'`, `'yearly'`, `'never'`; default: `'weekly'`).
+  - `priority`: Default priority (`0.0` - `1.0`; default: `0.8`).
+  - `i18n`: Enable i18n hreflang alternatives (default: `false`).
+  - `locales`: Supported locale list (default: from `SUPPORTED_LOCALES` or `['en']`).
+  - `robots`: Auto-serve `/robots.txt` referencing sitemap (default: `true`).
+  - `robotsDisallow`: Array of path patterns to disallow in `robots.txt`.
+  - `dynamicSources`: Array of dynamic sources `{ model, query, urlPattern, fields, lastmodField, changefreq, priority }`.
+  - `cacheMaxAge`: In-memory XML cache TTL in ms (default: 5 minutes).
+- **Usage**:
+  ```javascript
+  const { sitemapPlugin } = require('webspresso/plugins');
+
+  sitemapPlugin({
+    hostname: 'https://example.com',
+    exclude: ['/api/*', '/_admin/*'],
+    dynamicSources: [
+      {
+        model: 'Post',
+        urlPattern: '/blog/:slug',
+        fields: { slug: 'slug' },
+        lastmodField: 'updated_at',
+        priority: 0.9,
+      },
+    ],
+  });
+  ```
+
+### 2.29 `seoCheckerPlugin` (`plugins/seo-checker`)
+In-browser client-side SEO analysis and diagnostics panel integrated into the development toolbar (inspired by `django-check-seo`).
+- **Why**: Catches missing meta tags, broken OpenGraph attributes, missing canonical links, heading hierarchy issues, and alt text omissions directly in the browser during development.
+- **Options**:
+  - `enabled`: Toggle plugin (default: `process.env.NODE_ENV !== 'production'`).
+  - `settings`: Custom thresholds for title/meta lengths and required tags.
+- **Usage**:
+  ```javascript
+  const { seoCheckerPlugin } = require('webspresso/plugins');
+
+  seoCheckerPlugin();
+  ```
+
+### 2.30 `analyticsPlugin` (`plugins/analytics.js`)
+Zero-dependency tag and tracking snippet injector for external analytics and webmaster verification.
+- **Why**: Injects standardized snippets and verification meta tags for Google Analytics (GA4/gtag), Google Tag Manager (GTM + noscript), Yandex.Metrika (with Webvisor), Microsoft/Bing UET, and Meta/Facebook Pixel.
+- **Options**:
+  - `google`: `{ measurementId, adsId, verificationCode }`.
+  - `gtm`: `{ containerId }`.
+  - `yandex`: `{ counterId, verificationCode, webvisor, clickmap, trackLinks, accurateTrackBounce }`.
+  - `bing`: `{ uetId, verificationCode }`.
+  - `facebook`: `{ pixelId, domainVerification }`.
+  - `pinterest`: `{ verificationCode }`.
+- **Usage**:
+  ```javascript
+  const { analyticsPlugin } = require('webspresso/plugins');
+
+  analyticsPlugin({
+    google: { measurementId: 'G-XXXXXXXXXX', verificationCode: 'abc...' },
+    gtm: { containerId: 'GTM-XXXXXXX' },
+  });
+  ```
+  Provides Nunjucks template helpers: `{{ fsy.gtag() }}`, `{{ fsy.gtm() }}`, `{{ fsy.gtmNoscript() }}`, `{{ fsy.yandexMetrika() }}`, `{{ fsy.bingUet() }}`, `{{ fsy.facebookPixel() }}`, and `{{ fsy.verificationTags() }}`.
+
+### 2.31 `recaptchaPlugin` (`plugins/recaptcha`)
+Server-side token verification and Nunjucks form helpers for Google reCAPTCHA (v2 Checkbox and v3 Invisible Score).
+- **Why**: Prevents bot abuse and spam submissions on forms without manual curl/fetch verification.
+- **Options**:
+  - `siteKey`: Public site key (required).
+  - `secretKey`: Secret key (defaults to `process.env.RECAPTCHA_SECRET_KEY`).
+  - `version`: `'v2'` or `'v3'` (default: `'v2'`).
+  - `minScore`: Minimum score threshold for v3 (default: `0.5`).
+  - `expectedAction`: Expected action string for v3 verification.
+- **Usage**:
+  ```javascript
+  const { recaptchaPlugin } = require('webspresso/plugins');
+
+  recaptchaPlugin({
+    siteKey: process.env.RECAPTCHA_SITE_KEY,
+    secretKey: process.env.RECAPTCHA_SECRET_KEY,
+    version: 'v3',
+    minScore: 0.7,
+  });
+  ```
+  Provides named middleware `middleware: ['recaptcha']` and template helpers `{{ fsy.recaptchaScript() }}`, `{{ fsy.recaptchaWidget() }}`, `{{ fsy.recaptchaExecute() }}`.
+
+### 2.32 `dataExchangePlugin` (`plugins/data-exchange`)
+Spreadsheet import (CSV/XLSX) and Excel export engine integrated into the Mithril.js Admin Panel.
+- **Why**: Allows non-technical staff to export filtered ORM model records to formatted `.xlsx` files and bulk-import records from CSV/Excel spreadsheets with field validation.
+- **Options**:
+  - `enabled`: Toggle plugin (default: `true`).
+  - `db`: Database instance (default: `ctx.db`).
+  - `adminPath`: Mount path (default: `'/_admin'`).
+  - `maxRows`: Maximum row limit (default: `10000`).
+  - `maxFileBytes`: Maximum upload size in bytes (default: `10485760` / 10MB).
+- **Usage**:
+  ```javascript
+  const { dataExchangePlugin, adminPanelPlugin } = require('webspresso/plugins');
+
+  createApp({
+    plugins: [
+      adminPanelPlugin({ db }),
+      dataExchangePlugin({ maxRows: 25000 }),
+    ],
+  });
+  ```
+
+### 2.33 `healthCheckPlugin` (`plugins/health-check.js`)
+Dedicated HTTP health check endpoint (`/health`) for load balancer probes, Kubernetes liveness, and uptime monitoring.
+- **Why**: Lightweight, non-intrusive probe endpoint that reports framework version, uptime, and executes custom diagnostic checks.
+- **Options**:
+  - `path`: Endpoint route (default: `'/health'`).
+  - `enabled`: Toggle plugin (default: `true`).
+  - `authorize`: Optional gate function `(req) => boolean`.
+  - `verbose`: Include timestamp, uptime, framework version (default: `true`).
+  - `checks`: Async function `async ({ req, db, options }) => ({ db: 'ok' })`. Thrown errors return HTTP 503.
+- **Usage**:
+  ```javascript
+  const { healthCheckPlugin } = require('webspresso/plugins');
+
+  healthCheckPlugin({
+    path: '/health',
+    checks: async ({ db }) => {
+      await db.raw('SELECT 1');
+      return { database: 'ok' };
+    },
+  });
+  ```
+
+### 2.34 `queuePlugin` (`plugins/queue`)
+Modular plugin wrapper for Webspresso's background job queue engine (`core/queue`).
+- **Why**: Connects background workers (`jobs/`) to Express lifecycle, automatically starts worker poll loops on server listen, and gracefully drains jobs on shutdown.
+- **Options**:
+  - `adapter`: `'memory'`, `'database'` / `'db'`, `'redis'`, `'wait-until'`, `'cloudflare'`, or a custom `QueueAdapter` instance (default: `'memory'`).
+  - `db`: Database instance for database adapter.
+  - `redisClient`: Redis client instance for redis adapter.
+  - `concurrency`: Number of concurrent job workers (default: `2`).
+  - `pollInterval`: Polling interval in ms (default: `500`).
+  - `jobsDir`: Path to jobs directory (default: `<cwd>/jobs`).
+  - `autoStart`: Automatically start worker loop (default: `true`).
+  - `retention`: Auto-retention cleanup config.
+- **Usage**:
+  ```javascript
+  const { queuePlugin } = require('webspresso/plugins');
+
+  queuePlugin({
+    adapter: 'database',
+    concurrency: 4,
+    pollInterval: 1000,
+  });
+  ```
 

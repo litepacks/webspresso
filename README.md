@@ -5,7 +5,7 @@
 [![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg?style=flat-square)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-A batteries-included, full-stack Node.js framework combining Next.js/Nuxt-style file-based routing, server-rendered Nunjucks streaming, a Knex-based ORM with ambient transactions, zero-dependency dual authentication, background queues, and a customizable Mithril.js SPA Admin Panel.
+A batteries-included, full-stack Node.js framework combining Next.js/Nuxt-style file-based routing, server-rendered Nunjucks streaming, a Knex-based ORM with ambient transactions, built-in native dual authentication, background queues, and a customizable Mithril.js SPA Admin Panel.
 
 ---
 
@@ -33,7 +33,7 @@ Open **`http://localhost:7331`** in your browser.
 | **Routing & SSR** | 100% file-based routing (`pages/`), method suffixes (`.get.js`, `.post.js`), nested layouts (`_layout.njk`), directory-level error boundaries (`_error.njk`), loading skeletons (`_loading.njk`), and out-of-order chunked response streaming (`res.renderStream`). |
 | **Performance & Cold Start** | Single-pass unified route discovery, dev mode JIT on-demand route evaluation, production AOT route manifest (`webspresso build`), AOT Nunjucks template precompilation (zero AST parsing at runtime), and on-demand lazy plugin mounting. |
 | **Database & ORM** | Built-in Knex ORM with `defineModel`, `zdb` schema builder, Repository pattern (`db.getRepository('Model')`), relations (`belongsTo`, `hasMany`), cascade soft-delete & restore, and ambient transactions via `AsyncLocalStorage`. |
-| **Dual Auth & Sessions** | Stateful cookies for SSR + stateless HS256 JWT rotation for APIs, magic links, active device management & remote session revocation, CSRF protection, and zero external auth dependencies. |
+| **Dual Auth & Sessions** | Stateful cookies for SSR + stateless HS256 JWT rotation for APIs, magic links, active device management & remote session revocation, CSRF protection, and built-in native auth. |
 | **Services & Queues** | File-based auto-discovery in `services/` with declarative Zod validation, role-based access guards, and ACID transaction propagation. Background worker queues in `jobs/`. |
 | **Admin Panel SPA** | Integrated Mithril.js single-page admin panel mounted at `/_admin` with auto-layout wrapping, CRUD views, custom dashboard widgets, and custom field renderers. Supports on-demand lazy mounting (`adminPanelPlugin({ lazy: true })`). |
 | **Plugin Ecosystem** | 20+ official plugins: Polar.sh billing, Webhooks dispatcher with HMAC signatures, Realtime (WebSocket/SSE), Site Analytics, API Keys, File Manager, CSV/Excel generation, On-demand Lazy Plugins (`lazyPlugin`), and more. |

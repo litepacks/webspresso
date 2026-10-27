@@ -61,7 +61,7 @@ sequenceDiagram
 
 ### Phase 1: Transport & Connection Edge
 1. **TCP Connection & Draining Check**: The server checks if it is in shutdown draining mode. If shutting down, new requests are rejected immediately with HTTP 503 (`Service Unavailable`).
-2. **Streaming Compression (`server.compression`)**: The zero-dependency streaming zlib interceptor inspects the `Accept-Encoding` header (`br`, `gzip`, `deflate`). Payloads below the 1 KB threshold bypass compression; larger payloads stream through zlib transform streams.
+2. **Streaming Compression (`server.compression`)**: The native streaming zlib interceptor inspects the `Accept-Encoding` header (`br`, `gzip`, `deflate`). Payloads below the 1 KB threshold bypass compression; larger payloads stream through zlib transform streams.
 
 ### Phase 2: Context & Auth Initialization
 3. **Request Correlation & Context Container**:

@@ -34,7 +34,7 @@ npm run build:css
 
 ## 3. Graceful Shutdown & Lifecycle Management
 
-Webspresso includes native, zero-dependency graceful shutdown support. Configure it in `server.js`:
+Webspresso includes native, built-in graceful shutdown support. Configure it in `server.js`:
 
 ```javascript
 const { createApp } = require('webspresso');

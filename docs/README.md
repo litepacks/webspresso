@@ -5,7 +5,7 @@ description: Official documentation for the Webspresso Node.js SSR framework —
 
 # Webspresso Documentation
 
-Welcome to the official Webspresso documentation. Webspresso is a lightweight, zero-dependency-sprawl Express SSR framework featuring file-based routing, Nunjucks templating, an intuitive Knex-based ORM with ambient transactions, a modular plugin ecosystem, and a customizable Mithril.js SPA Admin Panel.
+Welcome to the official Webspresso documentation. Webspresso is a lightweight full-stack Express SSR framework featuring file-based routing, Nunjucks templating, an intuitive Knex-based ORM with ambient transactions, a modular plugin ecosystem, and a customizable Mithril.js SPA Admin Panel.
 
 ---
 
@@ -41,7 +41,10 @@ Task-focused guides for solving specific engineering problems:
 - **[SSR & Templates](guides/ssr-and-templates.md)** — Server-side data loading (`load()`), Nunjucks layouts, `fsy` template helpers, and chunked streaming.
 - **[Services Layer](guides/services.md)** — Defining services, Zod validation, declarative auth guards, and ambient ACID transactions.
 - **[Database & ORM](guides/database-and-orm.md)** — Defining models (`defineModel`), `zdb` schema builder, repositories API, and Knex migrations.
-- **[Dual Authentication](guides/authentication.md)** — Session-based auth cookies for SSR, stateless JWT & refresh token rotation for APIs.
+- **[Dual Authentication](guides/authentication.md)** — Session-based auth cookies for SSR, stateless JWT & refresh token rotation for APIs, 2FA/TOTP, QR codes, and passwordless magic links.
+- **[AI & Real-Time Streaming](guides/ai-and-streaming.md)** — LLM token streaming (`res.streamText`, `res.streamJson`), Server-Sent Events (SSE), and client abort cancellation.
+- **[Forms & Flash Messages](guides/forms-and-flash.md)** — ModelForm builder (`fsy.field`, `fsy.formFor`), flash messages, and `withOldInput()` across redirects.
+- **[Developer Tools & Workflows](guides/developer-tools.md)** — Webspresso DB Studio visual browser, interactive REPL console, and static site export (SSG).
 - **API Endpoints** — HTTP method files (`.get.js`, `.post.js`), `req.input` validation, and JSON responses (see [File-Based Routing](guides/routing.md)).
 - **[Admin Panel SPA](guides/admin-panel.md)** — Registering admin modules, custom Mithril.js components (`component.js`), field renderers, and widgets.
 - **[Plugin Ecosystem](reference/plugins.md)** — Official plugins, lifecycle hooks (`register`, `onRoutesReady`), and inter-plugin APIs.

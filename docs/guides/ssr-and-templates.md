@@ -169,3 +169,33 @@ Catch exceptions locally within a section of your application without crashing t
 - **Companion Loader (`_error.js`)**: Export `load({ error, req, ctx })` to fetch custom error data.
 - **Status Preservation**: Thrown HTTP exceptions (`NotFoundError`, `ForbiddenError`) automatically preserve their status codes (`404`, `403`).
 - **Template Context**: Access `{{ error.message }}`, `{{ error.status }}`, `{{ route.routePath }}`, and `fsy` helpers.
+
+---
+
+## 7. Ahead-Of-Time (AOT) Template Precompilation
+
+For maximum production performance and near-instant cold starts, precompile all Nunjucks templates and route descriptors into an ahead-of-time bundle:
+
+```bash
+# Run before production deploy
+npx webspresso build
+```
+
+This compiles:
+1. `.webspresso/templates.compiled.js`: Precompiled JavaScript functions for all Nunjucks templates (completely eliminates runtime template parsing and AST generation).
+2. `.webspresso/routes.manifest.json`: Pre-indexed route manifest eliminating filesystem scanning.
+
+### Automatic Production Activation
+In production (`NODE_ENV=production`), `createApp()` automatically detects and mounts `.webspresso/templates.compiled.js` and `.webspresso/routes.manifest.json` if they exist.
+
+To explicitly configure or override the precompiled template behavior in `createApp()`:
+
+```javascript
+createApp({
+  // Automatically loads in production; set false to disable, or specify custom bundle path:
+  precompiledTemplates: process.env.NODE_ENV === 'production',
+  // Or pass a custom bundle path:
+  // precompiledTemplates: './dist/templates.compiled.js',
+});
+```
+

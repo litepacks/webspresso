@@ -1,6 +1,6 @@
-# Native Zero-Dependency Rate Limiting Engine (`core/rate-limit`)
+# Native Rate Limiting Engine (`core/rate-limit`)
 
-Webspresso features a high-performance, zero-dependency Rate Limiting Engine located in `core/rate-limit/`. It works seamlessly across both traditional Express middleware pipelines and modern edge/serverless contexts (such as Hono), providing standard RFC 6585 and IETF Draft rate limit headers with memory leak-free in-memory and distributed Redis sliding-window stores.
+Webspresso features a high-performance, built-in Rate Limiting Engine located in `core/rate-limit/`. It works seamlessly across both traditional Express middleware pipelines and modern edge/serverless contexts (such as Hono), providing standard RFC 6585 and IETF Draft rate limit headers with memory leak-free in-memory and distributed Redis sliding-window stores.
 
 ---
 
@@ -8,7 +8,7 @@ Webspresso features a high-performance, zero-dependency Rate Limiting Engine loc
 
 | Feature | Core Rate Limiter (`core/rate-limit`) | Rate Limit Plugin (`plugins/rate-limit`) |
 | :--- | :--- | :--- |
-| **Dependencies** | **Zero external dependencies** (pure Node.js) | Requires `express-rate-limit` peer dependency |
+| **Dependencies** | **Built-in** (pure Node.js) | Requires `express-rate-limit` peer dependency |
 | **Import** | `const { rateLimit, RateLimiter } = require('webspresso')` | `const { rateLimitPlugin } = require('webspresso')` |
 | **Framework Agnostic** | ✅ Express `(req, res, next)` & Hono `(c, next)` | Express only |
 | **Stores** | Native Sliding Window `MemoryRateLimitStore` & `RedisRateLimitStore` | `express-rate-limit` memory or external store |

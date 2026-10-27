@@ -42,33 +42,44 @@ module.exports = {
 
 ---
 
-## Official plugins
+## Official plugins (34 Built-in Plugins)
 
-| Plugin | Purpose | Guide |
-|--------|---------|-------|
-| `adminPanelPlugin` | Mithril.js CRUD admin SPA | [Admin Panel](/guides/admin-panel) |
-| `polarPlugin` | Polar.sh billing (checkout, webhooks) | [Polar Billing](/guides/polar-billing) |
-| `rateLimitPlugin` | Named + global rate limiters | — |
-| `emailPlugin` | MJML + Nodemailer | — |
-| `uploadPlugin` | Multipart file uploads | — |
-| `fileManagerPlugin` | Filesystem media library & asset picker | — |
-| `contentPlugin` | Headless CMS | — |
-| `restResourcePlugin` | Auto REST CRUD from models | — |
-| `corsPlugin` | CORS handler | — |
-| `csrfPlugin` | CSRF tokens | — |
-| `basicAuthPlugin` | HTTP Basic Auth | — |
-| `redirectPlugin` | HTTP redirects | — |
-| `healthCheckPlugin` | Liveness probe | — |
-| `realtimePlugin` | WebSocket / SSE / Socket.IO | — |
-| `siteAnalyticsPlugin` | Self-hosted analytics & retention pruning | — |
-| `auditLogPlugin` | Admin audit trail | — |
-| `dataExchangePlugin` | Admin CSV/XLSX import/export | — |
-| `swaggerPlugin` | OpenAPI + Swagger UI | — |
-| `recaptchaPlugin` | reCAPTCHA verification | — |
-| `sitemapPlugin` | sitemap.xml / robots.txt | — |
-| `schemaExplorerPlugin` | Schema & ER diagram explorer (API & Admin) | — |
-| `xlsxPlugin` | Excel XLSX generation, parsing & ORM export | — |
-| `csvPlugin` | RFC 4180 CSV generation, parsing & ORM export | — |
+| Plugin | Purpose | Guide / Reference |
+|--------|---------|-------------------|
+| `adminPanelPlugin` | Mithril.js CRUD admin SPA with user & role management | [Admin Panel](/guides/admin-panel) |
+| `polarPlugin` | Polar.sh subscription billing, checkouts, and customer state sync | [Polar Billing](/guides/polar-billing) |
+| `rateLimitPlugin` | Named route rate limiters and global DDoS throttling | — |
+| `emailPlugin` | MJML template compilation, Nodemailer transport & delivery log | — |
+| `uploadPlugin` | Multipart uploads with Local, S3, R2, and GCS storage providers | — |
+| `fileManagerPlugin` | Filesystem media library, directory tree & modal asset picker | — |
+| `contentPlugin` | Schema-driven headless CMS with inline page editing | — |
+| `restResourcePlugin` | Zero-boilerplate RESTful CRUD API generated from ORM models | — |
+| `corsPlugin` | Declarative Cross-Origin Resource Sharing handler | — |
+| `csrfPlugin` | CSRF token defense supporting cookie and session modes | — |
+| `basicAuthPlugin` | RFC 7617 HTTP Basic Authentication with named route middleware | — |
+| `apiKeyPlugin` | B2B Developer API Key manager with SHA-256 and wildcard scopes | — |
+| `webhooksPlugin` | Outgoing Webhooks with HMAC-SHA256 signatures and exponential retries | — |
+| `oauthPlugin` | OAuth 2.0 social login client (Google, GitHub, Discord, Apple, etc.) | — |
+| `rlsPlugin` | Dynamic model Row-Level Security (RLS) with tenant and user scoping | — |
+| `redirectPlugin` | Declarative HTTP 301–308 URL redirects with method filtering | — |
+| `healthCheckPlugin` | Lightweight `/health` HTTP probe for load balancers and monitors | — |
+| `realtimePlugin` | Unified WebSocket, SSE, and Socket.IO realtime layer with Redis Pub/Sub | — |
+| `queuePlugin` | Background worker queue bridge connecting jobs to server lifecycle | — |
+| `siteAnalyticsPlugin` | Self-hosted privacy-friendly page view analytics & JS error tracker | — |
+| `analyticsPlugin` | Tag & snippet injector for GA4, GTM, Yandex.Metrika, Bing, Meta | — |
+| `seoCheckerPlugin` | In-browser client-side SEO analysis and diagnostics panel | — |
+| `sitemapPlugin` | Dynamic XML sitemap generator (`/sitemap.xml`) & `robots.txt` responder | — |
+| `auditLogPlugin` | Mutation audit trail for ORM models and Admin staff actions | — |
+| `dataExchangePlugin` | Admin CSV/XLSX bulk import and Excel export engine | — |
+| `xlsxPlugin` | Excel XLSX file generator, parser, and streaming model export | — |
+| `csvPlugin` | RFC 4180 CSV generator, parser, formula sanitizer & streaming export | — |
+| `swaggerPlugin` / `openapiPlugin` | Automated OpenAPI 3.0 generator with Swagger UI & Scalar playground | — |
+| `schemaExplorerPlugin` | Interactive database schema & ER diagram visualizer | — |
+| `ormCacheAdminPlugin` | In-memory cache inspection and invalidation dashboard | — |
+| `dashboardPlugin` / `devToolbarPlugin` | Development toolbar with diagnostics and query inspection | — |
+| `mcpPlugin` | Model Context Protocol (MCP) server exposing tools and resources | — |
+| `recaptchaPlugin` | Google reCAPTCHA v2 checkbox & v3 invisible score verification | — |
+| `lazyPlugin` / `defineLazyPlugin` | On-demand JIT plugin hydration wrapper for faster cold starts | — |
 
 Import from `require('webspresso/plugins')`. Full source lives under `plugins/` in the repository.
 

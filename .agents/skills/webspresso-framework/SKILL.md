@@ -87,3 +87,17 @@ npx webspresso add tailwind --upgrade
 - **`models/`**: Schema-driven ORM models with `zdb` definitions, repositories, relations, scopes, and query cache.
 - **`plugins/`**: Modular extension ecosystem (Admin Panel, Media Library, Polar Billing, CSV/XLSX, Realtime, CSRF, CORS, Basic Auth).
 - **`views/`**: Nunjucks layouts, partials, and `fsy` template helpers.
+
+---
+
+## 🔒 Internal Development Strict Invariants
+
+When developing framework internals, modifying `core/`, `plugins/`, `bin/`, or `docs/`, consult and follow the strict invariants in [`webspresso-internal-dev`](../webspresso-internal-dev/SKILL.md):
+1. Maintain dual schema compiler syntax (`({ z }) => ({})` and `{ body: z.object() }`).
+2. Support numeric shorthands on all `zdb.*` column helpers accepting lengths.
+3. Keep optional runtime libraries in `peerDependencies` (with optional flag) and guard imports gracefully.
+4. Enforce zero phantom packages in docs (`npm i express` is strictly banned).
+5. Maintain parity and full typing across all 34 plugins in `plugins/index.js`, `index.d.ts`, and `docs/reference/plugins.md`.
+6. Maintain full CLI command parity across `bin/commands/`, `docs/reference/cli.md`, and `.agents/CLI.md`.
+7. Always verify with `npm run check:types` and `npm run test:fast`.
+

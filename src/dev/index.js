@@ -2,7 +2,7 @@
 
 /**
  * Webspresso Development & DX Tooling
- * Zero-dependency banner, route table introspection, request profiler, and N+1 query detection
+ * Built-in banner, route table introspection, request profiler, and N+1 query detection
  * @module src/dev
  */
 

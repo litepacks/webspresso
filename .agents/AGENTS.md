@@ -1,6 +1,6 @@
 # Webspresso Project Guidelines & Rules
 
-Webspresso is a modern, lightweight, zero-dependency-sprawl full-stack Node.js SSR & API framework featuring Next.js/Nuxt-style file-based routing, an intuitive Knex-based ORM, a modular plugin ecosystem, zero-dependency Dual Authentication (Session + JWT), Graceful Shutdown & Force Close, HTTP Response Compression, Centralized Framework Exceptions, and a customizable Mithril.js SPA Admin Panel.
+Webspresso is a modern, lightweight full-stack Node.js SSR & API framework featuring Next.js/Nuxt-style file-based routing, an intuitive Knex-based ORM, a modular plugin ecosystem, native Dual Authentication (Session + JWT), Graceful Shutdown & Force Close, HTTP Response Compression, Centralized Framework Exceptions, and a customizable Mithril.js SPA Admin Panel.
 
 ---
 
@@ -23,9 +23,11 @@ When tasked with a feature or bugfix, **immediately consult the corresponding to
 | **Cloud Secrets (GCP & AWS Secret Manager)** | [`.agents/SECRETS.md`](SECRETS.md) | `core/secrets/`, `bin/commands/secrets-pull.js` |
 | **Cloud Metrics & Distributed Tracing** | [`.agents/METRICS.md`](METRICS.md) | `core/metrics/`, `/metrics` |
 | **Cloud Migration Jobs (Zero-Downtime DB Deploy)** | [`.agents/MIGRATION_JOBS.md`](MIGRATION_JOBS.md) | `bin/commands/add-migration-job.js`, `core/orm/migrate-cloud.js` |
-| **Rate Limiting Engine (Zero-Dependency & Redis)** | [`.agents/RATE_LIMIT.md`](RATE_LIMIT.md) | `core/rate-limit/` |
+| **Rate Limiting Engine (In-Memory & Redis)** | [`.agents/RATE_LIMIT.md`](RATE_LIMIT.md) | `core/rate-limit/` |
 | **Feature Flags & Canary Splitter (`core/flags`)** | [`.agents/FLAGS.md`](FLAGS.md) | `core/flags/` |
 | **Ambient Context & Composable Hooks (`core/context`)** | [`.agents/CONTEXT.md`](CONTEXT.md) | `core/context/` |
+| **Form Builder, ModelForms & Flash (`core/forms`)** | [`.agents/FORMS.md`](FORMS.md) | `core/forms/`, `fsy.field`, `fsy.formFor` |
+| **AI Token Streaming & SSE (`core/stream`)** | [`.agents/STREAMING.md`](STREAMING.md) | `core/stream/`, `core/sse/`, `res.streamText` |
 | **API Signatures & Types Verification** | [`index.d.ts`](../index.d.ts) | **Canonical Ground Truth** |
 
 ---
@@ -36,7 +38,7 @@ Every coding agent working on Webspresso **MUST** follow this 4-step execution d
 
 1. **Discover & Triage**: Identify the relevant topic guide above and inspect existing similar files in the workspace (e.g. `pages/api/`, `models/`, `services/`).
 2. **Contract Adherence**: Follow the exact module contract exported by the framework (`{ schema, middleware, handler }` for routes, `defineModel` for ORM, `defineService` for services).
-3. **Zero External Dependencies**: Use native Node.js standard modules (`crypto`, `path`, `fs`, `zlib`, `events`) and built-in framework utilities. NEVER install ad-hoc npm packages for auth, jwt, routing, or templating.
+3. **Minimal External Dependencies**: Rely on native Node.js standard modules (`crypto`, `path`, `fs`, `zlib`, `events`) and built-in framework utilities. NEVER install ad-hoc npm packages for auth, jwt, routing, or templating.
 4. **Targeted Verification**: Run the specific Vitest test file (`npx vitest run tests/...`) to confirm zero regressions before marking the task complete.
 
 ---
@@ -59,24 +61,25 @@ This `.agents/` customization root is organized into modular topic guides:
 12. **[Admin Panel Customization](.agents/ADMIN.md)** — Extending Mithril.js Admin Panel SPA (Custom pages `component.js`, custom field renderers, widgets, single & bulk actions).
 13. **[CLI Tooling & Commands](CLI.md)** — `webspresso dev`, `build`, `doctor`, `db:migrate`, `db:seed`, `polar:migrate`, `favicon:generate`, `add:tailwind`, `add:docker`, `add:cloudrun`, `add:aws`, `add:cloudflare`, `deploy:check`, `agents:init`.
 14. **[Development & Testing Workflow](.agents/WORKFLOW.md)** — CLI commands, Vitest unit/integration testing, Playwright E2E tests, TypeScript type checking, and zero regression policy.
-15. **[Coding Standards & Conventions](.agents/CONVENTIONS.md)** — Zero external dependencies policy, strict function signature & schema verification, clean component separation, and log traceback inspection rules.
+15. **[Coding Standards & Conventions](.agents/CONVENTIONS.md)** — Minimal external dependencies policy, strict function signature & schema verification, clean component separation, and log traceback inspection rules.
 16. **[Background Job Queue](.agents/QUEUE.md)** — In-Memory, Knex Database, Distributed Redis, AWS SQS, and Google Cloud Pub/Sub queue adapters, job auto-discovery (`jobs/`), retries, and graceful draining.
 17. **[SSR Streaming & Chunked Transfer](.agents/STREAMING.md)** — Native HTTP chunked streaming (`res.renderStream()`), deferred data loader slots (`defer: { key: promise }`), and TTFB optimization.
 18. **Polar billing production checklist** — [docs/guides/polar-production-checklist.md](../docs/guides/polar-production-checklist.md) (env, webhooks, rate limits, external tier hooks, CSP). Plugin reference: [PLUGINS.md § polarPlugin](PLUGINS.md).
-19. **[Decoupled Events & Signals Architecture](.agents/EVENTS.md)** — Zero-dependency enterprise event dispatcher (`core/events`), sync/async/parallel/serial/waterfall dispatch, wildcard listeners (`order.*`), Django-style `Signal` and sender filtering, queue bridging, and listener auto-discovery.
-20. **[HTTP 103 Early Hints](.agents/EARLY_HINTS.md)** — Zero-dependency RFC 8288 / RFC 8297 Early Hints dispatcher (`core/early-hints`), preloading route CSS/JS and fonts before SSR loader execution, `createApp({ earlyHints })`, and `res.earlyHints(links)` / `ctx.earlyHints(links)` helpers.
-21. **[Payload Limits & DoS Protection](.agents/LIMITS.md)** — Zero-dependency request body limits and DoS protection (`core/limits`), `createApp({ limits })`, automatic `PayloadTooLargeError` (HTTP 413) mapping, route overrides (`limits.routes`), streaming bypass, and native HMAC webhook `req.rawBody` capture.
-22. **[Cloud & Kubernetes Health Probes](.agents/HEALTH.md)** — Zero-dependency RFC-compliant liveness (`/healthz`), readiness (`/readyz`), and combined diagnostic (`/health`) probes (`core/health`), event loop lag telemetry, database/queue health monitors, automatic HTTP 503 draining on graceful shutdown, and `createApp({ healthCheck: true })`.
-23. **[LRU & Tagged Cache Engine](.agents/CACHE.md)** — Zero-dependency, memory-bounded in-memory LRU cache (`core/cache`), byte budget constraints (`maxBytes` / `maxMemoryMb`), TTL expiration, stampede protection (`getOrSet`), leak-free tag invalidation (`TaggedLruCache`), ORM query cache provider, and `createApp({ cache })`.
-24. **[Enterprise Resilience & Circuit Breaker](.agents/RESILIENCE.md)** — Zero-dependency fault tolerance engine (`core/resilience`), three-state `CircuitBreaker` (`CLOSED`, `OPEN`, `HALF_OPEN`), rolling window failure rate, per-call execution timeout, fallback handlers, and exponential backoff retry engine (`retry`, `withRetry`) with randomized jitter and transient error detection.
-25. **[Structured Cloud Logging & Distributed Tracing](.agents/LOGGING.md)** — Zero-dependency cloud logger (`core/logger`), GCP Cloud Logging, AWS CloudWatch, automatic trace propagation (`x-cloud-trace-context`, `x-amzn-trace-id`, `traceparent`), sensitive key redaction, and `req.logger` child context.
-26. **[Stateless Scale-Out & Database Pool Management](.agents/SCALE_OUT.md)** — Distributed Redis session store (`createRedisSessionStore`), Redis session tracker (`createRedisSessionTracker`), zero-dependency RESP client, serverless DB connection pool optimizer (`normalizeServerlessPoolConfig`), and scale-out preflight audits (`deploy:check`).
-27. **[Cloud Secrets Management](.agents/SECRETS.md)** — Zero-dependency Google Cloud Secret Manager & AWS Secrets Manager/SSM integration (`core/secrets`), in-memory caching with TTL, dot-notation JSON subkeys, process.env hydration, and `webspresso secrets:pull`.
-28. **[Cloud Metrics & Distributed Tracing](.agents/METRICS.md)** — Zero-dependency Prometheus exposition format (`/metrics`), JSON telemetry (`/metrics.json`), HTTP latency histograms, Node.js event loop/memory/pool/cache collectors, and W3C `traceparent` & `x-trace-id` propagation (`core/metrics`).
+19. **[Decoupled Events & Signals Architecture](.agents/EVENTS.md)** — Enterprise event dispatcher (`core/events`), sync/async/parallel/serial/waterfall dispatch, wildcard listeners (`order.*`), Django-style `Signal` and sender filtering, queue bridging, and listener auto-discovery.
+20. **[HTTP 103 Early Hints](.agents/EARLY_HINTS.md)** — Built-in RFC 8288 / RFC 8297 Early Hints dispatcher (`core/early-hints`), preloading route CSS/JS and fonts before SSR loader execution, `createApp({ earlyHints })`, and `res.earlyHints(links)` / `ctx.earlyHints(links)` helpers.
+21. **[Payload Limits & DoS Protection](.agents/LIMITS.md)** — Built-in request body limits and DoS protection (`core/limits`), `createApp({ limits })`, automatic `PayloadTooLargeError` (HTTP 413) mapping, route overrides (`limits.routes`), streaming bypass, and native HMAC webhook `req.rawBody` capture.
+22. **[Cloud & Kubernetes Health Probes](.agents/HEALTH.md)** — Built-in RFC-compliant liveness (`/healthz`), readiness (`/readyz`), and combined diagnostic (`/health`) probes (`core/health`), event loop lag telemetry, database/queue health monitors, automatic HTTP 503 draining on graceful shutdown, and `createApp({ healthCheck: true })`.
+23. **[LRU & Tagged Cache Engine](.agents/CACHE.md)** — Memory-bounded in-memory LRU cache (`core/cache`), byte budget constraints (`maxBytes` / `maxMemoryMb`), TTL expiration, stampede protection (`getOrSet`), leak-free tag invalidation (`TaggedLruCache`), ORM query cache provider, and `createApp({ cache })`.
+24. **[Enterprise Resilience & Circuit Breaker](.agents/RESILIENCE.md)** — Built-in fault tolerance engine (`core/resilience`), three-state `CircuitBreaker` (`CLOSED`, `OPEN`, `HALF_OPEN`), rolling window failure rate, per-call execution timeout, fallback handlers, and exponential backoff retry engine (`retry`, `withRetry`) with randomized jitter and transient error detection.
+25. **[Structured Cloud Logging & Distributed Tracing](.agents/LOGGING.md)** — Built-in cloud logger (`core/logger`), GCP Cloud Logging, AWS CloudWatch, automatic trace propagation (`x-cloud-trace-context`, `x-amzn-trace-id`, `traceparent`), sensitive key redaction, and `req.logger` child context.
+26. **[Stateless Scale-Out & Database Pool Management](.agents/SCALE_OUT.md)** — Distributed Redis session store (`createRedisSessionStore`), Redis session tracker (`createRedisSessionTracker`), lightweight RESP client, serverless DB connection pool optimizer (`normalizeServerlessPoolConfig`), and scale-out preflight audits (`deploy:check`).
+27. **[Cloud Secrets Management](.agents/SECRETS.md)** — Built-in Google Cloud Secret Manager & AWS Secrets Manager/SSM integration (`core/secrets`), in-memory caching with TTL, dot-notation JSON subkeys, process.env hydration, and `webspresso secrets:pull`.
+28. **[Cloud Metrics & Distributed Tracing](.agents/METRICS.md)** — Built-in Prometheus exposition format (`/metrics`), JSON telemetry (`/metrics.json`), HTTP latency histograms, Node.js event loop/memory/pool/cache collectors, and W3C `traceparent` & `x-trace-id` propagation (`core/metrics`).
 29. **[Cloud Migration Jobs & Zero-Downtime Database Deploy](.agents/MIGRATION_JOBS.md)** — Dedicated pre-deploy migration jobs for Cloud Run, AWS ECS, and Kubernetes (`webspresso add:migration-job`), connection retries, and stale lock auto-healing (`webspresso db:migrate --safe`).
-30. **[Native Zero-Dependency Rate Limiting Engine](.agents/RATE_LIMIT.md)** — Framework-agnostic rate limiter (`core/rate-limit`), sliding window in-memory & Redis stores, RFC 6585 standard headers (`RateLimit-*`, `Retry-After`), Express & Hono dual support, and `rateLimit({ window, limit })`.
-31. **[Feature Flags & Canary Traffic Splitter](.agents/FLAGS.md)** — Zero-dependency feature flag and canary rollout engine (`core/flags`), deterministic FNV-1a bucketing, targeting rules (users, roles, email domains), A/B variants, SSR template helpers (`fsy.hasFeature`), and declarative API guards (`defineApi({ flag })`).
-32. **[Ambient Context & Composable Hooks](.agents/CONTEXT.md)** — Zero-dependency execution context powered by `AsyncLocalStorage` (`core/context`), eliminating prop drilling across loaders, services, models, and workers with `useContext`, `useDb`, `useAuth`, `useUser`, `useService`, `useLogger`, `useReq`, `useRes`, `useParams`, `useQuery`, `useTransaction`, and `withContext`.
+30. **[Native Rate Limiting Engine](.agents/RATE_LIMIT.md)** — Framework-agnostic rate limiter (`core/rate-limit`), sliding window in-memory & Redis stores, RFC 6585 standard headers (`RateLimit-*`, `Retry-After`), Express & Hono dual support, and `rateLimit({ window, limit })`.
+31. **[Feature Flags & Canary Traffic Splitter](.agents/FLAGS.md)** — Built-in feature flag and canary rollout engine (`core/flags`), deterministic FNV-1a bucketing, targeting rules (users, roles, email domains), A/B variants, SSR template helpers (`fsy.hasFeature`), and declarative API guards (`defineApi({ flag })`).
+32. **[Ambient Context & Composable Hooks](.agents/CONTEXT.md)** — Built-in execution context powered by `AsyncLocalStorage` (`core/context`), eliminating prop drilling across loaders, services, models, and workers with `useContext`, `useDb`, `useAuth`, `useUser`, `useService`, `useLogger`, `useReq`, `useRes`, `useParams`, `useQuery`, `useTransaction`, and `withContext`.
+33. **[Form Builder, ModelForms & Flash Messages](.agents/FORMS.md)** — Built-in form generation and flash state management (`core/forms`), preserving old input and validation errors across redirects (`res.withOldInput()`, `res.flash()`), accessible form inputs (`fsy.field()`), and model-driven forms (`fsy.formFor()`).
 
 ---
 
@@ -89,7 +92,7 @@ This `.agents/` customization root is organized into modular topic guides:
 - **Page Data Loaders (NO Manual `res.render()`)**: NEVER call `res.render()` inside custom handlers for SSR pages. Use companion loaders `pages/*.js` exporting `async function load({ req, res, db, ctx })`.
 - **Semantic Exceptions (NO Generic Errors / Manual Responses)**: NEVER return manual `res.status(404).json(...)` inside services or loaders. ALWAYS throw semantic errors: `NotFoundError`, `ValidationError`, `UnauthorizedError`, `ForbiddenError`.
 - **Background Jobs (NO BullMQ / `setTimeout`)**: NEVER use unmanaged `setTimeout` or external queues. Place job workers in `jobs/` and dispatch via `req.queue.dispatch()`.
-- **Zero External Dependencies**: Core framework functions (Auth, JWT, CORS, Routing, Errors, Compression, Shutdown, Nunjucks helpers) must rely strictly on native Node.js modules (`crypto`, `path`, `fs`, `events`, `zlib`, `async_hooks`).
+- **Minimal External Dependencies**: Core framework functions (Auth, JWT, CORS, Routing, Errors, Compression, Shutdown, Nunjucks helpers) must rely strictly on native Node.js modules (`crypto`, `path`, `fs`, `events`, `zlib`, `async_hooks`).
 - **Zero Regression Policy**: Always run Vitest tests (`npm test` or `npx vitest run`) before declaring any task complete.
 - **Strict Verification**: Inspect authoritative source files for function signatures and schema definitions before writing consuming code.
 - **Log & Traceback Inspection**: Base all bug fixes strictly on exact runtime error log tracebacks and empirical test output.

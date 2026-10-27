@@ -1,6 +1,6 @@
 # Webspresso Background Job Queue Guide
 
-Webspresso features a high-performance, zero-dependency background job queue engine (`core/queue`) and plugin (`plugins/queue`), supporting In-Memory, Knex Database, and Distributed Redis adapters, automatic retries with exponential backoff, priority scheduling, and graceful shutdown draining.
+Webspresso features a high-performance background job queue engine (`core/queue`) and plugin (`plugins/queue`), supporting In-Memory, Knex Database, and Distributed Redis adapters, automatic retries with exponential backoff, priority scheduling, and graceful shutdown draining.
 
 ---
 
@@ -68,7 +68,7 @@ app.post('/api/export', async (req, res) => {
 ## 3. Adapters
 
 ### 1. `MemoryQueueAdapter` (Default)
-Zero-dependency in-memory priority queue. Ideal for lightweight background tasks, single-process apps, and development.
+Built-in in-memory priority queue. Ideal for lightweight background tasks, single-process apps, and development.
 
 ### 2. `DatabaseQueueAdapter`
 Persistent queue backed by Knex database table (`webspresso_jobs`) supporting SQLite, PostgreSQL, and MySQL with row-level locking.
@@ -93,7 +93,7 @@ queuePlugin({
 ```
 
 ### 4. `SqsQueueAdapter` (AWS SQS)
-Zero-dependency AWS SQS adapter powered by native Node.js HTTP and standard AWS SigV4 request signing. Supports long-polling worker loops (`dequeue`), direct enqueue with delay seconds calculation, and AWS Lambda push batch execution (`processBatch`).
+Native AWS SQS adapter powered by standard Node.js HTTP and AWS SigV4 request signing. Supports long-polling worker loops (`dequeue`), direct enqueue with delay seconds calculation, and AWS Lambda push batch execution (`processBatch`).
 
 ```js
 const { SqsQueueAdapter } = require('webspresso');
@@ -113,7 +113,7 @@ exports.handler = async (event) => {
 ```
 
 ### 5. `PubSubQueueAdapter` (Google Cloud Pub/Sub)
-Zero-dependency Google Cloud Pub/Sub adapter using standard REST API (`:publish`, `:pull`, `:acknowledge`, `:modifyAckDeadline`) with base64 payload serialization. Supports both background pull workers and Cloud Run / App Engine Push Subscription HTTP webhooks (`processPushRequest`).
+Native Google Cloud Pub/Sub adapter using standard REST API (`:publish`, `:pull`, `:acknowledge`, `:modifyAckDeadline`) with base64 payload serialization. Supports both background pull workers and Cloud Run / App Engine Push Subscription HTTP webhooks (`processPushRequest`).
 
 ```js
 const { PubSubQueueAdapter } = require('webspresso');
@@ -200,7 +200,7 @@ webspresso queue:prune --days 14 --status completed,failed
 
 ## 6. Cron & Recurring Task Scheduler
 
-Webspresso includes a native, zero-dependency task scheduler with a POSIX-compliant 5-field cron parser (`core/queue/cron.js` & `core/queue/scheduler.js`).
+Webspresso includes a native task scheduler with a POSIX-compliant 5-field cron parser (`core/queue/cron.js` & `core/queue/scheduler.js`).
 
 ### 1. Cron Expression Syntax
 - Standard 5 fields: `minute hour day-of-month month day-of-week`

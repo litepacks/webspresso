@@ -57,7 +57,7 @@ Webspresso follows the principle of **"Secure by default, configurable when nece
 │                  File Router & Middleware                   │
 │   • Directory Traversal & Encoded Dot Filtering (%2e%2e)    │
 │   • Global / Route-Level CSRF Protection (Timing-Safe)      │
-│   • Zero-Dependency CORS & Basic Auth (CRLF Protected)      │
+│   • Built-in CORS & Basic Auth (CRLF Protected)             │
 │   • Request Timeout Boundaries                              │
 └──────────────────────────────┬──────────────────────────────┘
                                │
@@ -73,7 +73,7 @@ Webspresso follows the principle of **"Secure by default, configurable when nece
 ```
 
 ### Key Built-in Defenses
-- **Zero-Dependency Security Core**: Cryptographic operations, JWT verification, CSRF hashing, and basic auth parsing rely exclusively on native Node.js standard libraries (`crypto`, `buffer`).
+- **Native Security Core**: Cryptographic operations, JWT verification, CSRF hashing, and basic auth parsing rely exclusively on native Node.js standard libraries (`crypto`, `buffer`).
 - **Timing-Attack Resistance**: All secret comparisons (HMAC signatures, basic auth credentials, CSRF tokens, password hashes) use `crypto.timingSafeEqual`.
 - **SSR & Template Protection**: Nunjucks auto-escaping is active by default. The `json` filter serializes angle brackets (`<`, `>`) as unicode escape sequences to prevent `</script>` breakouts.
 - **Admin Panel Isolation**: Admin panel authentication (`req.session.adminUser`) is strictly separated from front-facing public authentication (`req.user`). Column filter parameters are validated against model schemas to prevent injection.
@@ -86,8 +86,8 @@ Webspresso follows the principle of **"Secure by default, configurable when nece
 
 When building applications with Webspresso, adhere to the following recommendations:
 
-1. **Always Set `NODE_ENV=production`**:
-   Ensure your deployment sets `NODE_ENV=production` to enable automatic Helmet headers, CSP enforcement, and error detail masking.
+1. **Secure by Default Environment (`NODE_ENV`)**:
+   Webspresso is secure by default: if `NODE_ENV` is omitted, the framework automatically defaults to production security rules (Helmet headers enabled, error stack trace masking, strict cookie flags). In local development (`NODE_ENV=development`), `Content-Security-Policy-Report-Only` is enabled so developers catch CSP violations in the browser console before deploying.
 
 2. **Configure Reverse Proxy Settings**:
    - If running behind Nginx / Cloudflare / AWS ALB:
@@ -99,8 +99,9 @@ When building applications with Webspresso, adhere to the following recommendati
      createApp({ trustProxy: false });
      ```
 
-3. **Strong Secrets & Key Rotation**:
-   - Provide high-entropy secrets (at least 32 characters) for `session.secret` and JWT signing keys.
+3. **Strong Secrets Enforcement & Key Rotation**:
+   - In production (`NODE_ENV=production`), Webspresso strictly enforces that `session.secret` and JWT signing keys (`AUTH_SESSION_SECRET`, `JWT_SECRET`) must be **at least 32 high-entropy characters** and not use default dictionary words. Applications with insecure secrets fail immediately at startup.
+   - Generate secure secrets easily: `openssl rand -hex 32`
    - Never commit `.env` files containing production secrets to version control.
 
 4. **CSRF Protection for Form Submissions**:

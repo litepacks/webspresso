@@ -381,11 +381,12 @@ function createSchemaHelpers(z) {
 
     /**
      * Nanoid primary key column (URL-safe string, default length 21)
-     * @param {Partial<import('./types').ColumnMeta>} [options={}]
+     * @param {number|Partial<import('./types').ColumnMeta>} [options={}]
      * @returns {SchemaBuilder}
      */
     nanoid(options = {}) {
-      const { maxLength = 21, ...rest } = options;
+      const opts = typeof options === 'number' ? { maxLength: options } : (options || {});
+      const { maxLength = 21, ...rest } = opts;
       const schema = z
         .string()
         .length(maxLength)
@@ -405,11 +406,12 @@ function createSchemaHelpers(z) {
 
     /**
      * String column (varchar)
-     * @param {Partial<import('./types').ColumnMeta>} [options={}]
+     * @param {number|Partial<import('./types').ColumnMeta>} [options={}]
      * @returns {SchemaBuilder}
      */
     string(options = {}) {
-      const { maxLength = 255, nullable = false, ...rest } = options;
+      const opts = typeof options === 'number' ? { maxLength: options } : (options || {});
+      const { maxLength = 255, nullable = false, ...rest } = opts;
       let schema = z.string().max(maxLength);
       if (nullable) {
         schema = schema.nullable().optional();
@@ -442,11 +444,12 @@ function createSchemaHelpers(z) {
 
     /**
      * File / URL column (stored as varchar; value is public URL or path from upload)
-     * @param {Partial<import('./types').ColumnMeta>} [options={}]
+     * @param {number|Partial<import('./types').ColumnMeta>} [options={}]
      * @returns {SchemaBuilder}
      */
     file(options = {}) {
-      const { maxLength = 2048, nullable = false, ...rest } = options;
+      const opts = typeof options === 'number' ? { maxLength: options } : (options || {});
+      const { maxLength = 2048, nullable = false, ...rest } = opts;
       let schema = z.string().max(maxLength);
       if (nullable) {
         schema = schema.nullable().optional();

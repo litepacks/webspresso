@@ -2,7 +2,7 @@
 
 /**
  * Webspresso Dev CLI Colors
- * Lightweight, zero-dependency ANSI color utilities with NO_COLOR & TTY detection
+ * Lightweight ANSI color utilities with NO_COLOR & TTY detection
  * @module src/dev/colors
  */
 

@@ -172,7 +172,7 @@ C4Container
 Webspresso features a **Dual Authentication (Session + JWT)** architecture designed to seamlessly serve both SSR web applications and REST API / Mobile / SPA clients:
 
 - **Session + Cookie Auth (Stateful)**: Primary auth mechanism for browser-rendered SSR routes (`/`, `/dashboard`) and Admin Panel (`/_admin`). Uses `httpOnly` secure cookies for XSS protection and immediate server-side session revocation.
-- **JWT + Refresh Token Auth (Stateless)**: Built-in zero-dependency HS256 JWT auth for REST APIs and mobile/SPA clients (`/api/*`). Uses `Authorization: Bearer <token>` for access tokens (short-lived) and rotatable Refresh Tokens (long-lived).
+- **JWT + Refresh Token Auth (Stateless)**: Built-in HS256 JWT auth for REST APIs and mobile/SPA clients (`/api/*`). Uses `Authorization: Bearer <token>` for access tokens (short-lived) and rotatable Refresh Tokens (long-lived).
 
 | Layer | Session / Token | Identity store | Typical login |
 |-------|-----------------|----------------|---------------|
@@ -183,7 +183,7 @@ Webspresso features a **Dual Authentication (Session + JWT)** architecture desig
 | Component | Responsibility |
 |-----------|----------------|
 | `createAuth` / `quickAuth` | Credential verify, session, remember-me, and opt-in JWT / Refresh Token manager |
-| `signJwt` / `verifyJwt` | Zero-dependency HS256 HMAC-SHA256 JWT signing, verifying, and duration parsing |
+| `signJwt` / `verifyJwt` | Native HS256 HMAC-SHA256 JWT signing, verifying, and duration parsing |
 | `generateRefreshToken` / `refreshAccessToken` | Long-lived refresh token generation & automatic token rotation |
 | `authenticate` middleware | **Dual-Auth Evaluator**: Checks `Authorization: Bearer <token>` header first; falls back to Session cookie, then Remember-Me cookie |
 | `requireJwt` middleware | Enforces valid Bearer Access Token on API endpoints (rejects refresh tokens for access) |
@@ -213,8 +213,8 @@ Plugins declare `name`, `version`, optional `dependencies`, and lifecycle hooks 
 
 | Plugin | Feature set | One-line purpose |
 |--------|-------------|------------------|
-| `corsPlugin` | Security / HTTP | Zero-dependency CORS middleware & preflight handling |
-| `basicAuthPlugin` | Security / HTTP | Zero-dependency HTTP Basic Auth (RFC 7617) with named route middleware & global guard |
+| `corsPlugin` | Security / HTTP | Built-in CORS middleware & preflight handling |
+| `basicAuthPlugin` | Security / HTTP | Built-in HTTP Basic Auth (RFC 7617) with named route middleware & global guard |
 | `csrfPlugin` | Security / HTTP | Double-submit CSRF token validation and Nunjucks helpers |
 | `redirectPlugin` | HTTP | Configurable redirects before file routes |
 | `rateLimitPlugin` | HTTP | Named rate-limit middleware + optional global limiter |

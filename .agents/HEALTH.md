@@ -1,6 +1,6 @@
 # Cloud & Kubernetes Health & Readiness Probes (`core/health`)
 
-Webspresso includes a zero-dependency, Docker & Kubernetes-native health inspection system. It provides standard liveness (`/healthz`), readiness (`/readyz`), and combined diagnostics endpoints with automatic database pings, background worker queue checks, event loop delay metrics, and instant graceful shutdown draining integration.
+Webspresso includes a built-in, Docker & Kubernetes-native health inspection system. It provides standard liveness (`/healthz`), readiness (`/readyz`), and combined diagnostics endpoints with automatic database pings, background worker queue checks, event loop delay metrics, and instant graceful shutdown draining integration.
 
 ---
 

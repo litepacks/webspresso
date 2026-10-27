@@ -2,7 +2,7 @@
 
 When deploying Webspresso to serverless or auto-scaling cloud environments (Google Cloud Run, AWS App Runner, ECS Fargate, AWS Lambda, Kubernetes, or PM2 Cluster), multiple container instances run concurrently and scale up/down dynamically.
 
-To ensure seamless operation without lost user sessions or database exhaustion, Webspresso provides native zero-dependency **Stateless Scale-Out** primitives:
+To ensure seamless operation without lost user sessions or database exhaustion, Webspresso provides native built-in **Stateless Scale-Out** primitives:
 1. **Distributed Redis Session Store** (`createRedisSessionStore`)
 2. **Distributed Redis Session & Device Tracker** (`createRedisSessionTracker`)
 3. **Built-in Lightweight RESP Redis Client** (`createMiniRedisClient`) & `InMemoryRedisClient`

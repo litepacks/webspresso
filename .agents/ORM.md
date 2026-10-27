@@ -568,7 +568,7 @@ const admins = await UserFactory.count(3).apply('admin').create({ db });
 
 ## 12. Dynamic Model Row-Level Security (RLS)
 
-Webspresso ORM features zero-dependency, declarative Row-Level Security (RLS) directly on model definitions, ensuring data isolation across users, organizations, and multi-tenant systems.
+Webspresso ORM features built-in, declarative Row-Level Security (RLS) directly on model definitions, ensuring data isolation across users, organizations, and multi-tenant systems.
 
 ### 12.1 Declaring RLS Policies on Models
 

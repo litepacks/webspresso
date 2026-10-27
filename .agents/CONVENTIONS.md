@@ -48,3 +48,19 @@
    - **ALWAYS** prefer Tailwind CSS v4 using `npx webspresso add tailwind --v4` (powered by Oxide and `@tailwindcss/cli`).
    - **ALWAYS** use CSS-first `@import "tailwindcss";` in `src/input.css` and compile to `public/css/style.css`.
    - **NEVER** create redundant `tailwind.config.js` or `postcss.config.js` files unless custom legacy PostCSS plugins are specifically required.
+15. **Dual Schema Compiler Support (Functional & Object)**:
+   - **ALWAYS** maintain dual syntax support in `core/validation/compiler.js`: both `schema: ({ z }) => ({ body: ... })` and `schema: { body: z.object(...) }`.
+   - **NEVER** break either syntax style when modifying or extending schema compilation.
+16. **ORM Column Numeric Shorthand (Single Argument)**:
+   - **ALWAYS** allow numeric shorthands for `zdb.*` column helpers accepting lengths or counts (e.g. `zdb.string(200)`, `zdb.file(2048)`, `zdb.nanoid(21)`).
+17. **Peer Dependencies Boundary for Optional Runtime Tools**:
+   - **NEVER** declare client runtime packages (`@swup/*`, `alpinejs`, `swup`) or optional third-party integrations as mandatory `dependencies` in `package.json`.
+   - **ALWAYS** place them in `peerDependencies` with `peerDependenciesMeta: { [pkg]: { optional: true } }` and add graceful runtime checks.
+18. **Zero Phantom / Stale Docs Protocol**:
+   - **NEVER** write documentation instructing users to `npm install` packages that are built into Webspresso (`express`, `knex`, `nunjucks`, `zod`, `express-session`, `jsonwebtoken`, `passport`).
+19. **Plugin Catalog & CLI Parity**:
+   - **ALWAYS** export every plugin from `plugins/index.js`, provide full TypeScript definitions in `index.d.ts`, and register in `docs/reference/plugins.md` and `.agents/PLUGINS.md`.
+   - **ALWAYS** sync every CLI command between `bin/commands/`, `docs/reference/cli.md`, and `.agents/CLI.md`.
+20. **Strict Type & Test Verification Protocol**:
+   - **ALWAYS** run `npm run check:types` and `npm run test:fast` before concluding any framework development task.
+

@@ -1,13 +1,13 @@
 # Cloud Metrics & Distributed Tracing Guide
 
-Webspresso provides an enterprise-grade, zero-dependency Cloud Metrics & Distributed Tracing engine (`core/metrics`) delivering Prometheus exposition format (`/metrics`), JSON telemetry (`/metrics.json`), HTTP latency histograms, and W3C/GCP/AWS distributed tracing header propagation.
+Webspresso provides an enterprise-grade, built-in Cloud Metrics & Distributed Tracing engine (`core/metrics`) delivering Prometheus exposition format (`/metrics`), JSON telemetry (`/metrics.json`), HTTP latency histograms, and W3C/GCP/AWS distributed tracing header propagation.
 
 ---
 
 ## 🎯 Key Capabilities
 
 1. **Prometheus-Compatible Exposition Format**:
-   - Zero external dependencies (no `prom-client` or OpenTelemetry npm packages required).
+   - Built-in implementation (no `prom-client` or OpenTelemetry npm packages required).
    - Generates compliant `text/plain; version=0.0.4; charset=utf-8` output directly consumable by Prometheus, Grafana Agent, Google Cloud Managed Service for Prometheus, AWS CloudWatch Container Insights, and Datadog.
    - Dual-format exposition: `/metrics` for Prometheus scraping and `/metrics.json` (or `Accept: application/json`) for programmatic inspection or lightweight dashboards.
 2. **Distributed Tracing & W3C Propagation**:

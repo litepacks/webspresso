@@ -88,7 +88,7 @@ function adminPanelPlugin(options = {}) {
 
   // Dependencies are now in main package
   const session = require('express-session');
-  const bcrypt = require('bcrypt');
+  const { hash: hashPasswordUtil, verify: verifyPasswordUtil } = require('../../core/auth/hash');
 
   const serveAdminPanel = (req, res) => {
     res.type('text/html');
@@ -324,7 +324,7 @@ function adminPanelPlugin(options = {}) {
           db,
           auth,
           config: userMgmtConfig,
-          hashPassword: (password, rounds) => bcrypt.hash(password, process.env.NODE_ENV === 'test' ? 4 : (rounds || 10)),
+          hashPassword: (password, rounds) => hashPasswordUtil(password, process.env.NODE_ENV === 'test' ? 4 : (rounds || 10)),
         });
       }
 
@@ -392,8 +392,8 @@ function adminPanelPlugin(options = {}) {
         db,
         registry,
         AdminUser,
-        hashPassword: (password, rounds) => bcrypt.hash(password, process.env.NODE_ENV === 'test' ? 4 : (rounds || 10)),
-        comparePassword: (password, hash) => bcrypt.compare(password, hash),
+        hashPassword: (password, rounds) => hashPasswordUtil(password, process.env.NODE_ENV === 'test' ? 4 : (rounds || 10)),
+        comparePassword: (password, hash) => verifyPasswordUtil(password, hash),
         richTextSanitize,
         loginRateLimit,
       });
@@ -413,7 +413,7 @@ function adminPanelPlugin(options = {}) {
         adminUsersHandlers = createAdminUsersApiHandlers({
           db,
           AdminUser,
-          hashPassword: (password, rounds) => bcrypt.hash(password, process.env.NODE_ENV === 'test' ? 4 : (rounds || 10)),
+          hashPassword: (password, rounds) => hashPasswordUtil(password, process.env.NODE_ENV === 'test' ? 4 : (rounds || 10)),
         });
       }
 

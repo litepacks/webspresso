@@ -1,6 +1,6 @@
 # Webspresso — Claude Code Assistant Guide
 
-Webspresso is a lightweight, zero-dependency-sprawl full-stack Node.js SSR & API framework.
+Webspresso is a lightweight full-stack Node.js SSR & API framework.
 
 > [!IMPORTANT]
 > **Authoritative Rules & Architecture**: Always follow [AGENTS.md](AGENTS.md) and the modular topic guides in [.agents/](.agents/AGENTS.md).
@@ -42,7 +42,7 @@ npx webspresso db:migrate
 3. **Services Layer (NO `controllers/`)**:
    - Place business logic in `services/domain/action.js` and invoke via `ctx.service('domain.action', input)`.
 
-4. **Zero-Dependency Native Dual Auth**:
+4. **Native Dual Auth**:
    - Never install `jsonwebtoken`, `passport`, or `express-session`.
    - Use built-in `req.auth` and `webspresso/core/auth`.
 

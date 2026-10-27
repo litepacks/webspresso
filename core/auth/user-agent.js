@@ -57,6 +57,8 @@ function parseUserAgent(userAgent = '') {
 
   const cached = uaCache.get(ua);
   if (cached) {
+    uaCache.delete(ua);
+    uaCache.set(ua, cached);
     return { ...cached };
   }
 

@@ -1,6 +1,6 @@
 # Structured Cloud Logging & Distributed Tracing Guide
 
-Webspresso features an enterprise, zero-dependency Structured Cloud Logger (`core/logger`) designed specifically for serverless and containerized cloud platforms (Google Cloud Run, AWS App Runner, ECS Fargate, Lambda, Kubernetes).
+Webspresso features an enterprise, built-in Structured Cloud Logger (`core/logger`) designed specifically for serverless and containerized cloud platforms (Google Cloud Run, AWS App Runner, ECS Fargate, Lambda, Kubernetes).
 
 ---
 

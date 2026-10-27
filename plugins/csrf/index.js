@@ -105,8 +105,8 @@ function csrfPlugin(options = {}) {
     errorStatus = 403,
   } = options;
 
-  // Resolve cookie config
-  const cookieEnabled = !!cookie;
+  // Resolve cookie vs session mode
+  const cookieEnabled = options.mode === 'cookie' ? true : (options.mode === 'session' ? false : !!cookie);
   const cookieOpts = typeof cookie === 'object' ? cookie : {};
   const cookieKey = cookieOpts.key || '_csrf';
   const cookieOptions = {
@@ -120,7 +120,7 @@ function csrfPlugin(options = {}) {
     cookieOptions.maxAge = cookieOpts.maxAge;
   }
 
-  const cookieSecret = cookieOptions.signed ? (cookieOpts.secret || process.env.SESSION_SECRET) : undefined;
+  const cookieSecret = cookieOptions.signed ? (cookieOpts.secret || options.secret || process.env.SESSION_SECRET) : undefined;
   const parseCookies = cookieParser(cookieSecret);
 
   /**

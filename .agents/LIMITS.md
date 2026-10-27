@@ -1,6 +1,6 @@
 # Configurable Payload Size Limits & DoS Protection (`core/limits`)
 
-Webspresso provides a zero-dependency, configurable request body size limiter and Denial of Service (DoS) protection layer. It safeguards Node.js memory against payload exhaustion attacks while supporting per-route overrides, streaming bypass, and native raw body capture for HMAC webhook verification.
+Webspresso provides a built-in, configurable request body size limiter and Denial of Service (DoS) protection layer. It safeguards Node.js memory against payload exhaustion attacks while supporting per-route overrides, streaming bypass, and native raw body capture for HMAC webhook verification.
 
 ---
 

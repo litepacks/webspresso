@@ -1,6 +1,6 @@
 # Enterprise Resilience, Circuit Breaker & Retry Engine (`core/resilience`)
 
-Webspresso includes a zero-dependency, enterprise-grade resilience and fault tolerance engine built directly on native Node.js primitives (`events`, `perf_hooks`, `async_hooks`). It prevents cascading downstream outages, protects critical services, and recovers automatically from transient network spikes.
+Webspresso includes a built-in, enterprise-grade resilience and fault tolerance engine built directly on native Node.js primitives (`events`, `perf_hooks`, `async_hooks`). It prevents cascading downstream outages, protects critical services, and recovers automatically from transient network spikes.
 
 ---
 

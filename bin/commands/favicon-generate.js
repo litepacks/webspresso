@@ -6,9 +6,16 @@
 const fs = require('fs');
 const path = require('path');
 function getSharp() {
-  return (process.env.NODE_ENV === 'test' || process.env.VITEST)
-    ? require('../../tests/mocks/sharp')
-    : require('sharp');
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+    return require('../../tests/mocks/sharp');
+  }
+  try {
+    return require('sharp');
+  } catch {
+    throw new Error(
+      "The 'sharp' package is required to generate favicons. Install it with: npm install sharp"
+    );
+  }
 }
 
 const APPLE_SIZES = [57, 60, 72, 76, 114, 120, 144, 152, 180];

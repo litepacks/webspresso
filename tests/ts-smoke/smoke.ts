@@ -9,6 +9,8 @@ import {
   createDatabase,
   defineModel,
   defineService,
+  defineApi,
+  api,
   zdb,
   restResourcePlugin,
   corsPlugin,
@@ -21,6 +23,12 @@ import {
   type InferModelUpdate,
   type InferServiceInput,
   type InferServiceOutput,
+  type InferApiBody,
+  type InferApiQuery,
+  type InferApiParams,
+  type InferApiHeaders,
+  type InferApiInput,
+  type InferApiOutput,
   type Repository,
   type PaginatedResult,
   type WebspressoApplication,
@@ -171,6 +179,113 @@ const metricsApp = createApp({
   },
 });
 void metricsApp.app.metrics;
+
+// ==========================================
+// defineApi Type Inference Smoke Tests
+// ==========================================
+
+// 1. Direct object schema inference
+const createNoteApi = defineApi({
+  description: 'Create a note with validated body and query',
+  schema: {
+    body: z.object({
+      title: z.string().min(1),
+      content: z.string(),
+      priority: z.number().default(1),
+    }),
+    query: z.object({
+      notify: z.enum(['true', 'false']).optional(),
+    }),
+    params: z.object({
+      folderId: z.string(),
+    }),
+  },
+  handler: async (req, res, ctx) => {
+    // Automatic inference on req.input
+    const title: string = req.input.body.title;
+    const content: string = req.input.body.content;
+    const priority: number = req.input.body.priority;
+    const notify: 'true' | 'false' | undefined = req.input.query.notify;
+    const folderId: string = req.input.params.folderId;
+
+    // Automatic inference on req.body and req.query
+    const bodyTitle: string = req.body.title;
+    const queryNotify: 'true' | 'false' | undefined = req.query.notify;
+
+    // Automatic inference on ctx
+    const ctxTitle: string = ctx.body.title;
+    const ctxFolder: string = ctx.params.folderId;
+
+    void title;
+    void content;
+    void priority;
+    void notify;
+    void folderId;
+    void bodyTitle;
+    void queryNotify;
+    void ctxTitle;
+    void ctxFolder;
+
+    return {
+      success: true,
+      noteId: 42,
+    };
+  },
+});
+
+type NoteApiInput = InferApiInput<typeof createNoteApi>;
+type NoteApiBody = InferApiBody<typeof createNoteApi>;
+type NoteApiQuery = InferApiQuery<typeof createNoteApi>;
+type NoteApiParams = InferApiParams<typeof createNoteApi>;
+type NoteApiOutput = InferApiOutput<typeof createNoteApi>;
+
+const testNoteInput: NoteApiInput = {
+  body: { title: 'Hello', content: 'World', priority: 2 },
+  query: { notify: 'true' },
+  params: { folderId: 'folder_123' },
+};
+void testNoteInput;
+
+const testNoteOutput: NoteApiOutput = { success: true, noteId: 101 };
+void testNoteOutput;
+
+// 2. Functional schema inference
+const updateUserApi = api({
+  schema: ({ z }) => ({
+    body: z.object({
+      email: z.string().email(),
+      age: z.number().optional(),
+    }),
+    headers: z.object({
+      'x-api-version': z.string().default('v1'),
+    }),
+  }),
+  handler: async (req) => {
+    const email: string = req.input.body.email;
+    const age: number | undefined = req.input.body.age;
+    const apiVer: string | undefined = req.input.headers?.['x-api-version'];
+    void email;
+    void age;
+    void apiVer;
+    return { updated: true };
+  },
+});
+
+type UpdateUserBody = InferApiBody<typeof updateUserApi>;
+type UpdateUserHeaders = InferApiHeaders<typeof updateUserApi>;
+const sampleUserBody: UpdateUserBody = { email: 'user@example.com', age: 30 };
+void sampleUserBody;
+
+const sampleUserHeaders: UpdateUserHeaders = { 'x-api-version': 'v2' };
+void sampleUserHeaders;
+
+// 3. Schema-less API
+const pingApi = defineApi({
+  handler: async (req, res, ctx) => {
+    return { pong: true, url: req.url, method: req.method, locale: ctx.locale };
+  },
+});
+void pingApi;
 
 
 

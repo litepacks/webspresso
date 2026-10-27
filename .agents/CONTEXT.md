@@ -2,7 +2,7 @@
 
 [← Back to AGENTS.md](AGENTS.md)
 
-Webspresso features an enterprise-grade, zero-dependency **Ambient Request & Execution Context Engine** powered by Node.js `AsyncLocalStorage`. It enables composable hooks (`useContext`, `useDb`, `useAuth`, `useUser`, `useService`, `useLogger`, `useReq`, `useRes`, `useParams`, `useQuery`, `useBreaker`, `useTransaction`, `withContext`) across API handlers, SSR companion loaders, domain services, ORM models, and background workers without parameter threading or prop drilling.
+Webspresso features an enterprise-grade, built-in **Ambient Request & Execution Context Engine** powered by Node.js `AsyncLocalStorage`. It enables composable hooks (`useContext`, `useDb`, `useAuth`, `useUser`, `useService`, `useLogger`, `useReq`, `useRes`, `useParams`, `useQuery`, `useBreaker`, `useTransaction`, `withContext`) across API handlers, SSR companion loaders, domain services, ORM models, and background workers without parameter threading or prop drilling.
 
 ---
 

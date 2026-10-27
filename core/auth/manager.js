@@ -29,6 +29,36 @@ class AuthenticationError extends Error {
   }
 }
 
+const WEAK_SECRETS_PATTERN = /^(changeme|secret|default|password|test|webspresso-jwt-secret|123456)/i;
+
+/**
+ * Validate secret strength
+ * In production: throws Error if secret is missing, shorter than 32 chars, or uses common defaults.
+ * In development/test: logs a warning if weak.
+ * @param {string} name - Name of the secret setting / env var
+ * @param {string} value - Secret value
+ * @param {boolean} [isProd=false] - Whether environment is production
+ */
+function assertStrongSecret(name, value, isProd = false) {
+  if (!value || typeof value !== 'string') {
+    throw new Error(`${name} is required.`);
+  }
+
+  const isWeak = value.length < 32 || WEAK_SECRETS_PATTERN.test(value);
+
+  if (isProd && isWeak) {
+    throw new Error(
+      `Insecure secret for ${name}: Production requires at least 32 high-entropy characters and cannot use default/weak words. Generate one with 'openssl rand -hex 32'.`
+    );
+  }
+
+  if (!isProd && isWeak && !process.env.VITEST && process.env.NODE_ENV !== 'test') {
+    console.warn(
+      `\x1b[33m[Webspresso Security Warning]\x1b[0m ${name} appears weak or uses a default value. In production, at least 32 high-entropy characters are strictly enforced.`
+    );
+  }
+}
+
 /**
  * Default configuration
  */
@@ -117,12 +147,20 @@ class AuthManager extends EventEmitter {
     this.twoFactor = config.twoFactor || { enabled: false };
 
     if (config.jwt || config.secret) {
+      const isProd = process.env.NODE_ENV === 'production';
       const jwtSecret = typeof config.jwt === 'object' && config.jwt.secret
         ? config.jwt.secret
-        : (config.secret || config.session?.secret || process.env.JWT_SECRET || process.env.AUTH_SESSION_SECRET || 'webspresso-jwt-secret');
+        : (config.secret || config.session?.secret || process.env.JWT_SECRET || process.env.AUTH_SESSION_SECRET || (isProd ? null : 'webspresso-jwt-secret'));
+
+      assertStrongSecret('JWT_SECRET / auth.secret', jwtSecret, isProd);
+
       const refreshSecret = typeof config.jwt === 'object' && config.jwt.refreshSecret
         ? config.jwt.refreshSecret
         : (process.env.JWT_REFRESH_SECRET || jwtSecret);
+
+      if (refreshSecret !== jwtSecret) {
+        assertStrongSecret('JWT_REFRESH_SECRET', refreshSecret, isProd);
+      }
       const expiresIn = typeof config.jwt === 'object' && config.jwt.expiresIn
         ? config.jwt.expiresIn
         : '24h';
@@ -231,10 +269,9 @@ class AuthManager extends EventEmitter {
    */
   getSessionConfig() {
     const config = { ...this.config.session };
+    const isProd = process.env.NODE_ENV === 'production';
     
-    if (!config.secret) {
-      throw new Error('Session secret is required. Set AUTH_SESSION_SECRET environment variable or pass session.secret in config.');
-    }
+    assertStrongSecret('AUTH_SESSION_SECRET / session.secret', config.secret, isProd);
 
     // Auto-detect and configure distributed Redis session store
     if (!config.store) {
