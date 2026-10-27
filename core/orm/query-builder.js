@@ -50,6 +50,10 @@ class QueryBuilder {
     this.state = {
       wheres: [],
       orderBys: [],
+      groupBys: [],
+      havings: [],
+      distinct: false,
+      distinctColumns: [],
       selects: [],
       withs: [],
       limitValue: undefined,
@@ -65,6 +69,20 @@ class QueryBuilder {
    */
   select(...columns) {
     this.state.selects.push(...columns.flat());
+    return this;
+  }
+
+  /**
+   * Set DISTINCT on the query
+   * @param {...string} [columns] - Optional specific columns for distinct
+   * @returns {this}
+   */
+  distinct(...columns) {
+    this.state.distinct = true;
+    const flat = columns.flat().filter(Boolean);
+    if (flat.length > 0) {
+      this.state.distinctColumns.push(...flat);
+    }
     return this;
   }
 
@@ -239,6 +257,147 @@ class QueryBuilder {
   }
 
   /**
+   * Add an OR WHERE NULL clause
+   * @param {string} column - Column name
+   * @returns {this}
+   */
+  orWhereNull(column) {
+    this.state.wheres.push({
+      column,
+      operator: 'is null',
+      value: null,
+      boolean: 'or',
+    });
+    return this;
+  }
+
+  /**
+   * Add an OR WHERE NOT NULL clause
+   * @param {string} column - Column name
+   * @returns {this}
+   */
+  orWhereNotNull(column) {
+    this.state.wheres.push({
+      column,
+      operator: 'is not null',
+      value: null,
+      boolean: 'or',
+    });
+    return this;
+  }
+
+  /**
+   * Add an OR WHERE IN clause
+   * @param {string} column - Column name
+   * @param {Array} values - Values array
+   * @returns {this}
+   */
+  orWhereIn(column, values) {
+    this.state.wheres.push({
+      column,
+      operator: 'in',
+      value: values,
+      boolean: 'or',
+    });
+    return this;
+  }
+
+  /**
+   * Add an OR WHERE NOT IN clause
+   * @param {string} column - Column name
+   * @param {Array} values - Values array
+   * @returns {this}
+   */
+  orWhereNotIn(column, values) {
+    this.state.wheres.push({
+      column,
+      operator: 'not in',
+      value: values,
+      boolean: 'or',
+    });
+    return this;
+  }
+
+  /**
+   * Add an OR WHERE NOT clause
+   * @param {string|Object} column - Column name or object of { col: val }
+   * @param {*} [value] - Value to compare against
+   * @returns {this}
+   */
+  orWhereNot(column, value) {
+    const startIndex = this.state.wheres.length;
+    this.whereNot(column, value);
+    for (let i = startIndex; i < this.state.wheres.length; i++) {
+      this.state.wheres[i].boolean = 'or';
+    }
+    return this;
+  }
+
+  /**
+   * Add a WHERE BETWEEN clause
+   * @param {string} column - Column name
+   * @param {[any, any]|Array} range - [min, max] values
+   * @returns {this}
+   */
+  whereBetween(column, range) {
+    this.state.wheres.push({
+      column,
+      operator: 'between',
+      value: range,
+      boolean: 'and',
+    });
+    return this;
+  }
+
+  /**
+   * Add an OR WHERE BETWEEN clause
+   * @param {string} column - Column name
+   * @param {[any, any]|Array} range - [min, max] values
+   * @returns {this}
+   */
+  orWhereBetween(column, range) {
+    this.state.wheres.push({
+      column,
+      operator: 'between',
+      value: range,
+      boolean: 'or',
+    });
+    return this;
+  }
+
+  /**
+   * Add a WHERE NOT BETWEEN clause
+   * @param {string} column - Column name
+   * @param {[any, any]|Array} range - [min, max] values
+   * @returns {this}
+   */
+  whereNotBetween(column, range) {
+    this.state.wheres.push({
+      column,
+      operator: 'not between',
+      value: range,
+      boolean: 'and',
+    });
+    return this;
+  }
+
+  /**
+   * Add an OR WHERE NOT BETWEEN clause
+   * @param {string} column - Column name
+   * @param {[any, any]|Array} range - [min, max] values
+   * @returns {this}
+   */
+  orWhereNotBetween(column, range) {
+    this.state.wheres.push({
+      column,
+      operator: 'not between',
+      value: range,
+      boolean: 'or',
+    });
+    return this;
+  }
+
+  /**
    * Add ORDER BY clause
    * @param {string} column - Column name
    * @param {'asc'|'desc'} [direction='asc'] - Sort direction
@@ -257,6 +416,104 @@ class QueryBuilder {
    */
   orderByRaw(sql, bindings = []) {
     this.state.orderBys.push({ raw: true, sql, bindings });
+    return this;
+  }
+
+  /**
+   * Add a GROUP BY clause
+   * @param {...string} columns - Column names to group by
+   * @returns {this}
+   */
+  groupBy(...columns) {
+    const flat = columns.flat().filter(Boolean);
+    if (flat.length > 0) {
+      this.state.groupBys.push({ columns: flat });
+    }
+    return this;
+  }
+
+  /**
+   * Add a raw GROUP BY clause
+   * @param {string} sql - Raw SQL expression
+   * @param {Array} [bindings=[]] - Parameter bindings
+   * @returns {this}
+   */
+  groupByRaw(sql, bindings = []) {
+    this.state.groupBys.push({ raw: true, sql, bindings });
+    return this;
+  }
+
+  /**
+   * Add a HAVING clause
+   * @param {string} column - Column name or aggregate expression
+   * @param {string|*} [operatorOrValue] - Operator or value
+   * @param {*} [value] - Value (if operator provided)
+   * @returns {this}
+   */
+  having(column, operatorOrValue, value) {
+    if (value !== undefined) {
+      this.state.havings.push({
+        column,
+        operator: operatorOrValue,
+        value,
+        boolean: 'and',
+      });
+      return this;
+    }
+    this.state.havings.push({
+      column,
+      operator: '=',
+      value: operatorOrValue,
+      boolean: 'and',
+    });
+    return this;
+  }
+
+  /**
+   * Add an OR HAVING clause
+   * @param {string} column
+   * @param {string|*} [operatorOrValue]
+   * @param {*} [value]
+   * @returns {this}
+   */
+  orHaving(column, operatorOrValue, value) {
+    const startIndex = this.state.havings.length;
+    this.having(column, operatorOrValue, value);
+    for (let i = startIndex; i < this.state.havings.length; i++) {
+      this.state.havings[i].boolean = 'or';
+    }
+    return this;
+  }
+
+  /**
+   * Add a raw HAVING clause
+   * @param {string} sql - Raw SQL expression
+   * @param {Array} [bindings=[]] - Parameter bindings
+   * @returns {this}
+   */
+  havingRaw(sql, bindings = []) {
+    this.state.havings.push({
+      raw: true,
+      sql,
+      bindings,
+      boolean: 'and',
+    });
+    return this;
+  }
+
+  /**
+   * Add an OR raw HAVING clause
+   * @param {string} sql - Raw SQL expression
+   * @param {Array} [bindings=[]] - Parameter bindings
+   * @returns {this}
+   */
+  orHavingRaw(sql, bindings = []) {
+    this.state.havings.push({
+      raw: true,
+      sql,
+      bindings,
+      boolean: 'or',
+    });
     return this;
   }
 
@@ -483,6 +740,15 @@ class QueryBuilder {
       qb = qb.select(this.state.selects);
     }
 
+    // Apply distinct
+    if (this.state.distinct) {
+      if (this.state.distinctColumns && this.state.distinctColumns.length > 0) {
+        qb = qb.distinct(...this.state.distinctColumns);
+      } else {
+        qb = qb.distinct();
+      }
+    }
+
     // Apply wheres
     for (const where of this.state.wheres) {
       // Handle raw where clauses
@@ -506,6 +772,16 @@ class QueryBuilder {
             ? qb.orWhereNotIn(where.column, where.value)
             : qb.whereNotIn(where.column, where.value);
           break;
+        case 'between':
+          qb = where.boolean === 'or'
+            ? qb.orWhereBetween(where.column, where.value)
+            : qb.whereBetween(where.column, where.value);
+          break;
+        case 'not between':
+          qb = where.boolean === 'or'
+            ? qb.orWhereNotBetween(where.column, where.value)
+            : qb.whereNotBetween(where.column, where.value);
+          break;
         case 'is null':
           qb = where.boolean === 'or'
             ? qb.orWhereNull(where.column)
@@ -518,6 +794,31 @@ class QueryBuilder {
           break;
         default:
           qb = qb[method](where.column, where.operator, where.value);
+      }
+    }
+
+    // Apply group by
+    if (this.state.groupBys && this.state.groupBys.length > 0) {
+      for (const groupBy of this.state.groupBys) {
+        if (groupBy.raw) {
+          qb = qb.groupByRaw(groupBy.sql, groupBy.bindings);
+        } else {
+          qb = qb.groupBy(...groupBy.columns);
+        }
+      }
+    }
+
+    // Apply havings
+    if (this.state.havings && this.state.havings.length > 0) {
+      for (const having of this.state.havings) {
+        if (having.raw) {
+          qb = having.boolean === 'or'
+            ? qb.orHavingRaw(having.sql, having.bindings)
+            : qb.havingRaw(having.sql, having.bindings);
+        } else {
+          const method = having.boolean === 'or' ? 'orHaving' : 'having';
+          qb = qb[method](having.column, having.operator, having.value);
+        }
       }
     }
 
@@ -725,8 +1026,15 @@ class QueryBuilder {
     const self = this;
 
     async function loadFromDb() {
-      const result = await self
-        .toKnex({ includeLimitOffset: false, includeOrderBy: false, includeSelect: false })
+      const baseKnex = self
+        .toKnex({ includeLimitOffset: false, includeOrderBy: false, includeSelect: false });
+
+      if (self.state.groupBys && self.state.groupBys.length > 0) {
+        const result = await self.knex.from(baseKnex.as('grouped_subquery')).count('* as count').first();
+        return parseInt(result?.count || 0, 10);
+      }
+
+      const result = await baseKnex
         .count('* as count')
         .first();
       return parseInt(result?.count || 0, 10);
@@ -799,10 +1107,12 @@ class QueryBuilder {
 
       // Execute count query (without ORDER BY, LIMIT, OFFSET, or SELECT projections)
       // and data query (with pagination) in parallel to halve database latency
-      const countPromise = self
-        .toKnex({ includeLimitOffset: false, includeOrderBy: false, includeSelect: false })
-        .count('* as count')
-        .first();
+      const baseCountKnex = self
+        .toKnex({ includeLimitOffset: false, includeOrderBy: false, includeSelect: false });
+
+      const countPromise = (self.state.groupBys && self.state.groupBys.length > 0)
+        ? self.knex.from(baseCountKnex.as('grouped_subquery')).count('* as count').first()
+        : baseCountKnex.count('* as count').first();
 
       const dataPromise = self
         .toKnex({ includeLimitOffset: false })
@@ -923,6 +1233,17 @@ class QueryBuilder {
     cloned.state = {
       wheres: this.state.wheres.map(w => ({ ...w })),
       orderBys: this.state.orderBys.map(o => ({ ...o })),
+      groupBys: this.state.groupBys.map(g => ({
+        ...g,
+        columns: g.columns ? [...g.columns] : undefined,
+        bindings: g.bindings ? [...g.bindings] : undefined,
+      })),
+      havings: this.state.havings.map(h => ({
+        ...h,
+        bindings: h.bindings ? [...h.bindings] : undefined,
+      })),
+      distinct: this.state.distinct,
+      distinctColumns: [...(this.state.distinctColumns || [])],
       selects: [...this.state.selects],
       withs: [...this.state.withs],
       limitValue: this.state.limitValue,

@@ -204,11 +204,43 @@ function defineModel(options) {
   const resolvedCreatedCol = ((columns && columns.has('createdAt')) || (hasShape && normalizedSchema.shape.createdAt)) ? 'createdAt' : 'created_at';
   const resolvedUpdatedCol = ((columns && columns.has('updatedAt')) || (hasShape && normalizedSchema.shape.updatedAt)) ? 'updatedAt' : 'updated_at';
 
+  // Precompute insert schema: only auto-managed columns (primaryKey, timestamps, softDelete, tenant, autoIncrement)
+  // are allowed to be optional on insert. All required user fields remain strictly enforced.
+  let insertSchema = normalizedSchema;
+  if (normalizedSchema && typeof normalizedSchema.partial === 'function' && normalizedSchema.shape) {
+    const autoFieldMask = {};
+    const autoKeys = new Set([
+      primaryKey,
+      resolvedCreatedCol,
+      resolvedUpdatedCol,
+      resolvedDeletedCol,
+    ]);
+    if (scopes && scopes.tenant) {
+      autoKeys.add(scopes.tenant);
+    }
+    if (columns) {
+      for (const [colName, meta] of columns.entries()) {
+        if (meta && (meta.primary || meta.autoIncrement || meta.auto || meta.hasDefault || meta.default !== undefined)) {
+          autoKeys.add(colName);
+        }
+      }
+    }
+    for (const key of Object.keys(normalizedSchema.shape)) {
+      if (autoKeys.has(key)) {
+        autoFieldMask[key] = true;
+      }
+    }
+    if (Object.keys(autoFieldMask).length > 0) {
+      insertSchema = normalizedSchema.partial(autoFieldMask);
+    }
+  }
+
   // Create model definition
   const model = {
     name,
     table,
     schema: normalizedSchema,
+    _insertSchema: insertSchema,
     _partialSchema: typeof normalizedSchema?.partial === 'function' ? normalizedSchema.partial() : normalizedSchema,
     primaryKey,
     _deletedCol: resolvedDeletedCol,

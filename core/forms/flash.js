@@ -99,12 +99,19 @@ function decodeFlashCookie(raw) {
 /**
  * Flash and Old Input Express Middleware
  * @param {Object} [options={}]
+ * @param {string} [options.cookieName]
+ * @param {boolean} [options.signed]
+ * @param {string|string[]} [options.secret]
  * @returns {import('express').RequestHandler}
  */
 function createFlashMiddleware(options = {}) {
   const cookieName = options.cookieName || FLASH_COOKIE_NAME;
 
   return function flashMiddleware(req, res, next) {
+    if (options.secret && !req.secret) {
+      req.secret = options.secret;
+    }
+
     // 1. Load incoming flash messages from session or cookie
     let incomingFlash = {};
 
@@ -112,6 +119,11 @@ function createFlashMiddleware(options = {}) {
       incomingFlash = req.session[FLASH_SESSION_KEY] || {};
       // Delete from session for next request (consume)
       delete req.session[FLASH_SESSION_KEY];
+    } else if (req.signedCookies && cookieName in req.signedCookies) {
+      const signedVal = req.signedCookies[cookieName];
+      incomingFlash = (signedVal && typeof signedVal === 'string') ? (decodeFlashCookie(signedVal) || {}) : {};
+      // Clear cookie immediately
+      res.clearCookie(cookieName, { path: '/' });
     } else if (req.cookies && req.cookies[cookieName]) {
       incomingFlash = decodeFlashCookie(req.cookies[cookieName]) || {};
       // Clear cookie immediately
@@ -209,12 +221,19 @@ function createFlashMiddleware(options = {}) {
           }
         }
         const encoded = encodeFlashCookie(outgoingFlash);
-        res.cookie(cookieName, encoded, {
+        const shouldSign = options.signed !== undefined
+          ? Boolean(options.signed)
+          : Boolean(req.secret || options.secret);
+        const cookieOpts = {
           path: '/',
           httpOnly: true,
           sameSite: 'lax',
           maxAge: 300000, // 5 minutes
-        });
+        };
+        if (shouldSign && (req.secret || options.secret)) {
+          cookieOpts.signed = true;
+        }
+        res.cookie(cookieName, encoded, cookieOpts);
       }
     }
 

@@ -26,6 +26,53 @@ const { getAmbientTransaction, hasAmbientTransaction, runTransaction } = require
 const { calculateSafeChunkSize, chunkArray } = require('./batch');
 
 /**
+ * Get or cache insert schema for model (only auto-managed fields are optional)
+ * @param {import('./types').ModelDefinition} model
+ * @returns {import('zod').ZodTypeAny}
+ */
+function getInsertSchema(model) {
+  if (model && model._insertSchema) {
+    return model._insertSchema;
+  }
+  if (!model || !model.schema) {
+    return null;
+  }
+  const schema = model.schema;
+  if (typeof schema.partial === 'function' && schema.shape) {
+    const autoFieldMask = {};
+    const autoKeys = new Set([
+      model.primaryKey,
+      model._createdCol,
+      model._updatedCol,
+      model._deletedCol,
+    ]);
+    if (model.scopes?.tenant) {
+      autoKeys.add(model.scopes.tenant);
+    }
+    if (model.columns) {
+      for (const [colName, meta] of model.columns.entries()) {
+        if (meta && (meta.primary || meta.autoIncrement || meta.auto || meta.hasDefault || meta.default !== undefined)) {
+          autoKeys.add(colName);
+        }
+      }
+    }
+    for (const key of Object.keys(schema.shape)) {
+      if (autoKeys.has(key)) {
+        autoFieldMask[key] = true;
+      }
+    }
+    const insertSchema = Object.keys(autoFieldMask).length > 0
+      ? schema.partial(autoFieldMask)
+      : schema;
+    if (model) {
+      model._insertSchema = insertSchema;
+    }
+    return insertSchema;
+  }
+  return schema;
+}
+
+/**
  * Get or cache partial schema for model
  * @param {import('./types').ModelDefinition} model
  * @returns {import('zod').ZodTypeAny}
@@ -338,8 +385,8 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
       throw new HookCancellationError(ctx.cancelReason, model.name, Hooks.BEFORE_VALIDATION);
     }
 
-    // Validate with Zod schema (partial for insert - allows auto fields to be missing)
-    const validated = getPartialSchema(model).parse(workingData);
+    // Validate with Zod schema (only auto-managed fields like timestamps/id are optional)
+    const validated = getInsertSchema(model).parse(workingData);
 
     // Emit afterValidation
     ModelEvents.emit(model.name, Hooks.AFTER_VALIDATION, validated, ctx);
@@ -457,7 +504,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
 
         let validatedData = workingData;
         if (validate) {
-          validatedData = getPartialSchema(model).parse(workingData);
+          validatedData = getInsertSchema(model).parse(workingData);
         }
 
         if (hooks) {
@@ -611,7 +658,7 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
 
         let validatedData = workingData;
         if (validate) {
-          validatedData = getPartialSchema(model).parse(workingData);
+          validatedData = getInsertSchema(model).parse(workingData);
         }
 
         if (hooks) {

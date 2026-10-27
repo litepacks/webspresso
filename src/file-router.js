@@ -1368,6 +1368,8 @@ function mountPages(app, options) {
       }
       let handlerFn = null;
       let preResolvedMw = null;
+      let lastRouteMtime = null;
+      let lastMiddlewareSig = null;
       let preCompiledSchema = null;
 
       // In production, eager-load to compile schemas & fail fast at startup
@@ -1437,11 +1439,24 @@ function mountPages(app, options) {
               return res.status(500).json({ error: 'Internal Server Error', message: `Route ${route.file} does not export a valid handler function` });
             }
 
-            // Stateful middlewares (e.g. rate limiters) must be resolved once and preserved across requests
-            if (preResolvedMw === null) {
+            // In dev mode, re-resolve middleware when file is modified or middleware config changes.
+            // When unchanged across requests, preserve resolved instances (e.g. stateful in-memory rate limiters).
+            let fileMtime = null;
+            try {
+              fileMtime = fs.statSync(route.fullPath).mtimeMs;
+            } catch (_) {}
+
+            const rawMw = currentHandler.middleware;
+            const mwSig = Array.isArray(rawMw)
+              ? rawMw.map((m) => (typeof m === 'string' ? m : (Array.isArray(m) ? JSON.stringify(m) : (m?.name || 'fn')))).join(',')
+              : (typeof rawMw === 'string' ? rawMw : (rawMw ? 'custom' : 'none'));
+
+            if (preResolvedMw === null || fileMtime !== lastRouteMtime || mwSig !== lastMiddlewareSig) {
               preResolvedMw = currentHandler.middleware
                 ? resolveMiddlewares(currentHandler.middleware, middlewares)
                 : EMPTY_ARRAY;
+              lastRouteMtime = fileMtime;
+              lastMiddlewareSig = mwSig;
             }
 
             invalidateSchema(route.fullPath);
@@ -1539,6 +1554,8 @@ function mountPages(app, options) {
       let preResolvedPageMw = mountConfig?.middleware
         ? resolveMiddlewares(mountConfig.middleware, middlewares)
         : (!isDev ? EMPTY_ARRAY : null);
+      let lastPageConfigMtime = null;
+      let lastPageMwSig = null;
       const staticRouteHooks = mountConfig?.hooks || EMPTY_OBJECT;
 
       app.get(route.routePath, async (req, res, next) => {
@@ -1590,12 +1607,27 @@ function mountPages(app, options) {
             ? (route.hasCompanionConfig ? loadRouteConfig(route.configPath, true) : null)
             : mountConfig;
           const routeHooks = isDev ? (config?.hooks || EMPTY_OBJECT) : staticRouteHooks;
-          if (preResolvedPageMw === null) {
-            preResolvedPageMw = config?.middleware
-              ? resolveMiddlewares(config.middleware, middlewares)
-              : EMPTY_ARRAY;
+          if (isDev) {
+            let configMtime = null;
+            if (route.hasCompanionConfig && route.configPath) {
+              try {
+                configMtime = fs.statSync(route.configPath).mtimeMs;
+              } catch (_) {}
+            }
+            const rawMw = config?.middleware;
+            const mwSig = Array.isArray(rawMw)
+              ? rawMw.map((m) => (typeof m === 'string' ? m : (Array.isArray(m) ? JSON.stringify(m) : (m?.name || 'fn')))).join(',')
+              : (typeof rawMw === 'string' ? rawMw : (rawMw ? 'custom' : 'none'));
+
+            if (preResolvedPageMw === null || configMtime !== lastPageConfigMtime || mwSig !== lastPageMwSig) {
+              preResolvedPageMw = config?.middleware
+                ? resolveMiddlewares(config.middleware, middlewares)
+                : EMPTY_ARRAY;
+              lastPageConfigMtime = configMtime;
+              lastPageMwSig = mwSig;
+            }
           }
-          const pageMw = preResolvedPageMw;
+          const pageMw = preResolvedPageMw || EMPTY_ARRAY;
         
         // Create context with plugin helpers merged
         const baseHelpers = createHelpers({ req, res, locale, t });

@@ -52,6 +52,30 @@ export interface CreateAppOptions {
       };
   /** Trust proxy configuration (default: 1) */
   trustProxy?: boolean | number | string;
+  /** Hardened query parser configuration: 'simple' | false | Function | { depth?: number; parameterLimit?: number; arrayLimit?: number; allowDots?: boolean } */
+  queryParser?: 'simple' | 'extended' | boolean | ((str: string) => unknown) | {
+    depth?: number;
+    parameterLimit?: number;
+    arrayLimit?: number;
+    allowDots?: boolean;
+  };
+  /** Cookie / session signing secret(s) for cookie-parser, signed cookies, and flash messages */
+  secret?: string | string[];
+  cookieSecret?: string | string[];
+  session?: {
+    secret?: string | string[];
+    [key: string]: unknown;
+  };
+  cookies?: {
+    secret?: string | string[];
+    [key: string]: unknown;
+  };
+  /** Cookie/session-backed flash messages and old input options */
+  flash?: {
+    cookieName?: string;
+    signed?: boolean;
+    secret?: string | string[];
+  };
   /**
    * Custom 404 / 500 / 503 handlers. File-based route errors are forwarded with `next(err)` and hit `serverError` / `timeout`.
    * When `serverError` / `timeout` is a template path, it is not used for paths under `/api` (default JSON instead).
@@ -76,6 +100,12 @@ export interface CreateAppOptions {
   };
   auth?: unknown;
   db?: DatabaseInstance | null;
+  /** Background Job Queue: QueueManager instance, options object, or false to disable */
+  queue?: QueueManager | Record<string, unknown> | boolean;
+  /** Directory path to auto-discover job handlers (defaults to 'jobs' or 'src/jobs') */
+  jobsDir?: string;
+  /** Whether to start background queue worker automatically (default: true, false in test env) */
+  queueAutoStart?: boolean;
   /** HTTP response compression options */
   compression?: boolean | CompressionOptions;
   /** HTTP 103 Early Hints options (preloads CSS/JS before SSR finish) */
@@ -119,6 +149,12 @@ export interface CreateAppOptions {
     metrics?: boolean | MetricsConfig;
     cache?: boolean | LruCacheConfig;
     trustProxy?: boolean | number | string;
+    queryParser?: 'simple' | 'extended' | boolean | ((str: string) => unknown) | {
+      depth?: number;
+      parameterLimit?: number;
+      arrayLimit?: number;
+      allowDots?: boolean;
+    };
     [key: string]: unknown;
   };
   /** Opt-in Alpine / swup assets under `/__webspresso/client-runtime/*`. Env: WEBSPRESSO_ALPINE, WEBSPRESSO_SWUP. */
@@ -1319,14 +1355,20 @@ export function getMailer(): Mailer | null;
 
 export function hasMailer(): boolean;
 
+export function getQueue(): QueueManager | null;
+
+export function hasQueue(): boolean;
+
 export function resetAppContext(): void;
 
 export function setAppContext(partial: {
   db?: DatabaseInstance | null;
+  queue?: QueueManager | null;
   shutdownManager?: ShutdownManager | null;
   serviceRegistry?: ServiceRegistry | null;
   events?: any;
   mailer?: Mailer | null;
+  cache?: any;
 }): void;
 
 // --- File router ---
@@ -1497,7 +1539,11 @@ export interface FlashMessages {
   [key: string]: any;
 }
 
-export function createFlashMiddleware(options?: { cookieName?: string }): import('express').RequestHandler;
+export function createFlashMiddleware(options?: {
+  cookieName?: string;
+  signed?: boolean;
+  secret?: string | string[];
+}): import('express').RequestHandler;
 
 export function normalizeErrors(errors: any): Record<string, string[]>;
 
@@ -2058,6 +2104,8 @@ export interface ModelDefinition<TModel = Record<string, any>> {
   name: string;
   table: string;
   schema: ZodObject<Record<string, ZodTypeAny>>;
+  _insertSchema?: ZodTypeAny;
+  _partialSchema?: ZodTypeAny;
   primaryKey: string;
   relations: Record<string, RelationDefinition>;
   scopes: {
@@ -2163,13 +2211,36 @@ export interface SearchOptions {
 }
 
 export interface QueryBuilder<T = Record<string, any>> {
+  select(...columns: (keyof T | string)[]): this;
+  distinct(...columns: (keyof T | string)[]): this;
   where(column: keyof T | string, value: unknown): this;
   where(column: keyof T | string, operator: string, value: unknown): this;
   where(conditions: Partial<T> | Record<string, unknown>): this;
   orWhere(...args: unknown[]): this;
+  whereNot(column: keyof T | string | Partial<T>, value?: unknown): this;
+  orWhereNot(column: keyof T | string | Partial<T>, value?: unknown): this;
   whereIn(column: keyof T | string, values: unknown[]): this;
-  whereBetween(column: keyof T | string, range: [unknown, unknown]): this;
-  select(...columns: (keyof T | string)[]): this;
+  orWhereIn(column: keyof T | string, values: unknown[]): this;
+  whereNotIn(column: keyof T | string, values: unknown[]): this;
+  orWhereNotIn(column: keyof T | string, values: unknown[]): this;
+  whereNull(column: keyof T | string): this;
+  orWhereNull(column: keyof T | string): this;
+  whereNotNull(column: keyof T | string): this;
+  orWhereNotNull(column: keyof T | string): this;
+  whereBetween(column: keyof T | string, range: [unknown, unknown] | unknown[]): this;
+  orWhereBetween(column: keyof T | string, range: [unknown, unknown] | unknown[]): this;
+  whereNotBetween(column: keyof T | string, range: [unknown, unknown] | unknown[]): this;
+  orWhereNotBetween(column: keyof T | string, range: [unknown, unknown] | unknown[]): this;
+  whereRaw(sql: string, bindings?: unknown[]): this;
+  orWhereRaw(sql: string, bindings?: unknown[]): this;
+  groupBy(...columns: (keyof T | string)[]): this;
+  groupByRaw(sql: string, bindings?: unknown[]): this;
+  having(column: string, value: unknown): this;
+  having(column: string, operator: string, value: unknown): this;
+  orHaving(column: string, value: unknown): this;
+  orHaving(column: string, operator: string, value: unknown): this;
+  havingRaw(sql: string, bindings?: unknown[]): this;
+  orHavingRaw(sql: string, bindings?: unknown[]): this;
   orderBy(column: keyof T | string, direction?: 'asc' | 'desc'): this;
   orderByRaw(sql: string, bindings?: unknown[]): this;
   search(term: string, columns?: string | string[], options?: SearchOptions): this;

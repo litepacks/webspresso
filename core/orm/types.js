@@ -216,6 +216,10 @@
  * @typedef {Object} QueryState
  * @property {WhereClause[]} wheres - WHERE clauses
  * @property {OrderByClause[]} orderBys - ORDER BY clauses
+ * @property {Array<{ columns?: string[], raw?: boolean, sql?: string, bindings?: any[] }>} groupBys - GROUP BY clauses
+ * @property {Array<{ column?: string, operator?: string, value?: any, boolean?: string, raw?: boolean, sql?: string, bindings?: any[] }>} havings - HAVING clauses
+ * @property {boolean} distinct - Whether DISTINCT is applied
+ * @property {string[]} distinctColumns - Specific columns for DISTINCT
  * @property {string[]} selects - SELECT columns
  * @property {string[]} withs - Relations to eager load
  * @property {number} [limitValue] - LIMIT value

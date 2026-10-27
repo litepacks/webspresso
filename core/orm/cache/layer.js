@@ -186,7 +186,10 @@ class OrmCacheLayer {
    * @param {'first'|'list'|'count'|'paginate'} op
    */
   classifyQueryBuilder(model, state, op) {
-    const hasRaw = state.wheres.some((w) => w.raw);
+    const hasRaw = state.wheres.some((w) => w.raw) ||
+      (state.groupBys && state.groupBys.some((g) => g.raw)) ||
+      (state.havings && state.havings.some((h) => h.raw)) ||
+      (state.orderBys && state.orderBys.some((o) => o.raw));
     if (hasRaw) return { cacheable: false, kind: 'collection' };
 
     if (state.withs.length > 0) return { cacheable: true, kind: 'collection' };
@@ -196,6 +199,10 @@ class OrmCacheLayer {
     }
 
     // first()
+    if (state.distinct || (state.groupBys && state.groupBys.length > 0)) {
+      return { cacheable: true, kind: 'collection' };
+    }
+
     if (state.wheres.length !== 1) return { cacheable: true, kind: 'collection' };
 
     const w = state.wheres[0];
@@ -218,7 +225,11 @@ class OrmCacheLayer {
     return hashKey(model, scopeContext, {
       op,
       selects: [...state.selects].sort(),
+      distinct: !!state.distinct,
+      distinctColumns: [...(state.distinctColumns || [])].sort(),
       wheres: serializeWheres(state.wheres),
+      groupBys: state.groupBys || [],
+      havings: state.havings || [],
       orderBys: state.orderBys,
       limit: state.limitValue,
       offset: state.offsetValue,

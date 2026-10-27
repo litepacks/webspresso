@@ -170,17 +170,29 @@ describe('Repository Integration', () => {
       expect(user.updated_at).toBeDefined();
     });
 
-    it('should validate with Zod schema', async () => {
+    it('should validate with Zod schema for invalid fields', async () => {
       await expect(UserRepo.create({
         email: 'invalid', // Too short for Zod max length validation
         name: 'x'.repeat(300), // Exceeds maxLength
       })).rejects.toThrow();
+    });
+
+    it('should reject when required fields are missing on create', async () => {
+      await expect(UserRepo.create({
+        name: 'Missing Email User',
+      })).rejects.toThrow(/email/i);
     });
   });
 
   describe('createMany', () => {
     afterEach(() => {
       dirty = true;
+    });
+
+    it('should reject batch creation when required fields are missing', async () => {
+      await expect(UserRepo.createMany([
+        { name: 'Missing Email 1' },
+      ])).rejects.toThrow(/email/i);
     });
 
     it('should create multiple records', async () => {

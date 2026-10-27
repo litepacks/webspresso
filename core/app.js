@@ -176,9 +176,52 @@ class CoreApp {
       }
     }
 
+    // 6.5. Background Queue & Jobs auto-discovery
+    let resolvedQueue = options.queue;
+    if (resolvedQueue === undefined) {
+      const candidateJobsDir = options.jobsDir
+        ? (path.isAbsolute(options.jobsDir) ? options.jobsDir : path.join(this.rootDir, options.jobsDir))
+        : (fs.existsSync(path.join(this.rootDir, 'jobs'))
+          ? path.join(this.rootDir, 'jobs')
+          : (fs.existsSync(path.join(this.rootDir, 'src/jobs'))
+            ? path.join(this.rootDir, 'src/jobs')
+            : null));
+      if (candidateJobsDir && fs.existsSync(candidateJobsDir)) {
+        const { createQueueManager } = require('./queue');
+        resolvedQueue = createQueueManager({
+          jobsDir: candidateJobsDir,
+          autoStart: options.queueAutoStart !== undefined ? Boolean(options.queueAutoStart) : (process.env.NODE_ENV !== 'test'),
+          timeouts: options.timeouts,
+          adapter: options.queueAdapter,
+        });
+      }
+    } else if (resolvedQueue && typeof resolvedQueue === 'object' && typeof resolvedQueue.dispatch !== 'function') {
+      const { createQueueManager } = require('./queue');
+      resolvedQueue = createQueueManager({
+        autoStart: options.queueAutoStart !== undefined ? Boolean(options.queueAutoStart) : (process.env.NODE_ENV !== 'test'),
+        timeouts: options.timeouts,
+        ...resolvedQueue,
+      });
+    }
+
+    if (resolvedQueue && typeof resolvedQueue !== 'boolean') {
+      this.queue = resolvedQueue;
+      if (this.shutdownManager) {
+        this.shutdownManager.registerDisposer('queue', () => {
+          if (typeof resolvedQueue.drain === 'function') {
+            return resolvedQueue.drain();
+          } else if (typeof resolvedQueue.stop === 'function') {
+            return resolvedQueue.stop();
+          }
+        });
+      }
+    } else {
+      this.queue = null;
+    }
+
     // 7. Events Subsystem
     this.events = options.events || createEventDispatcher({
-      queue: options.queue || null,
+      queue: this.queue,
       logger: this.logger,
     });
     this.shutdownManager.onShutdown(() => {
@@ -238,9 +281,8 @@ class CoreApp {
       this.flags = null;
     }
 
-    // 10. Database & Queue
+    // 10. Database
     this.db = options.db ?? null;
-    this.queue = options.queue ?? null;
 
     // 10. Module Services discovery (if modules directory exists)
     this.moduleMiddlewares = {};

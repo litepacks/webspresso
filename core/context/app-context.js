@@ -5,9 +5,10 @@
 
 const { circuitBreakerRegistry, retry } = require('../resilience');
 
-/** @type {{ db: object|null, shutdownManager: object|null, serviceRegistry: object|null, events: object|null, mailer: object|null, cache: object|null, breakers: object|null }} */
+/** @type {{ db: object|null, queue: object|null, shutdownManager: object|null, serviceRegistry: object|null, events: object|null, mailer: object|null, cache: object|null, breakers: object|null }} */
 let context = {
   db: null,
+  queue: null,
   shutdownManager: null,
   serviceRegistry: null,
   events: null,
@@ -18,7 +19,7 @@ let context = {
 
 /**
  * Merge into the current context (typically called once from createApp).
- * @param {{ db?: object|null, shutdownManager?: object|null, serviceRegistry?: object|null, events?: object|null, mailer?: object|null, cache?: object|null }} partial
+ * @param {{ db?: object|null, queue?: object|null, shutdownManager?: object|null, serviceRegistry?: object|null, events?: object|null, mailer?: object|null, cache?: object|null }} partial
  */
 function setAppContext(partial) {
   context = { ...context, ...partial };
@@ -105,6 +106,7 @@ function hasEvents() {
 function resetAppContext() {
   context = {
     db: null,
+    queue: null,
     shutdownManager: null,
     serviceRegistry: null,
     events: null,
@@ -112,6 +114,20 @@ function resetAppContext() {
     cache: null,
     breakers: circuitBreakerRegistry,
   };
+}
+
+/**
+ * @returns {object|null}
+ */
+function getQueue() {
+  return context.queue;
+}
+
+/**
+ * @returns {boolean}
+ */
+function hasQueue() {
+  return context.queue != null;
 }
 
 /**
@@ -143,7 +159,7 @@ function hasCache() {
 }
 
 /**
- * Express middleware: sets `req.db`, `req.service`, `req.events`, `req.mailer`, and `req.cache` from registered app context.
+ * Express middleware: sets `req.db`, `req.queue`, `req.service`, `req.events`, `req.mailer`, and `req.cache` from registered app context.
  * File-based `pages/api/*` routes attach this automatically; use in `setupRoutes`
  * for manually registered handlers that need `req.db` and `req.service`.
  * @type {import('express').RequestHandler}
@@ -151,6 +167,9 @@ function hasCache() {
 function attachDbMiddleware(req, res, next) {
   if (context.db != null) {
     req.db = context.db;
+  }
+  if (context.queue != null) {
+    req.queue = context.queue;
   }
   if (context.events != null) {
     req.events = context.events;
@@ -170,6 +189,7 @@ function attachDbMiddleware(req, res, next) {
         req,
         res,
         db: context.db,
+        queue: context.queue,
         events: context.events,
         mailer: context.mailer,
         cache: context.cache,
@@ -186,6 +206,8 @@ module.exports = {
   getAppContext,
   getDb,
   hasDb,
+  getQueue,
+  hasQueue,
   getShutdownManager,
   hasShutdownManager,
   getServiceRegistry,

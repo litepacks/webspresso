@@ -4,22 +4,58 @@
  */
 
 const fs = require('fs');
+const path = require('path');
 const { spawn } = require('child_process');
 
 /**
  * Build node --watch arguments with additional watch paths
+ * @param {string} [projectRoot=process.cwd()]
  * @returns {string[]} Node arguments
  */
-function buildWatchArgs() {
+function buildWatchArgs(projectRoot = process.cwd()) {
   const args = ['--watch'];
   
-  // Add watch paths for server-side code directories (services, models, config, pages)
-  // Note: views contains Nunjucks templates which are live-reloaded in-memory by devReloadHub
-  const watchPaths = ['pages', 'models', 'services', 'config'];
+  // Add watch paths for server-side code directories:
+  // - pages: File-based routing and companion loaders
+  // - models: ORM database models
+  // - services: Business logic services
+  // - jobs: Background queues and scheduled cron workers
+  // - listeners: Decoupled events and signals
+  // - modules / src/modules: Modular domain packages
+  // - plugins / src/plugins: Local plugin extensions
+  // - config: App config and credentials
+  // - migrations: DB migration definitions
+  const watchPaths = [
+    'pages',
+    'models',
+    'services',
+    'jobs',
+    'listeners',
+    'modules',
+    'plugins',
+    'config',
+    'migrations',
+    'src/models',
+    'src/services',
+    'src/jobs',
+    'src/listeners',
+    'src/modules',
+    'src/plugins',
+  ];
   
   for (const dir of watchPaths) {
-    if (fs.existsSync(dir)) {
+    const fullPath = path.isAbsolute(dir) ? dir : path.join(projectRoot, dir);
+    if (fs.existsSync(fullPath)) {
       args.push(`--watch-path=./${dir}`);
+    }
+  }
+
+  // Also watch .env files if present
+  const envFiles = ['.env', '.env.local', '.env.development'];
+  for (const envFile of envFiles) {
+    const fullPath = path.join(projectRoot, envFile);
+    if (fs.existsSync(fullPath)) {
+      args.push(`--watch-path=./${envFile}`);
     }
   }
   
@@ -124,4 +160,4 @@ function registerCommand(program) {
     });
 }
 
-module.exports = { registerCommand };
+module.exports = { registerCommand, buildWatchArgs };

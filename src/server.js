@@ -700,8 +700,16 @@ function createApp(options = {}) {
   };
 
   try {
+  // Adopt or resolve Background Queue
+  const queueManager = core.queue || (options.queue && typeof options.queue.dispatch === 'function' ? options.queue : null);
+  if (queueManager) {
+    app.queue = queueManager;
+    options.queue = queueManager;
+  }
+
   setAppContext({
     db: options.db ?? null,
+    queue: queueManager ?? null,
     shutdownManager,
     serviceRegistry,
     events: eventDispatcher,
@@ -726,9 +734,6 @@ function createApp(options = {}) {
   app.service.invalidateByTags = (tags, serviceName) => serviceRegistry.invalidateByTags(tags, serviceName);
   app.service.invalidateTag = app.service.invalidateByTag;
   app.service.invalidateTags = app.service.invalidateByTags;
-  if (options.queue) {
-    app.queue = options.queue;
-  }
 
   const { renderStream } = require('../core/ssr/stream');
   const { createSseStream } = require('../core/sse/stream');
@@ -764,8 +769,8 @@ function createApp(options = {}) {
     if (options.db) {
       req.db = options.db;
     }
-    if (options.queue) {
-      req.queue = options.queue;
+    if (queueManager) {
+      req.queue = queueManager;
     }
     req.events = eventDispatcher;
     req.cache = appCache;
@@ -776,6 +781,7 @@ function createApp(options = {}) {
       req,
       res,
       app,
+      queue: queueManager ?? null,
       assetManager: appAssetManager,
       ...(req.context || {}),
     });
@@ -1255,9 +1261,6 @@ function createApp(options = {}) {
     app.set('trust proxy', false);
   }
 
-  // Ensure extended query parser for nested filter/sort query parameters (?filter[field]=val)
-  app.set('query parser', 'extended');
-  
   // Fast hardware-accelerated Weak ETag (CRC32 + Hex length) as default
   // Configurable via options.etag or options.server.etag
   const etagSetting = options.etag !== undefined
@@ -1276,10 +1279,54 @@ function createApp(options = {}) {
   const limitsOpt = options.limits ?? options.server?.limits;
   const activeLimits = setupLimitsMiddleware(app, limitsOpt);
 
+  // Hardened, prototype-safe Query Parser with DoS depth & parameter limits
+  const queryParserOpt = options.queryParser ?? options.server?.queryParser;
+  if (queryParserOpt === false) {
+    app.set('query parser', false);
+  } else if (queryParserOpt === 'simple') {
+    app.set('query parser', 'simple');
+  } else if (typeof queryParserOpt === 'function') {
+    app.set('query parser', queryParserOpt);
+  } else {
+    const qs = require('qs');
+    const parserConfig = (typeof queryParserOpt === 'object' && queryParserOpt !== null) ? queryParserOpt : {};
+    const safeDepth = parserConfig.depth !== undefined ? parserConfig.depth : 5;
+    const safeParamLimit = parserConfig.parameterLimit !== undefined
+      ? parserConfig.parameterLimit
+      : (activeLimits?.parameterLimit || 1000);
+    const safeArrayLimit = parserConfig.arrayLimit !== undefined ? parserConfig.arrayLimit : 100;
+    const safeAllowDots = parserConfig.allowDots !== undefined ? Boolean(parserConfig.allowDots) : true;
+
+    app.set('query parser', function safeExtendedQueryParser(str) {
+      return qs.parse(str, {
+        depth: safeDepth,
+        parameterLimit: safeParamLimit,
+        arrayLimit: safeArrayLimit,
+        allowDots: safeAllowDots,
+        allowPrototypes: false,
+      });
+    });
+  }
+
   // Cookie parser & Flash messages (AdonisJS & Django-inspired old input and errors)
+  const cookieSecret =
+    options.secret ||
+    options.cookieSecret ||
+    options.session?.secret ||
+    options.cookies?.secret ||
+    (typeof authManager?.getSessionConfig === 'function' ? authManager.getSessionConfig()?.secret : authManager?.config?.session?.secret) ||
+    process.env.COOKIE_SECRET ||
+    process.env.SESSION_SECRET ||
+    undefined;
+
   const cookieParser = require('cookie-parser');
-  app.use(cookieParser());
-  app.use(createFlashMiddleware());
+  app.use(cookieParser(cookieSecret));
+
+  const flashConfig = typeof options.flash === 'object' ? { ...options.flash } : {};
+  if (cookieSecret && flashConfig.secret === undefined) {
+    flashConfig.secret = cookieSecret;
+  }
+  app.use(createFlashMiddleware(flashConfig));
   
   // Ensure default empty object for body on mutating requests if not populated
   // and halt processing if request has timed out (after body parsers)
@@ -1298,7 +1345,7 @@ function createApp(options = {}) {
   const healthOpt = options.healthCheck ?? options.server?.healthCheck;
   setupHealthMiddleware(app, healthOpt, {
     db: options.db,
-    queue: options.queue,
+    queue: queueManager || options.queue,
     shutdownManager,
   });
 
