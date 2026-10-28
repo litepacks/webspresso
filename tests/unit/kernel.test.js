@@ -424,4 +424,34 @@ describe('kernel view resolver', () => {
     });
     expect(view.renderView('ns::p', {})).toBe('v');
   });
+
+  it('caches template resolution when cache: true and allows clearCache()', () => {
+    const tmp = path.join(__dirname, '../fixtures/kernel-view-cache-tmp');
+    const appRoot = path.join(tmp, 'app', 'plugins', 'cached-plugin', 'pages');
+    fs.mkdirSync(appRoot, { recursive: true });
+    try {
+      fs.writeFileSync(path.join(appRoot, 'index.html'), 'VERSION_1');
+
+      const view = createViewEngine({
+        appViews: path.join(tmp, 'app'),
+        cache: true,
+      });
+
+      expect(view.renderView('cached-plugin::index', {})).toBe('VERSION_1');
+
+      // Update file on disk
+      fs.writeFileSync(path.join(appRoot, 'index.html'), 'VERSION_2');
+
+      // Still returns cached VERSION_1
+      expect(view.renderView('cached-plugin::index', {})).toBe('VERSION_1');
+
+      // Clear cache
+      view.clearCache();
+
+      // Now returns updated VERSION_2
+      expect(view.renderView('cached-plugin::index', {})).toBe('VERSION_2');
+    } finally {
+      cleanupDir(tmp);
+    }
+  });
 });

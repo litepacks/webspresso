@@ -450,7 +450,7 @@ export function defineService<TInput = unknown, TOutput = unknown>(
   definition: ServiceDefinition<TInput, TOutput> | ServiceHandler<TInput, TOutput>
 ): ServiceDefinition<TInput, TOutput>;
 
-export const service: typeof defineService;
+export declare const service: typeof defineService;
 
 export interface MemoizeOptions {
   ttl?: string | number | boolean;
@@ -892,7 +892,7 @@ export function formatLinkHeader(links: string | EarlyHintLink | (string | Early
 export function inferAsType(url: string): string | null;
 
 export namespace earlyHints {
-  export const EXTENSION_AS_MAP: Record<string, string>;
+  export declare const EXTENSION_AS_MAP: Record<string, string>;
   export function inferAsType(url: string): string | null;
   export function formatLink(item: string | EarlyHintLink): string | null;
   export function formatLinkHeader(links: string | EarlyHintLink | (string | EarlyHintLink)[]): string[];
@@ -940,7 +940,7 @@ export function createLimitsMiddleware(routeOptions?: unknown): RequestHandler;
 export function parseByteSize(value: string | number): number | string;
 
 export namespace limits {
-  export const DEFAULT_LIMITS: Record<string, unknown>;
+  export declare const DEFAULT_LIMITS: Record<string, unknown>;
   export function parseByteSize(value: string | number): number | string;
   export function normalizeLimits(options?: unknown): unknown;
   export function matchesPath(pattern: string | RegExp | Function, pathname: string): boolean;
@@ -980,7 +980,7 @@ export function setupHealthMiddleware(app: Application, options?: unknown, conte
 export function createHealthManager(config: unknown, context?: unknown): unknown;
 
 export namespace health {
-  export const DEFAULT_HEALTH_CONFIG: Record<string, unknown>;
+  export declare const DEFAULT_HEALTH_CONFIG: Record<string, unknown>;
   export function normalizeHealthConfig(options?: unknown): unknown;
   export function formatMb(bytes: number): string;
   export function createEventLoopMonitor(): unknown;
@@ -1295,7 +1295,7 @@ export class CircuitBreakerRegistry {
   clear(): void;
 }
 
-export const circuitBreakerRegistry: CircuitBreakerRegistry;
+export declare const circuitBreakerRegistry: CircuitBreakerRegistry;
 export function getBreaker(name: string, options?: CircuitBreakerOptions): CircuitBreaker;
 
 export namespace resilience {
@@ -1321,7 +1321,7 @@ export function resolveClientRuntime(options?: {
   };
 }): { alpine: boolean; swup: boolean };
 
-export const CLIENT_RUNTIME_BASE: string;
+export declare const CLIENT_RUNTIME_BASE: string;
 
 // --- App context ---
 
@@ -1643,7 +1643,7 @@ export class EventDispatcher {
 
 export function createEventDispatcher(options?: { queue?: any; maxListeners?: number; logger?: any }): EventDispatcher;
 
-export const events: EventDispatcher;
+export declare const events: EventDispatcher;
 
 export class Signal {
   constructor(name: string, dispatcher: EventDispatcher);
@@ -1747,7 +1747,7 @@ export function pick<T extends object, K extends keyof T>(obj: T | null | undefi
 export function omit<T extends object, K extends keyof T>(obj: T | null | undefined, keys: K[] | K): Omit<T, K>;
 export function deepClone<T>(obj: T): T;
 
-export const DEFAULT_TIMEOUTS: Readonly<{
+export declare const DEFAULT_TIMEOUTS: Readonly<{
   request: number;
   service: number;
   queue: number;
@@ -1801,7 +1801,7 @@ export function createTimeoutMiddleware(
   options?: { respond?: boolean }
 ): (req: Request, res: Response, next: (err?: unknown) => void) => void;
 
-export const utils: Record<string, unknown>;
+export declare const utils: Record<string, unknown>;
 
 export class AssetManager {
   constructor(options?: Record<string, unknown>);
@@ -2172,9 +2172,9 @@ export type Zdb = Record<string, any> & {
   softDeletes(options?: { snakeCase?: boolean; deletedAt?: string }): Record<string, any>;
 };
 
-export const zdb: Zdb;
-export const z: typeof import('zod').z;
-export const zod: typeof import('zod').z;
+export declare const zdb: Zdb;
+export declare const z: typeof import('zod').z;
+export declare const zod: typeof import('zod').z;
 
 export function createSchemaHelpers(z: typeof import('zod').z): Zdb;
 
@@ -2475,7 +2475,7 @@ export interface DatabaseInstance {
 
 export function createDatabase(config: DatabaseConfig): DatabaseInstance;
 export function createD1Knex(d1Database: unknown, options?: Record<string, unknown>): Knex;
-export const Client_D1: unknown;
+export declare const Client_D1: unknown;
 export function executeD1Batch(
   d1Database: unknown,
   queriesOrCallback: Array<any> | ((batch: { add(q: any): any; raw(sql: string, bindings?: any[]): any }) => Promise<any> | any)
@@ -2623,7 +2623,7 @@ export function runCloudMigration(knex: unknown, options?: CloudMigrationOptions
 
 export function generateNanoid(options?: { maxLength?: number } | number): string;
 
-export const zodNanoid: ZodTypeAny;
+export declare const zodNanoid: ZodTypeAny;
 
 export function extendZ(z: typeof import('zod').z): typeof import('zod').z;
 
@@ -2638,14 +2638,14 @@ export function sanitizeForOutput(
 
 // --- ORM: events ---
 
-export const ModelEvents: {
+export declare const ModelEvents: {
   on(event: string, handler: (...args: unknown[]) => void): void;
   emit(event: string, ...args: unknown[]): void;
   emitAsync?(event: string, ...args: unknown[]): Promise<void>;
   [key: string]: unknown;
 };
 
-export const Hooks: Record<string, string>;
+export declare const Hooks: Record<string, string>;
 
 export class HookCancellationError extends Error {
   reason: string;
@@ -2673,7 +2673,7 @@ export class QueryComplexityError extends BadRequestError {
   code: string;
 }
 
-export const DEFAULT_QUERY_LIMITS: {
+export declare const DEFAULT_QUERY_LIMITS: {
   maxLimit: number;
   defaultLimit: number;
   maxIncludes: number;
@@ -3643,7 +3643,7 @@ export interface ContentPluginOptions {
 
 export function contentPlugin(options: ContentPluginOptions): WebspressoPlugin;
 
-export const content: {
+export declare const content: {
   createContentService: typeof import('./core/content').createContentService;
   parseContentTypeSchema: typeof import('./core/content').parseContentTypeSchema;
   validateEntryData: typeof import('./core/content').validateEntryData;
@@ -4024,12 +4024,12 @@ export interface WebspressoKernel {
   createEventBus(): KernelEventBus;
   buildContext: KernelEventBus['buildContext'];
   randomUUID(): string;
-  createViewEngine(paths?: { appViews?: string; themeViews?: string }): KernelViewEngine;
+  createViewEngine(paths?: { appViews?: string; themeViews?: string; cache?: boolean }): KernelViewEngine;
   renderTemplate(template: string, data: Record<string, unknown>): string;
   parseQualified(qualified: string): { namespace: string; name: string };
 }
 
-export const kernel: WebspressoKernel;
+export declare const kernel: WebspressoKernel;
 
 // --- Background Job Queue ---
 
@@ -4270,7 +4270,7 @@ export class CronExpression {
 export function parseCron(expression: string, options?: { utc?: boolean; timezone?: string; tz?: string }): CronExpression;
 export function isValidCron(expression: string, options?: { utc?: boolean; timezone?: string; tz?: string }): boolean;
 export function resolveCronAlias(str: string): string;
-export const CRON_ALIASES: Record<string, string>;
+export declare const CRON_ALIASES: Record<string, string>;
 
 export class TaskScheduler {
   queue: QueueManager;
@@ -4437,7 +4437,7 @@ export function renderStream(
   options?: RenderStreamOptions
 ): Promise<void>;
 
-export const ssr: {
+export declare const ssr: {
   createHtmlStream: typeof createHtmlStream;
   renderStream: typeof renderStream;
 };
@@ -4521,7 +4521,7 @@ export function createSseStream(
   maybeOptions?: SseOptions
 ): ServerSentEventsStream | Promise<void>;
 
-export const sseStream: {
+export declare const sseStream: {
   ServerSentEventsStream: typeof ServerSentEventsStream;
   createSseStream: typeof createSseStream;
   formatSseFrame: (data?: any, event?: string, id?: string | number, retry?: number) => string;
@@ -4567,7 +4567,7 @@ export function streamJson(
   maybeOptions?: TextStreamOptions
 ): TextStreamController | Promise<void>;
 
-export const stream: {
+export declare const stream: {
   TextStreamController: typeof TextStreamController;
   streamText: typeof streamText;
   streamJson: typeof streamJson;
@@ -4737,7 +4737,7 @@ export interface XlsxToolkit {
   createServices(options?: Record<string, unknown>): Record<string, unknown>;
 }
 
-export const xlsx: XlsxToolkit;
+export declare const xlsx: XlsxToolkit;
 export function xlsxPlugin(options?: XlsxPluginOptions): WebspressoPlugin;
 
 // --- CSV Plugin & Toolkit ---
@@ -4807,7 +4807,7 @@ export interface CsvToolkit {
   createServices(options?: Record<string, unknown>): Record<string, unknown>;
 }
 
-export const csv: CsvToolkit;
+export declare const csv: CsvToolkit;
 export function csvPlugin(options?: CsvPluginOptions): WebspressoPlugin;
 
 // --- Discovery, Pages, API & Modules ---
@@ -5082,7 +5082,7 @@ export function defineApi<
   ) => Promise<TResult> | TResult
 ): DefineApiOptions<TResult, TBody, TParams, TQuery, THeaders>;
 
-export const api: typeof defineApi;
+export declare const api: typeof defineApi;
 
 export interface DefineModuleOptions {
   name: string;

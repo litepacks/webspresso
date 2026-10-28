@@ -5,6 +5,19 @@
 
 'use strict';
 
+const crypto = require('crypto');
+
+/**
+ * Generate a cryptographically unique collision-free Job ID
+ * @returns {string}
+ */
+function generateJobId() {
+  if (typeof crypto.randomUUID === 'function') {
+    return `job_${crypto.randomUUID().replace(/-/g, '')}`;
+  }
+  return `job_${Date.now().toString(36)}_${crypto.randomBytes(8).toString('hex')}`;
+}
+
 class Job {
   /**
    * @param {Object} options
@@ -26,7 +39,7 @@ class Job {
    * @param {Function} [options.onProgress]
    */
   constructor(options = {}) {
-    this.id = options.id || ('job_' + Math.random().toString(36).slice(2, 11) + Date.now().toString(36));
+    this.id = options.id || generateJobId();
     this.name = options.name || 'default';
     this.data = options.data !== undefined ? options.data : {};
     this.status = options.status || 'pending';

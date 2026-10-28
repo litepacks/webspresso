@@ -42,11 +42,18 @@ function parseQualified(qualified) {
  * @param {{
  *   appViews?: string,
  *   themeViews?: string,
+ *   cache?: boolean,
  * }} paths
  */
 function createViewEngine(paths = {}) {
   const appPluginsRoot = paths.appViews || '';
   const themeRoot = paths.themeViews || '';
+  const enableCache = paths.cache !== undefined
+    ? Boolean(paths.cache)
+    : (process.env.NODE_ENV === 'production' && process.env.__WEBSPRESSO_TESTING__ !== 'true');
+
+  /** @type {Map<string, string|null>} */
+  const templateCache = new Map();
 
   /** @type {Map<string, { pluginName: string, layouts: Record<string,string>, pages: Record<string,string>, partials: Record<string,string> }>} */
   const registry = new Map();
@@ -63,6 +70,16 @@ function createViewEngine(paths = {}) {
       pages: bundle.pages || {},
       partials: bundle.partials || {},
     });
+    if (enableCache) {
+      templateCache.clear();
+    }
+  }
+
+  /**
+   * Clear the in-memory template cache
+   */
+  function clearCache() {
+    templateCache.clear();
   }
 
   /**
@@ -73,6 +90,11 @@ function createViewEngine(paths = {}) {
    * @returns {string|null}
    */
   function resolveTemplate(kind, namespace, id) {
+    const cacheKey = `${kind}:${namespace}:${id}`;
+    if (enableCache && templateCache.has(cacheKey)) {
+      return templateCache.get(cacheKey);
+    }
+
     const entry = registry.get(namespace);
     const pluginSlug = entry ? entry.pluginName : namespace;
 
@@ -84,21 +106,23 @@ function createViewEngine(paths = {}) {
           : 'pages';
     const file = `${id}.html`;
 
+    let template = null;
+
     if (appPluginsRoot) {
       const appPath = path.join(appPluginsRoot, 'plugins', pluginSlug, sub, file);
       if (fs.existsSync(appPath)) {
-        return fs.readFileSync(appPath, 'utf8');
+        template = fs.readFileSync(appPath, 'utf8');
       }
     }
 
-    if (themeRoot) {
+    if (template === null && themeRoot) {
       const themePath = path.join(themeRoot, pluginSlug, sub, file);
       if (fs.existsSync(themePath)) {
-        return fs.readFileSync(themePath, 'utf8');
+        template = fs.readFileSync(themePath, 'utf8');
       }
     }
 
-    if (entry) {
+    if (template === null && entry) {
       const dict =
         kind === 'layout'
           ? entry.layouts
@@ -106,10 +130,14 @@ function createViewEngine(paths = {}) {
             ? entry.partials
             : entry.pages;
       const inline = dict[id];
-      if (inline != null) return inline;
+      if (inline != null) template = inline;
     }
 
-    return null;
+    if (enableCache) {
+      templateCache.set(cacheKey, template);
+    }
+
+    return template;
   }
 
   /**
@@ -157,6 +185,8 @@ function createViewEngine(paths = {}) {
     renderPartial,
     renderTemplate,
     parseQualified,
+    clearCache,
+    resolveTemplate,
   };
 }
 
