@@ -161,8 +161,39 @@ describe('Server-Sent Events (SSE) Engine', () => {
       expect(sse.isOpen).toBe(false);
       expect(sse.isClosed).toBe(true);
       expect(closeSpy).toHaveBeenCalledTimes(1);
-
       vi.useRealTimers();
+    });
+
+    it('safely initializes when req is null or undefined', () => {
+      const mockRes = new (require('events').EventEmitter)();
+      mockRes.headersSent = true;
+      mockRes.write = vi.fn().mockReturnValue(true);
+      mockRes.end = vi.fn();
+
+      const sse = new ServerSentEventsStream(null, mockRes, { heartbeat: false });
+      expect(sse.isOpen).toBe(true);
+      expect(sse.req).toBeNull();
+      sse.close();
+      expect(sse.isOpen).toBe(false);
+    });
+
+    it('resolves false and cleans up listeners when connection closes during backpressure', async () => {
+      const mockReq = new (require('events').EventEmitter)();
+      const mockRes = new (require('events').EventEmitter)();
+      mockRes.headersSent = true;
+      mockRes.write = vi.fn().mockReturnValue(false);
+      mockRes.end = vi.fn();
+
+      const sse = new ServerSentEventsStream(mockReq, mockRes, { heartbeat: false });
+      const sendPromise = sse.send({ test: 'backpressure' });
+
+      // Client closes connection before drain occurs
+      mockRes.emit('close');
+
+      const result = await sendPromise;
+      expect(result).toBe(false);
+      expect(mockRes.listenerCount('drain')).toBe(0);
+      expect(mockRes.listenerCount('close')).toBe(0);
     });
   });
 

@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { ConfigurationError, RouteNotFoundError } = require('../errors');
 
 /**
  * @param {string} template
@@ -30,7 +31,7 @@ function parseQualified(qualified) {
   const sep = '::';
   const i = qualified.indexOf(sep);
   if (i === -1) {
-    throw new Error(`View name must be namespaced ("ns::page"), got: ${qualified}`);
+    throw new ConfigurationError(`View name must be namespaced ("ns::page"), got: ${qualified}`);
   }
   return {
     namespace: qualified.slice(0, i),
@@ -149,7 +150,7 @@ function createViewEngine(paths = {}) {
     const { namespace, name } = parseQualified(qualified);
     let body = resolveTemplate('page', namespace, name);
     if (body == null) {
-      throw new Error(`View not found: ${qualified}`);
+      throw new RouteNotFoundError(`View not found: ${qualified}`);
     }
     body = renderTemplate(body, data);
 
@@ -157,7 +158,7 @@ function createViewEngine(paths = {}) {
       const lq = parseQualified(options.layout);
       const layoutBody = resolveTemplate('layout', lq.namespace, lq.name);
       if (layoutBody == null) {
-        throw new Error(`Layout not found: ${options.layout}`);
+        throw new RouteNotFoundError(`Layout not found: ${options.layout}`);
       }
       const merged = { ...data, content: body };
       return renderTemplate(layoutBody, merged);
@@ -174,7 +175,7 @@ function createViewEngine(paths = {}) {
     const { namespace, name } = parseQualified(qualified);
     const raw = resolveTemplate('partial', namespace, name);
     if (raw == null) {
-      throw new Error(`Partial not found: ${qualified}`);
+      throw new RouteNotFoundError(`Partial not found: ${qualified}`);
     }
     return renderTemplate(raw, data);
   }

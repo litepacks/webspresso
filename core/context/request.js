@@ -208,11 +208,33 @@ async function useTransaction(callback) {
   }
 
   if (typeof db.transaction === 'function') {
-    return db.transaction(async (trx) => {
+    return db.transaction(async (trxOrCtx) => {
       const current = requestContextStorage.getStore() || {};
-      const txDb = trx.db || trx;
-      const txCtx = { ...current, db: txDb, trx: trx.trx || trx };
-      return requestContextStorage.run(txCtx, () => callback(trx));
+      const actualTrx = (trxOrCtx && trxOrCtx.trx) ? trxOrCtx.trx : trxOrCtx;
+
+      // Transparent transactional DB proxy delegating missing methods (raw, getModel, models) to base db or trx
+      const txDb = new Proxy(trxOrCtx, {
+        get(target, prop, receiver) {
+          if (prop in target) {
+            const val = Reflect.get(target, prop, receiver);
+            return typeof val === 'function' ? val.bind(target) : val;
+          }
+          if (prop === 'raw' && actualTrx && typeof actualTrx.raw === 'function') {
+            return actualTrx.raw.bind(actualTrx);
+          }
+          if (prop === 'knex') {
+            return actualTrx;
+          }
+          if (db && prop in db) {
+            const val = Reflect.get(db, prop, receiver);
+            return typeof val === 'function' ? val.bind(db) : val;
+          }
+          return undefined;
+        },
+      });
+
+      const txCtx = { ...current, db: txDb, trx: actualTrx };
+      return requestContextStorage.run(txCtx, () => callback(trxOrCtx));
     });
   }
 

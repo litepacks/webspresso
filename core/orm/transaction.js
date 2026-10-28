@@ -12,12 +12,13 @@ const ambientTransactionStorage = new AsyncLocalStorage();
 
 /**
  * Execute a callback within an ambient transaction context
- * @param {import('knex').Knex.Transaction} trx - Knex transaction
+ * @param {import('knex').Knex.Transaction|{ trx: import('knex').Knex.Transaction }} trx - Knex transaction or transaction context
  * @param {Function} callback - Function to execute
  * @returns {Promise<*>} Result of callback
  */
 function runWithAmbientTransaction(trx, callback) {
-  return ambientTransactionStorage.run({ trx }, callback);
+  const actualTrx = (trx && trx.trx) ? trx.trx : trx;
+  return ambientTransactionStorage.run({ trx: actualTrx }, callback);
 }
 
 /**
@@ -27,10 +28,11 @@ function runWithAmbientTransaction(trx, callback) {
 function getAmbientTransaction() {
   const store = ambientTransactionStorage.getStore();
   if (!store || !store.trx) return null;
-  if (typeof store.trx.isCompleted === 'function' && store.trx.isCompleted()) {
+  const rawTrx = (store.trx && store.trx.trx) ? store.trx.trx : store.trx;
+  if (typeof rawTrx.isCompleted === 'function' && rawTrx.isCompleted()) {
     return null;
   }
-  return store.trx;
+  return rawTrx;
 }
 
 /**

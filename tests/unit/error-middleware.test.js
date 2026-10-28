@@ -186,5 +186,43 @@ describe('Central Error Handler Middleware (core/errors/middleware)', () => {
       });
       expect(res.body.stack).toBeDefined();
     });
+
+    it('should safely delegate to next(err) if custom error handler throws after headersSent', async () => {
+      let nextCalledWith = null;
+      const handler = createCentralErrorHandler({
+        getCustomHandler: () => async (err, req, res) => {
+          res.headersSent = true;
+          throw new Error('Custom handler failed mid-stream');
+        },
+      });
+
+      const res = createMockRes();
+      const primaryErr = new Error('Original error');
+      await handler(primaryErr, { path: '/stream', headers: {} }, res, (err) => {
+        nextCalledWith = err;
+      });
+
+      expect(nextCalledWith).toBe(primaryErr);
+      expect(res.body).toBeNull();
+    });
+
+    it('should safely delegate to next(err) if renderHtmlError throws after headersSent', async () => {
+      let nextCalledWith = null;
+      const handler = createCentralErrorHandler({
+        renderHtmlError: async (err, req, res) => {
+          res.headersSent = true;
+          throw new Error('HTML renderer failed mid-stream');
+        },
+      });
+
+      const res = createMockRes();
+      const primaryErr = new Error('Template error');
+      await handler(primaryErr, { path: '/page', headers: {} }, res, (err) => {
+        nextCalledWith = err;
+      });
+
+      expect(nextCalledWith).toBe(primaryErr);
+      expect(res.body).toBeNull();
+    });
   });
 });

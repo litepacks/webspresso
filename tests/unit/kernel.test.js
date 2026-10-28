@@ -387,6 +387,14 @@ describe('kernel view resolver', () => {
     expect(() => view.renderPartial('x::nope', {})).toThrow('Partial not found');
   });
 
+  it('throws ConfigurationError and RouteNotFoundError error classes for view failures', () => {
+    const { ConfigurationError, RouteNotFoundError } = require('../../core/errors');
+    expect(() => parseQualified('badname')).toThrow(ConfigurationError);
+    const view = createViewEngine({});
+    expect(() => view.renderView('missing::page', {})).toThrow(RouteNotFoundError);
+    expect(() => view.renderPartial('missing::part', {})).toThrow(RouteNotFoundError);
+  });
+
   it('renderView wraps layout with content slot', () => {
     const view = createViewEngine({});
     view.registerPluginViews('p', {

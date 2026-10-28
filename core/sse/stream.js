@@ -88,7 +88,7 @@ class ServerSentEventsStream extends EventEmitter {
     }
 
     // 2. Socket-level optimizations for long-lived real-time streams
-    const socket = this.req.socket;
+    const socket = this.req ? this.req.socket : null;
     if (socket) {
       if (typeof socket.setTimeout === 'function') socket.setTimeout(0);
       if (typeof socket.setNoDelay === 'function') socket.setNoDelay(true);
@@ -149,7 +149,10 @@ class ServerSentEventsStream extends EventEmitter {
     }
 
     // 6. Listen for connection close from either client or server
-    this.req.on('close', this._cleanupBound);
+    if (this.req) {
+      this.req.on('close', this._cleanupBound);
+      this.req.on('aborted', this._cleanupBound);
+    }
     this.res.on('close', this._cleanupBound);
     this.res.on('finish', this._cleanupBound);
     this.res.on('error', this._cleanupBound);
@@ -177,7 +180,10 @@ class ServerSentEventsStream extends EventEmitter {
 
     this._stopHeartbeat();
 
-    this.req.removeListener('close', this._cleanupBound);
+    if (this.req) {
+      this.req.removeListener('close', this._cleanupBound);
+      this.req.removeListener('aborted', this._cleanupBound);
+    }
     this.res.removeListener('close', this._cleanupBound);
     this.res.removeListener('finish', this._cleanupBound);
     this.res.removeListener('error', this._cleanupBound);
@@ -238,8 +244,25 @@ class ServerSentEventsStream extends EventEmitter {
         const canContinue = this.res.write(frame);
         this._flush();
 
-        if (!canContinue && !this.res.destroyed && !this.res.writableEnded) {
-          this.res.once('drain', () => resolve(true));
+        if (!canContinue && !this.res.destroyed && !this.res.writableEnded && this.isOpen) {
+          const onDrain = () => {
+            cleanup();
+            resolve(true);
+          };
+          const onClose = () => {
+            cleanup();
+            resolve(false);
+          };
+          const cleanup = () => {
+            if (this.res) {
+              this.res.removeListener('drain', onDrain);
+              this.res.removeListener('close', onClose);
+              this.res.removeListener('error', onClose);
+            }
+          };
+          this.res.once('drain', onDrain);
+          this.res.once('close', onClose);
+          this.res.once('error', onClose);
         } else {
           resolve(true);
         }

@@ -384,5 +384,52 @@ describe('ORM Ambient Transaction Management', () => {
         expect(err.cause.message).toBe('Secondary socket closed during rollback');
       }
     });
+
+    it('unwraps trxContext in runWithAmbientTransaction so getAmbientTransaction() yields raw knex transaction', async () => {
+      const { runWithAmbientTransaction, getAmbientTransaction } = require('../../../core/orm/transaction');
+      const fakeKnexTrx = { isTransaction: true, isCompleted: () => false, commit: () => {} };
+      const trxContext = { trx: fakeKnexTrx, knex: fakeKnexTrx, getRepository: () => {} };
+
+      await runWithAmbientTransaction(trxContext, async () => {
+        const ambient = getAmbientTransaction();
+        expect(ambient).toBe(fakeKnexTrx);
+        expect(ambient.isTransaction).toBe(true);
+      });
+    });
+
+    it('proxies raw and missing db methods through useTransaction transparently', async () => {
+      const { runWithContext, useTransaction, useDb } = require('../../../core/context/request');
+
+      let rawQueryExecuted = false;
+      const fakeDb = {
+        hasModel: (m) => m === 'User',
+        getModel: (m) => ({ name: m }),
+        transaction: async (cb) => {
+          const fakeTrx = {
+            raw: async (sql) => {
+              rawQueryExecuted = true;
+              return [{ val: 1 }];
+            },
+          };
+          const trxContext = {
+            trx: fakeTrx,
+            knex: fakeTrx,
+            getRepository: () => ({ name: 'scoped-repo' }),
+          };
+          return cb(trxContext);
+        },
+      };
+
+      await runWithContext({ db: fakeDb }, async () => {
+        await useTransaction(async () => {
+          const ambientDb = useDb();
+          expect(ambientDb.hasModel('User')).toBe(true);
+          expect(ambientDb.getModel('User')).toEqual({ name: 'User' });
+          const res = await ambientDb.raw('SELECT 1');
+          expect(res).toEqual([{ val: 1 }]);
+          expect(rawQueryExecuted).toBe(true);
+        });
+      });
+    });
   });
 });

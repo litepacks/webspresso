@@ -111,7 +111,14 @@ function createCentralErrorHandler(options = {}) {
         if (typeof console !== 'undefined' && console.error) {
           console.error('[webspresso] Error in custom error handler:', customErr);
         }
+        if (res.headersSent) {
+          return next(err);
+        }
       }
+    }
+
+    if (res.headersSent) {
+      return next(err);
     }
 
     // Log errors based on severity
@@ -162,7 +169,14 @@ function createCentralErrorHandler(options = {}) {
         if (typeof console !== 'undefined' && console.error) {
           console.error('[webspresso] Error rendering HTML error page:', renderErr);
         }
+        if (res.headersSent) {
+          return next(err);
+        }
       }
+    }
+
+    if (res.headersSent) {
+      return next(err);
     }
 
     return res.send(renderDefaultErrorHtml(normalized, isDev));

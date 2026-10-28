@@ -339,21 +339,22 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
       const alreadyInTx = Boolean(activeCtx.trx || hasAmbientTransaction());
 
       if (shouldUseTx && knexInstance && !alreadyInTx) {
-        return await knexInstance.transaction(async (trx) => {
-          return await runWithAmbientTransaction(trx, async () => {
+        return await knexInstance.transaction(async (trxOrCtx) => {
+          const actualTrx = (trxOrCtx && trxOrCtx.trx) ? trxOrCtx.trx : trxOrCtx;
+          return await runWithAmbientTransaction(actualTrx, async () => {
             const txCtx = Object.create(activeCtx);
-            txCtx.trx = trx;
+            txCtx.trx = actualTrx;
             if (activeCtx.db && typeof activeCtx.db.getRepository === 'function') {
               const { createRepository } = require('../orm/repository');
               const { createQueryBuilder } = require('../orm/query-builder');
               txCtx.db = Object.assign(Object.create(activeCtx.db), {
-                knex: trx,
-                trx,
+                knex: actualTrx,
+                trx: actualTrx,
                 transaction: (cb, sContext) => {
                   if (typeof activeCtx.db.transaction === 'function') {
                     return activeCtx.db.transaction(cb, sContext);
                   }
-                  return trx.transaction(cb);
+                  return actualTrx.transaction(cb);
                 },
                 getRepository: (modelName, scopeCtx) => {
                   const origRepo = activeCtx.db.getRepository(modelName, scopeCtx);
@@ -362,7 +363,7 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
                   }
                   return createRepository(
                     origRepo.model,
-                    trx,
+                    actualTrx,
                     scopeCtx,
                     origRepo.cacheLayer || activeCtx.db.ormCacheLayer || null
                   );
