@@ -154,3 +154,40 @@ await ctx.service('fileManager.batchMove', { paths: ['temp/a.txt', 'temp/b.txt']
 await ctx.service('fileManager.batchDelete', { paths: ['temp/old.log'] });
 ```
 
+---
+
+## 5. Email Suite & Delivery Engine (`emailPlugin`)
+
+The Email Suite mounts at `/_admin#!/email` and provides transactional email delivery, responsive MJML preview, and audit logging.
+
+### Core Features
+- **Delivery Audit Logs:** Real-time search across recipients (`to`), subject, and templates; status filtering (`sent`/`failed`); modal error traceback inspector; and 1-click retry / resend.
+- **Live Responsive Template Previewer:** Viewport toggles for Desktop (`680px`), Mobile (`375px` phone bezel), and Fluid (`100%`); HTML vs Plain text tabs; sample JSON live editor with automatic previews; and quick "Send Test to Me" modal.
+- **Manual Test Sender:** Full form with `To`, `Subject`, `From`, `Reply-To`, and collapsible `CC`/`BCC` fields.
+- **Live SMTP Diagnostics:** Handshake connection testing with millisecond round-trip latency measurement.
+
+### Programmatic Services
+```javascript
+// Send transactional email or MJML template
+await ctx.service('mail.send', {
+  to: 'user@example.com',
+  subject: 'Welcome to Webspresso',
+  template: 'welcome',
+  data: { name: 'Ahmet' },
+});
+
+// Render template preview
+const { html, text } = await ctx.service('mail.preview', {
+  template: 'welcome',
+  data: { name: 'Ahmet' },
+});
+
+// Inspect and retry delivery logs
+const log = await ctx.service('mail.get-log', { id: 42 });
+await ctx.service('mail.resend', { id: 42, to: 'new@example.com' });
+
+// Verify transport connection
+const isConnected = await ctx.service('mail.verify');
+```
+
+

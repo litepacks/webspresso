@@ -28,9 +28,45 @@ function createEmailApiHandlers(options) {
         template: req.query.template,
         from: req.query.from,
         to: req.query.to,
+        search: req.query.search || req.query.q,
         includeTotal: true,
       });
       res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+
+  async function getLogHandler(req, res) {
+    try {
+      const id = req.params?.id || req.query?.id;
+      if (!id) {
+        return res.status(400).json({ error: 'id parameter is required' });
+      }
+      const log = await emailService.getLogById(id);
+      if (!log) {
+        return res.status(404).json({ error: `Email log #${id} not found` });
+      }
+      res.json({ ok: true, data: log });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+
+  async function resendHandler(req, res) {
+    try {
+      const body = req.body || {};
+      const id = body.id || body.logId || req.params?.id;
+      if (!id) {
+        return res.status(400).json({ error: 'id is required to resend email log' });
+      }
+      const overrides = {};
+      if (body.to) overrides.to = body.to;
+      if (body.subject) overrides.subject = body.subject;
+      if (body.data) overrides.data = safeJsonParse(body.data, body.data);
+
+      const result = await emailService.resendLog(id, overrides);
+      res.json({ ok: true, message: `Email log #${id} resent successfully`, ...result });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -88,8 +124,20 @@ function createEmailApiHandlers(options) {
     }
   }
 
+  const SAMPLE_DATA_MAP = {
+    'auth-password-reset': { name: 'Ahmet Yılmaz', resetUrl: 'https://example.com/auth/reset?token=sample-reset-123' },
+    'auth-email-verify': { name: 'Ahmet Yılmaz', verifyUrl: 'https://example.com/auth/verify?token=sample-verify-456' },
+    'auth-welcome': { name: 'Ahmet Yılmaz' },
+    'auth-magic-link': { name: 'Ahmet Yılmaz', magicLinkUrl: 'https://example.com/auth/magic?token=sample-magic-789', expiresMinutes: 15 },
+  };
+
   async function templatesHandler(req, res) {
-    res.json({ data: registry.list() });
+    const list = registry.list() || [];
+    const enriched = list.map((t) => ({
+      ...t,
+      sampleData: SAMPLE_DATA_MAP[t.id] || { name: 'Sample Recipient', actionUrl: 'https://example.com' },
+    }));
+    res.json({ data: enriched });
   }
 
   async function purgeHandler(req, res) {
@@ -113,6 +161,8 @@ function createEmailApiHandlers(options) {
 
   return {
     listLogsHandler,
+    getLogHandler,
+    resendHandler,
     sendTestHandler,
     previewHandler,
     verifyHandler,

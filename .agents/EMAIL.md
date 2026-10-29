@@ -100,7 +100,9 @@ emailApi.registerTemplate('notification', '<mjml><mj-body>...</mj-body></mjml>')
 
 // 5. Connection test & log management
 const isReady = await emailApi.verifyConnection();
-const logs = await emailApi.queryLogs({ status: 'sent', limit: 20 });
+const logs = await emailApi.queryLogs({ status: 'sent', search: 'john', limit: 20 });
+const singleLog = await emailApi.getLogById(123);
+const retryResult = await emailApi.resendLog(123, { to: 'override@example.com' });
 await emailApi.purgeLogs({ olderThan: '30d' });
 
 // 6. In-memory outbox inspection & clearing (memory backend / tests)
@@ -212,12 +214,54 @@ const email = emailPlugin({
 
 ---
 
-## 9. Admin Panel UI & Database Logs
+## 9. Admin Panel UI & Delivery Engine
 
 When `includeAdminPage: true` and `adminPanelPlugin` are present, an interactive Email Management module is mounted at `/_admin/email`:
 
-- **Live Template Preview**: Select any MJML template, edit mock JSON data, and preview rendered responsive HTML.
-- **Test Sender**: Send test emails directly from the Admin Panel to verify SMTP configuration.
-- **Audit Logs Inspector**: Filter sent email logs by status (`sent`, `failed`), view error tracebacks, and purge historic logs.
-- **Database Schema**: Log entries are stored in `email_logs` table (`id`, `to_email`, `subject`, `template_name`, `status`, `error`, `created_at`).
+### 📊 Delivery Logs & Live Search
+- **Metrics Summary Banner:** Real-time visibility into total email volume, successful sends, and percentage delivery rate.
+- **Debounced Live Search:** Fast filtering across recipients (`to`), subject lines, and template names.
+- **Status Filter:** Instant toggling between `All`, `Sent`, and `Failed`.
+- **Detailed Log Modal:** Inspect full JSON metadata, request headers, and error tracebacks for failed attempts.
+- **1-Click Retry / Resend:** Resend failed messages or duplicate sent messages directly from the log table.
+
+![Email Delivery Logs](file:///Users/ahmet/projects/webspresso/docs/assets/screenshots/email/01-email-logs.png)
+
+![Email Log Details Modal](file:///Users/ahmet/projects/webspresso/docs/assets/screenshots/email/02-email-log-modal.png)
+
+### 📱 Live Responsive Template Previewer
+- **Responsive Viewport Toggles:** Switch between **Desktop** (`680px`), **Mobile** (`375px` phone bezel), and **Fluid** (`100%`) viewport widths.
+- **HTML vs Plain Text Tabs:** Verify both rich HTML styling and fallback text versions.
+- **Sample JSON Editor:** Edit interpolation variables live with instant hot-reloading in the sandbox iframe.
+- **Quick Send Test:** Dispatch the currently previewed template directly to an email address with one click.
+
+![Template Preview Desktop](file:///Users/ahmet/projects/webspresso/docs/assets/screenshots/email/03-email-preview-desktop.png)
+
+![Template Preview Mobile](file:///Users/ahmet/projects/webspresso/docs/assets/screenshots/email/04-email-preview-mobile.png)
+
+### ✉️ Manual Test Sender
+- **Flexible Addressing:** Configure `To`, `Subject`, `From`, `Reply-To`, `CC`, and `BCC` fields.
+- **Format Toggle:** Send pure HTML or plain text messages.
+- **Instant Feedback:** Displays clear success badges and detailed error notifications.
+
+![Send Test Email](file:///Users/ahmet/projects/webspresso/docs/assets/screenshots/email/05-email-send-test.png)
+
+### 🔌 Live SMTP Diagnostics & Connection Testing
+- **Handshake Verification:** Executes SMTP `verify()` handshake against the configured host.
+- **Round-Trip Latency:** Measures and displays exact connection latency in milliseconds (`ms`).
+- **Connection Details:** Reports active transport backend, host, and port.
+
+![SMTP Diagnostics](file:///Users/ahmet/projects/webspresso/docs/assets/screenshots/email/06-email-smtp-diagnostics.png)
+
+---
+
+## 10. Built-in Services Reference
+
+| Service Name | Input Payload | Description |
+| :--- | :--- | :--- |
+| `mail.send` | `{ to, subject, html?, text?, template?, data? }` | Dispatches an email or renders & sends an MJML template. |
+| `mail.preview` | `{ template, data? }` | Compiles template without sending; returns `{ html, text?, subject? }`. |
+| `mail.get-log` | `{ id: number }` | Retrieves a specific delivery log record by its database ID. |
+| `mail.resend` | `{ id: number, to?: string }` | Re-executes delivery of a previous log record with optional recipient override. |
+| `mail.verify` | `{}` | Tests transport connectivity and returns connection health. |
 

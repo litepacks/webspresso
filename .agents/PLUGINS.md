@@ -252,7 +252,14 @@ Transactional email compiler (MJML) & Nodemailer transport integration with data
   ```bash
   webspresso email:prune --days 90
   ```
-- **Admin Panel UI**: Includes log listing, test email dispatch, template preview, connection verification, and "Purge 90d" action.
+- **Admin Panel UI & Delivery Engine**:
+  - **Delivery Logs Suite:** Real-time search across recipients, subject, and template; status filter (`sent`/`failed`); modal error traceback viewer; and 1-click retry/resend.
+  - **Live Responsive Template Previewer:** Desktop (`680px`), Mobile (`375px` phone bezel), Fluid (`100%`) viewport modes; HTML vs Plain text tabs; sample JSON live editor; and quick test send.
+  - **Manual Test Sender:** Full addressing form with CC/BCC inputs.
+  - **SMTP Diagnostics:** Handshake tester measuring round-trip connection latency in milliseconds.
+- **Built-in Services:** `mail.send`, `mail.preview`, `mail.get-log`, `mail.resend`, `mail.verify`.
+- **Guide & Visuals:** See [Email Suite Guide](docs/guides/email.md) and [`.agents/EMAIL.md`](EMAIL.md).
+
 
 ### 2.14 `polarPlugin` (`plugins/polar`)
 Polar.sh subscription billing — checkout, customer portal, webhooks, Customer State sync, tier columns. Pure native implementation (`crypto` + `fetch`).

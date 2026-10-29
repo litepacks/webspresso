@@ -208,6 +208,8 @@ function emailPlugin(options = {}) {
       listTemplates: () => registry.list(),
       verifyConnection: () => emailService.verifyConnection(),
       queryLogs: (filters) => emailService.queryLogs(filters),
+      getLogById: (id) => emailService.getLogById(id),
+      resendLog: (id, overrides) => emailService.resendLog(id, overrides),
       purge: (opts = {}) => {
         if (!knex) throw new Error('Database is required for purge');
         return purgeEmailLogs(knex, {
@@ -358,11 +360,14 @@ function emailPlugin(options = {}) {
           prefix: apiPrefix,
           routes: [
             { method: 'get', path: '/logs', handler: handlers.listLogsHandler },
+            { method: 'get', path: '/logs/:id', handler: handlers.getLogHandler },
             { method: 'get', path: '/templates', handler: handlers.templatesHandler },
             { method: 'post', path: '/send-test', handler: handlers.sendTestHandler },
             { method: 'post', path: '/preview', handler: handlers.previewHandler },
             { method: 'post', path: '/verify', handler: handlers.verifyHandler },
             { method: 'post', path: '/purge', handler: handlers.purgeHandler },
+            { method: 'post', path: '/retry', handler: handlers.resendHandler },
+            { method: 'post', path: '/resend', handler: handlers.resendHandler },
           ],
         },
       });

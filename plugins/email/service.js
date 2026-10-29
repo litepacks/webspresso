@@ -234,6 +234,36 @@ function createEmailService(options) {
   }
 
   /**
+   * @param {number|string} id
+   */
+  async function getLogById(id) {
+    if (!knex) return null;
+    return knex(tableName).where('id', id).first();
+  }
+
+  /**
+   * @param {number|string} id
+   * @param {Object} [overrides={}]
+   */
+  async function resendLog(id, overrides = {}) {
+    if (!knex) throw new Error('Database logging is not enabled');
+    const log = await getLogById(id);
+    if (!log) throw new Error(`Email log #${id} not found`);
+
+    const sendPayload = {
+      to: overrides.to || log.to,
+      cc: overrides.cc !== undefined ? overrides.cc : log.cc,
+      bcc: overrides.bcc !== undefined ? overrides.bcc : log.bcc,
+      subject: overrides.subject || log.subject,
+      template: overrides.template !== undefined ? overrides.template : log.template_id,
+      data: overrides.data || {},
+      from: overrides.from || log.from,
+    };
+
+    return send(sendPayload);
+  }
+
+  /**
    * @param {Object} [filters={}]
    */
   async function queryLogs(filters = {}) {
@@ -250,6 +280,14 @@ function createEmailService(options) {
     if (filters.template) qb = qb.where('template_id', String(filters.template));
     if (filters.from) qb = qb.where('created_at', '>=', String(filters.from));
     if (filters.to) qb = qb.where('created_at', '<=', String(filters.to));
+    if (filters.search || filters.q) {
+      const term = `%${String(filters.search || filters.q).trim()}%`;
+      qb = qb.where(function() {
+        this.where('to', 'like', term)
+          .orWhere('subject', 'like', term)
+          .orWhere('template_id', 'like', term);
+      });
+    }
 
     const rows = await qb.offset(offset).limit(limit);
 
@@ -259,6 +297,14 @@ function createEmailService(options) {
       if (filters.template) countQ = countQ.where('template_id', String(filters.template));
       if (filters.from) countQ = countQ.where('created_at', '>=', String(filters.from));
       if (filters.to) countQ = countQ.where('created_at', '<=', String(filters.to));
+      if (filters.search || filters.q) {
+        const term = `%${String(filters.search || filters.q).trim()}%`;
+        countQ = countQ.where(function() {
+          this.where('to', 'like', term)
+            .orWhere('subject', 'like', term)
+            .orWhere('template_id', 'like', term);
+        });
+      }
       const countRow = await countQ.count('* as cnt').first();
       const total = Number(countRow?.cnt ?? Object.values(countRow || {})[0] ?? 0);
       return { data: rows, meta: { page, perPage: limit, total, offset } };
@@ -273,6 +319,8 @@ function createEmailService(options) {
     preview,
     verifyConnection,
     queryLogs,
+    getLogById,
+    resendLog,
     getTransport: () => transport,
     isTransportReady: () => !!transport,
     getOutbox: () => (transport && typeof transport.getOutbox === 'function' ? transport.getOutbox() : []),

@@ -126,6 +126,33 @@ function createMailServices(options = {}) {
         return { logs, total: logs.length };
       },
     },
+
+    'mail.get-log': {
+      schema: z.object({
+        id: z.union([z.number(), z.string()]),
+      }),
+      auth: 'admin',
+      async handler(input) {
+        const log = await emailService.getLogById(input.id);
+        if (!log) throw new NotFoundError(`Email log #${input.id} not found`);
+        return log;
+      },
+    },
+
+    'mail.resend': {
+      schema: z.object({
+        id: z.union([z.number(), z.string()]),
+        to: emailSchema.optional(),
+        subject: z.string().optional(),
+        data: z.record(z.any()).optional(),
+      }),
+      auth: 'admin',
+      async handler(input) {
+        const { id, ...overrides } = input;
+        const result = await emailService.resendLog(id, overrides);
+        return { success: true, ...result };
+      },
+    },
   };
 }
 
