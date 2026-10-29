@@ -14,6 +14,8 @@ const {
   deleteItem,
   moveItem,
   saveUploadedFile,
+  getFileContent,
+  saveFileContent,
 } = require('../../../plugins/file-manager/core');
 const { parseBase64 } = require('./media');
 
@@ -168,6 +170,40 @@ function createFileManagerServices(options = {}) {
           mimeType,
           publicBasePath
         );
+      },
+    },
+
+    'fileManager.getContent': {
+      schema: z.object({
+        path: z.string().min(1, 'Path is required'),
+        baseDir: z.string().optional(),
+        maxTextBytes: z.number().int().positive().optional(),
+      }),
+      async handler(input) {
+        const baseDir = input.baseDir ? path.resolve(input.baseDir) : defaultBaseDir;
+        return getFileContent(baseDir, input.path, {
+          maxTextBytes: input.maxTextBytes,
+        });
+      },
+    },
+
+    'fileManager.saveContent': {
+      schema: z.object({
+        path: z.string().min(1, 'Path is required'),
+        content: z.string(),
+        overwrite: z.boolean().optional().default(true),
+        newName: z.string().optional(),
+        baseDir: z.string().optional(),
+        publicBasePath: z.string().optional(),
+      }),
+      async handler(input) {
+        const baseDir = input.baseDir ? path.resolve(input.baseDir) : defaultBaseDir;
+        const publicBasePath = input.publicBasePath || defaultPublicBase;
+        return saveFileContent(baseDir, input.path, input.content, {
+          overwrite: input.overwrite,
+          newName: input.newName,
+          publicBasePath,
+        });
       },
     },
   };

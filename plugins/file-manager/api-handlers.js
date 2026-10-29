@@ -90,7 +90,11 @@ function createFileManagerApiHandlers(options = {}) {
           publicBasePath,
         });
 
-        return res.json({ success: true, ...result });
+        const storage = await core.getDetailedStorageStats(baseDir, {
+          maxTotalStorageBytes,
+        });
+
+        return res.json({ success: true, ...result, storage });
       } catch (err) {
         const status = err.statusCode || err.status || 400;
         return res.status(status).json({ success: false, error: err.message });
@@ -243,6 +247,167 @@ function createFileManagerApiHandlers(options = {}) {
           return res.status(status).json({ success: false, error: saveErr.message });
         }
       });
+    },
+
+    async saveImage(req, res) {
+      if (!isActionAllowed(req, 'upload', permissions)) {
+        return res.status(403).json({ success: false, error: 'Permission denied for action: upload' });
+      }
+
+      try {
+        const { path: itemPath, dataUrl, overwrite, newName } = req.body || {};
+        if (!itemPath || !dataUrl) {
+          return res.status(400).json({ success: false, error: 'Path and dataUrl are required' });
+        }
+
+        const result = await core.saveEditedImage(baseDir, itemPath, dataUrl, {
+          overwrite: overwrite === true || overwrite === 'true',
+          newName,
+          publicBasePath,
+        });
+
+        return res.status(200).json({ success: true, file: result });
+      } catch (err) {
+        const status = err.statusCode || err.status || 400;
+        return res.status(status).json({ success: false, error: err.message });
+      }
+    },
+
+    async getFileContent(req, res) {
+      if (!isActionAllowed(req, 'read', permissions)) {
+        return res.status(403).json({ success: false, error: 'Permission denied for action: read' });
+      }
+
+      try {
+        const itemPath = req.query.path;
+        if (!itemPath) {
+          return res.status(400).json({ success: false, error: 'Path query parameter is required' });
+        }
+
+        const result = await core.getFileContent(baseDir, itemPath, {
+          maxTextBytes: 5 * 1024 * 1024,
+        });
+
+        return res.status(200).json({ success: true, ...result });
+      } catch (err) {
+        const status = err.statusCode || err.status || (err.name === 'NotFoundError' ? 404 : 400);
+        return res.status(status).json({ success: false, error: err.message });
+      }
+    },
+
+    async saveFileContent(req, res) {
+      if (!isActionAllowed(req, 'upload', permissions)) {
+        return res.status(403).json({ success: false, error: 'Permission denied for action: upload' });
+      }
+
+      try {
+        const { path: itemPath, content, overwrite, newName } = req.body || {};
+        if (!itemPath || typeof content !== 'string') {
+          return res.status(400).json({ success: false, error: 'Path and content string are required' });
+        }
+
+        const result = await core.saveFileContent(baseDir, itemPath, content, {
+          overwrite: overwrite === true || overwrite === 'true',
+          newName,
+          publicBasePath,
+        });
+
+        return res.status(200).json({ success: true, file: result });
+      } catch (err) {
+        const status = err.statusCode || err.status || 400;
+        return res.status(status).json({ success: false, error: err.message });
+      }
+    },
+
+    async batchDelete(req, res) {
+      if (!isActionAllowed(req, 'delete', permissions)) {
+        return res.status(403).json({ success: false, error: 'Permission denied for action: delete' });
+      }
+
+      try {
+        const { paths: itemPaths } = req.body || {};
+        if (!Array.isArray(itemPaths) || itemPaths.length === 0) {
+          return res.status(400).json({ success: false, error: 'paths array is required' });
+        }
+
+        const result = await core.batchDelete(baseDir, itemPaths);
+        return res.status(200).json(result);
+      } catch (err) {
+        const status = err.statusCode || err.status || 400;
+        return res.status(status).json({ success: false, error: err.message });
+      }
+    },
+
+    async batchMove(req, res) {
+      if (!isActionAllowed(req, 'move', permissions)) {
+        return res.status(403).json({ success: false, error: 'Permission denied for action: move' });
+      }
+
+      try {
+        const { paths: itemPaths, destination = '' } = req.body || {};
+        if (!Array.isArray(itemPaths) || itemPaths.length === 0) {
+          return res.status(400).json({ success: false, error: 'paths array is required' });
+        }
+
+        const result = await core.batchMove(baseDir, itemPaths, destination);
+        return res.status(200).json(result);
+      } catch (err) {
+        const status = err.statusCode || err.status || 400;
+        return res.status(status).json({ success: false, error: err.message });
+      }
+    },
+
+    async downloadZip(req, res) {
+      if (!isActionAllowed(req, 'read', permissions)) {
+        return res.status(403).json({ success: false, error: 'Permission denied for action: read' });
+      }
+
+      try {
+        let itemPaths = [];
+        if (req.method === 'POST') {
+          itemPaths = (req.body && req.body.paths) || [];
+        } else {
+          const raw = req.query.paths;
+          if (Array.isArray(raw)) {
+            itemPaths = raw;
+          } else if (typeof raw === 'string') {
+            itemPaths = raw.split(',').map(s => s.trim()).filter(Boolean);
+          }
+        }
+
+        if (!Array.isArray(itemPaths) || itemPaths.length === 0) {
+          return res.status(400).json({ success: false, error: 'At least one path is required for zip download' });
+        }
+
+        const { buffer, filename, size, fileCount } = await core.createZipFromPaths(baseDir, itemPaths);
+
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Length', String(size));
+        res.setHeader('X-Archive-Files-Count', String(fileCount));
+        return res.end(buffer);
+      } catch (err) {
+        const status = err.statusCode || err.status || 400;
+        return res.status(status).json({ success: false, error: err.message });
+      }
+    },
+
+    async getStorageStats(req, res) {
+      if (!isActionAllowed(req, 'list', permissions)) {
+        return res.status(403).json({ success: false, error: 'Permission denied for action: list' });
+      }
+
+      try {
+        const forceRefresh = req.query.refresh === 'true' || req.query.force === 'true';
+        const stats = await core.getDetailedStorageStats(baseDir, {
+          forceRefresh,
+          maxTotalStorageBytes,
+        });
+        return res.json({ success: true, stats });
+      } catch (err) {
+        const status = err.statusCode || err.status || 400;
+        return res.status(status).json({ success: false, error: err.message });
+      }
     },
   };
 }
