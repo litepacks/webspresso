@@ -132,3 +132,19 @@ adminApi.registerFieldRenderer('color-picker', {
   }),
 });
 ```
+
+---
+
+## 5. Media Library & File Manager
+
+Webspresso comes with a fully-featured Media Library powered by `fileManagerPlugin({ baseDir: './public/uploads' })`:
+
+- **Admin Route:** Available at `/_admin#!/files` with Grid and List views.
+- **Image Editing:** Built-in HTML5 Canvas crop presets (1:1, 16:9, 4:3), 90° rotate, flip, resize, and WebP export.
+- **Code & Text Editing:** In-browser modal editor with line numbers and JSON formatting.
+- **Bulk Operations:** Multi-select files and download them as a native zero-dependency PKWARE ZIP archive.
+- **Storage Quota:** Live storage meter with 6-category size breakdown and warning badges.
+- **Asset Picker:** Integrates with `zdb.file({ admin: { picker: true } })` so staff can choose existing files directly in model forms.
+
+👉 *For full details and visual previews, see the [File Manager & Media Library Guide](/guides/file-manager).*
+

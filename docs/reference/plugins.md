@@ -51,7 +51,7 @@ module.exports = {
 | `rateLimitPlugin` | Named route rate limiters and global DDoS throttling | — |
 | `emailPlugin` | MJML template compilation, Nodemailer transport & delivery log | — |
 | `uploadPlugin` | Multipart uploads with Local, S3, R2, and GCS storage providers | — |
-| `fileManagerPlugin` | Filesystem media library, directory tree & modal asset picker | — |
+| `fileManagerPlugin` | Media library with image editor, code editor, batch ZIP ops & quota visualizer | [File Manager](/guides/file-manager) |
 | `contentPlugin` | Schema-driven headless CMS with inline page editing | — |
 | `restResourcePlugin` | Zero-boilerplate RESTful CRUD API generated from ORM models | — |
 | `corsPlugin` | Declarative Cross-Origin Resource Sharing handler | — |

@@ -175,17 +175,21 @@ Multipart file upload manager with local disk, AWS S3, Google Cloud Storage (GCS
 
 
 ### 2.7 `fileManagerPlugin` (`plugins/file-manager`)
-Filesystem-first media library, directory explorer, and modal asset picker for Admin Panel.
-- **Options**: `{ baseDir: './public/uploads', publicBasePath: '/uploads', apiPrefix: '/files', pageTitle: 'File Manager', maxUploadBytes: 10485760, allowedExtensions, allowedMimeTypes, includePage: true, lazy: false }`
+Filesystem-first media library, directory explorer, and modal asset picker for Admin Panel with image editing, code editing, batch ZIP ops, keyboard navigation, and storage quota visualization.
+- **Options**: `{ baseDir: './public/uploads', publicBasePath: '/uploads', apiPrefix: '/files', pageTitle: 'File Manager', maxUploadBytes: 10485760, maxTotalStorageBytes: 1073741824, storageBreakdown: true, allowedExtensions, allowedMimeTypes, includePage: true, lazy: false }`
 - **Features**:
-  - Directory tree navigation (breadcrumbs), safe subfolder creation (`mkdir`), item rename, delete, and move.
-  - Path traversal attack protection (`resolveSafePath`).
-  - Grid (thumbnail gallery) & List (table) view modes.
-  - On-demand hydration via `lazy: true`.
-  - Search by filename and type filter (Images, Documents, Videos, Audio, Archives, Code).
-  - Media preview modal with copy URL and direct playback/preview.
-  - "Choose from Media Library" modal picker integrated with `FileUploadField` and `zdb.file()` form fields.
-  - Built-in services: `fileManager.list`, `fileManager.mkdir`, `fileManager.rename`, `fileManager.delete`, `fileManager.move`, `fileManager.upload`.
+  - **Directory Navigation & Safe Operations:** Breadcrumbs, safe subfolder creation (`mkdir`), item rename, delete, and move with path traversal attack protection (`resolveSafePath`).
+  - **Grid & List Views:** Thumbnail gallery and detailed metadata table view modes.
+  - **Image Transformation Suite:** Client-side HTML5 Canvas crop presets (`1:1`, `16:9`, `4:3`, `Free`), 90° rotation, flip H/V, dimension scaling, and WebP/original format export.
+  - **Syntax-Aware Code & Text Editor:** In-browser modal editor with line numbers gutter, JSON validation & prettification, syntax badge indicator, and unsaved changes warning.
+  - **Full-Surface Drag-and-Drop:** Backdrop-blur dropzone overlay on drag-over, real-time XHR byte/percentage progress bar, and request cancellation.
+  - **Multi-Selection & Batch Operations:** Grid/list checkboxes, Select All toggle, floating batch toolbar, native zero-dependency PKWARE ZIP archive packaging & download, batch move, and batch delete.
+  - **Keyboard Shortcuts & Rapid Navigation:** Arrow key focus navigation with visual ring highlighting, macOS Finder-style `Space` Quick Look preview, `Cmd+A` select all, `X` toggle select, `R`/`E`/`Delete` inline actions, `/` quick search, and `?` cheatsheet modal.
+  - **Storage Usage & Quota Visualizer:** Multi-tier quota meter (Emerald < 75%, Amber 75-90%, Red > 90%), 15-second TTL in-memory disk cache, and 6-category breakdown (Images, Documents, Code, Media, Archives, Other) with manual reload (`🔄`).
+  - **Media Library Asset Picker:** Integrated with `FileUploadField` and `zdb.file({ admin: { picker: true } })` form fields.
+  - **On-Demand Hydration:** JIT plugin loading via `lazy: true`.
+  - **Built-in Services:** `fileManager.list`, `fileManager.mkdir`, `fileManager.rename`, `fileManager.delete`, `fileManager.move`, `fileManager.upload`, `fileManager.saveContent`, `fileManager.saveImage`, `fileManager.batchDelete`, `fileManager.batchMove`, `fileManager.createZip`, `fileManager.getStorageStats`.
+  - **Screenshots & Guide:** See [`docs/guides/file-manager.md`](../docs/guides/file-manager.md) and [`docs/assets/screenshots/file-manager/`](../docs/assets/screenshots/file-manager/).
 
 ### 2.8 `corsPlugin` (`plugins/cors`)
 Built-in Cross-Origin Resource Sharing (CORS) handler.

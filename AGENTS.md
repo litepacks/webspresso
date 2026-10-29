@@ -152,7 +152,7 @@ Every coding agent working on Webspresso **MUST** follow this 4-step execution d
 ### 1.5 Plugin Ecosystem (`plugins/`)
 Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register(ctx)`, `onRoutesReady(ctx)`):
 - `adminPanelPlugin`: Model CRUD, custom pages, widgets, user management.
-- `fileManagerPlugin`: Media library, directory tree, file preview, and drag-and-drop uploads.
+- `fileManagerPlugin`: Media library with HTML5 canvas image editor, code editor, drag-and-drop progress, batch PKWARE ZIP ops, keyboard shortcuts, and cached storage quota visualizer.
 - `basicAuthPlugin`: Built-in HTTP Basic Authentication (RFC 7617) with named route middleware (`ctx.middlewares.basicAuth`) and global protection.
 - `contentPlugin`: Schema-driven CMS with inline editing and headless API.
 - `uploadPlugin`: Multipart file uploads with local/cloud storage providers.
