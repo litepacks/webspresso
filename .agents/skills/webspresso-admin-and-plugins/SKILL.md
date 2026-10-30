@@ -190,4 +190,46 @@ await ctx.service('mail.resend', { id: 42, to: 'new@example.com' });
 const isConnected = await ctx.service('mail.verify');
 ```
 
+---
+
+## 6. Outgoing Webhooks Engine (`webhooksPlugin`)
+
+The Webhooks Engine mounts at `/_admin#!/webhooks` and provides cryptographic HMAC-SHA256 event dispatching, delivery tracking, and subscriber endpoint management.
+
+### Core Features
+- **Endpoints Dashboard & KPI Metrics:** Telemetry banner for active endpoints, total dispatches, success rate %, and average latency ms.
+- **Masked Secrets & Safe Rotation:** Masked HMAC signing secrets (`whsec_••••••••••••`), clipboard copy, and zero-downtime secret rotation retaining `previous_secret` for subscriber verification grace periods.
+- **Live Payload & Ping Tester:** Dedicated test modal with presets (`ping`, `order.created`, `user.registered`, `payment.succeeded`), JSON editor, and full HTTP response diagnostics.
+- **Delivery Audit Logs & Floating Bulk Action:** Searchable logs with duration latency, attempt counts, and multi-select batch retry (`webhook.bulk-retry`).
+- **Delivery Inspector & Replay Engine:** Failure diagnosis modal with request payload viewer, response body tabs, and in-place edit-and-replay engine.
+
+### Programmatic Services
+```javascript
+// Dispatch event to matching subscribers
+await ctx.service('webhook.dispatch', {
+  event: 'order.created',
+  payload: { id: 1042, amount: 99.00 },
+});
+
+// Test endpoint connectivity
+await ctx.service('webhook.test', {
+  endpointId: 1,
+  event: 'order.created',
+  payload: { id: 999 },
+});
+
+// Replay delivery with optional payload override
+await ctx.service('webhook.replay', {
+  deliveryId: 45,
+  payload: { status: 'reprocessed' },
+});
+
+// Rotate endpoint signing secret
+const { secret, previousSecret } = await ctx.service('webhook.rotate-secret', { endpointId: 1 });
+
+// Bulk retry failed deliveries
+const result = await ctx.service('webhook.bulk-retry', { deliveryIds: [12, 13, 14] });
+```
+
+
 

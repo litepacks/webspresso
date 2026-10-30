@@ -174,6 +174,7 @@ async function sendWebhook(options = {}) {
       deliveryId,
       timestamp,
       bodyStr,
+      requestHeaders,
     };
   } catch (err) {
     if (timeoutId) {
@@ -194,6 +195,7 @@ async function sendWebhook(options = {}) {
       deliveryId,
       timestamp,
       bodyStr,
+      requestHeaders,
     };
   }
 }

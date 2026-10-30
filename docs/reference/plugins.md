@@ -58,7 +58,7 @@ module.exports = {
 | `csrfPlugin` | CSRF token defense supporting cookie and session modes | — |
 | `basicAuthPlugin` | RFC 7617 HTTP Basic Authentication with named route middleware | — |
 | `apiKeyPlugin` | B2B Developer API Key manager with SHA-256 and wildcard scopes | — |
-| `webhooksPlugin` | Outgoing Webhooks with HMAC-SHA256 signatures and exponential retries | — |
+| `webhooksPlugin` | Outgoing Webhooks with HMAC-SHA256 signatures, replay engine & Admin UI | [Webhooks Engine](/guides/webhooks) |
 | `oauthPlugin` | OAuth 2.0 social login client (Google, GitHub, Discord, Apple, etc.) | — |
 | `rlsPlugin` | Dynamic model Row-Level Security (RLS) with tenant and user scoping | — |
 | `redirectPlugin` | Declarative HTTP 301–308 URL redirects with method filtering | — |

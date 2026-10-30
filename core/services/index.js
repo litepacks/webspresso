@@ -90,6 +90,7 @@ module.exports = {
   get createFileManagerServices() { return require('./builtins/file-manager').createFileManagerServices; },
   get createSystemServices() { return require('./builtins/system').createSystemServices; },
   get createExchangeServices() { return require('./builtins/exchange').createExchangeServices; },
+  get createWebhookServices() { return require('./builtins/webhook').createWebhookServices; },
   memoize,
   parseTtlMs,
   stableCacheKey,

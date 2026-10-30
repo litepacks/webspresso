@@ -134,20 +134,35 @@ Outgoing Webhook Dispatcher and Management Plugin. Dispatches events to subscrib
 - **Built-in Services Registered**:
   - `'webhook.dispatch'`: Dispatch events via `ctx.service('webhook.dispatch', { event, payload })`.
   - `'webhook.ping'`: Test endpoint connectivity via `ctx.service('webhook.ping', { endpointId })`.
+  - `'webhook.test'`: Test endpoint with custom payload & event presets via `ctx.service('webhook.test', { endpointId, event, payload })`.
   - `'webhook.retry'`: Manually retry a delivery via `ctx.service('webhook.retry', { deliveryId })`.
+  - `'webhook.replay'`: Replay delivery with optional modified payload via `ctx.service('webhook.replay', { deliveryId, payload, event })`.
+  - `'webhook.rotate-secret'`: Rotate HMAC signing secret with grace period support via `ctx.service('webhook.rotate-secret', { endpointId })`.
+  - `'webhook.bulk-retry'`: Batch retry multiple failed deliveries via `ctx.service('webhook.bulk-retry', { deliveryIds })`.
+  - `'webhook.get-stats'`: Retrieve endpoint and delivery KPI metrics via `ctx.service('webhook.get-stats')`.
 - **Programmatic API (`webhooksPlugin.api` / `dispatcher`)**:
   - `dispatch(event, payload, options)`: Match endpoints and deliver payload asynchronously (or await with `wait: true`).
   - `pingEndpoint(endpointId)`: Send a test `ping` event to verify destination connectivity.
+  - `testEndpoint(endpointId, options)`: Send a custom test payload with selected event topic and return delivery outcome.
+  - `rotateSecret(endpointId, options)`: Rotate HMAC secret, preserving `previous_secret` and `secret_rotated_at` for zero-downtime subscriber migration.
   - `retryDelivery(deliveryId)`: Re-send a failed delivery with incremented attempt count.
+  - `replayDelivery(deliveryId, options)`: Replay delivery as a new delivery record with optional payload overrides.
+  - `bulkRetryDeliveries(deliveryIds)`: Batch re-attempt multiple deliveries and aggregate outcome counts.
+  - `getStats()`: Compute real-time KPI metrics (active endpoints, total dispatches, success rate %, average latency).
   - `createEndpoint(data)`: Register a new webhook endpoint with custom or auto-generated `whsec_` secret.
   - `updateEndpoint(id, data)` / `deleteEndpoint(id)`: Update or delete endpoint records.
   - `listEndpoints(filters)`: List endpoints with delivery statistics.
-  - `listDeliveries(filters)`: Query delivery logs with filtering by endpoint, event, and success status.
+  - `listDeliveries(filters)`: Query delivery logs with filtering by endpoint, event, search query, and success status.
   - `purgeDeliveries(options)`: Purge logs older than specified retention days.
   - `signPayload(payload, secret, options)`: Compute HMAC-SHA256 signature (`sha256=...` and `t=...,v1=...`).
   - `verifySignature(payload, header, secret, options)`: Constant-time signature verification with drift tolerance.
   - `getMigrationTemplate()`: Knex migration script for `webhook_endpoints` and `webhook_deliveries`.
   - `getModels()`: Webspresso ORM model definitions for `WebhookEndpoint` and `WebhookDelivery`.
+- **Admin Panel SPA Workspaces (`/_admin#!/webhooks`)**:
+  - **Endpoints Dashboard**: Real-time KPI metrics banner, masked secrets (`whsec_••••••••••••`), copy to clipboard, instant secret rotation, and status toggling.
+  - **Live Payload & Ping Tester**: Interactive test modal with event presets (`ping`, `order.created`, `user.registered`, `payment.succeeded`), JSON payload editor, and live execution diagnostics (HTTP status badge, latency ms, signature headers, response body).
+  - **Delivery Audit Logs**: Searchable, filterable audit log with execution times, attempt counts, and floating bulk retry bar.
+  - **Delivery Inspection & Replay**: Deep failure diagnostics modal with request payload viewer, response body tabs, and in-place edit-and-replay engine.
 
 ### 2.4 `adminPanelPlugin` (`plugins/admin-panel`)
 Mithril.js SPA Admin Panel mounted at `/_admin`.

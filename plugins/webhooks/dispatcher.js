@@ -499,6 +499,9 @@ class WebhookDispatcher extends EventEmitter {
       error: res.error,
       willRetry,
       nextRetryAt,
+      responseBody: res.responseBody || null,
+      headers: res.requestHeaders || {},
+      body: res.bodyStr || null,
     };
 
     if (res.success) {
@@ -546,18 +549,23 @@ class WebhookDispatcher extends EventEmitter {
   }
 
   /**
-   * Send a test ping webhook to an endpoint
+   * Send a test webhook with custom event and payload to an endpoint
    * 
    * @param {number|string} endpointId 
+   * @param {Object} [options]
+   * @param {string} [options.event='ping']
+   * @param {any} [options.payload]
+   * @param {Object} [options.headers]
    * @returns {Promise<Object>}
    */
-  async pingEndpoint(endpointId) {
+  async testEndpoint(endpointId, options = {}) {
     const endpoint = await this.getEndpoint(endpointId);
     if (!endpoint) {
       throw new Error(`Endpoint #${endpointId} not found.`);
     }
 
-    const pingPayload = {
+    const event = options.event || 'ping';
+    const payload = options.payload !== undefined ? options.payload : {
       ping: true,
       message: 'Webspresso Webhook ping test',
       timestamp: new Date().toISOString(),
@@ -568,12 +576,12 @@ class WebhookDispatcher extends EventEmitter {
     };
 
     const deliveryId = generateDeliveryId();
-    const payloadStr = JSON.stringify(pingPayload);
+    const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
     const kx = this.resolveKnex();
 
     const deliveryRecord = {
       endpoint_id: endpoint.id,
-      event: 'ping',
+      event,
       payload: payloadStr,
       status_code: null,
       success: false,
@@ -604,14 +612,193 @@ class WebhookDispatcher extends EventEmitter {
       deliveryRecord.id = deliveryId;
     }
 
-    return this.executeDelivery({
+    const outcome = await this.executeDelivery({
       endpoint,
       deliveryId: deliveryRecord.id,
-      event: 'ping',
-      payload: pingPayload,
+      event,
+      payload,
+      attempt: 1,
+      autoRetry: false,
+      headers: options.headers,
+    });
+
+    return {
+      ...outcome,
+      deliveryRecordId: deliveryRecord.id,
+      event,
+      payload,
+    };
+  }
+
+  /**
+   * Send a test ping webhook to an endpoint (backward-compatible alias)
+   * 
+   * @param {number|string} endpointId 
+   * @param {Object} [options]
+   * @returns {Promise<Object>}
+   */
+  async pingEndpoint(endpointId, options = {}) {
+    return this.testEndpoint(endpointId, options);
+  }
+
+  /**
+   * Rotate signing secret for an endpoint with grace metadata
+   * 
+   * @param {number|string} endpointId 
+   * @param {Object} [options]
+   * @param {string} [options.prefix='whsec_']
+   * @returns {Promise<{ success: boolean, endpointId: any, secret: string, previousSecret: string, rotatedAt: string, endpoint: Object }>}
+   */
+  async rotateSecret(endpointId, options = {}) {
+    const endpoint = await this.getEndpoint(endpointId);
+    if (!endpoint) {
+      throw new Error(`Endpoint #${endpointId} not found.`);
+    }
+
+    const prefix = options.prefix || 'whsec_';
+    const newSecret = generateSecret(prefix);
+    const previousSecret = endpoint.secret;
+    const rotatedAt = new Date().toISOString();
+
+    let meta = {};
+    if (typeof endpoint.metadata === 'string') {
+      meta = safeJsonParse(endpoint.metadata, {});
+    } else if (typeof endpoint.metadata === 'object' && endpoint.metadata !== null) {
+      meta = { ...endpoint.metadata };
+    }
+    meta.previous_secret = previousSecret;
+    meta.secret_rotated_at = rotatedAt;
+
+    const updated = await this.updateEndpoint(endpointId, {
+      secret: newSecret,
+      metadata: meta,
+    });
+
+    return {
+      success: true,
+      endpointId: endpoint.id,
+      secret: newSecret,
+      previousSecret,
+      rotatedAt,
+      endpoint: updated,
+    };
+  }
+
+  /**
+   * Replay an existing delivery, optionally overriding payload or event
+   * 
+   * @param {number|string} deliveryId 
+   * @param {Object} [options]
+   * @param {any} [options.payload]
+   * @param {string} [options.event]
+   * @param {number|string} [options.endpointId]
+   * @returns {Promise<Object>}
+   */
+  async replayDelivery(deliveryId, options = {}) {
+    const kx = this.resolveKnex();
+    if (!kx) {
+      throw new Error('Database connection required to replay delivery.');
+    }
+
+    const original = await kx(this.deliveriesTable).where({ id: deliveryId }).first();
+    if (!original) {
+      throw new Error(`Delivery #${deliveryId} not found.`);
+    }
+
+    const targetEndpointId = options.endpointId || original.endpoint_id;
+    const endpoint = await this.getEndpoint(targetEndpointId);
+    if (!endpoint) {
+      throw new Error(`Target endpoint #${targetEndpointId} no longer exists.`);
+    }
+
+    const event = options.event || original.event;
+    const payload = options.payload !== undefined
+      ? options.payload
+      : safeJsonParse(original.payload, original.payload);
+
+    const newDeliveryId = generateDeliveryId();
+    const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
+
+    const newRecord = {
+      endpoint_id: endpoint.id,
+      event,
+      payload: payloadStr,
+      status_code: null,
+      success: false,
+      duration_ms: null,
+      error: null,
+      response_body: null,
+      attempt: 1,
+      max_attempts: 1,
+      next_retry_at: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
+
+    let savedId = newDeliveryId;
+    try {
+      const insertRes = await kx(this.deliveriesTable).insert(newRecord);
+      if (Array.isArray(insertRes) && insertRes.length > 0) {
+        savedId = typeof insertRes[0] === 'object' && insertRes[0] !== null ? insertRes[0].id : insertRes[0];
+      } else if (typeof insertRes === 'number') {
+        savedId = insertRes;
+      }
+    } catch (e) {
+      // fallback to generated ID
+    }
+
+    const outcome = await this.executeDelivery({
+      endpoint,
+      deliveryId: savedId,
+      event,
+      payload,
       attempt: 1,
       autoRetry: false,
     });
+
+    return {
+      ...outcome,
+      replayedFromId: deliveryId,
+      deliveryId: savedId,
+    };
+  }
+
+  /**
+   * Bulk retry multiple failed delivery records
+   * 
+   * @param {Array<number|string>} deliveryIds 
+   * @returns {Promise<{ total: number, succeeded: number, failed: number, items: Array<Object> }>}
+   */
+  async bulkRetryDeliveries(deliveryIds = []) {
+    if (!Array.isArray(deliveryIds) || deliveryIds.length === 0) {
+      return { total: 0, succeeded: 0, failed: 0, items: [] };
+    }
+
+    const results = [];
+    let succeeded = 0;
+    let failed = 0;
+
+    for (const id of deliveryIds) {
+      try {
+        const res = await this.retryDelivery(id);
+        if (res.success) {
+          succeeded++;
+        } else {
+          failed++;
+        }
+        results.push({ id, ...res });
+      } catch (err) {
+        failed++;
+        results.push({ id, success: false, error: err.message });
+      }
+    }
+
+    return {
+      total: deliveryIds.length,
+      succeeded,
+      failed,
+      items: results,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -624,6 +811,7 @@ class WebhookDispatcher extends EventEmitter {
    * @param {Object} [filters]
    * @param {number|string} [filters.endpointId]
    * @param {string} [filters.event]
+   * @param {string} [filters.search]
    * @param {boolean} [filters.success]
    * @param {number} [filters.page=1]
    * @param {number} [filters.limit=25]
@@ -640,14 +828,24 @@ class WebhookDispatcher extends EventEmitter {
     const offset = (page - 1) * limit;
 
     let baseQuery = kx(this.deliveriesTable);
-    if (filters.endpointId) {
-      baseQuery = baseQuery.where({ endpoint_id: filters.endpointId });
+    const epId = filters.endpointId || filters.endpoint_id;
+    if (epId) {
+      baseQuery = baseQuery.where({ endpoint_id: epId });
     }
     if (filters.event) {
       baseQuery = baseQuery.where('event', 'like', `%${filters.event}%`);
     }
     if (filters.success !== undefined && filters.success !== null && filters.success !== '') {
       baseQuery = baseQuery.where({ success: filters.success === true || filters.success === 'true' });
+    }
+    const search = filters.search || filters.q;
+    if (search && String(search).trim()) {
+      const q = String(search).trim();
+      baseQuery = baseQuery.where((builder) => {
+        builder.where('event', 'like', `%${q}%`)
+          .orWhere('payload', 'like', `%${q}%`)
+          .orWhere('error', 'like', `%${q}%`);
+      });
     }
 
     const countRes = await baseQuery.clone().count({ count: '*' });
@@ -683,6 +881,76 @@ class WebhookDispatcher extends EventEmitter {
     if (!kx) return null;
     const row = await kx(this.deliveriesTable).where({ id }).first();
     return row || null;
+  }
+
+  /**
+   * Compute comprehensive webhook statistics
+   * 
+   * @returns {Promise<{
+   *   totalEndpoints: number,
+   *   activeEndpoints: number,
+   *   totalDeliveries: number,
+   *   successfulDeliveries: number,
+   *   failedDeliveries: number,
+   *   successRate: number,
+   *   avgDurationMs: number
+   * }>}
+   */
+  async getStats() {
+    const kx = this.resolveKnex();
+    if (!kx) {
+      const eps = this._staticEndpoints || [];
+      return {
+        totalEndpoints: eps.length,
+        activeEndpoints: eps.filter((e) => e.is_active !== false).length,
+        totalDeliveries: 0,
+        successfulDeliveries: 0,
+        failedDeliveries: 0,
+        successRate: 100,
+        avgDurationMs: 0,
+      };
+    }
+
+    try {
+      const [epCount] = await kx(this.endpointsTable).count({ count: '*' });
+      const [activeEpCount] = await kx(this.endpointsTable).where({ is_active: true }).count({ count: '*' });
+      
+      const totalEndpoints = parseInt(epCount?.count || 0, 10);
+      const activeEndpoints = parseInt(activeEpCount?.count || 0, 10);
+
+      const dlvStats = await kx(this.deliveriesTable)
+        .select(
+          kx.raw('COUNT(*) as total'),
+          kx.raw('SUM(CASE WHEN success = 1 OR success = true THEN 1 ELSE 0 END) as successful'),
+          kx.raw('AVG(duration_ms) as avg_duration')
+        );
+
+      const totalDeliveries = parseInt(dlvStats[0]?.total || 0, 10);
+      const successfulDeliveries = parseInt(dlvStats[0]?.successful || 0, 10);
+      const failedDeliveries = totalDeliveries - successfulDeliveries;
+      const successRate = totalDeliveries > 0 ? Math.round((successfulDeliveries / totalDeliveries) * 100) : 100;
+      const avgDurationMs = Math.round(parseFloat(dlvStats[0]?.avg_duration || 0));
+
+      return {
+        totalEndpoints,
+        activeEndpoints,
+        totalDeliveries,
+        successfulDeliveries,
+        failedDeliveries,
+        successRate,
+        avgDurationMs,
+      };
+    } catch (e) {
+      return {
+        totalEndpoints: 0,
+        activeEndpoints: 0,
+        totalDeliveries: 0,
+        successfulDeliveries: 0,
+        failedDeliveries: 0,
+        successRate: 100,
+        avgDurationMs: 0,
+      };
+    }
   }
 
   /**

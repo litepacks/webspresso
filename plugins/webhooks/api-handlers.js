@@ -135,15 +135,44 @@ function createWebhookApiHandlers(dispatcher, options = {}) {
   }
 
   /**
-   * POST /endpoints/:id/ping — Send test ping
+   * POST /endpoints/:id/ping or POST /endpoints/:id/test — Send test webhook / ping
    */
   async function pingEndpointHandler(req, res) {
     try {
       const id = req.params.id;
-      const result = await dispatcher.pingEndpoint(id);
+      const opts = req.body || {};
+      const result = await dispatcher.testEndpoint(id, opts);
       return res.status(200).json(result);
     } catch (err) {
       return res.status(400).json({ error: err.message || 'Failed to ping webhook endpoint' });
+    }
+  }
+
+  /**
+   * POST /endpoints/:id/test — Send test webhook with custom event/payload
+   */
+  async function testEndpointHandler(req, res) {
+    try {
+      const id = req.params.id;
+      const opts = req.body || {};
+      const result = await dispatcher.testEndpoint(id, opts);
+      return res.status(200).json(result);
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Failed to test webhook endpoint' });
+    }
+  }
+
+  /**
+   * POST /endpoints/:id/rotate-secret — Rotate HMAC signing secret
+   */
+  async function rotateSecretHandler(req, res) {
+    try {
+      const id = req.params.id;
+      const opts = req.body || {};
+      const result = await dispatcher.rotateSecret(id, opts);
+      return res.status(200).json(result);
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Failed to rotate secret' });
     }
   }
 
@@ -154,6 +183,7 @@ function createWebhookApiHandlers(dispatcher, options = {}) {
     try {
       const endpointId = req.query.endpointId || req.query.endpoint_id;
       const event = req.query.event;
+      const search = req.query.search || req.query.q;
       const success = req.query.success;
       const page = req.query.page;
       const limit = req.query.limit || req.query.perPage;
@@ -161,6 +191,7 @@ function createWebhookApiHandlers(dispatcher, options = {}) {
       const data = await dispatcher.listDeliveries({
         endpointId,
         event,
+        search,
         success,
         page,
         limit,
@@ -202,6 +233,45 @@ function createWebhookApiHandlers(dispatcher, options = {}) {
   }
 
   /**
+   * POST /deliveries/:id/replay — Replay delivery with optional edited payload/event
+   */
+  async function replayDeliveryHandler(req, res) {
+    try {
+      const id = req.params.id;
+      const opts = req.body || {};
+      const result = await dispatcher.replayDelivery(id, opts);
+      return res.status(200).json(result);
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Failed to replay webhook delivery' });
+    }
+  }
+
+  /**
+   * POST /deliveries/bulk-retry — Bulk retry multiple delivery IDs
+   */
+  async function bulkRetryDeliveriesHandler(req, res) {
+    try {
+      const ids = req.body?.ids || req.body?.deliveryIds || [];
+      const result = await dispatcher.bulkRetryDeliveries(ids);
+      return res.status(200).json(result);
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Failed to bulk retry webhook deliveries' });
+    }
+  }
+
+  /**
+   * GET /stats — Global webhook metrics
+   */
+  async function getStatsHandler(req, res) {
+    try {
+      const stats = await dispatcher.getStats();
+      return res.status(200).json(stats);
+    } catch (err) {
+      return res.status(500).json({ error: err.message || 'Failed to fetch webhook statistics' });
+    }
+  }
+
+  /**
    * POST /deliveries/purge — Purge old deliveries
    */
   async function purgeDeliveriesHandler(req, res) {
@@ -225,9 +295,14 @@ function createWebhookApiHandlers(dispatcher, options = {}) {
     updateEndpointHandler,
     deleteEndpointHandler,
     pingEndpointHandler,
+    testEndpointHandler,
+    rotateSecretHandler,
     listDeliveriesHandler,
     getDeliveryHandler,
     retryDeliveryHandler,
+    replayDeliveryHandler,
+    bulkRetryDeliveriesHandler,
+    getStatsHandler,
     purgeDeliveriesHandler,
   };
 }

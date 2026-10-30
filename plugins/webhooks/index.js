@@ -62,8 +62,13 @@ function webhooksPlugin(options = {}) {
     api: {
       dispatcher,
       dispatch: (event, payload, opts) => dispatcher.dispatch(event, payload, opts),
-      pingEndpoint: (id) => dispatcher.pingEndpoint(id),
+      pingEndpoint: (id, opts) => dispatcher.pingEndpoint(id, opts),
+      testEndpoint: (id, opts) => dispatcher.testEndpoint(id, opts),
+      rotateSecret: (id, opts) => dispatcher.rotateSecret(id, opts),
       retryDelivery: (id) => dispatcher.retryDelivery(id),
+      replayDelivery: (id, opts) => dispatcher.replayDelivery(id, opts),
+      bulkRetryDeliveries: (ids) => dispatcher.bulkRetryDeliveries(ids),
+      getStats: () => dispatcher.getStats(),
       createEndpoint: (data) => dispatcher.createEndpoint(data),
       getEndpoint: (id) => dispatcher.getEndpoint(id),
       updateEndpoint: (id, data) => dispatcher.updateEndpoint(id, data),
@@ -132,12 +137,37 @@ function webhooksPlugin(options = {}) {
         }
         if (!registry.has('webhook.ping')) {
           registry.register('webhook.ping', {
-            handler: async (input) => dispatcher.pingEndpoint(input.endpointId),
+            handler: async (input) => dispatcher.pingEndpoint(input.endpointId, input),
+          });
+        }
+        if (!registry.has('webhook.test')) {
+          registry.register('webhook.test', {
+            handler: async (input) => dispatcher.testEndpoint(input.endpointId, input),
           });
         }
         if (!registry.has('webhook.retry')) {
           registry.register('webhook.retry', {
             handler: async (input) => dispatcher.retryDelivery(input.deliveryId),
+          });
+        }
+        if (!registry.has('webhook.replay')) {
+          registry.register('webhook.replay', {
+            handler: async (input) => dispatcher.replayDelivery(input.deliveryId, input),
+          });
+        }
+        if (!registry.has('webhook.rotate-secret')) {
+          registry.register('webhook.rotate-secret', {
+            handler: async (input) => dispatcher.rotateSecret(input.endpointId, input),
+          });
+        }
+        if (!registry.has('webhook.bulk-retry')) {
+          registry.register('webhook.bulk-retry', {
+            handler: async (input) => dispatcher.bulkRetryDeliveries(input.deliveryIds || input.ids),
+          });
+        }
+        if (!registry.has('webhook.get-stats')) {
+          registry.register('webhook.get-stats', {
+            handler: async () => dispatcher.getStats(),
           });
         }
       }
@@ -226,9 +256,14 @@ function webhooksPlugin(options = {}) {
             { method: 'patch', path: '/endpoints/:id', handler: apiHandlers.updateEndpointHandler },
             { method: 'delete', path: '/endpoints/:id', handler: apiHandlers.deleteEndpointHandler },
             { method: 'post', path: '/endpoints/:id/ping', handler: apiHandlers.pingEndpointHandler },
+            { method: 'post', path: '/endpoints/:id/test', handler: apiHandlers.testEndpointHandler },
+            { method: 'post', path: '/endpoints/:id/rotate-secret', handler: apiHandlers.rotateSecretHandler },
             { method: 'get', path: '/deliveries', handler: apiHandlers.listDeliveriesHandler },
             { method: 'get', path: '/deliveries/:id', handler: apiHandlers.getDeliveryHandler },
             { method: 'post', path: '/deliveries/:id/retry', handler: apiHandlers.retryDeliveryHandler },
+            { method: 'post', path: '/deliveries/:id/replay', handler: apiHandlers.replayDeliveryHandler },
+            { method: 'post', path: '/deliveries/bulk-retry', handler: apiHandlers.bulkRetryDeliveriesHandler },
+            { method: 'get', path: '/stats', handler: apiHandlers.getStatsHandler },
             { method: 'post', path: '/deliveries/purge', handler: apiHandlers.purgeDeliveriesHandler },
           ],
         },
