@@ -36,7 +36,7 @@ Open **`http://localhost:7331`** in your browser.
 | **Dual Auth & Sessions** | Stateful cookies for SSR + stateless HS256 JWT rotation for APIs, magic links, active device management & remote session revocation, CSRF protection, and built-in native auth. |
 | **Services & Queues** | File-based auto-discovery in `services/` with declarative Zod validation, role-based access guards, and ACID transaction propagation. Background worker queues in `jobs/`. |
 | **Admin Panel SPA** | Integrated Mithril.js single-page admin panel mounted at `/_admin` with auto-layout wrapping, CRUD views, custom dashboard widgets, and custom field renderers. Supports on-demand lazy mounting (`adminPanelPlugin({ lazy: true })`). |
-| **Plugin Ecosystem** | 20+ official plugins: Polar.sh billing, Webhooks dispatcher with HMAC signatures, Realtime (WebSocket/SSE), Site Analytics, API Keys, File Manager, CSV/Excel generation, On-demand Lazy Plugins (`lazyPlugin`), and more. |
+| **Plugin Ecosystem** | 20+ official plugins: Polar.sh billing, Webhooks dispatcher with HMAC signatures, Realtime client layer (WebSocket/SSE/Socket.IO adapters), Site Analytics, API Keys, File Manager, CSV/Excel generation, On-demand Lazy Plugins (`lazyPlugin`), and more. |
 | **DevOps & Production** | Built-in streaming zlib compression (`brotli`/`gzip`), socket connection draining & graceful shutdown, `webspresso deploy:check` production readiness auditor, and Docker scaffolding. |
 
 ---

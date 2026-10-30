@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **ORM relations accept model name strings**: `relations: { user: { type: 'belongsTo', model: 'User', foreignKey: 'userId' } }` (as typed in `index.d.ts` and shown in the README) no longer throws; string references are resolved lazily, with a clear error for unknown models.
+- **`query().paginate({ page, limit })`**: The object form documented in `AGENTS.md` / `.agents/ORM.md` was silently ignored (always page 1, 15 rows). `paginate()` now accepts `{ page, perPage }` / `{ page, limit }` alongside the positional form.
+- **CLI `add` commands**: `webspresso add esbuild` ran the Tailwind handler and `webspresso add:tailwind` failed with a missing-argument error. Both `add <integration>` and `add:<integration>` forms now route correctly.
+
+### Docs
+- Added the missing `LICENSE` file referenced by the README.
+- Corrected the ORM guide pagination example, realtime and dependency-policy wording, plugin count, and dev boot-time claims.
+
 ## [0.0.108] - 2026-10-24
 
 ### Added

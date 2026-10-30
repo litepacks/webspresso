@@ -2262,6 +2262,7 @@ export interface QueryBuilder<T = Record<string, any>> {
   find(): Promise<T[]>;
   count(): Promise<number>;
   paginate(page?: number, perPage?: number): Promise<PaginatedResult<T>>;
+  paginate(options: { page?: number; perPage?: number; limit?: number }): Promise<PaginatedResult<T>>;
   exists(): Promise<boolean>;
   clone(): QueryBuilder<T>;
   getWiths(): string[];

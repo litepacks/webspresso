@@ -45,15 +45,15 @@ describe('ORM Model Definition & Registry (core/orm/model)', () => {
       },
     })).toThrow('Invalid relation type "invalidType"');
 
-    // Missing model function
+    // Invalid model reference (neither function nor model name)
     expect(() => defineModel({
       name: 'Post',
       table: 'posts',
       schema,
       relations: {
-        author: { type: 'belongsTo', model: 'notAFunction' },
+        author: { type: 'belongsTo', model: 42 },
       },
-    })).toThrow('must have a model function');
+    })).toThrow('must have a model function or model name string');
 
     // Missing foreignKey
     expect(() => defineModel({

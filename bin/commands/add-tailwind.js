@@ -6,11 +6,15 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { getAddCommand } = require('../utils/add-command');
 
 function registerCommand(program) {
-  program
-    .command('add tailwind')
-    .alias('add:tailwind')
+  configureCommand(program.command('add:tailwind'));
+  configureCommand(getAddCommand(program).command('tailwind'));
+}
+
+function configureCommand(command) {
+  command
     .description('Add Tailwind CSS to the project with build process')
     .option('--v4', 'Use Tailwind CSS v4 (Oxide engine, LightningCSS, zero postcss config)')
     .option('--v3', 'Use Tailwind CSS v3 (legacy PostCSS engine)')

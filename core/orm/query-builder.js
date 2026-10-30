@@ -1084,6 +1084,12 @@ class QueryBuilder {
    * @returns {Promise<import('./types').PaginatedResult>}
    */
   async paginate(page = 1, perPage = 15) {
+    // Object form: paginate({ page, perPage }) or paginate({ page, limit })
+    if (page && typeof page === 'object') {
+      const opts = page;
+      page = opts.page ?? 1;
+      perPage = opts.perPage ?? opts.limit ?? 15;
+    }
     const validated = validateQueryComplexity(this.model, { perPage });
     perPage = validated.perPage;
     page = Math.max(1, parseInt(page, 10) || 1);

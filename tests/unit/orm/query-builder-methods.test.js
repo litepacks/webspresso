@@ -290,6 +290,20 @@ describe('QueryBuilder Extended SQL Methods', () => {
       expect(totalGroups).toBe(3);
     });
 
+    it('accepts object form paginate({ page, limit }) and paginate({ page, perPage })', async () => {
+      const byLimit = await ProductRepo.query().orderBy('id', 'asc').paginate({ page: 2, limit: 2 });
+      expect(byLimit.page).toBe(2);
+      expect(byLimit.perPage).toBe(2);
+      expect(byLimit.data.length).toBeLessThanOrEqual(2);
+
+      const byPerPage = await ProductRepo.query().orderBy('id', 'asc').paginate({ page: 1, perPage: 3 });
+      expect(byPerPage.page).toBe(1);
+      expect(byPerPage.perPage).toBe(3);
+
+      const positional = await ProductRepo.query().orderBy('id', 'asc').paginate(2, 2);
+      expect(byLimit.data).toEqual(positional.data);
+    });
+
     it('accurately paginates grouped queries', async () => {
       const paginated = await ProductRepo.query()
         .select('category')
