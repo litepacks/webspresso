@@ -70,7 +70,7 @@ module.exports = {
 | `seoCheckerPlugin` | In-browser client-side SEO analysis and diagnostics panel | — |
 | `sitemapPlugin` | Dynamic XML sitemap generator (`/sitemap.xml`) & `robots.txt` responder | — |
 | `auditLogPlugin` | Mutation audit trail for ORM models and Admin staff actions | — |
-| `dataExchangePlugin` | Admin CSV/XLSX bulk import and Excel export engine | — |
+| `dataExchangePlugin` | Spreadsheet templates, smart column mapping, atomic import & Excel/CSV export wizard | [Data Exchange Wizard](/guides/data-exchange) |
 | `xlsxPlugin` | Excel XLSX file generator, parser, and streaming model export | — |
 | `csvPlugin` | RFC 4180 CSV generator, parser, formula sanitizer & streaming export | — |
 | `swaggerPlugin` / `openapiPlugin` | Automated OpenAPI 3.0 generator with Swagger UI & Scalar playground | — |

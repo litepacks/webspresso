@@ -114,6 +114,8 @@ function buildPayloadForRow(model, data, mode) {
     try {
       v = coerceCell(raw, meta, col);
     } catch (e) {
+      e.column = col;
+      e.value = raw;
       throw e;
     }
     if (v === undefined) continue;
@@ -257,8 +259,36 @@ function createImportHandler(opts) {
           return res.status(400).json({ error: 'File must include a header row and at least one data row' });
         }
 
+        let columnMapping = null;
+        if (req.body?.columnMapping) {
+          try {
+            columnMapping = typeof req.body.columnMapping === 'string'
+              ? JSON.parse(req.body.columnMapping)
+              : req.body.columnMapping;
+          } catch {}
+        } else if (req.query.columnMapping) {
+          try {
+            columnMapping = JSON.parse(req.query.columnMapping);
+          } catch {}
+        }
+
         const allowedKeys = allowedImportColumns(model);
-        const headerMapping = buildHeaderMapping(rows[0], allowedKeys);
+        let headerMapping;
+
+        if (columnMapping && typeof columnMapping === 'object') {
+          headerMapping = {};
+          const fileHeaders = rows[0].map(h => String(h || '').trim());
+          for (let idx = 0; idx < fileHeaders.length; idx++) {
+            const h = fileHeaders[idx];
+            const targetCol = columnMapping[h];
+            if (targetCol && allowedKeys.includes(targetCol)) {
+              headerMapping[idx] = targetCol;
+            }
+          }
+        } else {
+          headerMapping = buildHeaderMapping(rows[0], allowedKeys);
+        }
+
         const objects = dataRowsToObjects(rows, headerMapping);
         if (objects.length > maxRows) {
           return res.status(400).json({ error: `Too many data rows (${objects.length}). Limit is ${maxRows}.` });
@@ -277,6 +307,7 @@ function createImportHandler(opts) {
           created: 0,
           updated: 0,
           failed: 0,
+          totalRows: objects.length,
           errors: [],
         };
 
@@ -287,7 +318,7 @@ function createImportHandler(opts) {
               if (Object.keys(payload).length === 0) {
                 summary.failed++;
                 const errMsg = 'No mappable columns';
-                summary.errors.push({ row: rowNumber, message: errMsg });
+                summary.errors.push({ row: rowNumber, column: null, message: errMsg });
                 if (isAtomic) {
                   throw new Error(`Row ${rowNumber}: ${errMsg}`);
                 }
@@ -306,7 +337,12 @@ function createImportHandler(opts) {
                 keyVal = coerceCell(data[upsertKey], keyMeta, upsertKey);
               } catch (e) {
                 summary.failed++;
-                summary.errors.push({ row: rowNumber, message: e.message || 'Bad upsert key' });
+                summary.errors.push({
+                  row: rowNumber,
+                  column: upsertKey,
+                  value: data[upsertKey],
+                  message: e.message || 'Bad upsert key',
+                });
                 if (isAtomic) throw e;
                 continue;
               }
@@ -330,7 +366,12 @@ function createImportHandler(opts) {
               }
             } catch (e) {
               summary.failed++;
-              summary.errors.push({ row: rowNumber, message: e.message || String(e) });
+              summary.errors.push({
+                row: rowNumber,
+                column: e.column || null,
+                value: e.value !== undefined ? e.value : null,
+                message: e.message || String(e),
+              });
               if (isAtomic) {
                 throw e;
               }

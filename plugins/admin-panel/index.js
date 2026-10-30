@@ -527,16 +527,22 @@ function adminPanelPlugin(options = {}) {
       // Data exchange (Excel export & CSV/XLSX import) routes
       const dataExchangeConfig = typeof dataExchangeOption === 'object' ? dataExchangeOption : { enabled: dataExchangeOption !== false };
       if (dataExchangeConfig.enabled !== false && !ctx.app?._dataExchangeRoutesRegistered) {
-        const { createExportXlsxHandler } = require('../data-exchange/export-xlsx');
+        const { createExportHandler } = require('../data-exchange/export');
         const { createImportHandler } = require('../data-exchange/import');
-        const exportHandler = createExportXlsxHandler({ db, maxRows: dataExchangeConfig.maxRows || 10000 });
+        const { createTemplateHandler } = require('../data-exchange/template');
+        const { createPreviewHandler } = require('../data-exchange/preview');
+        const exportHandler = createExportHandler({ db, maxRows: dataExchangeConfig.maxRows || 10000 });
         const importHandler = createImportHandler({
           db,
           maxRows: dataExchangeConfig.maxRows || 10000,
           maxFileBytes: dataExchangeConfig.maxFileBytes || 10 * 1024 * 1024,
         });
+        const templateHandler = createTemplateHandler({ db });
+        const previewHandler = createPreviewHandler({ db, maxFileBytes: dataExchangeConfig.maxFileBytes || 10 * 1024 * 1024 });
 
         const base = `${adminPath}/api/data-exchange`;
+        ctx.addRoute('get', `${base}/template/:model`, requireAuth, templateHandler);
+        ctx.addRoute('post', `${base}/preview/:model`, requireAuth, previewHandler);
         ctx.addRoute('get', `${base}/export/:model`, requireAuth, exportHandler);
         ctx.addRoute('post', `${base}/export/:model`, requireAuth, exportHandler);
         ctx.addRoute('post', `${base}/import/:model`, requireAuth, importHandler);

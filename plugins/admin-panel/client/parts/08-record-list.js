@@ -183,6 +183,715 @@ async function executeBulkAction(action, modelName, modelMeta) {
   }
 }
 
+// --- Data Exchange Visual Wizard State & Components ---
+var dataExchangeState = {
+  importOpen: false,
+  exportOpen: false,
+  modelName: '',
+  modelMeta: null,
+  step: 1, // 1: upload & settings, 2: column mapping & preview, 3: results
+  file: null,
+  fileName: '',
+  fileSize: '',
+  mode: 'insert',
+  upsertKey: 'id',
+  atomic: false,
+  loading: false,
+  error: null,
+  previewData: null,
+  columnMapping: {},
+  results: null,
+
+  // Export
+  exportFormat: 'xlsx',
+  exportColumns: {},
+  exportScope: 'all',
+  selectedRecords: [],
+  exportLoading: false,
+  exportError: null,
+};
+
+function openDataExchangeImport(modelName, modelMeta, file) {
+  dataExchangeState.importOpen = true;
+  dataExchangeState.exportOpen = false;
+  dataExchangeState.modelName = modelName;
+  dataExchangeState.modelMeta = modelMeta;
+  dataExchangeState.step = 1;
+  dataExchangeState.file = file || null;
+  dataExchangeState.fileName = file ? file.name : '';
+  dataExchangeState.fileSize = file ? (file.size / 1024).toFixed(1) + ' KB' : '';
+  dataExchangeState.mode = 'insert';
+  dataExchangeState.upsertKey = modelMeta?.primaryKey || 'id';
+  dataExchangeState.atomic = false;
+  dataExchangeState.loading = false;
+  dataExchangeState.error = null;
+  dataExchangeState.previewData = null;
+  dataExchangeState.columnMapping = {};
+  dataExchangeState.results = null;
+
+  if (file) {
+    fetchImportPreview();
+  } else {
+    m.redraw();
+  }
+}
+
+function openDataExchangeExport(modelName, modelMeta, selectedRecords) {
+  dataExchangeState.exportOpen = true;
+  dataExchangeState.importOpen = false;
+  dataExchangeState.modelName = modelName;
+  dataExchangeState.modelMeta = modelMeta;
+  dataExchangeState.exportFormat = 'xlsx';
+  const sel = selectedRecords ? (selectedRecords instanceof Set ? Array.from(selectedRecords) : selectedRecords) : [];
+  dataExchangeState.selectedRecords = sel;
+  dataExchangeState.exportScope = sel.length > 0 ? 'selected' : 'all';
+  dataExchangeState.exportLoading = false;
+  dataExchangeState.exportError = null;
+
+  // Initialize columns
+  dataExchangeState.exportColumns = {};
+  if (modelMeta?.columns) {
+    const hidden = new Set(modelMeta.hidden || []);
+    const cols = modelMeta.columns instanceof Map ? Array.from(modelMeta.columns.keys()) : Object.keys(modelMeta.columns);
+    for (const c of cols) {
+      if (!hidden.has(c)) {
+        dataExchangeState.exportColumns[c] = true;
+      }
+    }
+  }
+  m.redraw();
+}
+
+function downloadExchangeTemplate(format) {
+  const adminPath = window.__ADMIN_PATH__ || '/_admin';
+  const url = adminPath + '/api/data-exchange/template/' + dataExchangeState.modelName +
+    '?format=' + format + '&mode=' + dataExchangeState.mode;
+  window.open(url, '_blank');
+}
+
+function fetchImportPreview() {
+  if (!dataExchangeState.file) return;
+  dataExchangeState.loading = true;
+  dataExchangeState.error = null;
+  m.redraw();
+
+  const adminPath = window.__ADMIN_PATH__ || '/_admin';
+  const fd = new FormData();
+  fd.append('file', dataExchangeState.file);
+
+  const fetchFn = (typeof fetchWithTimeout === 'function' ? fetchWithTimeout : fetch);
+  fetchFn(adminPath + '/api/data-exchange/preview/' + dataExchangeState.modelName, {
+    method: 'POST',
+    body: fd,
+    credentials: 'include',
+    timeout: 30000,
+  }).then(function(res) {
+    return res.json().then(function(body) {
+      if (!res.ok) throw new Error(body.error || 'Preview failed');
+      return body;
+    });
+  }).then(function(data) {
+    dataExchangeState.loading = false;
+    dataExchangeState.previewData = data;
+    dataExchangeState.columnMapping = Object.assign({}, data.suggestedMapping || {});
+    dataExchangeState.step = 2;
+    m.redraw();
+  }).catch(function(err) {
+    dataExchangeState.loading = false;
+    dataExchangeState.error = err.message || 'Failed to analyze file';
+    m.redraw();
+  });
+}
+
+function executeImport() {
+  dataExchangeState.loading = true;
+  dataExchangeState.error = null;
+  m.redraw();
+
+  const adminPath = window.__ADMIN_PATH__ || '/_admin';
+  const fd = new FormData();
+  fd.append('file', dataExchangeState.file);
+  fd.append('mode', dataExchangeState.mode);
+  fd.append('upsertKey', dataExchangeState.upsertKey);
+  fd.append('atomic', dataExchangeState.atomic ? 'true' : 'false');
+  fd.append('columnMapping', JSON.stringify(dataExchangeState.columnMapping));
+
+  const fetchFn = (typeof fetchWithTimeout === 'function' ? fetchWithTimeout : fetch);
+  fetchFn(adminPath + '/api/data-exchange/import/' + dataExchangeState.modelName +
+    '?mode=' + encodeURIComponent(dataExchangeState.mode) +
+    '&upsertKey=' + encodeURIComponent(dataExchangeState.upsertKey) +
+    '&atomic=' + (dataExchangeState.atomic ? 'true' : 'false'), {
+    method: 'POST',
+    body: fd,
+    credentials: 'include',
+    timeout: 120000,
+  }).then(function(res) {
+    return res.json().then(function(body) {
+      if (!res.ok) throw new Error(body.error || 'Import failed');
+      return body;
+    });
+  }).then(function(data) {
+    dataExchangeState.loading = false;
+    dataExchangeState.results = data;
+    dataExchangeState.step = 3;
+    m.redraw();
+  }).catch(function(err) {
+    dataExchangeState.loading = false;
+    dataExchangeState.error = err.message || 'Import failed';
+    m.redraw();
+  });
+}
+
+function executeExport() {
+  dataExchangeState.exportLoading = true;
+  dataExchangeState.exportError = null;
+  m.redraw();
+
+  const adminPath = window.__ADMIN_PATH__ || '/_admin';
+  const chosenCols = Object.keys(dataExchangeState.exportColumns).filter(function(k) {
+    return dataExchangeState.exportColumns[k];
+  });
+
+  let q = '?format=' + dataExchangeState.exportFormat;
+  if (chosenCols.length > 0) {
+    q += '&columns=' + encodeURIComponent(chosenCols.join(','));
+  }
+
+  if (dataExchangeState.exportScope === 'selected' && dataExchangeState.selectedRecords.length > 0) {
+    const pk = dataExchangeState.modelMeta?.primaryKey || 'id';
+    const ids = dataExchangeState.selectedRecords.map(function(r) { return r[pk]; }).filter(Boolean);
+    if (ids.length > 0) {
+      q += '&ids=' + encodeURIComponent(ids.join(','));
+    }
+  }
+
+  const fetchFn = (typeof fetchWithTimeout === 'function' ? fetchWithTimeout : fetch);
+  fetchFn(adminPath + '/api/data-exchange/export/' + dataExchangeState.modelName + q, {
+    method: 'GET',
+    credentials: 'include',
+    timeout: 60000,
+  }).then(function(res) {
+    if (!res.ok) {
+      return res.json().then(function(b) { throw new Error(b.error || 'Export failed'); });
+    }
+    return res.blob();
+  }).then(function(blob) {
+    const ext = dataExchangeState.exportFormat === 'csv' ? 'csv' : 'xlsx';
+    const filename = dataExchangeState.modelName + '_export.' + ext;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function() {
+      if (a.parentNode) a.parentNode.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 1000);
+    dataExchangeState.exportLoading = false;
+    dataExchangeState.exportOpen = false;
+    notifySuccess('Export complete! File download started.');
+    m.redraw();
+  }).catch(function(err) {
+    dataExchangeState.exportLoading = false;
+    dataExchangeState.exportError = err.message || 'Export failed';
+    notifyError('Export failed: ' + err.message);
+    m.redraw();
+  });
+}
+
+// Visual Data Exchange Import Modal
+var DataExchangeImportModal = {
+  view: function() {
+    if (!dataExchangeState.importOpen) return null;
+    const modelLabel = dataExchangeState.modelMeta?.label || dataExchangeState.modelName;
+
+    return m('div.fixed.inset-0.z-50.flex.items-center.justify-center.p-4', [
+      m('div.fixed.inset-0.bg-black/60.backdrop-blur-sm', {
+        onclick: function() {
+          if (!dataExchangeState.loading) dataExchangeState.importOpen = false;
+        }
+      }),
+      m('div.relative.bg-white.dark:bg-slate-900.rounded-2xl.shadow-2xl.border.border-gray-200.dark:border-slate-800.max-w-3xl.w-full.max-h-[90vh].flex.flex-col.overflow-hidden.z-10', [
+        // Modal Header
+        m('div.px-6.py-4.border-b.border-gray-100.dark:border-slate-800.flex.items-center.justify-between.bg-gray-50/50.dark:bg-slate-800/40', [
+          m('div.flex.items-center.gap-3', [
+            m('div.w-9.h-9.rounded-xl.bg-indigo-100.dark:bg-indigo-950/70.text-indigo-600.dark:text-indigo-400.flex.items-center.justify-center.font-bold', '📥'),
+            m('div', [
+              m('h3.text-base.font-bold.text-gray-900.dark:text-slate-100', 'Spreadsheet Import Wizard'),
+              m('p.text-xs.text-gray-500.dark:text-slate-400', 'Target Model: ' + modelLabel)
+            ])
+          ]),
+          m('button.text-gray-400.hover:text-gray-600.dark:hover:text-slate-200.p-1.5.rounded-lg', {
+            onclick: function() { dataExchangeState.importOpen = false; }
+          }, '✕')
+        ]),
+
+        // Stepper Navigation
+        m('div.px-6.py-3.bg-gray-100/60.dark:bg-slate-800/60.border-b.border-gray-200.dark:border-slate-700/60.flex.items-center.justify-between.text-xs.font-semibold', [
+          m('div.flex.items-center.gap-2', {
+            class: dataExchangeState.step === 1 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-slate-400'
+          }, [
+            m('span.w-5.h-5.rounded-full.flex.items-center.justify-center.text-xs', {
+              class: dataExchangeState.step === 1 ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-300'
+            }, '1'),
+            'Upload & Settings'
+          ]),
+          m('span.text-gray-400', '➔'),
+          m('div.flex.items-center.gap-2', {
+            class: dataExchangeState.step === 2 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-slate-400'
+          }, [
+            m('span.w-5.h-5.rounded-full.flex.items-center.justify-center.text-xs', {
+              class: dataExchangeState.step === 2 ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-300'
+            }, '2'),
+            'Column Mapping & Preview'
+          ]),
+          m('span.text-gray-400', '➔'),
+          m('div.flex.items-center.gap-2', {
+            class: dataExchangeState.step === 3 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-slate-400'
+          }, [
+            m('span.w-5.h-5.rounded-full.flex.items-center.justify-center.text-xs', {
+              class: dataExchangeState.step === 3 ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-300'
+            }, '3'),
+            'Execution Results'
+          ]),
+        ]),
+
+        // Modal Content
+        m('div.p-6.overflow-y-auto.flex-1.space-y-6', [
+          dataExchangeState.error ? m('div.p-4.rounded-xl.bg-red-50.dark:bg-red-950/40.border.border-red-200.dark:border-red-800.text-xs.text-red-700.dark:text-red-300', [
+            m('strong.font-semibold', 'Error: '), dataExchangeState.error
+          ]) : null,
+
+          // STEP 1: Upload & Templates
+          dataExchangeState.step === 1 ? [
+            // Template Download Card
+            m('div.p-4.rounded-xl.bg-indigo-50/70.dark:bg-indigo-950/40.border.border-indigo-100.dark:border-indigo-900/60.flex.flex-col.sm:flex-row.sm:items-center.justify-between.gap-3', [
+              m('div', [
+                m('h4.text-xs.font-bold.text-indigo-900.dark:text-indigo-200', 'Need a Starter Spreadsheet Template?'),
+                m('p.text-xs.text-indigo-700/80.dark:text-indigo-300/80.mt-0.5', 'Download a pre-formatted template with model headers and sample data types:')
+              ]),
+              m('div.flex.items-center.gap-2', [
+                m('button.px-3.py-1.5.text-xs.font-semibold.text-indigo-700.bg-white.dark:bg-slate-800.dark:text-indigo-300.rounded-lg.border.border-indigo-200.dark:border-indigo-800.hover:bg-indigo-50.shadow-sm', {
+                  onclick: function() { downloadExchangeTemplate('csv'); }
+                }, '📄 Sample CSV'),
+                m('button.px-3.py-1.5.text-xs.font-semibold.text-emerald-700.bg-white.dark:bg-slate-800.dark:text-emerald-300.rounded-lg.border.border-emerald-200.dark:border-emerald-800.hover:bg-emerald-50.shadow-sm', {
+                  onclick: function() { downloadExchangeTemplate('xlsx'); }
+                }, '📗 Sample Excel')
+              ])
+            ]),
+
+            // Dropzone
+            m('div.border-2.border-dashed.border-gray-300.dark:border-slate-700.rounded-2xl.p-8.text-center.hover:border-indigo-500.transition-colors.cursor-pointer.relative', {
+              ondragover: function(e) { e.preventDefault(); },
+              ondrop: function(e) {
+                e.preventDefault();
+                const file = e.dataTransfer && e.dataTransfer.files[0];
+                if (file) {
+                  dataExchangeState.file = file;
+                  dataExchangeState.fileName = file.name;
+                  dataExchangeState.fileSize = (file.size / 1024).toFixed(1) + ' KB';
+                  m.redraw();
+                }
+              },
+              onclick: function() {
+                const el = document.getElementById('data-exchange-wizard-file');
+                if (el) el.click();
+              }
+            }, [
+              m('input#data-exchange-wizard-file[type=file]', {
+                style: 'display:none',
+                accept: '.csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv',
+                onchange: function(e) {
+                  const file = e.target.files && e.target.files[0];
+                  if (file) {
+                    dataExchangeState.file = file;
+                    dataExchangeState.fileName = file.name;
+                    dataExchangeState.fileSize = (file.size / 1024).toFixed(1) + ' KB';
+                    m.redraw();
+                  }
+                }
+              }),
+              m('div.w-12.h-12.rounded-full.bg-indigo-50.dark:bg-indigo-950/60.text-indigo-600.dark:text-indigo-400.flex.items-center.justify-center.mx-auto.mb-3', {
+                style: 'font-size: 24px;'
+              }, '📁'),
+              dataExchangeState.file ? [
+                m('p.text-sm.font-bold.text-gray-900.dark:text-slate-100', dataExchangeState.fileName),
+                m('p.text-xs.text-emerald-600.dark:text-emerald-400.font-medium.mt-1', '✓ Ready to analyze (' + dataExchangeState.fileSize + ')')
+              ] : [
+                m('p.text-sm.font-semibold.text-gray-800.dark:text-slate-200', 'Drag and drop your spreadsheet here, or click to browse'),
+                m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1', 'Supports CSV (.csv) and Microsoft Excel (.xlsx)')
+              ]
+            ]),
+
+            // Settings Grid
+            m('div.grid.grid-cols-1.sm:grid-cols-2.gap-4.bg-gray-50.dark:bg-slate-800/40.p-4.rounded-xl.border.border-gray-200.dark:border-slate-800', [
+              m('div', [
+                m('label.text-xs.font-bold.text-gray-700.dark:text-slate-300.block.mb-1.5', 'Import Strategy'),
+                m('div.space-y-2', [
+                  m('label.flex.items-center.gap-2.text-xs.text-gray-700.dark:text-slate-300.cursor-pointer', [
+                    m('input[type=radio][name=import_mode]', {
+                      value: 'insert',
+                      checked: dataExchangeState.mode === 'insert',
+                      onchange: function() { dataExchangeState.mode = 'insert'; }
+                    }),
+                    m('span', [
+                      m('strong', 'Insert Only'),
+                      m('span.text-gray-500.dark:text-slate-400.block', 'Create new records (auto-generates primary key IDs)')
+                    ])
+                  ]),
+                  m('label.flex.items-center.gap-2.text-xs.text-gray-700.dark:text-slate-300.cursor-pointer', [
+                    m('input[type=radio][name=import_mode]', {
+                      value: 'upsert',
+                      checked: dataExchangeState.mode === 'upsert',
+                      onchange: function() { dataExchangeState.mode = 'upsert'; }
+                    }),
+                    m('span', [
+                      m('strong', 'Upsert'),
+                      m('span.text-gray-500.dark:text-slate-400.block', 'Update existing rows by unique key, insert if new')
+                    ])
+                  ])
+                ])
+              ]),
+
+              m('div.space-y-3', [
+                dataExchangeState.mode === 'upsert' ? m('div', [
+                  m('label.text-xs.font-bold.text-gray-700.dark:text-slate-300.block.mb-1', 'Match Unique Key'),
+                  m('select.w-full.px-3.py-2.text-xs.rounded-lg.border.border-gray-300.dark:border-slate-700.bg-white.dark:bg-slate-900.text-gray-800.dark:text-slate-200', {
+                    value: dataExchangeState.upsertKey,
+                    onchange: function(e) { dataExchangeState.upsertKey = e.target.value; }
+                  }, (function() {
+                    const cols = dataExchangeState.modelMeta?.columns instanceof Map
+                      ? Array.from(dataExchangeState.modelMeta.columns.keys())
+                      : Object.keys(dataExchangeState.modelMeta?.columns || {});
+                    return cols.map(function(c) {
+                      return m('option', { value: c }, c + (c === dataExchangeState.modelMeta?.primaryKey ? ' (Primary Key)' : ''));
+                    });
+                  })())
+                ]) : null,
+
+                m('div.pt-1', [
+                  m('label.flex.items-center.gap-2.text-xs.text-gray-700.dark:text-slate-300.cursor-pointer', [
+                    m('input[type=checkbox]', {
+                      checked: dataExchangeState.atomic,
+                      onchange: function(e) { dataExchangeState.atomic = e.target.checked; }
+                    }),
+                    m('span', [
+                      m('strong', 'Atomic Transaction'),
+                      m('span.text-gray-500.dark:text-slate-400.block', 'Roll back all changes if any single row fails')
+                    ])
+                  ])
+                ])
+              ])
+            ])
+          ] : null,
+
+          // STEP 2: Column Mapping & Preview
+          dataExchangeState.step === 2 && dataExchangeState.previewData ? [
+            m('div.p-3.rounded-xl.bg-blue-50.dark:bg-blue-950/40.border.border-blue-200.dark:border-blue-900.flex.items-center.justify-between.text-xs.text-blue-800.dark:text-blue-300', [
+              m('span', 'Detected ' + dataExchangeState.previewData.headers.length + ' file columns across ' + dataExchangeState.previewData.totalRows + ' rows. Verify column mapping:'),
+              m('span.font-semibold', dataExchangeState.fileName)
+            ]),
+
+            // Mapping Table
+            m('div.border.border-gray-200.dark:border-slate-800.rounded-xl.overflow-hidden', [
+              m('table.w-full.text-left.text-xs', [
+                m('thead.bg-gray-100.dark:bg-slate-800.text-gray-600.dark:text-slate-300', [
+                  m('tr', [
+                    m('th.px-4.py-2.5', 'Spreadsheet Header'),
+                    m('th.px-4.py-2.5', 'Sample Value (Row 1)'),
+                    m('th.px-4.py-2.5.text-center', '➔'),
+                    m('th.px-4.py-2.5', 'Database Model Column'),
+                    m('th.px-4.py-2.5.text-center', 'Status'),
+                  ])
+                ]),
+                m('tbody.divide-y.divide-gray-100.dark:divide-slate-800', dataExchangeState.previewData.headers.map(function(fh, idx) {
+                  const sampleVal = dataExchangeState.previewData.sampleRows[0] ? dataExchangeState.previewData.sampleRows[0][idx] : '—';
+                  const currentMapped = dataExchangeState.columnMapping[fh] || '';
+
+                  return m('tr.hover:bg-gray-50/50.dark:hover:bg-slate-800/30', [
+                    m('td.px-4.py-2.5.font-bold.text-gray-900.dark:text-slate-100', fh),
+                    m('td.px-4.py-2.5.text-gray-500.dark:text-slate-400.font-mono.truncate.max-w-[150px]', sampleVal || '—'),
+                    m('td.px-4.py-2.5.text-center.text-gray-400', '➔'),
+                    m('td.px-4.py-2.5', [
+                      m('select.w-full.px-2.5.py-1.5.text-xs.rounded-lg.border.border-gray-300.dark:border-slate-700.bg-white.dark:bg-slate-900.text-gray-800.dark:text-slate-200', {
+                        value: currentMapped,
+                        onchange: function(e) {
+                          dataExchangeState.columnMapping[fh] = e.target.value || null;
+                        }
+                      }, [
+                        m('option', { value: '' }, '— Do Not Import / Skip —'),
+                        m('optgroup', { label: 'Model Columns' }, dataExchangeState.previewData.modelColumns.map(function(mc) {
+                          return m('option', { value: mc.name }, mc.name + ' (' + mc.type + (mc.required ? ', required *' : '') + ')');
+                        }))
+                      ])
+                    ]),
+                    m('td.px-4.py-2.5.text-center', [
+                      currentMapped
+                        ? m('span.px-2.py-0.5.text-2xs.font-semibold.rounded-full.bg-emerald-100.text-emerald-800.dark:bg-emerald-950/60.dark:text-emerald-300', '✓ Mapped')
+                        : m('span.px-2.py-0.5.text-2xs.font-semibold.rounded-full.bg-gray-100.text-gray-600.dark:bg-slate-800.dark:text-slate-400', '— Skipped')
+                    ])
+                  ]);
+                }))
+              ])
+            ]),
+
+            // Sample Rows Preview Table
+            m('div.space-y-2', [
+              m('h5.text-xs.font-bold.text-gray-700.dark:text-slate-300', 'Live Data Preview (First 5 Rows Mapped):'),
+              m('div.border.border-gray-200.dark:border-slate-800.rounded-xl.overflow-x-auto.max-h-48', [
+                m('table.w-full.text-left.text-xs', [
+                  m('thead.bg-gray-100.dark:bg-slate-800.text-gray-600.dark:text-slate-300', [
+                    m('tr', dataExchangeState.previewData.headers.map(function(fh) {
+                      const target = dataExchangeState.columnMapping[fh];
+                      return m('th.px-3.py-2.whitespace-nowrap', [
+                        m('span.text-gray-900.dark:text-slate-100.font-bold', target || '(skipped)'),
+                        m('span.text-gray-400.text-2xs.block', 'from ' + fh)
+                      ]);
+                    }))
+                  ]),
+                  m('tbody.divide-y.divide-gray-100.dark:divide-slate-800', dataExchangeState.previewData.sampleRows.slice(0, 5).map(function(row) {
+                    return m('tr', row.map(function(cell) {
+                      return m('td.px-3.py-1.5.text-gray-600.dark:text-slate-300.whitespace-nowrap.truncate.max-w-[200px]', cell || '—');
+                    }));
+                  }))
+                ])
+              ])
+            ])
+          ] : null,
+
+          // STEP 3: Execution Results
+          dataExchangeState.step === 3 && dataExchangeState.results ? [
+            m('div.text-center.py-4', [
+              m('div.w-16.h-16.rounded-full.flex.items-center.justify-center.mx-auto.mb-3', {
+                class: dataExchangeState.results.failed === 0
+                  ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400',
+                style: 'font-size: 32px;'
+              }, dataExchangeState.results.failed === 0 ? '✓' : '⚠'),
+              m('h3.text-lg.font-bold.text-gray-900.dark:text-slate-100',
+                dataExchangeState.results.failed === 0 ? 'Import Completed Successfully!' : 'Import Completed with Failures'),
+              m('p.text-xs.text-gray-500.dark:text-slate-400.mt-1',
+                'Finished processing ' + (dataExchangeState.results.totalRows || (dataExchangeState.results.created + dataExchangeState.results.updated + dataExchangeState.results.failed)) + ' rows into ' + modelLabel + '.')
+            ]),
+
+            // Results KPI Grid
+            m('div.grid.grid-cols-4.gap-3', [
+              m('div.p-4.rounded-xl.bg-gray-50.dark:bg-slate-800/50.border.border-gray-200.dark:border-slate-800.text-center', [
+                m('div.text-xs.font-semibold.text-gray-500.dark:text-slate-400', 'Total Rows'),
+                m('div.text-xl.font-extrabold.text-gray-900.dark:text-slate-100.mt-1', dataExchangeState.results.totalRows || (dataExchangeState.results.created + dataExchangeState.results.updated + dataExchangeState.results.failed))
+              ]),
+              m('div.p-4.rounded-xl.bg-emerald-50.dark:bg-emerald-950/40.border.border-emerald-200.dark:border-emerald-900/60.text-center', [
+                m('div.text-xs.font-semibold.text-emerald-700.dark:text-emerald-300', 'Created'),
+                m('div.text-xl.font-extrabold.text-emerald-600.dark:text-emerald-400.mt-1', dataExchangeState.results.created)
+              ]),
+              m('div.p-4.rounded-xl.bg-blue-50.dark:bg-blue-950/40.border.border-blue-200.dark:border-blue-900/60.text-center', [
+                m('div.text-xs.font-semibold.text-blue-700.dark:text-blue-300', 'Updated'),
+                m('div.text-xl.font-extrabold.text-blue-600.dark:text-blue-400.mt-1', dataExchangeState.results.updated || 0)
+              ]),
+              m('div.p-4.rounded-xl.bg-red-50.dark:bg-red-950/40.border.border-red-200.dark:border-red-900/60.text-center', [
+                m('div.text-xs.font-semibold.text-red-700.dark:text-red-300', 'Failed'),
+                m('div.text-xl.font-extrabold.text-red-600.dark:text-red-400.mt-1', dataExchangeState.results.failed)
+              ]),
+            ]),
+
+            // Error Log Table if failed > 0
+            dataExchangeState.results.errors && dataExchangeState.results.errors.length > 0 ? [
+              m('div.space-y-2', [
+                m('h5.text-xs.font-bold.text-red-600.dark:text-red-400', 'Row Validation & Execution Errors (' + dataExchangeState.results.errors.length + '):'),
+                m('div.border.border-red-200.dark:border-red-900/60.rounded-xl.overflow-hidden.max-h-48.overflow-y-auto', [
+                  m('table.w-full.text-left.text-xs', [
+                    m('thead.bg-red-50.dark:bg-red-950/40.text-red-800.dark:text-red-300', [
+                      m('tr', [
+                        m('th.px-3.py-2', 'Row'),
+                        m('th.px-3.py-2', 'Column'),
+                        m('th.px-3.py-2', 'Value'),
+                        m('th.px-3.py-2', 'Reason'),
+                      ])
+                    ]),
+                    m('tbody.divide-y.divide-red-100.dark:divide-red-900/40', dataExchangeState.results.errors.map(function(errItem) {
+                      return m('tr', [
+                        m('td.px-3.py-1.5.font-bold.text-red-700.dark:text-red-400', '#' + errItem.row),
+                        m('td.px-3.py-1.5.text-gray-600.dark:text-slate-300', errItem.column || '—'),
+                        m('td.px-3.py-1.5.font-mono.text-gray-500.dark:text-slate-400', errItem.value !== undefined && errItem.value !== null ? String(errItem.value) : '—'),
+                        m('td.px-3.py-1.5.text-red-600.dark:text-red-300', errItem.message),
+                      ]);
+                    }))
+                  ])
+                ])
+              ])
+            ] : null,
+          ] : null,
+        ]),
+
+        // Modal Footer
+        m('div.px-6.py-4.border-t.border-gray-100.dark:border-slate-800.bg-gray-50/50.dark:bg-slate-800/40.flex.items-center.justify-between', [
+          dataExchangeState.step === 1 ? [
+            m('button.px-4.py-2.text-xs.font-semibold.text-gray-700.dark:text-slate-300.hover:bg-gray-100.dark:hover:bg-slate-800.rounded-lg', {
+              onclick: function() { dataExchangeState.importOpen = false; }
+            }, 'Cancel'),
+            m('button.px-5.py-2.text-xs.font-bold.text-white.bg-indigo-600.hover:bg-indigo-700.rounded-lg.shadow-sm.flex.items-center.gap-2', {
+              disabled: !dataExchangeState.file || dataExchangeState.loading,
+              onclick: fetchImportPreview
+            }, dataExchangeState.loading ? 'Analyzing File...' : 'Next: Preview & Map Columns ➔')
+          ] : null,
+
+          dataExchangeState.step === 2 ? [
+            m('button.px-4.py-2.text-xs.font-semibold.text-gray-700.dark:text-slate-300.hover:bg-gray-100.dark:hover:bg-slate-800.rounded-lg', {
+              onclick: function() { dataExchangeState.step = 1; }
+            }, '⬅ Back to Upload'),
+            m('button.px-5.py-2.text-xs.font-bold.text-white.bg-indigo-600.hover:bg-indigo-700.rounded-lg.shadow-sm.flex.items-center.gap-2', {
+              disabled: dataExchangeState.loading,
+              onclick: executeImport
+            }, dataExchangeState.loading ? 'Importing Rows...' : 'Start Import ➔')
+          ] : null,
+
+          dataExchangeState.step === 3 ? [
+            m('div'),
+            m('button.px-5.py-2.text-xs.font-bold.text-white.bg-indigo-600.hover:bg-indigo-700.rounded-lg.shadow-sm', {
+              onclick: function() {
+                dataExchangeState.importOpen = false;
+                loadRecords(dataExchangeState.modelName, state.pagination.page, state.filters);
+              }
+            }, 'Done & Refresh Records')
+          ] : null,
+        ])
+      ])
+    ]);
+  }
+};
+
+// Visual Data Exchange Export Modal
+var DataExchangeExportModal = {
+  view: function() {
+    if (!dataExchangeState.exportOpen) return null;
+    const modelLabel = dataExchangeState.modelMeta?.label || dataExchangeState.modelName;
+    const cols = Object.keys(dataExchangeState.exportColumns);
+
+    return m('div.fixed.inset-0.z-50.flex.items-center.justify-center.p-4', [
+      m('div.fixed.inset-0.bg-black/60.backdrop-blur-sm', {
+        onclick: function() {
+          if (!dataExchangeState.exportLoading) dataExchangeState.exportOpen = false;
+        }
+      }),
+      m('div.relative.bg-white.dark:bg-slate-900.rounded-2xl.shadow-2xl.border.border-gray-200.dark:border-slate-800.max-w-lg.w-full.flex.flex-col.overflow-hidden.z-10', [
+        // Modal Header
+        m('div.px-6.py-4.border-b.border-gray-100.dark:border-slate-800.flex.items-center.justify-between.bg-gray-50/50.dark:bg-slate-800/40', [
+          m('div.flex.items-center.gap-3', [
+            m('div.w-9.h-9.rounded-xl.bg-emerald-100.dark:bg-emerald-950/70.text-emerald-600.dark:text-emerald-400.flex.items-center.justify-center.font-bold', '📤'),
+            m('div', [
+              m('h3.text-base.font-bold.text-gray-900.dark:text-slate-100', 'Export Model Records'),
+              m('p.text-xs.text-gray-500.dark:text-slate-400', 'Source: ' + modelLabel)
+            ])
+          ]),
+          m('button.text-gray-400.hover:text-gray-600.dark:hover:text-slate-200.p-1.5.rounded-lg', {
+            onclick: function() { dataExchangeState.exportOpen = false; }
+          }, '✕')
+        ]),
+
+        // Modal Body
+        m('div.p-6.space-y-5.overflow-y-auto.max-h-[70vh]', [
+          // Format Selection
+          m('div', [
+            m('label.text-xs.font-bold.text-gray-700.dark:text-slate-300.block.mb-2', 'Export Format'),
+            m('div.grid.grid-cols-2.gap-3', [
+              m('div.p-3.rounded-xl.border.cursor-pointer.flex.items-center.gap-3.transition-colors', {
+                class: dataExchangeState.exportFormat === 'xlsx'
+                  ? 'border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 font-bold'
+                  : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 text-gray-700 dark:text-slate-300',
+                onclick: function() { dataExchangeState.exportFormat = 'xlsx'; }
+              }, [
+                m('span.text-2xl', '📗'),
+                m('div', [
+                  m('div.text-xs', 'Excel Spreadsheet'),
+                  m('div.text-2xs.text-gray-500.dark:text-slate-400.font-normal', '.xlsx format with styles')
+                ])
+              ]),
+
+              m('div.p-3.rounded-xl.border.cursor-pointer.flex.items-center.gap-3.transition-colors', {
+                class: dataExchangeState.exportFormat === 'csv'
+                  ? 'border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 font-bold'
+                  : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 text-gray-700 dark:text-slate-300',
+                onclick: function() { dataExchangeState.exportFormat = 'csv'; }
+              }, [
+                m('span.text-2xl', '📄'),
+                m('div', [
+                  m('div.text-xs', 'CSV File'),
+                  m('div.text-2xs.text-gray-500.dark:text-slate-400.font-normal', 'RFC 4180 with UTF-8 BOM')
+                ])
+              ])
+            ])
+          ]),
+
+          // Scope Selection
+          dataExchangeState.selectedRecords.length > 0 ? m('div', [
+            m('label.text-xs.font-bold.text-gray-700.dark:text-slate-300.block.mb-1.5', 'Export Scope'),
+            m('div.flex.gap-4 text-xs', [
+              m('label.flex.items-center.gap-1.5.cursor-pointer', [
+                m('input[type=radio][name=export_scope]', {
+                  checked: dataExchangeState.exportScope === 'selected',
+                  onchange: function() { dataExchangeState.exportScope = 'selected'; }
+                }),
+                'Selected Only (' + dataExchangeState.selectedRecords.length + ' rows)'
+              ]),
+              m('label.flex.items-center.gap-1.5.cursor-pointer', [
+                m('input[type=radio][name=export_scope]', {
+                  checked: dataExchangeState.exportScope === 'all',
+                  onchange: function() { dataExchangeState.exportScope = 'all'; }
+                }),
+                'All Matching Records'
+              ])
+            ])
+          ]) : null,
+
+          // Column Selection
+          m('div', [
+            m('div.flex.items-center.justify-between.mb-2', [
+              m('label.text-xs.font-bold.text-gray-700.dark:text-slate-300', 'Select Columns to Include'),
+              m('div.flex.gap-2', [
+                m('button.text-2xs.text-indigo-600.dark:text-indigo-400.hover:underline.font-semibold', {
+                  onclick: function() {
+                    for (const c of cols) dataExchangeState.exportColumns[c] = true;
+                  }
+                }, 'Select All'),
+                m('span.text-gray-400', '·'),
+                m('button.text-2xs.text-gray-500.dark:text-slate-400.hover:underline.font-semibold', {
+                  onclick: function() {
+                    for (const c of cols) dataExchangeState.exportColumns[c] = false;
+                  }
+                }, 'Deselect All')
+              ])
+            ]),
+            m('div.grid.grid-cols-2.gap-2.border.border-gray-200.dark:border-slate-800.rounded-xl.p-3.max-h-48.overflow-y-auto', cols.map(function(c) {
+              return m('label.flex.items-center.gap-2.text-xs.text-gray-700.dark:text-slate-300.cursor-pointer', [
+                m('input[type=checkbox]', {
+                  checked: !!dataExchangeState.exportColumns[c],
+                  onchange: function(e) {
+                    dataExchangeState.exportColumns[c] = e.target.checked;
+                  }
+                }),
+                c
+              ]);
+            }))
+          ])
+        ]),
+
+        // Modal Footer
+        m('div.px-6.py-4.border-t.border-gray-100.dark:border-slate-800.bg-gray-50/50.dark:bg-slate-800/40.flex.items-center.justify-end.gap-3', [
+          m('button.px-4.py-2.text-xs.font-semibold.text-gray-700.dark:text-slate-300.hover:bg-gray-100.dark:hover:bg-slate-800.rounded-lg', {
+            onclick: function() { dataExchangeState.exportOpen = false; }
+          }, 'Cancel'),
+          m('button.px-5.py-2.text-xs.font-bold.text-white.bg-emerald-600.hover:bg-emerald-700.rounded-lg.shadow-sm.flex.items-center.gap-2', {
+            disabled: dataExchangeState.exportLoading,
+            onclick: executeExport
+          }, dataExchangeState.exportLoading ? 'Generating Export...' : 'Download Export ➔')
+        ])
+      ])
+    ]);
+  }
+};
+
 // Record List Component - displays records with dynamic columns
 const RecordList = {
   oninit(vnode) {
@@ -282,65 +991,18 @@ const RecordList = {
         ]),
         m('.flex.flex-wrap.items-center.gap-2', [
           m('button.inline-flex.items-center.gap-2.px-4.py-2.text-sm.font-medium.text-indigo-700.bg-white.dark:bg-slate-800.border.border-indigo-200.rounded-lg.hover:bg-indigo-50.transition-colors', {
-            onclick: async () => {
-              try {
-                const payload = { selectAll: true, filters: state.filters };
-                if (state.trashedView) payload.trashed = 'only';
-                await downloadDataExchangeXlsx(modelName, payload);
-              } catch (err) {
-                notifyError('Error: ' + err.message);
-              }
+            onclick: () => {
+              openDataExchangeExport(modelName, modelMeta, state.selectedRecords);
             },
           }, [
             m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
               m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' })
             ),
-            'Export Excel',
+            'Export',
           ]),
-          !state.trashedView ? m('input[type=file]', {
-            id: 'data-exchange-import-' + modelName,
-            style: 'display:none',
-            accept: '.csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv',
-            onchange: async (e) => {
-              const file = e.target.files && e.target.files[0];
-              e.target.value = '';
-              if (!file) return;
-              const adminPath = window.__ADMIN_PATH__ || '/_admin';
-              const mode = (await confirmAction({
-                title: 'Import Mode',
-                message: 'Confirm to upsert records matching existing IDs, or cancel to insert as new records only.',
-                confirmText: 'Upsert by ID',
-                cancelText: 'Insert only'
-              })) ? 'upsert' : 'insert';
-              const upsertKey = 'id';
-              const fd = new FormData();
-              fd.append('file', file);
-              try {
-                const fetchFn = (typeof fetchWithTimeout === 'function' ? fetchWithTimeout : fetch);
-                const res = await fetchFn(
-                  adminPath + '/api/data-exchange/import/' + modelName +
-                    '?mode=' + encodeURIComponent(mode) + '&upsertKey=' + encodeURIComponent(upsertKey),
-                  { method: 'POST', body: fd, credentials: 'include', timeout: 60000 }
-                );
-                const body = await res.json().catch(function () { return ({}); });
-                if (!res.ok) {
-                  throw new Error(body.error || 'Import failed');
-                }
-                var msg = 'Import finished: created ' + body.created + ', updated ' + (body.updated || 0) + ', failed ' + (body.failed || 0);
-                if (body.errors && body.errors.length) {
-                  msg += 'First errors: ' + body.errors.slice(0, 3).map(function (x) { return 'row ' + x.row + ': ' + x.message; }).join('; ');
-                }
-                notifySuccess(msg);
-                loadRecords(modelName, state.pagination.page, state.filters);
-              } catch (err) {
-                notifyError('Error: ' + err.message);
-              }
-            },
-          }) : null,
           !state.trashedView ? m('button.inline-flex.items-center.gap-2.px-4.py-2.text-sm.font-medium.text-indigo-700.bg-white.dark:bg-slate-800.border.border-indigo-200.rounded-lg.hover:bg-indigo-50.transition-colors', {
             onclick: function () {
-              var el = document.getElementById('data-exchange-import-' + modelName);
-              if (el) el.click();
+              openDataExchangeImport(modelName, modelMeta);
             },
           }, [
             m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
@@ -595,30 +1257,13 @@ const RecordList = {
                 m('button.inline-flex.items-center.gap-1.px-3.py-1.5.text-sm.font-medium.text-violet-600.bg-white dark:bg-slate-800.border.border-violet-200.rounded.hover:bg-violet-50.transition-colors', {
                   disabled: state.bulkActionInProgress,
                   onclick: async () => {
-                    state.bulkActionInProgress = true;
-                    m.redraw();
-                    try {
-                      const payload = state.selectAllMode 
-                        ? { selectAll: true, filters: state.filters }
-                        : { ids: Array.from(state.selectedRecords) };
-                      if (!state.selectAllMode && (!payload.ids || payload.ids.length === 0)) {
-                        notifyWarning('Please select at least one record to export');
-                        return;
-                      }
-                      if (state.trashedView) payload.trashed = 'only';
-                      await downloadDataExchangeXlsx(modelName, payload);
-                    } catch (err) {
-                      notifyError('Error: ' + err.message);
-                    } finally {
-                      state.bulkActionInProgress = false;
-                      m.redraw();
-                    }
+                    openDataExchangeExport(modelName, modelMeta, state.selectedRecords);
                   },
                 }, [
                   m('svg.w-4.h-4', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
                     m('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' })
                   ),
-                  'Export Excel',
+                  'Export Selected',
                 ]),
                 !state.trashedView ? m(BulkFieldUpdateDropdown, {
                   modelName: modelName,
@@ -810,6 +1455,8 @@ const RecordList = {
               onPageChange: (newPage) => loadRecords(modelName, newPage),
             }),
           ]),
+          dataExchangeState.importOpen ? m(DataExchangeImportModal) : null,
+          dataExchangeState.exportOpen ? m(DataExchangeExportModal) : null,
     ]);
   },
 };

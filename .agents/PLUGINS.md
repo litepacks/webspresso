@@ -844,14 +844,23 @@ Server-side token verification and Nunjucks form helpers for Google reCAPTCHA (v
   Provides named middleware `middleware: ['recaptcha']` and template helpers `{{ fsy.recaptchaScript() }}`, `{{ fsy.recaptchaWidget() }}`, `{{ fsy.recaptchaExecute() }}`.
 
 ### 2.32 `dataExchangePlugin` (`plugins/data-exchange`)
-Spreadsheet import (CSV/XLSX) and Excel export engine integrated into the Mithril.js Admin Panel.
-- **Why**: Allows non-technical staff to export filtered ORM model records to formatted `.xlsx` files and bulk-import records from CSV/Excel spreadsheets with field validation.
+Comprehensive Spreadsheet Import/Export Wizard with starter template generation, visual column mapping, and atomic transaction rollback, fully integrated into the Mithril.js Admin Panel.
+- **Why**: Allows administrators to export filtered ORM model records to formatted `.xlsx` or `.csv` files with column selection, download schema-tailored sample templates, map uploaded spreadsheet headers to database columns with live data preview, and perform transactional bulk imports.
 - **Options**:
   - `enabled`: Toggle plugin (default: `true`).
   - `db`: Database instance (default: `ctx.db`).
   - `adminPath`: Mount path (default: `'/_admin'`).
   - `maxRows`: Maximum row limit (default: `10000`).
   - `maxFileBytes`: Maximum upload size in bytes (default: `10485760` / 10MB).
+  - `maxPreviewRows`: Maximum preview rows returned in preview payload (default: `10`).
+- **Features**:
+  - **3-Step Visual Import Wizard**: Step 1 (Upload, Dropzone, Starter Template Downloads, Mode & Atomic switch), Step 2 (Smart Column Mapping & 5-row live preview), Step 3 (Execution Results KPI & Row Error Inspector).
+  - **Starter Template Generator**: Generates formatted CSV (with UTF-8 BOM) or Excel templates (`GET /_admin/api/data-exchange/template/:model`).
+  - **Heuristic Header Matcher**: Automatic matching of exact, case-insensitive, normalized, and aliased names (`Full Name` ➔ `name`, `Amount` ➔ `price`, `Qty` ➔ `quantity`).
+  - **Custom Column Mapping**: Map arbitrary file headers to ORM columns or skip columns before committing.
+  - **Atomic Transaction Rollback**: Pass `atomic=true` to guarantee all-or-nothing execution with zero orphaned records on validation failure.
+  - **Format-Negotiated Export**: Choose `.xlsx` or `.csv`, select column subsets, and export all matching or selected rows.
+  - **Built-in Services**: `exchange.template`, `exchange.preview`, `exchange.export`, `exchange.import`.
 - **Usage**:
   ```javascript
   const { dataExchangePlugin, adminPanelPlugin } = require('webspresso/plugins');
@@ -859,10 +868,30 @@ Spreadsheet import (CSV/XLSX) and Excel export engine integrated into the Mithri
   createApp({
     plugins: [
       adminPanelPlugin({ db }),
-      dataExchangePlugin({ maxRows: 25000 }),
+      dataExchangePlugin({ maxRows: 25000, maxFileBytes: 15 * 1024 * 1024 }),
     ],
   });
   ```
+- **Service Invocations**:
+  ```javascript
+  // Generate downloadable starter template
+  const tmpl = await ctx.service('exchange.template', { model: 'Customer', format: 'xlsx' });
+
+  // Preview and map uploaded spreadsheet
+  const preview = await ctx.service('exchange.preview', { model: 'Customer', buffer, filename: 'data.csv' });
+
+  // Export records with column filtering
+  const file = await ctx.service('exchange.export', { model: 'Customer', format: 'csv', columns: ['name', 'email'] });
+
+  // Import with custom mapping and atomic rollback
+  const res = await ctx.service('exchange.import', {
+    model: 'Customer',
+    buffer,
+    atomic: true,
+    columnMapping: { 'Contact Email': 'email' },
+  });
+  ```
+
 
 ### 2.33 `healthCheckPlugin` (`plugins/health-check.js`)
 Dedicated HTTP health check endpoint (`/health`) for load balancer probes, Kubernetes liveness, and uptime monitoring.

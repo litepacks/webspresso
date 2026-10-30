@@ -231,5 +231,52 @@ const { secret, previousSecret } = await ctx.service('webhook.rotate-secret', { 
 const result = await ctx.service('webhook.bulk-retry', { deliveryIds: [12, 13, 14] });
 ```
 
+---
+
+## 7. Data Exchange Suite (`dataExchangePlugin`)
+
+The Data Exchange Suite adds model-based spreadsheet import and export capabilities to the Admin Panel with starter template generation, visual column mapping, and atomic transaction rollback.
+
+### Core Features
+- **3-Step Import Wizard Modal:**
+  - *Step 1 (Upload & Settings):* Pre-formatted starter `.csv` (UTF-8 BOM) and `.xlsx` template downloads, dropzone, Insert vs Upsert strategy, and Atomic rollback switch.
+  - *Step 2 (Column Mapping):* Heuristic file header to model column matching, status badges (`✓ Mapped` / `— Skipped`), and 5-row live data preview table.
+  - *Step 3 (Execution Results):* Success/Failure KPI banner (`Total Rows`, `Created`, `Updated`, `Failed`), and row-by-row error diagnostics table.
+- **Spreadsheet Export Wizard Modal:** Format selection cards (styled `.xlsx` vs RFC 4180 `.csv`), scope toggle (All vs Selected records), and column selection checklist with Select All / Deselect All.
+- **Security & Integrity:** Automatic formula injection escaping (`=`, `+`, `-`, `@`), Unicode BOM for Excel, and complete transaction rollback when `atomic: true`.
+
+### Programmatic Services
+```javascript
+// 1. Generate starter spreadsheet template
+const tmpl = await ctx.service('exchange.template', {
+  model: 'Customer',
+  format: 'xlsx', // 'xlsx' | 'csv'
+  mode: 'insert', // 'insert' | 'upsert'
+});
+
+// 2. Analyze spreadsheet preview and get suggested mappings
+const preview = await ctx.service('exchange.preview', {
+  model: 'Customer',
+  buffer: fileBuffer,
+  filename: 'customers.csv',
+});
+
+// 3. Export model records with column filtering
+const exportRes = await ctx.service('exchange.export', {
+  model: 'Customer',
+  format: 'csv',
+  columns: ['name', 'email'],
+  selectAll: true,
+});
+
+// 4. Import records with custom column mapping and atomic rollback
+const importRes = await ctx.service('exchange.import', {
+  model: 'Customer',
+  buffer: fileBuffer,
+  atomic: true,
+  columnMapping: { 'Full Name': 'name', 'Contact Email': 'email' },
+});
+```
+
 
 
