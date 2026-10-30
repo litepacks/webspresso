@@ -475,6 +475,88 @@ class QueueManager extends EventEmitter {
   }
 
   /**
+   * List jobs with optional filter, pagination and sorting
+   * @param {Object} [filter={}]
+   * @returns {Promise<{ jobs: Job[], total: number, page: number, limit: number, totalPages: number }>}
+   */
+  async listJobs(filter = {}) {
+    if (this.adapter && typeof this.adapter.listJobs === 'function') {
+      return this.adapter.listJobs(filter);
+    }
+    return { jobs: [], total: 0, page: 1, limit: 20, totalPages: 0 };
+  }
+
+  /**
+   * Retry a specific job
+   * @param {string|number} jobId
+   * @param {Object} [options={}]
+   * @returns {Promise<Job|null>}
+   */
+  async retryJob(jobId, options = {}) {
+    if (this.adapter && typeof this.adapter.retryJob === 'function') {
+      const job = await this.adapter.retryJob(jobId, options);
+      if (job) {
+        this.emit('job:retried', job);
+        if (this.isRunning && !this.isPaused && this.runningCount < this.concurrency) {
+          setImmediate(() => this._tick());
+        }
+      }
+      return job;
+    }
+    return null;
+  }
+
+  /**
+   * Bulk retry jobs by ID array
+   * @param {Array<string|number>} ids
+   * @param {Object} [options={}]
+   * @returns {Promise<{ retried: number, jobs: Job[] }>}
+   */
+  async bulkRetry(ids = [], options = {}) {
+    if (this.adapter && typeof this.adapter.bulkRetry === 'function') {
+      const res = await this.adapter.bulkRetry(ids, options);
+      if (res.retried > 0 && this.isRunning && !this.isPaused && this.runningCount < this.concurrency) {
+        setImmediate(() => this._tick());
+      }
+      return res;
+    }
+    const results = [];
+    for (const id of ids) {
+      const retried = await this.retryJob(id, options);
+      if (retried) results.push(retried);
+    }
+    return { retried: results.length, jobs: results };
+  }
+
+  /**
+   * Cancel (remove) a job by ID
+   * @param {string|number} jobId
+   * @returns {Promise<{ success: boolean, id: string|number }>}
+   */
+  async cancelJob(jobId) {
+    if (this.adapter && typeof this.adapter.cancelJob === 'function') {
+      const res = await this.adapter.cancelJob(jobId);
+      this.emit('job:cancelled', jobId);
+      return res;
+    }
+    return { success: false, id: jobId };
+  }
+
+  /**
+   * Purge jobs (completed/failed/all)
+   * @param {Object} [options={}]
+   * @param {string|string[]} [options.status=['completed', 'failed']]
+   * @returns {Promise<number>}
+   */
+  async purgeJobs(options = {}) {
+    const statuses = options.status || ['completed', 'failed'];
+    return this.clean({
+      status: statuses,
+      days: 0,
+    });
+  }
+
+  /**
    * Auto-discover and register job files from directory recursively
    * @param {string} dirPath
    */

@@ -278,5 +278,50 @@ const importRes = await ctx.service('exchange.import', {
 });
 ```
 
+---
+
+## 8. Background Job Queue (`queuePlugin`)
+
+The Job Queue plugin integrates Webspresso's background worker engine (`core/queue`) with the Admin Panel SPA (`/_admin#!/queue`) for real-time monitoring, inspection, and ad-hoc execution.
+
+### Core Features
+- **Live KPI Metrics Banner:** Pending / Waiting, Running, Delayed / Due, Completed, and Failed counters, plus active worker slots.
+- **Status Tabs & Search:** Status filters (`All`, `Pending`, `Running`, `Delayed`, `Completed`, `Failed`, `Recurring Schedules`), registered job type selector, and text search across IDs, names, errors, and payloads.
+- **Job Detail Modal (`JobDetailModal`):**
+  - Full multiline execution error stack trace with 1-click **Copy Error** button.
+  - Formatted JSON data payload and execution result with **Copy JSON** buttons.
+  - Complete metadata grid (ID, Type, Status, Priority, Attempts, Timeout, Timestamps).
+  - 1-click **Re-queue Job** and **Delete Job** actions.
+- **Manual Dispatch Modal (`JobDispatchModal`):**
+  - Enqueue ad-hoc jobs with starter presets (`email.send`, `report.generate`, `cache.warm`, `data.sync`, `custom`).
+  - Configurable priority, delay (seconds), max attempts, timeout, and interactive JSON payload editor.
+- **Bulk Operations:** Multi-row selection with 1-click bulk re-queue and bulk purge.
+- **Runtime Controls:** Instant Pause and Resume buttons for worker execution loops.
+
+### Programmatic Services
+```javascript
+// 1. Fetch real-time queue metrics
+const stats = await ctx.service('queue.stats');
+
+// 2. List jobs with search and status filtering
+const { jobs, total } = await ctx.service('queue.list', {
+  status: 'failed',
+  search: 'Stripe',
+  limit: 20,
+});
+
+// 3. Re-queue single or bulk jobs
+await ctx.service('queue.retry', { id: 'job_48821' });
+await ctx.service('queue.bulk-retry', { ids: ['job_1', 'job_2'] });
+
+// 4. Dispatch ad-hoc job with options
+await ctx.service('queue.dispatch', {
+  name: 'email.welcome',
+  data: { email: 'user@example.com' },
+  priority: 25,
+  delay: '10s',
+});
+```
+
 
 

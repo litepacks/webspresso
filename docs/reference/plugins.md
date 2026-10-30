@@ -64,7 +64,7 @@ module.exports = {
 | `redirectPlugin` | Declarative HTTP 301–308 URL redirects with method filtering | — |
 | `healthCheckPlugin` | Lightweight `/health` HTTP probe for load balancers and monitors | — |
 | `realtimePlugin` | Unified WebSocket, SSE, and Socket.IO realtime layer with Redis Pub/Sub | — |
-| `queuePlugin` | Background worker queue bridge connecting jobs to server lifecycle | — |
+| `queuePlugin` | Background worker queue bridge with Admin Dashboard SPA, error stack traces, retries & cron | [Job Queue Dashboard](/guides/queue) |
 | `siteAnalyticsPlugin` | Self-hosted privacy-friendly page view analytics & JS error tracker | — |
 | `analyticsPlugin` | Tag & snippet injector for GA4, GTM, Yandex.Metrika, Bing, Meta | — |
 | `seoCheckerPlugin` | In-browser client-side SEO analysis and diagnostics panel | — |

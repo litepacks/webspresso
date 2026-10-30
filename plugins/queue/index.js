@@ -109,6 +109,22 @@ function queuePlugin(options = {}) {
         });
       }
 
+      // Register built-in queue services if service registry is available
+      const registry = ctx.serviceRegistry || ctx.services || ctx.app?.serviceRegistry;
+      if (registry && typeof registry.register === 'function') {
+        try {
+          const { createQueueServices } = require('../../core/services/builtins/queue');
+          const services = createQueueServices({ queueManager });
+          for (const [name, def] of Object.entries(services)) {
+            if (!registry.has(name)) {
+              registry.register(name, def);
+            }
+          }
+        } catch (svcErr) {
+          console.warn('[queuePlugin] Failed to register built-in queue services:', svcErr.message);
+        }
+      }
+
       this.queue = queueManager;
     },
 
@@ -124,6 +140,59 @@ function queuePlugin(options = {}) {
     onRoutesReady(ctx) {
       if (jobsDir && fs.existsSync(jobsDir)) {
         queueManager.loadJobsFromDirectory(jobsDir);
+      }
+
+      // Check if admin-panel plugin is active
+      const adminApi = ctx.usePlugin ? ctx.usePlugin('admin-panel') : null;
+      if (adminApi && typeof adminApi.registerModule === 'function') {
+        const { createQueueApiHandlers } = require('./api-handlers');
+        const { generateQueueComponent } = require('./admin-component');
+
+        const pageTitle = options.adminTitle || 'Job Queue';
+        const apiPrefix = options.adminApiPrefix || '/queue';
+        const menuOrder = options.menuOrder !== undefined ? options.menuOrder : 55;
+        const apiHandlers = createQueueApiHandlers(queueManager, options);
+
+        adminApi.registerModule({
+          id: 'queue',
+          title: pageTitle,
+          pages: [
+            {
+              id: 'queue',
+              title: pageTitle,
+              path: '/queue',
+              icon: 'clock',
+              component: generateQueueComponent({ apiPrefix }),
+            },
+          ],
+          menu: [
+            {
+              id: 'queue',
+              label: pageTitle,
+              path: '/queue',
+              icon: 'clock',
+              order: menuOrder,
+            },
+          ],
+          api: {
+            prefix: apiPrefix,
+            routes: [
+              { method: 'get', path: '/stats', handler: apiHandlers.getStatsHandler },
+              { method: 'get', path: '/jobs', handler: apiHandlers.listJobsHandler },
+              { method: 'get', path: '/jobs/:id', handler: apiHandlers.getJobHandler },
+              { method: 'post', path: '/jobs/:id/retry', handler: apiHandlers.retryJobHandler },
+              { method: 'post', path: '/jobs/bulk-retry', handler: apiHandlers.bulkRetryHandler },
+              { method: 'post', path: '/jobs/:id/cancel', handler: apiHandlers.cancelJobHandler },
+              { method: 'delete', path: '/jobs/:id', handler: apiHandlers.cancelJobHandler },
+              { method: 'post', path: '/jobs/purge', handler: apiHandlers.purgeJobsHandler },
+              { method: 'post', path: '/dispatch', handler: apiHandlers.dispatchJobHandler },
+              { method: 'post', path: '/pause', handler: apiHandlers.pauseQueueHandler },
+              { method: 'post', path: '/resume', handler: apiHandlers.resumeQueueHandler },
+              { method: 'get', path: '/schedules', handler: apiHandlers.getSchedulesHandler },
+              { method: 'post', path: '/schedules/:id/trigger', handler: apiHandlers.triggerScheduleHandler },
+            ],
+          },
+        });
       }
     },
 

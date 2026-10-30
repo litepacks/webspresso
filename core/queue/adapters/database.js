@@ -251,7 +251,7 @@ class DatabaseQueueAdapter {
 
   /**
    * Get stats summary
-   * @returns {Promise<{ pending: number, running: number, completed: number, failed: number, total: number }>}
+   * @returns {Promise<{ pending: number, delayed: number, running: number, completed: number, failed: number, total: number }>}
    */
   async getStats() {
     await this.ensureTable();
@@ -260,7 +260,7 @@ class DatabaseQueueAdapter {
       .count('* as count')
       .groupBy('status');
 
-    const stats = { pending: 0, running: 0, completed: 0, failed: 0, total: 0 };
+    const stats = { pending: 0, delayed: 0, running: 0, completed: 0, failed: 0, total: 0 };
     for (const r of rows) {
       const count = Number(r.count || r.COUNT || 0);
       if (r.status in stats) {
@@ -268,6 +268,16 @@ class DatabaseQueueAdapter {
       }
       stats.total += count;
     }
+
+    try {
+      const now = new Date();
+      const delayedRow = await this.knex(this.tableName)
+        .where('status', 'pending')
+        .where('run_at', '>', now)
+        .count('* as count')
+        .first();
+      stats.delayed = Number(delayedRow?.count || delayedRow?.COUNT || 0);
+    } catch {}
 
     return stats;
   }
@@ -373,6 +383,142 @@ class DatabaseQueueAdapter {
   async clear() {
     await this.ensureTable();
     await this.knex(this.tableName).del();
+  }
+
+  /**
+   * List jobs with filtering, search, pagination, and sorting
+   * @param {Object} [filter={}]
+   * @param {string} [filter.status] - 'all', 'pending', 'delayed', 'running', 'completed', 'failed'
+   * @param {string} [filter.name] - Job name
+   * @param {string} [filter.search] - Substring search in id, name, error, data
+   * @param {number} [filter.page=1]
+   * @param {number} [filter.limit=20]
+   * @param {string} [filter.sortBy='createdAt']
+   * @param {'asc'|'desc'} [filter.sortOrder='desc']
+   * @returns {Promise<{ jobs: Job[], total: number, page: number, limit: number, totalPages: number }>}
+   */
+  async listJobs(filter = {}) {
+    await this.ensureTable();
+    const page = Math.max(1, Number(filter.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(filter.limit) || 20));
+    const offset = (page - 1) * limit;
+    const now = new Date();
+
+    const applyFilters = (query) => {
+      if (filter.status && filter.status !== 'all') {
+        if (filter.status === 'delayed') {
+          query.where('status', 'pending').where('run_at', '>', now);
+        } else if (filter.status === 'pending') {
+          query.where('status', 'pending').where('run_at', '<=', now);
+        } else {
+          query.where('status', filter.status);
+        }
+      }
+
+      if (filter.name) {
+        query.where('name', filter.name);
+      }
+
+      if (filter.search) {
+        const term = `%${filter.search}%`;
+        query.where((qb) => {
+          qb.where('id', 'like', term)
+            .orWhere('name', 'like', term)
+            .orWhere('error', 'like', term)
+            .orWhere('data', 'like', term);
+        });
+      }
+      return query;
+    };
+
+    const countQuery = applyFilters(this.knex(this.tableName).count('* as count')).first();
+    const totalRow = await countQuery;
+    const total = Number(totalRow?.count || totalRow?.COUNT || 0);
+
+    const sortColumnMap = {
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+      runAt: 'run_at',
+      priority: 'priority',
+      status: 'status',
+      name: 'name',
+    };
+    const sortBy = sortColumnMap[filter.sortBy] || 'created_at';
+    const sortOrder = filter.sortOrder === 'asc' ? 'asc' : 'desc';
+
+    const rows = await applyFilters(this.knex(this.tableName).select('*'))
+      .orderBy(sortBy, sortOrder)
+      .offset(offset)
+      .limit(limit);
+
+    const jobs = rows.map((r) => this._rowToJob(r));
+    return {
+      jobs,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    };
+  }
+
+  /**
+   * Reschedule or retry a job immediately or with delay
+   * @param {string|number} jobId
+   * @param {Object} [options={}]
+   * @param {number} [options.delayMs=0]
+   * @param {boolean} [options.resetAttempts=true]
+   * @returns {Promise<Job|null>}
+   */
+  async retryJob(jobId, options = {}) {
+    await this.ensureTable();
+    const delayMs = options.delayMs || options.delay || 0;
+    const runAt = new Date(Date.now() + Math.max(0, delayMs));
+    const updatedAt = new Date();
+
+    const updates = {
+      status: 'pending',
+      run_at: runAt,
+      error: null,
+      updated_at: updatedAt,
+    };
+    if (options.resetAttempts !== false) {
+      updates.attempts = 0;
+    }
+
+    const updated = await this.knex(this.tableName)
+      .where('id', String(jobId))
+      .update(updates);
+
+    if (!updated) return null;
+    return this.getJob(jobId);
+  }
+
+  /**
+   * Bulk retry jobs by ID
+   * @param {Array<string|number>} jobIds
+   * @param {Object} [options={}]
+   * @returns {Promise<{ retried: number, jobs: Job[] }>}
+   */
+  async bulkRetry(jobIds = [], options = {}) {
+    const results = [];
+    for (const id of jobIds) {
+      const retried = await this.retryJob(id, options);
+      if (retried) results.push(retried);
+    }
+    return { retried: results.length, jobs: results };
+  }
+
+  /**
+   * Cancel (delete) a job by ID
+   * @param {string|number} jobId
+   * @returns {Promise<{ success: boolean, id: string|number }>}
+   */
+  async cancelJob(jobId) {
+    await this.ensureTable();
+    const deleted = await this.knex(this.tableName)
+      .where('id', String(jobId))
+      .del();
+    return { success: deleted > 0, id: jobId };
   }
 
   /**

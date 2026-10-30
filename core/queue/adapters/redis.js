@@ -329,6 +329,7 @@ class RedisQueueAdapter {
     const totalPending = pending + delayed;
     return {
       pending: totalPending,
+      delayed,
       running,
       completed,
       failed,

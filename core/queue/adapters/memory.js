@@ -140,28 +140,176 @@ class MemoryQueueAdapter {
 
   /**
    * Get queue statistics
-   * @returns {Promise<{ pending: number, running: number, completed: number, failed: number, total: number }>}
+   * @returns {Promise<{ pending: number, delayed: number, running: number, completed: number, failed: number, total: number }>}
    */
   async getStats() {
     let pending = 0;
+    let delayed = 0;
     let running = 0;
     let completed = 0;
     let failed = 0;
 
+    const now = Date.now();
     for (const job of this.jobs.values()) {
-      if (job.status === 'pending') pending++;
-      else if (job.status === 'running') running++;
-      else if (job.status === 'completed') completed++;
-      else if (job.status === 'failed') failed++;
+      if (job.status === 'pending') {
+        if (job.runAt && job.runAt.getTime() > now) {
+          delayed++;
+        }
+        pending++;
+      } else if (job.status === 'running') {
+        running++;
+      } else if (job.status === 'completed') {
+        completed++;
+      } else if (job.status === 'failed') {
+        failed++;
+      }
     }
 
     return {
       pending,
+      delayed,
       running,
       completed,
       failed,
       total: this.jobs.size,
     };
+  }
+
+  /**
+   * List jobs with filtering, search, pagination, and sorting
+   * @param {Object} [filter={}]
+   * @param {string} [filter.status] - 'all', 'pending', 'delayed', 'running', 'completed', 'failed'
+   * @param {string} [filter.name] - Job name
+   * @param {string} [filter.search] - Substring search in id, name, error, data
+   * @param {number} [filter.page=1]
+   * @param {number} [filter.limit=20]
+   * @param {string} [filter.sortBy='createdAt']
+   * @param {'asc'|'desc'} [filter.sortOrder='desc']
+   * @returns {Promise<{ jobs: Job[], total: number, page: number, limit: number, totalPages: number }>}
+   */
+  async listJobs(filter = {}) {
+    const page = Math.max(1, Number(filter.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(filter.limit) || 20));
+    const now = Date.now();
+    const searchTerm = filter.search ? String(filter.search).trim().toLowerCase() : null;
+    const filterStatus = filter.status && filter.status !== 'all' ? filter.status : null;
+    const filterName = filter.name ? filter.name : null;
+
+    let items = Array.from(this.jobs.values());
+
+    // Status filter
+    if (filterStatus) {
+      if (filterStatus === 'delayed') {
+        items = items.filter((j) => j.status === 'pending' && j.runAt && j.runAt.getTime() > now);
+      } else if (filterStatus === 'pending') {
+        items = items.filter((j) => j.status === 'pending' && (!j.runAt || j.runAt.getTime() <= now));
+      } else {
+        items = items.filter((j) => j.status === filterStatus);
+      }
+    }
+
+    // Name filter
+    if (filterName) {
+      items = items.filter((j) => j.name === filterName);
+    }
+
+    // Search filter (id, name, error, data)
+    if (searchTerm) {
+      items = items.filter((j) => {
+        if (String(j.id).toLowerCase().includes(searchTerm)) return true;
+        if (String(j.name).toLowerCase().includes(searchTerm)) return true;
+        if (j.error) {
+          const errStr = typeof j.error === 'string' ? j.error : (j.error.message || j.error.stack || JSON.stringify(j.error));
+          if (errStr.toLowerCase().includes(searchTerm)) return true;
+        }
+        if (j.data) {
+          try {
+            if (JSON.stringify(j.data).toLowerCase().includes(searchTerm)) return true;
+          } catch {}
+        }
+        return false;
+      });
+    }
+
+    const total = items.length;
+
+    // Sorting
+    const sortBy = filter.sortBy || 'createdAt';
+    const sortOrder = filter.sortOrder === 'asc' ? 1 : -1;
+
+    items.sort((a, b) => {
+      let valA = a[sortBy];
+      let valB = b[sortBy];
+      if (valA instanceof Date) valA = valA.getTime();
+      if (valB instanceof Date) valB = valB.getTime();
+      if (valA == null) valA = 0;
+      if (valB == null) valB = 0;
+      if (valA < valB) return -1 * sortOrder;
+      if (valA > valB) return 1 * sortOrder;
+      return 0;
+    });
+
+    // Pagination
+    const startIndex = (page - 1) * limit;
+    const paginated = items.slice(startIndex, startIndex + limit);
+
+    return {
+      jobs: paginated,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    };
+  }
+
+  /**
+   * Reschedule or retry a job immediately or with delay
+   * @param {string|number} jobId
+   * @param {Object} [options={}]
+   * @param {number} [options.delayMs=0]
+   * @param {boolean} [options.resetAttempts=true]
+   * @returns {Promise<Job|null>}
+   */
+  async retryJob(jobId, options = {}) {
+    const job = this.jobs.get(jobId);
+    if (!job) return null;
+    const delayMs = options.delayMs || options.delay || 0;
+    job.status = 'pending';
+    job.runAt = new Date(Date.now() + Math.max(0, delayMs));
+    job.error = null;
+    if (options.resetAttempts !== false) {
+      job.attempts = 0;
+    }
+    job.updatedAt = new Date();
+    return job;
+  }
+
+  /**
+   * Bulk retry jobs by ID
+   * @param {Array<string|number>} jobIds
+   * @param {Object} [options={}]
+   * @returns {Promise<{ retried: number, jobs: Job[] }>}
+   */
+  async bulkRetry(jobIds = [], options = {}) {
+    const results = [];
+    for (const id of jobIds) {
+      const retried = await this.retryJob(id, options);
+      if (retried) results.push(retried);
+    }
+    return { retried: results.length, jobs: results };
+  }
+
+  /**
+   * Cancel (delete) a job by ID
+   * @param {string|number} jobId
+   * @returns {Promise<{ success: boolean, id: string|number }>}
+   */
+  async cancelJob(jobId) {
+    const existed = this.jobs.has(jobId);
+    if (existed) {
+      this.jobs.delete(jobId);
+    }
+    return { success: existed, id: jobId };
   }
 
   /**

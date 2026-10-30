@@ -917,7 +917,25 @@ Dedicated HTTP health check endpoint (`/health`) for load balancer probes, Kuber
 
 ### 2.34 `queuePlugin` (`plugins/queue`)
 Modular plugin wrapper for Webspresso's background job queue engine (`core/queue`).
-- **Why**: Connects background workers (`jobs/`) to Express lifecycle, automatically starts worker poll loops on server listen, and gracefully drains jobs on shutdown.
+- **Why**: Connects background workers (`jobs/`) to Express lifecycle, provides a full-featured Mithril.js Admin Panel Dashboard (`/_admin#!/queue`), automatically starts worker poll loops on server listen, and gracefully drains jobs on shutdown.
+- **Admin Dashboard Integration**:
+  - **Live KPI Banner**: Real-time metrics for Pending, Running, Delayed, Completed, and Failed jobs with active worker telemetry.
+  - **Status Tabs & Search**: Filter jobs by state (`All`, `Pending`, `Running`, `Delayed`, `Completed`, `Failed`, `Recurring Schedules`) and full-text search across IDs, names, errors, and payloads.
+  - **Job Detail Modal**: Full multiline execution error stack trace with 1-click copy, formatted JSON data payload, and metadata inspection.
+  - **1-Click & Bulk Retries**: Re-queue failed or completed jobs individually or in bulk.
+  - **Manual Dispatch Modal**: Enqueue ad-hoc jobs on-demand with preset templates (`email.send`, `report.generate`, `cache.warm`, `data.sync`, `custom`), custom priority, delay, timeout, and JSON payload editor.
+  - **Pause / Resume Controls**: Dynamically pause or resume worker processing from the UI.
+- **Built-in Services**:
+  - `queue.stats`: Fetch real-time queue metrics and worker counts.
+  - `queue.list`: List paginated jobs with status, search, and sorting.
+  - `queue.get`: Retrieve job details by ID.
+  - `queue.retry`: Re-queue a failed or completed job.
+  - `queue.bulk-retry`: Bulk re-queue multiple jobs by ID.
+  - `queue.cancel`: Cancel and remove a job from queue.
+  - `queue.purge`: Prune completed or failed jobs immediately.
+  - `queue.dispatch`: Enqueue a background job with custom options.
+  - `queue.pause`: Pause worker processing loop.
+  - `queue.resume`: Resume worker processing loop.
 - **Options**:
   - `adapter`: `'memory'`, `'database'` / `'db'`, `'redis'`, `'wait-until'`, `'cloudflare'`, or a custom `QueueAdapter` instance (default: `'memory'`).
   - `db`: Database instance for database adapter.
@@ -926,15 +944,24 @@ Modular plugin wrapper for Webspresso's background job queue engine (`core/queue
   - `pollInterval`: Polling interval in ms (default: `500`).
   - `jobsDir`: Path to jobs directory (default: `<cwd>/jobs`).
   - `autoStart`: Automatically start worker loop (default: `true`).
-  - `retention`: Auto-retention cleanup config.
+  - `retentionDays`: Auto-retention cleanup period in days.
+  - `adminTitle`: Custom navigation label for Admin Panel (default: `'Job Queue'`).
+  - `adminApiPrefix`: Route prefix for admin API endpoints (default: `'/queue'`).
 - **Usage**:
   ```javascript
-  const { queuePlugin } = require('webspresso/plugins');
+  const { createApp, adminPanelPlugin, queuePlugin } = require('webspresso');
 
-  queuePlugin({
-    adapter: 'database',
-    concurrency: 4,
-    pollInterval: 1000,
+  createApp({
+    plugins: [
+      adminPanelPlugin({ db }),
+      queuePlugin({
+        adapter: 'database',
+        concurrency: 4,
+        pollInterval: 500,
+        retentionDays: 7,
+      }),
+    ],
   });
   ```
+
 

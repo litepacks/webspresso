@@ -288,3 +288,52 @@ module.exports = {
 - On `queue.drain()` or `queue.stop()`, recurring schedules are stopped and active dispatched jobs are given time to complete.
 - Overlap prevention (`overlap: false`) hooks into `job:completed` and `job:failed` events, ensuring slow asynchronous tasks never collide or duplicate.
 
+---
+
+## 4. Admin Panel SPA Dashboard (`/_admin#!/queue`)
+
+When `adminPanelPlugin` is enabled alongside `queuePlugin`, a modern Mithril.js management interface is automatically mounted at `/_admin#!/queue`:
+- **Real-Time KPI Cards**: Live counters for Pending, Running, Delayed, Completed, and Failed jobs, plus worker slot capacity.
+- **Status Tabs & Filtering**: 1-click status filtering, registered job type dropdown, and multi-field search across IDs, names, errors, and JSON payloads.
+- **Job Detail Modal (`JobDetailModal`)**: Full multiline execution error stack trace with 1-click copy, formatted JSON data payload, execution result, and metadata grid.
+- **1-Click & Bulk Retries**: Re-queue failed or completed jobs individually or in bulk.
+- **Manual Dispatch Modal (`JobDispatchModal`)**: Enqueue ad-hoc jobs on-demand with preset templates (`email.send`, `report.generate`, `cache.warm`, `data.sync`, `custom`), custom priority, delay, timeout, and JSON payload editor.
+- **Worker Controls**: Pause or resume worker processing with 1 click.
+
+---
+
+## 5. Built-in Framework Services
+
+Official services registered under `ctx.serviceRegistry` for programmatic queue control:
+
+```javascript
+// Fetch stats
+const stats = await ctx.service('queue.stats');
+
+// List jobs
+const { jobs, total } = await ctx.service('queue.list', { status: 'failed', limit: 10 });
+
+// Retry single or bulk
+await ctx.service('queue.retry', { id: 'job_123' });
+await ctx.service('queue.bulk-retry', { ids: ['job_1', 'job_2'] });
+
+// Cancel / remove job
+await ctx.service('queue.cancel', { id: 'job_123' });
+
+// Purge completed and failed jobs
+await ctx.service('queue.purge', { status: ['completed', 'failed'] });
+
+// Dispatch ad-hoc job
+await ctx.service('queue.dispatch', {
+  name: 'email.welcome',
+  data: { email: 'user@example.com' },
+  priority: 20,
+  delay: '10s',
+});
+
+// Pause / Resume
+await ctx.service('queue.pause');
+await ctx.service('queue.resume');
+```
+
+
