@@ -69,9 +69,9 @@ function configureCommand(command) {
         packageJson.scripts.dev = 'npm run watch:css & node --watch server.js';
       }
       
-      // Update start script to build CSS
+      // Update start script to build CSS (webspresso build runs Tailwind) and start cross-platform
       if (packageJson.scripts.start) {
-        packageJson.scripts.start = 'npm run build:css && NODE_ENV=production node server.js';
+        packageJson.scripts.start = 'webspresso build && webspresso start';
       }
       
       fs.writeFileSync('package.json', JSON.stringify(packageJson, null, 2) + '\n');

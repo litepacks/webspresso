@@ -325,6 +325,23 @@ describe('Cloud Metrics & Distributed Tracing (core/metrics)', () => {
       expect(okRes.text).toContain('# TYPE webspresso_http_requests_total counter');
     });
 
+    it('warns in production when the scrape endpoint has no auth token', () => {
+      const originalEnv = process.env.NODE_ENV;
+      const warn = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+      try {
+        process.env.NODE_ENV = 'production';
+        setupMetricsMiddleware(express(), { enabled: true });
+        expect(warn.mock.calls.flat().join(' ')).toMatch(/\/metrics is publicly readable/);
+
+        warn.mockClear();
+        setupMetricsMiddleware(express(), { enabled: true, auth: 'token-abc' });
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        process.env.NODE_ENV = originalEnv;
+        warn.mockRestore();
+      }
+    });
+
     it('ignores metrics scrape endpoints in request tracking to avoid scraping noise', async () => {
       const app = express();
       const manager = setupMetricsMiddleware(app, true);

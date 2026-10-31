@@ -973,6 +973,8 @@ export interface HealthCheckConfig {
   checks?: Record<string, (context: unknown) => Promise<unknown> | unknown>;
   /** Custom headers to attach to health probe responses */
   headers?: Record<string, string>;
+  /** Include pid/nodeVersion/platform and raw dependency error messages (default: true outside production) */
+  exposeDetails?: boolean;
 }
 
 export function normalizeHealthConfig(options?: unknown): unknown;
@@ -1201,6 +1203,8 @@ export interface CircuitBreakerOptions {
   rollingWindow?: number | string;
   rollingWindowMs?: number | string;
   successThreshold?: number;
+  /** Concurrent trial calls allowed in HALF_OPEN (default: successThreshold) */
+  halfOpenMaxCalls?: number;
   resetTimeout?: number | string;
   resetTimeoutMs?: number | string;
   timeout?: number | string;
@@ -2048,6 +2052,8 @@ export interface RestMetadata {
   enabled?: boolean;
   path?: string;
   allowInclude?: string[];
+  /** Columns accepted on POST/PATCH; when omitted every non-hidden column is writable */
+  writable?: string[];
 }
 
 export interface ScopeOptions {
@@ -4083,6 +4089,8 @@ export interface QueueAdapter {
   getJob(jobId: string | number): Promise<Job | null>;
   getStats(): Promise<{ pending: number; running: number; completed: number; failed: number; total: number }>;
   clear(): Promise<void>;
+  /** Requeue jobs abandoned in 'running' state by a crashed worker; returns the number recovered */
+  recoverStale?(options?: { graceMs?: number; excludeIds?: Array<string | number> }): Promise<number>;
 }
 
 export class MemoryQueueAdapter implements QueueAdapter {
@@ -4308,6 +4316,9 @@ export class QueueManager extends EventEmitter {
     pollInterval?: number;
     jobsDir?: string | null;
     autoStart?: boolean;
+    /** Requeue jobs a crashed worker left 'running' after their timeout plus this grace (default '1m'; false disables) */
+    staleJobGrace?: number | string | false;
+    staleCheckInterval?: number | string;
     retention?: boolean | QueueRetentionConfig;
     retentionDays?: number;
     retentionStatuses?: string[];
@@ -4352,6 +4363,8 @@ export function createQueueManager(options?: {
   pollInterval?: number;
   jobsDir?: string | null;
   autoStart?: boolean;
+  staleJobGrace?: number | string | false;
+  staleCheckInterval?: number | string;
   retention?: boolean | QueueRetentionConfig;
   retentionDays?: number;
   retentionStatuses?: string[];

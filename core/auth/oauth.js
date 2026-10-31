@@ -8,6 +8,7 @@
 const crypto = require('crypto');
 const { fetchWithTimeout } = require('../utils/fetch');
 const { safeCompare, sha256, hmacSha256, base64UrlEncode, base64UrlDecode, randomToken } = require('../utils/crypto');
+const { assertStrongSecret } = require('./manager');
 
 /**
  * Custom error class for OAuth operations
@@ -193,7 +194,10 @@ class OAuthClient {
    * @param {number} [config.stateTtlMs=600000] - State token TTL in ms
    */
   constructor(config = {}) {
-    this.secret = config.secret || process.env.OAUTH_SECRET || process.env.SESSION_SECRET || 'webspresso-oauth-secret';
+    const isProd = process.env.NODE_ENV === 'production';
+    this.secret = config.secret || process.env.OAUTH_SECRET || process.env.SESSION_SECRET || (isProd ? null : 'webspresso-oauth-secret');
+    // State tokens are HMAC-signed with this secret; a well-known default would let anyone forge them.
+    if (isProd) assertStrongSecret('OAUTH_SECRET / oauth.secret', this.secret, true);
     this.stateTtlMs = config.stateTtlMs || 10 * 60 * 1000;
     this.timeout = typeof (config.timeout || config.requestTimeout) === 'number'
       ? (config.timeout || config.requestTimeout)

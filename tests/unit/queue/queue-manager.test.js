@@ -273,3 +273,50 @@ describe('QueueManager Core Engine', () => {
   });
 });
 
+
+describe('QueueManager stale job recovery', () => {
+  const knex = require('knex');
+  const { DatabaseQueueAdapter, Job } = require('../../../core/queue');
+  let db;
+  let queue;
+
+  afterEach(async () => {
+    if (queue) {
+      await queue.drain(100);
+      await queue.stop();
+      queue = null;
+    }
+    if (db) await db.destroy();
+  });
+
+  it('processes a job a crashed worker left in running state', async () => {
+    db = knex({ client: 'better-sqlite3', connection: { filename: ':memory:' }, useNullAsDefault: true });
+    const adapter = new DatabaseQueueAdapter({ knex: db, tableName: 'recover_jobs' });
+    await adapter.ensureTable();
+
+    const job = new Job({ name: 'report.build', data: { id: 7 }, timeout: 50, maxAttempts: 3 });
+    await adapter.enqueue(job);
+    await db('recover_jobs').where('id', job.id)
+      .update({ status: 'running', attempts: 1, updated_at: new Date(Date.now() - 5000) });
+
+    queue = createQueueManager({ adapter, pollInterval: 20, staleJobGrace: 100, staleCheckInterval: 10, autoStart: false });
+    const recovered = new Promise((resolve) => queue.on('jobs:recovered', resolve));
+    const completed = new Promise((resolve) => queue.on('job:completed', resolve));
+    queue.define('report.build', async (j) => ({ built: j.data.id }));
+    queue.start();
+
+    expect(await recovered).toBe(1);
+    const done = await completed;
+    expect(done.id).toBe(job.id);
+    expect(done.attempts).toBe(2);
+  });
+
+  it('can be disabled with staleJobGrace: false', async () => {
+    const adapter = { recoverStale: vi.fn(), dequeue: vi.fn().mockResolvedValue(null) };
+    queue = createQueueManager({ adapter, pollInterval: 20, staleJobGrace: false, autoStart: false });
+    queue.define('noop', async () => {});
+    queue.start();
+    await wait(60);
+    expect(adapter.recoverStale).not.toHaveBeenCalled();
+  });
+});

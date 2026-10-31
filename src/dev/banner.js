@@ -94,9 +94,18 @@ function collectBannerSummary(context = {}) {
     db,
     serviceRegistry,
     pluginManager,
-    port = 7331,
     host = 'localhost',
   } = context;
+
+  // Prefer the port the server actually bound to over configured/default values
+  let boundPort;
+  try {
+    const addr = context.server && typeof context.server.address === 'function' ? context.server.address() : null;
+    boundPort = addr && typeof addr === 'object' ? addr.port : undefined;
+  } catch {
+    boundPort = undefined;
+  }
+  const port = context.port || boundPort || context.options?.server?.port || process.env.PORT || 7331;
 
   // 1. Routes summary
   const routes = Array.isArray(routeTable)

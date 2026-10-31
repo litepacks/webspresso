@@ -383,6 +383,33 @@ describe('Zero-Dependency Two-Factor Authentication (2FA / TOTP)', () => {
       expect(requestAuth.is2FaVerified()).toBe(true);
     });
 
+    it('requestAuth.verify2Fa rejects replay of an already accepted TOTP code (RFC 6238 §5.2)', () => {
+      const secret = generateTotpSecret();
+      const token = generateTotp(secret);
+      const auth = () => authManager.createRequestAuth({ session: {} }, {});
+
+      const first = auth().verify2Fa(token, { totp_secret: secret });
+      expect(first.success).toBe(true);
+      expect(typeof first.step).toBe('number');
+
+      // Same code again within its window, e.g. a phished/shoulder-surfed code
+      expect(auth().verify2Fa(token, { totp_secret: secret }).success).toBe(false);
+
+      // Opt-out keeps the old behaviour
+      expect(auth().verify2Fa(token, { totp_secret: secret }, { preventReuse: false }).success).toBe(true);
+    });
+
+    it('requestAuth.verify2Fa honours a persisted last step (cross-process replay)', () => {
+      const secret = generateTotpSecret();
+      const token = generateTotp(secret);
+      const currentStep = Math.floor(Date.now() / 1000 / 30);
+
+      const req = { session: {} };
+      const requestAuth = authManager.createRequestAuth(req, {});
+      const result = requestAuth.verify2Fa(token, { totp_secret: secret, totp_last_step: currentStep });
+      expect(result.success).toBe(false);
+    });
+
     it('requestAuth.verify2Fa falls back to recovery code verification', () => {
       const codes = generateRecoveryCodes({ count: 4 });
       const hashedCodes = codes.map(hashRecoveryCode);

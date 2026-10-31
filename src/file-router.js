@@ -1481,8 +1481,12 @@ function mountPages(app, options) {
                 routeDir: route.routeDir || (route.fullPath ? path.dirname(route.fullPath) : ''),
                 isDev,
               });
+              // Same envelope as other framework errors (status/error/message/code) plus issues
               return res.status(400).json({
+                status: 400,
                 error: 'Validation Error',
+                message: 'Validation Error',
+                code: 'VALIDATION_ERROR',
                 issues: translatedIssues,
               });
             }

@@ -223,13 +223,16 @@ function generateTotp(secret, options = {}) {
  * @param {number} [options.step=30] - Time step in seconds
  * @param {number} [options.digits=6] - Expected digits
  * @param {string} [options.algorithm='sha1'] - 'sha1', 'sha256', 'sha512'
- * @param {boolean} [options.detailed=false] - Return { valid: boolean, delta: number|null } instead of boolean
- * @returns {boolean|{ valid: boolean, delta: number|null }}
+ * @param {number} [options.afterStep] - Reject counters <= this value (RFC 6238 §5.2 replay protection;
+ *   pass the counter of the last accepted code)
+ * @param {boolean} [options.detailed=false] - Return { valid, delta, counter } instead of boolean
+ * @returns {boolean|{ valid: boolean, delta: number|null, counter?: number|null }}
  */
 function verifyTotp(token, secret, options = {}) {
   if (typeof token !== 'string') {
-    return options.detailed ? { valid: false, delta: null } : false;
+    return options.detailed ? { valid: false, delta: null, counter: null } : false;
   }
+  const afterStep = typeof options.afterStep === 'number' ? options.afterStep : -1;
 
   const cleanToken = token.trim();
   const digits = options.digits || cleanToken.length || 6;
@@ -250,21 +253,52 @@ function verifyTotp(token, secret, options = {}) {
 
   for (let delta = -windowSize; delta <= windowSize; delta++) {
     const counter = currentCounter + delta;
-    if (counter < 0) continue;
+    if (counter < 0 || counter <= afterStep) continue;
 
     const expected = generateHotp(secret, counter, { ...options, digits });
     if (timingSafeTokenCompare(cleanToken, expected)) {
       if (options.detailed) {
-        return { valid: true, delta };
+        return { valid: true, delta, counter };
       }
       return true;
     }
   }
 
   if (options.detailed) {
-    return { valid: false, delta: null };
+    return { valid: false, delta: null, counter: null };
   }
   return false;
+}
+
+// In-process record of the last accepted TOTP counter per secret, so a code cannot be
+// replayed within its validity window. Bounded; persist the returned step for cluster-wide safety.
+const MAX_TRACKED_TOTP_SECRETS = 10000;
+const lastUsedTotpSteps = new Map();
+
+function secretKey(secret) {
+  return sha256(Buffer.isBuffer(secret) ? secret.toString('hex') : String(secret));
+}
+
+/**
+ * @param {string|Buffer} secret
+ * @returns {number|undefined} Last accepted counter for this secret in this process
+ */
+function getLastUsedTotpStep(secret) {
+  return lastUsedTotpSteps.get(secretKey(secret));
+}
+
+/**
+ * @param {string|Buffer} secret
+ * @param {number} counter - Accepted counter
+ */
+function markTotpStepUsed(secret, counter) {
+  const key = secretKey(secret);
+  const prev = lastUsedTotpSteps.get(key);
+  lastUsedTotpSteps.delete(key);
+  lastUsedTotpSteps.set(key, typeof prev === 'number' ? Math.max(prev, counter) : counter);
+  if (lastUsedTotpSteps.size > MAX_TRACKED_TOTP_SECRETS) {
+    lastUsedTotpSteps.delete(lastUsedTotpSteps.keys().next().value);
+  }
 }
 
 /**
@@ -465,6 +499,8 @@ function createTotpSetup(options = {}) {
 }
 
 module.exports = {
+  getLastUsedTotpStep,
+  markTotpStepUsed,
   // Base32
   base32Encode,
   base32Decode,

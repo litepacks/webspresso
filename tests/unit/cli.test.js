@@ -333,10 +333,12 @@ describe('CLI', () => {
       
       expect(packageJson.name).toBe(projectName);
       expect(packageJson.scripts.dev).toBe('webspresso dev');
-      expect(packageJson.scripts.start).toContain('build:css');
+      // `webspresso build` runs build:css plus AOT routes/templates; `webspresso start` sets NODE_ENV cross-platform
+      expect(packageJson.scripts.start).toBe('webspresso build && webspresso start');
+      expect(packageJson.scripts.build).toBe('webspresso build');
       expect(packageJson.scripts['build:css']).toContain('tailwindcss');
       expect(packageJson.scripts['watch:css']).toContain('tailwindcss');
-      expect(packageJson.dependencies.webspresso).toBeDefined();
+      expect(packageJson.dependencies.webspresso).toBe(`^${require('../../package.json').version}`);
       expect(packageJson.dependencies.zod).toBeDefined();
       expect(packageJson.devDependencies.tailwindcss).toBeDefined();
       expect(packageJson.devDependencies.postcss).toBeDefined();
@@ -591,7 +593,7 @@ describe('CLI', () => {
       
       expect(packageJson.scripts['build:css']).toBeDefined();
       expect(packageJson.scripts['build:css']).toContain('tailwindcss');
-      expect(packageJson.scripts.start).toContain('build:css');
+      expect(packageJson.scripts.start).toContain('webspresso build');
     });
   });
 

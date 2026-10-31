@@ -86,6 +86,8 @@ describe('defineApi & API Loader', () => {
     expect(resFail.status).toBe(400);
     expect(resFail.body.error).toBe('Validation Error');
     expect(resFail.body.issues).toBeDefined();
+    // Same envelope shape as other framework error responses
+    expect(resFail.body).toMatchObject({ status: 400, message: 'Validation Error', code: 'VALIDATION_ERROR' });
 
     delete require.cache[require.resolve(mockFile)];
   });

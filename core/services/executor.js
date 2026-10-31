@@ -330,7 +330,7 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
     }
 
     // Helper to execute handler with optional database transaction
-    const executeHandler = async (activeCtx) => {
+    const executeHandler = async (activeCtx, timeoutSignal = null) => {
       const shouldUseTx = (options.transaction === true || serviceDef.transaction === true);
       const db = activeCtx.db;
 
@@ -374,7 +374,7 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
                     if (origRepo && origRepo.model) {
                       return createQueryBuilder(
                         origRepo.model,
-                        trx,
+                        actualTrx,
                         scopeCtx,
                         origRepo.cacheLayer || activeCtx.db.ormCacheLayer || null
                       );
@@ -385,7 +385,7 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
                 },
               });
             } else {
-              txCtx.db = trx;
+              txCtx.db = actualTrx;
             }
             txCtx.service = (subName, subInput, subOpts) =>
               executeService(registry, subName, subInput, txCtx, subOpts);
@@ -404,7 +404,23 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
             txCtx.breaker = (bName, bOpts) =>
               circuitBreakerRegistry.getBreaker(bName, bOpts);
             txCtx.retry = retry;
-            return await runWithContext(txCtx, () => serviceDef.handler(currentInput, txCtx));
+            const handlerRun = runWithContext(txCtx, () => serviceDef.handler(currentInput, txCtx));
+            if (!timeoutSignal) {
+              return await handlerRun;
+            }
+            // Reject inside the transaction callback on timeout so knex rolls back instead of
+            // committing work the caller already saw fail (and may retry).
+            handlerRun.catch(() => {});
+            return await Promise.race([
+              handlerRun,
+              new Promise((_, reject) => {
+                if (timeoutSignal.aborted) {
+                  reject(timeoutSignal.reason);
+                  return;
+                }
+                timeoutSignal.addEventListener('abort', () => reject(timeoutSignal.reason), { once: true });
+              }),
+            ]);
           });
         });
       }
@@ -421,6 +437,8 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
         if (controller && !executionContext.signal) {
           executionContext.signal = controller.signal;
         }
+        // Internal signal, independent of any caller-provided ctx.signal, used to roll back transactions
+        const timeoutController = typeof AbortController !== 'undefined' ? new AbortController() : null;
 
         const timeoutPromise = new Promise((_, reject) => {
           timerId = setTimeout(() => {
@@ -431,6 +449,9 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
             if (controller) {
               try { controller.abort(timeoutErr); } catch (_) {}
             }
+            if (timeoutController) {
+              try { timeoutController.abort(timeoutErr); } catch (_) {}
+            }
             reject(timeoutErr);
           }, timeoutMs);
           if (timerId && typeof timerId.unref === 'function') {
@@ -438,7 +459,7 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
           }
         });
 
-        const handlerPromise = executeHandler(executionContext);
+        const handlerPromise = executeHandler(executionContext, timeoutController && timeoutController.signal);
         if (handlerPromise && typeof handlerPromise.catch === 'function') {
           handlerPromise.catch(() => {});
         }

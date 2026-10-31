@@ -8,6 +8,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { safeCompare } = require('../utils/crypto');
 const { MetricsRegistry } = require('./registry');
 const {
   collectSystemMetrics,
@@ -189,6 +190,15 @@ function setupMetricsMiddleware(app, options = {}, context = {}) {
   // Attach tracking middleware
   app.use(manager.requestMiddleware);
 
+  if (!config.auth && process.env.NODE_ENV === 'production') {
+    const warnMsg = `[webspresso:metrics] ${config.path} is publicly readable. Set metrics: { auth: process.env.METRICS_TOKEN } or restrict it at the proxy.`;
+    if (typeof process.emitWarning === 'function') {
+      process.emitWarning(warnMsg, 'SecurityWarning');
+    } else {
+      console.warn(warnMsg);
+    }
+  }
+
   // Mount scrape endpoint
   const metricsHandler = (req, res) => {
     // Optional auth verification
@@ -197,7 +207,7 @@ function setupMetricsMiddleware(app, options = {}, context = {}) {
       const authHeader = req.headers['authorization'] || '';
       const providedToken = authHeader.replace(/^Bearer\s+/i, '').trim();
 
-      if (expectedToken && providedToken !== expectedToken) {
+      if (expectedToken && !safeCompare(String(providedToken), String(expectedToken))) {
         res.setHeader('WWW-Authenticate', 'Bearer realm="Metrics"');
         return res.status(401).send('Unauthorized');
       }

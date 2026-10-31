@@ -89,6 +89,7 @@ function adminPanelPlugin(options = {}) {
   // Dependencies are now in main package
   const session = require('express-session');
   const { hash: hashPasswordUtil, verify: verifyPasswordUtil } = require('../../core/auth/hash');
+  const { assertStrongSecret } = require('../../core/auth/manager');
 
   const serveAdminPanel = (req, res) => {
     res.type('text/html');
@@ -220,7 +221,10 @@ function adminPanelPlugin(options = {}) {
 
       // Session must be registered before file routes so SSR pages can read adminUser.
       if (enabled && typeof ctx.app?.use === 'function' && !ctx.app._webspressoSessionInitialized) {
-        const secret = sessionSecret || process.env.SESSION_SECRET || 'webspresso-admin-secret-change-in-production';
+        const isProd = process.env.NODE_ENV === 'production';
+        const secret = sessionSecret || process.env.SESSION_SECRET || (isProd ? null : 'webspresso-admin-secret-change-in-production');
+        // Admin session cookies are signed with this secret; refuse the well-known dev default in production.
+        if (isProd) assertStrongSecret('SESSION_SECRET / adminPanelPlugin({ sessionSecret })', secret, true);
         const secureMode =
           process.env.NODE_ENV === 'production' ||
           process.env.COOKIE_SECURE === 'true' ||

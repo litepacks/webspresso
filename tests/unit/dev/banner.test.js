@@ -87,6 +87,17 @@ describe('src/dev/banner', () => {
       expect(summary.urls.local).toBe('http://localhost:7331');
       expect(summary.urls.admin).toBe('http://localhost:7331/_admin');
     });
+
+    it('uses the port the server is actually bound to', () => {
+      const summary = collectBannerSummary({
+        routeTable: sampleRoutes,
+        server: { address: () => ({ address: '::', family: 'IPv6', port: 7394 }) },
+        options: { server: { port: 5000 } },
+      });
+
+      expect(summary.port).toBe(7394);
+      expect(summary.urls.local).toBe('http://localhost:7394');
+    });
   });
 
   describe('formatDevBanner & printDevBanner', () => {
@@ -139,6 +150,28 @@ describe('src/dev/banner', () => {
       app.printDevBanner({ logger: { log: (m) => logs.push(m) } });
       expect(logs.length).toBe(1);
       expect(logs[0]).toContain('Webspresso');
+    });
+
+    it('counts classic .njk page routes in the route summary', () => {
+      const fs = require('fs');
+      const os = require('os');
+      const path = require('path');
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsp-banner-'));
+      try {
+        fs.mkdirSync(path.join(dir, 'pages', 'api'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'pages', 'index.njk'), '<h1>home</h1>');
+        fs.writeFileSync(path.join(dir, 'pages', 'about.njk'), '<h1>about</h1>');
+        fs.writeFileSync(path.join(dir, 'pages', 'api', 'ping.get.js'), 'module.exports = { handler: (req, res) => res.json({}) };');
+
+        const { app } = createApp({ rootDir: dir, pagesDir: path.join(dir, 'pages'), logging: false });
+        const { summary } = app.formatDevBanner();
+
+        expect(summary.counts.pageRoutes).toBe(2);
+        expect(summary.counts.apiRoutes).toBe(1);
+        expect(summary.counts.routesTotal).toBe(3);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 });

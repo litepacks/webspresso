@@ -8,7 +8,7 @@ const { getAllModels } = require('../../core/orm/model');
 const { omit } = require('../../core/orm/utils');
 const { trimUrlPathSlashes } = require('../../core/url-path-normalize');
 const { validateQueryComplexity } = require('../../core/orm/complexity');
-const { applyColumnFilters, RESERVED_QUERY_KEYS } = require('../../core/orm/query-filters');
+const { applyColumnFilters, isPublicColumn, RESERVED_QUERY_KEYS } = require('../../core/orm/query-filters');
 
 /**
  * Pluralize a PascalCase model name to a URL segment (e.g. User -> users, Company -> companies)
@@ -95,6 +95,7 @@ function sanitizeRecordTree(record, model) {
 
 /**
  * Only real table columns; drop relations and hidden (aligned with repo validation).
+ * When model.rest.writable is set, only those columns are accepted (mass-assignment guard).
  * @param {Object} body
  * @param {import('../../core/orm/types').ModelDefinition} model
  * @returns {Object}
@@ -104,8 +105,12 @@ function pickWritableColumns(body, model) {
   if (!body || typeof body !== 'object') {
     return out;
   }
+  const writable = Array.isArray(model.rest?.writable) ? new Set(model.rest.writable) : null;
   for (const key of Object.keys(body)) {
     if (!model.columns.has(key)) {
+      continue;
+    }
+    if (writable && !writable.has(key)) {
       continue;
     }
     const meta = model.columns.get(key);
@@ -181,7 +186,7 @@ function parseSortParams(model, rawSort, rawOrder) {
   function addSort(col, dir) {
     if (!col || typeof col !== 'string') return;
     const cleanCol = col.trim();
-    if (!model.columns.has(cleanCol) || seen.has(cleanCol)) return;
+    if (!isPublicColumn(model, cleanCol) || seen.has(cleanCol)) return;
     seen.add(cleanCol);
     const cleanDir = String(dir || 'asc').toLowerCase() === 'desc' ? 'desc' : 'asc';
     result.push({ column: cleanCol, direction: cleanDir });
