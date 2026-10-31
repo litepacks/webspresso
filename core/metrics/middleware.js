@@ -23,9 +23,13 @@ const { extractTraceContext } = require('../logger/trace');
  * @param {Object|boolean} options
  * @returns {Object}
  */
-function normalizeMetricsConfig(options = {}) {
+function normalizeMetricsConfig(options) {
   const envEnabled = process.env.METRICS_ENABLED === 'true';
-  const isEnabled = options === true || Boolean(options && options.enabled !== false) || envEnabled;
+  // Opt-in: only `metrics: true`, a config object (unless enabled: false) or METRICS_ENABLED=true.
+  // An omitted option must not expose /metrics and /metrics.json.
+  const isEnabled = options === true ||
+    Boolean(options && typeof options === 'object' && options.enabled !== false) ||
+    envEnabled;
 
   const raw = typeof options === 'object' && options !== null ? options : {};
 
@@ -173,7 +177,7 @@ function createMetricsManager(options = {}, context = {}) {
  * @param {Object} [context={}]
  * @returns {Object|null} Metrics manager or null if disabled
  */
-function setupMetricsMiddleware(app, options = {}, context = {}) {
+function setupMetricsMiddleware(app, options, context = {}) {
   const config = normalizeMetricsConfig(options);
   if (!config.enabled) {
     return null;

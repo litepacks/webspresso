@@ -24,6 +24,8 @@ const { buildSearchClause } = require('./search');
  * @param {import('./types').ScopeContext} [initialContext] - Initial scope context
  * @returns {QueryBuilder}
  */
+const { applyHiddenSerialization } = require('./hidden');
+
 function createQueryBuilder(model, knex, initialContext, cacheLayer = null) {
   return new QueryBuilder(model, knex, initialContext, cacheLayer);
 }
@@ -1258,6 +1260,14 @@ class QueryBuilder {
     };
     return cloned;
   }
+}
+
+// Results returned to callers serialize without the model's hidden columns (see ./hidden)
+for (const method of ['first', 'list', 'paginate']) {
+  const original = QueryBuilder.prototype[method];
+  QueryBuilder.prototype[method] = async function hiddenAwareResult(...args) {
+    return applyHiddenSerialization(this.model, await original.apply(this, args));
+  };
 }
 
 module.exports = {

@@ -3702,6 +3702,8 @@ export interface UploadPluginOptions {
   maxBytes?: number;
   mimeAllowlist?: string[] | null;
   extensionAllowlist?: string[] | null;
+  /** Accept HTML/SVG/JS/XML uploads that are not explicitly allowlisted (default: false) */
+  allowExecutable?: boolean;
   middleware?: RequestHandler | RequestHandler[];
   fieldName?: string;
   multiple?: boolean;
@@ -5388,6 +5390,8 @@ export interface OAuthPluginOptions {
   pkce?: boolean;
   stateTtlMs?: number;
   defaultReturnTo?: string;
+  /** Absolute origins `returnTo` may redirect to; same-site paths are always allowed */
+  allowedRedirectOrigins?: string[];
   failureRedirect?: string;
   findOrCreateUser?: (params: {
     provider: string;

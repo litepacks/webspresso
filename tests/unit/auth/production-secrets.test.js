@@ -53,6 +53,13 @@ describe('production secret enforcement', () => {
       expect(new OAuthClient({}).secret).toBe(STRONG);
     });
 
+    it('oauthPlugin does not bypass the check with its own fallback secret', () => {
+      const oauthPlugin = require('../../../plugins/oauth');
+      process.env.NODE_ENV = 'production';
+      expect(() => oauthPlugin({})).toThrow(/OAUTH_SECRET \/ oauth.secret is required/);
+      expect(() => oauthPlugin({ secret: STRONG })).not.toThrow();
+    });
+
     it('keeps the development default outside production', () => {
       process.env.NODE_ENV = 'development';
       expect(new OAuthClient({}).secret).toBe('webspresso-oauth-secret');

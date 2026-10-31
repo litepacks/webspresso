@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { sendWebhook } from '../../../plugins/webhooks/sender';
+import { sendWebhook, isMetadataAddress } from '../../../plugins/webhooks/sender';
 
 describe('Webhook Sender Module', () => {
   beforeEach(() => {
@@ -24,6 +24,37 @@ describe('Webhook Sender Module', () => {
     const res2 = await sendWebhook({ url: null });
     expect(res2.success).toBe(false);
     expect(res2.statusCode).toBe(0);
+  });
+
+  it('refuses cloud metadata targets without sending (SSRF)', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({ status: 200, text: async () => 'creds' });
+
+    for (const url of [
+      'http://169.254.169.254/latest/meta-data/iam/security-credentials/',
+      'http://metadata.google.internal/computeMetadata/v1/',
+      'http://[fd00:ec2::254]/latest/meta-data/',
+      'http://[fe80::1]/',
+      'http://100.100.100.200/latest/meta-data/',
+    ]) {
+      const res = await sendWebhook({ url, event: 'x', payload: {} });
+      expect(res.success, url).toBe(false);
+      expect(res.error).toContain('metadata');
+    }
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    expect(isMetadataAddress('::ffff:169.254.169.254')).toBe(true);
+    expect(isMetadataAddress('10.0.0.5')).toBe(false);
+    expect(isMetadataAddress('93.184.216.34')).toBe(false);
+  });
+
+  it('does not follow redirects', async () => {
+    let capturedOptions = {};
+    vi.spyOn(global, 'fetch').mockImplementation(async (url, opts) => {
+      capturedOptions = opts;
+      return { status: 200, statusText: 'OK', text: async () => '' };
+    });
+    await sendWebhook({ url: 'https://127.0.0.1:9/hook', event: 'x', payload: {} });
+    expect(capturedOptions.redirect).toBe('manual');
   });
 
   it('sends POST request with wrapped payload, headers, and signatures', async () => {

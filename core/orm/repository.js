@@ -7,6 +7,7 @@
 const { createQueryBuilder } = require('./query-builder');
 const { loadRelations } = require('./eager-loader');
 const { resolveRelationModel, isCascadeEnabled } = require('./model');
+const { applyHiddenSerialization } = require('./hidden');
 const {
   applyInsertModifiers,
   applyUpdateModifiers,
@@ -1337,21 +1338,24 @@ function createRepository(model, knex, initialContext, cacheLayer = null) {
     return query().search(term, columns, options);
   }
 
+  // Records returned to callers serialize without the model's hidden columns (see ./hidden)
+  const withHidden = (fn) => async (...args) => applyHiddenSerialization(model, await fn(...args));
+
   return {
-    findById,
-    findOne,
-    findAll,
-    find,
-    create,
-    createMany,
+    findById: withHidden(findById),
+    findOne: withHidden(findOne),
+    findAll: withHidden(findAll),
+    find: withHidden(find),
+    create: withHidden(create),
+    createMany: withHidden(createMany),
     createBatch,
-    upsert,
+    upsert: withHidden(upsert),
     upsertBatch,
-    update,
+    update: withHidden(update),
     updateWhere,
     delete: del,
     forceDelete,
-    restore,
+    restore: withHidden(restore),
     query,
     search,
     raw,

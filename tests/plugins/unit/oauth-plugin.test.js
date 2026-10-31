@@ -421,6 +421,37 @@ describe('OAuth Plugin Definition & Utilities', () => {
       expect(redirectedTo).toBe('/dashboard/overview');
     });
 
+    it('refuses off-site returnTo targets (open redirect) unless the origin is allowed', async () => {
+      const runCallback = async (returnTo, pluginOptions = {}) => {
+        const mockClient = {
+          getProviderNames: () => ['testprov'],
+          getProvider: () => ({ redirectUri: 'https://app.com/cb' }),
+          handleCallback: vi.fn().mockResolvedValue({
+            provider: 'testprov',
+            user: { id: 'ext-1' },
+            tokens: {},
+            stateData: { returnTo },
+          }),
+        };
+        const plugin = oauthPlugin({ client: mockClient, defaultReturnTo: '/home', ...pluginOptions });
+        plugin.onRoutesReady(ctx);
+        let redirectedTo = null;
+        await routes['GET /auth/:provider/callback'](
+          { params: { provider: 'testprov' }, query: { code: 'c', state: 's' }, headers: { accept: 'text/html' } },
+          { redirect: (t) => { redirectedTo = t; }, headersSent: false },
+          vi.fn()
+        );
+        return redirectedTo;
+      };
+
+      for (const evil of ['https://evil.example/phish', '//evil.example', '/\\evil.example', 'javascript:alert(1)']) {
+        expect(await runCallback(evil), evil).toBe('/home');
+      }
+      expect(await runCallback('/account?tab=1')).toBe('/account?tab=1');
+      expect(await runCallback('https://app.example.com/after', { allowedRedirectOrigins: ['https://app.example.com'] }))
+        .toBe('https://app.example.com/after');
+    });
+
     it('handles onError hook custom interception', async () => {
       const onError = vi.fn().mockImplementation(async ({ res }) => {
         res.status(418).json({ custom: 'handled' });

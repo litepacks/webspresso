@@ -7,9 +7,47 @@
 'use strict';
 
 const crypto = require('crypto');
+const dns = require('dns');
+const net = require('net');
 const { signPayload } = require('./crypto');
 const { safeJsonParse } = require('../../core/utils/json');
 const { parseDurationMs } = require('../../core/utils/time');
+
+const METADATA_HOSTNAMES = new Set(['metadata.google.internal', 'metadata', 'instance-data', 'instance-data.ec2.internal']);
+
+/**
+ * Cloud instance metadata endpoints (link-local 169.254/16 incl. AWS/GCP/Azure, AWS IPv6
+ * fd00:ec2::254, IPv6 link-local fe80::/10, Alibaba 100.100.100.200). Reaching them from a
+ * webhook would let whoever configures endpoints read instance credentials.
+ * @param {string} ip
+ * @returns {boolean}
+ */
+function isMetadataAddress(ip) {
+  const addr = String(ip || '').toLowerCase().replace(/^::ffff:/, '');
+  if (net.isIPv4(addr)) {
+    return addr.startsWith('169.254.') || addr === '100.100.100.200';
+  }
+  if (net.isIPv6(addr)) {
+    return /^fe[89ab][0-9a-f]:/.test(addr) || addr === 'fd00:ec2::254';
+  }
+  return false;
+}
+
+/**
+ * @param {string} hostname - URL hostname (IPv6 literals may be bracketed)
+ * @returns {Promise<boolean>}
+ */
+async function targetsMetadataService(hostname) {
+  const host = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  if (METADATA_HOSTNAMES.has(host)) return true;
+  if (net.isIP(host)) return isMetadataAddress(host);
+  try {
+    const addresses = await dns.promises.lookup(host, { all: true });
+    return addresses.some((a) => isMetadataAddress(a.address));
+  } catch {
+    return false; // unresolvable: fetch will fail on its own
+  }
+}
 
 /**
  * Send a webhook HTTP request to a target endpoint
@@ -87,6 +125,18 @@ async function sendWebhook(options = {}) {
     };
   }
 
+  if (!opts.allowMetadataAddresses && await targetsMetadataService(parsedUrl.hostname)) {
+    return {
+      success: false,
+      statusCode: 0,
+      responseBody: '',
+      durationMs: 0,
+      error: 'Webhook URL targets a cloud metadata address and is not allowed.',
+      deliveryId,
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+  }
+
   const timestamp = Math.floor(Date.now() / 1000);
 
   // Construct request body
@@ -149,6 +199,8 @@ async function sendWebhook(options = {}) {
       headers: requestHeaders,
       body: bodyStr,
       signal: controller.signal,
+      // Do not follow redirects: a 3xx to a metadata address would bypass the check above
+      redirect: 'manual',
     });
 
     clearTimeout(timeoutId);
@@ -201,5 +253,7 @@ async function sendWebhook(options = {}) {
 }
 
 module.exports = {
+  isMetadataAddress,
+  targetsMetadataService,
   sendWebhook,
 };

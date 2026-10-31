@@ -218,6 +218,13 @@ describe('Cloud Metrics & Distributed Tracing (core/metrics)', () => {
       const disabled = normalizeMetricsConfig({ enabled: false });
       expect(disabled.enabled).toBe(false);
 
+      // Opt-in: an omitted option must not mount /metrics
+      expect(normalizeMetricsConfig().enabled).toBe(false);
+      expect(normalizeMetricsConfig(undefined).enabled).toBe(false);
+      expect(normalizeMetricsConfig(null).enabled).toBe(false);
+      expect(normalizeMetricsConfig(false).enabled).toBe(false);
+      expect(setupMetricsMiddleware(express(), undefined)).toBeNull();
+
       const custom = normalizeMetricsConfig({
         path: '/telemetry',
         auth: 'secret-token-123',
