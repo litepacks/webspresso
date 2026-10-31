@@ -144,7 +144,7 @@ describe.sequential('ORM Seeder Smart Fields & Factory Scenarios', () => {
     const record = builder.make();
 
     expect(record.uuid_val).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-    expect(record.nanoid_val.length).toBe(21);
+    expect(record.nanoid_val.length).toBe(16); // zdb.nanoid(16)
     expect(typeof record.price).toBe('number');
     expect(typeof record.view_count).toBe('number');
     expect(typeof record.metadata).toBe('object');

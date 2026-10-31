@@ -184,7 +184,8 @@ describe('QueryBuilder Extended SQL Methods', () => {
         .orWhereNotNull('tags')
         .find();
 
-      expect(results.length).toBe(5);
+      // electronics (Laptop, Phone, Tablet) OR tagged (Laptop, Phone, Shirt, Jeans, Cookbook)
+      expect(results.map((r) => r.name).sort()).toEqual(['Cookbook', 'Jeans', 'Laptop', 'Phone', 'Shirt', 'Tablet']);
     });
   });
 

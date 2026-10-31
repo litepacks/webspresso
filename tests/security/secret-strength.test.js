@@ -3,6 +3,12 @@
  */
 const { AuthManager } = require('../../core/auth/manager');
 
+// AuthManager requires user lookup functions; these tests only exercise secret validation
+const userLookups = {
+  findUserById: async () => null,
+  findUserByCredentials: async () => null,
+};
+
 describe('Secret Strength Validation in Production', () => {
   const originalEnv = process.env.NODE_ENV;
 
@@ -10,6 +16,7 @@ describe('Secret Strength Validation in Production', () => {
     process.env.NODE_ENV = 'production';
     try {
       const auth = new AuthManager({
+        ...userLookups,
         session: { secret: 'short-secret' },
       });
       expect(() => auth.getSessionConfig()).toThrow(/Production requires at least 32 high-entropy characters/);
@@ -22,6 +29,7 @@ describe('Secret Strength Validation in Production', () => {
     process.env.NODE_ENV = 'production';
     try {
       const auth = new AuthManager({
+        ...userLookups,
         session: { secret: 'password12345678901234567890123456' },
       });
       expect(() => auth.getSessionConfig()).toThrow(/Production requires at least 32 high-entropy characters/);
@@ -35,6 +43,7 @@ describe('Secret Strength Validation in Production', () => {
     try {
       const strongSecret = '9f8e7d6c5b4a3928170e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c';
       const auth = new AuthManager({
+        ...userLookups,
         session: { secret: strongSecret },
       });
       const config = auth.getSessionConfig();
@@ -51,6 +60,7 @@ describe('Secret Strength Validation in Production', () => {
     try {
       expect(() => {
         new AuthManager({
+          ...userLookups,
           jwt: { secret: 'changeme123' },
         });
       }).toThrow(/Production requires at least 32 high-entropy characters/);

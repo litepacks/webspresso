@@ -350,7 +350,7 @@ describe('EmailService & API Handlers Enhancements', () => {
     expect(js).toContain("previewDevice === 'mobile'");
     expect(js).toContain("previewDevice === 'desktop'");
     expect(js).toContain('/retry');
-    expect(new Function(js)).not.toThrow();
+    expect(() => new Function(js)).not.toThrow(); // syntax check only (the component needs a browser)
   });
 });
 

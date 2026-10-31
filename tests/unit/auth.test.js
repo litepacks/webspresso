@@ -335,7 +335,7 @@ describe('AuthManager', () => {
         session: { name: 'test' },
       });
       
-      expect(() => auth.getSessionConfig()).toThrow('Session secret is required');
+      expect(() => auth.getSessionConfig()).toThrow('AUTH_SESSION_SECRET / session.secret is required');
     });
   });
 

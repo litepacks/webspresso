@@ -559,9 +559,11 @@ class QueueManager extends EventEmitter {
    */
   async purgeJobs(options = {}) {
     const statuses = options.status || ['completed', 'failed'];
+    // Purge means "regardless of age": include jobs finished in this very millisecond,
+    // which a `days: 0` cutoff (updatedAt < now) would skip.
     return this.clean({
       status: statuses,
-      days: 0,
+      olderThan: new Date(Date.now() + 1),
     });
   }
 

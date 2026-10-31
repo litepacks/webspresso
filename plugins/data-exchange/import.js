@@ -276,15 +276,11 @@ function createImportHandler(opts) {
         let headerMapping;
 
         if (columnMapping && typeof columnMapping === 'object') {
-          headerMapping = {};
-          const fileHeaders = rows[0].map(h => String(h || '').trim());
-          for (let idx = 0; idx < fileHeaders.length; idx++) {
-            const h = fileHeaders[idx];
-            const targetCol = columnMapping[h];
-            if (targetCol && allowedKeys.includes(targetCol)) {
-              headerMapping[idx] = targetCol;
-            }
-          }
+          // dataRowsToObjects() expects an array indexed by column position (like buildHeaderMapping)
+          headerMapping = rows[0].map((h) => {
+            const targetCol = columnMapping[String(h || '').trim()];
+            return targetCol && allowedKeys.includes(targetCol) ? targetCol : null;
+          });
         } else {
           headerMapping = buildHeaderMapping(rows[0], allowedKeys);
         }
