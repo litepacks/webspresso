@@ -871,7 +871,7 @@ describe('Core Architecture Branch Coverage', () => {
     const {
       buildXlsxBuffer,
       getModelExportColumns,
-    } = require('../../plugins/data-exchange/export-xlsx.js');
+    } = require('../../plugins/data-exchange/export.js');
     const { resolveExportRecords } = require('../../plugins/data-exchange/record-selection.js');
     const {
       buildPayloadForRow,

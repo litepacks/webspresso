@@ -892,7 +892,7 @@ export function formatLinkHeader(links: string | EarlyHintLink | (string | Early
 export function inferAsType(url: string): string | null;
 
 export namespace earlyHints {
-  export declare const EXTENSION_AS_MAP: Record<string, string>;
+  export const EXTENSION_AS_MAP: Record<string, string>;
   export function inferAsType(url: string): string | null;
   export function formatLink(item: string | EarlyHintLink): string | null;
   export function formatLinkHeader(links: string | EarlyHintLink | (string | EarlyHintLink)[]): string[];
@@ -940,7 +940,7 @@ export function createLimitsMiddleware(routeOptions?: unknown): RequestHandler;
 export function parseByteSize(value: string | number): number | string;
 
 export namespace limits {
-  export declare const DEFAULT_LIMITS: Record<string, unknown>;
+  export const DEFAULT_LIMITS: Record<string, unknown>;
   export function parseByteSize(value: string | number): number | string;
   export function normalizeLimits(options?: unknown): unknown;
   export function matchesPath(pattern: string | RegExp | Function, pathname: string): boolean;
@@ -982,7 +982,7 @@ export function setupHealthMiddleware(app: Application, options?: unknown, conte
 export function createHealthManager(config: unknown, context?: unknown): unknown;
 
 export namespace health {
-  export declare const DEFAULT_HEALTH_CONFIG: Record<string, unknown>;
+  export const DEFAULT_HEALTH_CONFIG: Record<string, unknown>;
   export function normalizeHealthConfig(options?: unknown): unknown;
   export function formatMb(bytes: number): string;
   export function createEventLoopMonitor(): unknown;
@@ -1231,7 +1231,7 @@ export interface CircuitBreakerStats {
   lastStateChange: number;
 }
 
-export class CircuitBreaker extends import('events').EventEmitter {
+export class CircuitBreaker extends EventEmitter {
   readonly name: string;
   readonly failureThreshold: number;
   readonly failureRateThreshold: number | null;
@@ -3211,28 +3211,6 @@ export interface HealthCheckPluginOptions {
 
 export function healthCheckPlugin(options?: HealthCheckPluginOptions): WebspressoPlugin;
 
-export interface CorsPluginOptions {
-  origin?:
-    | string
-    | string[]
-    | RegExp
-    | ((
-        origin: string,
-        callback: (err: Error | null, allow?: boolean | string) => void
-      ) => void);
-  methods?: string | string[];
-  allowedHeaders?: string | string[];
-  exposedHeaders?: string | string[];
-  credentials?: boolean;
-  maxAge?: number;
-  preflightContinue?: boolean;
-  optionsSuccessStatus?: number;
-  routes?: string | string[] | boolean;
-  global?: boolean;
-}
-
-export function corsPlugin(options?: CorsPluginOptions): WebspressoPlugin;
-
 export interface RedirectRule {
   from: string | RegExp;
   to: string;
@@ -3641,7 +3619,7 @@ export function webhooksPlugin(options?: WebhooksPluginOptions): WebspressoPlugi
 };
 
 export interface ContentPluginOptions {
-  db: import('./index').Database;
+  db: DatabaseInstance;
   adminPath?: string;
   publicApiPath?: string;
   inlineEdit?: boolean;
@@ -4089,7 +4067,7 @@ export interface QueueAdapter {
   fail(jobId: string | number, error?: unknown): Promise<Job | null>;
   retry(jobId: string | number, delayMs: number, error?: unknown): Promise<Job | null>;
   getJob(jobId: string | number): Promise<Job | null>;
-  getStats(): Promise<{ pending: number; running: number; completed: number; failed: number; total: number }>;
+  getStats(): Promise<{ pending: number; running: number; total: number; completed?: number; failed?: number; delayed?: number }>;
   clear(): Promise<void>;
   /** Requeue jobs abandoned in 'running' state by a crashed worker; returns the number recovered */
   recoverStale?(options?: { graceMs?: number; excludeIds?: Array<string | number> }): Promise<number>;
@@ -4180,7 +4158,8 @@ export interface SqsQueueAdapterOptions {
   httpTransport?: unknown;
 }
 
-export class SqsQueueAdapter implements QueueAdapter {
+/** AWS SQS adapter: no job lookup or clear (SQS has no per-message query) */
+export class SqsQueueAdapter {
   constructor(options?: SqsQueueAdapterOptions);
   enqueue(job: Job): Promise<Job>;
   dequeue(jobNames?: string[]): Promise<Job | null>;
@@ -4200,7 +4179,8 @@ export interface PubSubQueueAdapterOptions {
   httpTransport?: unknown;
 }
 
-export class PubSubQueueAdapter implements QueueAdapter {
+/** Push-based Google Pub/Sub adapter: enqueue/dequeue only (no job lookup, stats or clear) */
+export class PubSubQueueAdapter {
   constructor(options: PubSubQueueAdapterOptions);
   enqueue(job: Job): Promise<Job>;
   dequeue(jobNames?: string[]): Promise<Job | null>;
@@ -4867,12 +4847,7 @@ export interface ApiRequest<
   TParams = Record<string, string>,
   TQuery = Record<string, string>,
   THeaders = Record<string, string>
-> extends Request {
-  url?: string;
-  method?: string;
-  headers: import('http').IncomingHttpHeaders;
-  rawHeaders?: string[];
-  httpVersion?: string;
+> extends Omit<Request, 'params' | 'query' | 'body' | 'session'> {
   body: TBody;
   params: TParams;
   query: TQuery;
@@ -6008,7 +5983,7 @@ export namespace repl {
 export interface RequestContextStore {
   req?: any;
   res?: any;
-  db?: Database | any;
+  db?: DatabaseInstance | any;
   user?: any;
   auth?: any;
   session?: any;
@@ -6023,7 +5998,7 @@ export function runWithContext<T>(context: RequestContextStore, fn: () => T): T;
 export function withContext<T>(overrides: Partial<RequestContextStore>, fn: () => T): T;
 export function getContext(): RequestContextStore | null;
 export function useContext<T = RequestContextStore>(): T;
-export function useDb<T = Database>(): T | null;
+export function useDb<T = DatabaseInstance>(): T | null;
 export function useAuth<T = any>(): T | null;
 export function useUser<T = any>(): T | null;
 export function useLogger(): any;
@@ -6042,3 +6017,157 @@ export function useTransaction<T = any>(callback: (trx: any) => Promise<T>): Pro
 
 
 
+
+// --- Runtime exports that previously had no declarations ---------------------------------
+
+/** Aliases of definePage / defineModule */
+export declare const page: typeof definePage;
+export declare const module: typeof defineModule;
+
+/** Circuit breaker state constants */
+export declare const STATE_CLOSED: 'CLOSED';
+export declare const STATE_OPEN: 'OPEN';
+export declare const STATE_HALF_OPEN: 'HALF_OPEN';
+
+/** Health probe helpers (core/health) */
+export function probeDatabase(db: unknown): Promise<{ status: 'up' | 'down' | 'skipped'; latencyMs?: number; error?: string; message?: string }>;
+export function probeQueue(queue: unknown): Promise<{ status: 'up' | 'down' | 'skipped'; stats?: Record<string, unknown>; error?: string; message?: string }>;
+export function probeCustomChecks(
+  checks?: Record<string, (context: unknown) => Promise<unknown> | unknown>,
+  context?: unknown,
+  timeoutMs?: number
+): Promise<Record<string, { status: 'up' | 'down'; error?: string; [key: string]: unknown }>>;
+export function formatMb(bytes: number): string;
+export function createEventLoopMonitor(options?: { resolution?: number }): {
+  start(): void;
+  stop(): void;
+  getStats(): { meanMs: number; maxMs: number; p50Ms: number; p99Ms: number };
+};
+export function getSystemMetrics(monitor?: unknown): Record<string, unknown>;
+
+/** ORM cache configuration normalizer */
+export function normalizeCacheConfig(config: unknown): Record<string, unknown>;
+
+/** Route mounting (advanced) */
+export function mountDiscoveredRoutes(
+  app: import('express').Application,
+  routeTable: unknown,
+  options?: Record<string, unknown>
+): { routeMetadata: Array<Record<string, unknown>>; registerDynamicDiscoveredRoutes: () => void };
+
+/** ORM repository factory and relation loaders (advanced) */
+export function createRepository<T = Record<string, any>>(
+  model: ModelDefinition<T>,
+  knex: import('knex').Knex | import('knex').Knex.Transaction,
+  scopeContext?: ScopeContext,
+  cacheLayer?: unknown
+): Repository<T>;
+export function loadRelations(
+  records: Record<string, any>[],
+  model: ModelDefinition<any>,
+  relations: string[] | Record<string, unknown>,
+  knex: import('knex').Knex,
+  options?: Record<string, unknown>
+): Promise<Record<string, any>[]>;
+export function loadRelation(
+  records: Record<string, any>[],
+  model: ModelDefinition<any>,
+  relationName: string,
+  knex: import('knex').Knex,
+  options?: Record<string, unknown>
+): Promise<Record<string, any>[]>;
+export function parseRelationTree(includes: string | string[]): Record<string, unknown>;
+
+/** Kernel repository base class (core/kernel) */
+export declare const BaseRepository: KernelBaseRepositoryConstructor;
+
+/** Static export helpers (core/export) */
+export function urlToFilePath(url: string, outDir?: string): string;
+export function generateSitemapXml(urls: Array<string | { loc: string; lastmod?: string | Date; changefreq?: string; priority?: number }>, options?: { baseUrl?: string }): string;
+export function copyDirRecursive(src: string, dest: string): void;
+
+/** Native dual auth (core/auth) */
+export function createAuth(config: Record<string, unknown>): any;
+export function quickAuth(options: Record<string, unknown>): any;
+export function createAuthMiddleware(authManager: unknown, options?: Record<string, unknown>): import('express').RequestHandler;
+export function setupAuthMiddleware(app: import('express').Application, authManager: unknown, options?: Record<string, unknown>): void;
+
+/** Dev tooling */
+export function createDevReloadHub(options?: Record<string, unknown>): {
+  broadcast(event: string, data?: unknown): void;
+  close(): void;
+  [key: string]: unknown;
+};
+export function createWebspressoClient(options?: { baseUrl?: string; fetch?: typeof fetch; headers?: Record<string, string> }): any;
+export class WebspressoClientError extends Error {
+  status?: number;
+  body?: unknown;
+}
+export function buildSwaggerUiHtml(options?: { specUrl?: string; title?: string; [key: string]: unknown }): string;
+export function buildScalarUiHtml(options?: { specUrl?: string; title?: string; [key: string]: unknown }): string;
+
+/** Plugin helpers re-exported from webspresso/plugins */
+export function createBasicAuthMiddleware(options?: BasicAuthPluginOptions): import('express').RequestHandler;
+export function polarPlugin(options?: Record<string, unknown>): WebspressoPlugin;
+export class WebhookDispatcher {
+  constructor(options?: Record<string, unknown>);
+  dispatch(event: string, payload?: unknown, options?: Record<string, unknown>): Promise<unknown>;
+  [key: string]: any;
+}
+
+/** Namespaced module objects (each also exposes the typed top-level exports above) */
+export declare const context: Record<string, any>;
+export declare const appContext: Record<string, any>;
+export declare const requestContext: Record<string, any>;
+export declare const requestContextStorage: import('async_hooks').AsyncLocalStorage<any>;
+export declare const services: {
+  ServiceRegistry: typeof ServiceRegistry;
+  createServiceRegistry: typeof createServiceRegistry;
+  defineService: typeof defineService;
+  [key: string]: any;
+};
+export declare const errors: {
+  WebspressoError: typeof WebspressoError;
+  HttpError: typeof HttpError;
+  normalizeError: typeof normalizeError;
+  [key: string]: any;
+};
+export declare const orm: {
+  createDatabase: typeof createDatabase;
+  createRepository: typeof createRepository;
+  [key: string]: any;
+};
+export declare const studio: Record<string, any>;
+export declare const auth: {
+  createAuth: typeof createAuth;
+  quickAuth: typeof quickAuth;
+  [key: string]: any;
+};
+export declare const validation: {
+  z: typeof z;
+  [key: string]: any;
+};
+export declare const queue: {
+  Job: typeof Job;
+  QueueManager: typeof QueueManager;
+  createQueueManager: typeof createQueueManager;
+  [key: string]: any;
+};
+export declare const dev: Record<string, any>;
+export declare const typegen: Record<string, any>;
+export declare const webhooks: typeof webhooksPlugin & Record<string, any>;
+export declare const mail: {
+  Mailer: typeof Mailer;
+  createMailer: typeof createMailer;
+  [key: string]: any;
+};
+export declare const logger: {
+  CloudLogger: typeof CloudLogger;
+  createLogger: typeof createLogger;
+  [key: string]: any;
+};
+export declare const flags: {
+  FeatureFlagManager: typeof FeatureFlagManager;
+  createFeatureFlagManager: typeof createFeatureFlagManager;
+  [key: string]: any;
+};

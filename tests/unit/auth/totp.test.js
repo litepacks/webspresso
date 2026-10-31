@@ -189,13 +189,14 @@ describe('Zero-Dependency Two-Factor Authentication (2FA / TOTP)', () => {
 
       // Detailed mode returns delta
       const resPast = verifyTotp(pastToken, secret, { time: now, window: 1, detailed: true });
-      expect(resPast).toEqual({ valid: true, delta: -1 });
+      expect(resPast).toMatchObject({ valid: true, delta: -1 });
+      expect(typeof resPast.counter).toBe('number');
 
       const resCurrent = verifyTotp(currentToken, secret, { time: now, window: 1, detailed: true });
-      expect(resCurrent).toEqual({ valid: true, delta: 0 });
+      expect(resCurrent).toEqual({ valid: true, delta: 0, counter: resPast.counter + 1 });
 
       const resInvalid = verifyTotp('999999', secret, { time: now, window: 1, detailed: true });
-      expect(resInvalid).toEqual({ valid: false, delta: null });
+      expect(resInvalid).toEqual({ valid: false, delta: null, counter: null });
     });
   });
 

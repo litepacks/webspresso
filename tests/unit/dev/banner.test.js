@@ -79,9 +79,16 @@ describe('src/dev/banner', () => {
     });
 
     it('defaults to port 7331 when port parameter is omitted', () => {
-      const summary = collectBannerSummary({
-        routeTable: sampleRoutes,
-      });
+      const savedPort = process.env.PORT;
+      delete process.env.PORT; // other suites may leave PORT set in this worker
+      let summary;
+      try {
+        summary = collectBannerSummary({
+          routeTable: sampleRoutes,
+        });
+      } finally {
+        if (savedPort !== undefined) process.env.PORT = savedPort;
+      }
 
       expect(summary.port).toBe(7331);
       expect(summary.urls.local).toBe('http://localhost:7331');

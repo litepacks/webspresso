@@ -18,6 +18,22 @@ const { executeApiPipeline, enrichRouteError } = require('../../core/http');
  * @param {Object|Function} schemaDef
  * @returns {Object|null}
  */
+
+const warnedNonRouteModules = new Set();
+
+/**
+ * Warn once per file that an API-directory module exports no handler.
+ * @param {string} source - Project-relative file path
+ */
+function warnNonRouteModule(source) {
+  if (warnedNonRouteModules.has(source) || process.env.NODE_ENV === 'production') return;
+  warnedNonRouteModules.add(source);
+  console.warn(
+    `[webspresso] ${source} is in an API directory but exports no handler; responding 404. ` +
+    'Prefix helper files with "_" (e.g. _client.js) to keep them out of routing.'
+  );
+}
+
 function compileApiSchema(schemaDef) {
   if (!schemaDef) return null;
   if (typeof schemaDef === 'function') {
@@ -125,7 +141,9 @@ function createApiHandler(descriptor, context) {
         handlerFn = apiDef.handler || (typeof apiModule === 'function' ? apiModule : null);
 
         if (typeof handlerFn !== 'function') {
-          throw new Error(`API file "${descriptor.source}" does not export a valid handler function`);
+          // A helper module living in an API directory is not a route: answer 404 instead of a 500
+          warnNonRouteModule(descriptor.source);
+          return next();
         }
 
         compiledSchema = compileApiSchema(apiDef.schema);

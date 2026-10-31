@@ -244,7 +244,7 @@ describe('defineApi & API Loader', () => {
     delete require.cache[require.resolve(mockFile)];
   });
 
-  it('should reject invalid handler and throw error during handler creation', async () => {
+  it('treats a module without a handler as a non-route (404, no error)', async () => {
     const app = express();
     const mockFile = path.resolve(__dirname, '../../fixtures/mock-api.js');
     const descriptor = {
@@ -272,9 +272,7 @@ describe('defineApi & API Loader', () => {
     });
 
     const res = await request(app).get('/api/invalid-handler');
-    expect(res.status).toBe(500);
-    expect(res.body.error).toContain('does not export a valid handler function');
-    expect(res.body.phase).toBe('handler');
+    expect(res.status).toBe(404);
 
     delete require.cache[require.resolve(mockFile)];
   });
