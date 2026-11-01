@@ -197,7 +197,7 @@
     "@types/node": "^20.14.0",
     "@vitest/coverage-v8": "^4.1.11",
     "alpinejs": "^3.15.11",
-    "bcrypt": "^5.1.1",
+    "bcrypt": "^6.0.0",
     "better-sqlite3": "^11.10.0",
     "chokidar": "^4.0.3",
     "docboot": "^0.3.0",
@@ -232,6 +232,7 @@
     "vite": "^8.3.5"
   },
   "allowScripts": {
+    "bcrypt@6.0.0": true,
     "better-sqlite3@11.10.0": true
   }
 }
