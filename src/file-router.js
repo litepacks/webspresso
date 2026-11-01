@@ -1428,15 +1428,21 @@ function mountPages(app, options) {
               currentHandler = require(route.fullPath);
             } catch (err) {
               console.error(`Failed to load API route ${route.file}:`, err);
-              return res.status(500).json({ error: 'Internal Server Error', message: `Failed to load API route: ${err.message}` });
+              return res.status(500).json({
+                error: 'Internal Server Error',
+                message: isDev ? `Failed to load API route: ${err.message}` : 'Internal Server Error',
+              });
             }
             fn = typeof currentHandler === 'function' 
               ? currentHandler 
               : currentHandler.default || currentHandler.handler;
 
             if (typeof fn !== 'function') {
-              console.warn(`API route ${route.file} does not export a function`);
-              return res.status(500).json({ error: 'Internal Server Error', message: `Route ${route.file} does not export a valid handler function` });
+              // A helper module living in pages/api is not a route: answer 404 instead of a 500
+              if (isDev) {
+                console.warn(`API route ${route.file} exports no handler; responding 404. Prefix helper files with "_" to keep them out of routing.`);
+              }
+              return next();
             }
 
             // In dev mode, re-resolve middleware when file is modified or middleware config changes.
@@ -1481,8 +1487,12 @@ function mountPages(app, options) {
                 routeDir: route.routeDir || (route.fullPath ? path.dirname(route.fullPath) : ''),
                 isDev,
               });
+              // Same envelope as other framework errors (status/error/message/code) plus issues
               return res.status(400).json({
+                status: 400,
                 error: 'Validation Error',
+                message: 'Validation Error',
+                code: 'VALIDATION_ERROR',
                 issues: translatedIssues,
               });
             }

@@ -230,6 +230,29 @@ function createCompressionMiddleware(options = {}) {
         reasonPhrase = undefined;
       }
 
+      // Once the compress/no-compress decision has flushed headers, writeHead must reach Node.
+      // Node calls res.writeHead() implicitly on the first write (res.send/res.end never call it
+      // themselves); deferring that call here sent the body with no status line or headers.
+      if (headersFlushed) {
+        if (shouldCompress && headers && typeof headers === 'object' && !Array.isArray(headers)) {
+          delete headers['content-length'];
+          delete headers['Content-Length'];
+          headers['content-encoding'] = res.getHeader('Content-Encoding');
+        }
+        if (reasonPhrase) return _writeHead.call(res, statusCode, reasonPhrase, headers);
+        if (headers) return _writeHead.call(res, statusCode, headers);
+        return _writeHead.call(res, statusCode);
+      }
+
+      // Apply writeHead's header object to the response now so the compression decision sees
+      // Content-Type/Content-Length; flushHeaders() later strips Content-Length when compressing.
+      if (headers && typeof headers === 'object' && !Array.isArray(headers)) {
+        for (const [key, value] of Object.entries(headers)) {
+          if (value !== undefined) _setHeader.call(res, key, value);
+        }
+        headers = undefined;
+      }
+
       pendingWriteHead = { statusCode, reason: reasonPhrase, headers };
 
       let cl = res.getHeader('Content-Length');

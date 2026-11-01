@@ -50,6 +50,24 @@ function extensionFromName(name) {
   return path.extname(path.basename(name || '')).replace(/^\./, '').toLowerCase();
 }
 
+// Types a browser can execute when served from the app's own origin. Uploaded scripts satisfy
+// `script-src 'self'`, so an uploaded .html + .js pair would run with the site's privileges.
+const EXECUTABLE_EXTENSIONS = new Set([
+  'html', 'htm', 'xhtml', 'xht', 'shtml', 'svg', 'svgz', 'js', 'mjs', 'cjs',
+  'xml', 'xsl', 'xslt', 'wasm', 'swf', 'hta', 'php', 'phtml',
+]);
+const EXECUTABLE_MIME_PATTERN = /^(text\/html|application\/xhtml\+xml|image\/svg\+xml|(text|application)\/(x-)?(java|ecma)script|(text|application)\/xml|application\/wasm|application\/x-shockwave-flash)\b/i;
+
+/**
+ * Whether an upload would be executable by a browser (by MIME type or original extension).
+ * @param {string} mime
+ * @param {string} ext - lowercase extension without dot
+ * @returns {boolean}
+ */
+function isExecutableUpload(mime, ext) {
+  return EXECUTABLE_MIME_PATTERN.test(String(mime || '')) || EXECUTABLE_EXTENSIONS.has(ext);
+}
+
 /**
  * @param {number} maxBytes
  * @param {string} fieldName
@@ -90,6 +108,8 @@ function multerErrorResponse(err) {
  * @param {number} [options.maxBytes=10485760] — 10 MiB default
  * @param {string[]|null} [options.mimeAllowlist] — If set, reject other MIME types (415)
  * @param {string[]|null} [options.extensionAllowlist] — Optional extra guard on original extension
+ * @param {boolean} [options.allowExecutable=false] — Accept HTML/SVG/JS/XML uploads (rejected by default
+ *   unless listed in mimeAllowlist/extensionAllowlist; serve them from a separate origin if you do)
  * @param {import('express').RequestHandler|import('express').RequestHandler[]} [options.middleware]
  * @param {string} [options.fieldName='file'] — Multipart field name
  * @param {boolean} [options.multiple=false] — Allow multiple file uploads
@@ -104,6 +124,7 @@ function uploadPlugin(options = {}) {
     maxBytes = 10 * 1024 * 1024,
     mimeAllowlist = null,
     extensionAllowlist = null,
+    allowExecutable = false,
     middleware = [],
     fieldName = 'file',
     multiple = false,
@@ -120,6 +141,14 @@ function uploadPlugin(options = {}) {
     });
 
   const mw = ensureArray(middleware).filter(Boolean);
+  if (mw.length === 0 && process.env.NODE_ENV === 'production') {
+    const warnMsg = `[webspresso:upload] ${normalizedPath} accepts uploads without authentication. Pass uploadPlugin({ middleware: [...] }) to restrict it.`;
+    if (typeof process.emitWarning === 'function') {
+      process.emitWarning(warnMsg, 'SecurityWarning');
+    } else {
+      console.warn(warnMsg);
+    }
+  }
   const parseMultipart = createMulterMiddleware(maxBytes, fieldName, multiple, maxFiles);
 
   function mountRoutes(ctx) {
@@ -160,6 +189,12 @@ function uploadPlugin(options = {}) {
             (!ext || !extensionAllowlist.includes(ext))
           ) {
             return res.status(400).json({ error: 'File extension not allowed', message: 'File extension not allowed' });
+          }
+          const explicitlyAllowed =
+            (mimeAllowlist && mimeAllowlist.includes(mime)) ||
+            (extensionAllowlist && ext && extensionAllowlist.includes(ext));
+          if (!allowExecutable && !explicitlyAllowed && isExecutableUpload(mime, ext)) {
+            return res.status(415).json({ error: 'File type not allowed', message: 'File type not allowed' });
           }
         }
 
@@ -309,4 +344,5 @@ module.exports = {
   generateStorageKey,
   scanOrphanedUploads,
   pruneOrphanedUploads,
+  isExecutableUpload,
 };

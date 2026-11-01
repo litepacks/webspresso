@@ -67,7 +67,7 @@ function registerCommand(program) {
   program
     .command('dev')
     .description('Start development server')
-    .option('-p, --port <port>', 'Port number', '7331')
+    .option('-p, --port <port>', 'Port number (default: $PORT or 7331)')
     .option('--no-css', 'Skip CSS watch (if Tailwind is set up)')
     .option('--no-js', 'Skip client JS watch (if esbuild / watch:js is set up)')
     .action((options) => {
@@ -76,6 +76,7 @@ function registerCommand(program) {
         process.exit(1);
       }
       
+      options.port = options.port || process.env.PORT || '7331';
       process.env.PORT = options.port;
       process.env.NODE_ENV = 'development';
       

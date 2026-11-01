@@ -20,6 +20,7 @@ import {
   normalizeHeaderName,
   analyzeSpreadsheetPreview,
 } from '../../../plugins/data-exchange/preview.js';
+import { parseCsvToRows } from '../../../plugins/data-exchange/import.js';
 
 describe.sequential('Data exchange advanced features', () => {
   let app;
@@ -140,7 +141,7 @@ describe.sequential('Data exchange advanced features', () => {
 
     it('generates CSV template with UTF-8 BOM and sample row', () => {
       const Customer = db.getModel('Customer');
-      const csvStr = generateCsvTemplate(Customer, 'insert');
+      const csvStr = generateCsvTemplate(Customer, 'insert').toString('utf8');
       expect(csvStr.startsWith('\uFEFF')).toBe(true);
       expect(csvStr).toContain('full_name,email_address,balance,is_active');
       expect(csvStr).toContain('user@example.com');
@@ -181,12 +182,12 @@ describe.sequential('Data exchange advanced features', () => {
     it('analyzes CSV buffer preview and builds suggested mapping', async () => {
       const Customer = db.getModel('Customer');
       const csv = 'Full Name,E-Mail Address,Account Balance,Active\nJohn Doe,john@test.com,150.50,true\nJane Smith,jane@test.com,200.00,false\n';
-      const preview = await analyzeSpreadsheetPreview(Buffer.from(csv), 'customers.csv', Customer);
+      const preview = analyzeSpreadsheetPreview(Customer, parseCsvToRows(Buffer.from(csv)));
 
-      expect(preview.fileType).toBe('csv');
       expect(preview.fileHeaders).toEqual(['Full Name', 'E-Mail Address', 'Account Balance', 'Active']);
+      expect(preview.totalRows).toBe(2);
       expect(preview.sampleRows).toHaveLength(2);
-      expect(preview.sampleRows[0]['Full Name']).toBe('John Doe');
+      expect(preview.sampleRows[0][0]).toBe('John Doe');
       expect(preview.suggestedMapping['Full Name']).toBe('full_name');
       expect(preview.suggestedMapping['E-Mail Address']).toBe('email_address');
       expect(preview.suggestedMapping['Account Balance']).toBe('balance');

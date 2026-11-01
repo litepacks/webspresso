@@ -118,6 +118,25 @@ function createHealthManager(config, context = {}) {
   };
 }
 
+const REDACTED_HEALTH_KEYS = new Set(['nodeVersion', 'pid', 'platform']);
+
+/**
+ * Deep-copies a health payload, dropping runtime fingerprint fields and replacing
+ * dependency error messages with a generic value.
+ * @param {*} value
+ * @returns {*}
+ */
+function redactHealthDetails(value) {
+  if (Array.isArray(value)) return value.map(redactHealthDetails);
+  if (!value || typeof value !== 'object' || value instanceof Date) return value;
+  const out = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (REDACTED_HEALTH_KEYS.has(key)) continue;
+    out[key] = key === 'error' && typeof val === 'string' ? 'unavailable' : redactHealthDetails(val);
+  }
+  return out;
+}
+
 /**
  * Mounts standard health check endpoints onto the Express app
  *
@@ -142,6 +161,16 @@ function setupHealthMiddleware(app, options = {}, context = {}) {
 
   const healthManager = createHealthManager(config, serverContext);
 
+  // Health endpoints are usually public. Outside development, hide fingerprinting details and raw
+  // dependency error messages (which can contain hostnames, ports or file paths) unless opted in.
+  const rawOpts = options && typeof options === 'object'
+    ? (options.healthCheck ?? options.server?.healthCheck ?? options)
+    : null;
+  const exposeDetails = rawOpts && typeof rawOpts === 'object' && typeof rawOpts.exposeDetails === 'boolean'
+    ? rawOpts.exposeDetails
+    : process.env.NODE_ENV !== 'production';
+  const publicBody = (body) => (exposeDetails ? body : redactHealthDetails(body));
+
   // Helper to attach configured headers (Cache-Control: no-store, etc.)
   function applyHealthHeaders(res) {
     if (config.headers && typeof config.headers === 'object') {
@@ -158,9 +187,9 @@ function setupHealthMiddleware(app, options = {}, context = {}) {
         applyHealthHeaders(res);
         const liveness = await healthManager.getLiveness();
         const statusCode = liveness.status === 'ok' ? 200 : 200; // Liveness passes if process responds
-        return res.status(statusCode).json(liveness);
+        return res.status(statusCode).json(publicBody(liveness));
       } catch (err) {
-        return res.status(500).json({ status: 'error', error: err.message });
+        return res.status(500).json(publicBody({ status: 'error', error: err.message }));
       }
     });
   }
@@ -172,9 +201,9 @@ function setupHealthMiddleware(app, options = {}, context = {}) {
         applyHealthHeaders(res);
         const readiness = await healthManager.getReadiness();
         const statusCode = readiness.ready ? 200 : 503;
-        return res.status(statusCode).json(readiness);
+        return res.status(statusCode).json(publicBody(readiness));
       } catch (err) {
-        return res.status(503).json({ ready: false, status: 'error', error: err.message });
+        return res.status(503).json(publicBody({ ready: false, status: 'error', error: err.message }));
       }
     });
   }
@@ -186,9 +215,9 @@ function setupHealthMiddleware(app, options = {}, context = {}) {
         applyHealthHeaders(res);
         const status = await healthManager.getStatus();
         const statusCode = status.readiness.ready ? 200 : 503;
-        return res.status(statusCode).json(status);
+        return res.status(statusCode).json(publicBody(status));
       } catch (err) {
-        return res.status(503).json({ status: 'error', error: err.message });
+        return res.status(503).json(publicBody({ status: 'error', error: err.message }));
       }
     });
   }
@@ -209,5 +238,6 @@ function setupHealthMiddleware(app, options = {}, context = {}) {
 
 module.exports = {
   createHealthManager,
+  redactHealthDetails,
   setupHealthMiddleware,
 };

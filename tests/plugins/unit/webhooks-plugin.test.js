@@ -480,7 +480,15 @@ describe('Webhooks Plugin', () => {
       expect(mod.pages[0].path).toBe('/webhooks');
       expect(mod.menu[0].label).toBe('Webhooks');
       expect(mod.api.prefix).toBe('/api/admin/webhooks');
-      expect(mod.api.routes.length).toBe(11);
+      const routeKeys = mod.api.routes.map((r) => `${r.method.toUpperCase()} ${r.path}`);
+      expect(routeKeys).toEqual(expect.arrayContaining([
+        'GET /endpoints', 'POST /endpoints', 'GET /endpoints/:id', 'PUT /endpoints/:id',
+        'PATCH /endpoints/:id', 'DELETE /endpoints/:id', 'POST /endpoints/:id/ping',
+        'POST /endpoints/:id/test', 'POST /endpoints/:id/rotate-secret', 'GET /deliveries',
+        'GET /deliveries/:id', 'POST /deliveries/:id/retry', 'POST /deliveries/:id/replay',
+        'POST /deliveries/bulk-retry', 'GET /stats', 'POST /deliveries/purge',
+      ]));
+      expect(routeKeys).toHaveLength(16);
     });
 
     it('registers built-in services in app.serviceRegistry', async () => {
@@ -499,7 +507,7 @@ describe('Webhooks Plugin', () => {
       const componentStr = generateWebhooksComponent({ apiPrefix: '/test-prefix' });
       expect(componentStr).toContain("var API = '/test-prefix';");
       expect(componentStr).toContain("window.__customPages['webhooks'] = WebhooksPage;");
-      expect(componentStr).toContain('HMAC SHA-256');
+      expect(componentStr).toContain('HMAC-SHA256');
     });
 
     it('supports static in-memory endpoints when no db is provided', async () => {

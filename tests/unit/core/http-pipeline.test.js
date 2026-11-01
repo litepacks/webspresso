@@ -340,7 +340,10 @@ describe('HTTP Pipeline & Adapters Layer (core/http)', () => {
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
+          status: 400,
           error: 'Validation Error',
+          message: 'Validation Error',
+          code: 'VALIDATION_ERROR',
           issues: expect.any(Array),
         })
       );

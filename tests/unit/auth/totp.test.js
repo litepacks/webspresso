@@ -189,13 +189,14 @@ describe('Zero-Dependency Two-Factor Authentication (2FA / TOTP)', () => {
 
       // Detailed mode returns delta
       const resPast = verifyTotp(pastToken, secret, { time: now, window: 1, detailed: true });
-      expect(resPast).toEqual({ valid: true, delta: -1 });
+      expect(resPast).toMatchObject({ valid: true, delta: -1 });
+      expect(typeof resPast.counter).toBe('number');
 
       const resCurrent = verifyTotp(currentToken, secret, { time: now, window: 1, detailed: true });
-      expect(resCurrent).toEqual({ valid: true, delta: 0 });
+      expect(resCurrent).toEqual({ valid: true, delta: 0, counter: resPast.counter + 1 });
 
       const resInvalid = verifyTotp('999999', secret, { time: now, window: 1, detailed: true });
-      expect(resInvalid).toEqual({ valid: false, delta: null });
+      expect(resInvalid).toEqual({ valid: false, delta: null, counter: null });
     });
   });
 
@@ -381,6 +382,33 @@ describe('Zero-Dependency Two-Factor Authentication (2FA / TOTP)', () => {
       expect(result.success).toBe(true);
       expect(result.type).toBe('totp');
       expect(requestAuth.is2FaVerified()).toBe(true);
+    });
+
+    it('requestAuth.verify2Fa rejects replay of an already accepted TOTP code (RFC 6238 §5.2)', () => {
+      const secret = generateTotpSecret();
+      const token = generateTotp(secret);
+      const auth = () => authManager.createRequestAuth({ session: {} }, {});
+
+      const first = auth().verify2Fa(token, { totp_secret: secret });
+      expect(first.success).toBe(true);
+      expect(typeof first.step).toBe('number');
+
+      // Same code again within its window, e.g. a phished/shoulder-surfed code
+      expect(auth().verify2Fa(token, { totp_secret: secret }).success).toBe(false);
+
+      // Opt-out keeps the old behaviour
+      expect(auth().verify2Fa(token, { totp_secret: secret }, { preventReuse: false }).success).toBe(true);
+    });
+
+    it('requestAuth.verify2Fa honours a persisted last step (cross-process replay)', () => {
+      const secret = generateTotpSecret();
+      const token = generateTotp(secret);
+      const currentStep = Math.floor(Date.now() / 1000 / 30);
+
+      const req = { session: {} };
+      const requestAuth = authManager.createRequestAuth(req, {});
+      const result = requestAuth.verify2Fa(token, { totp_secret: secret, totp_last_step: currentStep });
+      expect(result.success).toBe(false);
     });
 
     it('requestAuth.verify2Fa falls back to recovery code verification', () => {

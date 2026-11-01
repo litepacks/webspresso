@@ -170,6 +170,10 @@ class WebhookDispatcher extends EventEmitter {
     const kx = this.resolveKnex();
     if (!kx) return null;
     const ep = await kx(this.endpointsTable).where({ id }).first();
+    if (ep && typeof ep.metadata === 'string') {
+      // metadata is a JSON column (zdb.json); expose it as an object like the model does
+      ep.metadata = safeJsonParse(ep.metadata, null);
+    }
     return ep || null;
   }
 
@@ -255,7 +259,14 @@ class WebhookDispatcher extends EventEmitter {
     if (this._staticEndpoints) {
       const idx = this._staticEndpoints.findIndex((ep) => String(ep.id) === String(id));
       if (idx === -1) return null;
-      this._staticEndpoints[idx] = { ...this._staticEndpoints[idx], ...updatePayload };
+      // In-memory endpoints keep metadata as an object (only the DB column stores JSON text)
+      const staticPayload = { ...updatePayload };
+      if (data.metadata !== undefined) {
+        staticPayload.metadata = typeof data.metadata === 'string'
+          ? safeJsonParse(data.metadata, null)
+          : (data.metadata || null);
+      }
+      this._staticEndpoints[idx] = { ...this._staticEndpoints[idx], ...staticPayload };
       return this._staticEndpoints[idx];
     }
 

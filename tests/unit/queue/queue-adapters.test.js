@@ -84,6 +84,34 @@ describe('Queue Adapters', () => {
       await adapter.clear();
     });
 
+    it('recoverStale requeues jobs abandoned in running state by a dead worker', async () => {
+      const age = (ms) => new Date(Date.now() - ms);
+      const stuck = new Job({ name: 'db.stuck', timeout: 1000, maxAttempts: 3 });
+      const exhausted = new Job({ name: 'db.exhausted', timeout: 1000, maxAttempts: 1 });
+      const fresh = new Job({ name: 'db.fresh', timeout: 1000 });
+      const local = new Job({ name: 'db.local', timeout: 1000 });
+      for (const j of [stuck, exhausted, fresh, local]) await adapter.enqueue(j);
+
+      // Simulate workers that claimed jobs and then died
+      await db('test_jobs').whereIn('id', [stuck.id, exhausted.id, local.id])
+        .update({ status: 'running', attempts: 1, updated_at: age(10000) });
+      await db('test_jobs').where('id', fresh.id).update({ status: 'running', attempts: 1, updated_at: new Date() });
+
+      const recovered = await adapter.recoverStale({ graceMs: 1000, excludeIds: [local.id] });
+      expect(recovered).toBe(2);
+
+      expect((await adapter.getJob(stuck.id)).status).toBe('pending');
+      const failed = await adapter.getJob(exhausted.id);
+      expect(failed.status).toBe('failed');
+      expect(String(failed.error)).toContain('Worker stopped');
+      expect((await adapter.getJob(fresh.id)).status).toBe('running'); // still within timeout + grace
+      expect((await adapter.getJob(local.id)).status).toBe('running'); // owned by this process
+
+      const again = await adapter.dequeue(['db.stuck']);
+      expect(again.id).toBe(stuck.id);
+      expect(again.attempts).toBe(2);
+    });
+
     it('enqueues and dequeues persistent jobs in DB', async () => {
       const job = new Job({ name: 'db.job', data: { val: 42 }, priority: 15 });
       await adapter.enqueue(job);

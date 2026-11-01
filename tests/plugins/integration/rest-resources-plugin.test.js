@@ -155,6 +155,25 @@ describe('REST resources plugin', { timeout: 60000 }, () => {
     expect(res.body.data[0].email).toBe('bob@tech.com');
   });
 
+  it('ignores filters and sorting on hidden columns (no value oracle)', async () => {
+    const all = await request(app).get('/api/rest/users').expect(200);
+    const total = all.body.data.length;
+
+    // A match-nothing pattern on a hidden column must not narrow results
+    for (const qs of [
+      'metadata[like]=__no_such_value__%25',
+      'filter[metadata][like]=__no_such_value__%25',
+      'metadata=__no_such_value__',
+    ]) {
+      const res = await request(app).get(`/api/rest/users?${qs}`).expect(200);
+      expect(res.body.data.length, qs).toBe(total);
+    }
+
+    const sorted = await request(app).get('/api/rest/users?sort=metadata').expect(200);
+    const ids = sorted.body.data.map((r) => r.id);
+    expect(ids).toEqual([...ids].sort((a, b) => b - a)); // falls back to primary key desc
+  });
+
   it('supports pagination with page and perPage limits', async () => {
     const res = await request(app).get('/api/rest/users?page=1&perPage=2').expect(200);
     expect(res.body.data.length).toBe(2);

@@ -12,6 +12,8 @@ const inquirer = {
 };
 const fs = require('fs');
 const path = require('path');
+
+const FRAMEWORK_VERSION = require('../../package.json').version;
 const { runInstallation, startDevServer } = require('../utils/project');
 const { getSeedFileTemplate } = require('../utils/seed');
 const { scaffoldAgentsFiles } = require('./agents-init');
@@ -250,10 +252,13 @@ function registerCommand(program) {
         main: 'server.js',
         scripts: {
           dev: 'webspresso dev',
-          start: 'NODE_ENV=production node server.js'
+          build: 'webspresso build',
+          // `webspresso start` sets NODE_ENV=production cross-platform; build first so the
+          // AOT route manifest and precompiled templates are used in production.
+          start: 'webspresso build && webspresso start'
         },
         dependencies: {
-          webspresso: '*',
+          webspresso: `^${FRAMEWORK_VERSION}`,
           dotenv: '^16.3.1',
           zod: '^3.23.0'
         }
@@ -728,7 +733,7 @@ module.exports = {
         }
         
         updatedPackageJson.scripts.dev = 'webspresso dev';
-        updatedPackageJson.scripts.start = 'npm run build:css && NODE_ENV=production node server.js';
+        updatedPackageJson.scripts.start = 'webspresso build && webspresso start';
         
         fs.writeFileSync(
           path.join(projectPath, 'package.json'),

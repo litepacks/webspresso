@@ -244,6 +244,21 @@ describe('Magic Link Authentication (core/auth/magic-link)', () => {
       await expect(auth.verifyMagicLink(rawToken)).rejects.toThrow(AuthenticationError);
     });
 
+    it('redeems a magic link only once under concurrent requests', async () => {
+      const { token } = await auth.requestMagicLink('alice@example.com');
+
+      const results = await Promise.allSettled([
+        auth.verifyMagicLink(token),
+        auth.verifyMagicLink(token),
+        auth.verifyMagicLink(token),
+      ]);
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const rejected = results.filter((r) => r.status === 'rejected');
+      expect(rejected).toHaveLength(2);
+      for (const r of rejected) expect(r.reason.code).toBe('INVALID_MAGIC_LINK');
+    });
+
     it('throws AuthenticationError with code INVALID_MAGIC_LINK on nonexistent token', async () => {
       await expect(auth.verifyMagicLink('non_existent_token_12345')).rejects.toThrow(
         /Invalid or expired magic link/

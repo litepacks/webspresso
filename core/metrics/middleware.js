@@ -8,6 +8,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { safeCompare } = require('../utils/crypto');
 const { MetricsRegistry } = require('./registry');
 const {
   collectSystemMetrics,
@@ -22,9 +23,13 @@ const { extractTraceContext } = require('../logger/trace');
  * @param {Object|boolean} options
  * @returns {Object}
  */
-function normalizeMetricsConfig(options = {}) {
+function normalizeMetricsConfig(options) {
   const envEnabled = process.env.METRICS_ENABLED === 'true';
-  const isEnabled = options === true || Boolean(options && options.enabled !== false) || envEnabled;
+  // Opt-in: only `metrics: true`, a config object (unless enabled: false) or METRICS_ENABLED=true.
+  // An omitted option must not expose /metrics and /metrics.json.
+  const isEnabled = options === true ||
+    Boolean(options && typeof options === 'object' && options.enabled !== false) ||
+    envEnabled;
 
   const raw = typeof options === 'object' && options !== null ? options : {};
 
@@ -172,7 +177,7 @@ function createMetricsManager(options = {}, context = {}) {
  * @param {Object} [context={}]
  * @returns {Object|null} Metrics manager or null if disabled
  */
-function setupMetricsMiddleware(app, options = {}, context = {}) {
+function setupMetricsMiddleware(app, options, context = {}) {
   const config = normalizeMetricsConfig(options);
   if (!config.enabled) {
     return null;
@@ -189,6 +194,15 @@ function setupMetricsMiddleware(app, options = {}, context = {}) {
   // Attach tracking middleware
   app.use(manager.requestMiddleware);
 
+  if (!config.auth && process.env.NODE_ENV === 'production') {
+    const warnMsg = `[webspresso:metrics] ${config.path} is publicly readable. Set metrics: { auth: process.env.METRICS_TOKEN } or restrict it at the proxy.`;
+    if (typeof process.emitWarning === 'function') {
+      process.emitWarning(warnMsg, 'SecurityWarning');
+    } else {
+      console.warn(warnMsg);
+    }
+  }
+
   // Mount scrape endpoint
   const metricsHandler = (req, res) => {
     // Optional auth verification
@@ -197,7 +211,7 @@ function setupMetricsMiddleware(app, options = {}, context = {}) {
       const authHeader = req.headers['authorization'] || '';
       const providedToken = authHeader.replace(/^Bearer\s+/i, '').trim();
 
-      if (expectedToken && providedToken !== expectedToken) {
+      if (expectedToken && !safeCompare(String(providedToken), String(expectedToken))) {
         res.setHeader('WWW-Authenticate', 'Bearer realm="Metrics"');
         return res.status(401).send('Unauthorized');
       }

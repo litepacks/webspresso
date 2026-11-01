@@ -134,6 +134,23 @@ describe('REST Resources Plugin (plugins/rest-resources)', () => {
       expect(pickWritableColumns(null, model)).toEqual({});
       expect(pickWritableColumns('string', model)).toEqual({});
     });
+
+    it('should restrict writes to rest.writable when provided (mass-assignment guard)', () => {
+      const model = {
+        columns: new Map([
+          ['id', { primary: true, autoIncrement: true }],
+          ['name', { type: 'string' }],
+          ['role', { type: 'string' }],
+          ['secret', { type: 'string' }],
+        ]),
+        hidden: ['secret'],
+        rest: { writable: ['name', 'secret'] },
+      };
+
+      const writable = pickWritableColumns({ name: 'Ann', role: 'admin', secret: 'x' }, model);
+      // role is not whitelisted; hidden still wins over the whitelist
+      expect(writable).toEqual({ name: 'Ann' });
+    });
   });
 
   describe('resolveExposedModels & Plugin Route Mounting', () => {

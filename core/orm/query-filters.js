@@ -321,6 +321,17 @@ function buildFilteredQuery(repoOrQuery, filters, options = {}) {
  * @param {import('express').Request|Object} reqOrQuery - Express request or query object
  * @returns {{ query: Object, countQuery: Object }} Mutated query instances
  */
+/**
+ * Whether an untrusted query-string key may filter on this column.
+ * Hidden columns are excluded: filtering on them (e.g. ?passwordHash[like]=a%)
+ * would leak their values through result counts even though responses omit them.
+ */
+function isPublicColumn(model, column) {
+  if (!model || !model.columns || typeof model.columns.has !== 'function') return true;
+  if (!model.columns.has(column)) return false;
+  return !(Array.isArray(model.hidden) && model.hidden.includes(column));
+}
+
 function applyColumnFilters(query, countQuery, model, reqOrQuery) {
   const q = query;
   const c = countQuery;
@@ -339,7 +350,7 @@ function applyColumnFilters(query, countQuery, model, reqOrQuery) {
   // 1. Process dedicated filter object: ?filter[col]=... or ?filter[col][op]=... or ?filter={ col: { op, value } }
   if (rawQuery.filter && typeof rawQuery.filter === 'object') {
     for (const [col, colFilter] of Object.entries(rawQuery.filter)) {
-      if (hasColumns && !model.columns.has(col)) continue;
+      if (hasColumns && !isPublicColumn(model, col)) continue;
       const meta = hasColumns ? model.columns.get(col) : null;
 
       if (colFilter && typeof colFilter === 'object' && !Array.isArray(colFilter)) {
@@ -367,7 +378,7 @@ function applyColumnFilters(query, countQuery, model, reqOrQuery) {
     if (RESERVED_QUERY_KEYS.has(key) || key === 'filter') {
       continue;
     }
-    if (hasColumns && !model.columns.has(key)) {
+    if (hasColumns && !isPublicColumn(model, key)) {
       continue;
     }
     const meta = hasColumns ? model.columns.get(key) : null;
@@ -390,4 +401,5 @@ module.exports = {
   applyFilterCondition,
   buildFilteredQuery,
   applyColumnFilters,
+  isPublicColumn,
 };

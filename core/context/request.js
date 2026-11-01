@@ -212,8 +212,14 @@ async function useTransaction(callback) {
       const current = requestContextStorage.getStore() || {};
       const actualTrx = (trxOrCtx && trxOrCtx.trx) ? trxOrCtx.trx : trxOrCtx;
 
+      // Some transaction providers hand over `{ db }` (a transaction-bound db) instead of a
+      // repository-capable context; proxy that db so useDb() inside the callback resolves it.
+      const txTarget = (trxOrCtx && typeof trxOrCtx === 'object' && trxOrCtx.db && typeof trxOrCtx.db === 'object')
+        ? trxOrCtx.db
+        : trxOrCtx;
+
       // Transparent transactional DB proxy delegating missing methods (raw, getModel, models) to base db or trx
-      const txDb = new Proxy(trxOrCtx, {
+      const txDb = new Proxy(txTarget, {
         get(target, prop, receiver) {
           if (prop in target) {
             const val = Reflect.get(target, prop, receiver);

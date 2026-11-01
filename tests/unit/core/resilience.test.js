@@ -126,6 +126,32 @@ describe('Webspresso Enterprise Resilience Engine (core/resilience)', () => {
       }
     });
 
+    it('limits concurrent trial calls in HALF_OPEN and rejects the rest', async () => {
+      const breaker = new CircuitBreaker({ name: 'half-open-limit', failureThreshold: 1, resetTimeout: 10, halfOpenMaxCalls: 2 });
+      const fail = async () => { const e = new Error('down'); e.statusCode = 503; throw e; };
+      await expect(breaker.execute(fail)).rejects.toThrow();
+      expect(breaker.state).toBe(STATE_OPEN);
+      await wait(20);
+
+      let release;
+      const gate = new Promise((r) => { release = r; });
+      let downstreamCalls = 0;
+      const slowProbe = async () => { downstreamCalls++; await gate; return 'ok'; };
+
+      const results = Promise.allSettled([1, 2, 3, 4, 5].map(() => breaker.execute(slowProbe)));
+      await wait(5);
+      expect(downstreamCalls).toBe(2);
+      release();
+
+      const settled = await results;
+      expect(settled.filter((r) => r.status === 'fulfilled')).toHaveLength(2);
+      const rejected = settled.filter((r) => r.status === 'rejected');
+      expect(rejected).toHaveLength(3);
+      for (const r of rejected) expect(r.reason).toBeInstanceOf(CircuitBreakerOpenError);
+      expect(breaker.state).toBe(STATE_CLOSED); // two successes reach the default successThreshold
+      expect(breaker._halfOpenInFlight).toBe(0);
+    });
+
     it('should immediately trip back to OPEN if a call fails in HALF_OPEN state', async () => {
       const breaker = new CircuitBreaker({
         name: 'half-open-fail',

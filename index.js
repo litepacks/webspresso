@@ -424,12 +424,10 @@ module.exports = {
 
   // High-Performance In-Memory LRU & Tagged Cache
   cache,
-  normalizeCacheConfig: cache.normalizeCacheConfig,
-  parseCacheTtlMs: cache.parseCacheTtlMs,
+  normalizeCacheConfig: require('./core/orm/cache').normalizeCacheConfig,
   LruCache: cache.LruCache,
   TaggedLruCache: cache.TaggedLruCache,
   createTaggedLruCache: cache.createTaggedLruCache,
-  createOrmCacheProvider: cache.createOrmCacheProvider,
 
   // Enterprise Resilience & Circuit Breaker Engine
   resilience,
@@ -471,14 +469,12 @@ Object.defineProperties(module.exports, {
   // ORM & Database Layer (lazy loaded)
   orm: { get: () => getOrm(), enumerable: true, configurable: true },
   createDatabase: { get: () => getOrm().createDatabase, enumerable: true, configurable: true },
-  createInMemoryDatabase: { get: () => getOrm().createInMemoryDatabase, enumerable: true, configurable: true },
   defineModel: { get: () => getOrm().defineModel, enumerable: true, configurable: true },
   zdb: { get: () => getOrm().zdb, enumerable: true, configurable: true },
   z: { get: () => getOrm().z, enumerable: true, configurable: true },
   zod: { get: () => getOrm().zod, enumerable: true, configurable: true },
-  BaseRepository: { get: () => getOrm().BaseRepository, enumerable: true, configurable: true },
-  Repository: { get: () => getOrm().Repository, enumerable: true, configurable: true },
-  createRepository: { get: () => getOrm().createRepository, enumerable: true, configurable: true },
+  BaseRepository: { get: () => require('./core/kernel/base-repository').BaseRepository, enumerable: true, configurable: true },
+  createRepository: { get: () => require('./core/orm/repository').createRepository, enumerable: true, configurable: true },
   getModel: { get: () => getOrm().getModel, enumerable: true, configurable: true },
   getAllModels: { get: () => getOrm().getAllModels, enumerable: true, configurable: true },
   hasModel: { get: () => getOrm().hasModel, enumerable: true, configurable: true },
@@ -495,7 +491,6 @@ Object.defineProperties(module.exports, {
   Hooks: { get: () => getOrm().Hooks, enumerable: true, configurable: true },
   HookCancellationError: { get: () => getOrm().HookCancellationError, enumerable: true, configurable: true },
   createEventContext: { get: () => getOrm().createEventContext, enumerable: true, configurable: true },
-  getTransactionContext: { get: () => getOrm().getTransactionContext, enumerable: true, configurable: true },
   createTransactionContext: { get: () => getOrm().createTransactionContext, enumerable: true, configurable: true },
   runTransaction: { get: () => getOrm().runTransaction, enumerable: true, configurable: true },
   createSchemaHelpers: { get: () => getOrm().createSchemaHelpers, enumerable: true, configurable: true },
@@ -701,3 +696,62 @@ Object.defineProperties(module.exports, {
   evaluateInConsole: { get: () => require('./core/console').evaluateInConsole, enumerable: true, configurable: true },
 });
 
+// Exports declared in index.d.ts that were previously only reachable through submodules
+Object.defineProperties(module.exports, {
+  // Services helpers declared in index.d.ts
+  createServiceRegistryAsync: { get: () => require('./core/services').createServiceRegistryAsync, enumerable: true, configurable: true },
+  composeMiddleware: { get: () => require('./core/services').composeMiddleware, enumerable: true, configurable: true },
+  loadModuleSync: { get: () => require('./core/services').loadModuleSync, enumerable: true, configurable: true },
+  loadModuleAsync: { get: () => require('./core/services').loadModuleAsync, enumerable: true, configurable: true },
+  extractModuleExport: { get: () => require('./core/services').extractModuleExport, enumerable: true, configurable: true },
+  createServiceValidationError: { get: () => require('./core/services').createServiceValidationError, enumerable: true, configurable: true },
+  normalizeValidationIssues: { get: () => require('./core/services').normalizeValidationIssues, enumerable: true, configurable: true },
+  // App context accessors
+  getMailer: { get: () => require('./core/context/app-context').getMailer, enumerable: true, configurable: true },
+  hasMailer: { get: () => require('./core/context/app-context').hasMailer, enumerable: true, configurable: true },
+  getQueue: { get: () => require('./core/context/app-context').getQueue, enumerable: true, configurable: true },
+  hasQueue: { get: () => require('./core/context/app-context').hasQueue, enumerable: true, configurable: true },
+  // Utilities
+  randomTimestampedId: { get: () => require('./core/utils').randomTimestampedId, enumerable: true, configurable: true },
+  // Studio
+  createStudioApp: { get: () => require('./core/studio').createStudioApp, enumerable: true, configurable: true },
+  // Ambient transactions & ORM cache
+  runWithAmbientTransaction: { get: () => require('./core/orm').runWithAmbientTransaction, enumerable: true, configurable: true },
+  getAmbientTransaction: { get: () => require('./core/orm').getAmbientTransaction, enumerable: true, configurable: true },
+  hasAmbientTransaction: { get: () => require('./core/orm').hasAmbientTransaction, enumerable: true, configurable: true },
+  createMemoryCacheProvider: { get: () => require('./core/orm').createMemoryCacheProvider, enumerable: true, configurable: true },
+  // Feature flag hashing
+  fnv1a: { get: () => require('./core/flags/hasher').fnv1a, enumerable: true, configurable: true },
+  // Upload maintenance
+  scanOrphanedUploads: { get: () => require('./plugins/upload').scanOrphanedUploads, enumerable: true, configurable: true },
+  pruneOrphanedUploads: { get: () => require('./plugins/upload').pruneOrphanedUploads, enumerable: true, configurable: true },
+  // Queue jobs, adapters and cron
+  Job: { get: () => require('./core/queue').Job, enumerable: true, configurable: true },
+  MemoryQueueAdapter: { get: () => require('./core/queue').MemoryQueueAdapter, enumerable: true, configurable: true },
+  DatabaseQueueAdapter: { get: () => require('./core/queue').DatabaseQueueAdapter, enumerable: true, configurable: true },
+  RedisQueueAdapter: { get: () => require('./core/queue').RedisQueueAdapter, enumerable: true, configurable: true },
+  WaitUntilQueueAdapter: { get: () => require('./core/queue').WaitUntilQueueAdapter, enumerable: true, configurable: true },
+  CloudflareQueueAdapter: { get: () => require('./core/queue').CloudflareQueueAdapter, enumerable: true, configurable: true },
+  resolveCronAlias: { get: () => require('./core/queue').resolveCronAlias, enumerable: true, configurable: true },
+  // Cron aliases
+  CRON_ALIASES: { get: () => require('./core/queue/cron').CRON_ALIASES, enumerable: true, configurable: true },
+  // OAuth, magic link and session helpers
+  generatePKCE: { get: () => require('./core/auth').generatePKCE, enumerable: true, configurable: true },
+  createSignedState: { get: () => require('./core/auth').createSignedState, enumerable: true, configurable: true },
+  verifySignedState: { get: () => require('./core/auth').verifySignedState, enumerable: true, configurable: true },
+  buildMagicLinkUrl: { get: () => require('./core/auth').buildMagicLinkUrl, enumerable: true, configurable: true },
+  formatMagicLinkHtml: { get: () => require('./core/auth').formatMagicLinkHtml, enumerable: true, configurable: true },
+  createMagicLinkVerifyMiddleware: { get: () => require('./core/auth').createMagicLinkVerifyMiddleware, enumerable: true, configurable: true },
+  createMagicLinkRequestHandler: { get: () => require('./core/auth').createMagicLinkRequestHandler, enumerable: true, configurable: true },
+  createUserSessionsTable: { get: () => require('./core/auth').createUserSessionsTable, enumerable: true, configurable: true },
+  dropUserSessionsTable: { get: () => require('./core/auth').dropUserSessionsTable, enumerable: true, configurable: true },
+  createListSessionsHandler: { get: () => require('./core/auth').createListSessionsHandler, enumerable: true, configurable: true },
+  createRevokeSessionHandler: { get: () => require('./core/auth').createRevokeSessionHandler, enumerable: true, configurable: true },
+  magicLink: { get: () => require('./core/auth').magicLink, enumerable: true, configurable: true },
+  // Metrics
+  setupMetricsMiddleware: { get: () => require('./core/metrics').setupMetricsMiddleware, enumerable: true, configurable: true },
+  Counter: { get: () => require('./core/metrics').Counter, enumerable: true, configurable: true },
+  Gauge: { get: () => require('./core/metrics').Gauge, enumerable: true, configurable: true },
+  Histogram: { get: () => require('./core/metrics').Histogram, enumerable: true, configurable: true },
+  sseStream: { get: () => require('./core/sse/stream'), enumerable: true, configurable: true },
+});
