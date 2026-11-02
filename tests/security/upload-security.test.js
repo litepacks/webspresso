@@ -51,6 +51,54 @@ describe('Security: File Upload Plugin', () => {
     expect(fs.existsSync(fullSavedPath)).toBe(true);
   });
 
+  it('rejects browser-executable uploads (HTML/JS/SVG/XML) by default', async () => {
+    const { app } = createApp({
+      pagesDir: PAGES_DIR,
+      viewsDir: VIEWS_DIR,
+      plugins: [uploadPlugin({ local: { destDir: TEMP_UPLOAD_DIR } })],
+    });
+
+    const cases = [
+      ['page.html', 'text/html'],
+      ['steal.js', 'application/javascript'],
+      ['logo.svg', 'image/svg+xml'],
+      ['feed.xml', 'application/xml'],
+      ['disguised.html', 'application/octet-stream'], // extension alone is enough
+      ['innocent.png', 'text/html'], // MIME alone is enough
+    ];
+    for (const [name, contentType] of cases) {
+      const res = await request(app).post('/api/upload').attach('file', Buffer.from('<script>x</script>'), { filename: name, contentType });
+      expect(res.status, name).toBe(415);
+    }
+
+    await request(app)
+      .post('/api/upload')
+      .attach('file', Buffer.from('plain'), { filename: 'notes.txt', contentType: 'text/plain' })
+      .expect(200);
+  });
+
+  it('accepts executable types when explicitly allowlisted or allowExecutable is set', async () => {
+    const svgOnly = createApp({
+      pagesDir: PAGES_DIR,
+      viewsDir: VIEWS_DIR,
+      plugins: [uploadPlugin({ local: { destDir: TEMP_UPLOAD_DIR }, mimeAllowlist: ['image/svg+xml'] })],
+    });
+    await request(svgOnly.app)
+      .post('/api/upload')
+      .attach('file', Buffer.from('<svg/>'), { filename: 'logo.svg', contentType: 'image/svg+xml' })
+      .expect(200);
+
+    const anything = createApp({
+      pagesDir: PAGES_DIR,
+      viewsDir: VIEWS_DIR,
+      plugins: [uploadPlugin({ local: { destDir: TEMP_UPLOAD_DIR }, allowExecutable: true })],
+    });
+    await request(anything.app)
+      .post('/api/upload')
+      .attach('file', Buffer.from('<p>hi</p>'), { filename: 'page.html', contentType: 'text/html' })
+      .expect(200);
+  });
+
   it('should enforce MIME allowlist and reject disallowed types (415)', async () => {
     const { app } = createApp({
       pagesDir: PAGES_DIR,

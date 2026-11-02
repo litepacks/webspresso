@@ -1156,12 +1156,15 @@ describe('Realtime Layer & Server Lifecycle Branch Coverage', () => {
         { file: invalidApiFile, path: '/api/invalid', source: 'invalid-handler.js' },
         {}
       );
+      // A module without a handler is not a route: it falls through (404) instead of erroring
+      let nextCalled = false;
       let capturedErr = null;
       await invalidHandler({ headers: {}, query: {}, params: {} }, {}, (err) => {
+        nextCalled = true;
         capturedErr = err;
       });
-      expect(capturedErr).toBeDefined();
-      expect(capturedErr.message).toContain('does not export a valid handler function');
+      expect(nextCalled).toBe(true);
+      expect(capturedErr).toBeUndefined();
 
       // 2. Middleware throwing synchronous error
       const validApiFile = path.join(tmpDir, 'sync-mw-test.js');

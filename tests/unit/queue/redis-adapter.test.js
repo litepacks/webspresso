@@ -110,6 +110,50 @@ describe('RedisQueueAdapter', () => {
       expect(waitingList[0].member).toBe('j1');
     });
 
+    it('hands a job to only one of several concurrent workers', async () => {
+      const raw = createMockIoRedis();
+      // Yield between every command, like a network round trip, so workers interleave
+      const client = {};
+      for (const [k, fn] of Object.entries(raw)) {
+        client[k] = typeof fn === 'function'
+          ? async (...args) => { await new Promise((r) => setImmediate(r)); return fn(...args); }
+          : fn;
+      }
+      const workers = [1, 2, 3].map(() => new RedisQueueAdapter({ client }));
+
+      await workers[0].enqueue(new Job({ id: 'only-once', name: 'payment.capture' }));
+      const results = await Promise.all(workers.map((w) => w.dequeue()));
+
+      const claimed = results.filter(Boolean);
+      expect(claimed).toHaveLength(1);
+      expect(claimed[0].id).toBe('only-once');
+      expect(claimed[0].attempts).toBe(1);
+    });
+
+    it('recoverStale requeues active jobs abandoned by a dead worker', async () => {
+      const client = createMockIoRedis();
+      const adapter = new RedisQueueAdapter({ client });
+
+      await adapter.enqueue(new Job({ id: 'lost', name: 'report.build', timeout: 1000, maxAttempts: 3 }));
+      await adapter.enqueue(new Job({ id: 'busy', name: 'report.build', timeout: 1000, maxAttempts: 3 }));
+      const lost = await adapter.dequeue();
+      const busy = await adapter.dequeue();
+      expect([lost.id, busy.id].sort()).toEqual(['busy', 'lost']);
+
+      // Age the 'lost' job as if its worker died long ago
+      const key = adapter._key('job:lost');
+      const payload = JSON.parse(client.store.get(key));
+      payload.updatedAt = new Date(Date.now() - 10000).toISOString();
+      client.store.set(key, JSON.stringify(payload));
+
+      expect(await adapter.recoverStale({ graceMs: 1000 })).toBe(1);
+      expect(Array.from(client.sets.get(adapter._key('active')))).toEqual(['busy']);
+
+      const again = await adapter.dequeue();
+      expect(again.id).toBe('lost');
+      expect(again.attempts).toBe(2);
+    });
+
     it('enqueues delayed job when runAt is in future', async () => {
       const client = createMockIoRedis();
       const adapter = new RedisQueueAdapter({ client });

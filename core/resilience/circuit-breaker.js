@@ -23,6 +23,8 @@ const STATE_HALF_OPEN = 'HALF_OPEN';
  * @property {number} [minimumRequests=5] - Minimum requests in rolling window for failure rate calculation
  * @property {number|string} [rollingWindowMs=10000] - Rolling window for metrics in ms or duration string
  * @property {number} [successThreshold=2] - Consecutive successes in HALF_OPEN to close circuit
+ * @property {number} [halfOpenMaxCalls] - Concurrent trial calls allowed in HALF_OPEN (defaults to successThreshold);
+ *   extra calls are rejected like OPEN so a recovering dependency is not flooded
  * @property {number|string} [resetTimeout=10000] - Duration in ms or duration string to stay OPEN before HALF_OPEN
  * @property {number|string} [timeout=0] - Per-call execution timeout in ms or duration string (0 = disabled)
  * @property {function(Error, ...*): *} [fallback] - Fallback handler when OPEN or call fails
@@ -49,6 +51,10 @@ class CircuitBreaker extends EventEmitter {
       : (options.rollingWindow !== undefined ? parseDurationMs(options.rollingWindow, 10000) : 10000);
 
     this.successThreshold = typeof options.successThreshold === 'number' ? Math.max(1, options.successThreshold) : 2;
+    this.halfOpenMaxCalls = typeof options.halfOpenMaxCalls === 'number'
+      ? Math.max(1, options.halfOpenMaxCalls)
+      : this.successThreshold;
+    this._halfOpenInFlight = 0;
 
     this.resetTimeoutMs = options.resetTimeout !== undefined
       ? parseDurationMs(options.resetTimeout, 10000)
@@ -286,24 +292,36 @@ class CircuitBreaker extends EventEmitter {
     this.metrics.totalCalls++;
 
     // 1. Check if OPEN state should attempt recovery to HALF_OPEN
+    let rejectCall = false;
     if (this.state === STATE_OPEN) {
       const now = Date.now();
       if (now - this.lastStateChange >= this.resetTimeoutMs) {
         this._transitionTo(STATE_HALF_OPEN);
       } else {
         // Fast-fail: Circuit is OPEN and reset timeout has not expired
-        this.metrics.rejectedCalls++;
-        const openErr = new CircuitBreakerOpenError(this.name, this.resetTimeoutMs);
-
-        if (this.fallback) {
-          this.metrics.fallbackCalls++;
-          this.emit('fallback', openErr, this);
-          return await this.fallback(openErr, ...args);
-        }
-
-        throw openErr;
+        rejectCall = true;
       }
     }
+    // Only a limited number of trial calls may probe a recovering dependency at once
+    if (!rejectCall && this.state === STATE_HALF_OPEN && this._halfOpenInFlight >= this.halfOpenMaxCalls) {
+      rejectCall = true;
+    }
+
+    if (rejectCall) {
+      this.metrics.rejectedCalls++;
+      const openErr = new CircuitBreakerOpenError(this.name, this.resetTimeoutMs);
+
+      if (this.fallback) {
+        this.metrics.fallbackCalls++;
+        this.emit('fallback', openErr, this);
+        return await this.fallback(openErr, ...args);
+      }
+
+      throw openErr;
+    }
+
+    const isTrialCall = this.state === STATE_HALF_OPEN;
+    if (isTrialCall) this._halfOpenInFlight++;
 
     // 2. Execute operation with optional timeout
     let timerId = null;
@@ -357,6 +375,7 @@ class CircuitBreaker extends EventEmitter {
         clearTimeout(timerId);
         timerId = null;
       }
+      if (isTrialCall) this._halfOpenInFlight = Math.max(0, this._halfOpenInFlight - 1);
     }
   }
 

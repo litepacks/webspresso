@@ -122,7 +122,7 @@ describe('File Manager Plugin Definition', () => {
     expect(registeredModule.menu[0].order).toBe(15);
 
     expect(registeredModule.api.prefix).toBe('/custom-files');
-    expect(registeredModule.api.routes).toHaveLength(6);
+    expect(registeredModule.api.routes).toHaveLength(14); // core CRUD + image/content editing, batch ops, ZIP, storage stats
     const routeMethods = registeredModule.api.routes.map((r) => `${r.method.toUpperCase()} ${r.path}`);
     expect(routeMethods).toContain('GET ');
     expect(routeMethods).toContain('POST /mkdir');
@@ -130,6 +130,10 @@ describe('File Manager Plugin Definition', () => {
     expect(routeMethods).toContain('POST /move');
     expect(routeMethods).toContain('POST /delete');
     expect(routeMethods).toContain('POST /upload');
+    expect(routeMethods).toEqual(expect.arrayContaining([
+      'POST /save-image', 'GET /content', 'POST /save-content', 'POST /batch-delete',
+      'POST /batch-move', 'GET /download-zip', 'POST /download-zip', 'GET /storage-stats',
+    ]));
   });
 
   it('omits admin page and menu when includePage is false', () => {

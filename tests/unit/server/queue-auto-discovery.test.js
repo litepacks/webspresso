@@ -3,7 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import supertest from 'supertest';
 import { createApp } from '../../../src/server';
-import { getQueue, hasQueue, resetAppContext } from '../../../core/context/app-context';
+// require (not import) so this is the same module instance src/server.js uses via require
+const { getQueue, hasQueue, resetAppContext } = require('../../../core/context/app-context');
 import { createQueueManager } from '../../../core/queue';
 
 describe('Background Queue Auto-Discovery & Context Integration (Item #6)', () => {

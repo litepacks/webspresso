@@ -196,6 +196,38 @@ describe('Cloud & Kubernetes Health & Readiness Probes (core/health)', () => {
       expect(res.body.pid).toBe(process.pid);
     });
 
+    it('redacts runtime fingerprints and dependency errors in production by default', async () => {
+      const originalEnv = process.env.NODE_ENV;
+      try {
+        process.env.NODE_ENV = 'production';
+        const failingDb = { knex: { raw: async () => { throw new Error('connect ECONNREFUSED 10.9.8.7:5432'); } } };
+
+        const app = createApp({ rootDir: process.cwd(), pagesDir: 'pages', db: failingDb, healthCheck: true });
+        const live = await request(app).get('/healthz');
+        expect(live.body.status).toBe('ok');
+        expect(live.body.pid).toBeUndefined();
+        expect(live.body.nodeVersion).toBeUndefined();
+        expect(live.body.platform).toBeUndefined();
+
+        const ready = await request(app).get('/readyz');
+        expect(ready.status).toBe(503);
+        expect(ready.body.checks.database.status).toBe('down');
+        expect(ready.body.checks.database.error).toBe('unavailable');
+        expect(JSON.stringify(ready.body)).not.toContain('10.9.8.7');
+
+        const exposed = createApp({
+          rootDir: process.cwd(),
+          pagesDir: 'pages',
+          db: failingDb,
+          healthCheck: { enabled: true, exposeDetails: true },
+        });
+        const detailed = await request(exposed).get('/readyz');
+        expect(detailed.body.checks.database.error).toContain('ECONNREFUSED');
+      } finally {
+        process.env.NODE_ENV = originalEnv;
+      }
+    });
+
     it('serves /readyz (readiness) with 200 when all systems healthy', async () => {
       const mockDb = {
         knex: {

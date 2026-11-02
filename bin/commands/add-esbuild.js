@@ -5,11 +5,15 @@
 
 const fs = require('fs');
 const path = require('path');
+const { getAddCommand } = require('../utils/add-command');
 
 function registerCommand(program) {
-  program
-    .command('add esbuild')
-    .alias('add:esbuild')
+  configureCommand(program.command('add:esbuild'));
+  configureCommand(getAddCommand(program).command('esbuild'));
+}
+
+function configureCommand(command) {
+  command
     .description('Add esbuild client bundling and incremental watch to the project')
     .action(async () => {
       if (!fs.existsSync('package.json')) {

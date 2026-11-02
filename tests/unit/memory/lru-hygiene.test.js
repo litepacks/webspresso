@@ -93,7 +93,7 @@ describe('Memory Hygiene & LRU Caching Hardening', () => {
       const standardUA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36';
       
       const parsed1 = parseUserAgent(standardUA);
-      expect(parsed1.os).toBe('macOS');
+      expect(parsed1.os).toBe('macOS 10.15.7');
       expect(parsed1.device).toBe('desktop');
 
       // Generate 600 unique bot user agents (exceeds MAX_UA_CACHE = 512)
@@ -107,7 +107,7 @@ describe('Memory Hygiene & LRU Caching Hardening', () => {
 
       // standardUA should still be readily resolvable
       const parsedAgain = parseUserAgent(standardUA);
-      expect(parsedAgain.os).toBe('macOS');
+      expect(parsedAgain.os).toBe('macOS 10.15.7');
     });
   });
 });

@@ -449,7 +449,7 @@ describe('Core Architecture Branch Coverage', () => {
       expect(() => compile(file2, { schema: 'not-a-function' })).toThrow(/must be a function/);
 
       // 3. Schema returning non-object throws
-      expect(() => compile(file3, { schema: () => 'invalid-return' })).toThrow(/must return an object or null/);
+      expect(() => compile(file3, { schema: () => 'invalid-return' })).toThrow(/must evaluate to an object or null/);
 
       // 4. Valid schema function
       const validCompiled = compile(file4, {
@@ -871,7 +871,7 @@ describe('Core Architecture Branch Coverage', () => {
     const {
       buildXlsxBuffer,
       getModelExportColumns,
-    } = require('../../plugins/data-exchange/export-xlsx.js');
+    } = require('../../plugins/data-exchange/export.js');
     const { resolveExportRecords } = require('../../plugins/data-exchange/record-selection.js');
     const {
       buildPayloadForRow,

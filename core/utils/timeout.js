@@ -281,7 +281,14 @@ function createTimeoutMiddleware(timeoutConfig, options = {}) {
     if (typeof AbortController !== 'undefined') {
       controller = new AbortController();
       req.abortController = controller;
-      req.signal = controller.signal;
+      // Node 24 defines a getter-only IncomingMessage#signal, so plain assignment throws in
+      // strict mode; shadow it with an own property carrying the timeout signal.
+      Object.defineProperty(req, 'signal', {
+        value: controller.signal,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      });
     }
 
     let timer = setTimeout(() => {

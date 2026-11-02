@@ -766,13 +766,26 @@ const analyzerScript = `
             statusIcon = '!';
           }
           
-          el.innerHTML = 
-            '<div class="seo-check-status ' + statusClass + '">' + statusIcon + '</div>' +
-            '<div class="seo-check-content">' +
-              '<div class="seo-check-name">' + item.name + '</div>' +
-              '<div class="seo-check-message">' + item.result.message + '</div>' +
-            '</div>' +
-            '<div class="seo-check-value">' + item.result.value + '</div>';
+          // Values come from the inspected page (e.g. its <title>), so build nodes with textContent
+          const statusEl = document.createElement('div');
+          statusEl.className = 'seo-check-status ' + statusClass;
+          statusEl.textContent = statusIcon;
+          const contentEl = document.createElement('div');
+          contentEl.className = 'seo-check-content';
+          const nameEl = document.createElement('div');
+          nameEl.className = 'seo-check-name';
+          nameEl.textContent = String(item.name);
+          const messageEl = document.createElement('div');
+          messageEl.className = 'seo-check-message';
+          messageEl.textContent = String(item.result.message);
+          contentEl.appendChild(nameEl);
+          contentEl.appendChild(messageEl);
+          const valueEl = document.createElement('div');
+          valueEl.className = 'seo-check-value';
+          valueEl.textContent = item.result.value == null ? '' : String(item.result.value);
+          el.appendChild(statusEl);
+          el.appendChild(contentEl);
+          el.appendChild(valueEl);
           
           section.appendChild(el);
         });

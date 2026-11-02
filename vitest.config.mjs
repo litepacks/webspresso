@@ -12,8 +12,11 @@ const isCoverage =
   Boolean(process.env.npm_lifecycle_event?.includes('coverage')) ||
   process.argv.some(arg => arg.includes('coverage'));
 
+// The softscope profiler reports failing tests as passed, so it is opt-in (SOFTSCOPE=true)
+// and must never run in normal test or CI runs.
+const softscopeEnabled = process.env.SOFTSCOPE === 'true' || process.env.SOFTSCOPE === '1';
 const plugins = [];
-if (!isCoverage) {
+if (softscopeEnabled && !isCoverage) {
   plugins.push(softscopeVitest({ json: 'softscope-report.json' }));
 }
 
@@ -53,14 +56,12 @@ export default defineConfig({
         '**/tests/**',
         '**/fixtures/**',
         'src/**/*.test.js',
-        '**/run-demo.js',
         // Browser/admin UI bundles are not executed by the Node test suite
         'plugins/admin-panel/client/**',
         'plugins/admin-panel/field-renderers/**',
         'plugins/admin-panel/vendor/**',
         'plugins/admin-panel/components.js',
         'plugins/admin-panel/app.js',
-        'plugins/admin-panel/styles.js',
         'plugins/dashboard/app.js',
         'plugins/dashboard/styles.js',
         'plugins/content/client/**',

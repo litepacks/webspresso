@@ -6,11 +6,15 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { getAddCommand } = require('../utils/add-command');
 
 function registerCommand(program) {
-  program
-    .command('add tailwind')
-    .alias('add:tailwind')
+  configureCommand(program.command('add:tailwind'));
+  configureCommand(getAddCommand(program).command('tailwind'));
+}
+
+function configureCommand(command) {
+  command
     .description('Add Tailwind CSS to the project with build process')
     .option('--v4', 'Use Tailwind CSS v4 (Oxide engine, LightningCSS, zero postcss config)')
     .option('--v3', 'Use Tailwind CSS v3 (legacy PostCSS engine)')
@@ -65,9 +69,9 @@ function registerCommand(program) {
         packageJson.scripts.dev = 'npm run watch:css & node --watch server.js';
       }
       
-      // Update start script to build CSS
+      // Update start script to build CSS (webspresso build runs Tailwind) and start cross-platform
       if (packageJson.scripts.start) {
-        packageJson.scripts.start = 'npm run build:css && NODE_ENV=production node server.js';
+        packageJson.scripts.start = 'webspresso build && webspresso start';
       }
       
       fs.writeFileSync('package.json', JSON.stringify(packageJson, null, 2) + '\n');

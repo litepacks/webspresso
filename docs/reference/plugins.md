@@ -50,7 +50,7 @@ module.exports = {
 | `polarPlugin` | Polar.sh subscription billing, checkouts, and customer state sync | [Polar Billing](/guides/polar-billing) |
 | `rateLimitPlugin` | Named route rate limiters and global DDoS throttling | — |
 | `emailPlugin` | MJML template compilation, live responsive preview, retry engine & delivery log | [Email Suite](/guides/email) |
-| `uploadPlugin` | Multipart uploads with Local, S3, R2, and GCS storage providers | — |
+| `uploadPlugin` | Multipart uploads with Local, S3, R2, and GCS storage providers. HTML/SVG/JS/XML uploads are rejected unless allowlisted or `allowExecutable: true`; pass `middleware` to require authentication | — |
 | `fileManagerPlugin` | Media library with image editor, code editor, batch ZIP ops & quota visualizer | [File Manager](/guides/file-manager) |
 | `contentPlugin` | Schema-driven headless CMS with inline page editing | — |
 | `restResourcePlugin` | Zero-boilerplate RESTful CRUD API generated from ORM models | — |

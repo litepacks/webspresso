@@ -13,6 +13,14 @@ describe('Dev Mode Middleware Reload (src/file-router.js)', () => {
     tempPagesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-dev-mw-pages-'));
     tempViewsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-dev-mw-views-'));
     fs.mkdirSync(path.join(tempPagesDir, 'api'), { recursive: true });
+    // Routes are discovered at startup, so version 1 of the route must exist before createApp()
+    fs.writeFileSync(
+      path.join(tempPagesDir, 'api', 'test.get.js'),
+      `module.exports = {
+        middleware: ['mw1'],
+        handler: (req, res) => res.json({ mw: req.appliedMw || [] }),
+      };`
+    );
 
     const mw1 = (req, res, next) => {
       req.appliedMw = req.appliedMw || [];

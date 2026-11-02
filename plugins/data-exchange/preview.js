@@ -27,19 +27,47 @@ function normalizeHeaderName(str) {
 }
 
 /**
- * Common field aliases for smart mapping
+ * Semantic concepts for smart mapping. A header and a model column match when both
+ * refer to the same concept (by whole normalized name or by one of their words), so
+ * "Email" / "Mail" map to `email_address` and "Customer Name" maps to `full_name`.
  */
-const COMMON_ALIASES = {
-  name: ['fullname', 'displayname', 'personname', 'title', 'label'],
-  email: ['emailaddress', 'mail', 'e_mail', 'useremail'],
-  phone: ['phonenumber', 'telephone', 'mobile', 'tel', 'cell'],
-  active: ['isactive', 'status', 'enabled', 'isenabled'],
-  created_at: ['created', 'creationdate', 'datecreated', 'registeredat'],
-  updated_at: ['updated', 'lastupdated', 'datemodified', 'modifiedat'],
-  description: ['desc', 'details', 'notes', 'summary', 'about'],
-  price: ['amount', 'cost', 'unitprice', 'rate'],
-  quantity: ['qty', 'count', 'units'],
+const CONCEPT_ALIASES = {
+  name: ['name', 'fullname', 'customername', 'displayname', 'personname', 'username'],
+  email: ['email', 'mail', 'emailaddress', 'useremail', 'contactemail'],
+  phone: ['phone', 'phonenumber', 'telephone', 'mobile', 'tel', 'cell'],
+  active: ['active', 'isactive', 'status', 'enabled', 'isenabled', 'activestatus'],
+  created: ['created', 'createdat', 'creationdate', 'datecreated', 'registeredat'],
+  updated: ['updated', 'updatedat', 'lastupdated', 'datemodified', 'modifiedat'],
+  description: ['description', 'desc', 'details', 'notes', 'summary', 'about'],
+  amount: ['amount', 'balance', 'price', 'cost', 'unitprice', 'rate', 'total'],
+  quantity: ['quantity', 'qty', 'count', 'units'],
 };
+
+const IGNORED_TOKENS = new Set(['the', 'of', 'a', 'an', 'is', 'id', 'no', 'nr']);
+
+function tokenize(str) {
+  return String(str || '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t && !IGNORED_TOKENS.has(t));
+}
+
+/**
+ * Concepts a name refers to, by its whole normalized form or any of its words.
+ * @param {string} name
+ * @returns {Set<string>}
+ */
+function conceptsOf(name) {
+  const norm = normalizeHeaderName(name);
+  const tokens = tokenize(name);
+  const found = new Set();
+  for (const [concept, aliases] of Object.entries(CONCEPT_ALIASES)) {
+    if (aliases.includes(norm) || tokens.some((t) => aliases.includes(t))) {
+      found.add(concept);
+    }
+  }
+  return found;
+}
 
 /**
  * Suggest model column for a given file header
@@ -66,16 +94,30 @@ function suggestColumnMatch(header, modelCols) {
     if (normalizeHeaderName(col) === norm) return col;
   }
 
-  // 4. Check semantic aliases
-  for (const [targetCol, aliases] of Object.entries(COMMON_ALIASES)) {
-    if (modelCols.includes(targetCol)) {
-      if (aliases.includes(norm) || aliases.includes(lower)) {
-        return targetCol;
-      }
+  // 4. Score columns by shared concepts (strong) and shared words (weak); require a unique best
+  const headerConcepts = conceptsOf(raw);
+  const headerTokens = new Set(tokenize(raw));
+  let best = null;
+  let bestScore = 0;
+  let tie = false;
+  for (const col of modelCols) {
+    let score = 0;
+    for (const c of conceptsOf(col)) {
+      if (headerConcepts.has(c)) score += 2;
+    }
+    for (const t of tokenize(col)) {
+      if (headerTokens.has(t)) score += 1;
+    }
+    if (score > bestScore) {
+      best = col;
+      bestScore = score;
+      tie = false;
+    } else if (score > 0 && score === bestScore) {
+      tie = true;
     }
   }
 
-  return null;
+  return bestScore > 0 && !tie ? best : null;
 }
 
 /**

@@ -73,7 +73,7 @@
     "bench:baseline": "vitest bench --run --outputJson benchmarks/ci-baseline.json",
     "bench:ci": "vitest bench --run --outputJson benchmarks/current-benchmark.json && node scripts/check-bench-regression.mjs benchmarks/ci-baseline.json benchmarks/current-benchmark.json",
     "bench:ci:local": "npm run bench:baseline && npm run bench:ci",
-    "check:types": "tsc --project tests/ts-smoke/tsconfig.json",
+    "check:types": "tsc --project tests/ts-smoke/tsconfig.json && tsc --noEmit --skipLibCheck false --types node index.d.ts",
     "rebuild:native": "npm rebuild better-sqlite3 bcrypt sharp",
     "docs:dev": "docboot dev ./docs",
     "docs:build": "docboot build ./docs",
@@ -118,6 +118,7 @@
     "knex": "^3.1.0",
     "multer": "^2.4.0",
     "nunjucks": "^3.2.4",
+    "qs": "^6.16.0",
     "sanitize-html": "^2.18.1",
     "yaml": "^2.8.3",
     "zod": "^3.23.0",
@@ -196,7 +197,7 @@
     "@types/node": "^20.14.0",
     "@vitest/coverage-v8": "^4.1.11",
     "alpinejs": "^3.15.11",
-    "bcrypt": "^5.1.1",
+    "bcrypt": "^6.0.0",
     "better-sqlite3": "^11.10.0",
     "chokidar": "^4.0.3",
     "docboot": "^0.3.0",
@@ -231,6 +232,7 @@
     "vite": "^8.3.5"
   },
   "allowScripts": {
+    "bcrypt@6.0.0": true,
     "better-sqlite3@11.10.0": true
   }
 }

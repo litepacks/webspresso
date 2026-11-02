@@ -133,12 +133,20 @@ class RedisQueueAdapter {
         continue;
       }
 
-      // Pop from waiting and add to active
+      // Claim: ZREM is atomic, so only the worker whose ZREM removed the id owns the job.
+      // Concurrent workers read the same ids via ZRANGE; the losers get 0 and move on.
+      let removed;
       if (typeof this.client.zrem === 'function') {
-        await this.client.zrem(waitingKey, String(id));
-        await this.client.sadd(activeKey, String(id));
+        removed = await this.client.zrem(waitingKey, String(id));
       } else if (typeof this.client.zRem === 'function') {
-        await this.client.zRem(waitingKey, String(id));
+        removed = await this.client.zRem(waitingKey, String(id));
+      }
+      if (removed === 0 || removed === '0') {
+        continue;
+      }
+      if (typeof this.client.sadd === 'function') {
+        await this.client.sadd(activeKey, String(id));
+      } else if (typeof this.client.sAdd === 'function') {
         await this.client.sAdd(activeKey, String(id));
       }
 
@@ -176,6 +184,52 @@ class RedisQueueAdapter {
       jobs.push(job);
     }
     return jobs;
+  }
+
+  /**
+   * Requeue jobs left in the active set by a crashed or killed worker.
+   * A job counts as abandoned once it has not been updated for its own timeout plus graceMs.
+   * @param {Object} [options]
+   * @param {number} [options.graceMs=60000]
+   * @param {Array<string|number>} [options.excludeIds] - Jobs still running in this process
+   * @returns {Promise<number>} Number of recovered jobs
+   */
+  async recoverStale(options = {}) {
+    const graceMs = Math.max(0, options.graceMs ?? 60000);
+    const exclude = new Set((options.excludeIds || []).map(String));
+    const activeKey = this._key('active');
+    const now = Date.now();
+
+    let ids = [];
+    if (typeof this.client.smembers === 'function') ids = await this.client.smembers(activeKey);
+    else if (typeof this.client.sMembers === 'function') ids = await this.client.sMembers(activeKey);
+
+    let recovered = 0;
+    for (const id of ids || []) {
+      if (exclude.has(String(id))) continue;
+      const job = await this.getJob(id);
+      if (!job) continue;
+      const timeout = Number(job.timeout);
+      const updatedAt = job.updatedAt ? new Date(job.updatedAt).getTime() : 0;
+      if (!timeout || timeout <= 0 || updatedAt + timeout + graceMs > now) continue;
+
+      // SREM is atomic: only one recovering process wins the job
+      let removed;
+      if (typeof this.client.srem === 'function') removed = await this.client.srem(activeKey, String(id));
+      else if (typeof this.client.sRem === 'function') removed = await this.client.sRem(activeKey, String(id));
+      if (removed === 0 || removed === '0') continue;
+
+      if (job.attempts >= job.maxAttempts) {
+        await this.fail(id, new Error('Worker stopped while processing job'));
+      } else {
+        job.status = 'pending';
+        job.runAt = new Date(now);
+        job.updatedAt = new Date(now);
+        await this.enqueue(job);
+      }
+      recovered++;
+    }
+    return recovered;
   }
 
   /**

@@ -41,6 +41,8 @@ function resolveRedirectUri(req, providerName, providerConfig, pathPrefix) {
  * @param {number} [options.stateTtlMs=600000] - State TTL in milliseconds (default 10 mins)
  * @param {string} [options.defaultReturnTo='/'] - Default redirect URL after successful login
  * @param {string} [options.failureRedirect='/login'] - Default redirect URL on failure
+ * @param {string[]} [options.allowedRedirectOrigins] - Absolute origins `returnTo` may point to
+ *   (default: none — only same-site paths such as '/dashboard' are honoured)
  * @param {Function} [options.findOrCreateUser] - (params: { provider, profile, tokens, stateData, req, res, db }) => Promise<User>
  * @param {Function} [options.onSuccess] - (params: { provider, user, profile, tokens, stateData, req, res, client }) => Promise<void|any>
  * @param {Function} [options.onError] - (params: { error, provider, req, res, client }) => Promise<void|any>
@@ -57,13 +59,44 @@ function oauthPlugin(options = {}) {
     stateTtlMs = 10 * 60 * 1000,
     providers = {},
     secret,
+    allowedRedirectOrigins = [],
   } = options;
 
+  // OAuthClient resolves OAUTH_SECRET / SESSION_SECRET and enforces a strong secret in production
   const client = options.client || createOAuthClient({
-    secret: secret || process.env.OAUTH_SECRET || process.env.SESSION_SECRET || 'webspresso-oauth-secret',
+    secret,
     stateTtlMs,
     providers,
   });
+
+  const allowedOrigins = new Set(
+    (Array.isArray(allowedRedirectOrigins) ? allowedRedirectOrigins : [])
+      .map((o) => {
+        try { return new URL(o).origin; } catch { return null; }
+      })
+      .filter(Boolean)
+  );
+
+  /**
+   * Only same-site paths or explicitly allowed origins may be used after login,
+   * otherwise /auth/google?returnTo=https://evil.example becomes an open redirect.
+   * @param {*} value
+   * @returns {string}
+   */
+  function safeReturnTo(value) {
+    if (typeof value !== 'string' || value.length === 0 || value.length > 2048) return defaultReturnTo;
+    // Same-site path: '/x' but not protocol-relative '//host' or '/\\host'
+    if (value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/\\') && !/[\r\n]/.test(value)) {
+      return value;
+    }
+    try {
+      const url = new URL(value);
+      if ((url.protocol === 'https:' || url.protocol === 'http:') && allowedOrigins.has(url.origin)) {
+        return url.href;
+      }
+    } catch {}
+    return defaultReturnTo;
+  }
 
   /**
    * Handle OAuth failure response
@@ -174,7 +207,7 @@ function oauthPlugin(options = {}) {
       });
     }
 
-    const targetUrl = stateData?.returnTo || defaultReturnTo;
+    const targetUrl = safeReturnTo(stateData?.returnTo);
     return res.redirect(targetUrl);
   }
 
@@ -258,7 +291,7 @@ function oauthPlugin(options = {}) {
           const providerConfig = client.getProvider(providerName);
           const redirectUri = resolveRedirectUri(req, providerName, providerConfig, pathPrefix);
 
-          const returnTo = req.query.returnTo || req.query.redirect || defaultReturnTo;
+          const returnTo = safeReturnTo(req.query.returnTo || req.query.redirect);
           const extraState = req.query.state ? { customState: req.query.state } : {};
           const stateData = {
             returnTo,

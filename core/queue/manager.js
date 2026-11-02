@@ -23,6 +23,9 @@ class QueueManager extends EventEmitter {
    * @param {number} [options.pollInterval=500] - Polling interval in ms when idle
    * @param {string} [options.jobsDir] - Directory to auto-discover job handlers
    * @param {boolean} [options.autoStart=true] - Start worker loop immediately
+   * @param {number|string|false} [options.staleJobGrace='1m'] - Requeue jobs left 'running' by a crashed
+   *   worker once they are idle for their timeout plus this grace (false disables)
+   * @param {number|string} [options.staleCheckInterval='30s'] - How often to look for abandoned jobs
    */
   constructor(options = {}) {
     super();
@@ -37,6 +40,12 @@ class QueueManager extends EventEmitter {
     this.defaultTimeout = options.timeout !== undefined
       ? parseDurationMs(options.timeout, 30000)
       : (options.timeouts?.queue ? parseDurationMs(options.timeouts.queue, 30000) : 30000);
+
+    this.staleJobGrace = options.staleJobGrace === false
+      ? false
+      : parseDurationMs(options.staleJobGrace ?? '1m', 60000);
+    this.staleCheckInterval = parseDurationMs(options.staleCheckInterval ?? '30s', 30000);
+    this._lastStaleCheck = 0;
 
     /** @type {Map<string, { handler: Function, options: Object }>} */
     this.handlers = new Map();
@@ -550,9 +559,11 @@ class QueueManager extends EventEmitter {
    */
   async purgeJobs(options = {}) {
     const statuses = options.status || ['completed', 'failed'];
+    // Purge means "regardless of age": include jobs finished in this very millisecond,
+    // which a `days: 0` cutoff (updatedAt < now) would skip.
     return this.clean({
       status: statuses,
-      days: 0,
+      olderThan: new Date(Date.now() + 1),
     });
   }
 
@@ -629,6 +640,8 @@ class QueueManager extends EventEmitter {
       return;
     }
 
+    await this._recoverStaleJobs();
+
     let jobs = [];
     try {
       if (typeof this.adapter.dequeueMany === 'function' && availableSlots > 1) {
@@ -690,6 +703,26 @@ class QueueManager extends EventEmitter {
       this._scheduleNextTick(0);
     } else {
       this._scheduleNextTick(this.pollInterval);
+    }
+  }
+
+  /**
+   * Requeue jobs abandoned in 'running' state by crashed workers (throttled).
+   * @private
+   */
+  async _recoverStaleJobs() {
+    if (this.staleJobGrace === false || typeof this.adapter.recoverStale !== 'function') return;
+    const now = Date.now();
+    if (now - this._lastStaleCheck < this.staleCheckInterval) return;
+    this._lastStaleCheck = now;
+    try {
+      const recovered = await this.adapter.recoverStale({
+        graceMs: this.staleJobGrace,
+        excludeIds: Array.from(this.activeJobs.keys()),
+      });
+      if (recovered > 0) this.emit('jobs:recovered', recovered);
+    } catch (err) {
+      this.emit('error', err);
     }
   }
 

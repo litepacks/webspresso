@@ -95,14 +95,12 @@ const user = await userRepo.findById(123);
 // Find one by criteria
 const admin = await userRepo.findOne({ email: 'admin@example.com' });
 
-// Paginated query
-const paginated = await userRepo.paginate({
-  page: 1,
-  limit: 20,
-  where: { active: true },
-  orderBy: { field: 'createdAt', direction: 'desc' },
-  include: ['posts'], // Eager load hasMany posts
-});
+// Paginated query (paginate(page, perPage) or paginate({ page, limit }))
+const paginated = await userRepo.query()
+  .where({ active: true })
+  .orderBy('createdAt', 'desc')
+  .include('posts') // Eager load hasMany posts
+  .paginate({ page: 1, limit: 20 });
 
 // Create record
 const newUser = await userRepo.create({

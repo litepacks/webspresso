@@ -29,7 +29,7 @@ class AuthenticationError extends Error {
   }
 }
 
-const WEAK_SECRETS_PATTERN = /^(changeme|secret|default|password|test|webspresso-jwt-secret|123456)/i;
+const WEAK_SECRETS_PATTERN = /^(changeme|secret|default|password|test|webspresso-|123456)/i;
 
 /**
  * Validate secret strength
@@ -596,7 +596,10 @@ class AuthManager extends EventEmitter {
        * @param {string} tokenOrCode - Submitted 6-digit TOTP code or recovery code
        * @param {Object|string} secretOrUser - Secret string or user object with totp_secret / recovery_codes
        * @param {Object} [options]
-       * @returns {{ success: boolean, type?: 'totp'|'recovery_code', delta?: number, remainingHashedCodes?: string[], matchedIndex?: number }}
+       * @param {number} [options.lastStep] - Last accepted TOTP counter (defaults to user.totp_last_step / totpLastStep)
+       * @param {boolean} [options.preventReuse=true] - Reject a TOTP code whose counter was already accepted
+       * @returns {{ success: boolean, type?: 'totp'|'recovery_code', delta?: number, step?: number, remainingHashedCodes?: string[], matchedIndex?: number }}
+       *   On TOTP success, persist `step` (e.g. users.totp_last_step) to block replays across processes.
        */
       verify2Fa(tokenOrCode, secretOrUser, options = {}) {
         if (!tokenOrCode) {
@@ -615,10 +618,21 @@ class AuthManager extends EventEmitter {
 
         // Try TOTP code first
         if (secret) {
-          const totpResult = self.totp.verifyTotp(tokenOrCode, secret, { ...options, detailed: true });
+          const preventReuse = options.preventReuse !== false;
+          let afterStep;
+          if (preventReuse) {
+            const persisted = options.lastStep ?? (secretOrUser && typeof secretOrUser === 'object'
+              ? (secretOrUser.totp_last_step ?? secretOrUser.totpLastStep)
+              : undefined);
+            const steps = [Number(persisted), self.totp.getLastUsedTotpStep(secret)]
+              .filter((n) => typeof n === 'number' && Number.isFinite(n));
+            if (steps.length > 0) afterStep = Math.max(...steps);
+          }
+          const totpResult = self.totp.verifyTotp(tokenOrCode, secret, { ...options, afterStep, detailed: true });
           if (totpResult.valid) {
+            if (preventReuse) self.totp.markTotpStepUsed(secret, totpResult.counter);
             this.set2FaVerified(true);
-            return { success: true, type: 'totp', delta: totpResult.delta };
+            return { success: true, type: 'totp', delta: totpResult.delta, step: totpResult.counter };
           }
         }
 
@@ -932,13 +946,13 @@ class AuthManager extends EventEmitter {
       TOKEN_TYPES.PASSWORD_RESET,
       rawToken
     );
-    if (!verified) {
+    // Claim the token before acting on it so concurrent requests cannot both redeem it
+    if (!verified || !(await consumeAuthToken(this.authTokens, verified.tokenHash))) {
       throw new AuthenticationError('Invalid or expired reset token', 'INVALID_TOKEN');
     }
 
     const hashed = await hashPassword(newPassword);
     await this.updateUser(verified.userId, { [this.passwordField]: hashed });
-    await consumeAuthToken(this.authTokens, verified.tokenHash);
     await this.authTokens.deleteAllForUser(verified.userId, TOKEN_TYPES.PASSWORD_RESET);
 
     return { ok: true };
@@ -1003,12 +1017,11 @@ class AuthManager extends EventEmitter {
       TOKEN_TYPES.EMAIL_VERIFY,
       rawToken
     );
-    if (!verified) {
+    if (!verified || !(await consumeAuthToken(this.authTokens, verified.tokenHash))) {
       throw new AuthenticationError('Invalid or expired verification token', 'INVALID_TOKEN');
     }
 
     await this.updateUser(verified.userId, { [this.verifiedField]: new Date() });
-    await consumeAuthToken(this.authTokens, verified.tokenHash);
 
     return { ok: true, userId: verified.userId };
   }
@@ -1096,7 +1109,7 @@ class AuthManager extends EventEmitter {
       TOKEN_TYPES.MAGIC_LINK,
       rawToken
     );
-    if (!verified) {
+    if (!verified || !(await consumeAuthToken(this.authTokens, verified.tokenHash))) {
       throw new AuthenticationError('Invalid or expired magic link', 'INVALID_MAGIC_LINK');
     }
 
@@ -1104,8 +1117,6 @@ class AuthManager extends EventEmitter {
     if (!user) {
       throw new AuthenticationError('User not found for magic link', 'USER_NOT_FOUND');
     }
-
-    await consumeAuthToken(this.authTokens, verified.tokenHash);
 
     if (options.consumeAllForUser !== false) {
       await this.authTokens.deleteAllForUser(verified.userId, TOKEN_TYPES.MAGIC_LINK);
@@ -1367,4 +1378,5 @@ module.exports = {
   AuthManager,
   AuthenticationError,
   DEFAULT_CONFIG,
+  assertStrongSecret,
 };

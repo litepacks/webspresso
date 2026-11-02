@@ -80,17 +80,27 @@ async function createTestProject() {
       </div>
 
       <div class="flex gap-3">
-        <button id="btn-increment" onclick="count++; document.getElementById('counter-display').textContent = count;" class="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-95 transition text-white font-semibold rounded-lg shadow-sm">
+        <button id="btn-increment" type="button" class="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-95 transition text-white font-semibold rounded-lg shadow-sm">
           + Increment
         </button>
-        <button id="btn-reset" onclick="count=0; document.getElementById('counter-display').textContent = count;" class="py-2.5 px-4 bg-slate-200 hover:bg-slate-300 active:scale-95 transition text-slate-700 font-semibold rounded-lg">
+        <button id="btn-reset" type="button" class="py-2.5 px-4 bg-slate-200 hover:bg-slate-300 active:scale-95 transition text-slate-700 font-semibold rounded-lg">
           Reset
         </button>
       </div>
     </div>
   </div>
   <script>
+    // Wire handlers from script: inline onclick attributes are blocked by CSP (script-src-attr 'none')
     var count = 0;
+    var display = document.getElementById('counter-display');
+    document.getElementById('btn-increment').addEventListener('click', function () {
+      count++;
+      display.textContent = count;
+    });
+    document.getElementById('btn-reset').addEventListener('click', function () {
+      count = 0;
+      display.textContent = count;
+    });
   </script>
 </body>
 </html>`

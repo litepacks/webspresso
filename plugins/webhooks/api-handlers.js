@@ -140,8 +140,7 @@ function createWebhookApiHandlers(dispatcher, options = {}) {
   async function pingEndpointHandler(req, res) {
     try {
       const id = req.params.id;
-      const opts = req.body || {};
-      const result = await dispatcher.testEndpoint(id, opts);
+      const result = await dispatcher.pingEndpoint(id);
       return res.status(200).json(result);
     } catch (err) {
       return res.status(400).json({ error: err.message || 'Failed to ping webhook endpoint' });

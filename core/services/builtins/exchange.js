@@ -73,7 +73,7 @@ function createExchangeServices(options = {}) {
           const buffer = await generateXlsxTemplate(model, { mode, includeSampleRow });
           return {
             buffer,
-            filename: `${safeName}_template.xlsx`,
+            filename: `${safeName}-template.xlsx`,
             contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             format: 'xlsx',
             model: modelName,
@@ -83,7 +83,7 @@ function createExchangeServices(options = {}) {
         const buffer = generateCsvTemplate(model, { mode, includeSampleRow });
         return {
           buffer,
-          filename: `${safeName}_template.csv`,
+          filename: `${safeName}-template.csv`,
           contentType: 'text/csv; charset=utf-8',
           format: 'csv',
           model: modelName,

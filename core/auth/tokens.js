@@ -63,7 +63,7 @@ function createKnexAuthTokensAdapter(db) {
       return knex('auth_tokens').where({ token: tokenHash, type }).first();
     },
     delete: async (tokenHash) => {
-      await knex('auth_tokens').where({ token: tokenHash }).delete();
+      return knex('auth_tokens').where({ token: tokenHash }).delete();
     },
     deleteAllForUser: async (userId, type) => {
       const q = knex('auth_tokens').where({ user_id: userId });
@@ -120,11 +120,16 @@ async function verifyAuthToken(authTokensAdapter, type, rawToken) {
 }
 
 /**
+ * Atomically claim a verified token by deleting it. Only the caller whose delete removed the row
+ * may act on the token, so concurrent requests cannot both redeem it.
+ * Adapters whose delete() returns no count are trusted (treated as claimed).
  * @param {Object} authTokensAdapter
  * @param {string} tokenHash
+ * @returns {Promise<boolean>} true when this caller claimed the token
  */
 async function consumeAuthToken(authTokensAdapter, tokenHash) {
-  await authTokensAdapter.delete(tokenHash);
+  const deleted = await authTokensAdapter.delete(tokenHash);
+  return typeof deleted === 'number' ? deleted > 0 : true;
 }
 
 /**

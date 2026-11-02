@@ -50,7 +50,7 @@ Every coding agent working on Webspresso **MUST** follow this 4-step execution d
 | **Routing** | `routes/index.js`, `express.Router()`, `app.get('/api/users')` | `pages/api/users.get.js` exporting `{ schema, handler }` |
 | **Database** | `db('users').where({ id }).select()` (Raw Knex queries) | `db.getRepository('User').findById(id)` |
 | **Business Logic** | `controllers/UserController.js` | `services/user/get.js` → `ctx.service('user.get', input)` |
-| **Auth** | `npm i jsonwebtoken passport express-session` | Built-in `req.auth`, `core/auth`, `middleware: ['jwt']` |
+| **Auth** | `npm i jsonwebtoken passport express-session` (sessions are already bundled by the framework) | Built-in `req.auth`, `core/auth`, `middleware: ['jwt']` |
 | **SSR Rendering**| `res.render('profile.njk', data)` inside custom handlers | Companion loader `pages/profile.js` exporting `async function load()` |
 | **Exceptions** | `res.status(404).json({ error: 'Not found' })` | `throw new NotFoundError('User not found')` |
 | **Background** | `setTimeout(...)`, `npm i bullmq` | `jobs/user/welcome.js` → `req.queue.dispatch('user.welcome', data)` |
@@ -80,7 +80,7 @@ Every coding agent working on Webspresso **MUST** follow this 4-step execution d
 - **Custom Error & 404 Pages**: Configured via `createApp({ errorPages: { notFound, serverError, timeout } })`. Supports template paths (e.g. `notFound: '404.njk'`) or custom handler functions, passing `{ fsy, locale, isDev, url, method }` to templates.
 - **Cold Start & High-Performance Optimizations**:
   - Unified single-pass route scanner (`discoverAppRoutes`).
-  - Dev-mode on-demand (JIT) route evaluation (`lazyRoutes: true`, dev boot ~15ms).
+  - Dev-mode on-demand (JIT) route evaluation (`lazyRoutes: true`; `createApp()` boots in well under 100ms for small projects).
   - Ahead-of-time (AOT) route table manifest (`webspresso build` -> `.webspresso/routes.manifest.json`).
   - Ahead-of-time (AOT) Nunjucks template precompilation (`webspresso build` -> `.webspresso/templates.compiled.js`).
   - On-demand lazy plugin hydration (`lazyPlugin`, `adminPanelPlugin({ lazy: true })`, `fileManagerPlugin({ lazy: true })`).

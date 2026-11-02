@@ -227,6 +227,27 @@ describe('Centralized Timeout Management & Utilities', () => {
   });
 
   describe('createTimeoutMiddleware', () => {
+    it('exposes the timeout signal even when the request has a getter-only signal (Node 24)', () => {
+      // Node 24 adds a getter-only IncomingMessage#signal; plain assignment throws in strict mode
+      class FakeIncomingMessage {
+        get signal() {
+          return null;
+        }
+      }
+      const req = new FakeIncomingMessage();
+      req.on = () => {};
+      req.emit = () => {};
+      const res = { on: () => {}, once: () => {}, headersSent: false, writableEnded: false };
+      const next = vi.fn();
+
+      const mw = createTimeoutMiddleware(5000);
+      expect(() => mw(req, res, next)).not.toThrow();
+      expect(next).toHaveBeenCalled();
+      expect(req.signal).toBe(req.abortController.signal);
+      expect(req.signal.aborted).toBe(false);
+      req.clearTimeout?.();
+    });
+
     it('returns pass-through middleware when timeout is false', () => {
       const mw = createTimeoutMiddleware(false);
       const req = {};

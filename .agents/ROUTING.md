@@ -410,7 +410,7 @@ Passing `discoveredRoutes` to `createApp({ discoveredRoutes })` skips internal d
 In development (`NODE_ENV !== 'production'`), `lazyRoutes: true` is enabled by default:
 - Route paths and HTTP methods are registered immediately with lightweight proxy handlers.
 - Route handler modules (`pages/**/*.js` / `pages/api/**/*.js`) are required and evaluated **on-demand on the first incoming HTTP request**.
-- Result: Dev server boots in ~15ms even in applications with hundreds of routes.
+- Result: Dev boot time stays roughly constant even in applications with hundreds of routes.
 - Can be explicitly controlled via `createApp({ lazyRoutes: false })` to force eager evaluation.
 
 #### 3. Production Ahead-of-Time (AOT) Route Manifest (`routes.manifest.json`)

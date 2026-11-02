@@ -218,6 +218,13 @@ describe('Cloud Metrics & Distributed Tracing (core/metrics)', () => {
       const disabled = normalizeMetricsConfig({ enabled: false });
       expect(disabled.enabled).toBe(false);
 
+      // Opt-in: an omitted option must not mount /metrics
+      expect(normalizeMetricsConfig().enabled).toBe(false);
+      expect(normalizeMetricsConfig(undefined).enabled).toBe(false);
+      expect(normalizeMetricsConfig(null).enabled).toBe(false);
+      expect(normalizeMetricsConfig(false).enabled).toBe(false);
+      expect(setupMetricsMiddleware(express(), undefined)).toBeNull();
+
       const custom = normalizeMetricsConfig({
         path: '/telemetry',
         auth: 'secret-token-123',
@@ -323,6 +330,23 @@ describe('Cloud Metrics & Distributed Tracing (core/metrics)', () => {
         .set('Authorization', 'Bearer secret-token-xyz');
       expect(okRes.status).toBe(200);
       expect(okRes.text).toContain('# TYPE webspresso_http_requests_total counter');
+    });
+
+    it('warns in production when the scrape endpoint has no auth token', () => {
+      const originalEnv = process.env.NODE_ENV;
+      const warn = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+      try {
+        process.env.NODE_ENV = 'production';
+        setupMetricsMiddleware(express(), { enabled: true });
+        expect(warn.mock.calls.flat().join(' ')).toMatch(/\/metrics is publicly readable/);
+
+        warn.mockClear();
+        setupMetricsMiddleware(express(), { enabled: true, auth: 'token-abc' });
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        process.env.NODE_ENV = originalEnv;
+        warn.mockRestore();
+      }
     });
 
     it('ignores metrics scrape endpoints in request tracking to avoid scraping noise', async () => {

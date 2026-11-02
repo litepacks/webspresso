@@ -151,7 +151,7 @@ const app = createApp({
 
 ### 5.2 Automatic Routes
 - `GET /auth/:provider` (e.g. `/auth/google?returnTo=/dashboard`): Generates PKCE code challenge and HMAC-signed state token with embedded return URL, redirecting the browser to the provider's authorization page.
-- `GET /auth/:provider/callback`: Validates anti-CSRF state, exchanges authorization code for tokens, fetches normalized profile, calls `findOrCreateUser`, automatically establishes session via `req.auth.login(user)`, and redirects to `returnTo`. For API/mobile clients (`format=json` or `Accept: application/json`), returns `{ success: true, user, token }`.
+- `GET /auth/:provider/callback`: Validates anti-CSRF state, exchanges authorization code for tokens, fetches normalized profile, calls `findOrCreateUser`, automatically establishes session via `req.auth.login(user)`, and redirects to `returnTo` (only same-site paths like `/dashboard`, or origins listed in `allowedRedirectOrigins`; anything else falls back to `defaultReturnTo`). For API/mobile clients (`format=json` or `Accept: application/json`), returns `{ success: true, user, token }`.
 
 ### 5.3 Template Helper (`fsy.oauthUrl`)
 In Nunjucks templates:

@@ -73,6 +73,7 @@ function getSampleValueForColumn(colName, meta = {}) {
  * @returns {Array<{ name: string, type: string, required: boolean, sample: any }>}
  */
 function resolveTemplateColumns(model, options = {}) {
+  if (typeof options === 'string') options = { mode: options };
   const mode = options.mode || 'insert';
   const pk = model.primaryKey || 'id';
   const allCols = allowedImportColumns(model);
@@ -84,6 +85,10 @@ function resolveTemplateColumns(model, options = {}) {
 
     // In insert mode, omit auto-generated primary key
     if (mode === 'insert' && isPk && (meta.autoIncrement || meta.auto === 'create' || !meta.type)) {
+      continue;
+    }
+    // Auto-managed timestamps (zdb.timestamp({ auto })) are set by the ORM, never by the sheet
+    if (!isPk && meta.auto) {
       continue;
     }
 
@@ -105,6 +110,7 @@ function resolveTemplateColumns(model, options = {}) {
  * @returns {Buffer}
  */
 function generateCsvTemplate(model, options = {}) {
+  if (typeof options === 'string') options = { mode: options };
   const columns = resolveTemplateColumns(model, options);
   const includeSample = options.includeSampleRow !== false;
 
@@ -135,6 +141,7 @@ function generateCsvTemplate(model, options = {}) {
  * @returns {Promise<Buffer>}
  */
 async function generateXlsxTemplate(model, options = {}) {
+  if (typeof options === 'string') options = { mode: options };
   const columns = resolveTemplateColumns(model, options);
   const includeSample = options.includeSampleRow !== false;
 
@@ -210,14 +217,14 @@ function createTemplateHandler(opts) {
           'Content-Type',
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         );
-        res.setHeader('Content-Disposition', `attachment; filename="${safeName}_template.xlsx"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${safeName}-template.xlsx"`);
         return res.send(buffer);
       }
 
       // Default: CSV
       const buffer = generateCsvTemplate(model, { mode, includeSampleRow: includeSample });
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="${safeName}_template.csv"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${safeName}-template.csv"`);
       return res.send(buffer);
     } catch (err) {
       console.error('[data-exchange] template error:', err);

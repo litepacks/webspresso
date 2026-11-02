@@ -383,6 +383,7 @@ describe('data-exchange import unit tests', () => {
         created: 2,
         updated: 0,
         failed: 0,
+        totalRows: 2,
         errors: [],
       });
       expect(mockCreate).toHaveBeenCalledTimes(2);
@@ -428,6 +429,7 @@ describe('data-exchange import unit tests', () => {
         created: 1,
         updated: 1,
         failed: 0,
+        totalRows: 2,
         errors: [],
       });
       expect(mockUpdate).toHaveBeenCalledWith(10, { sku: 'SKU1', name: 'Item 1 Updated' });
@@ -502,7 +504,7 @@ describe('data-exchange import unit tests', () => {
       expect(res.body.created).toBe(1);
       expect(res.body.failed).toBe(1);
       expect(res.body.errors).toHaveLength(1);
-      expect(res.body.errors[0]).toEqual({ row: 3, message: 'DB write error' });
+      expect(res.body.errors[0]).toEqual({ row: 3, column: null, value: null, message: 'DB write error' });
     });
   });
 });

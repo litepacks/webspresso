@@ -86,10 +86,28 @@ describe('Auth Tokens Module (core/auth/tokens)', () => {
     const verified = await verifyAuthToken(adapter, TOKEN_TYPES.PASSWORD_RESET, rawToken);
     expect(verified).not.toBeNull();
 
-    await consumeAuthToken(adapter, verified.tokenHash);
+    await expect(consumeAuthToken(adapter, verified.tokenHash)).resolves.toBe(true);
 
     const checkAgain = await verifyAuthToken(adapter, TOKEN_TYPES.PASSWORD_RESET, rawToken);
     expect(checkAgain).toBeNull();
+  });
+
+  it('lets only one of two concurrent verifications claim the token', async () => {
+    const { rawToken } = await createAuthToken(adapter, TOKEN_TYPES.PASSWORD_RESET, 304, 60 * 1000);
+
+    // Both requests pass verification before either consumes
+    const [a, b] = await Promise.all([
+      verifyAuthToken(adapter, TOKEN_TYPES.PASSWORD_RESET, rawToken),
+      verifyAuthToken(adapter, TOKEN_TYPES.PASSWORD_RESET, rawToken),
+    ]);
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
+
+    const claims = await Promise.all([
+      consumeAuthToken(adapter, a.tokenHash),
+      consumeAuthToken(adapter, b.tokenHash),
+    ]);
+    expect(claims.filter(Boolean)).toHaveLength(1);
   });
 
   it('should delete all existing tokens for a user when creating a new token of same type', async () => {

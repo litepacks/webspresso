@@ -118,9 +118,7 @@ module.exports = {
   TaggedLruCache: cache.TaggedLruCache,
   createTaggedLruCache: cache.createTaggedLruCache,
   approximateByteSize: cache.approximateByteSize,
-  normalizeCacheConfig: cache.normalizeCacheConfig,
-  parseCacheTtlMs: cache.parseCacheTtlMs,
-  createOrmCacheProvider: cache.createOrmCacheProvider,
+  normalizeCacheConfig: require('./orm/cache').normalizeCacheConfig,
 
   // Resilience & Fault Tolerance (Circuit Breaker & Retry Engine)
   resilience,
@@ -274,12 +272,10 @@ Object.defineProperties(module.exports, {
   // ORM & Database Layer
   orm: { get: () => getOrm(), enumerable: true, configurable: true },
   createDatabase: { get: () => getOrm().createDatabase, enumerable: true, configurable: true },
-  createInMemoryDatabase: { get: () => getOrm().createInMemoryDatabase, enumerable: true, configurable: true },
   defineModel: { get: () => getOrm().defineModel, enumerable: true, configurable: true },
   zdb: { get: () => getOrm().zdb, enumerable: true, configurable: true },
-  BaseRepository: { get: () => getOrm().BaseRepository, enumerable: true, configurable: true },
-  Repository: { get: () => getOrm().Repository, enumerable: true, configurable: true },
-  createRepository: { get: () => getOrm().createRepository, enumerable: true, configurable: true },
+  BaseRepository: { get: () => require('./kernel/base-repository').BaseRepository, enumerable: true, configurable: true },
+  createRepository: { get: () => require('./orm/repository').createRepository, enumerable: true, configurable: true },
   getModel: { get: () => getOrm().getModel, enumerable: true, configurable: true },
   getAllModels: { get: () => getOrm().getAllModels, enumerable: true, configurable: true },
   hasModel: { get: () => getOrm().hasModel, enumerable: true, configurable: true },

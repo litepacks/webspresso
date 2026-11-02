@@ -1146,7 +1146,19 @@ function createApp(options = {}) {
         }
       }
     }
-    
+
+    // The bundled Alpine build evaluates x-data/x-text expressions with `new AsyncFunction`,
+    // which the default `script-src 'self'` blocks in production. Only widen our own default
+    // policy; a user-supplied contentSecurityPolicy is left untouched.
+    if (
+      clientRuntime.alpine &&
+      finalConfig.contentSecurityPolicy === defaultConfig.contentSecurityPolicy &&
+      finalConfig.contentSecurityPolicy?.directives?.scriptSrc &&
+      !finalConfig.contentSecurityPolicy.directives.scriptSrc.includes("'unsafe-eval'")
+    ) {
+      finalConfig.contentSecurityPolicy.directives.scriptSrc.push("'unsafe-eval'");
+    }
+
     const helmetMw = helmet(finalConfig);
 
     // Check if configuration uses purely static directives (no per-request dynamic functions)
@@ -1736,6 +1748,18 @@ function createApp(options = {}) {
   // Combine route metadata for plugin manager
   const allRouteMeta = [...discoveredMeta, ...classicRouteMeta];
   pluginManager.setRoutes(allRouteMeta);
+
+  // The dev banner lists every mounted route: discovered routes plus classic .njk/.js page routes
+  const bannerRoutes = [];
+  const bannerRouteKeys = new Set();
+  for (const r of allRouteMeta) {
+    const method = String(r.method || 'GET').toUpperCase();
+    const routePath = r.path || r.pattern;
+    const key = `${method} ${routePath}`;
+    if (!routePath || bannerRouteKeys.has(key)) continue;
+    bannerRouteKeys.add(key);
+    bannerRoutes.push({ method, path: routePath, type: r.type === 'api' ? 'api' : 'page', source: r.file || '' });
+  }
   
   // Call onRoutesReady hook on plugins with full unified context and mount routes
   pluginManager.onRoutesReadySync({
@@ -2060,7 +2084,7 @@ function createApp(options = {}) {
         printDevBanner({
           app,
           server,
-          routeTable,
+          routeTable: bannerRoutes,
           options,
           db: options.db ?? null,
           serviceRegistry,
@@ -2078,7 +2102,7 @@ function createApp(options = {}) {
     printDevBanner({
       app,
       server: app.server,
-      routeTable,
+      routeTable: bannerRoutes,
       options,
       db: options.db ?? null,
       serviceRegistry,
@@ -2093,7 +2117,7 @@ function createApp(options = {}) {
     return formatDevBanner({
       app,
       server: app.server,
-      routeTable,
+      routeTable: bannerRoutes,
       options,
       db: options.db ?? null,
       serviceRegistry,

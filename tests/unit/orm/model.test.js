@@ -97,17 +97,17 @@ describe('ORM Model Definition & Registry', () => {
         })
       ).toThrow(/Invalid relation type "manyToMany"/);
 
-      // Missing model function
+      // Invalid model reference (neither function nor model name)
       expect(() =>
         defineModel({
           name: 'Order',
           table: 'orders',
           schema,
           relations: {
-            customer: { type: 'belongsTo', model: 'NotAFunc' },
+            customer: { type: 'belongsTo', model: '' },
           },
         })
-      ).toThrow(/must have a model function/);
+      ).toThrow(/must have a model function or model name string/);
 
       // Missing foreignKey
       expect(() =>
@@ -230,6 +230,29 @@ describe('ORM Model Definition & Registry', () => {
       // Invalid reference throws
       expect(() => resolveRelationModel({ model: () => 'GhostModel' })).toThrow(
         'Invalid relation model reference'
+      );
+    });
+
+    it('accepts string model references in relations and resolves them lazily', () => {
+      const schema = z.object({ id: z.number(), authorId: z.number() });
+      // Defined before Author exists: resolution must be deferred
+      const postModel = defineModel({
+        name: 'Post',
+        table: 'posts',
+        schema,
+        relations: {
+          author: { type: 'belongsTo', model: 'Author', foreignKey: 'authorId' },
+          ghost: { type: 'belongsTo', model: 'GhostModel', foreignKey: 'authorId' },
+        },
+      });
+      const authorModel = defineModel({ name: 'Author', table: 'authors', schema: z.object({ id: z.number() }) });
+
+      expect(typeof postModel.relations.author.model).toBe('function');
+      expect(postModel.relations.author.model()).toBe(authorModel);
+      expect(resolveRelationModel(postModel.relations.author)).toBe(authorModel);
+      expect(getRelationKeys(postModel, 'author').relatedModel).toBe(authorModel);
+      expect(() => postModel.relations.ghost.model()).toThrow(
+        'Relation "ghost" in model "Post" references unknown model "GhostModel"'
       );
     });
 

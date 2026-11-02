@@ -170,6 +170,42 @@ class DatabaseQueueAdapter {
   }
 
   /**
+   * Requeue jobs abandoned in 'running' state by a crashed or killed worker.
+   * A job counts as abandoned once it has not been updated for its own timeout plus graceMs
+   * (the owning worker would already have timed it out). Exhausted jobs are marked failed.
+   * @param {Object} [options]
+   * @param {number} [options.graceMs=60000]
+   * @param {Array<string|number>} [options.excludeIds] - Jobs still running in this process
+   * @returns {Promise<number>} Number of recovered jobs
+   */
+  async recoverStale(options = {}) {
+    await this.ensureTable();
+    const graceMs = Math.max(0, options.graceMs ?? 60000);
+    const exclude = new Set((options.excludeIds || []).map(String));
+    const now = new Date();
+
+    const rows = await this.knex(this.tableName).where('status', 'running');
+    let recovered = 0;
+    for (const row of rows) {
+      const timeout = Number(row.timeout);
+      if (exclude.has(String(row.id)) || !timeout || timeout <= 0) continue;
+      const cutoff = new Date(now.getTime() - timeout - graceMs);
+      if (new Date(row.updated_at).getTime() > cutoff.getTime()) continue;
+
+      const exhausted = Number(row.attempts) >= Number(row.max_attempts);
+      // Conditional update: a worker that completes or fails the job concurrently wins
+      const changed = await this.knex(this.tableName)
+        .where({ id: row.id, status: 'running' })
+        .where('updated_at', '<=', cutoff)
+        .update(exhausted
+          ? { status: 'failed', error: 'Worker stopped while processing job', updated_at: now }
+          : { status: 'pending', run_at: now, updated_at: now });
+      recovered += Number(changed) || 0;
+    }
+    return recovered;
+  }
+
+  /**
    * Mark job as completed
    * @param {string|number} jobId
    * @param {any} [result]

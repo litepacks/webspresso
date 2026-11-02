@@ -164,9 +164,9 @@ function defineModel(options) {
         `Invalid relation type "${relation.type}" for "${relationName}" in model "${name}"`
       );
     }
-    if (typeof relation.model !== 'function') {
+    if (typeof relation.model !== 'function' && (typeof relation.model !== 'string' || !relation.model)) {
       throw new Error(
-        `Relation "${relationName}" in model "${name}" must have a model function`
+        `Relation "${relationName}" in model "${name}" must have a model function or model name string`
       );
     }
     if (!relation.foreignKey || typeof relation.foreignKey !== 'string') {
@@ -187,8 +187,22 @@ function defineModel(options) {
       }
     }
 
+    // String references (model: 'User') are wrapped in a lazy resolver so every
+    // consumer can keep calling relation.model() regardless of definition order.
+    const modelRef = relation.model;
     normalizedRelations[relationName] = {
       ...relation,
+      model: typeof modelRef === 'string'
+        ? () => {
+          const resolved = getModel(modelRef);
+          if (!resolved) {
+            throw new Error(
+              `Relation "${relationName}" in model "${name}" references unknown model "${modelRef}"`
+            );
+          }
+          return resolved;
+        }
+        : modelRef,
     };
   }
 

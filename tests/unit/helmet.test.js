@@ -47,6 +47,47 @@ describe.sequential('Helmet Configuration', () => {
     });
   });
 
+  describe('Alpine client runtime', () => {
+    const scriptSrcOf = (res) => {
+      const csp = res.headers['content-security-policy'] || '';
+      return (csp.split(';').find((d) => d.trim().startsWith('script-src ')) || '').trim();
+    };
+
+    it("allows 'unsafe-eval' in the default production CSP only when Alpine is enabled", async () => {
+      const originalEnv = process.env.NODE_ENV;
+      try {
+        process.env.NODE_ENV = 'production';
+
+        const withAlpine = createApp({ pagesDir, viewsDir, clientRuntime: { alpine: true } });
+        expect(scriptSrcOf(await request(withAlpine.app).get('/'))).toContain("'unsafe-eval'");
+
+        const withoutAlpine = createApp({ pagesDir, viewsDir });
+        const plain = scriptSrcOf(await request(withoutAlpine.app).get('/'));
+        expect(plain).toContain("'self'");
+        expect(plain).not.toContain("'unsafe-eval'");
+      } finally {
+        process.env.NODE_ENV = originalEnv;
+      }
+    });
+
+    it('leaves a user-supplied CSP untouched when Alpine is enabled', async () => {
+      const originalEnv = process.env.NODE_ENV;
+      try {
+        process.env.NODE_ENV = 'production';
+
+        const { app } = createApp({
+          pagesDir,
+          viewsDir,
+          clientRuntime: { alpine: true },
+          helmet: { contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'"] } } },
+        });
+        expect(scriptSrcOf(await request(app).get('/'))).not.toContain("'unsafe-eval'");
+      } finally {
+        process.env.NODE_ENV = originalEnv;
+      }
+    });
+  });
+
   describe('Custom Configuration', () => {
     it('should allow disabling helmet', async () => {
       const { app } = createApp({ 
