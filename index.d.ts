@@ -528,6 +528,22 @@ export function createExchangeServices(options?: {
   db?: unknown;
 }): Record<string, ServiceDefinition>;
 
+export function createWebhookServices(options?: {
+  dispatcher: unknown;
+}): Record<string, ServiceDefinition>;
+
+export function createQueueServices(options?: {
+  queueManager?: unknown;
+  queue?: unknown;
+}): Record<string, ServiceDefinition>;
+
+export function createSecurityServices(options?: {
+  firewall: unknown;
+  incidentRecorder?: unknown;
+  pluginOptions?: unknown;
+  app?: unknown;
+}): Record<string, ServiceDefinition>;
+
 export function validateServiceInput(
   schema: unknown,
   input: unknown,
@@ -5759,6 +5775,116 @@ export interface RlsPluginOptions {
 
 export function rlsPlugin(options?: RlsPluginOptions): import('./core/plugins').Plugin;
 export function createRlsMiddleware(options?: RlsPluginOptions): (req: any, res: any, next: (err?: any) => void) => void;
+
+// --- Security Shield Plugin ---
+export interface SecurityPluginOptions {
+  headers?: boolean | {
+    csp?: boolean | Record<string, string[] | boolean | string>;
+    cspReportOnly?: boolean;
+    hsts?: boolean | { maxAge?: number; includeSubDomains?: boolean; preload?: boolean; force?: boolean };
+    frameGuard?: 'SAMEORIGIN' | 'DENY' | string | boolean;
+    noSniff?: boolean;
+    referrerPolicy?: string | boolean;
+    permissionsPolicy?: string | boolean;
+    xssFilter?: boolean;
+    dnsPrefetchControl?: boolean;
+    crossOriginOpenerPolicy?: string | boolean;
+    crossOriginResourcePolicy?: string | boolean;
+    hidePoweredBy?: boolean;
+    generateNonce?: boolean;
+  };
+  firewall?: boolean | {
+    whitelist?: string[];
+    blacklist?: string[];
+    autoBan?: {
+      enabled?: boolean;
+      threshold?: number;
+      window?: string | number;
+      duration?: string | number;
+    };
+  };
+  honeypot?: boolean | {
+    honeypots?: boolean | string[];
+    detectTraversal?: boolean;
+    blockBadBots?: boolean;
+    instantBan?: boolean;
+    violationWeight?: number;
+    honeypotStatus?: number;
+  };
+  bruteForce?: boolean | {
+    routes?: string[];
+    maxAttempts?: number;
+    window?: string | number;
+    lockout?: string | number;
+    progressiveDelay?: boolean;
+    banOnExceeded?: boolean;
+  };
+  incidents?: boolean | {
+    maxSize?: number;
+  };
+  adminPanel?: boolean;
+  adminTitle?: string;
+  adminApiPrefix?: string;
+  menuOrder?: number;
+}
+
+export function securityPlugin(options?: SecurityPluginOptions): import('./core/plugins').Plugin & {
+  api?: {
+    getFirewall(): any;
+    getIncidentRecorder(): any;
+    isBanned(ip: string): { banned: boolean; reason?: string; expiresAt?: number };
+    ban(ip: string, options?: { reason?: string; duration?: string | number; meta?: Record<string, any> }): any;
+    unban(ip: string): boolean;
+    listBanned(options?: { page?: number; limit?: number; search?: string; reason?: string }): any;
+    getStats(): any;
+    audit(app?: any): any;
+  };
+};
+export function createSecurityHeadersMiddleware(options?: any): RequestHandler;
+export function createFirewallMiddleware(firewall: any): RequestHandler;
+
+export class FirewallManager {
+  constructor(options?: any);
+  isBanned(ip: string): { banned: boolean; reason?: string; expiresAt?: number; isPermanent?: boolean; remainingMs?: number };
+  isWhitelisted(ip: string): boolean;
+  ban(ip: string, options?: { reason?: string; duration?: string | number; meta?: Record<string, any> }): any;
+  unban(ip: string): boolean;
+  recordViolation(ip: string, violation?: { type?: string; weight?: number; path?: string; userAgent?: string }): { banned: boolean; count: number; autoBanned: boolean };
+  listBanned(filter?: { page?: number; limit?: number; search?: string; reason?: string }): { items: any[]; total: number; page: number; limit: number; totalPages: number };
+  getStats(): { activeBans: number; permanentBans: number; autoBans24h: number; totalBans: number; totalViolations: number; whitelistCount: number; blacklistCount: number };
+}
+
+export class IncidentRecorder {
+  constructor(options?: { maxSize?: number });
+  record(data: {
+    type: string;
+    ip: string;
+    method?: string;
+    path?: string;
+    userAgent?: string;
+    reason?: string;
+    actionTaken?: 'blocked' | 'banned' | 'throttled' | 'warned' | string;
+    details?: Record<string, any>;
+  }): any;
+  list(filter?: { limit?: number; type?: string; search?: string }): { items: any[]; total: number };
+  clear(): void;
+  getStats(): { last24hCount: number; breakdown: Record<string, number> };
+}
+
+export function auditSecurityPosture(context?: {
+  options?: any;
+  firewall?: any;
+  incidentRecorder?: any;
+  app?: any;
+}): {
+  score: number;
+  grade: string;
+  checks: Array<{ id: string; category: string; title: string; description: string; passed: boolean; weight: number; recommendation: string | null }>;
+  totalChecks: number;
+  passedChecks: number;
+  failedChecks: number;
+  auditedAt: string;
+};
 
 // --- Structured Cloud Logging ---
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';

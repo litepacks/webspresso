@@ -92,6 +92,7 @@ module.exports = {
   get createExchangeServices() { return require('./builtins/exchange').createExchangeServices; },
   get createWebhookServices() { return require('./builtins/webhook').createWebhookServices; },
   get createQueueServices() { return require('./builtins/queue').createQueueServices; },
+  get createSecurityServices() { return require('./builtins/security').createSecurityServices; },
   memoize,
   parseTtlMs,
   stableCacheKey,

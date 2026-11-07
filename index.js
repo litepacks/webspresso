@@ -465,6 +465,9 @@ Object.defineProperties(module.exports, {
   createFileManagerServices: { get: () => require('./core/services').createFileManagerServices, enumerable: true, configurable: true },
   createSystemServices: { get: () => require('./core/services').createSystemServices, enumerable: true, configurable: true },
   createExchangeServices: { get: () => require('./core/services').createExchangeServices, enumerable: true, configurable: true },
+  createWebhookServices: { get: () => require('./core/services').createWebhookServices, enumerable: true, configurable: true },
+  createQueueServices: { get: () => require('./core/services').createQueueServices, enumerable: true, configurable: true },
+  createSecurityServices: { get: () => require('./core/services').createSecurityServices, enumerable: true, configurable: true },
 
   // ORM & Database Layer (lazy loaded)
   orm: { get: () => getOrm(), enumerable: true, configurable: true },
@@ -680,6 +683,14 @@ Object.defineProperties(module.exports, {
   MemoryRateLimitStore: { get: () => require('./core/rate-limit').MemoryRateLimitStore, enumerable: true, configurable: true },
   RedisRateLimitStore: { get: () => require('./core/rate-limit').RedisRateLimitStore, enumerable: true, configurable: true },
   rateLimitPlugin: { get: () => require('./plugins/rate-limit').rateLimitPlugin, enumerable: true, configurable: true },
+
+  // Security Shield Plugin (Core & Plugin)
+  securityPlugin: { get: () => require('./plugins/security').securityPlugin, enumerable: true, configurable: true },
+  createSecurityHeadersMiddleware: { get: () => require('./plugins/security').createSecurityHeadersMiddleware, enumerable: true, configurable: true },
+  createFirewallMiddleware: { get: () => require('./plugins/security').createFirewallMiddleware, enumerable: true, configurable: true },
+  FirewallManager: { get: () => require('./plugins/security').FirewallManager, enumerable: true, configurable: true },
+  IncidentRecorder: { get: () => require('./plugins/security').IncidentRecorder, enumerable: true, configurable: true },
+  auditSecurityPosture: { get: () => require('./plugins/security').auditSecurityPosture, enumerable: true, configurable: true },
 
   // Feature Flags & Canary Traffic Splitter (Core)
   flags: { get: () => require('./core/flags'), enumerable: true, configurable: true },

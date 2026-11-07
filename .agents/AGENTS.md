@@ -27,6 +27,7 @@ When tasked with a feature or bugfix, **immediately consult the corresponding to
 | **Feature Flags & Canary Splitter (`core/flags`)** | [`.agents/FLAGS.md`](FLAGS.md) | `core/flags/` |
 | **Ambient Context & Composable Hooks (`core/context`)** | [`.agents/CONTEXT.md`](CONTEXT.md) | `core/context/` |
 | **Form Builder, ModelForms & Flash (`core/forms`)** | [`.agents/FORMS.md`](FORMS.md) | `core/forms/`, `fsy.field`, `fsy.formFor` |
+| **Security Shield & Threat Defense (`securityPlugin`)** | [`../docs/guides/security.md`](../docs/guides/security.md) | `plugins/security/`, `core/services/builtins/security.js` |
 | **AI Token Streaming & SSE (`core/stream`)** | [`.agents/STREAMING.md`](STREAMING.md) | `core/stream/`, `core/sse/`, `res.streamText` |
 | **API Signatures & Types Verification** | [`index.d.ts`](../index.d.ts) | **Canonical Ground Truth** |
 
@@ -80,6 +81,7 @@ This `.agents/` customization root is organized into modular topic guides:
 31. **[Feature Flags & Canary Traffic Splitter](.agents/FLAGS.md)** — Built-in feature flag and canary rollout engine (`core/flags`), deterministic FNV-1a bucketing, targeting rules (users, roles, email domains), A/B variants, SSR template helpers (`fsy.hasFeature`), and declarative API guards (`defineApi({ flag })`).
 32. **[Ambient Context & Composable Hooks](.agents/CONTEXT.md)** — Built-in execution context powered by `AsyncLocalStorage` (`core/context`), eliminating prop drilling across loaders, services, models, and workers with `useContext`, `useDb`, `useAuth`, `useUser`, `useService`, `useLogger`, `useReq`, `useRes`, `useParams`, `useQuery`, `useTransaction`, and `withContext`.
 33. **[Form Builder, ModelForms & Flash Messages](.agents/FORMS.md)** — Built-in form generation and flash state management (`core/forms`), preserving old input and validation errors across redirects (`res.withOldInput()`, `res.flash()`), accessible form inputs (`fsy.field()`), and model-driven forms (`fsy.formFor()`).
+34. **[Security Shield & Threat Defense](../docs/guides/security.md)** — Zero-dependency threat defense suite (`plugins/security`), native WAF, Helmet-alternative HTTP security headers, IP firewall & CIDR auto-ban, honeypots, LFI/traversal guard, brute-force shield, and Mithril.js Admin Security Cockpit.
 
 ---
 

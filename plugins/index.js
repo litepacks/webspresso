@@ -68,6 +68,12 @@ module.exports = {
   get defineLazyPlugin() { return require('./lazy').defineLazyPlugin; },
   get rlsPlugin() { return require('./rls').rlsPlugin; },
   get createRlsMiddleware() { return require('./rls').createRlsMiddleware; },
+  get securityPlugin() { return require('./security').securityPlugin; },
+  get createSecurityHeadersMiddleware() { return require('./security').createSecurityHeadersMiddleware; },
+  get createFirewallMiddleware() { return require('./security').createFirewallMiddleware; },
+  get FirewallManager() { return require('./security').FirewallManager; },
+  get IncidentRecorder() { return require('./security').IncidentRecorder; },
+  get auditSecurityPosture() { return require('./security').auditSecurityPosture; },
 };
 
 

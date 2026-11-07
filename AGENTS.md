@@ -27,6 +27,7 @@ When tasked with a feature or bugfix, **immediately consult the corresponding to
 | **Feature Flags & Canary Splitter (`core/flags`)** | [`.agents/FLAGS.md`](.agents/FLAGS.md) | `core/flags/` |
 | **Ambient Context & Composable Hooks (`core/context`)** | [`.agents/CONTEXT.md`](.agents/CONTEXT.md) | `core/context/` |
 | **Form Builder, ModelForms & Flash (`core/forms`)** | [`.agents/FORMS.md`](.agents/FORMS.md) | `core/forms/`, `fsy.field`, `fsy.formFor` |
+| **Security Shield & Threat Defense (`securityPlugin`)** | [`docs/guides/security.md`](docs/guides/security.md) | `plugins/security/`, `core/services/builtins/security.js` |
 | **AI Token Streaming & SSE (`core/stream`)** | [`.agents/STREAMING.md`](.agents/STREAMING.md) | `core/stream/`, `core/sse/`, `res.streamText` |
 | **API Signatures & Types Verification** | [`index.d.ts`](index.d.ts) | **Canonical Ground Truth** |
 
@@ -171,6 +172,7 @@ Plugins expose `name`, `version`, `dependencies`, and lifecycle hooks (`register
 - `csvPlugin`: RFC 4180 CSV generator, parser, Excel UTF-8 BOM compatibility, formula sanitization, streaming writer (`res.csv`), and built-in services (`csv.generate`, `csv.parse`, `csv.exportModel`).
 - `apiKeyPlugin`: Built-in B2B & Developer API Key Management with SHA-256 secure storage, constant-time verification, granular wildcard scopes, named route middleware (`ctx.middlewares.apiKey`), and non-blocking usage tracking.
 - `webhooksPlugin`: Outgoing Webhook Dispatcher with HMAC-SHA256 cryptographic signatures, wildcard event matching (`*`, `order.*`), automatic retries with exponential backoff, background job queue integration (`core/queue`), built-in services (`webhook.dispatch`, `webhook.ping`, `webhook.retry`), and Mithril.js Admin Panel management UI.
+- `securityPlugin`: Zero-dependency enterprise threat defense suite (WAF, Helmet alternative headers, IP firewall & auto-ban, honeypots, LFI/traversal guard, brute-force shield, and Mithril.js Admin Security Cockpit).
 
 ---
 
