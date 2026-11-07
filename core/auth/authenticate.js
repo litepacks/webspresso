@@ -25,10 +25,10 @@ async function authenticateRequest(req, res, authManager) {
     req.auth = authManager.createRequestAuth(req, res);
   }
 
-  // 1. Check Bearer JWT token header first
+  // 1. Check Bearer JWT token header first (case-insensitive per RFC 6750)
   const authHeader = req.headers?.authorization || req.headers?.Authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7).trim();
+  if (authHeader && /^Bearer\s+/i.test(authHeader)) {
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
     try {
       const payload = authManager.verifyJwt(token);
       req.token = token;

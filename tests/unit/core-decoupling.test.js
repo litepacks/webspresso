@@ -383,5 +383,29 @@ describe('Core Decoupling & Framework Independence', () => {
       expect(req.user.id).toBe(101);
       expect(req.token).toBe(token);
     });
+
+    it('authenticates request via case-insensitive bearer prefix per RFC 6750', async () => {
+      const { authenticateRequest } = require('../../core/auth/authenticate');
+      const { AuthManager } = require('../../core/auth/manager');
+
+      const authManager = new AuthManager({
+        secret: 'test-jwt-secret-key-32-chars-long!',
+        users: {
+          findById: async (id) => ({ id, email: 'lowercase@example.com' }),
+        },
+      });
+
+      const token = authManager.generateUserToken({ id: 202, email: 'lowercase@example.com' });
+      const req = {
+        headers: {
+          authorization: `bearer ${token}`,
+        },
+      };
+
+      const user = await authenticateRequest(req, null, authManager);
+      expect(user).toBeDefined();
+      expect(user.id).toBe(202);
+      expect(req.token).toBe(token);
+    });
   });
 });

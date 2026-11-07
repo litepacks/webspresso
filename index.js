@@ -83,6 +83,7 @@ const {
   configureAssets, 
   getAssetManager 
 } = require('./src/helpers');
+const cascading = require('./src/routing/cascading');
 const {
   PluginManager,
   createPluginManager,
@@ -180,10 +181,18 @@ module.exports = {
 
   // HTTP Response Compression
   compression,
+  supportsBrotli: compression.supportsBrotli,
+  getDefaultSupportedEncodings: compression.getDefaultSupportedEncodings,
+  parseAcceptEncoding: compression.parseAcceptEncoding,
+  selectEncoding: compression.selectEncoding,
+  isCompressible: compression.isCompressible,
+  createCompressionStream: compression.createCompressionStream,
   createCompressionMiddleware: compression.createCompressionMiddleware,
+  appendVary: compression.appendVary,
 
   // HTTP 103 Early Hints
   earlyHints,
+  EXTENSION_AS_MAP: earlyHints.EXTENSION_AS_MAP,
   sendEarlyHints: earlyHints.sendEarlyHints,
   createEarlyHintsMiddleware: earlyHints.createEarlyHintsMiddleware,
   formatLink: earlyHints.formatLink,
@@ -192,13 +201,18 @@ module.exports = {
 
   // Payload Limits & DoS Protection
   limits,
+  DEFAULT_LIMITS: limits.DEFAULT_LIMITS,
   normalizeLimits: limits.normalizeLimits,
   setupLimitsMiddleware: limits.setupLimitsMiddleware,
   createLimitsMiddleware: limits.createLimitsMiddleware,
   parseByteSize: limits.parseByteSize,
+  matchesPath: limits.matchesPath,
+  shouldSkipBodyParser: limits.shouldSkipBodyParser,
+  shouldCaptureRawBody: limits.shouldCaptureRawBody,
 
   // Health & Readiness Probes
   health,
+  DEFAULT_HEALTH_CONFIG: health.DEFAULT_HEALTH_CONFIG,
   normalizeHealthConfig: health.normalizeHealthConfig,
   setupHealthMiddleware: health.setupHealthMiddleware,
   createHealthManager: health.createHealthManager,
@@ -312,6 +326,22 @@ module.exports = {
   compileRouteTable,
   RouteTable,
   mountDiscoveredRoutes,
+
+  // SSR Cascading Layouts & Middleware
+  cascading,
+  getDirectoryChain: cascading.getDirectoryChain,
+  templateHasExtends: cascading.templateHasExtends,
+  findCascadingMiddlewareFiles: cascading.findCascadingMiddlewareFiles,
+  loadCascadingMiddlewares: cascading.loadCascadingMiddlewares,
+  runMiddleware: cascading.runMiddleware,
+  runMiddlewareChain: cascading.runMiddlewareChain,
+  findCascadingLayouts: cascading.findCascadingLayouts,
+  executeCascadingLayoutLoads: cascading.executeCascadingLayoutLoads,
+  applyCascadingLayouts: cascading.applyCascadingLayouts,
+  findNearestErrorBoundary: cascading.findNearestErrorBoundary,
+  findNearestLoadingTemplate: cascading.findNearestLoadingTemplate,
+  clearCascadingCaches: cascading.clearCascadingCaches,
+
   resolveMiddlewares: require('./src/routing/middleware-resolver').resolveMiddlewares,
   translateValidationIssues: require('./src/api/validation-i18n').translateValidationIssues,
   getTranslatorForRequest: require('./src/api/validation-i18n').getTranslatorForRequest,

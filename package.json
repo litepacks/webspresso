@@ -38,6 +38,7 @@
     "webspresso": "./bin/webspresso.js"
   },
   "scripts": {
+    "audit:jev": "node scripts/jev-audit.js",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit/ tests/plugins/unit/",
     "test:integration": "vitest run tests/integration/ tests/plugins/integration/",

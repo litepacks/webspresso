@@ -45,6 +45,8 @@ function createAuthMiddleware(authManager) {
    * Sets up express-session with secure cookie enforcement
    */
   const sessionMiddleware = session({
+    resave: sessionConfig.resave ?? false,
+    saveUninitialized: sessionConfig.saveUninitialized ?? false,
     ...sessionConfig,
     cookie: {
       httpOnly: true,
@@ -125,14 +127,14 @@ function createAuthMiddleware(authManager) {
   function requireJwt(options = {}) {
     return async (req, res, next) => {
       const authHeader = req.headers?.authorization || req.headers?.Authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      if (!authHeader || !/^Bearer\s+/i.test(authHeader)) {
         return res.status(401).json({
           error: 'Unauthorized',
           message: 'Bearer token required',
         });
       }
 
-      const token = authHeader.substring(7).trim();
+      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
       try {
         const payload = authManager.verifyJwt(token, options);
         req.token = token;

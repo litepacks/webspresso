@@ -3660,6 +3660,7 @@ export interface RestResourcePluginOptions {
 }
 
 export function restResourcePlugin(options?: RestResourcePluginOptions): WebspressoPlugin;
+export const restResourcesPlugin: typeof restResourcePlugin;
 
 export function ormCacheAdminPlugin(options: { db: DatabaseInstance }): WebspressoPlugin;
 

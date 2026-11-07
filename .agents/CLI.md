@@ -41,17 +41,39 @@ Checks performed:
 
 ---
 
-## 3. Database Commands (`db:migrate`, `db:seed`)
+## 3. Database Commands (`db:migrate`, `db:status`, `db:rollback`, `db:make`, `db:makemigrations`, `db:scaffold`, `db:seed`, `orm:map`)
 
 ```bash
 # Run pending Knex database migrations
 npx webspresso db:migrate
+
+# Inspect migration status (completed vs pending)
+npx webspresso db:status
+
+# Rollback last migration batch (or --all to revert everything)
+npx webspresso db:rollback
+npx webspresso db:rollback --all
+
+# Create a new empty migration file (or for a specific model)
+npx webspresso db:make create_orders_table
+npx webspresso db:make add_status_to_orders -m Order
+
+# Auto-detect model changes against live database and generate migrations
+npx webspresso db:makemigrations
+# Alias:
+npx webspresso makemigrations
+
+# Scaffold create-table migrations directly from models/*.js
+npx webspresso db:scaffold
 
 # Seed database records
 npx webspresso db:seed
 
 # Scaffold initial seed files
 npx webspresso db:seed --setup
+
+# Generate an interactive visual HTML map of ORM models and relationships
+npx webspresso orm:map
 ```
 
 ---
@@ -646,4 +668,55 @@ npx webspresso console --no-history --no-banner
 - `.flags`: List active feature flags and targeting rules.
 - `.reload`: Hot-reload models and services from filesystem.
 - `.exit`: Exit the console session (`Ctrl+D`).
+
+---
+
+## 30. Admin Staff Management (`admin:setup`, `admin:password`, `admin:list`)
+
+Manage isolated admin panel users and authentication tables:
+
+```bash
+# Create admin_users table migration
+npx webspresso admin:setup
+
+# Reset or set staff password
+npx webspresso admin:password -e admin@example.com -p "NewPassword123!"
+
+# List all admin users
+npx webspresso admin:list
+```
+
+---
+
+## 31. Cloud Database Migration Jobs (`add:migration-job`)
+
+Scaffold pre-deploy zero-downtime database migration jobs for Google Cloud Run, AWS ECS Fargate, or Kubernetes Helm hooks:
+
+```bash
+# Scaffold migration job for Google Cloud Run with Cloud SQL proxy
+npx webspresso add:migration-job --platform cloudrun --app my-app --cloudsql my-project:us-central1:my-db
+
+# Scaffold migration job for AWS ECS Fargate
+npx webspresso add:migration-job --platform aws --app my-app
+
+# Scaffold migration job for Kubernetes Job
+npx webspresso add:migration-job --platform k8s --app my-app
+```
+
+---
+
+## 32. Model Context Protocol (MCP) Server (`mcp`)
+
+Launch a local Model Context Protocol (MCP) server over Stdio for Claude Desktop, Cursor, or AI coding assistants to expose Webspresso services, ORM schemas, and resources:
+
+```bash
+# Start MCP server over standard I/O
+npx webspresso mcp
+
+# Start MCP server in read-only mode (prevents mutation services)
+npx webspresso mcp --read-only
+
+# Print detected MCP configuration and tools without starting the daemon
+npx webspresso mcp --print-config
+```
 

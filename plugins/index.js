@@ -20,6 +20,7 @@ module.exports = {
   get apiDocsPlugin() { return require('./swagger'); },
   get healthCheckPlugin() { return require('./health-check'); },
   get restResourcePlugin() { return require('./rest-resources'); },
+  get restResourcesPlugin() { return require('./rest-resources'); },
   get ormCacheAdminPlugin() { return require('./orm-cache-admin'); },
   get uploadPlugin() { return require('./upload').uploadPlugin; },
   get createLocalFileProvider() { return require('./upload').createLocalFileProvider; },
