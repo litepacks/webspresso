@@ -91,6 +91,7 @@ Unbiased, complete specification of public APIs verified against TypeScript decl
 Runnable, tested example projects demonstrating real-world patterns:
 
 - **`examples/basic-ssr`** — Minimal Nunjucks SSR + SQLite setup.
+- **`examples/fullstack-app`** — Feature-complete blog (SSR loaders, JSON API, services, ORM relations, JWT, jobs, events, metrics). All framework benchmarks run against it.
 - **`examples/rest-and-services`** — REST API endpoints, Zod schema validation, and services layer.
 - **`examples/auth-session-jwt`** — Dual authentication setup with session cookies and stateless JWTs.
 - **`examples/admin-custom-pages`** — Admin Panel SPA with custom Mithril.js components and dashboard widgets.

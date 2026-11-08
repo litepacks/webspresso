@@ -107,6 +107,121 @@ function decodeFlashCookie(raw) {
 function createFlashMiddleware(options = {}) {
   const cookieName = options.cookieName || FLASH_COOKIE_NAME;
 
+  // Helpers are created once per middleware and read per-request state from req.__flash /
+  // req.__outgoingFlash (`this` is the req or res they are called on), instead of allocating
+  // six closures on every request.
+
+  function saveOutgoingFlash(req, res) {
+    const outgoingFlash = req.__outgoingFlash;
+    if (req.session) {
+      req.session[FLASH_SESSION_KEY] = outgoingFlash;
+    } else {
+      // Remove any previously set cookie with the same name from response headers
+      const existing = res.getHeader('Set-Cookie');
+      if (existing) {
+        const arr = Array.isArray(existing) ? existing : [existing];
+        const filtered = arr.filter((c) => !c.startsWith(`${cookieName}=`));
+        if (filtered.length > 0) {
+          res.setHeader('Set-Cookie', filtered);
+        } else {
+          res.removeHeader('Set-Cookie');
+        }
+      }
+      const encoded = encodeFlashCookie(outgoingFlash);
+      const shouldSign = options.signed !== undefined
+        ? Boolean(options.signed)
+        : Boolean(req.secret || options.secret);
+      const cookieOpts = {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 300000, // 5 minutes
+      };
+      if (shouldSign && (req.secret || options.secret)) {
+        cookieOpts.signed = true;
+      }
+      res.cookie(cookieName, encoded, cookieOpts);
+    }
+  }
+
+  /**
+   * Set or get a flash message
+   * @this {import('express').Request}
+   * @param {string} [key]
+   * @param {any} [value]
+   * @returns {any}
+   */
+  function flash(key, value) {
+    if (arguments.length === 0) {
+      return this.__flash;
+    }
+    if (arguments.length === 1) {
+      return this.__flash[key];
+    }
+    this.__outgoingFlash[key] = value;
+    saveOutgoingFlash(this, this.res);
+    return value;
+  }
+
+  /**
+   * Get old input value from previous request
+   * @this {import('express').Request}
+   * @param {string} [name]
+   * @param {any} [defaultValue=null]
+   * @returns {any}
+   */
+  function old(name, defaultValue = null) {
+    const oldInputs = this.__flash.old || {};
+    if (!name) return oldInputs;
+    return oldInputs[name] !== undefined ? oldInputs[name] : defaultValue;
+  }
+
+  /**
+   * Flash current request body / input for the next request
+   * @this {import('express').Response}
+   * @param {Object} [customInput]
+   * @returns {import('express').Response}
+   */
+  function withInput(customInput) {
+    const req = this.req;
+    const input = customInput || req.body || {};
+    // Exclude sensitive fields by default
+    const sanitized = { ...input };
+    delete sanitized.password;
+    delete sanitized.password_confirmation;
+    delete sanitized.confirmPassword;
+    delete sanitized._csrf;
+
+    req.__outgoingFlash.old = sanitized;
+    saveOutgoingFlash(req, this);
+    return this;
+  }
+
+  /**
+   * Flash validation errors for the next request
+   * @this {import('express').Response}
+   * @param {any} errors - ZodError, object, array, or string
+   * @returns {import('express').Response}
+   */
+  function withErrors(errors) {
+    this.req.__outgoingFlash.errors = normalizeErrors(errors);
+    saveOutgoingFlash(this.req, this);
+    return this;
+  }
+
+  /**
+   * Flash a key-value message for the next request
+   * @this {import('express').Response}
+   * @param {string} key - e.g. 'success', 'warning', 'info'
+   * @param {any} message
+   * @returns {import('express').Response}
+   */
+  function withFlash(key, message) {
+    this.req.__outgoingFlash[key] = message;
+    saveOutgoingFlash(this.req, this);
+    return this;
+  }
+
   return function flashMiddleware(req, res, next) {
     if (options.secret && !req.secret) {
       req.secret = options.secret;
@@ -130,116 +245,16 @@ function createFlashMiddleware(options = {}) {
       res.clearCookie(cookieName, { path: '/' });
     }
 
-    // Outgoing flash state to be persisted for the NEXT request
-    const outgoingFlash = {};
-
-    /**
-     * Set or get a flash message
-     * @param {string} [key]
-     * @param {any} [value]
-     * @returns {any}
-     */
-    req.flash = function (key, value) {
-      if (arguments.length === 0) {
-        return incomingFlash;
-      }
-      if (arguments.length === 1) {
-        return incomingFlash[key];
-      }
-      outgoingFlash[key] = value;
-      saveOutgoingFlash();
-      return value;
-    };
-
-    /**
-     * Get old input value from previous request
-     * @param {string} [name]
-     * @param {any} [defaultValue=null]
-     * @returns {any}
-     */
-    req.old = function (name, defaultValue = null) {
-      const oldInputs = incomingFlash.old || {};
-      if (!name) return oldInputs;
-      return oldInputs[name] !== undefined ? oldInputs[name] : defaultValue;
-    };
-
-    /**
-     * Flash current request body / input for the next request
-     * @param {Object} [customInput]
-     * @returns {res}
-     */
-    res.withInput = function (customInput) {
-      const input = customInput || req.body || {};
-      // Exclude sensitive fields by default
-      const sanitized = { ...input };
-      delete sanitized.password;
-      delete sanitized.password_confirmation;
-      delete sanitized.confirmPassword;
-      delete sanitized._csrf;
-
-      outgoingFlash.old = sanitized;
-      saveOutgoingFlash();
-      return res;
-    };
-
-    /**
-     * Flash validation errors for the next request
-     * @param {any} errors - ZodError, object, array, or string
-     * @returns {res}
-     */
-    res.withErrors = function (errors) {
-      outgoingFlash.errors = normalizeErrors(errors);
-      saveOutgoingFlash();
-      return res;
-    };
-
-    /**
-     * Flash a key-value message for the next request
-     * @param {string} key - e.g. 'success', 'warning', 'info'
-     * @param {any} message
-     * @returns {res}
-     */
-    res.withFlash = function (key, message) {
-      outgoingFlash[key] = message;
-      saveOutgoingFlash();
-      return res;
-    };
-
-    function saveOutgoingFlash() {
-      if (req.session) {
-        req.session[FLASH_SESSION_KEY] = outgoingFlash;
-      } else {
-        // Remove any previously set cookie with the same name from response headers
-        const existing = res.getHeader('Set-Cookie');
-        if (existing) {
-          const arr = Array.isArray(existing) ? existing : [existing];
-          const filtered = arr.filter((c) => !c.startsWith(`${cookieName}=`));
-          if (filtered.length > 0) {
-            res.setHeader('Set-Cookie', filtered);
-          } else {
-            res.removeHeader('Set-Cookie');
-          }
-        }
-        const encoded = encodeFlashCookie(outgoingFlash);
-        const shouldSign = options.signed !== undefined
-          ? Boolean(options.signed)
-          : Boolean(req.secret || options.secret);
-        const cookieOpts = {
-          path: '/',
-          httpOnly: true,
-          sameSite: 'lax',
-          maxAge: 300000, // 5 minutes
-        };
-        if (shouldSign && (req.secret || options.secret)) {
-          cookieOpts.signed = true;
-        }
-        res.cookie(cookieName, encoded, cookieOpts);
-      }
-    }
-
-    // Attach to request context for Nunjucks helpers
+    // Attach to request context for Nunjucks helpers; outgoing state is persisted for the NEXT request
     req.__flash = incomingFlash;
-    req.__outgoingFlash = outgoingFlash;
+    req.__outgoingFlash = {};
+    if (!res.req) res.req = req;
+
+    req.flash = flash;
+    req.old = old;
+    res.withInput = withInput;
+    res.withErrors = withErrors;
+    res.withFlash = withFlash;
 
     next();
   };

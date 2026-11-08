@@ -74,6 +74,8 @@
     "bench:baseline": "vitest bench --run --outputJson benchmarks/ci-baseline.json",
     "bench:ci": "vitest bench --run --outputJson benchmarks/current-benchmark.json && node scripts/check-bench-regression.mjs benchmarks/ci-baseline.json benchmarks/current-benchmark.json",
     "bench:ci:local": "npm run bench:baseline && npm run bench:ci",
+    "bench:profile": "softscope --top 30 node scripts/profile-bench.mjs",
+    "bench:profile:ai": "softscope --top 40 -o softscope-bench.ai node scripts/profile-bench.mjs",
     "check:types": "tsc --project tests/ts-smoke/tsconfig.json && tsc --noEmit --skipLibCheck false --types node index.d.ts",
     "rebuild:native": "npm rebuild better-sqlite3 bcrypt sharp",
     "docs:dev": "docboot dev ./docs",

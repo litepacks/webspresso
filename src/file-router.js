@@ -158,7 +158,7 @@ async function handleDirectoryErrorBoundary({
 
     const shouldApplyLayout = errorConfig?.layout !== false &&
       errorData?.layout !== false &&
-      !templateHasExtends(njkTpl.templateBody, errorBoundary.fullPath);
+      !templateHasExtends(njkTpl.templateBody, errorBoundary.fullPath, isDev);
 
     if (shouldApplyLayout) {
       const errorLayouts = findCascadingLayouts(absolutePagesDir, errorBoundary.errorRelPath, isDev);
@@ -1204,7 +1204,12 @@ function mountPages(app, options) {
   const clientRuntime = clientRuntimeOpt && typeof clientRuntimeOpt === 'object'
     ? { alpine: !!clientRuntimeOpt.alpine, swup: !!clientRuntimeOpt.swup }
     : { alpine: false, swup: false };
-  const isDev = process.env.NODE_ENV !== 'production';
+  // createApp() passes its own decision (NODE_ENV === 'development' or options.isDev). The env
+  // fallback only applies to direct mountPages() callers; without it, NODE_ENV=test or an unset
+  // NODE_ENV re-required API handlers and re-read templates from disk on every request.
+  const isDev = options.isDev !== undefined
+    ? Boolean(options.isDev)
+    : process.env.NODE_ENV !== 'production';
   const log = silent ? NOOP : console.log.bind(console);
   
   // Get absolute path to pages directory
@@ -1530,9 +1535,9 @@ function mountPages(app, options) {
             t: tr.t,
             service: req.service,
             db,
-            sse: res.sse,
-            streamText: res.streamText,
-            streamJson: res.streamJson,
+            sse: (sourceOrOptions, maybeOptions) => (res && typeof res.sse === 'function' ? res.sse(sourceOrOptions, maybeOptions) : null),
+            streamText: (sourceOrCallback, maybeOptions) => (res && typeof res.streamText === 'function' ? res.streamText(sourceOrCallback, maybeOptions) : null),
+            streamJson: (sourceOrCallback, maybeOptions) => (res && typeof res.streamJson === 'function' ? res.streamJson(sourceOrCallback, maybeOptions) : null),
           });
 
           await fn(req, res, apiCtx);
@@ -1805,7 +1810,7 @@ function mountPages(app, options) {
           const shouldApplyLayout = config?.layout !== false &&
             ctx.data?.layout !== false &&
             ctx.meta?.layout !== false &&
-            !templateHasExtends(njkTpl.templateBody, route.fullPath);
+            !templateHasExtends(njkTpl.templateBody, route.fullPath, isDev);
 
           return await renderStream(res, templatePath, renderContext, {
             env: nunjucks,
@@ -1839,7 +1844,7 @@ function mountPages(app, options) {
         const shouldApplyLayout = config?.layout !== false &&
           ctx.data?.layout !== false &&
           ctx.meta?.layout !== false &&
-          !templateHasExtends(njkTpl.templateBody, route.fullPath);
+          !templateHasExtends(njkTpl.templateBody, route.fullPath, isDev);
 
         if (shouldApplyLayout && cascadingLayouts.length > 0) {
           html = applyCascadingLayouts(nunjucks, cascadingLayouts, html, renderContext, isDev);

@@ -11,42 +11,63 @@ const { sha256 } = require('../../utils/crypto');
  */
 function stableValue(v) {
   if (v === null || v === undefined) return v;
-  if (typeof v !== 'object') return v;
+  const type = typeof v;
+  if (type !== 'object') return v;
+  if (v instanceof Date || Buffer.isBuffer(v)) return v;
+
   if (Array.isArray(v)) {
     const len = v.length;
     if (len === 0) return v;
+    let needsTransform = false;
+    for (let i = 0; i < len; i++) {
+      const item = v[i];
+      if (item !== null && typeof item === 'object') {
+        needsTransform = true;
+        break;
+      }
+    }
+    if (!needsTransform) return v;
     const out = new Array(len);
     for (let i = 0; i < len; i++) {
-      out[i] = stableValue(v[i]);
+      const item = v[i];
+      out[i] = (item !== null && typeof item === 'object') ? stableValue(item) : item;
     }
     return out;
   }
+
   const keys = Object.keys(v);
   const keyLen = keys.length;
   if (keyLen === 0) return v;
   if (keyLen === 1) {
     const k = keys[0];
-    return { [k]: stableValue(v[k]) };
+    const val = v[k];
+    const s = (val !== null && typeof val === 'object') ? stableValue(val) : val;
+    return { [k]: s };
   }
   if (keyLen === 2) {
     const k0 = keys[0];
     const k1 = keys[1];
+    const val0 = v[k0];
+    const val1 = v[k1];
+    const s0 = (val0 !== null && typeof val0 === 'object') ? stableValue(val0) : val0;
+    const s1 = (val1 !== null && typeof val1 === 'object') ? stableValue(val1) : val1;
     return k0 < k1
-      ? { [k0]: stableValue(v[k0]), [k1]: stableValue(v[k1]) }
-      : { [k1]: stableValue(v[k1]), [k0]: stableValue(v[k0]) };
+      ? { [k0]: s0, [k1]: s1 }
+      : { [k1]: s1, [k0]: s0 };
   }
   let isSorted = true;
-  for (let i = 1; i < keyLen; i++) {
-    if (keys[i - 1] > keys[i]) {
-      isSorted = false;
-      break;
-    }
+  let hasObjects = false;
+  for (let i = 0; i < keyLen; i++) {
+    if (i > 0 && keys[i - 1] > keys[i]) isSorted = false;
+    const val = v[keys[i]];
+    if (val !== null && typeof val === 'object') hasObjects = true;
   }
   if (!isSorted) keys.sort();
   const out = {};
   for (let i = 0; i < keyLen; i++) {
     const k = keys[i];
-    out[k] = stableValue(v[k]);
+    const val = v[k];
+    out[k] = (val !== null && typeof val === 'object') ? stableValue(val) : val;
   }
   return out;
 }

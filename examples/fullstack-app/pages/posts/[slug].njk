@@ -1,0 +1,21 @@
+{% extends "layout.njk" %}
+
+{% block content %}
+<article class="card post">
+  <h1>{{ post.title }}</h1>
+  <p class="meta">
+    by {{ post.author.name }} in
+    <a href="/posts?category={{ post.category.slug }}">{{ post.category.name }}</a>
+    · {{ post.views }} views
+  </p>
+  <div class="body">{{ post.body }}</div>
+</article>
+
+<section class="card">
+  <h2>{{ post.comments | length }} comments</h2>
+  {% for comment in post.comments %}
+    <blockquote><strong>{{ comment.author_name }}:</strong> {{ comment.body }}</blockquote>
+  {% endfor %}
+</section>
+{% endblock %}
+

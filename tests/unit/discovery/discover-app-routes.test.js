@@ -91,4 +91,28 @@ describe('discoverAppRoutes Unified Scanner', () => {
       cleanupDir(tempDir);
     }
   });
+
+  it('should not flag a page template and its companion loader as a collision', () => {
+    const tempDir = createTempDir('temp-unified-companion');
+    fs.mkdirSync(path.join(tempDir, 'pages', 'posts'), { recursive: true });
+    fs.writeFileSync(path.join(tempDir, 'pages', 'index.njk'), 'home');
+    fs.writeFileSync(path.join(tempDir, 'pages', 'index.js'), 'module.exports = { load() { return {}; } };');
+    fs.writeFileSync(path.join(tempDir, 'pages', 'posts', '[slug].njk'), 'slug');
+    fs.writeFileSync(path.join(tempDir, 'pages', 'posts', '[slug].js'), 'module.exports = { load() { return {}; } };');
+
+    const mockWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      discoverAppRoutes({
+        rootDir: tempDir,
+        pages: { dir: path.join(tempDir, 'pages') },
+      });
+
+      const calls = mockWarn.mock.calls.map((c) => String(c[0]));
+      expect(calls.some((c) => c.includes('Dynamic route collision'))).toBe(false);
+    } finally {
+      mockWarn.mockRestore();
+      cleanupDir(tempDir);
+    }
+  });
 });

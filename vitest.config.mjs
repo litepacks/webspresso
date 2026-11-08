@@ -22,13 +22,16 @@ if (softscopeEnabled && !isCoverage) {
 
 export default defineConfig({
   cacheDir: process.env.TMPDIR ? `${process.env.TMPDIR}/.vite` : './node_modules/.vite',
-  benchmark: {
-    include: ['benchmarks/**/*.bench.mjs'],
-    exclude: ['node_modules', 'dist'],
-    reporters: ['default'],
-  },
   plugins,
   test: {
+    // Must live under `test` (a top-level `benchmark` key is ignored and Vitest falls back to
+    // `**/*.bench.*`, which also picked up agent worktrees under .claude/worktrees/).
+    benchmark: {
+      // All suites boot examples/fullstack-app via benchmarks/_fullstack-harness.mjs
+      include: ['benchmarks/**/*.bench.mjs'],
+      exclude: ['**/node_modules/**', '**/dist/**', '**/.claude/**', '**/worktrees/**', '**/examples/**'],
+      reporters: ['default'],
+    },
     silent: process.env.VERBOSE !== 'true',
     environment: 'node',
     testTimeout: 60000,

@@ -318,8 +318,8 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
       }
     }
 
-    // 2. Emit service:before event if dispatcher is present
-    if (eventDispatcher && typeof eventDispatcher.emit === 'function') {
+    // 2. Emit service:before event if dispatcher is present and listening
+    if (eventDispatcher && (typeof eventDispatcher.hasListeners === 'function' ? eventDispatcher.hasListeners('service:before') : typeof eventDispatcher.emit === 'function')) {
       try {
         eventDispatcher.emit('service:before', {
           name,
@@ -498,8 +498,8 @@ async function executeService(registry, name, input = {}, ctx = {}, options = {}
       }
     }
 
-    // 4. Emit service:after event
-    if (eventDispatcher && typeof eventDispatcher.emit === 'function') {
+    // 4. Emit service:after event if dispatcher is present and listening
+    if (eventDispatcher && (typeof eventDispatcher.hasListeners === 'function' ? eventDispatcher.hasListeners('service:after') : typeof eventDispatcher.emit === 'function')) {
       try {
         eventDispatcher.emit('service:after', {
           name,

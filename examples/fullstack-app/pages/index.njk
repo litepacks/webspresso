@@ -1,0 +1,33 @@
+{% extends "layout.njk" %}
+
+{% block content %}
+<section class="hero card">
+  <h1>Webspresso Fullstack Example</h1>
+  <p>A blog that exercises SSR loaders, services, ORM relations, JWT auth, queues, events and more.</p>
+  <ul class="stats">
+    <li><strong>{{ stats.posts }}</strong> published</li>
+    <li><strong>{{ stats.drafts }}</strong> drafts</li>
+    <li><strong>{{ stats.authors }}</strong> authors</li>
+    <li><strong>{{ stats.comments }}</strong> comments</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Latest posts</h2>
+  {% for post in latest %}
+    {% include "partials/post-card.njk" %}
+  {% else %}
+    <p>No posts yet.</p>
+  {% endfor %}
+</section>
+
+<aside class="card">
+  <h2>Categories</h2>
+  <ul class="tags">
+    {% for cat in categories %}
+      <li><a href="/posts?category={{ cat.slug }}">{{ cat.name }}</a></li>
+    {% endfor %}
+  </ul>
+</aside>
+{% endblock %}
+

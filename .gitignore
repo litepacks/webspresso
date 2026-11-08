@@ -57,3 +57,10 @@ doctor.html
 tmp/
 *.sqlite*
 *.db
+
+# Fullstack example local database
+examples/fullstack-app/data.sqlite*
+
+# scripts/profile-bench.mjs temp copies and softscope bench output
+benchmarks/.profile-*.bench.mjs
+softscope-bench.ai

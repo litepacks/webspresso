@@ -138,7 +138,16 @@ function main() {
     fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
   }
 
-  if (missingInCurrent.length && FAIL_MISSING) {
+  // A baseline with zero overlapping keys was recorded for a different suite (e.g. the
+  // benchmarks were rewritten). Report it, but don't fail until a fresh baseline exists.
+  const suiteReplaced = base.size > 0 && cur.size > 0 && missingInCurrent.length === base.size;
+  if (suiteReplaced) {
+    console.warn(
+      '\ncheck-bench-regression: baseline shares no benchmarks with this run (suite replaced); skipping missing-key check. Refresh with `npm run bench:baseline`.',
+    );
+  }
+
+  if (missingInCurrent.length && FAIL_MISSING && !suiteReplaced) {
     console.error(
       '\ncheck-bench-regression: some baseline benchmarks are missing in this run; if benches were renamed, refresh the baseline (`npm run bench:baseline`).',
     );

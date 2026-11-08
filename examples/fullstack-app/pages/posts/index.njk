@@ -1,0 +1,23 @@
+{% extends "layout.njk" %}
+
+{% block content %}
+<section>
+  <h1>Posts{% if category %} in “{{ category }}”{% endif %}</h1>
+  {% for post in posts.data %}
+    {% include "partials/post-card.njk" %}
+  {% else %}
+    <p>No posts found.</p>
+  {% endfor %}
+
+  <nav class="pager">
+    {% if posts.page > 1 %}
+      <a href="/posts?page={{ posts.page - 1 }}{% if category %}&category={{ category }}{% endif %}">← Newer</a>
+    {% endif %}
+    <span>Page {{ posts.page }} / {{ posts.totalPages }}</span>
+    {% if posts.page < posts.totalPages %}
+      <a href="/posts?page={{ posts.page + 1 }}{% if category %}&category={{ category }}{% endif %}">Older →</a>
+    {% endif %}
+  </nav>
+</section>
+{% endblock %}
+

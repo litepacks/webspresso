@@ -27,11 +27,19 @@ function formatLabels(labels) {
  * @returns {string}
  */
 function labelsKey(labels) {
-  if (!labels || Object.keys(labels).length === 0) return '';
-  return Object.entries(labels)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${k}=${v}`)
-    .join(',');
+  if (!labels) return '';
+  // Runs several times per HTTP request (counters + histogram). Avoid entries()/map()
+  // allocations and the much slower localeCompare(); keys only need a stable order.
+  const keys = Object.keys(labels);
+  const len = keys.length;
+  if (len === 0) return '';
+  if (len === 1) return `${keys[0]}=${labels[keys[0]]}`;
+  if (len > 2 || keys[0] > keys[1]) keys.sort();
+  let out = `${keys[0]}=${labels[keys[0]]}`;
+  for (let i = 1; i < len; i++) {
+    out += `,${keys[i]}=${labels[keys[i]]}`;
+  }
+  return out;
 }
 
 class Counter {
