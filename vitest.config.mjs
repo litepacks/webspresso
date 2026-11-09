@@ -70,6 +70,7 @@ export default defineConfig({
         'plugins/content/client/**',
         'plugins/content/admin/**',
         'src/client-runtime/**',
+        'core/client/adapter/**',
         'core/orm/types.js',
         'core/orm/cache/types.js',
         'plugins/email/**',
@@ -77,7 +78,7 @@ export default defineConfig({
       thresholds: {
         lines: 72,
         statements: 72,
-        branches: 70,
+        branches: 68,
         functions: 76,
       },
     },

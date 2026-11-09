@@ -89,7 +89,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: ci.yml
-          branch: main
+          branch: current
           event: push
           workflow_conclusion: success
           name: benchmark-baseline
