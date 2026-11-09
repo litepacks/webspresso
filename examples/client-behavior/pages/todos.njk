@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ pageTitle }} — Webspresso</title>
+  <link rel="stylesheet" href="/css/demo.css">
+  <script src="/js/client-demo.js" defer></script>
+</head>
+<body>
+  <nav class="demo-nav">
+    <a class="demo-nav-brand" href="/">
+      <span class="brand-icon">⚡</span>
+      <span>Webspresso <strong>Client Behavior</strong></span>
+    </a>
+    <div class="demo-nav-links">
+      <a href="/todos" class="active">1. Todo List Workspace</a>
+      <a href="/counter">2. SSR Counter (Zero .client.*)</a>
+    </div>
+  </nav>
+
+  <main data-w-controller="todos">
+    <header class="page-header">
+      <div class="header-titles">
+        <div class="eyebrow-badge">SSR Fragments + Datastar Signals + Typed Forms</div>
+        <h1>Task &amp; Engineering Backlog</h1>
+        <p class="subtitle">
+          Server renders HTML fragments (<code>todos-summary</code> &amp; <code>todos-list</code>);
+          client handles instant filtering, accessible validation, and protected live draft editing.
+        </p>
+      </div>
+    </header>
+
+    <!-- 1. SSR Fragment: Summary KPI + Progress Bar + Bulk Actions -->
+    {{ fsy.fragment('summary', {}, { instanceId: 'todos-summary' }) }}
+
+    <!-- 2. Main Two-Column Workspace -->
+    <div class="todos-workspace">
+      <!-- Left Column: Quick-Add Composer + Filter Bar + SSR Task List -->
+      <section class="todos-main-col">
+        <!-- Quick-Add Task Composer -->
+        <form
+          action="/api/todos"
+          method="post"
+          data-w-form="create-todo"
+          data-w-clear="true"
+          class="composer-card"
+          novalidate
+        >
+          <div class="composer-top-row">
+            <span class="composer-plus">+</span>
+            <input
+              name="title"
+              type="text"
+              class="composer-title-input"
+              placeholder="Add a new task... (try typing 1–2 chars to test HTTP 422 validation)"
+              autocomplete="off"
+            >
+            <button type="submit" class="btn-primary composer-submit-btn">Add Task</button>
+          </div>
+          <span data-w-error="title" class="composer-error"></span>
+
+          <div class="composer-bottom-row">
+            <div class="composer-meta-controls">
+              <label class="inline-chip-select">
+                <span>Priority</span>
+                <select name="priority">
+                  <option value="medium" selected>Medium</option>
+                  <option value="high">High</option>
+                  <option value="low">Low</option>
+                </select>
+              </label>
+
+              <label class="inline-chip-select">
+                <span>Category</span>
+                <select name="category">
+                  <option value="architecture" selected>architecture</option>
+                  <option value="frontend">frontend</option>
+                  <option value="backend">backend</option>
+                  <option value="testing">testing</option>
+                </select>
+              </label>
+            </div>
+
+            <textarea
+              name="notes"
+              rows="1"
+              class="composer-notes-input"
+              placeholder="Optional sub-notes or acceptance criteria..."
+            ></textarea>
+          </div>
+          <p data-w-form-error></p>
+        </form>
+
+        <!-- Interactive Filter & Search Toolbar -->
+        <div class="todos-filter-panel">
+          <div class="filter-top-bar">
+            <div class="search-input-wrap">
+              <span class="search-icon">⌕</span>
+              <input
+                type="search"
+                name="search"
+                value="{{ initialSearch }}"
+                placeholder="Filter by title, category, or notes..."
+                data-w-target="searchInput"
+                data-w-model="draft.search"
+                data-w-on:input="applyFilters"
+              >
+            </div>
+
+            <div class="filter-selects-group">
+              <select data-w-target="statusSelect" data-w-model="draft.status" data-w-on:change="applyFilters" aria-label="Filter by status">
+                <option value="all">Status: All</option>
+                <option value="active">Status: Open</option>
+                <option value="completed">Status: Done</option>
+              </select>
+
+              <select data-w-target="prioritySelect" data-w-model="draft.priority" data-w-on:change="applyFilters" aria-label="Filter by priority">
+                <option value="all">Priority: All</option>
+                <option value="high">Priority: High</option>
+                <option value="medium">Priority: Medium</option>
+                <option value="low">Priority: Low</option>
+              </select>
+
+              <button type="button" class="btn-ghost btn-sm" data-w-on:click="resetFilters">Reset</button>
+            </div>
+          </div>
+
+          <div class="filter-tabs-bar">
+            <div class="Quick-pills">
+              <span class="pills-label">Quick View:</span>
+              <button type="button" class="pill-btn" data-w-on:click="setQuickStatus" data-status="all">All</button>
+              <button type="button" class="pill-btn" data-w-on:click="setQuickStatus" data-status="active">Open Only</button>
+              <button type="button" class="pill-btn" data-w-on:click="setQuickStatus" data-status="completed">Completed</button>
+              <span class="meta-divider">|</span>
+              <button type="button" class="pill-btn pill-high" data-w-on:click="setQuickPriority" data-priority="high">🔥 High Priority</button>
+            </div>
+
+            <div class="pagination-controls">
+              <span class="active-filter-summary" data-w-text="filterSummaryText">Showing: All • Page 1</span>
+              <div class="pagination-btns">
+                <button type="button" class="btn-ghost btn-sm" data-w-on:click="prevPage">← Prev</button>
+                <button type="button" class="btn-ghost btn-sm" data-w-on:click="nextPage">Next →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SSR Fragment: Paginated Task List -->
+        {{ fsy.fragment('list', { search: initialSearch, status: initialStatus, priority: initialPriority, page: initialPage, limit: 4 }, { instanceId: 'todos-list' }) }}
+      </section>
+
+      <!-- Right Column: Sticky Draft Inspector + Client-Managed API Insights -->
+      <aside class="todos-side-col">
+        <!-- Protected Active Edit / Draft Inspector -->
+        <form
+          action="/api/todos/3"
+          method="patch"
+          data-w-form="edit-todo"
+          data-w-preserve-draft="true"
+          id="todo-draft-form"
+          class="demo-card draft-card"
+          data-w-target="editForm"
+          data-testid="open-edit-form"
+          novalidate
+        >
+          <div class="draft-header">
+            <div class="draft-title-group">
+              <span class="draft-shield-icon">🛡</span>
+              <h2>Draft Inspector</h2>
+            </div>
+            <span class="draft-badge" data-w-text="editingBadge">Task #3</span>
+          </div>
+
+          <div class="draft-callout">
+            <strong>DOM Morph Protection Active:</strong> Edit the fields below and leave them unsaved while you toggle, add, or delete tasks on the left — your text and cursor focus are never lost.
+          </div>
+
+          <div class="field-group">
+            <label for="draft-title-input">Task Title</label>
+            <input
+              id="draft-title-input"
+              name="title"
+              type="text"
+              value="Preserve unsaved draft and cursor focus during list refresh"
+              data-w-target="editTitle"
+              data-testid="edit-draft-title"
+            >
+            <span data-w-error="title"></span>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="field-group">
+              <label for="draft-priority-select">Priority</label>
+              <select id="draft-priority-select" name="priority" data-w-target="editPriority">
+                <option value="high" selected>High (Critical)</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label for="draft-category-input">Category</label>
+              <input id="draft-category-input" name="category" type="text" value="frontend" data-w-target="editCategory">
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label for="draft-notes-textarea">Detailed Notes / Scratchpad</label>
+            <textarea
+              id="draft-notes-textarea"
+              name="notes"
+              data-w-target="editNotes"
+              data-testid="edit-draft-content"
+            >In-place DOM morphing keeps active form inputs and cursor position intact while fragments refresh.</textarea>
+            <span data-w-error="notes"></span>
+          </div>
+
+          <div class="form-actions-row">
+            <button type="submit" class="btn-primary">Save Inspector Changes</button>
+            <button type="button" class="btn-ghost" data-w-on:click="resetDraftForm">Reset Draft</button>
+          </div>
+          <p data-w-form-error></p>
+        </form>
+
+        <!-- Client-Managed Data: Explicit Typed API Call writing to Controller State -->
+        <div class="demo-card insights-card">
+          <div class="insights-header">
+            <h2>📊 Live Telemetry &amp; Insights</h2>
+            <span class="client-pill">Client State (<code>api.get</code>)</span>
+          </div>
+          <p class="card-hint">
+            Fetches JSON from <code>GET /api/todos/insights</code> and binds it directly to controller-local Datastar signals (<code>data-w-text</code>, <code>data-w-show</code>).
+          </p>
+
+          <button
+            type="button"
+            class="btn-secondary full-width-btn"
+            data-w-on:click="loadInsights"
+            data-w-disabled="tasks.insights.pending"
+            data-testid="load-insights-btn"
+          >
+            ↻ Fetch Live Insights via API
+          </button>
+
+          <div class="insights-result" data-w-show="hasInsights" data-testid="insights-panel" hidden>
+            <p class="insights-headline" data-w-text="insightsHeadline" data-testid="insights-headline"></p>
+            <p class="insights-detail" data-w-text="insightsDetail" data-testid="insights-detail"></p>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+</body>
+</html>

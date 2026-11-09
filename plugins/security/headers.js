@@ -98,8 +98,14 @@ function createSecurityHeadersMiddleware(options = {}) {
   let cspDirectives = null;
   if (csp === true) {
     cspDirectives = { ...DEFAULT_CSP };
+    if (cspReportOnly) {
+      delete cspDirectives['upgrade-insecure-requests'];
+    }
   } else if (typeof csp === 'object' && csp !== null) {
     cspDirectives = { ...DEFAULT_CSP, ...csp };
+    if (cspReportOnly && !Object.prototype.hasOwnProperty.call(csp, 'upgrade-insecure-requests')) {
+      delete cspDirectives['upgrade-insecure-requests'];
+    }
   }
 
   // Normalized HSTS string

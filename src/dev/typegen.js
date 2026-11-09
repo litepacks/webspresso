@@ -13,30 +13,136 @@ const { hasServiceRegistry, getServiceRegistry } = require('../../core/context')
 const { scanRoutes } = require('../../src/discovery/scan-routes');
 const { compileRouteTable } = require('../../src/routing/route-table');
 const { z } = require('../../core/validation');
+const {
+  collectApiRouteContracts: collectApiRouteContractsRaw,
+  generateApiDeclarationCode,
+  checkTemplateFormContracts: checkTemplateFormContractsRaw,
+} = require('./api-typegen');
+
+/**
+ * Infer the output TypeScript type of a Zod `.transform(fn)` effect when possible.
+ *
+ * @param {Function} transformFn
+ * @param {import('zod').ZodTypeAny} innerSchema
+ * @param {number} indent
+ * @param {'output'|'input'|'wire'} mode
+ * @returns {string}
+ */
+function inferZodTransformOutputType(transformFn, innerSchema, indent, mode) {
+  if (typeof transformFn !== 'function') {
+    return zodToTsType(innerSchema, indent, mode);
+  }
+  const fnSrc = Function.prototype.toString.call(transformFn).trim();
+  if (/^(?:function\s*\([^)]*\)\s*\{\s*return\s+)?Number\s*\(/.test(fnSrc) || /=>\s*Number\s*\(/.test(fnSrc) || /=>\s*parseInt\s*\(/.test(fnSrc) || /=>\s*parseFloat\s*\(/.test(fnSrc) || /=>\s*\+\s*[a-zA-Z_$]/.test(fnSrc)) {
+    return 'number';
+  }
+  if (/=>\s*String\s*\(/.test(fnSrc) || /\.trim\(\)\s*$/.test(fnSrc) || /\.toLowerCase\(\)\s*$/.test(fnSrc) || /\.toUpperCase\(\)\s*$/.test(fnSrc)) {
+    return 'string';
+  }
+  if (/=>\s*Boolean\s*\(/.test(fnSrc) || /=>\s*!!/.test(fnSrc)) {
+    return 'boolean';
+  }
+  if (/\.split\s*\(/.test(fnSrc)) {
+    return 'Array<string>';
+  }
+  if (/=>\s*new\s+Date\s*\(/.test(fnSrc)) {
+    return mode === 'wire' ? 'string' : 'Date';
+  }
+  // Try executing transform on a safe dummy sample if innerSchema is primitive
+  const innerType = innerSchema && innerSchema._def && innerSchema._def.typeName;
+  try {
+    let sample;
+    if (innerType === 'ZodString') sample = '1';
+    else if (innerType === 'ZodNumber') sample = 1;
+    else if (innerType === 'ZodBoolean') sample = true;
+    if (sample !== undefined) {
+      const out = transformFn(sample, { addIssue() {}, path: [] });
+      if (typeof out === 'number') return 'number';
+      if (typeof out === 'string') return 'string';
+      if (typeof out === 'boolean') return 'boolean';
+      if (out instanceof Date) return mode === 'wire' ? 'string' : 'Date';
+      if (Array.isArray(out)) return 'Array<unknown>';
+    }
+  } catch {
+    // Ignore sample execution errors
+  }
+  return zodToTsType(innerSchema, indent, mode);
+}
+
+/**
+ * Checks whether a Zod field is optional in the given mode ('input' vs 'output' vs 'wire').
+ * Notice: `ZodDefault` is optional in 'input' mode (client may omit it),
+ * but required in 'output' mode (server receives the defaulted value).
+ *
+ * @param {import('zod').ZodTypeAny} zField
+ * @param {'output'|'input'|'wire'} mode
+ * @returns {boolean}
+ */
+function isZodFieldOptional(zField, mode = 'output') {
+  if (!zField || !zField._def) return false;
+  const t = zField._def.typeName;
+  if (t === 'ZodOptional') return true;
+  if (t === 'ZodDefault') {
+    return mode === 'input';
+  }
+  if (t === 'ZodEffects' && zField._def.schema) {
+    return isZodFieldOptional(zField._def.schema, mode);
+  }
+  return false;
+}
+
+/**
+ * Unwraps outer `ZodOptional` / `ZodDefault` for property type emission inside `ZodObject`.
+ */
+function unwrapOptionalOrDefault(zField, mode = 'output') {
+  if (!zField || !zField._def) return zField;
+  const t = zField._def.typeName;
+  if (t === 'ZodOptional') {
+    return zField._def.innerType;
+  }
+  if (t === 'ZodDefault' && mode === 'input') {
+    return zField._def.innerType;
+  }
+  return zField;
+}
 
 /**
  * Converts a Zod type schema to a TypeScript type string
  * @param {import('zod').ZodTypeAny} zType
  * @param {number} [indent=0]
+ * @param {'output'|'input'|'wire'} [mode='output'] - 'input' (client payload), 'output' (server parsed), or 'wire' (JSON wire format)
  * @returns {string}
  */
-function zodToTsType(zType, indent = 0) {
+function zodToTsType(zType, indent = 0, mode = 'output') {
   if (!zType || !zType._def) return 'unknown';
   const typeName = zType._def.typeName;
   const spaces = '  '.repeat(indent);
   const nextSpaces = '  '.repeat(indent + 1);
 
+  // Support custom zdb.file() metadata
+  if (zType._zdbMeta && zType._zdbMeta.columnType === 'file') {
+    return mode === 'input' ? 'File | Blob | string' : 'string';
+  }
+
   switch (typeName) {
     case 'ZodString':
       return 'string';
     case 'ZodNumber':
+      if (mode === 'input' && zType._def.coerce) {
+        return 'number | string';
+      }
       return 'number';
     case 'ZodBoolean':
+      if (mode === 'input' && zType._def.coerce) {
+        return 'boolean | string';
+      }
       return 'boolean';
     case 'ZodDate':
+      if (mode === 'wire') return 'string';
+      if (mode === 'input') return 'Date | string';
       return 'Date';
     case 'ZodBigInt':
-      return 'bigint';
+      return mode === 'wire' ? 'string' : 'bigint';
     case 'ZodNull':
       return 'null';
     case 'ZodUndefined':
@@ -58,29 +164,52 @@ function zodToTsType(zType, indent = 0) {
     case 'ZodNativeEnum':
       return 'number | string';
     case 'ZodArray':
-      return `Array<${zodToTsType(zType._def.type, indent)}>`;
+      return `Array<${zodToTsType(zType._def.type, indent, mode)}>`;
     case 'ZodOptional':
-      return `${zodToTsType(zType._def.innerType, indent)} | undefined`;
+      return `${zodToTsType(zType._def.innerType, indent, mode)} | undefined`;
     case 'ZodNullable':
-      return `${zodToTsType(zType._def.innerType, indent)} | null`;
+      return `${zodToTsType(zType._def.innerType, indent, mode)} | null`;
     case 'ZodDefault':
-      return zodToTsType(zType._def.innerType, indent);
-    case 'ZodEffects':
-      return zodToTsType(zType._def.schema, indent);
+      return zodToTsType(zType._def.innerType, indent, mode);
+    case 'ZodEffects': {
+      if (mode === 'input') {
+        if (zType._def.effect && zType._def.effect.type === 'preprocess') {
+          return `${zodToTsType(zType._def.schema, indent, mode)} | string`;
+        }
+        return zodToTsType(zType._def.schema, indent, mode);
+      }
+      if (zType._def.effect && zType._def.effect.type === 'transform') {
+        return inferZodTransformOutputType(
+          zType._def.effect.transform,
+          zType._def.schema,
+          indent,
+          mode
+        );
+      }
+      return zodToTsType(zType._def.schema, indent, mode);
+    }
     case 'ZodUnion':
-      return (zType._def.options || []).map((opt) => zodToTsType(opt, indent)).join(' | ') || 'unknown';
+    case 'ZodDiscriminatedUnion':
+      return (zType._def.options || []).map((opt) => zodToTsType(opt, indent, mode)).join(' | ') || 'unknown';
     case 'ZodObject': {
-      const shape = zType.shape;
+      const shape = typeof zType.shape === 'function' ? zType.shape() : zType.shape;
       if (!shape || Object.keys(shape).length === 0) return 'Record<string, unknown>';
-      const entries = Object.entries(shape).map(([k, v]) => {
-        const isOpt = v?._def?.typeName === 'ZodOptional';
-        const innerType = isOpt ? zodToTsType(v._def.innerType, indent + 1) : zodToTsType(v, indent + 1);
-        return `${nextSpaces}${k}${isOpt ? '?' : ''}: ${innerType};`;
-      });
+      const entries = [];
+      for (const [k, v] of Object.entries(shape)) {
+        if (mode === 'wire' && v && v._def && (v._def.typeName === 'ZodUndefined' || v._def.typeName === 'ZodVoid')) {
+          continue;
+        }
+        const isOpt = isZodFieldOptional(v, mode);
+        const unwrapped = unwrapOptionalOrDefault(v, mode);
+        const innerType = zodToTsType(unwrapped, indent + 1, mode);
+        const safeKey = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) ? k : `'${k}'`;
+        entries.push(`${nextSpaces}${safeKey}${isOpt ? '?' : ''}: ${innerType};`);
+      }
+      if (entries.length === 0) return 'Record<string, never>';
       return `{\n${entries.join('\n')}\n${spaces}}`;
     }
     case 'ZodRecord':
-      return `Record<string, ${zodToTsType(zType._def.valueType, indent)}>`;
+      return `Record<string, ${zodToTsType(zType._def.valueType, indent, mode)}>`;
     default:
       return 'unknown';
   }
@@ -449,11 +578,14 @@ function generateTypes(options = {}) {
   const models = collectModelMetadata(modelsDir);
   const services = collectServiceMetadata(servicesDir);
   const routes = collectRouteMetadata(rootDir, pagesRel);
+  const apiContracts = collectApiRouteContracts(rootDir, { pagesDir: pagesRel });
 
   const code = generateDeclarationCode({ models, services, routes });
+  const apiCode = generateApiDeclarationCode(apiContracts);
 
   const outDir = path.resolve(rootDir, options.outDir || '.webspresso');
   const outFile = options.outFile ? path.resolve(rootDir, options.outFile) : path.join(outDir, 'types.d.ts');
+  const apiOutFile = options.apiOutFile ? path.resolve(rootDir, options.apiOutFile) : path.join(path.dirname(outFile), 'api.d.ts');
   const envFile = options.createEnvFile !== false ? path.join(rootDir, 'webspresso-env.d.ts') : null;
 
   if (options.write !== false) {
@@ -463,28 +595,49 @@ function generateTypes(options = {}) {
       fs.mkdirSync(targetDir, { recursive: true });
     }
     fs.writeFileSync(outFile, code, 'utf8');
+    fs.writeFileSync(apiOutFile, apiCode, 'utf8');
 
     // Create root environment declaration helper if enabled
     if (envFile) {
       const relToOut = path.relative(rootDir, outFile).replace(/\\/g, '/');
-      const envContent = `/// <reference path="./${relToOut}" />\n`;
+      const relToApi = path.relative(rootDir, apiOutFile).replace(/\\/g, '/');
+      const envContent = `/// <reference path="./${relToOut}" />\n/// <reference path="./${relToApi}" />\n`;
       fs.writeFileSync(envFile, envContent, 'utf8');
     }
 
     if (!options.silent) {
       console.log(`[typegen] ✓ Generated types for ${models.length} models, ${services.length} services, and ${routes.length} routes.`);
       console.log(`[typegen] → ${path.relative(rootDir, outFile)}`);
+      console.log(`[typegen] → ${path.relative(rootDir, apiOutFile)}`);
     }
   }
 
   return {
     code,
+    apiCode,
     modelsCount: models.length,
     servicesCount: services.length,
     routesCount: routes.length,
+    apiContractsCount: apiContracts.length,
+    apiContracts,
     outFile,
+    apiOutFile,
     envFile,
   };
+}
+
+function collectApiRouteContracts(rootDir, options = {}) {
+  return collectApiRouteContractsRaw(rootDir, {
+    ...options,
+    zodToTsType,
+  });
+}
+
+function checkTemplateFormContracts(rootDir, options = {}) {
+  return checkTemplateFormContractsRaw(rootDir, {
+    ...options,
+    zodToTsType,
+  });
 }
 
 module.exports = {
@@ -492,6 +645,9 @@ module.exports = {
   collectModelMetadata,
   collectServiceMetadata,
   collectRouteMetadata,
+  collectApiRouteContracts,
   generateDeclarationCode,
+  generateApiDeclarationCode,
+  checkTemplateFormContracts,
   generateTypes,
 };

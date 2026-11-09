@@ -363,4 +363,22 @@ Object.defineProperties(module.exports, {
   MemoryFlagStore: { get: () => require('./flags').MemoryFlagStore, enumerable: true, configurable: true },
   evaluateFlag: { get: () => require('./flags').evaluateFlag, enumerable: true, configurable: true },
   getBucket: { get: () => require('./flags').getBucket, enumerable: true, configurable: true },
+
+  // Datastar Client Behavior Layer & SSR Fragments
+  client: { get: () => require('./client'), enumerable: true, configurable: true },
+  defineController: { get: () => require('./client').defineController, enumerable: true, configurable: true },
+  deriveControllerNameFromPath: { get: () => require('./client').deriveControllerNameFromPath, enumerable: true, configurable: true },
+  createClientRuntime: { get: () => require('./client').createClientRuntime, enumerable: true, configurable: true },
+  bootClient: { get: () => require('./client').bootClient, enumerable: true, configurable: true },
+  ClientRequestError: { get: () => require('./client').ClientRequestError, enumerable: true, configurable: true },
+  createApiClient: { get: () => require('./client').createApiClient, enumerable: true, configurable: true },
+  createFormHandle: { get: () => require('./client').createFormHandle, enumerable: true, configurable: true },
+  parseFormElement: { get: () => require('./client').parseFormElement, enumerable: true, configurable: true },
+  createFragmentCoordinator: { get: () => require('./client').createFragmentCoordinator, enumerable: true, configurable: true },
+  defineFragment: { get: () => require('./client').defineFragment, enumerable: true, configurable: true },
+  apiResult: { get: () => require('./client').apiResult, enumerable: true, configurable: true },
+  isApiResultEnvelope: { get: () => require('./client').isApiResultEnvelope, enumerable: true, configurable: true },
+  sendApiResult: { get: () => require('./client').sendApiResult, enumerable: true, configurable: true },
+  createDatastarAdapter: { get: () => require('./client').createDatastarAdapter, enumerable: true, configurable: true },
+  createClientDebugger: { get: () => require('./client').createClientDebugger, enumerable: true, configurable: true },
 });

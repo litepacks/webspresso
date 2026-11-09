@@ -111,6 +111,19 @@ function registerCommand(program) {
       if (shouldWatchCss) watchingLabels.push('CSS');
       if (shouldWatchJs) watchingLabels.push('JS (esbuild)');
 
+      // Generate initial .webspresso/types.d.ts and .webspresso/api.d.ts and warn on dynamic/mismatched HTML form fields
+      try {
+        const { generateTypes, checkTemplateFormContracts } = require('../../src/dev/typegen');
+        generateTypes({ rootDir: process.cwd(), silent: true });
+        const formCheck = checkTemplateFormContracts(process.cwd());
+        for (const w of formCheck.warnings) {
+          console.warn(`⚠️  [Form Check] ${w.message}`);
+        }
+        for (const e of formCheck.errors) {
+          console.warn(`❌ [Form Contract Mismatch] ${e.message}`);
+        }
+      } catch (_) {}
+
       console.log(`\n🚀 Starting development server on port ${options.port}...`);
       console.log(`   Watching: ${watchingLabels.join(', ')}\n`);
 

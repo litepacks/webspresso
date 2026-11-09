@@ -29,6 +29,7 @@ When tasked with a feature or bugfix, **immediately consult the corresponding to
 | **Form Builder, ModelForms & Flash (`core/forms`)** | [`.agents/FORMS.md`](.agents/FORMS.md) | `core/forms/`, `fsy.field`, `fsy.formFor` |
 | **Security Shield & Threat Defense (`securityPlugin`)** | [`docs/guides/security.md`](docs/guides/security.md) | `plugins/security/`, `core/services/builtins/security.js` |
 | **AI Token Streaming & SSE (`core/stream`)** | [`.agents/STREAMING.md`](.agents/STREAMING.md) | `core/stream/`, `core/sse/`, `res.streamText` |
+| **Client Behavior, SSR Fragments & Typed Forms (`core/client`)** | [`.agents/CLIENT.md`](.agents/CLIENT.md) & [`docs/guides/client-behavior.md`](docs/guides/client-behavior.md) | `core/client/`, `pages/*.client.ts`, `defineController`, `defineFragment` |
 | **API Signatures & Types Verification** | [`index.d.ts`](index.d.ts) | **Canonical Ground Truth** |
 
 ---

@@ -18,7 +18,32 @@ const ambientTransactionStorage = new AsyncLocalStorage();
  */
 function runWithAmbientTransaction(trx, callback) {
   const actualTrx = (trx && trx.trx) ? trx.trx : trx;
-  return ambientTransactionStorage.run({ trx: actualTrx }, callback);
+  const parentStore = ambientTransactionStorage.getStore();
+  const afterCommitCallbacks =
+    parentStore && Array.isArray(parentStore.afterCommitCallbacks)
+      ? parentStore.afterCommitCallbacks
+      : [];
+  return ambientTransactionStorage.run({ trx: actualTrx, afterCommitCallbacks }, callback);
+}
+
+/**
+ * Register a callback to execute only after the active ambient transaction commits.
+ * If no ambient transaction is active, executes the callback immediately.
+ *
+ * @param {Function} callback
+ */
+function onTransactionCommit(callback) {
+  if (typeof callback !== 'function') return;
+  const store = ambientTransactionStorage.getStore();
+  if (store && store.trx && Array.isArray(store.afterCommitCallbacks)) {
+    const rawTrx = store.trx.trx ? store.trx.trx : store.trx;
+    const completed = typeof rawTrx.isCompleted === 'function' && rawTrx.isCompleted();
+    if (!completed) {
+      store.afterCommitCallbacks.push(callback);
+      return;
+    }
+  }
+  callback();
 }
 
 /**
@@ -178,17 +203,33 @@ async function runTransaction(knex, callback, scopeContext, ormCacheLayer = null
     return callback(ctx);
   }
 
+  const isOutermost = !ambientTrx;
+  let capturedAfterCommit = [];
   let originalError = null;
   try {
-    return await runner.transaction(async (trx) => {
+    const result = await runner.transaction(async (trx) => {
       const ctx = createTransactionContext(trx, scopeContext, ormCacheLayer, modelResolver);
       try {
-        return await runWithAmbientTransaction(trx, () => callback(ctx));
+        return await runWithAmbientTransaction(trx, async () => {
+          const store = ambientTransactionStorage.getStore();
+          if (isOutermost && store && Array.isArray(store.afterCommitCallbacks)) {
+            capturedAfterCommit = store.afterCommitCallbacks;
+          }
+          return await callback(ctx);
+        });
       } catch (err) {
         originalError = err;
         throw err;
       }
     });
+
+    if (isOutermost && capturedAfterCommit.length > 0) {
+      for (const cb of capturedAfterCommit) {
+        await cb();
+      }
+    }
+
+    return result;
   } catch (err) {
     if (originalError && err !== originalError) {
       if (!originalError.cause) {
@@ -203,6 +244,7 @@ async function runTransaction(knex, callback, scopeContext, ormCacheLayer = null
 module.exports = {
   ambientTransactionStorage,
   runWithAmbientTransaction,
+  onTransactionCommit,
   getAmbientTransaction,
   hasAmbientTransaction,
   createTransactionContext,

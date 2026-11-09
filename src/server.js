@@ -377,6 +377,7 @@ function getDefaultHelmetConfig(isDev) {
         connectSrc: ["'self'", "ws:", "wss:"], // WebSockets for dev live reload
         frameSrc: ["'none'"],
         objectSrc: ["'none'"],
+        upgradeInsecureRequests: null, // Browser ignores & warns on upgrade-insecure-requests in Report-Only policy
       }
     } : {
       directives: {
