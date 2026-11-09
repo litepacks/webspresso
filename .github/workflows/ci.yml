@@ -3,7 +3,7 @@ name: CI
 
 on:
   push:
-    branches: [current]
+    branches: [current, main]
   pull_request:
 
 permissions:
@@ -42,7 +42,7 @@ jobs:
 
   benchmark-baseline:
     name: Benchmark baseline artifact (main, Node 20)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/current')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

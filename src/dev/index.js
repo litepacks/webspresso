@@ -27,7 +27,10 @@ const {
   collectModelMetadata,
   collectServiceMetadata,
   collectRouteMetadata,
+  collectApiRouteContracts,
   generateDeclarationCode,
+  generateApiDeclarationCode,
+  checkTemplateFormContracts,
   generateTypes,
 } = require('./typegen');
 
@@ -57,6 +60,9 @@ module.exports = {
   collectModelMetadata,
   collectServiceMetadata,
   collectRouteMetadata,
+  collectApiRouteContracts,
   generateDeclarationCode,
+  generateApiDeclarationCode,
+  checkTemplateFormContracts,
   generateTypes,
 };

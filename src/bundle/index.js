@@ -8,6 +8,52 @@
 
 const fs = require('fs');
 const path = require('path');
+const { deriveControllerNameFromPath } = require('../../core/client/controller');
+
+const SERVER_ONLY_BUILTINS = new Set([
+  'fs',
+  'fs/promises',
+  'net',
+  'tls',
+  'child_process',
+  'cluster',
+  'dgram',
+  'dns',
+  'http2',
+  'worker_threads',
+  'v8',
+  'vm',
+  'async_hooks',
+  'inspector',
+]);
+
+const SERVER_ONLY_PACKAGES = new Set([
+  'knex',
+  'better-sqlite3',
+  'pg',
+  'pg-native',
+  'mysql',
+  'mysql2',
+  'sqlite3',
+  'oracledb',
+  'tedious',
+  'mssql',
+  'ioredis',
+  'redis',
+  'express',
+  'helmet',
+  'compression',
+  'cookie-parser',
+  'express-session',
+  'nodemailer',
+  'mjml',
+  'bcrypt',
+  'bcryptjs',
+  'argon2',
+]);
+
+const SERVER_ONLY_INTERNAL_PATTERN =
+  /(?:^|\/)(?:core\/(?:orm|services|auth|secrets|queue|mail|http|metrics|health|rate-limit)|src\/(?:server|file-router|api|pages)|models|services|jobs|migrations|pages\/api)(?:\/|$)/;
 
 const DEFAULT_ENTRYPOINTS = [
   'src/client/main.js',
@@ -78,11 +124,13 @@ function findPageEntryPoints(cwd = process.cwd()) {
     }
   }
 
-  // 2. Secondary convention: src/pages/ with *.client.{js,ts,jsx,tsx}
-  const srcPagesDir = path.resolve(cwd, 'src/pages');
-  if (fs.existsSync(srcPagesDir)) {
-    const validExts = new Set(['.js', '.mjs', '.ts', '.jsx', '.tsx']);
-    function walkSrcPages(currentDir) {
+  // 2. Co-located page client files: pages/**/*.client.{js,ts,jsx,tsx} and src/pages/**/*.client.{js,ts,jsx,tsx}
+  const pageDirs = [path.resolve(cwd, 'pages'), path.resolve(cwd, 'src/pages')];
+  const validExts = new Set(['.js', '.mjs', '.ts', '.jsx', '.tsx']);
+
+  for (const dirToScan of pageDirs) {
+    if (!fs.existsSync(dirToScan)) continue;
+    function walkPages(currentDir) {
       let list;
       try {
         list = fs.readdirSync(currentDir, { withFileTypes: true });
@@ -93,11 +141,11 @@ function findPageEntryPoints(cwd = process.cwd()) {
         if (item.name.startsWith('.')) continue;
         const fullPath = path.join(currentDir, item.name);
         if (item.isDirectory()) {
-          walkSrcPages(fullPath);
+          walkPages(fullPath);
         } else if (item.isFile()) {
           const ext = path.extname(item.name).toLowerCase();
-          if (validExts.has(ext) && item.name.includes('.client.')) {
-            const rel = path.relative(srcPagesDir, fullPath).replace(/\\/g, '/');
+          if (validExts.has(ext) && item.name.includes('.client.') && !item.name.endsWith('.d.ts')) {
+            const rel = path.relative(dirToScan, fullPath).replace(/\\/g, '/');
             const cleanName = rel.replace(/\.client\.[a-z0-9]+$/i, '');
             const entryName = 'pages/' + cleanName;
             if (!pageEntries[entryName]) {
@@ -107,10 +155,291 @@ function findPageEntryPoints(cwd = process.cwd()) {
         }
       }
     }
-    walkSrcPages(srcPagesDir);
+    walkPages(dirToScan);
+  }
+
+  // 3. Co-located component/view client files: views/**/*.client.{js,ts,jsx,tsx} and src/views/**/*.client.{js,ts,jsx,tsx}
+  const viewDirs = [path.resolve(cwd, 'views'), path.resolve(cwd, 'src/views')];
+  for (const dirToScan of viewDirs) {
+    if (!fs.existsSync(dirToScan)) continue;
+    function walkViews(currentDir) {
+      let list;
+      try {
+        list = fs.readdirSync(currentDir, { withFileTypes: true });
+      } catch (_) {
+        return;
+      }
+      for (const item of list) {
+        if (item.name.startsWith('.')) continue;
+        const fullPath = path.join(currentDir, item.name);
+        if (item.isDirectory()) {
+          walkViews(fullPath);
+        } else if (item.isFile()) {
+          const ext = path.extname(item.name).toLowerCase();
+          if (validExts.has(ext) && item.name.includes('.client.') && !item.name.endsWith('.d.ts')) {
+            const rel = path.relative(dirToScan, fullPath).replace(/\\/g, '/');
+            const cleanName = rel.replace(/\.client\.[a-z0-9]+$/i, '');
+            const entryName = cleanName.startsWith('components/') ? cleanName : `views/${cleanName}`;
+            if (!pageEntries[entryName]) {
+              pageEntries[entryName] = fullPath;
+            }
+          }
+        }
+      }
+    }
+    walkViews(dirToScan);
   }
 
   return pageEntries;
+}
+
+/**
+ * Discovers all `.client.{js,ts,mjs,jsx,tsx}` controller files across `pages/` and `views/`
+ * and validates deterministic controller names for collisions.
+ *
+ * @param {string} [cwd=process.cwd()]
+ * @returns {Array<{ controllerName: string, entryName: string, filePath: string, relativePath: string }>}
+ */
+function discoverClientControllers(cwd = process.cwd()) {
+  const pageEntries = findPageEntryPoints(cwd);
+  const discovered = [];
+  const byControllerName = new Map();
+
+  for (const [entryName, filePath] of Object.entries(pageEntries)) {
+    const relativePath = path.relative(cwd, filePath).replace(/\\/g, '/');
+    const controllerName = deriveControllerNameFromPath(relativePath);
+    if (!controllerName) continue;
+
+    if (byControllerName.has(controllerName)) {
+      const existing = byControllerName.get(controllerName);
+      if (existing.filePath !== filePath) {
+        const err = new Error(
+          `Controller name collision: "${controllerName}" is defined by both "${existing.relativePath}" and "${relativePath}".`
+        );
+        err.code = 'CONTROLLER_NAME_COLLISION';
+        err.controllerName = controllerName;
+        err.files = [existing.relativePath, relativePath];
+        throw err;
+      }
+    }
+
+    const record = {
+      controllerName,
+      entryName,
+      filePath,
+      relativePath,
+    };
+    byControllerName.set(controllerName, record);
+    discovered.push(record);
+  }
+
+  return discovered;
+}
+
+/**
+ * Checks whether an import specifier or resolved path crosses into a server-only module boundary.
+ *
+ * @param {string} specifier - Raw import/require string
+ * @param {string} importerPath - Absolute path of the importing client file
+ * @param {string} [cwd=process.cwd()] - Project root directory
+ * @returns {{ forbidden: boolean, reason?: string }}
+ */
+function checkServerImportViolation(specifier, importerPath, cwd = process.cwd()) {
+  if (!specifier || typeof specifier !== 'string') return { forbidden: false };
+  const raw = specifier.trim();
+
+  // 1. Node built-in modules (`node:fs`, `fs`, `child_process`, etc.)
+  if (raw.startsWith('node:')) {
+    const modName = raw.slice(5);
+    if (SERVER_ONLY_BUILTINS.has(modName) || modName.startsWith('fs') || modName.startsWith('child_process')) {
+      return {
+        forbidden: true,
+        reason: `Node.js server built-in module "${raw}" cannot be imported into browser client bundle ("${path.relative(cwd, importerPath)}").`,
+      };
+    }
+  }
+  if (SERVER_ONLY_BUILTINS.has(raw)) {
+    return {
+      forbidden: true,
+      reason: `Node.js server built-in module "${raw}" cannot be imported into browser client bundle ("${path.relative(cwd, importerPath)}").`,
+    };
+  }
+
+  // 2. Server-only packages (`knex`, `express`, `better-sqlite3`, `pg`, etc.)
+  const pkgRoot = raw.startsWith('@')
+    ? raw.split('/').slice(0, 2).join('/')
+    : raw.split('/')[0];
+  if (!raw.startsWith('.') && !raw.startsWith('/') && SERVER_ONLY_PACKAGES.has(pkgRoot)) {
+    return {
+      forbidden: true,
+      reason: `Server-only package "${raw}" cannot be imported into browser client bundle ("${path.relative(cwd, importerPath)}").`,
+    };
+  }
+
+  // 3. Webspresso server subpath imports (`webspresso/core/orm`, `webspresso/core/services`, etc.)
+  if (!raw.startsWith('.') && SERVER_ONLY_INTERNAL_PATTERN.test(raw)) {
+    return {
+      forbidden: true,
+      reason: `Server-only Webspresso module "${raw}" cannot be imported into browser client bundle ("${path.relative(cwd, importerPath)}").`,
+    };
+  }
+
+  // 4. Relative or absolute path imports into server files (`pages/api/*`, `models/*`, `services/*`, server page loaders)
+  if (raw.startsWith('.') || raw.startsWith('/')) {
+    const resolved = path.resolve(path.dirname(importerPath), raw);
+    const relToRoot = path.relative(cwd, resolved).replace(/\\/g, '/');
+
+    if (SERVER_ONLY_INTERNAL_PATTERN.test(relToRoot)) {
+      return {
+        forbidden: true,
+        reason: `Server module "${relToRoot}" (imported as "${raw}" in "${path.relative(cwd, importerPath)}") cannot be bundled into browser code.`,
+      };
+    }
+
+    // Disallow importing a server page loader (`pages/notes.js`) from `pages/notes.client.ts`
+    if (
+      (relToRoot.startsWith('pages/') || relToRoot.startsWith('src/pages/')) &&
+      !relToRoot.includes('.client')
+    ) {
+      // Check if it resolves to a non-client .js/.ts file in pages/
+      const candidates = [resolved, `${resolved}.js`, `${resolved}.ts`];
+      for (const cand of candidates) {
+        if (fs.existsSync(cand) && fs.statSync(cand).isFile() && !cand.includes('.client.')) {
+          return {
+            forbidden: true,
+            reason: `Server page loader "${path.relative(cwd, cand)}" cannot be imported into browser client bundle ("${path.relative(cwd, importerPath)}").`,
+          };
+        }
+      }
+    }
+  }
+
+  return { forbidden: false };
+}
+
+/**
+ * Statically scans client entry files and their local relative dependency graph
+ * to reject any runtime import/require of server-only modules (ignores `import type`).
+ *
+ * @param {string[]|Record<string, string>} entryPoints
+ * @param {string} [cwd=process.cwd()]
+ */
+function validateClientBundleBoundaries(entryPoints, cwd = process.cwd()) {
+  const fileList = Array.isArray(entryPoints)
+    ? entryPoints
+    : entryPoints && typeof entryPoints === 'object'
+    ? Object.values(entryPoints)
+    : [];
+
+  const visited = new Set();
+
+  function scanFile(filePath) {
+    const absPath = path.resolve(cwd, filePath);
+    if (visited.has(absPath) || !fs.existsSync(absPath)) return;
+    visited.add(absPath);
+
+    let source;
+    try {
+      source = fs.readFileSync(absPath, 'utf8');
+    } catch (_) {
+      return;
+    }
+
+    // Strip block and line comments so commented-out imports don't trigger false positives
+    const cleanSource = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    const specs = [];
+
+    // Match runtime ESM imports (excluding `import type ...` and `export type ...`)
+    const esmImportRegex = /\b(?:import|export)\s+(?!type\b)(?:[\s\S]*?\bfrom\s+)?['"]([^'"]+)['"]/g;
+    let m;
+    while ((m = esmImportRegex.exec(cleanSource)) !== null) {
+      const fullMatch = m[0];
+      // Skip `import { type Foo } from '...'` if ALL imported bindings are `type`
+      const braceMatch = fullMatch.match(/\{([^}]+)\}/);
+      if (braceMatch && !/^[^{]+\{/.test(fullMatch.replace(/^(?:import|export)\s+/, ''))) {
+        const items = braceMatch[1]
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (items.length > 0 && items.every((item) => /^type\s+/.test(item))) {
+          continue;
+        }
+      }
+      specs.push(m[1]);
+    }
+
+    // Match CommonJS require('...') and dynamic import('...')
+    const callImportRegex = /\b(?:require|import)\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+    while ((m = callImportRegex.exec(cleanSource)) !== null) {
+      specs.push(m[1]);
+    }
+
+    for (const spec of specs) {
+      const check = checkServerImportViolation(spec, absPath, cwd);
+      if (check.forbidden) {
+        const err = new Error(check.reason);
+        err.code = 'SERVER_DEPENDENCY_IN_CLIENT';
+        err.importer = absPath;
+        err.specifier = spec;
+        throw err;
+      }
+
+      // Follow relative client imports recursively
+      if (spec.startsWith('.')) {
+        const baseResolved = path.resolve(path.dirname(absPath), spec);
+        const candidates = [
+          baseResolved,
+          `${baseResolved}.ts`,
+          `${baseResolved}.js`,
+          `${baseResolved}.mjs`,
+          `${baseResolved}.tsx`,
+          `${baseResolved}.jsx`,
+          path.join(baseResolved, 'index.ts'),
+          path.join(baseResolved, 'index.js'),
+        ];
+        for (const cand of candidates) {
+          if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+            scanFile(cand);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  for (const entry of fileList) {
+    scanFile(entry);
+  }
+}
+
+/**
+ * Creates an esbuild plugin that blocks server-only modules from entering browser bundles.
+ *
+ * @param {string} [cwd=process.cwd()]
+ */
+function createServerBoundaryPlugin(cwd = process.cwd()) {
+  return {
+    name: 'webspresso-server-boundary',
+    setup(build) {
+      build.onResolve({ filter: /.*/ }, (args) => {
+        if (!args.importer) return null;
+        const check = checkServerImportViolation(args.path, args.importer, cwd);
+        if (check.forbidden) {
+          return {
+            errors: [
+              {
+                text: check.reason,
+              },
+            ],
+          };
+        }
+        return null;
+      });
+    },
+  };
 }
 
 /**
@@ -367,6 +696,9 @@ function createDevBundler(options = {}, devReloadHub = null) {
       );
     }
 
+    discoverClientControllers(cwd);
+    validateClientBundleBoundaries(entryPoints, cwd);
+
     const outbase = options.outbase || (fs.existsSync(path.resolve(cwd, 'src/client')) ? path.resolve(cwd, 'src/client') : undefined);
     const esbuildConfig = {
       entryPoints,
@@ -378,7 +710,7 @@ function createDevBundler(options = {}, devReloadHub = null) {
       format,
       metafile,
       outbase,
-      plugins: [devReloadPlugin, ...userPlugins],
+      plugins: [createServerBoundaryPlugin(cwd), devReloadPlugin, ...userPlugins],
       ...(options.esbuildOptions || {}),
     };
 
@@ -443,12 +775,11 @@ const { generateManifest, createManifestPlugin } = require('./manifest');
  */
 async function buildBundle(options = {}) {
   const cwd = options.cwd || process.cwd();
-  const esbuild = resolveEsbuild(options, cwd);
-  if (!esbuild) {
-    throw new Error("esbuild is not installed. Run 'npm install --save-dev esbuild' to build assets.");
-  }
-
   const entryPoints = resolveEntryPoints(options.entryPoints, cwd);
+
+  discoverClientControllers(cwd);
+  validateClientBundleBoundaries(entryPoints, cwd);
+
   const hasEntryPoints = Array.isArray(entryPoints)
     ? entryPoints.length > 0
     : Boolean(entryPoints && Object.keys(entryPoints).length > 0);
@@ -459,6 +790,23 @@ async function buildBundle(options = {}) {
 
   const outdir = options.outdir ? path.resolve(cwd, options.outdir) : path.resolve(cwd, 'public/dist');
   const publicDir = options.publicDir ? path.resolve(cwd, options.publicDir) : path.resolve(cwd, 'public');
+  const manifestPath = options.manifestPath || path.join(outdir, 'manifest.json');
+
+  const esbuild = resolveEsbuild(options, cwd);
+  if (!esbuild) {
+    if (options.esbuild === null) {
+      throw new Error("esbuild is not installed. Run 'npm install --save-dev esbuild' to build assets.");
+    }
+    return buildBundleFallback({
+      cwd,
+      entryPoints,
+      outdir,
+      publicDir,
+      manifestPath,
+      hash: options.hash !== false,
+    });
+  }
+
   const bundle = options.bundle !== false;
   const minify = options.minify !== undefined ? options.minify : true;
   const sourcemap = options.sourcemap !== undefined ? options.sourcemap : true;
@@ -466,7 +814,6 @@ async function buildBundle(options = {}) {
   const format = options.format || 'esm';
   const outbase = options.outbase || (fs.existsSync(path.resolve(cwd, 'src/client')) ? path.resolve(cwd, 'src/client') : undefined);
   const entryNames = options.entryNames || (options.hash !== false ? '[dir]/[name].[hash]' : '[dir]/[name]');
-  const manifestPath = options.manifestPath || path.join(outdir, 'manifest.json');
   const userPlugins = Array.isArray(options.plugins) ? options.plugins : [];
 
   const manifestPlugin = createManifestPlugin({
@@ -481,13 +828,20 @@ async function buildBundle(options = {}) {
     outdir,
     bundle,
     minify,
+    treeShaking: true,
+    legalComments: options.legalComments || 'none',
+    define: {
+      'process.env.NODE_ENV': '"production"',
+      ...(options.define || {}),
+    },
+    drop: options.drop !== undefined ? options.drop : ['debugger'],
     sourcemap,
     target,
     format,
     entryNames,
     outbase,
     metafile: true,
-    plugins: [manifestPlugin, ...userPlugins],
+    plugins: [createServerBoundaryPlugin(cwd), manifestPlugin, ...userPlugins],
     ...(options.esbuildOptions || {}),
   };
 
@@ -504,6 +858,74 @@ async function buildBundle(options = {}) {
   };
 }
 
+/**
+ * Built-in fallback asset builder when esbuild is not installed in node_modules.
+ * Compiles `.ts` / `.js` client entrypoints, hashes filenames for cache-busting,
+ * and writes `manifest.json`.
+ */
+function buildBundleFallback({ cwd, entryPoints, outdir, publicDir, manifestPath, hash = true }) {
+  const crypto = require('crypto');
+  let ts = null;
+  try {
+    ts = require('typescript');
+  } catch (_) {}
+
+  const entriesMap = Array.isArray(entryPoints)
+    ? Object.fromEntries(
+        entryPoints.map((fp) => {
+          const base = path.basename(fp, path.extname(fp)).replace(/\.client$/i, '');
+          return [base, fp];
+        })
+      )
+    : entryPoints;
+
+  const metafile = { inputs: {}, outputs: {} };
+
+  for (const [entryKey, rawFilePath] of Object.entries(entriesMap)) {
+    const absIn = path.resolve(cwd, rawFilePath);
+    if (!fs.existsSync(absIn)) continue;
+    const rawCode = fs.readFileSync(absIn, 'utf8');
+    let outCode = rawCode;
+
+    if ((absIn.endsWith('.ts') || absIn.endsWith('.tsx')) && ts) {
+      const transpiled = ts.transpileModule(rawCode, {
+        compilerOptions: {
+          module: ts.ModuleKind.ESNext,
+          target: ts.ScriptTarget.ES2020,
+        },
+        fileName: absIn,
+      });
+      outCode = transpiled.outputText;
+    }
+
+    const digest = hash
+      ? '.' + crypto.createHash('sha256').update(outCode).digest('hex').slice(0, 8).toUpperCase()
+      : '';
+    const relOutFile = `${entryKey}${digest}.js`;
+    const absOut = path.join(outdir, relOutFile);
+    fs.mkdirSync(path.dirname(absOut), { recursive: true });
+    fs.writeFileSync(absOut, outCode, 'utf8');
+
+    const relInput = path.relative(cwd, absIn).replace(/\\/g, '/');
+    const relOutput = path.relative(cwd, absOut).replace(/\\/g, '/');
+    metafile.inputs[relInput] = { bytes: Buffer.byteLength(rawCode, 'utf8') };
+    metafile.outputs[relOutput] = {
+      entryPoint: relInput,
+      bytes: Buffer.byteLength(outCode, 'utf8'),
+    };
+  }
+
+  const manifest = generateManifest(metafile, { outdir, publicDir });
+  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+
+  return {
+    result: { errors: [], warnings: [], metafile },
+    manifest,
+    manifestPath,
+  };
+}
+
 module.exports = {
   createDevBundler,
   buildBundle,
@@ -511,6 +933,10 @@ module.exports = {
   createManifestPlugin,
   findDefaultEntryPoints,
   findPageEntryPoints,
+  discoverClientControllers,
+  checkServerImportViolation,
+  validateClientBundleBoundaries,
+  createServerBoundaryPlugin,
   scanClientPages,
   expandGlob,
   resolveEntryPoints,

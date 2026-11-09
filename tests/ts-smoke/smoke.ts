@@ -32,6 +32,7 @@ import {
   type Repository,
   type PaginatedResult,
   type WebspressoApplication,
+  defineController,
 } from '../..';
 import { z } from 'zod';
 
@@ -286,6 +287,44 @@ const pingApi = defineApi({
   },
 });
 void pingApi;
+
+// 4. Client Behavior Controller inference (state, forms, api, tasks, computed)
+const sampleController = defineController({
+  state: () => ({
+    count: 0,
+    draft: { title: 'initial' },
+    applied: { title: 'initial' },
+  }),
+  computed: {
+    titleLength: ({ state }) => state.draft.title.length,
+  },
+  tasks: {
+    loadData: ({ api }) => ({
+      run: () => api.get('/api/test'),
+      concurrency: 'latest',
+    }),
+  },
+  connect({ state, forms }) {
+    const _len: number = state.titleLength;
+    void _len;
+    const form = forms.get('test');
+    if (form) form.clearErrors();
+  },
+  actions: {
+    async updateDraft({ state, forms, api, tasks }, _event, actionEl) {
+      const currentTitle: string = state.draft.title;
+      state.draft.title = currentTitle + '!';
+      const form = forms.get('test');
+      if (form) form.fill({ title: 'new' });
+      const res = await api.get('/api/test');
+      void res;
+      if (tasks.loadData) await tasks.loadData.run();
+      if (actionEl) actionEl.getAttribute('data-id');
+    },
+  },
+});
+void sampleController;
+
 
 
 

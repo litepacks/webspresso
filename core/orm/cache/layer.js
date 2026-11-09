@@ -56,7 +56,13 @@ class OrmCacheLayer {
    * @param {import('../model').ModelDefinition} model
    */
   strategyFor(model) {
-    return modelCacheStrategy(model, this.defaultStrategy);
+    if (!model) return null;
+    let strategy = model._cacheStrategy;
+    if (strategy === undefined) {
+      strategy = modelCacheStrategy(model, this.defaultStrategy);
+      model._cacheStrategy = strategy;
+    }
+    return strategy;
   }
 
   /**

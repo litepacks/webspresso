@@ -10,13 +10,13 @@ const { resolveRelationModel } = require('./model');
 
 /**
  * Per-model serialization plan, built once: the shared toJSON descriptor (null when the
- * model hides nothing) and the relation names to recurse into.
- * @type {WeakMap<object, { descriptor: PropertyDescriptor|null, relations: string[] }>}
+ * model hides nothing), relation names, and a cached map of resolved relation models.
+ * @type {WeakMap<object, { descriptor: PropertyDescriptor|null, relations: string[], relationMap: Map<string, object> }>}
  */
 const plans = new WeakMap();
 
 function getPlan(model) {
-  let plan = plans.get(model);
+  let plan = model._hiddenPlan || plans.get(model);
   if (plan) return plan;
 
   const hidden = Array.isArray(model.hidden) ? model.hidden : [];
@@ -36,16 +36,52 @@ function getPlan(model) {
       writable: true,
     };
   }
-  plan = { descriptor, relations: Object.keys(model.relations || {}) };
+  const relations = Object.keys(model.relations || {});
+  const isNoop = !descriptor && relations.length === 0;
+  plan = { descriptor, relations, isNoop, relationMap: new Map() };
+  try {
+    model._hiddenPlan = plan;
+  } catch {}
   plans.set(model, plan);
   return plan;
 }
 
-function resolveRelated(model, name) {
+function resolveRelated(plan, model, name) {
+  let relatedModel = plan.relationMap.get(name);
+  if (relatedModel !== undefined) return relatedModel;
+
   try {
-    return resolveRelationModel(model.relations[name]);
+    relatedModel = resolveRelationModel(model.relations[name]);
   } catch {
-    return null;
+    relatedModel = null;
+  }
+  if (relatedModel) {
+    plan.relationMap.set(name, relatedModel);
+  }
+  return relatedModel;
+}
+
+function applySingleRecord(plan, model, value, seen) {
+  if (seen.has(value)) return;
+  seen.add(value);
+
+  if (plan.relations.length > 0) {
+    for (let i = 0; i < plan.relations.length; i++) {
+      const name = plan.relations[i];
+      const related = value[name];
+      if (!related || typeof related !== 'object') continue;
+      const relatedModel = resolveRelated(plan, model, name);
+      if (relatedModel) {
+        const relatedPlan = relatedModel._hiddenPlan || getPlan(relatedModel);
+        if (!relatedPlan.isNoop) {
+          applyHiddenSerialization(relatedModel, related, seen);
+        }
+      }
+    }
+  }
+
+  if (plan.descriptor && !Object.prototype.hasOwnProperty.call(value, 'toJSON')) {
+    Object.defineProperty(value, 'toJSON', plan.descriptor);
   }
 }
 
@@ -63,13 +99,18 @@ function applyHiddenSerialization(model, value, seen) {
     return value;
   }
 
-  const plan = getPlan(model);
+  const plan = model._hiddenPlan || getPlan(model);
+  if (plan.isNoop) return value;
 
   if (Array.isArray(value)) {
+    const len = value.length;
+    if (len === 0) return value;
+
     // Fast path: plain rows with no relations to walk
     if (plan.relations.length === 0) {
       if (plan.descriptor) {
-        for (const item of value) {
+        for (let i = 0; i < len; i++) {
+          const item = value[i];
           if (item && typeof item === 'object' && !Object.prototype.hasOwnProperty.call(item, 'toJSON')) {
             Object.defineProperty(item, 'toJSON', plan.descriptor);
           }
@@ -77,7 +118,14 @@ function applyHiddenSerialization(model, value, seen) {
       }
       return value;
     }
-    for (const item of value) applyHiddenSerialization(model, item, seen);
+
+    seen = seen || new WeakSet();
+    for (let i = 0; i < len; i++) {
+      const item = value[i];
+      if (item && typeof item === 'object') {
+        applySingleRecord(plan, model, item, seen);
+      }
+    }
     return value;
   }
 
@@ -87,21 +135,8 @@ function applyHiddenSerialization(model, value, seen) {
     return value;
   }
 
-  if (plan.relations.length > 0) {
-    seen = seen || new WeakSet();
-    if (seen.has(value)) return value;
-    seen.add(value);
-    for (const name of plan.relations) {
-      const related = value[name];
-      if (!related || typeof related !== 'object') continue;
-      const relatedModel = resolveRelated(model, name);
-      if (relatedModel) applyHiddenSerialization(relatedModel, related, seen);
-    }
-  }
-
-  if (plan.descriptor && !Object.prototype.hasOwnProperty.call(value, 'toJSON')) {
-    Object.defineProperty(value, 'toJSON', plan.descriptor);
-  }
+  seen = seen || new WeakSet();
+  applySingleRecord(plan, model, value, seen);
   return value;
 }
 

@@ -14,6 +14,14 @@ const { runWithContext } = require('../context/request');
 const { detectLocale, loadI18n, createTranslator, resolvePageAssets, applyPageAssetsToTemplateData } = require('../../src/file-router');
 const { createHelpers, getAssetManager } = require('../../src/helpers');
 const { sendEarlyHints } = require('../early-hints');
+const {
+  apiResult,
+  isApiResultEnvelope,
+  sendApiResult,
+  ensureRequestMemo,
+  attachSsrFragmentHelper,
+  resolvePendingSsrFragments,
+} = require('../client/server-fragments');
 
 /**
  * Validates request input against compiled schema
@@ -319,13 +327,18 @@ async function executeApiPipeline(params) {
       sse: (sourceOrOptions, maybeOptions) => (res && typeof res.sse === 'function' ? res.sse(sourceOrOptions, maybeOptions) : null),
       streamText: (sourceOrCallback, maybeOptions) => (res && typeof res.streamText === 'function' ? res.streamText(sourceOrCallback, maybeOptions) : null),
       streamJson: (sourceOrCallback, maybeOptions) => (res && typeof res.streamJson === 'function' ? res.streamJson(sourceOrCallback, maybeOptions) : null),
+      result: (data, meta) => apiResult(data, meta),
+      apiResult: (data, meta) => apiResult(data, meta),
     };
+
+    ensureRequestMemo(req, apiCtx);
 
     req.ctx = apiCtx;
     if (res) {
       res.service = apiCtx.service;
       res.input = apiCtx.input;
       res.module = apiCtx.module;
+      res.apiResult = (data, meta) => sendApiResult(req, res, apiResult(data, meta));
     }
 
     // 4. Execute within Ambient Request Context
@@ -339,6 +352,10 @@ async function executeApiPipeline(params) {
 
       // 5. Auto-respond if handler returned a value and response not yet sent
       if (res && !res.headersSent && !res.writableEnded && !res.finished) {
+        if (isApiResultEnvelope(result)) {
+          sendApiResult(req, res, result);
+          return result;
+        }
         if (result !== undefined && typeof res.json === 'function') {
           res.json(result);
           return result;
@@ -486,6 +503,9 @@ async function executePagePipeline(params) {
       cache: req.cache || context.cache || null,
     };
 
+    ensureRequestMemo(req, pageCtx);
+    pageCtx.ctx = pageCtx;
+
     req.ctx = pageCtx;
 
     // 3. Execute within Ambient Request Context
@@ -602,6 +622,17 @@ async function executePagePipeline(params) {
           query: req.query,
         };
 
+        attachSsrFragmentHelper({
+          req,
+          res,
+          ctx: pageCtx,
+          pageMod: pageDef,
+          pagePath: descriptor.path || req.path || '/',
+          nunjucksEnv: nunjucks,
+          fsy,
+          getRenderCtx: () => templateData,
+        });
+
         const isStreaming = Boolean(
           pageDef.stream ||
           descriptor.stream ||
@@ -624,13 +655,17 @@ async function executePagePipeline(params) {
         }
 
         return new Promise((resolve, reject) => {
-          nunjucks.render(njkCandidate, templateData, (err, html) => {
+          nunjucks.render(njkCandidate, templateData, (err, rawHtml) => {
             if (err) return reject(err);
-            if (res && !res.headersSent && !res.writableEnded && !res.finished) {
-              res.setHeader('Content-Type', 'text/html; charset=utf-8');
-              res.send(html);
-            }
-            resolve(html);
+            resolvePendingSsrFragments(rawHtml, req)
+              .then((html) => {
+                if (res && !res.headersSent && !res.writableEnded && !res.finished) {
+                  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+                  res.send(html);
+                }
+                resolve(html);
+              })
+              .catch(reject);
           });
         });
       }

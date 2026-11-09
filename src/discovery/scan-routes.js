@@ -79,7 +79,10 @@ function scanDirSafely(dirPath, baseDir = dirPath, checkWarnings = false) {
       }
 
       for (const [norm, items] of groups.entries()) {
-        if (items.length > 1) {
+        // A page template and its companion loader (`index.njk` + `index.js`,
+        // `[slug].njk` + `[slug].js`) share one route — only distinct names collide.
+        const distinctNames = new Set(items.map((item) => item.name));
+        if (distinctNames.size > 1) {
           const namesList = items.map((item) => `"${item.original}"`).join(' and ');
           const relDir = path.relative(baseDir, dirPath);
           const dirLabel = relDir ? `pages/${relDir.split(path.sep).join('/')}` : 'pages';

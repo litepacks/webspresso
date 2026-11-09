@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="{{ locale or 'en' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ meta.title or "Webspresso Fullstack Example" }}</title>
+  {% if meta.description %}<meta name="description" content="{{ meta.description }}">{% endif %}
+  <link rel="stylesheet" href="{{ fsy.asset('/css/app.css') }}">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">☕ Webspresso Blog</a>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/posts">Posts</a>
+      <a href="/about">About</a>
+      <a href="/api/posts">API</a>
+      <a href="/health">Health</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    Rendered by Webspresso · {{ req.path }}
+  </footer>
+</body>
+</html>
+

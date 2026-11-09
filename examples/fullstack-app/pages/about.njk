@@ -1,0 +1,22 @@
+{% extends "layout.njk" %}
+
+{% block content %}
+<section class="card">
+  <h1>About this example</h1>
+  <p>
+    This page has no <code>load()</code> function: it measures the pure Nunjucks
+    render path (layout inheritance, helpers, compression, security headers).
+  </p>
+  <h2>Features covered</h2>
+  <ul>
+    <li>File-based SSR pages with companion loaders and dynamic <code>[slug]</code> params</li>
+    <li>File-based JSON API with Zod schemas and named middleware</li>
+    <li>ORM models (<code>zdb</code>), relations, eager loading, soft deletes, query cache, migrations</li>
+    <li>Services with validation, ACID transactions, memoization and timeouts</li>
+    <li>Native JWT authentication and rate limiting</li>
+    <li>Background jobs, domain events and listeners</li>
+    <li>Compression, payload limits, health probes, metrics, CORS and redirects</li>
+  </ul>
+</section>
+{% endblock %}
+

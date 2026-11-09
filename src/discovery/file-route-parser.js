@@ -11,8 +11,19 @@ const path = require('path');
 
 const SUPPORTED_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head']);
 const SUPPORTED_EXTENSIONS = new Set(['.js', '.njk']);
-const METHOD_SUFFIX_REGEX = /\.([a-zA-Z]+)\.js$/;
+const METHOD_SUFFIX_REGEX = /\.([a-zA-Z]+)\.(?:js|ts)$/;
 const TEMPORARY_FILE_REGEX = /(?:~|\.swp|\.tmp|\.bak|\.DS_Store)$/;
+const CLIENT_BROWSER_FILE_REGEX = /\.(?:client\.(?:js|ts|mjs|cjs|jsx|tsx)|d\.ts)$/i;
+
+/**
+ * Checks if a filename is a browser `.client.*` or `.d.ts` file that must be excluded from server routing
+ * @param {string} name
+ * @returns {boolean}
+ */
+function isClientBrowserFile(name) {
+  if (!name || typeof name !== 'string') return false;
+  return CLIENT_BROWSER_FILE_REGEX.test(name);
+}
 
 /**
  * Safely scans a directory recursively for route files
@@ -66,6 +77,8 @@ function isPrivateOrIgnored(name) {
   if (name.startsWith('_')) return true;
   // Temporary editor files
   if (TEMPORARY_FILE_REGEX.test(name)) return true;
+  // Browser client files (.client.js, .client.ts) and TypeScript declaration files (.d.ts)
+  if (CLIENT_BROWSER_FILE_REGEX.test(name)) return true;
   return false;
 }
 
@@ -144,12 +157,12 @@ function parseFileRoute(relativePath, options = {}) {
     originalMethodPart = rawMethod;
     if (SUPPORTED_METHODS.has(rawMethod)) {
       method = rawMethod;
-      cleanFilename = filename.replace(`.${methodMatch[1]}.js`, '');
+      cleanFilename = filename.replace(new RegExp(`\\.${methodMatch[1]}\\.(?:js|ts)$`, 'i'), '');
     } else {
       // Invalid HTTP method in filename
       return { path: '', method: rawMethod, isValid: false, isPrivate: false, invalidMethod: true };
     }
-  } else if (filename.endsWith('.js')) {
+  } else if (filename.endsWith('.js') || filename.endsWith('.ts')) {
     cleanFilename = filename.slice(0, -3);
   } else if (filename.endsWith('.njk')) {
     cleanFilename = filename.slice(0, -4);
@@ -236,6 +249,7 @@ module.exports = {
   isRouteGroupSegment,
   isApiRouteFile,
   isPrivateOrIgnored,
+  isClientBrowserFile,
   normalizePrefix,
   transformDynamicSegment,
   scanDirSafely,

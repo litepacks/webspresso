@@ -83,6 +83,7 @@ const {
   configureAssets, 
   getAssetManager 
 } = require('./src/helpers');
+const cascading = require('./src/routing/cascading');
 const {
   PluginManager,
   createPluginManager,
@@ -180,10 +181,18 @@ module.exports = {
 
   // HTTP Response Compression
   compression,
+  supportsBrotli: compression.supportsBrotli,
+  getDefaultSupportedEncodings: compression.getDefaultSupportedEncodings,
+  parseAcceptEncoding: compression.parseAcceptEncoding,
+  selectEncoding: compression.selectEncoding,
+  isCompressible: compression.isCompressible,
+  createCompressionStream: compression.createCompressionStream,
   createCompressionMiddleware: compression.createCompressionMiddleware,
+  appendVary: compression.appendVary,
 
   // HTTP 103 Early Hints
   earlyHints,
+  EXTENSION_AS_MAP: earlyHints.EXTENSION_AS_MAP,
   sendEarlyHints: earlyHints.sendEarlyHints,
   createEarlyHintsMiddleware: earlyHints.createEarlyHintsMiddleware,
   formatLink: earlyHints.formatLink,
@@ -192,13 +201,18 @@ module.exports = {
 
   // Payload Limits & DoS Protection
   limits,
+  DEFAULT_LIMITS: limits.DEFAULT_LIMITS,
   normalizeLimits: limits.normalizeLimits,
   setupLimitsMiddleware: limits.setupLimitsMiddleware,
   createLimitsMiddleware: limits.createLimitsMiddleware,
   parseByteSize: limits.parseByteSize,
+  matchesPath: limits.matchesPath,
+  shouldSkipBodyParser: limits.shouldSkipBodyParser,
+  shouldCaptureRawBody: limits.shouldCaptureRawBody,
 
   // Health & Readiness Probes
   health,
+  DEFAULT_HEALTH_CONFIG: health.DEFAULT_HEALTH_CONFIG,
   normalizeHealthConfig: health.normalizeHealthConfig,
   setupHealthMiddleware: health.setupHealthMiddleware,
   createHealthManager: health.createHealthManager,
@@ -312,6 +326,22 @@ module.exports = {
   compileRouteTable,
   RouteTable,
   mountDiscoveredRoutes,
+
+  // SSR Cascading Layouts & Middleware
+  cascading,
+  getDirectoryChain: cascading.getDirectoryChain,
+  templateHasExtends: cascading.templateHasExtends,
+  findCascadingMiddlewareFiles: cascading.findCascadingMiddlewareFiles,
+  loadCascadingMiddlewares: cascading.loadCascadingMiddlewares,
+  runMiddleware: cascading.runMiddleware,
+  runMiddlewareChain: cascading.runMiddlewareChain,
+  findCascadingLayouts: cascading.findCascadingLayouts,
+  executeCascadingLayoutLoads: cascading.executeCascadingLayoutLoads,
+  applyCascadingLayouts: cascading.applyCascadingLayouts,
+  findNearestErrorBoundary: cascading.findNearestErrorBoundary,
+  findNearestLoadingTemplate: cascading.findNearestLoadingTemplate,
+  clearCascadingCaches: cascading.clearCascadingCaches,
+
   resolveMiddlewares: require('./src/routing/middleware-resolver').resolveMiddlewares,
   translateValidationIssues: require('./src/api/validation-i18n').translateValidationIssues,
   getTranslatorForRequest: require('./src/api/validation-i18n').getTranslatorForRequest,
@@ -465,6 +495,9 @@ Object.defineProperties(module.exports, {
   createFileManagerServices: { get: () => require('./core/services').createFileManagerServices, enumerable: true, configurable: true },
   createSystemServices: { get: () => require('./core/services').createSystemServices, enumerable: true, configurable: true },
   createExchangeServices: { get: () => require('./core/services').createExchangeServices, enumerable: true, configurable: true },
+  createWebhookServices: { get: () => require('./core/services').createWebhookServices, enumerable: true, configurable: true },
+  createQueueServices: { get: () => require('./core/services').createQueueServices, enumerable: true, configurable: true },
+  createSecurityServices: { get: () => require('./core/services').createSecurityServices, enumerable: true, configurable: true },
 
   // ORM & Database Layer (lazy loaded)
   orm: { get: () => getOrm(), enumerable: true, configurable: true },
@@ -681,6 +714,14 @@ Object.defineProperties(module.exports, {
   RedisRateLimitStore: { get: () => require('./core/rate-limit').RedisRateLimitStore, enumerable: true, configurable: true },
   rateLimitPlugin: { get: () => require('./plugins/rate-limit').rateLimitPlugin, enumerable: true, configurable: true },
 
+  // Security Shield Plugin (Core & Plugin)
+  securityPlugin: { get: () => require('./plugins/security').securityPlugin, enumerable: true, configurable: true },
+  createSecurityHeadersMiddleware: { get: () => require('./plugins/security').createSecurityHeadersMiddleware, enumerable: true, configurable: true },
+  createFirewallMiddleware: { get: () => require('./plugins/security').createFirewallMiddleware, enumerable: true, configurable: true },
+  FirewallManager: { get: () => require('./plugins/security').FirewallManager, enumerable: true, configurable: true },
+  IncidentRecorder: { get: () => require('./plugins/security').IncidentRecorder, enumerable: true, configurable: true },
+  auditSecurityPosture: { get: () => require('./plugins/security').auditSecurityPosture, enumerable: true, configurable: true },
+
   // Feature Flags & Canary Traffic Splitter (Core)
   flags: { get: () => require('./core/flags'), enumerable: true, configurable: true },
   FeatureFlagManager: { get: () => require('./core/flags').FeatureFlagManager, enumerable: true, configurable: true },
@@ -719,6 +760,7 @@ Object.defineProperties(module.exports, {
   runWithAmbientTransaction: { get: () => require('./core/orm').runWithAmbientTransaction, enumerable: true, configurable: true },
   getAmbientTransaction: { get: () => require('./core/orm').getAmbientTransaction, enumerable: true, configurable: true },
   hasAmbientTransaction: { get: () => require('./core/orm').hasAmbientTransaction, enumerable: true, configurable: true },
+  onTransactionCommit: { get: () => require('./core/orm/transaction').onTransactionCommit, enumerable: true, configurable: true },
   createMemoryCacheProvider: { get: () => require('./core/orm').createMemoryCacheProvider, enumerable: true, configurable: true },
   // Feature flag hashing
   fnv1a: { get: () => require('./core/flags/hasher').fnv1a, enumerable: true, configurable: true },
@@ -754,4 +796,24 @@ Object.defineProperties(module.exports, {
   Gauge: { get: () => require('./core/metrics').Gauge, enumerable: true, configurable: true },
   Histogram: { get: () => require('./core/metrics').Histogram, enumerable: true, configurable: true },
   sseStream: { get: () => require('./core/sse/stream'), enumerable: true, configurable: true },
+  // Datastar Client Behavior Layer & SSR Fragments (core/client)
+  client: { get: () => require('./core/client'), enumerable: true, configurable: true },
+  defineController: { get: () => require('./core/client').defineController, enumerable: true, configurable: true },
+  deriveControllerNameFromPath: { get: () => require('./core/client').deriveControllerNameFromPath, enumerable: true, configurable: true },
+  createClientRuntime: { get: () => require('./core/client').createClientRuntime, enumerable: true, configurable: true },
+  bootClient: { get: () => require('./core/client').bootClient, enumerable: true, configurable: true },
+  createLiteClientRuntime: { get: () => require('./core/client').createLiteClientRuntime, enumerable: true, configurable: true },
+  bootLiteClient: { get: () => require('./core/client').bootLiteClient, enumerable: true, configurable: true },
+  createControllerRuntime: { get: () => require('./core/client').createControllerRuntime, enumerable: true, configurable: true },
+  ClientRequestError: { get: () => require('./core/client').ClientRequestError, enumerable: true, configurable: true },
+  createApiClient: { get: () => require('./core/client').createApiClient, enumerable: true, configurable: true },
+  createFormHandle: { get: () => require('./core/client').createFormHandle, enumerable: true, configurable: true },
+  parseFormElement: { get: () => require('./core/client').parseFormElement, enumerable: true, configurable: true },
+  createFragmentCoordinator: { get: () => require('./core/client').createFragmentCoordinator, enumerable: true, configurable: true },
+  defineFragment: { get: () => require('./core/client').defineFragment, enumerable: true, configurable: true },
+  apiResult: { get: () => require('./core/client').apiResult, enumerable: true, configurable: true },
+  isApiResultEnvelope: { get: () => require('./core/client').isApiResultEnvelope, enumerable: true, configurable: true },
+  sendApiResult: { get: () => require('./core/client').sendApiResult, enumerable: true, configurable: true },
+  createDatastarAdapter: { get: () => require('./core/client').createDatastarAdapter, enumerable: true, configurable: true },
+  createClientDebugger: { get: () => require('./core/client').createClientDebugger, enumerable: true, configurable: true },
 });

@@ -66,9 +66,9 @@ function createMcpAuthMiddleware(options = {}) {
     // 3. Pre-shared token check
     if (token) {
       let clientToken = '';
-      const authHeader = req.headers.authorization;
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        clientToken = authHeader.slice('Bearer '.length).trim();
+      const authHeader = req.headers?.authorization || req.headers?.Authorization;
+      if (authHeader && /^Bearer\s+/i.test(authHeader)) {
+        clientToken = authHeader.replace(/^Bearer\s+/i, '').trim();
       } else if (req.query && req.query.token) {
         clientToken = String(req.query.token).trim();
       }

@@ -5,6 +5,13 @@
 const fs = require('fs');
 const path = require('path');
 const { resolveDbConfigIfExists, createDbInstance } = require('../utils/db');
+const { isClientBrowserFile } = require('../../src/discovery/file-route-parser');
+const {
+  discoverClientControllers,
+  findDefaultEntryPoints,
+  validateClientBundleBoundaries,
+} = require('../../src/bundle');
+const { checkTemplateFormContracts } = require('../../src/dev/typegen');
 
 /**
  * @param {string} enginesNode - e.g. ">=18.0.0", "^20.1.0"
@@ -136,13 +143,17 @@ function registerCommand(program) {
           return name;
         }
 
-        const VALID_API_METHODS = ['.get.js', '.post.js', '.put.js', '.patch.js', '.delete.js'];
+        const VALID_API_METHODS = [
+          '.get.js', '.post.js', '.put.js', '.patch.js', '.delete.js',
+          '.get.ts', '.post.ts', '.put.ts', '.patch.ts', '.delete.ts',
+        ];
 
         function scanRoutes(dirPath, relativeDir = '', isApi = false) {
           const children = fs.readdirSync(dirPath);
           const kept = [];
 
           for (const child of children) {
+            if (isClientBrowserFile(child)) continue;
             const fullPath = path.join(dirPath, child);
             const relPath = relativeDir ? path.join(relativeDir, child) : child;
             const stats = fs.statSync(fullPath);
@@ -212,6 +223,36 @@ function registerCommand(program) {
         }
       } else {
         line('⚠', 'pages/ not found (file-based routes may be missing)');
+        warnings += 1;
+      }
+
+      console.log('\nClient Behavior & Form Contracts');
+      console.log('--------------------------------');
+      try {
+        const controllers = discoverClientControllers(cwd);
+        const entries = findDefaultEntryPoints(cwd);
+        validateClientBundleBoundaries(entries, cwd);
+        line('✓', `Client controllers verified (${controllers.length} controller(s), zero boundary leaks or collisions)`);
+      } catch (clientErr) {
+        line('✗', clientErr.message || String(clientErr));
+        errors += 1;
+      }
+
+      try {
+        const formCheck = checkTemplateFormContracts(cwd);
+        for (const w of formCheck.warnings) {
+          line('⚠', w.message);
+          warnings += 1;
+        }
+        for (const e of formCheck.errors) {
+          line('✗', e.message);
+          errors += 1;
+        }
+        if (formCheck.errors.length === 0 && formCheck.warnings.length === 0) {
+          line('✓', `Static HTML form contracts verified (${formCheck.checkedFormsCount} API form(s) checked)`);
+        }
+      } catch (formErr) {
+        line('⚠', `Form contract check skipped: ${formErr.message}`);
         warnings += 1;
       }
 

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Webspresso Client Behavior Layer — Live Demo</title>
+  <link rel="stylesheet" href="/css/demo.css">
+</head>
+<body>
+  <nav class="demo-nav">
+    <a class="demo-nav-brand" href="/">⚡ Webspresso Client Behavior</a>
+    <div class="demo-nav-links">
+      <a href="/todos">1. Todo List (Full Showcase)</a>
+      <a href="/counter">2. SSR Counter (Zero .client.*)</a>
+    </div>
+  </nav>
+
+  <main>
+    <h1>Webspresso Client Behavior Layer (<code>core/client</code>)</h1>
+    <p class="subtitle">Explore the two interactive SSR + Datastar examples below:</p>
+
+    <div class="demo-card">
+      <h2>1. Todo List — Filtered &amp; Paginated Tasks + Draft Preservation + Explicit API</h2>
+      <p>
+        Features live KPI progress bar (<code>todos-summary</code> fragment), filtered &amp; paginated task list
+        (<code>todos-list</code> fragment), single-click task completion/deletion, bulk actions, server-side Zod validation
+        with accessible error focus, an open Edit Draft card that preserves unsaved input during refreshes, and an explicit
+        <code>api.get('/api/todos/insights')</code> client state panel.
+      </p>
+      <p><a href="/todos" style="color: var(--accent); font-weight: 600;">Open Todo List Showcase →</a></p>
+    </div>
+
+    <div class="demo-card">
+      <h2>2. Server-Fragment Counter (Zero <code>.client.*</code> File)</h2>
+      <p>
+        Renders the counter via an SSR fragment (<code>{{ "{{ fsy.fragment('count') }}" }}</code>) and updates it via a native
+        <code>&lt;form action="/api/counter" method="post" data-w-form="counter-increment"&gt;</code>.
+      </p>
+      <p><a href="/counter" style="color: var(--accent); font-weight: 600;">Open Counter Demo →</a></p>
+    </div>
+  </main>
+</body>
+</html>

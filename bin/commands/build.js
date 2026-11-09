@@ -6,7 +6,8 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { buildBundle } = require('../../src/bundle');
+const { buildBundle, findPageEntryPoints } = require('../../src/bundle');
+const { generateTypes, checkTemplateFormContracts } = require('../../src/dev/typegen');
 
 function registerCommand(program) {
   program
@@ -56,11 +57,14 @@ function registerCommand(program) {
         }
       }
 
-      // 2. Build JS Bundle with manifest.json (esbuild)
+      // 2. Build JS Bundle with manifest.json (esbuild or fallback)
       if (options.js !== false) {
-        const hasClientEntry = fs.existsSync(path.join(cwd, 'src', 'client', 'main.js')) ||
+        const discoveredClientPages = findPageEntryPoints(cwd);
+        const hasClientEntry =
+          fs.existsSync(path.join(cwd, 'src', 'client', 'main.js')) ||
           fs.existsSync(path.join(cwd, 'src', 'client', 'main.ts')) ||
-          fs.existsSync(path.join(cwd, 'src', 'client', 'index.js'));
+          fs.existsSync(path.join(cwd, 'src', 'client', 'index.js')) ||
+          Object.keys(discoveredClientPages).length > 0;
         const hasEsbuild = Boolean(
           (packageJson.devDependencies && packageJson.devDependencies.esbuild) ||
           (packageJson.dependencies && packageJson.dependencies.esbuild)
@@ -121,6 +125,18 @@ function registerCommand(program) {
           console.error('❌ Template precompilation failed:', err.message);
         }
       }
+
+      // 5. Generate TypeScript & API Route Manifest (.webspresso/types.d.ts & .webspresso/api.d.ts) and check HTML form contracts
+      try {
+        generateTypes({ rootDir: cwd, silent: true });
+        const formCheck = checkTemplateFormContracts(cwd);
+        for (const w of formCheck.warnings) {
+          console.warn(`⚠️  [Form Check] ${w.message}`);
+        }
+        for (const e of formCheck.errors) {
+          console.warn(`❌ [Form Contract Mismatch] ${e.message}`);
+        }
+      } catch (_) {}
 
       console.log('\n✨ Asset build complete!\n');
       if (cssBuilt) console.log('  ✓ CSS: public/css/style.css');

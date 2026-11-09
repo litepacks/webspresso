@@ -964,4 +964,62 @@ Modular plugin wrapper for Webspresso's background job queue engine (`core/queue
   });
   ```
 
+### 2.35 `securityPlugin` (`plugins/security`)
+Zero-dependency enterprise security shield and threat defense suite featuring a native WAF, HTTP security headers (Helmet alternative), IP firewall & auto-ban, honeypot traps, LFI/traversal defense, brute-force guard, and a Mithril.js Admin Panel Security Cockpit.
+- **Why**: Protects Webspresso applications from common automated attacks, bots, credential stuffing, and web exploits without installing heavy third-party npm packages (`helmet`, `express-rate-limit`, etc.).
+- **Admin Security Cockpit (`/_admin#!/security`)**:
+  - **Live KPI Banner**: Real-time status for Active Bans, 24h Blocked Attacks, Total Violations, and OWASP Compliance Score.
+  - **Firewall & Banned IPs Table**: Search, filter by threat reason, inspect ban expiration, and 1-click unban.
+  - **Manual Ban Modal**: Ban malicious IPs on-demand with duration selector (1h, 6h, 24h, 7d, 30d, Permanent) and custom reason.
+  - **Live Incident Threat Log**: Real-time audit stream of honeypot hits, directory traversals, bad bot scanners, and brute-force lockouts.
+  - **Security Posture Audit**: Automated checklist testing CSP, HSTS, X-Frame-Options, noSniff, Cookie entropy, and remediation tips with letter grades (A+, A, B, C, F).
+- **Built-in Services**:
+  - `security.stats`: Retrieve live firewall, ban, and incident telemetry.
+  - `security.ban`: Ban an IP address with optional reason, duration, and metadata.
+  - `security.unban`: Unban an IP address.
+  - `security.check-ip`: Check if an IP is currently banned and get remaining duration.
+  - `security.list-banned`: List paginated banned IPs with search and filters.
+  - `security.incidents`: Retrieve recent threat incidents.
+  - `security.audit`: Run an automated OWASP security posture audit.
+- **Usage**:
+  ```javascript
+  const { createApp, adminPanelPlugin, securityPlugin } = require('webspresso');
+
+  createApp({
+    plugins: [
+      adminPanelPlugin({ db }),
+      securityPlugin({
+        headers: {
+          csp: true,
+          hsts: true,
+          frameGuard: 'SAMEORIGIN',
+          noSniff: true,
+          referrerPolicy: 'strict-origin-when-cross-origin',
+        },
+        firewall: {
+          whitelist: ['127.0.0.1'],
+          autoBan: {
+            enabled: true,
+            threshold: 5,
+            window: '5m',
+            duration: '1h',
+          },
+        },
+        honeypot: {
+          paths: ['/.env', '/wp-admin', '/phpmyadmin', '/.git'],
+          detectTraversal: true,
+          blockBadBots: true,
+        },
+        bruteForce: {
+          routes: ['/api/auth/login', '/_admin/api/auth/login'],
+          maxAttempts: 5,
+          lockout: '15m',
+        },
+        adminPanel: true,
+      }),
+    ],
+  });
+  ```
+
+
 

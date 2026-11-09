@@ -33,6 +33,17 @@ const {
   resolveMiddlewares,
 } = require('./routing/middleware-resolver');
 const { escapeRegExp } = require('../core/utils/regex');
+const {
+  apiResult,
+  isApiResultEnvelope,
+  sendApiResult,
+  ensureRequestMemo,
+  attachSsrFragmentHelper,
+  resolvePendingSsrFragments,
+  createFragmentRefreshHandler,
+} = require('../core/client/server-fragments');
+
+const CLIENT_FILE_RE = /\.(?:client\.(?:js|ts|mjs|cjs|jsx|tsx)|d\.ts)$/i;
 
 const NOOP = () => {};
 const EMPTY_OBJECT = Object.freeze({});
@@ -158,7 +169,7 @@ async function handleDirectoryErrorBoundary({
 
     const shouldApplyLayout = errorConfig?.layout !== false &&
       errorData?.layout !== false &&
-      !templateHasExtends(njkTpl.templateBody, errorBoundary.fullPath);
+      !templateHasExtends(njkTpl.templateBody, errorBoundary.fullPath, isDev);
 
     if (shouldApplyLayout) {
       const errorLayouts = findCascadingLayouts(absolutePagesDir, errorBoundary.errorRelPath, isDev);
@@ -746,8 +757,8 @@ function scanDirectory(dir, baseDir = dir) {
       if (entry.name === 'locales') continue;
       files.push(...scanDirectory(fullPath, baseDir));
     } else if (entry.isFile()) {
-      // Skip files starting with _
-      if (entry.name.startsWith('_')) continue;
+      // Skip files starting with _ or browser .client.* / .d.ts files
+      if (entry.name.startsWith('_') || CLIENT_FILE_RE.test(entry.name)) continue;
       files.push(relativePath);
     }
   }
@@ -1204,7 +1215,12 @@ function mountPages(app, options) {
   const clientRuntime = clientRuntimeOpt && typeof clientRuntimeOpt === 'object'
     ? { alpine: !!clientRuntimeOpt.alpine, swup: !!clientRuntimeOpt.swup }
     : { alpine: false, swup: false };
-  const isDev = process.env.NODE_ENV !== 'production';
+  // createApp() passes its own decision (NODE_ENV === 'development' or options.isDev). The env
+  // fallback only applies to direct mountPages() callers; without it, NODE_ENV=test or an unset
+  // NODE_ENV re-required API handlers and re-read templates from disk on every request.
+  const isDev = options.isDev !== undefined
+    ? Boolean(options.isDev)
+    : process.env.NODE_ENV !== 'production';
   const log = silent ? NOOP : console.log.bind(console);
   
   // Get absolute path to pages directory
@@ -1233,7 +1249,7 @@ function mountPages(app, options) {
 
     for (const entry of children) {
       const child = entry.name;
-      if (child.startsWith('_') || child === 'locales') continue;
+      if (child.startsWith('_') || child === 'locales' || CLIENT_FILE_RE.test(child)) continue;
       const fullPath = path.join(dirPath, child);
       const relPath = relativeDir ? path.join(relativeDir, child) : child;
 
@@ -1302,6 +1318,7 @@ function mountPages(app, options) {
   const apiRoutes = [];
   
   for (const file of files) {
+    if (CLIENT_FILE_RE.test(file)) continue;
     const ext = path.extname(file);
     const isApi = isApiRouteFile(file);
     
@@ -1530,12 +1547,26 @@ function mountPages(app, options) {
             t: tr.t,
             service: req.service,
             db,
-            sse: res.sse,
-            streamText: res.streamText,
-            streamJson: res.streamJson,
+            sse: (sourceOrOptions, maybeOptions) => (res && typeof res.sse === 'function' ? res.sse(sourceOrOptions, maybeOptions) : null),
+            streamText: (sourceOrCallback, maybeOptions) => (res && typeof res.streamText === 'function' ? res.streamText(sourceOrCallback, maybeOptions) : null),
+            streamJson: (sourceOrCallback, maybeOptions) => (res && typeof res.streamJson === 'function' ? res.streamJson(sourceOrCallback, maybeOptions) : null),
+            result: (data, meta) => apiResult(data, meta),
+            apiResult: (data, meta) => apiResult(data, meta),
           });
 
-          await fn(req, res, apiCtx);
+          ensureRequestMemo(req, apiCtx);
+          if (res) {
+            res.apiResult = (data, meta) => sendApiResult(req, res, apiResult(data, meta));
+          }
+
+          const result = await fn(req, res, apiCtx);
+          if (res && !res.headersSent && !res.writableEnded && !res.finished) {
+            if (isApiResultEnvelope(result)) {
+              sendApiResult(req, res, result);
+            } else if (result !== undefined && result !== res && result !== req && typeof res.json === 'function') {
+              res.json(result);
+            }
+          }
         } catch (err) {
           console.error(`API error ${route.routePath}:`, err);
           const hookCtx = { req, res, error: err };
@@ -1690,7 +1721,14 @@ function mountPages(app, options) {
           clientRuntime,
         };
         
+        ensureRequestMemo(req, ctx);
+        ctx.ctx = ctx;
         req.context = ctx;
+        req.ctx = ctx;
+        req.req = req;
+        req.res = res;
+        if (db && !req.db) req.db = db;
+        if (!req.service) req.service = ctx.service;
         
         // Execute hooks: onRequest
         let hookPromise = runHooks(globalHooks, routeHooks, 'onRequest', ctx);
@@ -1790,6 +1828,17 @@ function mountPages(app, options) {
           renderContext.pageAssets = true;
           renderContext.pageHead = pageAssetBundle.pageHead;
         }
+
+        attachSsrFragmentHelper({
+          req,
+          res,
+          ctx,
+          pageMod: config,
+          pagePath: route.routePath,
+          nunjucksEnv: nunjucks,
+          fsy: ctx.fsy,
+          getRenderCtx: () => renderContext,
+        });
         
         // Render the template
         const templatePath = route.file.split(path.sep).join('/');
@@ -1805,7 +1854,7 @@ function mountPages(app, options) {
           const shouldApplyLayout = config?.layout !== false &&
             ctx.data?.layout !== false &&
             ctx.meta?.layout !== false &&
-            !templateHasExtends(njkTpl.templateBody, route.fullPath);
+            !templateHasExtends(njkTpl.templateBody, route.fullPath, isDev);
 
           return await renderStream(res, templatePath, renderContext, {
             env: nunjucks,
@@ -1839,11 +1888,13 @@ function mountPages(app, options) {
         const shouldApplyLayout = config?.layout !== false &&
           ctx.data?.layout !== false &&
           ctx.meta?.layout !== false &&
-          !templateHasExtends(njkTpl.templateBody, route.fullPath);
+          !templateHasExtends(njkTpl.templateBody, route.fullPath, isDev);
 
         if (shouldApplyLayout && cascadingLayouts.length > 0) {
           html = applyCascadingLayouts(nunjucks, cascadingLayouts, html, renderContext, isDev);
         }
+
+        html = await resolvePendingSsrFragments(html, req);
 
         if (pluginManager) {
           const contentApi = pluginManager.getPluginAPI('content');
@@ -1893,6 +1944,70 @@ function mountPages(app, options) {
     log(`  GET ${route.routePath} -> ${route.file}`);
     }
   };
+
+  // Mount SSR Fragment Refresh Endpoint (`/__webspresso/fragments`)
+  app.__ssrPageEntries = ssrRoutes.map((r) => ({
+    routePath: r.routePath,
+    file: r.file,
+    getPageMod: () => (r.hasCompanionConfig ? loadRouteConfig(r.configPath, isDev) : null),
+    cascadingMiddlewares: loadCascadingMiddlewares(absolutePagesDir, r.file, middlewares, isDev),
+  }));
+
+  if (!app.__fragmentRefreshMounted) {
+    app.__fragmentRefreshMounted = true;
+    const fragmentRefreshHandler = createFragmentRefreshHandler({
+      getPageEntries: () => [
+        ...(app.__ssrPageEntries || []),
+        ...(app.__discoveredPageEntries || []),
+      ],
+      nunjucksEnv: nunjucks,
+      buildFsy: (req) => {
+        const supported = parseSupportedLocaleSet();
+        const defaultLocale = getDefaultLocale(supported);
+        const locale = detectLocale(req, supported, defaultLocale);
+        const translations = loadI18n(absolutePagesDir, '', locale, isDev);
+        const t = createTranslator(translations, { locale, fallbackLocale: defaultLocale });
+        const baseHelpers = createHelpers({ req, res: req.res, locale, t });
+        const pluginStaticHelpers = pluginManager ? pluginManager.getHelpers() : EMPTY_OBJECT;
+        return { ...baseHelpers, ...pluginStaticHelpers };
+      },
+      buildContext: (req, res, { fsy }) => {
+        const ctx = {
+          req,
+          res,
+          db,
+          fsy,
+          params: req.params || {},
+          query: req.query || {},
+          user: req.user,
+          auth: req.auth,
+          session: req.session,
+          service: (name, input, opts) => {
+            if (serviceRegistry) {
+              return serviceRegistry.call(name, input, ctx, opts);
+            }
+            throw new Error(`Services not configured. Cannot call service '${name}'.`);
+          },
+        };
+        ctx.ctx = ctx;
+        req.context = ctx;
+        req.ctx = ctx;
+        req.req = req;
+        req.res = res;
+        if (db && !req.db) req.db = db;
+        if (!req.service) req.service = ctx.service;
+        return ctx;
+      },
+      resolveMiddlewareList: (mwList) => resolveMiddlewares(mwList, middlewares),
+    });
+
+    if (typeof app.get === 'function') {
+      app.get('/__webspresso/fragments', fragmentRefreshHandler);
+    }
+    if (typeof app.post === 'function') {
+      app.post('/__webspresso/fragments', fragmentRefreshHandler);
+    }
+  }
 
   // Static / literal file routes first so plugins can register reserved paths (e.g. /_admin)
   // before catch-all dynamics like /:slug shadow them.

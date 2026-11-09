@@ -722,6 +722,7 @@ function generateAdminPanelHtml(adminPath, registry) {
       });
     } catch (e) {}
   })();
+  </script>
   <script>window.__ADMIN_PATH__ = ${JSON.stringify(adminPath)};</script>
   <script src="${adminPath}/vendor/mithril.min.js"></script>
   <script src="${adminPath}/vendor/tailwind.min.js"></script>

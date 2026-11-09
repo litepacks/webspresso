@@ -1,0 +1,72 @@
+<div class="todos-list-container" data-testid="todos-list">
+  <div class="todos-list-meta">
+    <div class="meta-left">
+      <span class="meta-count-badge">
+        <strong data-testid="todos-matching-count">{{ total }}</strong> matching task{% if total != 1 %}s{% endif %}
+      </span>
+      <span class="meta-divider">•</span>
+      <span class="meta-page-info">Page <strong>{{ page }}</strong> of <strong>{{ totalPages }}</strong></span>
+    </div>
+    <span class="fragment-pill">SSR Fragment: <code>todos-list</code></span>
+  </div>
+
+  {% if items.length == 0 %}
+    <div class="todos-empty">
+      <div class="empty-icon">✦</div>
+      <h3>No matching tasks found</h3>
+      <p>Try clearing the search query or switching status/priority filters above.</p>
+    </div>
+  {% else %}
+    <ul class="todos-items">
+      {% for item in items %}
+        <li class="todo-row {% if item.completed %}is-completed{% endif %}" data-w-key="todo-{{ item.id }}">
+          <div class="todo-row-main">
+            <form action="/api/todos/{{ item.id }}/toggle" method="post" data-w-form="toggle-todo-{{ item.id }}" class="todo-toggle-form">
+              <button
+                type="submit"
+                class="todo-check-btn {% if item.completed %}checked{% endif %}"
+                title="{% if item.completed %}Mark as active{% else %}Mark as completed{% endif %}"
+                aria-label="Toggle task completion"
+              >
+                {% if item.completed %}✓{% else %}{% endif %}
+              </button>
+            </form>
+
+            <div class="todo-row-body">
+              <div class="todo-row-title-line">
+                <span class="todo-id-chip">#{{ item.id }}</span>
+                <strong class="todo-title">{{ item.title }}</strong>
+              </div>
+              {% if item.notes %}
+                <p class="todo-subnotes">{{ item.notes }}</p>
+              {% endif %}
+              <div class="todo-row-tags">
+                <span class="priority-badge priority-{{ item.priority }}">
+                  <span class="priority-dot"></span>
+                  {{ item.priority | upper }}
+                </span>
+                <span class="note-category">{{ item.category }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="todo-row-actions">
+            <button
+              type="button"
+              class="btn-ghost btn-sm edit-trigger-btn"
+              data-w-on:click="selectTodoForEdit"
+              data-todo-id="{{ item.id }}"
+              title="Load task into Draft Inspector"
+            >
+              ✎ Inspect / Edit
+            </button>
+
+            <form action="/api/todos/{{ item.id }}" method="delete" data-w-form="delete-todo-{{ item.id }}" class="todo-delete-form">
+              <button type="submit" class="btn-danger-ghost btn-sm" title="Delete Task" aria-label="Delete Task">🗑</button>
+            </form>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</div>

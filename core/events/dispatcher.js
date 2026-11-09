@@ -296,6 +296,36 @@ class EventDispatcher extends EventEmitter {
   }
 
   /**
+   * Check if any listeners match an event
+   * @param {string} [event]
+   * @param {any} [sender]
+   * @returns {boolean}
+   */
+  hasListeners(event, sender = null) {
+    if (this.exactListeners.size === 0 && this.wildcardListeners.length === 0 && this.anyListeners.length === 0) {
+      return false;
+    }
+    if (this.anyListeners.length > 0) return true;
+    if (event === undefined) return true;
+    if (this.wildcardListeners.length > 0) {
+      for (let i = 0; i < this.wildcardListeners.length; i++) {
+        const item = this.wildcardListeners[i];
+        if (item.regex.test(event) && matchesSender(item.sender, sender)) {
+          return true;
+        }
+      }
+    }
+    if (this.exactListeners.has(event)) {
+      if (sender === null) return true;
+      const list = this.exactListeners.get(event);
+      for (let i = 0; i < list.length; i++) {
+        if (matchesSender(list[i].sender, sender)) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Synchronous / fire-and-forget emit
    * @param {string|Object} eventOrInstance - Event name or Event class instance
    * @param {any} [data] - Event payload
@@ -303,6 +333,9 @@ class EventDispatcher extends EventEmitter {
    * @returns {boolean} Whether any listeners were invoked
    */
   emit(eventOrInstance, data, options = {}) {
+    if (this.exactListeners.size === 0 && this.wildcardListeners.length === 0 && this.anyListeners.length === 0) {
+      return false;
+    }
     const parsed = this._parseEmitArgs(eventOrInstance, data, options);
     const { event, data: payload, options: opts } = parsed;
     const sender = opts.sender ?? null;

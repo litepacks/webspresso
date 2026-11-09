@@ -2,6 +2,7 @@
  * Tests for Admin Panel Offline Zero-CDN Vendor Asset Serving
  */
 
+const vm = require('vm');
 const express = require('express');
 const request = require('supertest');
 const adminPanelPlugin = require('../../../plugins/admin-panel');
@@ -115,5 +116,19 @@ describe.sequential('Admin Panel Offline Zero-CDN Static Assets', () => {
     expect(res.text).toContain('/_admin/vendor/tailwind.min.js');
     expect(res.text).not.toContain('https://unpkg.com/mithril/mithril.js');
     expect(res.text).not.toContain('https://cdn.tailwindcss.com');
+  });
+
+  it('renders inline scripts that parse, so the theme sync bootstrap runs', async () => {
+    const res = await request(app).get('/_admin').expect(200);
+
+    const inlineScripts = [...res.text.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+    const themeScript = inlineScripts.find((s) => s.includes('webspresso-admin-theme'));
+
+    expect(themeScript).toBeDefined();
+    expect(themeScript).toContain('window.__syncAdminTheme = sync');
+    expect(themeScript).not.toContain('<script');
+    for (const code of inlineScripts) {
+      expect(() => new vm.Script(code)).not.toThrow();
+    }
   });
 });

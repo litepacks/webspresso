@@ -18,6 +18,9 @@ const middlewareFileCache = new Map();
 const layoutFileCache = new Map();
 const errorFileCache = new Map();
 const loadingFileCache = new Map();
+// fullPath -> whether the template file contains `{% extends %}`
+const extendsFileCache = new Map();
+const EXTENDS_RE = /\{%\s*extends\s+/;
 
 function shouldBypassCache(isDev) {
   return !!isDev;
@@ -54,21 +57,35 @@ function getDirectoryChain(relativeFilePath) {
 /**
  * Check if a template content explicitly declares its own layout inheritance via `{% extends ... %}`
  *
+ * When the body is not provided, the file is read once and the answer is cached per path
+ * (outside development), so rendering never does synchronous disk I/O per request.
+ *
  * @param {string} [templateBody]
  * @param {string} [fullPath]
+ * @param {boolean} [isDev=false]
  * @returns {boolean}
  */
-function templateHasExtends(templateBody, fullPath) {
-  if (typeof templateBody === 'string' && /\{%\s*extends\s+/.test(templateBody)) {
+function templateHasExtends(templateBody, fullPath, isDev = false) {
+  if (typeof templateBody === 'string' && EXTENDS_RE.test(templateBody)) {
     return true;
   }
-  if (fullPath && fs.existsSync(fullPath)) {
-    try {
-      const content = fs.readFileSync(fullPath, 'utf8');
-      return /\{%\s*extends\s+/.test(content);
-    } catch (_) {}
+  if (!fullPath) return false;
+
+  if (!shouldBypassCache(isDev) && extendsFileCache.has(fullPath)) {
+    return extendsFileCache.get(fullPath);
   }
-  return false;
+
+  let result = false;
+  try {
+    result = EXTENDS_RE.test(fs.readFileSync(fullPath, 'utf8'));
+  } catch (_) {
+    result = false;
+  }
+
+  if (!shouldBypassCache(isDev)) {
+    extendsFileCache.set(fullPath, result);
+  }
+  return result;
 }
 
 /**
@@ -476,6 +493,7 @@ function clearCascadingCaches() {
   layoutFileCache.clear();
   errorFileCache.clear();
   loadingFileCache.clear();
+  extendsFileCache.clear();
 }
 
 module.exports = {

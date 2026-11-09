@@ -1,6 +1,6 @@
 {
   "name": "webspresso",
-  "version": "0.0.108",
+  "version": "0.0.109",
   "description": "Minimal, production-ready SSR framework for Node.js with file-based routing, Nunjucks templating, built-in i18n, and CLI tooling",
   "main": "index.js",
   "types": "index.d.ts",
@@ -32,12 +32,33 @@
     "./core/errors": "./core/errors/index.js",
     "./core/orm": "./core/orm/index.js",
     "./core/queue": "./core/queue/index.js",
+    "./core/client": {
+      "types": "./index.d.ts",
+      "default": "./core/client/index.js"
+    },
+    "./client": {
+      "types": "./index.d.ts",
+      "default": "./core/client/index.js"
+    },
+    "./client/lite": {
+      "types": "./index.d.ts",
+      "default": "./core/client/lite.js"
+    },
+    "./client/fragments": {
+      "types": "./index.d.ts",
+      "default": "./core/client/fragments.js"
+    },
+    "./client/forms": {
+      "types": "./index.d.ts",
+      "default": "./core/client/forms.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
     "webspresso": "./bin/webspresso.js"
   },
   "scripts": {
+    "audit:jev": "node scripts/jev-audit.js",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit/ tests/plugins/unit/",
     "test:integration": "vitest run tests/integration/ tests/plugins/integration/",
@@ -73,6 +94,8 @@
     "bench:baseline": "vitest bench --run --outputJson benchmarks/ci-baseline.json",
     "bench:ci": "vitest bench --run --outputJson benchmarks/current-benchmark.json && node scripts/check-bench-regression.mjs benchmarks/ci-baseline.json benchmarks/current-benchmark.json",
     "bench:ci:local": "npm run bench:baseline && npm run bench:ci",
+    "bench:profile": "softscope --top 30 node scripts/profile-bench.mjs",
+    "bench:profile:ai": "softscope --top 40 -o softscope-bench.ai node scripts/profile-bench.mjs",
     "check:types": "tsc --project tests/ts-smoke/tsconfig.json && tsc --noEmit --skipLibCheck false --types node index.d.ts",
     "rebuild:native": "npm rebuild better-sqlite3 bcrypt sharp",
     "docs:dev": "docboot dev ./docs",

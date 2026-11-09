@@ -19,6 +19,14 @@ const {
 const { extractTraceContext } = require('../logger/trace');
 
 /**
+ * 32 lowercase hex chars (W3C trace-id width) from a pooled random UUID.
+ * @returns {string}
+ */
+function randomHex32() {
+  return crypto.randomUUID().replace(/-/g, '');
+}
+
+/**
  * Normalize metrics configuration options
  * @param {Object|boolean} options
  * @returns {Object}
@@ -76,8 +84,10 @@ function createMetricsManager(options = {}, context = {}) {
   function requestMiddleware(req, res, next) {
     // 1. Distributed Tracing Propagation
     const traceCtx = extractTraceContext(req);
-    const traceId = traceCtx.traceId || crypto.randomBytes(16).toString('hex');
-    const spanId = traceCtx.spanId || crypto.randomBytes(8).toString('hex');
+    // crypto.randomUUID() draws from a pre-filled entropy pool; randomBytes() made two
+    // synchronous CSPRNG calls per request (visible in benchmark CPU profiles).
+    const traceId = traceCtx.traceId || randomHex32();
+    const spanId = traceCtx.spanId || randomHex32().slice(0, 16);
 
     req.traceId = traceId;
     req.spanId = spanId;

@@ -528,6 +528,22 @@ export function createExchangeServices(options?: {
   db?: unknown;
 }): Record<string, ServiceDefinition>;
 
+export function createWebhookServices(options?: {
+  dispatcher: unknown;
+}): Record<string, ServiceDefinition>;
+
+export function createQueueServices(options?: {
+  queueManager?: unknown;
+  queue?: unknown;
+}): Record<string, ServiceDefinition>;
+
+export function createSecurityServices(options?: {
+  firewall: unknown;
+  incidentRecorder?: unknown;
+  pluginOptions?: unknown;
+  app?: unknown;
+}): Record<string, ServiceDefinition>;
+
 export function validateServiceInput(
   schema: unknown,
   input: unknown,
@@ -881,6 +897,14 @@ export namespace compression {
   export function appendVary(res: unknown, field: string): void;
 }
 
+export const supportsBrotli: typeof compression.supportsBrotli;
+export const getDefaultSupportedEncodings: typeof compression.getDefaultSupportedEncodings;
+export const parseAcceptEncoding: typeof compression.parseAcceptEncoding;
+export const selectEncoding: typeof compression.selectEncoding;
+export const isCompressible: typeof compression.isCompressible;
+export const createCompressionStream: typeof compression.createCompressionStream;
+export const appendVary: typeof compression.appendVary;
+
 export function createEarlyHintsMiddleware(options?: boolean | EarlyHintsOptions): RequestHandler;
 export function sendEarlyHints(
   res: unknown,
@@ -903,6 +927,8 @@ export namespace earlyHints {
   ): boolean;
   export function createEarlyHintsMiddleware(options?: boolean | EarlyHintsOptions): RequestHandler;
 }
+
+export const EXTENSION_AS_MAP: typeof earlyHints.EXTENSION_AS_MAP;
 
 export interface PayloadLimitParserConfig {
   enabled?: boolean;
@@ -950,6 +976,11 @@ export namespace limits {
   export function setupLimitsMiddleware(app: Application, options?: unknown): unknown;
 }
 
+export const DEFAULT_LIMITS: typeof limits.DEFAULT_LIMITS;
+export const matchesPath: typeof limits.matchesPath;
+export const shouldSkipBodyParser: typeof limits.shouldSkipBodyParser;
+export const shouldCaptureRawBody: typeof limits.shouldCaptureRawBody;
+
 export interface HealthCheckConfig {
   /** Enable or disable health check endpoints (default: true if healthCheck option is provided) */
   enabled?: boolean;
@@ -993,6 +1024,8 @@ export namespace health {
   export function createHealthManager(config: unknown, context?: unknown): unknown;
   export function setupHealthMiddleware(app: Application, options?: unknown, context?: unknown): unknown;
 }
+
+export const DEFAULT_HEALTH_CONFIG: typeof health.DEFAULT_HEALTH_CONFIG;
 
 // --- In-Memory & Tagged LRU Cache Engine ---
 
@@ -1437,6 +1470,19 @@ export namespace cascading {
   ): CascadingLoadingInfo | null;
   export function clearCascadingCaches(): void;
 }
+
+export const getDirectoryChain: typeof cascading.getDirectoryChain;
+export const templateHasExtends: typeof cascading.templateHasExtends;
+export const findCascadingMiddlewareFiles: typeof cascading.findCascadingMiddlewareFiles;
+export const loadCascadingMiddlewares: typeof cascading.loadCascadingMiddlewares;
+export const runMiddleware: typeof cascading.runMiddleware;
+export const runMiddlewareChain: typeof cascading.runMiddlewareChain;
+export const findCascadingLayouts: typeof cascading.findCascadingLayouts;
+export const executeCascadingLayoutLoads: typeof cascading.executeCascadingLayoutLoads;
+export const applyCascadingLayouts: typeof cascading.applyCascadingLayouts;
+export const findNearestErrorBoundary: typeof cascading.findNearestErrorBoundary;
+export const findNearestLoadingTemplate: typeof cascading.findNearestLoadingTemplate;
+export const clearCascadingCaches: typeof cascading.clearCascadingCaches;
 
 export function resolveMiddlewares(
   middlewareConfig: unknown[] | null | undefined,
@@ -3644,6 +3690,7 @@ export interface RestResourcePluginOptions {
 }
 
 export function restResourcePlugin(options?: RestResourcePluginOptions): WebspressoPlugin;
+export const restResourcesPlugin: typeof restResourcePlugin;
 
 export function ormCacheAdminPlugin(options: { db: DatabaseInstance }): WebspressoPlugin;
 
@@ -5760,6 +5807,116 @@ export interface RlsPluginOptions {
 export function rlsPlugin(options?: RlsPluginOptions): import('./core/plugins').Plugin;
 export function createRlsMiddleware(options?: RlsPluginOptions): (req: any, res: any, next: (err?: any) => void) => void;
 
+// --- Security Shield Plugin ---
+export interface SecurityPluginOptions {
+  headers?: boolean | {
+    csp?: boolean | Record<string, string[] | boolean | string>;
+    cspReportOnly?: boolean;
+    hsts?: boolean | { maxAge?: number; includeSubDomains?: boolean; preload?: boolean; force?: boolean };
+    frameGuard?: 'SAMEORIGIN' | 'DENY' | string | boolean;
+    noSniff?: boolean;
+    referrerPolicy?: string | boolean;
+    permissionsPolicy?: string | boolean;
+    xssFilter?: boolean;
+    dnsPrefetchControl?: boolean;
+    crossOriginOpenerPolicy?: string | boolean;
+    crossOriginResourcePolicy?: string | boolean;
+    hidePoweredBy?: boolean;
+    generateNonce?: boolean;
+  };
+  firewall?: boolean | {
+    whitelist?: string[];
+    blacklist?: string[];
+    autoBan?: {
+      enabled?: boolean;
+      threshold?: number;
+      window?: string | number;
+      duration?: string | number;
+    };
+  };
+  honeypot?: boolean | {
+    honeypots?: boolean | string[];
+    detectTraversal?: boolean;
+    blockBadBots?: boolean;
+    instantBan?: boolean;
+    violationWeight?: number;
+    honeypotStatus?: number;
+  };
+  bruteForce?: boolean | {
+    routes?: string[];
+    maxAttempts?: number;
+    window?: string | number;
+    lockout?: string | number;
+    progressiveDelay?: boolean;
+    banOnExceeded?: boolean;
+  };
+  incidents?: boolean | {
+    maxSize?: number;
+  };
+  adminPanel?: boolean;
+  adminTitle?: string;
+  adminApiPrefix?: string;
+  menuOrder?: number;
+}
+
+export function securityPlugin(options?: SecurityPluginOptions): import('./core/plugins').Plugin & {
+  api?: {
+    getFirewall(): any;
+    getIncidentRecorder(): any;
+    isBanned(ip: string): { banned: boolean; reason?: string; expiresAt?: number };
+    ban(ip: string, options?: { reason?: string; duration?: string | number; meta?: Record<string, any> }): any;
+    unban(ip: string): boolean;
+    listBanned(options?: { page?: number; limit?: number; search?: string; reason?: string }): any;
+    getStats(): any;
+    audit(app?: any): any;
+  };
+};
+export function createSecurityHeadersMiddleware(options?: any): RequestHandler;
+export function createFirewallMiddleware(firewall: any): RequestHandler;
+
+export class FirewallManager {
+  constructor(options?: any);
+  isBanned(ip: string): { banned: boolean; reason?: string; expiresAt?: number; isPermanent?: boolean; remainingMs?: number };
+  isWhitelisted(ip: string): boolean;
+  ban(ip: string, options?: { reason?: string; duration?: string | number; meta?: Record<string, any> }): any;
+  unban(ip: string): boolean;
+  recordViolation(ip: string, violation?: { type?: string; weight?: number; path?: string; userAgent?: string }): { banned: boolean; count: number; autoBanned: boolean };
+  listBanned(filter?: { page?: number; limit?: number; search?: string; reason?: string }): { items: any[]; total: number; page: number; limit: number; totalPages: number };
+  getStats(): { activeBans: number; permanentBans: number; autoBans24h: number; totalBans: number; totalViolations: number; whitelistCount: number; blacklistCount: number };
+}
+
+export class IncidentRecorder {
+  constructor(options?: { maxSize?: number });
+  record(data: {
+    type: string;
+    ip: string;
+    method?: string;
+    path?: string;
+    userAgent?: string;
+    reason?: string;
+    actionTaken?: 'blocked' | 'banned' | 'throttled' | 'warned' | string;
+    details?: Record<string, any>;
+  }): any;
+  list(filter?: { limit?: number; type?: string; search?: string }): { items: any[]; total: number };
+  clear(): void;
+  getStats(): { last24hCount: number; breakdown: Record<string, number> };
+}
+
+export function auditSecurityPosture(context?: {
+  options?: any;
+  firewall?: any;
+  incidentRecorder?: any;
+  app?: any;
+}): {
+  score: number;
+  grade: string;
+  checks: Array<{ id: string; category: string; title: string; description: string; passed: boolean; weight: number; recommendation: string | null }>;
+  totalChecks: number;
+  passedChecks: number;
+  failedChecks: number;
+  auditedAt: string;
+};
+
 // --- Structured Cloud Logging ---
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
 export type LogFormat = 'auto' | 'gcp' | 'aws' | 'json' | 'pretty';
@@ -6169,5 +6326,387 @@ export declare const logger: {
 export declare const flags: {
   FeatureFlagManager: typeof FeatureFlagManager;
   createFeatureFlagManager: typeof createFeatureFlagManager;
+  [key: string]: any;
+};
+
+/* ============================================================================
+ * Datastar Client Behavior Layer & SSR Fragments (core/client)
+ * ========================================================================= */
+
+export type ClientConcurrencyPolicy = 'latest' | 'drop' | 'queue' | 'parallel';
+export type ClientRequestErrorKind = 'http' | 'network' | 'validation' | 'canceled';
+
+export class ClientRequestError<TData = unknown> extends Error {
+  readonly kind: ClientRequestErrorKind;
+  readonly status: number;
+  readonly data: TData | null;
+  readonly fieldErrors: Record<string, string>;
+  readonly formError: string;
+  readonly method: string;
+  readonly url: string;
+  readonly isCanceled: boolean;
+  readonly isValidation: boolean;
+  readonly isNetwork: boolean;
+  readonly isHttp: boolean;
+  constructor(options: {
+    message: string;
+    kind: ClientRequestErrorKind;
+    status?: number;
+    data?: TData | null;
+    fieldErrors?: Record<string, string>;
+    formError?: string;
+    method?: string;
+    url?: string;
+    cause?: unknown;
+  });
+}
+
+export interface ClientRequestCallOptions<
+  TQuery = Record<string, unknown>,
+  TParams = Record<string, string | number>
+> {
+  query?: TQuery;
+  params?: TParams;
+  headers?: Record<string, string>;
+  signal?: AbortSignal;
+  key?: string;
+  concurrency?: ClientConcurrencyPolicy;
+  formData?: boolean;
+  skipInvalidation?: boolean;
+}
+
+export interface AppApiRouteMap {
+  GET: Record<string, { input: any; response: any }>;
+  POST: Record<string, { input: any; response: any }>;
+  PUT: Record<string, { input: any; response: any }>;
+  PATCH: Record<string, { input: any; response: any }>;
+  DELETE: Record<string, { input: any; response: any }>;
+}
+
+export interface ClientTask<TData = any, TArgs extends unknown[] = any[]> {
+  readonly pending: boolean;
+  readonly data: TData | null;
+  readonly error: ClientRequestError | Error | null;
+  readonly stale: boolean;
+  run(...args: TArgs): Promise<TData | undefined>;
+  cancel(): void;
+  dispose(): void;
+}
+
+export interface ClientTaskOptions {
+  concurrency?: ClientConcurrencyPolicy;
+  policy?: ClientConcurrencyPolicy;
+  key?: string;
+}
+
+export interface ClientFormFillOptions {
+  baseline?: boolean;
+}
+
+export interface ClientApiClient {
+  get<
+    P extends string,
+    TResponse = P extends keyof AppApiRouteMap['GET'] ? AppApiRouteMap['GET'][P]['response'] : unknown,
+    TQuery = P extends keyof AppApiRouteMap['GET'] ? AppApiRouteMap['GET'][P]['input']['query'] : Record<string, unknown>,
+    TParams = P extends keyof AppApiRouteMap['GET'] ? AppApiRouteMap['GET'][P]['input']['params'] : Record<string, string | number>
+  >(
+    url: P,
+    options?: ClientRequestCallOptions<TQuery, TParams>
+  ): Promise<TResponse>;
+
+  post<
+    P extends string,
+    TResponse = P extends keyof AppApiRouteMap['POST'] ? AppApiRouteMap['POST'][P]['response'] : unknown,
+    TBody = P extends keyof AppApiRouteMap['POST'] ? AppApiRouteMap['POST'][P]['input']['body'] : unknown,
+    TQuery = P extends keyof AppApiRouteMap['POST'] ? AppApiRouteMap['POST'][P]['input']['query'] : Record<string, unknown>,
+    TParams = P extends keyof AppApiRouteMap['POST'] ? AppApiRouteMap['POST'][P]['input']['params'] : Record<string, string | number>
+  >(
+    url: P,
+    body?: TBody,
+    options?: ClientRequestCallOptions<TQuery, TParams>
+  ): Promise<TResponse>;
+
+  put<
+    P extends string,
+    TResponse = P extends keyof AppApiRouteMap['PUT'] ? AppApiRouteMap['PUT'][P]['response'] : unknown,
+    TBody = P extends keyof AppApiRouteMap['PUT'] ? AppApiRouteMap['PUT'][P]['input']['body'] : unknown,
+    TQuery = P extends keyof AppApiRouteMap['PUT'] ? AppApiRouteMap['PUT'][P]['input']['query'] : Record<string, unknown>,
+    TParams = P extends keyof AppApiRouteMap['PUT'] ? AppApiRouteMap['PUT'][P]['input']['params'] : Record<string, string | number>
+  >(
+    url: P,
+    body?: TBody,
+    options?: ClientRequestCallOptions<TQuery, TParams>
+  ): Promise<TResponse>;
+
+  patch<
+    P extends string,
+    TResponse = P extends keyof AppApiRouteMap['PATCH'] ? AppApiRouteMap['PATCH'][P]['response'] : unknown,
+    TBody = P extends keyof AppApiRouteMap['PATCH'] ? AppApiRouteMap['PATCH'][P]['input']['body'] : unknown,
+    TQuery = P extends keyof AppApiRouteMap['PATCH'] ? AppApiRouteMap['PATCH'][P]['input']['query'] : Record<string, unknown>,
+    TParams = P extends keyof AppApiRouteMap['PATCH'] ? AppApiRouteMap['PATCH'][P]['input']['params'] : Record<string, string | number>
+  >(
+    url: P,
+    body?: TBody,
+    options?: ClientRequestCallOptions<TQuery, TParams>
+  ): Promise<TResponse>;
+
+  delete<
+    P extends string,
+    TResponse = P extends keyof AppApiRouteMap['DELETE'] ? AppApiRouteMap['DELETE'][P]['response'] : unknown,
+    TBody = P extends keyof AppApiRouteMap['DELETE'] ? AppApiRouteMap['DELETE'][P]['input']['body'] : unknown,
+    TQuery = P extends keyof AppApiRouteMap['DELETE'] ? AppApiRouteMap['DELETE'][P]['input']['query'] : Record<string, unknown>,
+    TParams = P extends keyof AppApiRouteMap['DELETE'] ? AppApiRouteMap['DELETE'][P]['input']['params'] : Record<string, string | number>
+  >(
+    url: P,
+    body?: TBody,
+    options?: ClientRequestCallOptions<TQuery, TParams>
+  ): Promise<TResponse>;
+
+  raw(url: string, options?: RequestInit & ClientRequestCallOptions): Promise<Response>;
+  stream(url: string, options?: ClientRequestCallOptions): Promise<ReadableStream<Uint8Array> | Response>;
+  abortKey(key: string): void;
+  abortAll(): void;
+}
+
+export interface ClientFormSubmitResult<TData = any> {
+  ok: boolean;
+  data?: TData;
+  refreshOk?: boolean;
+  refreshError?: Error | null;
+  error?: ClientRequestError | Error;
+  aborted?: boolean;
+}
+
+export interface ClientFormHandle<
+  TValues extends Record<string, any> = Record<string, any>,
+  TResponse = any
+> {
+  readonly name: string;
+  readonly el: HTMLFormElement | null;
+  readonly pending: boolean;
+  readonly dirty: boolean;
+  readonly errors: Record<string, string>;
+  readonly formError: string;
+  readonly fieldErrors: Partial<Record<keyof TValues & string, string>> & Record<string, string>;
+  disabled: boolean;
+  values(): TValues;
+  read(submitter?: HTMLElement | null): TValues;
+  fill(values: Partial<TValues> & Record<string, unknown>, options?: ClientFormFillOptions): this;
+  setAction(url: string): this;
+  setRouteParams(params: Record<string, string | number>): this;
+  setDisabled(disabled: boolean): this;
+  reset(): void;
+  clear(): void;
+  setErrors(fieldErrors?: Partial<Record<keyof TValues & string, string>>, formError?: string): void;
+  clearErrors(): void;
+  submit(submitter?: HTMLElement | null): Promise<ClientFormSubmitResult<TResponse>>;
+  onSuccess(callback: (data: TResponse, meta: { refreshOk: boolean; refreshError: Error | null }) => void): () => void;
+  destroy(): void;
+}
+
+export interface ControllerFormsRegistry {
+  get<TValues extends Record<string, any> = Record<string, any>, TResponse = any>(
+    formNameOrElement: string | HTMLFormElement,
+    options?: {
+      resetOnSuccess?: boolean;
+      clearOnSuccess?: boolean;
+      redirectOnSuccess?: string | ((data: TResponse) => string | void);
+      onSuccess?: (data: TResponse, meta: { refreshOk: boolean; refreshError: Error | null }) => void;
+    }
+  ): ClientFormHandle<TValues, TResponse>;
+  all(): ClientFormHandle[];
+}
+
+export interface ControllerFragmentHandle<TInput extends Record<string, any> = Record<string, any>> {
+  readonly input: TInput;
+  refresh(
+    nextInput?: Partial<TInput> & Record<string, unknown>,
+    options?: { replaceInput?: boolean }
+  ): Promise<{ ok?: boolean; refreshed: string[]; errors?: Error[]; skipped?: boolean; canceled?: boolean }>;
+}
+
+export interface ControllerContext<
+  TState extends Record<string, any> = Record<string, any>,
+  TTasks extends Record<string, ClientTask> = Record<string, ClientTask>
+> {
+  readonly el: HTMLElement;
+  readonly instanceId: string;
+  readonly name: string;
+  readonly state: TState;
+  readonly api: ClientApiClient;
+  readonly forms: ControllerFormsRegistry;
+  readonly tasks: TTasks;
+  readonly signal: AbortSignal;
+  readonly isConnected: () => boolean;
+  readonly isDisposed: () => boolean;
+  task<TData = any, TArgs extends unknown[] = any[]>(
+    runFn: (...args: TArgs) => Promise<TData>,
+    options?: ClientTaskOptions
+  ): ClientTask<TData, TArgs>;
+  param(name: string, actionEl?: HTMLElement): string | null;
+  target<T extends Element = HTMLElement>(targetName: string): T | null;
+  targets<T extends Element = HTMLElement>(targetName: string): T[];
+  on(
+    targetOrEvent: EventTarget | string,
+    eventOrHandler: string | ((event: Event) => void),
+    maybeHandlerOrOptions?: ((event: Event) => void) | AddEventListenerOptions,
+    maybeOptions?: AddEventListenerOptions
+  ): () => void;
+  emit<TDetail = unknown>(eventName: string, detail?: TDetail, options?: CustomEventInit<TDetail>): boolean;
+  effect(fn: () => void | (() => void)): () => void;
+  interval(fn: () => void, ms: number): () => void;
+  timeout(fn: () => void, ms: number): () => void;
+  invalidate(tags: string | string[]): Promise<{ ok?: boolean; refreshed: string[]; errors?: Error[]; skipped?: boolean }>;
+  refresh<TInput extends Record<string, any> = Record<string, any>>(
+    idOrName: string,
+    nextInput?: Partial<TInput> & Record<string, unknown>,
+    options?: { replaceInput?: boolean }
+  ): Promise<{ ok?: boolean; refreshed: string[]; errors?: Error[]; skipped?: boolean; canceled?: boolean }>;
+  fragment<TInput extends Record<string, any> = Record<string, any>>(
+    idOrName: string
+  ): ControllerFragmentHandle<TInput>;
+}
+
+export type ControllerComputedGetter<
+  TState extends Record<string, any> = Record<string, any>,
+  TResult = any
+> = (ctx: { state: Readonly<TState>; el: HTMLElement; tasks: Record<string, ClientTask> }) => TResult;
+
+export type ControllerTaskFactory<
+  TState extends Record<string, any> = Record<string, any>,
+  TData = any
+> =
+  | ((ctx: ControllerContext<TState>) => ClientTask<TData> | { run: (...args: any[]) => Promise<TData>; concurrency?: ClientConcurrencyPolicy; key?: string })
+  | { run: (...args: any[]) => Promise<TData>; concurrency?: ClientConcurrencyPolicy; key?: string };
+
+export type ControllerActionHandler<
+  TState extends Record<string, any> = Record<string, any>,
+  TTasks extends Record<string, ClientTask> = Record<string, ClientTask>
+> = (
+  ctx: ControllerContext<TState, TTasks>,
+  event: Event,
+  actionEl: HTMLElement
+) => unknown | Promise<unknown>;
+
+export interface ControllerDefinition<
+  TState extends Record<string, any> = Record<string, any>,
+  TComputed extends Record<string, ControllerComputedGetter<TState>> = Record<string, ControllerComputedGetter<TState>>,
+  TTasks extends Record<string, ControllerTaskFactory<TState>> = Record<string, ControllerTaskFactory<TState>>
+> {
+  name?: string;
+  state?: () => TState;
+  computed?: TComputed;
+  tasks?: TTasks;
+  connect?: (
+    ctx: ControllerContext<
+      [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> }
+    >
+  ) => void | (() => void);
+  disconnect?: (
+    ctx: ControllerContext<
+      [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> }
+    >
+  ) => void;
+  actions?: {
+    [actionName: string]: ControllerActionHandler<
+      [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> }
+    >;
+  };
+}
+
+export function defineController<
+  TState extends Record<string, any> = Record<string, any>,
+  TComputed extends Record<string, ControllerComputedGetter<TState>> = Record<string, ControllerComputedGetter<TState>>,
+  TTasks extends Record<string, ControllerTaskFactory<TState>> = Record<string, ControllerTaskFactory<TState>>
+>(
+  definition: ControllerDefinition<TState, TComputed, TTasks>
+): ControllerDefinition<TState, TComputed, TTasks> & { __isWebspressoController: true };
+
+export function deriveControllerNameFromPath(filePath: string): string;
+
+export interface FragmentLoaderContext<TInput = Record<string, unknown>> {
+  input: TInput;
+  instanceId: string;
+  fragmentName: string;
+  pagePath: string;
+  req: import('express').Request;
+  res: import('express').Response;
+  ctx: PageContext;
+  db: DatabaseInstance | null;
+  user: any;
+  auth: any;
+  params: Record<string, string>;
+  query: Record<string, unknown>;
+  service: PageContext['service'];
+  memo<T>(key: string, factory: () => T | Promise<T>): Promise<T>;
+}
+
+export interface FragmentDefinition<TInput = Record<string, unknown>, TData = Record<string, unknown>> {
+  template: string;
+  dependsOn?: string[];
+  schema?: ZodTypeAny | Record<string, ZodTypeAny> | ((helpers: { z: typeof z }) => ZodTypeAny | Record<string, ZodTypeAny>);
+  auth?: boolean | string | string[] | ((user: any, ctx: PageContext) => boolean | Promise<boolean>);
+  middleware?: Array<string | import('express').RequestHandler>;
+  load?: (context: FragmentLoaderContext<TInput>) => TData | Promise<TData>;
+}
+
+export function defineFragment<TInput = Record<string, unknown>, TData = Record<string, unknown>>(
+  definition: FragmentDefinition<TInput, TData>
+): FragmentDefinition<TInput, TData> & { __isWebspressoFragment: true };
+
+export interface ApiResultEnvelope<TData = unknown> {
+  readonly __webspressoApiResult: true;
+  readonly data: TData;
+  readonly invalidate: string[];
+  readonly status?: number;
+  readonly headers?: Record<string, string>;
+}
+
+export function apiResult<TData = unknown>(
+  data: TData,
+  meta?: {
+    invalidate?: string | string[];
+    status?: number;
+    headers?: Record<string, string>;
+  }
+): ApiResultEnvelope<TData>;
+
+export function isApiResultEnvelope(value: unknown): value is ApiResultEnvelope;
+export function sendApiResult(req: any, res: any, envelope: ApiResultEnvelope): void;
+export function createControllerRuntime(options?: Record<string, unknown>): Record<string, any>;
+export function onTransactionCommit(callback: () => void): void;
+
+export function createApiClient(options?: Record<string, unknown>): ClientApiClient;
+export function createFormHandle(formEl: HTMLFormElement, options?: Record<string, unknown>): ClientFormHandle;
+export function parseFormElement(formEl: HTMLFormElement, options?: Record<string, unknown>): {
+  values: Record<string, unknown>;
+  hasFile: boolean;
+  formData: FormData;
+};
+export function createFragmentCoordinator(options?: Record<string, unknown>): Record<string, any>;
+export function createClientRuntime(options?: Record<string, unknown>): Record<string, any>;
+export function bootClient(options?: Record<string, unknown>): Record<string, any>;
+export function createLiteClientRuntime(options?: Record<string, unknown>): Record<string, any>;
+export function bootLiteClient(options?: Record<string, unknown>): Record<string, any>;
+export function createDatastarAdapter(options?: Record<string, unknown>): Record<string, any>;
+export function createClientDebugger(options?: { enabled?: boolean; maxEvents?: number }): Record<string, any>;
+
+export declare const client: {
+  defineController: typeof defineController;
+  deriveControllerNameFromPath: typeof deriveControllerNameFromPath;
+  createClientRuntime: typeof createClientRuntime;
+  bootClient: typeof bootClient;
+  createLiteClientRuntime: typeof createLiteClientRuntime;
+  bootLiteClient: typeof bootLiteClient;
+  ClientRequestError: typeof ClientRequestError;
+  createApiClient: typeof createApiClient;
+  createFormHandle: typeof createFormHandle;
+  parseFormElement: typeof parseFormElement;
+  createFragmentCoordinator: typeof createFragmentCoordinator;
+  defineFragment: typeof defineFragment;
+  apiResult: typeof apiResult;
+  isApiResultEnvelope: typeof isApiResultEnvelope;
+  createDatastarAdapter: typeof createDatastarAdapter;
+  createClientDebugger: typeof createClientDebugger;
   [key: string]: any;
 };

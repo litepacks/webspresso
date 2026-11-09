@@ -20,6 +20,7 @@ module.exports = {
   get apiDocsPlugin() { return require('./swagger'); },
   get healthCheckPlugin() { return require('./health-check'); },
   get restResourcePlugin() { return require('./rest-resources'); },
+  get restResourcesPlugin() { return require('./rest-resources'); },
   get ormCacheAdminPlugin() { return require('./orm-cache-admin'); },
   get uploadPlugin() { return require('./upload').uploadPlugin; },
   get createLocalFileProvider() { return require('./upload').createLocalFileProvider; },
@@ -68,6 +69,12 @@ module.exports = {
   get defineLazyPlugin() { return require('./lazy').defineLazyPlugin; },
   get rlsPlugin() { return require('./rls').rlsPlugin; },
   get createRlsMiddleware() { return require('./rls').createRlsMiddleware; },
+  get securityPlugin() { return require('./security').securityPlugin; },
+  get createSecurityHeadersMiddleware() { return require('./security').createSecurityHeadersMiddleware; },
+  get createFirewallMiddleware() { return require('./security').createFirewallMiddleware; },
+  get FirewallManager() { return require('./security').FirewallManager; },
+  get IncidentRecorder() { return require('./security').IncidentRecorder; },
+  get auditSecurityPosture() { return require('./security').auditSecurityPosture; },
 };
 
 

@@ -1,0 +1,63 @@
+<div class="todos-summary-card">
+  <div class="todos-kpi-grid">
+    <div class="kpi-box">
+      <div class="kpi-top">
+        <span class="kpi-label">Total Tasks</span>
+        <span class="kpi-dot dot-neutral"></span>
+      </div>
+      <strong class="kpi-value" data-testid="todos-total-count">{{ summary.total }}</strong>
+    </div>
+    <div class="kpi-box kpi-active">
+      <div class="kpi-top">
+        <span class="kpi-label">In Progress</span>
+        <span class="kpi-dot dot-active"></span>
+      </div>
+      <strong class="kpi-value" data-testid="todos-active-count">{{ summary.active }}</strong>
+    </div>
+    <div class="kpi-box kpi-completed">
+      <div class="kpi-top">
+        <span class="kpi-label">Completed</span>
+        <span class="kpi-dot dot-completed"></span>
+      </div>
+      <strong class="kpi-value" data-testid="todos-completed-count">{{ summary.completed }}</strong>
+    </div>
+    <div class="kpi-box kpi-high">
+      <div class="kpi-top">
+        <span class="kpi-label">High Priority Open</span>
+        <span class="kpi-dot dot-high"></span>
+      </div>
+      <strong class="kpi-value" data-testid="todos-high-count">{{ summary.highPriority }}</strong>
+    </div>
+  </div>
+
+  <div class="todos-summary-bottom">
+    <div class="todos-progress-wrap">
+      <div class="todos-progress-header">
+        <span>Workspace Completion <span class="fragment-tag">SSR Fragment: <code>todos-summary</code></span></span>
+        <strong class="progress-pct">{{ summary.percentCompleted }}%</strong>
+      </div>
+      <div class="todos-progress-track">
+        <div class="todos-progress-fill" style="width: {{ summary.percentCompleted }}%;"></div>
+      </div>
+    </div>
+
+    <div class="todos-bulk-bar">
+      <form action="/api/todos/bulk" method="post" data-w-form="bulk-complete-all">
+        <input type="hidden" name="action" value="complete-all">
+        <button type="submit" class="btn-ghost btn-sm">✓ Complete All</button>
+      </form>
+      <form action="/api/todos/bulk" method="post" data-w-form="bulk-activate-all">
+        <input type="hidden" name="action" value="activate-all">
+        <button type="submit" class="btn-ghost btn-sm">↺ Reopen All</button>
+      </form>
+      <form action="/api/todos/bulk" method="post" data-w-form="bulk-clear-completed">
+        <input type="hidden" name="action" value="clear-completed">
+        <button type="submit" class="btn-ghost btn-sm">🧹 Clear Done</button>
+      </form>
+      <form action="/api/todos/bulk" method="post" data-w-form="bulk-reset-demo">
+        <input type="hidden" name="action" value="reset-demo">
+        <button type="submit" class="btn-ghost btn-sm">⚡ Reset Demo</button>
+      </form>
+    </div>
+  </div>
+</div>

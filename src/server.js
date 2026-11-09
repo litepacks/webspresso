@@ -121,23 +121,40 @@ function fastETag(body, encoding) {
  * @param {Object} options - Nunjucks options
  * @returns {nunjucks.Environment}
  */
+const normalizedTemplateNameCache = new Map();
 function normalizeTemplateName(name) {
   if (typeof name !== 'string') return name;
-  if (!name.includes('\\') && !name.includes('views')) return name;
-  let normalized = name.replace(/\\/g, '/');
-  // Collapse any repeated views/views/... to a single views/ or clean path
-  while (/(?:^|\/)views\/(?:\.\/)?views(?:\/|$)/.test(normalized)) {
-    normalized = normalized.replace(/((?:^|\/)views)\/(?:\.\/)?views(?=\/|$)/g, '$1');
+  const cached = normalizedTemplateNameCache.get(name);
+  if (cached !== undefined) return cached;
+  let normalized = name;
+  if (name.includes('\\') || name.includes('views')) {
+    normalized = name.replace(/\\/g, '/');
+    // Collapse any repeated views/views/... to a single views/ or clean path
+    while (/(?:^|\/)views\/(?:\.\/)?views(?:\/|$)/.test(normalized)) {
+      normalized = normalized.replace(/((?:^|\/)views)\/(?:\.\/)?views(?=\/|$)/g, '$1');
+    }
+  }
+  if (normalizedTemplateNameCache.size < 512) {
+    normalizedTemplateNameCache.set(name, normalized);
   }
   return normalized;
 }
 
+const canonicalKeyCache = new Map();
 function canonicalTemplateKey(name) {
+  if (typeof name !== 'string') return String(name);
+  const cached = canonicalKeyCache.get(name);
+  if (cached !== undefined) return cached;
   const norm = normalizeTemplateName(name);
-  if (typeof norm !== 'string') return String(norm);
-  if (!norm.startsWith('.') && !norm.startsWith('views/')) return norm;
-  // Canonical key strips leading ./ or views/ for cycle detection
-  return norm.replace(/^\.\//, '').replace(/^views\//, '');
+  let key = norm;
+  if (typeof norm === 'string' && (norm.startsWith('.') || norm.startsWith('views/'))) {
+    // Canonical key strips leading ./ or views/ for cycle detection
+    key = norm.replace(/^\.\//, '').replace(/^views\//, '');
+  }
+  if (canonicalKeyCache.size < 512) {
+    canonicalKeyCache.set(name, key);
+  }
+  return key;
 }
 
 function configureSafeNunjucks(templateDirs, options = {}) {
@@ -360,6 +377,7 @@ function getDefaultHelmetConfig(isDev) {
         connectSrc: ["'self'", "ws:", "wss:"], // WebSockets for dev live reload
         frameSrc: ["'none'"],
         objectSrc: ["'none'"],
+        upgradeInsecureRequests: null, // Browser ignores & warns on upgrade-insecure-requests in Report-Only policy
       }
     } : {
       directives: {
@@ -582,6 +600,34 @@ function haltOnTimedout(req, res, next) {
 }
 
 /**
+ * Replace Express 5's re-parsing `req.query` getter with a per-request memoized accessor.
+ * The first read delegates to the inherited getter (honouring the app's `query parser`);
+ * later reads return the same object. Assignments (`req.query = …`) keep working.
+ * @param {import('express').Request} req
+ */
+function memoizeRequestQuery(req) {
+  if (Object.prototype.hasOwnProperty.call(req, 'query')) return;
+  const proto = Object.getPrototypeOf(req);
+  let parsed;
+  let ready = false;
+  Object.defineProperty(req, 'query', {
+    configurable: true,
+    enumerable: true,
+    get() {
+      if (!ready) {
+        parsed = Reflect.get(proto, 'query', req);
+        ready = true;
+      }
+      return parsed;
+    },
+    set(value) {
+      parsed = value;
+      ready = true;
+    },
+  });
+}
+
+/**
  * Create and configure the Express app
  * @param {Object} options - Configuration options
  * @param {string} options.pagesDir - Path to pages directory
@@ -738,7 +784,7 @@ function createApp(options = {}) {
   const { renderStream } = require('../core/ssr/stream');
   const { createSseStream } = require('../core/sse/stream');
   const { streamText, streamJson } = require('../core/stream/text-stream');
-  const { runWithContext } = require('../core/context/request');
+  const { runWithContext, getContext } = require('../core/context/request');
   app.use((req, res, next) => {
     // 1. Request draining check during graceful shutdown (allow health/readiness probes through)
     const isHealthEndpoint = req.path === '/healthz' || req.path === '/readyz' || req.path === '/health' ||
@@ -765,6 +811,10 @@ function createApp(options = {}) {
     req.id = reqId;
     res.setHeader('X-Request-Id', reqId);
 
+    // 2b. Express 5 re-parses the query string (qs.parse) on every `req.query` read; the file
+    // router, validation and loaders read it ~3x per request. Parse once, keep it assignable.
+    memoizeRequestQuery(req);
+
     // 3. Request DB, Services, Queue, Events, and Context
     if (options.db) {
       req.db = options.db;
@@ -775,7 +825,6 @@ function createApp(options = {}) {
     req.events = eventDispatcher;
     req.cache = appCache;
     req.breakers = appBreakers;
-    req.breaker = (name, opts) => appBreakers.getBreaker(name, opts);
     req.retry = retry;
     req.context = core.createContext({
       req,
@@ -785,47 +834,85 @@ function createApp(options = {}) {
       assetManager: appAssetManager,
       ...(req.context || {}),
     });
-    req.service = (name, input, opts) =>
-      core.service(name, input, req.context, opts);
-    req.service.call = (name, input, opts) => req.service(name, input, opts);
-    req.service.execute = (name, input, opts) => req.service(name, input, opts);
-    req.service.invalidate = (name, input, ctx) =>
-      serviceRegistry.invalidate(name, input, ctx || req.context);
-    req.service.clearCache = (name) =>
-      serviceRegistry.clearCache(name);
-    req.service.invalidateByTag = (tag, serviceName) =>
-      serviceRegistry.invalidateByTag(tag, serviceName);
-    req.service.invalidateByTags = (tags, serviceName) =>
-      serviceRegistry.invalidateByTags(tags, serviceName);
-    req.service.invalidateTag = req.service.invalidateByTag;
-    req.service.invalidateTags = req.service.invalidateByTags;
-
-    // 4. SSR Streaming Response Helper
-    res.renderStream = (templatePath, context = {}, renderOptions = {}) => {
-      return renderStream(res, templatePath, context, {
-        env: nunjucksEnv,
-        ...renderOptions,
-      });
-    };
-
-    // 5. Server-Sent Events (SSE) Response Helper
-    res.sse = (sourceOrOptions, maybeOptions) => {
-      return createSseStream(req, res, sourceOrOptions, maybeOptions);
-    };
-
-    // 6. Text and NDJSON Streaming Helpers (AI / LLM Tokens)
-    res.streamText = (sourceOrCallback, maybeOptions) => {
-      return streamText(req, res, sourceOrCallback, maybeOptions);
-    };
-
-    res.streamJson = (sourceOrCallback, maybeOptions) => {
-      return streamJson(req, res, sourceOrCallback, maybeOptions);
-    };
+    // Shared helper functions (no per-request closures). Assigned as own properties rather than
+    // on app.request/app.response so they survive Express sub-app prototype swaps.
+    req.breaker = requestBreaker;
+    Object.defineProperty(req, 'service', REQUEST_SERVICE_DESCRIPTOR);
+    res.renderStream = renderStreamHelper;
+    res.sse = sseHelper;
+    res.streamText = streamTextHelper;
+    res.streamJson = streamJsonHelper;
 
     runWithContext(req.context, () => {
       next();
     });
   });
+
+  function requestBreaker(name, opts) {
+    return appBreakers.getBreaker(name, opts);
+  }
+
+  /** Build the request-bound service caller (only when a handler actually touches req.service). */
+  function createRequestService(req) {
+    const service = (name, input, opts) => core.service(name, input, req.context, opts);
+    service.call = service;
+    service.execute = service;
+    service.invalidate = (name, input, ctx) => serviceRegistry.invalidate(name, input, ctx || req.context);
+    service.clearCache = (name) => serviceRegistry.clearCache(name);
+    service.invalidateByTag = (tag, serviceName) => serviceRegistry.invalidateByTag(tag, serviceName);
+    service.invalidateByTags = (tags, serviceName) => serviceRegistry.invalidateByTags(tags, serviceName);
+    service.invalidateTag = service.invalidateByTag;
+    service.invalidateTags = service.invalidateByTags;
+    return service;
+  }
+
+  const REQUEST_SERVICE_DESCRIPTOR = {
+    configurable: true,
+    enumerable: true,
+    get() {
+      const service = createRequestService(this);
+      Object.defineProperty(this, 'service', { value: service, writable: true, configurable: true, enumerable: true });
+      return service;
+    },
+    set(value) {
+      Object.defineProperty(this, 'service', { value, writable: true, configurable: true, enumerable: true });
+    },
+  };
+
+  function resolveStreamReqRes(receiver) {
+    const ctx = getContext();
+    const res = receiver && typeof receiver.setHeader === 'function'
+      ? receiver
+      : (ctx?.res || null);
+    const req = (res && res.req) || (receiver && receiver.req) || (ctx?.req || null);
+    return { req, res };
+  }
+
+  // 4. SSR Streaming Response Helper
+  function renderStreamHelper(templatePath, context = {}, renderOptions = {}) {
+    const { res } = resolveStreamReqRes(this);
+    return renderStream(res || this, templatePath, context, {
+      env: nunjucksEnv,
+      ...renderOptions,
+    });
+  }
+
+  // 5. Server-Sent Events (SSE) Response Helper
+  function sseHelper(sourceOrOptions, maybeOptions) {
+    const { req, res } = resolveStreamReqRes(this);
+    return createSseStream(req, res, sourceOrOptions, maybeOptions);
+  }
+
+  // 6. Text and NDJSON Streaming Helpers (AI / LLM Tokens)
+  function streamTextHelper(sourceOrCallback, maybeOptions) {
+    const { req, res } = resolveStreamReqRes(this);
+    return streamText(req, res, sourceOrCallback, maybeOptions);
+  }
+
+  function streamJsonHelper(sourceOrCallback, maybeOptions) {
+    const { req, res } = resolveStreamReqRes(this);
+    return streamJson(req, res, sourceOrCallback, maybeOptions);
+  }
 
   // Async handler wrapper helper for automatic promise rejection handling
   function wrapAsync(fn) {
@@ -1740,6 +1827,7 @@ function createApp(options = {}) {
       pageAssets: options.pageAssets,
       serviceRegistry,
       skipExistingRoutes: routeTable,
+      isDev,
     });
     classicRouteMeta = classicMount.routeMetadata || [];
     registerDynamicFileRoutes = classicMount.registerDynamicFileRoutes || (() => {});
