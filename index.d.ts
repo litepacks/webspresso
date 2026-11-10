@@ -6853,6 +6853,28 @@ export function createLiteClientRuntime(options?: Record<string, unknown>): Reco
 export function bootLiteClient(options?: Record<string, unknown>): Record<string, any>;
 export function createDatastarAdapter(options?: Record<string, unknown>): Record<string, any>;
 export function createClientDebugger(options?: { enabled?: boolean; maxEvents?: number }): Record<string, any>;
+export interface ClientDevtoolHandle {
+  open(): void;
+  close(): void;
+  toggle(): void;
+  isOpen(): boolean;
+  getSnapshot(): Record<string, unknown>;
+  getState(controllerName: string): Record<string, unknown> | null;
+  refresh(fragmentName: string): Promise<any>;
+  highlight(controllerOrFragmentName: string): boolean;
+  destroy(): void;
+}
+
+export function mountDevtool(
+  runtime: any,
+  options?: {
+    position?: 'bottom-right' | 'bottom-left';
+    open?: boolean;
+    pollInterval?: number;
+    studioUrl?: string;
+  }
+): ClientDevtoolHandle;
+
 export function createClientStorage(options?: { prefix?: string }): ClientStorage;
 export declare const defaultStorage: ClientStorage;
 
@@ -6875,5 +6897,6 @@ export declare const client: {
   createClientDebugger: typeof createClientDebugger;
   createClientStorage: typeof createClientStorage;
   defaultStorage: typeof defaultStorage;
+  mountDevtool: typeof mountDevtool;
   [key: string]: any;
 };

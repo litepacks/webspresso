@@ -819,4 +819,5 @@ Object.defineProperties(module.exports, {
   defaultStorage: { get: () => require('./core/client').defaultStorage, enumerable: true, configurable: true },
   createClientStorage: { get: () => require('./core/client').createClientStorage, enumerable: true, configurable: true },
   watch: { get: () => require('./core/client').watch, enumerable: true, configurable: true },
+  mountDevtool: { get: () => require('./core/client').mountDevtool, enumerable: true, configurable: true },
 });

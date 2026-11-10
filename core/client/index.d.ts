@@ -53,5 +53,7 @@ export {
   ControllerPersistConfig,
   createClientStorage,
   defaultStorage,
+  ClientDevtoolHandle,
+  mountDevtool,
 } from '../../index';
 

@@ -5185,6 +5185,7 @@ function defineController(definition = {}) {
     disconnect: typeof definition.disconnect === 'function' ? definition.disconnect : null,
     onError: typeof definition.onError === 'function' ? definition.onError : null,
     persist: definition.persist || null,
+    watch: definition.watch && typeof definition.watch === 'object' ? definition.watch : null,
     actions: definition.actions && typeof definition.actions === 'object' ? definition.actions : {},
   });
 }
@@ -7869,6 +7870,12 @@ const {
   defaultStorage,
 } = require('./storage');
 
+const {
+  mountDevtool,
+  highlightElement,
+  setupReduxDevToolsBridge,
+} = require('./devtool');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -8026,6 +8033,7 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
+    mountDevtool: (opts) => mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
       create: (formEl, formOpts = {}) =>
@@ -8050,11 +8058,26 @@ function createClientRuntime(options = {}) {
  */
 function bootClient(options = {}) {
   const runtime = createClientRuntime(options);
+  const shouldMountDevtools =
+    options.devtools === true ||
+    (options.devtools !== false &&
+      (options.debug ||
+        options.dev ||
+        (typeof window !== 'undefined' &&
+          (window.__WEBSPRESSO_DEVTOOLS_ENABLED__ || window.__WEBSPRESSO_DEV__)) ||
+        (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production')));
+
   if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => runtime.mount(), { once: true });
-    } else {
+    const onReady = () => {
       runtime.mount();
+      if (shouldMountDevtools) {
+        runtime.devtool = mountDevtool(runtime, options.devtoolsOptions || {});
+      }
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', onReady, { once: true });
+    } else {
+      onReady();
     }
   }
   return runtime;
@@ -8151,9 +8174,12 @@ module.exports = {
   morphDomTrees,
   parseHtmlFragment,
 
-  // Debug & Telemetry
+  // Debug & Telemetry & DevTools
   createClientDebugger,
   summarizePayloadSafely,
+  mountDevtool,
+  highlightElement,
+  setupReduxDevToolsBridge,
 
   // Client Storage & Persistence
   MemoryStorage,
@@ -8238,6 +8264,12 @@ const {
   defaultStorage,
 } = require('./storage');
 
+const {
+  mountDevtool,
+  highlightElement,
+  setupReduxDevToolsBridge,
+} = require('./devtool');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -8395,6 +8427,7 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
+    mountDevtool: (opts) => mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
       create: (formEl, formOpts = {}) =>
@@ -8419,11 +8452,26 @@ function createClientRuntime(options = {}) {
  */
 function bootClient(options = {}) {
   const runtime = createClientRuntime(options);
+  const shouldMountDevtools =
+    options.devtools === true ||
+    (options.devtools !== false &&
+      (options.debug ||
+        options.dev ||
+        (typeof window !== 'undefined' &&
+          (window.__WEBSPRESSO_DEVTOOLS_ENABLED__ || window.__WEBSPRESSO_DEV__)) ||
+        (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production')));
+
   if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => runtime.mount(), { once: true });
-    } else {
+    const onReady = () => {
       runtime.mount();
+      if (shouldMountDevtools) {
+        runtime.devtool = mountDevtool(runtime, options.devtoolsOptions || {});
+      }
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', onReady, { once: true });
+    } else {
+      onReady();
     }
   }
   return runtime;
@@ -8520,9 +8568,12 @@ module.exports = {
   morphDomTrees,
   parseHtmlFragment,
 
-  // Debug & Telemetry
+  // Debug & Telemetry & DevTools
   createClientDebugger,
   summarizePayloadSafely,
+  mountDevtool,
+  highlightElement,
+  setupReduxDevToolsBridge,
 
   // Client Storage & Persistence
   MemoryStorage,
@@ -8607,6 +8658,12 @@ const {
   defaultStorage,
 } = require('./storage');
 
+const {
+  mountDevtool,
+  highlightElement,
+  setupReduxDevToolsBridge,
+} = require('./devtool');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -8764,6 +8821,7 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
+    mountDevtool: (opts) => mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
       create: (formEl, formOpts = {}) =>
@@ -8788,11 +8846,26 @@ function createClientRuntime(options = {}) {
  */
 function bootClient(options = {}) {
   const runtime = createClientRuntime(options);
+  const shouldMountDevtools =
+    options.devtools === true ||
+    (options.devtools !== false &&
+      (options.debug ||
+        options.dev ||
+        (typeof window !== 'undefined' &&
+          (window.__WEBSPRESSO_DEVTOOLS_ENABLED__ || window.__WEBSPRESSO_DEV__)) ||
+        (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production')));
+
   if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => runtime.mount(), { once: true });
-    } else {
+    const onReady = () => {
       runtime.mount();
+      if (shouldMountDevtools) {
+        runtime.devtool = mountDevtool(runtime, options.devtoolsOptions || {});
+      }
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', onReady, { once: true });
+    } else {
+      onReady();
     }
   }
   return runtime;
@@ -8889,9 +8962,12 @@ module.exports = {
   morphDomTrees,
   parseHtmlFragment,
 
-  // Debug & Telemetry
+  // Debug & Telemetry & DevTools
   createClientDebugger,
   summarizePayloadSafely,
+  mountDevtool,
+  highlightElement,
+  setupReduxDevToolsBridge,
 
   // Client Storage & Persistence
   MemoryStorage,
@@ -8976,6 +9052,12 @@ const {
   defaultStorage,
 } = require('./storage');
 
+const {
+  mountDevtool,
+  highlightElement,
+  setupReduxDevToolsBridge,
+} = require('./devtool');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -9133,6 +9215,7 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
+    mountDevtool: (opts) => mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
       create: (formEl, formOpts = {}) =>
@@ -9157,11 +9240,26 @@ function createClientRuntime(options = {}) {
  */
 function bootClient(options = {}) {
   const runtime = createClientRuntime(options);
+  const shouldMountDevtools =
+    options.devtools === true ||
+    (options.devtools !== false &&
+      (options.debug ||
+        options.dev ||
+        (typeof window !== 'undefined' &&
+          (window.__WEBSPRESSO_DEVTOOLS_ENABLED__ || window.__WEBSPRESSO_DEV__)) ||
+        (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production')));
+
   if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => runtime.mount(), { once: true });
-    } else {
+    const onReady = () => {
       runtime.mount();
+      if (shouldMountDevtools) {
+        runtime.devtool = mountDevtool(runtime, options.devtoolsOptions || {});
+      }
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', onReady, { once: true });
+    } else {
+      onReady();
     }
   }
   return runtime;
@@ -9258,9 +9356,12 @@ module.exports = {
   morphDomTrees,
   parseHtmlFragment,
 
-  // Debug & Telemetry
+  // Debug & Telemetry & DevTools
   createClientDebugger,
   summarizePayloadSafely,
+  mountDevtool,
+  highlightElement,
+  setupReduxDevToolsBridge,
 
   // Client Storage & Persistence
   MemoryStorage,
@@ -9345,6 +9446,12 @@ const {
   defaultStorage,
 } = require('./storage');
 
+const {
+  mountDevtool,
+  highlightElement,
+  setupReduxDevToolsBridge,
+} = require('./devtool');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -9502,6 +9609,7 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
+    mountDevtool: (opts) => mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
       create: (formEl, formOpts = {}) =>
@@ -9526,11 +9634,26 @@ function createClientRuntime(options = {}) {
  */
 function bootClient(options = {}) {
   const runtime = createClientRuntime(options);
+  const shouldMountDevtools =
+    options.devtools === true ||
+    (options.devtools !== false &&
+      (options.debug ||
+        options.dev ||
+        (typeof window !== 'undefined' &&
+          (window.__WEBSPRESSO_DEVTOOLS_ENABLED__ || window.__WEBSPRESSO_DEV__)) ||
+        (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production')));
+
   if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => runtime.mount(), { once: true });
-    } else {
+    const onReady = () => {
       runtime.mount();
+      if (shouldMountDevtools) {
+        runtime.devtool = mountDevtool(runtime, options.devtoolsOptions || {});
+      }
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', onReady, { once: true });
+    } else {
+      onReady();
     }
   }
   return runtime;
@@ -9627,9 +9750,12 @@ module.exports = {
   morphDomTrees,
   parseHtmlFragment,
 
-  // Debug & Telemetry
+  // Debug & Telemetry & DevTools
   createClientDebugger,
   summarizePayloadSafely,
+  mountDevtool,
+  highlightElement,
+  setupReduxDevToolsBridge,
 
   // Client Storage & Persistence
   MemoryStorage,
@@ -9714,6 +9840,12 @@ const {
   defaultStorage,
 } = require('./storage');
 
+const {
+  mountDevtool,
+  highlightElement,
+  setupReduxDevToolsBridge,
+} = require('./devtool');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -9871,6 +10003,7 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
+    mountDevtool: (opts) => mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
       create: (formEl, formOpts = {}) =>
@@ -9895,11 +10028,26 @@ function createClientRuntime(options = {}) {
  */
 function bootClient(options = {}) {
   const runtime = createClientRuntime(options);
+  const shouldMountDevtools =
+    options.devtools === true ||
+    (options.devtools !== false &&
+      (options.debug ||
+        options.dev ||
+        (typeof window !== 'undefined' &&
+          (window.__WEBSPRESSO_DEVTOOLS_ENABLED__ || window.__WEBSPRESSO_DEV__)) ||
+        (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production')));
+
   if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => runtime.mount(), { once: true });
-    } else {
+    const onReady = () => {
       runtime.mount();
+      if (shouldMountDevtools) {
+        runtime.devtool = mountDevtool(runtime, options.devtoolsOptions || {});
+      }
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', onReady, { once: true });
+    } else {
+      onReady();
     }
   }
   return runtime;
@@ -9996,9 +10144,12 @@ module.exports = {
   morphDomTrees,
   parseHtmlFragment,
 
-  // Debug & Telemetry
+  // Debug & Telemetry & DevTools
   createClientDebugger,
   summarizePayloadSafely,
+  mountDevtool,
+  highlightElement,
+  setupReduxDevToolsBridge,
 
   // Client Storage & Persistence
   MemoryStorage,
@@ -10083,6 +10234,12 @@ const {
   defaultStorage,
 } = require('./storage');
 
+const {
+  mountDevtool,
+  highlightElement,
+  setupReduxDevToolsBridge,
+} = require('./devtool');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -10240,6 +10397,7 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
+    mountDevtool: (opts) => mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
       create: (formEl, formOpts = {}) =>
@@ -10264,11 +10422,26 @@ function createClientRuntime(options = {}) {
  */
 function bootClient(options = {}) {
   const runtime = createClientRuntime(options);
+  const shouldMountDevtools =
+    options.devtools === true ||
+    (options.devtools !== false &&
+      (options.debug ||
+        options.dev ||
+        (typeof window !== 'undefined' &&
+          (window.__WEBSPRESSO_DEVTOOLS_ENABLED__ || window.__WEBSPRESSO_DEV__)) ||
+        (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production')));
+
   if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => runtime.mount(), { once: true });
-    } else {
+    const onReady = () => {
       runtime.mount();
+      if (shouldMountDevtools) {
+        runtime.devtool = mountDevtool(runtime, options.devtoolsOptions || {});
+      }
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', onReady, { once: true });
+    } else {
+      onReady();
     }
   }
   return runtime;
@@ -10365,9 +10538,12 @@ module.exports = {
   morphDomTrees,
   parseHtmlFragment,
 
-  // Debug & Telemetry
+  // Debug & Telemetry & DevTools
   createClientDebugger,
   summarizePayloadSafely,
+  mountDevtool,
+  highlightElement,
+  setupReduxDevToolsBridge,
 
   // Client Storage & Persistence
   MemoryStorage,

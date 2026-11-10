@@ -333,6 +333,31 @@ export default defineController({
 
 ---
 
+## 8.2 Client DevTools Dock & Inspector (`mountDevtool`)
+
+In development mode (or when `debug: true` / `devtools: true`), Webspresso mounts an isolated, zero-dependency floating DevTools dock using Shadow DOM:
+
+```ts
+import { bootClient } from 'webspresso/client';
+
+bootClient({
+  debug: true,    // Auto-mounts DevTools in development
+  devtools: true, // Customizable: { position: 'bottom-right', studioUrl: 'http://localhost:4567' }
+});
+```
+
+### DevTool Tabs & Capabilities:
+- **Collapsed Floating Pill**: Real-time counter of mounted controllers, active fragments, and dev server live-reload status (`⚡ Webspresso • 2 ctrls • 1 frag`).
+- **🎮 Controllers Tab**: Inspects live reactive `state`, computed values, bound forms, and tasks with DOM element highlight.
+- **🧩 Fragments Tab**: Displays active SSR partial fragments and offers one-click partial server refresh (`🔄 Refresh`).
+- **🌐 Network & Causal Chains**: Live client API request timeline with concurrency policies (`latest`, `drop`) and invalidation chains.
+- **💾 Storage Inspector**: Inspects and clears Webspresso-namespaced `localStorage` / `sessionStorage` (`w:*`).
+- **🛠️ Studio & Server**: Direct launch buttons for Webspresso DB Studio (`npx webspresso studio`), Admin Panel (`/_admin`), and SSE live-reload hub.
+- **🔌 Redux DevTools Bridge**: Automatically connects to browser Redux DevTools extension if installed.
+- **⌨️ Shortcuts & Console**: Press **`Alt + W`** to toggle dock, or use `window.__WEBSPRESSO_DEVTOOLS__`.
+
+---
+
 ## 9. Typed API Client & `.webspresso/api.d.ts`
 
 - When route manifests are generated, `api.get('/api/todos/insights')` automatically derives its response type from `AppApiRouteMap`.

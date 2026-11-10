@@ -577,3 +577,4 @@ describe('Client Watch API (`core/client/controller.js`)', () => {
     });
   });
 });
+

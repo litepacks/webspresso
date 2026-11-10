@@ -1091,6 +1091,79 @@ export default defineController({
      unwatch();
      ```
 
+---
+
+## 15. Development Mode Client DevTools Dock (`mountDevtool`)
+
+In development mode (or when `debug: true` / `devtools: true` is set), Webspresso mounts an isolated, zero-dependency floating DevTools dock into the page using Shadow DOM. It provides real-time inspection, partial SSR fragment testing, and direct bridges to developer tools.
+
+### Enabling the DevTools:
+```ts
+import { bootClient } from 'webspresso/client';
+
+bootClient({
+  debug: true,      // Automatically enables DevTools dock in development
+  devtools: true,   // Explicitly enable or customize
+  controllers: {
+    /* ... */
+  },
+});
+```
+
+Or mount programmatically on an existing runtime:
+```ts
+import { createClientRuntime, mountDevtool } from 'webspresso/client';
+
+const runtime = createClientRuntime({ debug: true });
+mountDevtool(runtime, {
+  position: 'bottom-right', // 'bottom-right' | 'bottom-left'
+  studioUrl: 'http://localhost:4567',
+});
+```
+
+### DevTool Features & Tabs:
+1. **Collapsed Floating Pill**:
+   - Displays real-time controller count, active fragment count, and dev server live-reload status (`⚡ Webspresso • 2 ctrls • 1 frag • ● dev`).
+   - Click to expand or press **`Alt + W`** (or `Cmd + Shift + D`).
+2. **🎮 Controllers Tab**:
+   - Lists all active mounted controllers.
+   - Live formatted JSON viewer of isolated reactive `state`.
+   - Displays computed values, bound forms, and active tasks.
+   - **`🎯 Highlight in DOM`** button: Smoothly scrolls to the controller element and pulses a glowing outline.
+   - **`📋 Copy`** button: Copies formatted JSON state to clipboard.
+3. **🧩 Fragments Tab**:
+   - Lists all server-rendered partial fragments (`data-w-fragment`).
+   - Inspects `data-w-depends-on` cache tags and input parameters.
+   - **`🔄 Refresh`** button: Triggers on-demand partial server re-fetch and DOM morphing without reloading the page.
+   - **`🔄 Refresh All`**: Batch-refreshes all mounted fragments in a single coalesced HTTP request.
+4. **🌐 Network & Causal Chains**:
+   - Live timeline of client API calls (`api.get`, `api.post`) with duration and concurrency policy (`latest`, `drop`).
+   - Visualizes complete causal chains: `mutation ➔ invalidation ➔ refresh ➔ DOM patch`.
+5. **💾 Storage Inspector**:
+   - Live viewer of Webspresso-namespaced `localStorage` and `sessionStorage` entries (`w:*`).
+   - **`🗑️ Clear Webspresso Storage`** button: Resets client state and stored form drafts without affecting third-party browser storage.
+6. **🛠️ Studio & Server Bridges**:
+   - **DB Studio ↗**: Direct link to Webspresso DB Studio (`http://localhost:4567` or `/_studio`).
+   - **Admin Panel ↗**: Direct link to the Mithril.js Admin Panel (`/_admin`).
+   - **Dev Reload Hub**: Real-time SSE connection indicator and manual force reload trigger.
+7. **Redux DevTools Browser Extension Bridge**:
+   - If the Chrome/Firefox/Safari Redux DevTools extension is detected (`window.__REDUX_DEVTOOLS_EXTENSION__`), Webspresso automatically registers and dispatches state snapshots and action logs for native browser devtools inspection.
+8. **Browser Console API (`window.__WEBSPRESSO_DEVTOOLS__`)**:
+   ```javascript
+   // Toggle dock UI
+   __WEBSPRESSO_DEVTOOLS__.toggle();
+
+   // Inspect controller state from console
+   __WEBSPRESSO_DEVTOOLS__.getState('todos');
+
+   // Trigger fragment refresh from console
+   __WEBSPRESSO_DEVTOOLS__.refresh('todos-list');
+
+   // Highlight element from console
+   __WEBSPRESSO_DEVTOOLS__.highlight('todos');
+   ```
+
+
 
 
 
