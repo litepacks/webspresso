@@ -18,6 +18,7 @@
 const { createFormHandle } = require('./forms');
 const { createApiClient } = require('./api');
 const { defaultStorage, createClientStorage } = require('./storage');
+const { decorateElement } = require('./utils');
 
 let instanceSeq = 0;
 
@@ -216,7 +217,7 @@ function queryScopedTargets(rootEl, controllerName, targetName) {
     const rawAttr = (el.getAttribute('data-w-target') || '').trim();
     const tokens = rawAttr.split(/\s+/);
     if (tokens.includes(cleanTarget) || tokens.includes(prefixedTarget)) {
-      matched.push(el);
+      matched.push(decorateElement(el));
     }
   }
 
@@ -828,8 +829,11 @@ function createControllerRuntime(options = {}) {
       },
       param: (name, maybeEl) => {
         if (!name) return null;
-        const el = maybeEl || currentActionEl;
+        const el = decorateElement(maybeEl || currentActionEl);
         if (!el) return null;
+        if (typeof el.data === 'function') {
+          return el.data(name);
+        }
         const rawAttr = el.getAttribute ? el.getAttribute(`data-${name}`) : null;
         if (rawAttr !== null) return rawAttr;
         if (el.dataset && el.dataset[name] !== undefined) return el.dataset[name];
@@ -927,9 +931,10 @@ function createControllerRuntime(options = {}) {
       if (typeof fn !== 'function') {
         return undefined;
       }
-      currentActionEl = actionEl || null;
+      const decoratedEl = decorateElement(actionEl);
+      currentActionEl = decoratedEl || null;
       try {
-        const res = fn(ctx, event, actionEl);
+        const res = fn(ctx, event, decoratedEl);
         if (res && typeof res.then === 'function') {
           return res.catch((err) => {
             // Ignore canceled/superseded request errors on disconnected or superseded instances
@@ -937,7 +942,7 @@ function createControllerRuntime(options = {}) {
             handleControllerError(err, {
               action: actionName,
               event,
-              actionEl,
+              actionEl: decoratedEl,
               phase: 'action',
             });
             throw err;
@@ -949,7 +954,7 @@ function createControllerRuntime(options = {}) {
         handleControllerError(err, {
           action: actionName,
           event,
-          actionEl,
+          actionEl: decoratedEl,
           phase: 'action',
         });
         throw err;

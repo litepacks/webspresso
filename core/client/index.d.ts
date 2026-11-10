@@ -17,6 +17,7 @@ export {
   ControllerFragmentHandle,
   ControllerContext,
   ControllerErrorMeta,
+  ControllerElement,
   ControllerErrorHandler,
   ControllerActionHandler,
   ControllerComputedGetter,

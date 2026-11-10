@@ -319,7 +319,12 @@ const sampleController = defineController({
       const res = await api.get('/api/test');
       void res;
       if (tasks.loadData) await tasks.loadData.run();
-      if (actionEl) actionEl.getAttribute('data-id');
+      if (actionEl) {
+        actionEl.getAttribute('data-id');
+        actionEl.data('id');
+        actionEl.data('id', 123);
+        actionEl.data();
+      }
     },
   },
 });

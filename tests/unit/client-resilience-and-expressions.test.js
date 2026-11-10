@@ -15,6 +15,7 @@ import {
   defineController,
   createControllerRuntime,
 } from '../../core/client/controller.js';
+import { decorateElement } from '../../core/client/utils.js';
 import { createMiniDomEnvironment } from '../utils/mini-dom.js';
 
 describe('Client Resilience & Expression Enhancements', () => {
@@ -949,6 +950,107 @@ describe('Client Resilience & Expression Enhancements', () => {
       expect(capturedPayload.fragments).toHaveLength(2);
       expect(capturedPayload.fragments.map((f) => f.instanceId).sort()).toEqual(['frag-a', 'frag-b']);
 
+      env.restore();
+    });
+  });
+
+  describe('7. Enhanced Action & Target Elements with .data() API', () => {
+    it('provides chainable and typed .data(key?, val?) access on DOM elements', () => {
+      const env = createMiniDomEnvironment(`
+        <button id="btn"
+          data-priority="high"
+          data-todo-id="42"
+          data-is-active="true"
+          data-code="0123"
+          data-meta='{"author":"alex","views":100}'>
+          Click
+        </button>
+      `);
+
+      const btn = env.document.getElementById('btn');
+      decorateElement(btn);
+
+      // 1. Reading single attributes with automatic coercion
+      expect(btn.data('priority')).toBe('high');
+      expect(btn.data('todo-id')).toBe(42);
+      expect(btn.data('todoId')).toBe(42); // CamelCase alias
+      expect(btn.data('is-active')).toBe(true);
+      expect(btn.data('isActive')).toBe(true);
+      expect(btn.data('code')).toBe('0123'); // Leading zero preserved as string!
+      expect(btn.data('meta')).toEqual({ author: 'alex', views: 100 });
+      expect(btn.data('nonexistent')).toBeNull();
+
+      // 2. Reading all attributes as a dictionary
+      const allData = btn.data();
+      expect(allData.priority).toBe('high');
+      expect(allData.todoId).toBe(42);
+      expect(allData.isActive).toBe(true);
+      expect(allData.code).toBe('0123');
+      expect(allData.meta).toEqual({ author: 'alex', views: 100 });
+
+      // 3. Setting values
+      const chained = btn.data('priority', 'urgent');
+      expect(chained).toBe(btn);
+      expect(btn.data('priority')).toBe('urgent');
+      expect(btn.getAttribute('data-priority')).toBe('urgent');
+
+      // 4. Batch setting
+      btn.data({ status: 'done', count: 99 });
+      expect(btn.data('status')).toBe('done');
+      expect(btn.data('count')).toBe(99);
+
+      // 5. Removing values via null
+      btn.data('status', null);
+      expect(btn.data('status')).toBeNull();
+
+      env.restore();
+    });
+
+    it('injects decorated actionEl with .data() into controller actions and ctx.target', async () => {
+      const env = createMiniDomEnvironment(`
+        <div data-w-controller="demo">
+          <button id="action-btn" data-w-click="handleAction" data-priority="urgent" data-category="security">
+            Action
+          </button>
+          <span data-w-target="badge" data-count="5">5</span>
+        </div>
+      `);
+
+      const datastar = createDatastarAdapter();
+      const runtime = createControllerRuntime({ datastar });
+
+      let capturedPriority = null;
+      let capturedCategory = null;
+      let capturedBadgeCount = null;
+      let capturedParam = null;
+
+      runtime.register(
+        defineController({
+          name: 'demo',
+          state: () => ({}),
+          actions: {
+            handleAction(ctx, _evt, actionEl) {
+              capturedPriority = actionEl.data('priority');
+              capturedCategory = actionEl.data('category');
+              capturedBadgeCount = ctx.target('badge').data('count');
+              capturedParam = ctx.param('priority');
+            },
+          },
+        })
+      );
+
+      const rootEl = env.document.querySelector('[data-w-controller="demo"]');
+      await runtime.mountSubtree(rootEl);
+
+      const btn = env.document.getElementById('action-btn');
+      btn.dispatchEvent(new env.window.Event('click', { bubbles: true }));
+
+      expect(capturedPriority).toBe('urgent');
+      expect(capturedCategory).toBe('security');
+      expect(capturedBadgeCount).toBe(5);
+      expect(capturedParam).toBe('urgent');
+
+      runtime.unmountSubtree(rootEl);
       env.restore();
     });
   });

@@ -76,6 +76,28 @@ Replace manual DOM reading/writing (`target('searchInput')?.value`, `input.value
 - **Loop Prevention**: Programmatic updates avoid infinite event/state loops.
 - **`target()` API Preserved**: Keep `ctx.target(name)` and `ctx.targets(name)` strictly for focus, scrolling, layout measurement, and third-party widgets.
 
+### 3.1 Enhanced Element `.data()` API (`actionEl` & `ctx.target`)
+All action elements (`actionEl` passed as 3rd arg to actions) and targets (`ctx.target(name)`) provide a chainable, type-coerced `.data(key?, val?)` helper:
+```ts
+actions: {
+  selectItem(ctx, event, actionEl) {
+    // 1. Read with automatic primitive coercion (numbers, booleans, JSON)
+    const id = actionEl.data('id');              // 42 (number)
+    const active = actionEl.data('is-active');   // true (boolean)
+    const activeCamel = actionEl.data('isActive'); // true (camelCase alias)
+
+    // 2. Read all data attributes as an object
+    const all = actionEl.data();                 // { id: 42, isActive: true }
+
+    // 3. Chainable setter
+    actionEl.data('status', 'selected');
+
+    // 4. Also available on targets!
+    ctx.target('badge').data('count', 10);
+  },
+}
+```
+
 ---
 
 ## 4. Draft vs Applied Filter Pattern

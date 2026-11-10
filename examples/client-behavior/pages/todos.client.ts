@@ -68,7 +68,7 @@ export default defineController({
 
     async setQuickStatus({ state, refresh }, _event, actionEl) {
       if (!actionEl) return;
-      const nextStatus = actionEl.getAttribute('data-status') || 'all';
+      const nextStatus = actionEl.data('status') || 'all';
       state.draft.status = nextStatus;
 
       const next = { ...state.draft };
@@ -88,7 +88,7 @@ export default defineController({
 
     async setQuickPriority({ state, refresh }, _event, actionEl) {
       if (!actionEl) return;
-      const clicked = actionEl.getAttribute('data-priority') || 'all';
+      const clicked = actionEl.data('priority') || 'all';
       const nextPriority = state.draft.priority === clicked ? 'all' : clicked;
       state.draft.priority = nextPriority;
 
@@ -156,8 +156,8 @@ export default defineController({
 
     async selectTodoForEdit({ state, forms, api }, _event, actionEl) {
       if (!actionEl) return;
-      const id = actionEl.getAttribute('data-todo-id');
-      if (!id || !id.trim()) return;
+      const id = actionEl.data('todo-id');
+      if (!id) return;
 
       const editForm = forms.get('edit-todo');
       if (!editForm) return;

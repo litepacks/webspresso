@@ -135,6 +135,139 @@ const NOOP_DEBUGGER = Object.freeze({
   clear() {},
 });
 
+/**
+ * Convert kebab-case or mixed string to camelCase (e.g. "todo-id" -> "todoId").
+ * @param {string} str
+ * @returns {string}
+ */
+function toCamelCase(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/-([a-z0-9])/gi, (_, char) => char.toUpperCase());
+}
+
+/**
+ * Convert camelCase to kebab-case (e.g. "todoId" -> "todo-id").
+ * @param {string} str
+ * @returns {string}
+ */
+function toKebabCase(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/([A-Z])/g, '-$1')
+    .toLowerCase()
+    .replace(/^-+/, '');
+}
+
+/**
+ * Parse string representation of data-* attributes into typed primitives.
+ * Mirrors jQuery / standard data coercion without unintended leading-zero mutation.
+ * @param {unknown} val
+ * @returns {unknown}
+ */
+function parseDataValue(val) {
+  if (typeof val !== 'string') return val;
+  if (val === 'true') return true;
+  if (val === 'false') return false;
+  if (val === 'null') return null;
+  if (val === 'undefined') return undefined;
+  if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(val)) {
+    const num = Number(val);
+    if (!Number.isNaN(num)) return num;
+  }
+  if ((val.startsWith('{') && val.endsWith('}')) || (val.startsWith('[') && val.endsWith(']'))) {
+    try {
+      return JSON.parse(val);
+    } catch (_e) {
+      return val;
+    }
+  }
+  return val;
+}
+
+/**
+ * Decorate an HTMLElement with a chainable `.data(key?, val?)` helper.
+ *
+ * Usage:
+ * - `el.data('priority')` -> reads dataset / data-priority (coerces numbers, booleans, JSON)
+ * - `el.data('priority', 'high')` -> sets data-priority="high" and returns `el`
+ * - `el.data({ priority: 'high', count: 1 })` -> sets multiple data attributes and returns `el`
+ * - `el.data()` -> returns object with all parsed data attributes
+ *
+ * @template {Element} T
+ * @param {T} el
+ * @returns {T}
+ */
+function decorateElement(el) {
+  if (!el || typeof el !== 'object') return el;
+  if (typeof el.data === 'function') return el;
+
+  try {
+    Object.defineProperty(el, 'data', {
+      value: function data(key, val) {
+        if (arguments.length === 0) {
+          const result = {};
+          if (el.dataset) {
+            for (const [k, v] of Object.entries(el.dataset)) {
+              result[k] = parseDataValue(v);
+            }
+          }
+          return result;
+        }
+
+        if (typeof key === 'object' && key !== null) {
+          for (const [k, v] of Object.entries(key)) {
+            el.data(k, v);
+          }
+          return el;
+        }
+
+        const strKey = String(key);
+        const camelKey = toCamelCase(strKey);
+        const kebabKey = toKebabCase(strKey);
+
+        if (arguments.length >= 2) {
+          if (val === null || val === undefined) {
+            if (el.dataset) delete el.dataset[camelKey];
+            if (typeof el.removeAttribute === 'function') {
+              el.removeAttribute(`data-${kebabKey}`);
+              el.removeAttribute(strKey);
+            }
+          } else {
+            const strVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
+            if (el.dataset) el.dataset[camelKey] = strVal;
+            if (typeof el.setAttribute === 'function') {
+              el.setAttribute(`data-${kebabKey}`, strVal);
+            }
+          }
+          return el;
+        }
+
+        let raw = null;
+        if (el.dataset && el.dataset[camelKey] !== undefined) {
+          raw = el.dataset[camelKey];
+        } else if (typeof el.getAttribute === 'function') {
+          raw = el.getAttribute(`data-${kebabKey}`);
+          if (raw === null || raw === undefined) {
+            raw = el.getAttribute(strKey);
+          }
+        }
+
+        if (raw === null || raw === undefined) {
+          return null;
+        }
+        return parseDataValue(raw);
+      },
+      configurable: true,
+      writable: true,
+      enumerable: false,
+    });
+  } catch (_e) {
+    // Ignore in case object is non-extensible
+  }
+
+  return el;
+}
+
 module.exports = {
   isObject,
   isPlainObject,
@@ -143,6 +276,10 @@ module.exports = {
   getByPath,
   setByPath,
   NOOP_DEBUGGER,
+  toCamelCase,
+  toKebabCase,
+  parseDataValue,
+  decorateElement,
 };
 
 
@@ -282,6 +419,139 @@ const NOOP_DEBUGGER = Object.freeze({
   clear() {},
 });
 
+/**
+ * Convert kebab-case or mixed string to camelCase (e.g. "todo-id" -> "todoId").
+ * @param {string} str
+ * @returns {string}
+ */
+function toCamelCase(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/-([a-z0-9])/gi, (_, char) => char.toUpperCase());
+}
+
+/**
+ * Convert camelCase to kebab-case (e.g. "todoId" -> "todo-id").
+ * @param {string} str
+ * @returns {string}
+ */
+function toKebabCase(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/([A-Z])/g, '-$1')
+    .toLowerCase()
+    .replace(/^-+/, '');
+}
+
+/**
+ * Parse string representation of data-* attributes into typed primitives.
+ * Mirrors jQuery / standard data coercion without unintended leading-zero mutation.
+ * @param {unknown} val
+ * @returns {unknown}
+ */
+function parseDataValue(val) {
+  if (typeof val !== 'string') return val;
+  if (val === 'true') return true;
+  if (val === 'false') return false;
+  if (val === 'null') return null;
+  if (val === 'undefined') return undefined;
+  if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(val)) {
+    const num = Number(val);
+    if (!Number.isNaN(num)) return num;
+  }
+  if ((val.startsWith('{') && val.endsWith('}')) || (val.startsWith('[') && val.endsWith(']'))) {
+    try {
+      return JSON.parse(val);
+    } catch (_e) {
+      return val;
+    }
+  }
+  return val;
+}
+
+/**
+ * Decorate an HTMLElement with a chainable `.data(key?, val?)` helper.
+ *
+ * Usage:
+ * - `el.data('priority')` -> reads dataset / data-priority (coerces numbers, booleans, JSON)
+ * - `el.data('priority', 'high')` -> sets data-priority="high" and returns `el`
+ * - `el.data({ priority: 'high', count: 1 })` -> sets multiple data attributes and returns `el`
+ * - `el.data()` -> returns object with all parsed data attributes
+ *
+ * @template {Element} T
+ * @param {T} el
+ * @returns {T}
+ */
+function decorateElement(el) {
+  if (!el || typeof el !== 'object') return el;
+  if (typeof el.data === 'function') return el;
+
+  try {
+    Object.defineProperty(el, 'data', {
+      value: function data(key, val) {
+        if (arguments.length === 0) {
+          const result = {};
+          if (el.dataset) {
+            for (const [k, v] of Object.entries(el.dataset)) {
+              result[k] = parseDataValue(v);
+            }
+          }
+          return result;
+        }
+
+        if (typeof key === 'object' && key !== null) {
+          for (const [k, v] of Object.entries(key)) {
+            el.data(k, v);
+          }
+          return el;
+        }
+
+        const strKey = String(key);
+        const camelKey = toCamelCase(strKey);
+        const kebabKey = toKebabCase(strKey);
+
+        if (arguments.length >= 2) {
+          if (val === null || val === undefined) {
+            if (el.dataset) delete el.dataset[camelKey];
+            if (typeof el.removeAttribute === 'function') {
+              el.removeAttribute(`data-${kebabKey}`);
+              el.removeAttribute(strKey);
+            }
+          } else {
+            const strVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
+            if (el.dataset) el.dataset[camelKey] = strVal;
+            if (typeof el.setAttribute === 'function') {
+              el.setAttribute(`data-${kebabKey}`, strVal);
+            }
+          }
+          return el;
+        }
+
+        let raw = null;
+        if (el.dataset && el.dataset[camelKey] !== undefined) {
+          raw = el.dataset[camelKey];
+        } else if (typeof el.getAttribute === 'function') {
+          raw = el.getAttribute(`data-${kebabKey}`);
+          if (raw === null || raw === undefined) {
+            raw = el.getAttribute(strKey);
+          }
+        }
+
+        if (raw === null || raw === undefined) {
+          return null;
+        }
+        return parseDataValue(raw);
+      },
+      configurable: true,
+      writable: true,
+      enumerable: false,
+    });
+  } catch (_e) {
+    // Ignore in case object is non-extensible
+  }
+
+  return el;
+}
+
 module.exports = {
   isObject,
   isPlainObject,
@@ -290,6 +560,10 @@ module.exports = {
   getByPath,
   setByPath,
   NOOP_DEBUGGER,
+  toCamelCase,
+  toKebabCase,
+  parseDataValue,
+  decorateElement,
 };
 
 
@@ -4513,6 +4787,7 @@ module.exports = {
 const { createFormHandle } = require('./forms');
 const { createApiClient } = require('./api');
 const { defaultStorage, createClientStorage } = require('./storage');
+const { decorateElement } = require('./utils');
 
 let instanceSeq = 0;
 
@@ -4711,7 +4986,7 @@ function queryScopedTargets(rootEl, controllerName, targetName) {
     const rawAttr = (el.getAttribute('data-w-target') || '').trim();
     const tokens = rawAttr.split(/\s+/);
     if (tokens.includes(cleanTarget) || tokens.includes(prefixedTarget)) {
-      matched.push(el);
+      matched.push(decorateElement(el));
     }
   }
 
@@ -5323,8 +5598,11 @@ function createControllerRuntime(options = {}) {
       },
       param: (name, maybeEl) => {
         if (!name) return null;
-        const el = maybeEl || currentActionEl;
+        const el = decorateElement(maybeEl || currentActionEl);
         if (!el) return null;
+        if (typeof el.data === 'function') {
+          return el.data(name);
+        }
         const rawAttr = el.getAttribute ? el.getAttribute(`data-${name}`) : null;
         if (rawAttr !== null) return rawAttr;
         if (el.dataset && el.dataset[name] !== undefined) return el.dataset[name];
@@ -5422,9 +5700,10 @@ function createControllerRuntime(options = {}) {
       if (typeof fn !== 'function') {
         return undefined;
       }
-      currentActionEl = actionEl || null;
+      const decoratedEl = decorateElement(actionEl);
+      currentActionEl = decoratedEl || null;
       try {
-        const res = fn(ctx, event, actionEl);
+        const res = fn(ctx, event, decoratedEl);
         if (res && typeof res.then === 'function') {
           return res.catch((err) => {
             // Ignore canceled/superseded request errors on disconnected or superseded instances
@@ -5432,7 +5711,7 @@ function createControllerRuntime(options = {}) {
             handleControllerError(err, {
               action: actionName,
               event,
-              actionEl,
+              actionEl: decoratedEl,
               phase: 'action',
             });
             throw err;
@@ -5444,7 +5723,7 @@ function createControllerRuntime(options = {}) {
         handleControllerError(err, {
           action: actionName,
           event,
-          actionEl,
+          actionEl: decoratedEl,
           phase: 'action',
         });
         throw err;
@@ -9702,7 +9981,7 @@ exports.default = (0, client_1.defineController)({
         async setQuickStatus({ state, refresh }, _event, actionEl) {
             if (!actionEl)
                 return;
-            const nextStatus = actionEl.getAttribute('data-status') || 'all';
+            const nextStatus = actionEl.data('status') || 'all';
             state.draft.status = nextStatus;
             const next = { ...state.draft };
             await refresh('todos-list', {
@@ -9721,7 +10000,7 @@ exports.default = (0, client_1.defineController)({
         async setQuickPriority({ state, refresh }, _event, actionEl) {
             if (!actionEl)
                 return;
-            const clicked = actionEl.getAttribute('data-priority') || 'all';
+            const clicked = actionEl.data('priority') || 'all';
             const nextPriority = state.draft.priority === clicked ? 'all' : clicked;
             state.draft.priority = nextPriority;
             const next = { ...state.draft };
@@ -9785,8 +10064,8 @@ exports.default = (0, client_1.defineController)({
         async selectTodoForEdit({ state, forms, api }, _event, actionEl) {
             if (!actionEl)
                 return;
-            const id = actionEl.getAttribute('data-todo-id');
-            if (!id || !id.trim())
+            const id = actionEl.data('todo-id');
+            if (!id)
                 return;
             const editForm = forms.get('edit-todo');
             if (!editForm)

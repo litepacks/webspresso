@@ -132,6 +132,139 @@ const NOOP_DEBUGGER = Object.freeze({
   clear() {},
 });
 
+/**
+ * Convert kebab-case or mixed string to camelCase (e.g. "todo-id" -> "todoId").
+ * @param {string} str
+ * @returns {string}
+ */
+function toCamelCase(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/-([a-z0-9])/gi, (_, char) => char.toUpperCase());
+}
+
+/**
+ * Convert camelCase to kebab-case (e.g. "todoId" -> "todo-id").
+ * @param {string} str
+ * @returns {string}
+ */
+function toKebabCase(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/([A-Z])/g, '-$1')
+    .toLowerCase()
+    .replace(/^-+/, '');
+}
+
+/**
+ * Parse string representation of data-* attributes into typed primitives.
+ * Mirrors jQuery / standard data coercion without unintended leading-zero mutation.
+ * @param {unknown} val
+ * @returns {unknown}
+ */
+function parseDataValue(val) {
+  if (typeof val !== 'string') return val;
+  if (val === 'true') return true;
+  if (val === 'false') return false;
+  if (val === 'null') return null;
+  if (val === 'undefined') return undefined;
+  if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(val)) {
+    const num = Number(val);
+    if (!Number.isNaN(num)) return num;
+  }
+  if ((val.startsWith('{') && val.endsWith('}')) || (val.startsWith('[') && val.endsWith(']'))) {
+    try {
+      return JSON.parse(val);
+    } catch (_e) {
+      return val;
+    }
+  }
+  return val;
+}
+
+/**
+ * Decorate an HTMLElement with a chainable `.data(key?, val?)` helper.
+ *
+ * Usage:
+ * - `el.data('priority')` -> reads dataset / data-priority (coerces numbers, booleans, JSON)
+ * - `el.data('priority', 'high')` -> sets data-priority="high" and returns `el`
+ * - `el.data({ priority: 'high', count: 1 })` -> sets multiple data attributes and returns `el`
+ * - `el.data()` -> returns object with all parsed data attributes
+ *
+ * @template {Element} T
+ * @param {T} el
+ * @returns {T}
+ */
+function decorateElement(el) {
+  if (!el || typeof el !== 'object') return el;
+  if (typeof el.data === 'function') return el;
+
+  try {
+    Object.defineProperty(el, 'data', {
+      value: function data(key, val) {
+        if (arguments.length === 0) {
+          const result = {};
+          if (el.dataset) {
+            for (const [k, v] of Object.entries(el.dataset)) {
+              result[k] = parseDataValue(v);
+            }
+          }
+          return result;
+        }
+
+        if (typeof key === 'object' && key !== null) {
+          for (const [k, v] of Object.entries(key)) {
+            el.data(k, v);
+          }
+          return el;
+        }
+
+        const strKey = String(key);
+        const camelKey = toCamelCase(strKey);
+        const kebabKey = toKebabCase(strKey);
+
+        if (arguments.length >= 2) {
+          if (val === null || val === undefined) {
+            if (el.dataset) delete el.dataset[camelKey];
+            if (typeof el.removeAttribute === 'function') {
+              el.removeAttribute(`data-${kebabKey}`);
+              el.removeAttribute(strKey);
+            }
+          } else {
+            const strVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
+            if (el.dataset) el.dataset[camelKey] = strVal;
+            if (typeof el.setAttribute === 'function') {
+              el.setAttribute(`data-${kebabKey}`, strVal);
+            }
+          }
+          return el;
+        }
+
+        let raw = null;
+        if (el.dataset && el.dataset[camelKey] !== undefined) {
+          raw = el.dataset[camelKey];
+        } else if (typeof el.getAttribute === 'function') {
+          raw = el.getAttribute(`data-${kebabKey}`);
+          if (raw === null || raw === undefined) {
+            raw = el.getAttribute(strKey);
+          }
+        }
+
+        if (raw === null || raw === undefined) {
+          return null;
+        }
+        return parseDataValue(raw);
+      },
+      configurable: true,
+      writable: true,
+      enumerable: false,
+    });
+  } catch (_e) {
+    // Ignore in case object is non-extensible
+  }
+
+  return el;
+}
+
 module.exports = {
   isObject,
   isPlainObject,
@@ -140,5 +273,9 @@ module.exports = {
   getByPath,
   setByPath,
   NOOP_DEBUGGER,
+  toCamelCase,
+  toKebabCase,
+  parseDataValue,
+  decorateElement,
 };
 

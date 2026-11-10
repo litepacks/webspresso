@@ -155,6 +155,34 @@ actions: {
 - **No Stale Target Caching**: `ctx.target(name)` and `ctx.targets(name)` query the live DOM dynamically on each call and never return elements belonging to nested child controllers of the same type.
 - **Automatic Teardown**: When a controller root is removed from the DOM, all `ctx.on()`, `ctx.effect()`, `ctx.interval()`, `ctx.timeout()`, `ctx.tasks`, and `ctx.signal()` resources are automatically disposed. Late async callbacks checking `ctx.isDisposed()` are prevented from mutating detached state.
 
+### 3.7 Action Element `.data()` API
+All action elements (`actionEl`) and target elements (`ctx.target(name)`) are enhanced with a chainable, type-coercing `.data(key?, val?)` helper:
+```html
+<button data-w-click="filterByStatus" data-status="active" data-page="1" data-is-open="true">
+  Active Only
+</button>
+```
+```ts
+actions: {
+  filterByStatus({ state, refresh }, event, actionEl) {
+    // 1. Read with automatic primitive coercion (numbers, booleans, JSON)
+    const status = actionEl.data('status');       // 'active'
+    const page = actionEl.data('page');           // 1 (number, not string)
+    const isOpen = actionEl.data('is-open');      // true (boolean)
+    const isOpenCamel = actionEl.data('isOpen');  // true (camelCase alias)
+
+    // 2. Read all data attributes as a dictionary
+    const allData = actionEl.data();             // { status: 'active', page: 1, isOpen: true }
+
+    // 3. Chainable setter (updates dataset and data-* attribute)
+    actionEl.data('status', 'archived');
+
+    // 4. Also available on targets!
+    ctx.target('counterBadge').data('count', 5);
+  },
+}
+```
+
 ---
 
 ## 4. Typed API Client & `.webspresso/api.d.ts`
@@ -216,7 +244,7 @@ Forms retrieved via `ctx.forms.get('edit-todo')` provide a typed API:
 
 ```ts
 async selectTodoForEdit({ state, forms, api }, _event, actionEl) {
-  const id = actionEl.getAttribute('data-todo-id');
+  const id = actionEl.data('todo-id');
   if (!id) return;
 
   const form = forms.get('edit-todo');

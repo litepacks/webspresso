@@ -6659,9 +6659,9 @@ export interface ControllerContext<
     runFn: (...args: TArgs) => Promise<TData>,
     options?: ClientTaskOptions
   ): ClientTask<TData, TArgs>;
-  param(name: string, actionEl?: HTMLElement): string | null;
-  target<T extends Element = HTMLElement>(targetName: string): T | null;
-  targets<T extends Element = HTMLElement>(targetName: string): T[];
+  param(name: string, actionEl?: ControllerElement | HTMLElement): string | null;
+  target<T extends ControllerElement = ControllerElement>(targetName: string): T | null;
+  targets<T extends ControllerElement = ControllerElement>(targetName: string): T[];
   on(
     targetOrEvent: EventTarget | string,
     eventOrHandler: string | ((event: Event) => void),
@@ -6695,13 +6695,20 @@ export type ControllerTaskFactory<
   | ((ctx: ControllerContext<TState>) => ClientTask<TData> | { run: (...args: any[]) => Promise<TData>; concurrency?: ClientConcurrencyPolicy; key?: string })
   | { run: (...args: any[]) => Promise<TData>; concurrency?: ClientConcurrencyPolicy; key?: string };
 
+export interface ControllerElement extends HTMLElement {
+  data(): Record<string, unknown>;
+  data<T = any>(key: string): T;
+  data(key: string, value: unknown): this;
+  data(entries: Record<string, unknown>): this;
+}
+
 export type ControllerActionHandler<
   TState extends Record<string, any> = Record<string, any>,
   TTasks extends Record<string, ClientTask> = Record<string, ClientTask>
 > = (
   ctx: ControllerContext<TState, TTasks>,
   event: Event,
-  actionEl: HTMLElement
+  actionEl: ControllerElement
 ) => unknown | Promise<unknown>;
 
 export interface ControllerDefinition<
