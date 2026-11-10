@@ -157,8 +157,11 @@ export interface CreateAppOptions {
     };
     [key: string]: unknown;
   };
-  /** Opt-in Alpine / swup assets under `/__webspresso/client-runtime/*`. Env: WEBSPRESSO_ALPINE, WEBSPRESSO_SWUP. */
+  /** Opt-in client assets under `/__webspresso/client-runtime/*`. */
   clientRuntime?: {
+    /**
+     * @deprecated Internal Alpine.js runtime has been removed. Load Alpine.js via CDN or script tag in your layout template.
+     */
     alpine?: boolean | Record<string, unknown>;
     swup?: boolean | Record<string, unknown>;
   };
@@ -654,7 +657,11 @@ export interface SetupRoutesContext {
   authMiddleware?: RequestHandler;
   pluginManager: PluginManager;
   options: CreateAppOptions;
-  clientRuntime: { alpine: boolean; swup: boolean };
+  clientRuntime: {
+    /** @deprecated Internal Alpine.js runtime has been removed. */
+    alpine?: boolean;
+    swup: boolean;
+  };
   http?: HttpAdapter;
 }
 
@@ -1353,10 +1360,15 @@ export namespace resilience {
 
 export function resolveClientRuntime(options?: {
   clientRuntime?: {
+    /** @deprecated Internal Alpine.js runtime has been removed. */
     alpine?: boolean | Record<string, unknown>;
     swup?: boolean | Record<string, unknown>;
   };
-}): { alpine: boolean; swup: boolean };
+}): {
+  /** @deprecated Internal Alpine.js runtime has been removed. */
+  alpine: boolean;
+  swup: boolean;
+};
 
 export declare const CLIENT_RUNTIME_BASE: string;
 

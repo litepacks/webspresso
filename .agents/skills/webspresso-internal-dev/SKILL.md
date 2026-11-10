@@ -42,7 +42,7 @@ This guide defines the mandatory rules and architectural invariants that MUST be
 
 ### 3. Dependency Boundary & Peer Dependencies Protocol
 - **Rule**: Webspresso is a lightweight, zero-dependency-sprawl framework.
-  - Browser/client-runtime libraries (e.g. `@swup/*`, `alpinejs`, `swup`) or optional third-party integrations MUST NEVER be declared as mandatory production `dependencies` in `package.json`.
+  - Browser/client-runtime libraries (e.g. `@swup/*`, `swup`) or optional third-party integrations MUST NEVER be declared as mandatory production `dependencies` in `package.json`.
   - Place optional integration packages in `peerDependencies` with `peerDependenciesMeta: { [packageName]: { optional: true } }` (and in `devDependencies` for local tests).
   - Client runtime loaders (`src/client-runtime/mount.js`) and plugins MUST include defensive runtime guards (e.g. `try { require(...) } catch {}`) that fail gracefully with clear installation instructions if the peer dependency is missing.
 

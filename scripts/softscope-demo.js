@@ -165,7 +165,7 @@ async function runHarness() {
       shutdown: { enabled: true, timeout: 2000 },
     },
     pageAssets: true,
-    clientRuntime: { alpine: true, swup: true },
+    clientRuntime: { swup: true },
     setupRoutes: (app) => {
       // Register custom services directly
       const registry = app.serviceRegistry;

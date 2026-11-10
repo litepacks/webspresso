@@ -1,6 +1,6 @@
 /**
- * Example JSON endpoint for Alpine `fetch()` on the marketing site (no HTMX).
- * e.g. x-init or @click → fetch('/api/client-demo-items').then(r => r.json())
+ * Example JSON endpoint for client `fetch()` on the marketing site.
+ * e.g. @click → fetch('/api/client-demo-items').then(r => r.json())
  */
 module.exports = async (req, res) => {
   res.json({

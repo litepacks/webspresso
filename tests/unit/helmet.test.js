@@ -47,22 +47,19 @@ describe.sequential('Helmet Configuration', () => {
     });
   });
 
-  describe('Alpine client runtime', () => {
+  describe('CSP script-src evaluation policy', () => {
     const scriptSrcOf = (res) => {
       const csp = res.headers['content-security-policy'] || '';
       return (csp.split(';').find((d) => d.trim().startsWith('script-src ')) || '').trim();
     };
 
-    it("allows 'unsafe-eval' in the default production CSP only when Alpine is enabled", async () => {
+    it("keeps 'unsafe-eval' disabled by default in production", async () => {
       const originalEnv = process.env.NODE_ENV;
       try {
         process.env.NODE_ENV = 'production';
 
-        const withAlpine = createApp({ pagesDir, viewsDir, clientRuntime: { alpine: true } });
-        expect(scriptSrcOf(await request(withAlpine.app).get('/'))).toContain("'unsafe-eval'");
-
-        const withoutAlpine = createApp({ pagesDir, viewsDir });
-        const plain = scriptSrcOf(await request(withoutAlpine.app).get('/'));
+        const { app } = createApp({ pagesDir, viewsDir });
+        const plain = scriptSrcOf(await request(app).get('/'));
         expect(plain).toContain("'self'");
         expect(plain).not.toContain("'unsafe-eval'");
       } finally {
@@ -70,7 +67,7 @@ describe.sequential('Helmet Configuration', () => {
       }
     });
 
-    it('leaves a user-supplied CSP untouched when Alpine is enabled', async () => {
+    it("allows user-supplied CSP with 'unsafe-eval' when configuring third-party libraries", async () => {
       const originalEnv = process.env.NODE_ENV;
       try {
         process.env.NODE_ENV = 'production';
@@ -78,10 +75,16 @@ describe.sequential('Helmet Configuration', () => {
         const { app } = createApp({
           pagesDir,
           viewsDir,
-          clientRuntime: { alpine: true },
-          helmet: { contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'"] } } },
+          helmet: {
+            contentSecurityPolicy: {
+              directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'", "'unsafe-eval'"],
+              },
+            },
+          },
         });
-        expect(scriptSrcOf(await request(app).get('/'))).not.toContain("'unsafe-eval'");
+        expect(scriptSrcOf(await request(app).get('/'))).toContain("'unsafe-eval'");
       } finally {
         process.env.NODE_ENV = originalEnv;
       }

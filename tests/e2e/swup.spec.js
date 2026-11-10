@@ -34,6 +34,27 @@ function writeFixtureLayout(viewsDir) {
 <head>
   <meta charset="UTF-8">
   <title>{{ meta.title or 'swup e2e' }}</title>
+  <script>
+    // Minimal Alpine simulation to test layout script inclusion and swup reinit
+    window.Alpine = {
+      initTree: function(root) {
+        var el = root || document;
+        el.querySelectorAll('[x-data]').forEach(function(node) {
+          var panel = node.querySelector('[data-testid="alpine-panel"]');
+          var btn = node.querySelector('[data-testid="alpine-toggle"]');
+          if (panel && btn) {
+            panel.style.display = 'none';
+            btn.onclick = function() {
+              panel.style.display = panel.style.display === 'none' ? 'inline' : 'none';
+            };
+          }
+        });
+      }
+    };
+    document.addEventListener('DOMContentLoaded', function() {
+      window.Alpine.initTree(document);
+    });
+  </script>
 </head>
 <body>
 <nav>
@@ -120,7 +141,7 @@ test.describe('clientRuntime swup + Alpine', () => {
       viewsDir: viewsOn,
       helmet: false,
       logging: false,
-      clientRuntime: { alpine: true, swup: true },
+      clientRuntime: { swup: true },
     });
 
     const off = await listen(appOff);
@@ -149,8 +170,8 @@ test.describe('clientRuntime swup + Alpine', () => {
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     expect(html).toContain('id="swup"');
-    expect(html).toContain('/__webspresso/client-runtime/alpine.min.js');
     expect(html).toContain('/__webspresso/client-runtime/swup.umd.js');
+    expect(html).toContain('/__webspresso/client-runtime/bootstrap-swup.js');
   });
 
   test('swup navigation keeps window state; data-no-swup reloads', async ({ page }) => {

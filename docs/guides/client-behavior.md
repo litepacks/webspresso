@@ -463,4 +463,115 @@ To keep the runtime small, predictable, and debuggable, the following are **inte
 4. **No Automatic Client Query Cache or Optimistic UI**: Client state is local to its mounted controller instance, and mutations wait for server confirmation before refreshing fragments.
 5. **No Client-Side SPA Router or Cross-Tab Broadcast Invalidation**: Page navigation uses standard HTTP/SSR routing, and `invalidate` refreshes fragments within the originating browser tab.
 
+---
+
+## 11. Using Alpine.js with Webspresso (Alternative & Migration Guide)
+
+While Webspresso ships with its own zero-dependency, TypeScript-safe client behavior runtime (`core/client` with `defineController` and `defineFragment`), you can easily use **Alpine.js** in your Webspresso applications.
+
+Webspresso does not force or bundle Alpine.js internally—allowing you to use any Alpine.js version, CDN, or bundler setup you prefer without framework bloat.
+
+### 11.1 Step 1: Include Alpine.js in Your Layout Template
+
+Add Alpine.js to your root layout (`views/layout.njk`) using a standard deferred `<script>` tag:
+
+```html
+<!-- views/layout.njk -->
+<!DOCTYPE html>
+<html lang="{{ locale }}">
+<head>
+  <meta charset="utf-8">
+  <title>{{ meta.title or "My Webspresso App" }}</title>
+
+  <!-- Prevent Flash of Unstyled Content (FOUC) while Alpine initializes -->
+  <style>
+    [x-cloak] { display: none !important; }
+  </style>
+
+  <!-- Load Alpine.js from CDN (or your local build via fsy.js / fsy.asset) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
+```
+
+### 11.2 Step 2: Writing Alpine Components
+
+In your Nunjucks pages (`pages/*.njk`), use standard Alpine.js directives:
+
+```html
+<!-- pages/counter.njk -->
+{% extends "views/layout.njk" %}
+
+{% block content %}
+<div class="p-6 max-w-sm mx-auto bg-white rounded-xl shadow-md" x-data="{ count: 0 }" x-cloak>
+  <h2 class="text-xl font-bold mb-2">Alpine Counter</h2>
+  <p class="text-gray-700">Current count: <span class="font-mono font-semibold" x-text="count"></span></p>
+  
+  <div class="mt-4 flex gap-2">
+    <button @click="count++" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">Increment</button>
+    <button @click="count = 0" class="px-3 py-1 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">Reset</button>
+  </div>
+</div>
+{% endblock %}
+```
+
+### 11.3 Step 3: Production CSP Configuration (Helmet)
+
+> [!IMPORTANT]
+> **Alpine evaluates directives (`x-data`, `x-text`, `@click`) using JavaScript function evaluation (`new AsyncFunction`)**, which standard production Content Security Policies (CSP) block by default.
+
+If you are running in production with Helmet CSP enabled, add `'unsafe-eval'` and your CDN host (if using a CDN) to `scriptSrc`:
+
+```javascript
+// server.js or app.js
+const { createApp } = require('webspresso');
+
+const { app } = createApp({
+  helmet: {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-eval'", // Required for Alpine.js directive evaluation
+          "https://cdn.jsdelivr.net", // If loading Alpine from CDN
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'"], // Needed for [x-cloak] style tag
+      },
+    },
+  },
+});
+```
+
+### 11.4 Step 4: Smooth Page Transitions with Swup
+
+If you use Webspresso's Swup integration (`clientRuntime: { swup: true }`), Webspresso's Swup bootstrap automatically detects `window.Alpine` and calls `Alpine.initTree(document.querySelector('#swup'))` when page content is swapped (`content:replace`).
+
+If you manage Swup manually, re-initialize Alpine on Swup transitions with:
+
+```javascript
+document.addEventListener('swup:enable', () => {
+  window.__webspressoSwup?.hooks.on('content:replace', () => {
+    if (window.Alpine && typeof window.Alpine.initTree === 'function') {
+      window.Alpine.initTree(document.querySelector('#swup'));
+    }
+  });
+});
+```
+
+### 11.5 Migrating from Legacy `clientRuntime: { alpine: true }`
+
+Older versions of Webspresso included internal Alpine.js bundling via `clientRuntime: { alpine: true }`. To migrate without breaking changes:
+
+1. **Update `createApp` configuration**: Remove `alpine: true` (or leave it as a no-op; it is safely ignored without throwing errors).
+2. **Add the Alpine `<script>` tag** in `views/layout.njk` as shown in Section 11.1 above.
+3. **Configure Helmet CSP** in `createApp({ helmet })` if deploying to production with a strict CSP.
+4. **Remove `alpinejs`** from `package.json` if you were previously installing it solely as a Webspresso peer dependency.
+
+
 

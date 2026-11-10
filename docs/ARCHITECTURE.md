@@ -141,7 +141,7 @@ C4Container
 | API validation | Zod `schema` → `req.input`; 400 on failure |
 | Global hooks | `pages/_hooks.js` lifecycle |
 | i18n | Locale JSON; `t()` in templates; route-level overrides |
-| Client runtime | Optional Alpine + swup at `/__webspresso/client-runtime/*` |
+| Client runtime | Optional Swup page transitions at `/__webspresso/client-runtime/*` (Alpine.js supported via template layout script) |
 | Security headers | Helmet; CSP stricter in production |
 | Static assets | `publicDir`; optional hashed manifest via `assets` config |
 
@@ -258,7 +258,7 @@ Plugins declare `name`, `version`, optional `dependencies`, and lifecycle hooks 
 
 | Component | Responsibility |
 |-----------|----------------|
-| `resolveClientRuntime` | Feature flags: Alpine, swup |
+| `resolveClientRuntime` | Feature flags: swup (Alpine.js used via layout template) |
 | `AssetManager` / `configureAssets` | Asset path resolution, cache-busting query strings (`?v=1.2.3`), Vite/Webpack manifest resolution (`manifestPath`), and CDN prefixes (`prefix`) for `fsy.asset`, `fsy.css`, `fsy.js`, `fsy.img` |
 | `pageAssets` | Per-route asset loading via `load()` return (`stylesheets`, `scripts` promoted to `pageHead`) |
 | Tailwind (scaffold) | App-level `build:css`; not part of core HTTP container |

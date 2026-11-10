@@ -1,6 +1,7 @@
 /**
  * Resolve clientRuntime flags from createApp({ clientRuntime }) and optional env overrides.
- * Env: WEBSPRESSO_ALPINE=1|true, WEBSPRESSO_SWUP=1|true (override explicit false from options when set).
+ * Env: WEBSPRESSO_SWUP=1|true.
+ * (Note: WEBSPRESSO_ALPINE / clientRuntime.alpine is deprecated; internal Alpine support is removed).
  */
 
 function envTruthy(name) {
@@ -18,7 +19,7 @@ function optionEnabled(v) {
 /**
  * @param {object} [options]
  * @param {object} [options.clientRuntime]
- * @param {boolean|object} [options.clientRuntime.alpine]
+ * @param {boolean|object} [options.clientRuntime.alpine] - Deprecated: internal Alpine bundling removed. Use template script tag.
  * @param {boolean|object} [options.clientRuntime.swup]
  * @returns {{ alpine: boolean, swup: boolean }}
  */

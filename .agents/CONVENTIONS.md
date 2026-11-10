@@ -54,7 +54,7 @@
 16. **ORM Column Numeric Shorthand (Single Argument)**:
    - **ALWAYS** allow numeric shorthands for `zdb.*` column helpers accepting lengths or counts (e.g. `zdb.string(200)`, `zdb.file(2048)`, `zdb.nanoid(21)`).
 17. **Peer Dependencies Boundary for Optional Runtime Tools**:
-   - **NEVER** declare client runtime packages (`@swup/*`, `alpinejs`, `swup`) or optional third-party integrations as mandatory `dependencies` in `package.json`.
+   - **NEVER** declare client runtime packages (`@swup/*`, `swup`) or optional third-party integrations as mandatory `dependencies` in `package.json`.
    - **ALWAYS** place them in `peerDependencies` with `peerDependenciesMeta: { [pkg]: { optional: true } }` and add graceful runtime checks.
 18. **Zero Phantom / Stale Docs Protocol**:
    - **NEVER** write documentation instructing users to `npm install` packages that are built into Webspresso (`express`, `knex`, `nunjucks`, `zod`, `express-session`, `jsonwebtoken`, `passport`).

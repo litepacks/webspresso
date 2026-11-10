@@ -1,5 +1,5 @@
 /**
- * Mount Express routes that serve vendored Alpine / Swup UMD builds from node_modules
+ * Mount Express routes that serve vendored Swup UMD builds from node_modules
  * and framework bootstrap scripts from src/client-runtime/.
  */
 
@@ -21,10 +21,10 @@ function pkgFileFromMain(pkg, ...segments) {
 
 /**
  * @param {import('express').Express} app
- * @param {{ alpine: boolean, swup: boolean }} flags
+ * @param {{ alpine?: boolean, swup: boolean }} flags
  */
 function mountClientRuntime(app, flags) {
-  if (!flags || (!flags.alpine && !flags.swup)) return;
+  if (!flags || !flags.swup) return;
 
   const express = require('express');
   const router = express.Router();
@@ -32,12 +32,6 @@ function mountClientRuntime(app, flags) {
   function send(res, filePath) {
     res.type('application/javascript');
     res.sendFile(filePath);
-  }
-
-  if (flags.alpine) {
-    router.get('/alpine.min.js', (req, res) => {
-      send(res, pkgFileFromMain('alpinejs', 'cdn.min.js'));
-    });
   }
 
   if (flags.swup) {
@@ -51,15 +45,9 @@ function mountClientRuntime(app, flags) {
       send(res, pkgFileFromMain('@swup/scripts-plugin', 'index.umd.js'));
     });
     const runtimeDir = __dirname;
-    if (flags.alpine) {
-      router.get('/bootstrap-alpine-swup.js', (req, res) => {
-        send(res, path.join(runtimeDir, 'bootstrap-alpine-swup.js'));
-      });
-    } else {
-      router.get('/bootstrap-swup.js', (req, res) => {
-        send(res, path.join(runtimeDir, 'bootstrap-swup.js'));
-      });
-    }
+    router.get(['/bootstrap-swup.js', '/bootstrap-alpine-swup.js'], (req, res) => {
+      send(res, path.join(runtimeDir, 'bootstrap-swup.js'));
+    });
   }
 
   app.use(CLIENT_RUNTIME_BASE, router);

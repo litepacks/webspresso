@@ -151,7 +151,6 @@
     "@faker-js/faker": ">=8.0.0",
     "@swup/head-plugin": ">=2.0.0",
     "@swup/scripts-plugin": ">=2.0.0",
-    "alpinejs": ">=3.0.0",
     "bcrypt": ">=5.0.0",
     "better-sqlite3": ">=9.0.0",
     "dotenv": ">=16.0.0",
@@ -204,9 +203,6 @@
     "@swup/scripts-plugin": {
       "optional": true
     },
-    "alpinejs": {
-      "optional": true
-    },
     "swup": {
       "optional": true
     }
@@ -219,7 +215,6 @@
     "@types/express": "^5.0.0",
     "@types/node": "^20.14.0",
     "@vitest/coverage-v8": "^4.1.11",
-    "alpinejs": "^3.15.11",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^11.10.0",
     "chokidar": "^4.0.3",

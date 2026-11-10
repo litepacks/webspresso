@@ -22,5 +22,14 @@
     plugins: [new SwupHeadPlugin(), new SwupScriptsPlugin()],
     ignoreVisit: ignoreVisit,
   });
+
+  // Re-initialize Alpine components after swup replaces page content if Alpine is loaded on the page
+  swup.hooks.on('content:replace', function () {
+    var root = document.querySelector('#swup');
+    if (root && typeof window !== 'undefined' && window.Alpine && typeof window.Alpine.initTree === 'function') {
+      window.Alpine.initTree(root);
+    }
+  });
+
   window.__webspressoSwup = swup;
 })();

@@ -32,6 +32,9 @@ Layout shells live in `views/layout.njk` and use Nunjucks block inheritance:
   </main>
   
   {% include "views/partials/footer.njk" %}
+
+  <!-- Client-side libraries (e.g. Alpine.js, HTMX, or custom client scripts) -->
+  {% block scripts %}{% endblock %}
 </body>
 </html>
 ```

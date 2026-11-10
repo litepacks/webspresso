@@ -20,16 +20,14 @@ function baseOpts() {
 
 describe('createApp HTTP extras (integration)', () => {
   describe('clientRuntime', () => {
-    it('serves Alpine when clientRuntime.alpine is true', async () => {
+    it('does not serve Alpine internally even when clientRuntime.alpine is specified', async () => {
       const { app } = createApp({
         ...baseOpts(),
         clientRuntime: { alpine: true },
       });
-      const res = await request(app)
+      await request(app)
         .get('/__webspresso/client-runtime/alpine.min.js')
-        .expect(200);
-      expect(res.headers['content-type']).toMatch(/javascript/);
-      expect(res.text.length).toBeGreaterThan(500);
+        .expect(404);
     });
 
     it('serves Swup UMD when clientRuntime.swup is true', async () => {
@@ -43,18 +41,7 @@ describe('createApp HTTP extras (integration)', () => {
       expect(res.text.length).toBeGreaterThan(500);
     });
 
-    it('serves bootstrap-alpine-swup when both flags are on', async () => {
-      const { app } = createApp({
-        ...baseOpts(),
-        clientRuntime: { alpine: true, swup: true },
-      });
-      const res = await request(app)
-        .get('/__webspresso/client-runtime/bootstrap-alpine-swup.js')
-        .expect(200);
-      expect(res.text).toContain('swup');
-    });
-
-    it('serves bootstrap-swup when only swup is on', async () => {
+    it('serves bootstrap-swup when swup is on', async () => {
       const { app } = createApp({
         ...baseOpts(),
         clientRuntime: { swup: true },
@@ -63,6 +50,18 @@ describe('createApp HTTP extras (integration)', () => {
         .get('/__webspresso/client-runtime/bootstrap-swup.js')
         .expect(200);
       expect(res.text.length).toBeGreaterThan(50);
+      expect(res.text).toContain('swup');
+    });
+
+    it('aliases bootstrap-alpine-swup to bootstrap-swup when swup is on', async () => {
+      const { app } = createApp({
+        ...baseOpts(),
+        clientRuntime: { swup: true },
+      });
+      const res = await request(app)
+        .get('/__webspresso/client-runtime/bootstrap-alpine-swup.js')
+        .expect(200);
+      expect(res.text).toContain('swup');
     });
   });
 
