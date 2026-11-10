@@ -383,4 +383,5 @@ Object.defineProperties(module.exports, {
   createClientDebugger: { get: () => require('./client').createClientDebugger, enumerable: true, configurable: true },
   defaultStorage: { get: () => require('./client').defaultStorage, enumerable: true, configurable: true },
   createClientStorage: { get: () => require('./client').createClientStorage, enumerable: true, configurable: true },
+  watch: { get: () => require('./client').watch, enumerable: true, configurable: true },
 });

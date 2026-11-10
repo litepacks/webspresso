@@ -6627,6 +6627,30 @@ export interface ControllerErrorMeta {
   [key: string]: unknown;
 }
 
+export type WatchSource<T = any> =
+  | (() => T)
+  | string
+  | [WatchSource<any>, ...WatchSource<any>[]]
+  | Record<string, any>;
+
+export type WatchCleanupCallback = (cleanupFn: () => void) => void;
+
+export type WatchCallback<T = any> = (
+  newValue: T,
+  oldValue: T | undefined,
+  onCleanup: (cleanupFn: () => void) => void
+) => void;
+
+export interface WatchOptions {
+  immediate?: boolean;
+  deep?: boolean;
+  once?: boolean;
+}
+
+export interface WatchDescriptor<T = any> extends WatchOptions {
+  handler: WatchCallback<T>;
+}
+
 export type ControllerErrorHandler<
   TState extends Record<string, any> = Record<string, any>,
   TTasks extends Record<string, ClientTask> = Record<string, ClientTask>
@@ -6670,6 +6694,11 @@ export interface ControllerContext<
   ): () => void;
   emit<TDetail = unknown>(eventName: string, detail?: TDetail, options?: CustomEventInit<TDetail>): boolean;
   effect(fn: () => void | (() => void)): () => void;
+  watch<T = any>(
+    source: WatchSource<T>,
+    callback: WatchCallback<T>,
+    options?: WatchOptions
+  ): () => void;
   interval(fn: () => void, ms: number): () => void;
   timeout(fn: () => void, ms: number): () => void;
   invalidate(tags: string | string[]): Promise<{ ok?: boolean; refreshed: string[]; errors?: Error[]; skipped?: boolean }>;
@@ -6734,6 +6763,7 @@ export interface ControllerDefinition<
     [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> }
   >;
   persist?: ControllerPersistConfig<TState> | (keyof TState & string)[] | 'local' | 'session' | null;
+  watch?: Record<string, WatchCallback<any> | WatchDescriptor<any>>;
   actions?: {
     [actionName: string]: ControllerActionHandler<
       [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> }
@@ -6748,6 +6778,12 @@ export function defineController<
 >(
   definition: ControllerDefinition<TState, TComputed, TTasks>
 ): ControllerDefinition<TState, TComputed, TTasks> & { __isWebspressoController: true };
+
+export function watch<T = any>(
+  source: WatchSource<T>,
+  callback: WatchCallback<T>,
+  options?: WatchOptions
+): () => void;
 
 export function deriveControllerNameFromPath(filePath: string): string;
 

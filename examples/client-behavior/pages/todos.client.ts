@@ -1,4 +1,4 @@
-import { defineController } from '../../../core/client';
+import { defineController, watch } from '../../../core/client';
 
 export default defineController({
   state: () => ({
@@ -40,10 +40,26 @@ export default defineController({
     }),
   },
 
-  connect({ forms }) {
+  connect({ forms, state }) {
     const createForm = forms.get('create-todo', {
       resetOnSuccess: true,
     });
+
+    // Vue-style reactive watcher: monitors selected task id and supports onCleanup
+    watch(
+      () => state.selectedTodoId,
+      (newId, _oldId, onCleanup) => {
+        let active = true;
+        onCleanup(() => {
+          active = false;
+        });
+        if (newId !== null && active) {
+          // Track or highlight selected task selection
+        }
+      },
+      { immediate: true }
+    );
+
     return () => {
       if (createForm) createForm.clearErrors();
     };

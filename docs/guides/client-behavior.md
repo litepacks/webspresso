@@ -995,6 +995,103 @@ Maintain filter state across page reloads or tab navigation by persisting fragme
   coordinator.clearStoredInput('dashboardMetrics');
   ```
 
+---
+
+## 14. Vue-Style Reactive Watchers (`watch`)
+
+Webspresso provides a Vue 3-inspired reactive `watch` API matching modern frontend developer ergonomics:
+
+```ts
+import { defineController, watch } from 'webspresso/client';
+
+export default defineController({
+  state: () => ({
+    status: 'idle',
+    race: { status: 'idle', count: 0 },
+    selectedId: null as number | null,
+  }),
+
+  connect({ state, watch }) {
+    let frame = 0;
+    function stop() {
+      if (frame) cancelAnimationFrame(frame);
+    }
+    function step() { /* ... */ }
+
+    // 1. Reactive Getter Function
+    watch(
+      () => state.race.status === 'running',
+      (running) => {
+        stop();
+        if (running) frame = requestAnimationFrame(step);
+      },
+      { immediate: true },
+    );
+
+    // 2. Side-Effect Cleanup with onCleanup
+    watch(
+      () => state.selectedId,
+      (newId, oldId, onCleanup) => {
+        let active = true;
+        onCleanup(() => {
+          active = false;
+        });
+        if (newId) {
+          fetch(`/api/items/${newId}`)
+            .then(r => r.json())
+            .then(data => { if (active) console.log(data); });
+        }
+      },
+      { immediate: true },
+    );
+  },
+
+  // 3. Declarative Watchers in Controller Definition
+  watch: {
+    status(newVal, oldVal, onCleanup, ctx) {
+      console.log(`Status changed from ${oldVal} to ${newVal}`);
+    },
+    'race.count': {
+      handler(newCount, oldCount) {
+        if (newCount >= 100) this.actions.finish();
+      },
+      immediate: true,
+      deep: true,
+    },
+  },
+});
+```
+
+### Key Watcher Invariants & Features:
+1. **Sources Supported**:
+   - **Getter Function**: `() => state.property` (evaluates dependencies automatically).
+   - **Dot-Path String**: `'race.status'` or `'filters.category'` (resolved on reactive state).
+   - **Array of Sources**: `[() => state.a, () => state.b]` (receives `([newA, newB], [oldA, oldB])`).
+   - **Reactive Object**: `state.user` or `state` (auto-deep touched).
+2. **Callback Signature**:
+   - `(newValue, oldValue, onCleanup) => void`.
+   - On the initial run with `{ immediate: true }`, `oldValue` is `undefined`.
+   - In declarative controller `watch: { ... }`, `this` is bound to `ctx`, and `(newValue, oldValue, onCleanup, ctx)` is passed.
+3. **Options**:
+   - `immediate?: boolean`: Runs callback immediately on mount/registration with `(initialValue, undefined)`.
+   - `deep?: boolean`: Recursively tracks nested objects and performs deep snapshot equality checks.
+   - `once?: boolean`: Fires only once and then automatically unregisters.
+4. **Side-Effect Cleanup (`onCleanup`)**:
+   - Pass a cleanup function `onCleanup(() => { /* cancel timer, abort fetch, stop animation */ })`.
+   - Executed right before the next watcher invocation and when the controller is unmounted/destroyed.
+5. **Untracked Callback Execution**:
+   - Accessing state properties inside the watcher callback does NOT register accidental reactive dependencies, preventing unintended trigger loops.
+6. **Automatic Teardown**:
+   - Watchers registered inside `connect()`, `ctx.watch(...)`, or declarative `watch: { ... }` automatically unregister when the controller is disconnected from the DOM.
+7. **Early Cancellation**:
+   - Every `watch(...)` call returns an `unwatch()` function for manual disposal:
+     ```ts
+     const unwatch = watch(() => state.count, (val) => { ... });
+     // Stop early:
+     unwatch();
+     ```
+
+
 
 
 

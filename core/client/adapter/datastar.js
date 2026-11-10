@@ -124,6 +124,16 @@ function createSignalsEngine() {
     };
   }
 
+  function untracked(fn) {
+    const prev = activeEffect;
+    activeEffect = null;
+    try {
+      return fn();
+    } finally {
+      activeEffect = prev;
+    }
+  }
+
   /**
    * Implements Datastar's public `SignalsRoot` contract:
    * exists(path), signal(path), value(path), setValue(path, val),
@@ -213,6 +223,7 @@ function createSignalsEngine() {
   return {
     signals: new CompatibleSignalsRoot(),
     effect,
+    untracked,
   };
 }
 

@@ -277,6 +277,62 @@ export default defineController({
 
 ---
 
+## 8.1 Vue-Style Reactive Watchers (`watch`)
+
+Webspresso controllers support Vue-style reactive watchers with getter functions, dot-paths, array sources, and side-effect cleanups:
+
+```ts
+import { defineController, watch } from 'webspresso/client';
+
+export default defineController({
+  state: () => ({
+    status: 'idle',
+    race: { status: 'idle', count: 0 },
+  }),
+
+  connect({ state, watch }) {
+    let frame = 0;
+    function stop() {
+      if (frame) cancelAnimationFrame(frame);
+    }
+    function step() { /* ... */ }
+
+    // Matches Vue 3 watch semantics:
+    watch(
+      () => state.race.status === 'running',
+      (running) => {
+        stop();
+        if (running) frame = requestAnimationFrame(step);
+      },
+      { immediate: true },
+    );
+  },
+
+  // Declarative watcher definition option:
+  watch: {
+    'race.count': {
+      handler(newCount, oldCount) {
+        if (newCount >= 100) this.actions.finish();
+      },
+      immediate: true,
+      deep: true,
+    },
+  },
+});
+```
+
+### Watcher Capabilities:
+- **Getter function source**: `() => state.property === value`
+- **Dot-path source**: `'race.status'` or `'filters.category'`
+- **Array of sources**: `[() => state.a, () => state.b]`
+- **Callback**: `(newValue, oldValue, onCleanup) => void`
+- **Side-effect cleanup**: `onCleanup(() => { /* abort, cancel */ })`
+- **Options**: `{ immediate: true, deep: true, once: true }`
+- **Untracked execution**: Accessing state inside the callback does not register unwanted dependencies
+- **Lifecycle cleanup**: Automatically cleaned up on controller disconnect/destroy
+
+---
+
 ## 9. Typed API Client & `.webspresso/api.d.ts`
 
 - When route manifests are generated, `api.get('/api/todos/insights')` automatically derives its response type from `AppApiRouteMap`.

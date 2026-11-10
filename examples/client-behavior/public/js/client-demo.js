@@ -695,6 +695,16 @@ function createSignalsEngine() {
     };
   }
 
+  function untracked(fn) {
+    const prev = activeEffect;
+    activeEffect = null;
+    try {
+      return fn();
+    } finally {
+      activeEffect = prev;
+    }
+  }
+
   /**
    * Implements Datastar's public `SignalsRoot` contract:
    * exists(path), signal(path), value(path), setValue(path, val),
@@ -784,6 +794,7 @@ function createSignalsEngine() {
   return {
     signals: new CompatibleSignalsRoot(),
     effect,
+    untracked,
   };
 }
 
@@ -4834,6 +4845,199 @@ const { defaultStorage, createClientStorage } = require('./storage');
 const { decorateElement } = require('./utils');
 
 let instanceSeq = 0;
+let activeControllerContext = null;
+
+function getActiveControllerContext() {
+  return activeControllerContext;
+}
+
+function resolveStatePath(root, pathStr) {
+  if (!root || !pathStr) return undefined;
+  const parts = String(pathStr).split('.');
+  let cur = root;
+  for (let i = 0; i < parts.length; i++) {
+    if (cur === null || typeof cur !== 'object') return undefined;
+    cur = cur[parts[i]];
+  }
+  return cur;
+}
+
+function deepTouch(val, visited = new Set()) {
+  if (val === null || typeof val !== 'object' || visited.has(val)) {
+    return;
+  }
+  visited.add(val);
+  if (Array.isArray(val)) {
+    for (let i = 0; i < val.length; i++) {
+      deepTouch(val[i], visited);
+    }
+  } else {
+    const keys = Object.keys(val);
+    for (let i = 0; i < keys.length; i++) {
+      deepTouch(val[keys[i]], visited);
+    }
+  }
+}
+
+function deepCloneOrSnapshot(val) {
+  if (val === null || typeof val !== 'object') return val;
+  try {
+    return JSON.parse(JSON.stringify(val));
+  } catch {
+    return Array.isArray(val) ? [...val] : { ...val };
+  }
+}
+
+function deepEqual(a, b) {
+  if (Object.is(a, b)) return true;
+  if (a === null || typeof a !== 'object' || b === null || typeof b !== 'object') return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (let i = 0; i < keysA.length; i++) {
+    const k = keysA[i];
+    if (!Object.prototype.hasOwnProperty.call(b, k) || !deepEqual(a[k], b[k])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function hasArrayChanged(newArr, oldArr) {
+  if (!Array.isArray(newArr) || !Array.isArray(oldArr)) return !Object.is(newArr, oldArr);
+  if (newArr.length !== oldArr.length) return true;
+  for (let i = 0; i < newArr.length; i++) {
+    if (!Object.is(newArr[i], oldArr[i])) return true;
+  }
+  return false;
+}
+
+function runUntracked(engine, fn) {
+  if (engine && typeof engine.untracked === 'function') {
+    return engine.untracked(fn);
+  }
+  return fn();
+}
+
+function createStandaloneWatch(engine, source, callback, options = {}) {
+  if (typeof callback !== 'function') {
+    throw new TypeError('watch(source, callback) requires callback to be a function.');
+  }
+
+  const immediate = Boolean(options.immediate);
+  const deep = Boolean(options.deep);
+  const once = Boolean(options.once);
+
+  let getter;
+  if (typeof source === 'function') {
+    getter = source;
+  } else if (Array.isArray(source)) {
+    getter = () => source.map((s) => (typeof s === 'function' ? s() : s));
+  } else {
+    getter = () => source;
+  }
+
+  let oldValue = undefined;
+  let isFirstRun = true;
+  let stopped = false;
+  let userCleanup = null;
+
+  function runCleanup() {
+    if (typeof userCleanup === 'function') {
+      try {
+        userCleanup();
+      } catch (_e) {}
+      userCleanup = null;
+    }
+  }
+
+  function onCleanup(fn) {
+    if (typeof fn === 'function') {
+      userCleanup = fn;
+    }
+  }
+
+  function stopWatch() {
+    if (stopped) return;
+    stopped = true;
+    runCleanup();
+    stopEffect();
+  }
+
+  const stopEffect = engine.effect(() => {
+    if (stopped) return;
+
+    let newValue;
+    try {
+      newValue = getter();
+      if ((deep || (source && typeof source === 'object' && typeof source !== 'function' && !Array.isArray(source))) && newValue && typeof newValue === 'object') {
+        deepTouch(newValue);
+      }
+    } catch (_err) {
+      return;
+    }
+
+    const isArr = Array.isArray(source);
+
+    if (isFirstRun) {
+      isFirstRun = false;
+      oldValue = deep ? deepCloneOrSnapshot(newValue) : isArr ? [...newValue] : newValue;
+      if (immediate) {
+        runCleanup();
+        runUntracked(engine, () => {
+          callback(newValue, undefined, onCleanup);
+        });
+        if (once) stopWatch();
+      }
+      return;
+    }
+
+    const hasChanged = deep
+      ? !deepEqual(newValue, oldValue)
+      : isArr
+        ? hasArrayChanged(newValue, oldValue)
+        : !Object.is(newValue, oldValue);
+
+    if (!hasChanged) return;
+
+    const prev = oldValue;
+    oldValue = deep ? deepCloneOrSnapshot(newValue) : isArr ? [...newValue] : newValue;
+
+    runCleanup();
+    runUntracked(engine, () => {
+      callback(newValue, prev, onCleanup);
+    });
+
+    if (once) stopWatch();
+  });
+
+  return stopWatch;
+}
+
+/**
+ * Vue-style reactive watcher.
+ *
+ * @template T
+ * @param {(() => T) | string | Array<any>} source - Reactive getter function, state dot-path, or array of sources
+ * @param {(newValue: T, oldValue: T | undefined, onCleanup: (fn: () => void) => void) => void} callback - Handler invoked when value changes
+ * @param {object} [options]
+ * @param {boolean} [options.immediate=false] - Trigger callback immediately on registration
+ * @param {boolean} [options.deep=false] - Deep watch nested object/array mutations
+ * @param {boolean} [options.once=false] - Stop watching automatically after first trigger
+ * @returns {() => void} Unwatch function
+ */
+function watch(source, callback, options = {}) {
+  if (activeControllerContext && typeof activeControllerContext.watch === 'function') {
+    return activeControllerContext.watch(source, callback, options);
+  }
+  const { createDatastarAdapter } = require('./adapter/datastar');
+  const engine = createDatastarAdapter().engine;
+  if (!engine || typeof engine.effect !== 'function') {
+    return () => {};
+  }
+  return createStandaloneWatch(engine, source, callback, options);
+}
 
 /**
  * Derive a deterministic controller name from a `.client.{js,ts}` file path.
@@ -4936,6 +5140,9 @@ function defineController(definition = {}) {
   }
   if (definition.tasks !== undefined && (typeof definition.tasks !== 'object' || definition.tasks === null)) {
     throw new TypeError('defineController({ tasks }) must be an object of task factory functions.');
+  }
+  if (definition.watch !== undefined && (typeof definition.watch !== 'object' || definition.watch === null)) {
+    throw new TypeError('defineController({ watch }) must be an object of watcher functions or descriptors.');
   }
   if (definition.onError !== undefined && typeof definition.onError !== 'function') {
     throw new TypeError('defineController({ onError }) must be an error handler function `(err, ctx, meta) => void`.');
@@ -5427,6 +5634,129 @@ function createControllerRuntime(options = {}) {
       return stop;
     }
 
+    function registerWatch(source, callback, options = {}) {
+      if (!isConnected()) return () => {};
+      if (typeof callback !== 'function') {
+        throw new TypeError('watch(source, callback) requires callback to be a function.');
+      }
+
+      const immediate = Boolean(options.immediate);
+      const deep = Boolean(options.deep);
+      const once = Boolean(options.once);
+
+      let getter;
+      if (typeof source === 'function') {
+        getter = () => source(ctx);
+      } else if (typeof source === 'string') {
+        getter = () => resolveStatePath(state, source);
+      } else if (Array.isArray(source)) {
+        getter = () =>
+          source.map((s) =>
+            typeof s === 'function'
+              ? s(ctx)
+              : typeof s === 'string'
+                ? resolveStatePath(state, s)
+                : s
+          );
+      } else if (source && typeof source === 'object') {
+        getter = () => source;
+      } else {
+        getter = () => source;
+      }
+
+      let oldValue = undefined;
+      let isFirstRun = true;
+      let stopped = false;
+      let userCleanup = null;
+
+      function runCleanup() {
+        if (typeof userCleanup === 'function') {
+          try {
+            userCleanup();
+          } catch (e) {
+            handleError(e, 'watch:cleanup');
+          }
+          userCleanup = null;
+        }
+      }
+
+      function onCleanup(fn) {
+        if (typeof fn === 'function') {
+          userCleanup = fn;
+        }
+      }
+
+      function stopWatch() {
+        if (stopped) return;
+        stopped = true;
+        runCleanup();
+        stopEffect();
+      }
+
+      const stopEffect = datastar.engine.effect(() => {
+        if (stopped || !isConnected()) return;
+
+        let newValue;
+        try {
+          newValue = getter();
+          if ((deep || (source && typeof source === 'object' && typeof source !== 'function' && !Array.isArray(source))) && newValue && typeof newValue === 'object') {
+            deepTouch(newValue);
+          }
+        } catch (err) {
+          handleError(err, 'watch:getter');
+          return;
+        }
+
+        const isArr = Array.isArray(source);
+
+        if (isFirstRun) {
+          isFirstRun = false;
+          oldValue = deep ? deepCloneOrSnapshot(newValue) : isArr ? [...newValue] : newValue;
+          if (immediate) {
+            try {
+              runCleanup();
+              runUntracked(datastar.engine, () => {
+                callback(newValue, undefined, onCleanup);
+              });
+            } catch (err) {
+              handleError(err, 'watch:callback');
+            }
+            if (once) {
+              stopWatch();
+            }
+          }
+          return;
+        }
+
+        const hasChanged = deep
+          ? !deepEqual(newValue, oldValue)
+          : isArr
+            ? hasArrayChanged(newValue, oldValue)
+            : !Object.is(newValue, oldValue);
+
+        if (!hasChanged) return;
+
+        const prev = oldValue;
+        oldValue = deep ? deepCloneOrSnapshot(newValue) : isArr ? [...newValue] : newValue;
+
+        try {
+          runCleanup();
+          runUntracked(datastar.engine, () => {
+            callback(newValue, prev, onCleanup);
+          });
+        } catch (err) {
+          handleError(err, 'watch:callback');
+        }
+
+        if (once) {
+          stopWatch();
+        }
+      });
+
+      cleanupCallbacks.push(stopWatch);
+      return stopWatch;
+    }
+
     function registerListener(targetOrEventName, eventNameOrHandler, handlerOrOptions, maybeOptions) {
       if (!isConnected()) return () => {};
       let targetEl = rootEl;
@@ -5688,6 +6018,7 @@ function createControllerRuntime(options = {}) {
       on: registerListener,
       emit: emitEvent,
       effect: registerEffect,
+      watch: registerWatch,
       interval: registerInterval,
       timeout: registerTimeout,
       signal: lifecycleAbort.signal,
@@ -5771,6 +6102,29 @@ function createControllerRuntime(options = {}) {
       }
     }
 
+    // Register declarative watchers from definition
+    if (reg.definition.watch && typeof reg.definition.watch === 'object') {
+      for (const [watchKey, watchDef] of Object.entries(reg.definition.watch)) {
+        if (typeof watchDef === 'function') {
+          registerWatch(watchKey, (newVal, oldVal, onCleanup) => {
+            watchDef.call(ctx, newVal, oldVal, onCleanup, ctx);
+          });
+        } else if (watchDef && typeof watchDef === 'object' && typeof watchDef.handler === 'function') {
+          registerWatch(
+            watchKey,
+            (newVal, oldVal, onCleanup) => {
+              watchDef.handler.call(ctx, newVal, oldVal, onCleanup, ctx);
+            },
+            {
+              immediate: watchDef.immediate,
+              deep: watchDef.deep,
+              once: watchDef.once,
+            }
+          );
+        }
+      }
+    }
+
     function invokeAction(actionName, event, actionEl) {
       if (!isConnected()) return undefined;
       const fn = reg.definition.actions[actionName];
@@ -5779,6 +6133,8 @@ function createControllerRuntime(options = {}) {
       }
       const decoratedEl = decorateElement(actionEl);
       currentActionEl = decoratedEl || null;
+      const prevContext = activeControllerContext;
+      activeControllerContext = ctx;
       try {
         const res = fn(ctx, event, decoratedEl);
         if (res && typeof res.then === 'function') {
@@ -5806,6 +6162,7 @@ function createControllerRuntime(options = {}) {
         throw err;
       } finally {
         currentActionEl = null;
+        activeControllerContext = prevContext;
       }
     }
 
@@ -5877,6 +6234,8 @@ function createControllerRuntime(options = {}) {
 
     // 8. Run `connect(ctx)` lifecycle hook
     if (reg.definition.connect) {
+      const prevContext = activeControllerContext;
+      activeControllerContext = ctx;
       try {
         const userCleanup = reg.definition.connect(ctx);
         if (typeof userCleanup === 'function') {
@@ -5887,6 +6246,8 @@ function createControllerRuntime(options = {}) {
         if (debug) {
           debug.trackCleanupError(instanceId, controllerName, 'connect', err);
         }
+      } finally {
+        activeControllerContext = prevContext;
       }
     }
 
@@ -6162,6 +6523,8 @@ module.exports = {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 };
 
 
@@ -7474,6 +7837,8 @@ const {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 } = require('./controller');
 
 const {
@@ -7710,6 +8075,8 @@ module.exports = {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 
   // Typed API Client & Request Management
   ClientRequestError,
@@ -7839,6 +8206,8 @@ const {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 } = require('./controller');
 
 const {
@@ -8075,6 +8444,8 @@ module.exports = {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 
   // Typed API Client & Request Management
   ClientRequestError,
@@ -8204,6 +8575,8 @@ const {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 } = require('./controller');
 
 const {
@@ -8440,6 +8813,8 @@ module.exports = {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 
   // Typed API Client & Request Management
   ClientRequestError,
@@ -8569,6 +8944,8 @@ const {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 } = require('./controller');
 
 const {
@@ -8805,6 +9182,8 @@ module.exports = {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 
   // Typed API Client & Request Management
   ClientRequestError,
@@ -8934,6 +9313,8 @@ const {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 } = require('./controller');
 
 const {
@@ -9170,6 +9551,8 @@ module.exports = {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 
   // Typed API Client & Request Management
   ClientRequestError,
@@ -9299,6 +9682,8 @@ const {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 } = require('./controller');
 
 const {
@@ -9535,6 +9920,8 @@ module.exports = {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 
   // Typed API Client & Request Management
   ClientRequestError,
@@ -9664,6 +10051,8 @@ const {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 } = require('./controller');
 
 const {
@@ -9900,6 +10289,8 @@ module.exports = {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 
   // Typed API Client & Request Management
   ClientRequestError,
@@ -10030,10 +10421,20 @@ exports.default = (0, client_1.defineController)({
             concurrency: 'latest',
         }),
     },
-    connect({ forms }) {
+    connect({ forms, state }) {
         const createForm = forms.get('create-todo', {
             resetOnSuccess: true,
         });
+        // Vue-style reactive watcher: monitors selected task id and supports onCleanup
+        (0, client_1.watch)(() => state.selectedTodoId, (newId, _oldId, onCleanup) => {
+            let active = true;
+            onCleanup(() => {
+                active = false;
+            });
+            if (newId !== null && active) {
+                // Track or highlight selected task selection
+            }
+        }, { immediate: true });
         return () => {
             if (createForm)
                 createForm.clearErrors();

@@ -38,6 +38,8 @@ const {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 } = require('./controller');
 
 const {
@@ -274,6 +276,8 @@ module.exports = {
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
+  watch,
+  getActiveControllerContext,
 
   // Typed API Client & Request Management
   ClientRequestError,
