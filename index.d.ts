@@ -6346,31 +6346,53 @@ export declare const flags: {
  * ========================================================================= */
 
 export type ClientConcurrencyPolicy = 'latest' | 'drop' | 'queue' | 'parallel';
-export type ClientRequestErrorKind = 'http' | 'network' | 'validation' | 'canceled';
+export type ClientRequestErrorKind = 'http' | 'network' | 'validation' | 'canceled' | 'timeout';
 
 export class ClientRequestError<TData = unknown> extends Error {
   readonly kind: ClientRequestErrorKind;
-  readonly status: number;
+  readonly status: number | null;
+  readonly code: string;
   readonly data: TData | null;
   readonly fieldErrors: Record<string, string>;
-  readonly formError: string;
+  readonly fieldErrorList: Record<string, string[]>;
+  readonly issues: Array<{ path: string; message: string; code?: string }>;
+  readonly formError: string | null;
   readonly method: string;
   readonly url: string;
+  readonly key: string;
   readonly isCanceled: boolean;
   readonly isValidation: boolean;
   readonly isNetwork: boolean;
   readonly isHttp: boolean;
+  readonly isTimedOut: boolean;
+  readonly isDropped: boolean;
+  readonly isSuperseded: boolean;
+  readonly cause?: unknown;
   constructor(options: {
     message: string;
     kind: ClientRequestErrorKind;
     status?: number;
+    code?: string;
     data?: TData | null;
     fieldErrors?: Record<string, string>;
     formError?: string;
     method?: string;
     url?: string;
+    key?: string;
     cause?: unknown;
+    isTimedOut?: boolean;
+    isDropped?: boolean;
+    isSuperseded?: boolean;
   });
+}
+
+export interface ClientRetryOptions {
+  count?: number;
+  delay?: number;
+  maxDelay?: number;
+  backoff?: 'exponential' | 'linear';
+  statusCodes?: number[];
+  onRetry?: (err: Error | ClientRequestError, attempt: number, delay: number) => void;
 }
 
 export interface ClientRequestCallOptions<
@@ -6383,8 +6405,12 @@ export interface ClientRequestCallOptions<
   signal?: AbortSignal;
   key?: string;
   concurrency?: ClientConcurrencyPolicy;
+  policy?: ClientConcurrencyPolicy;
   formData?: boolean;
   skipInvalidation?: boolean;
+  timeout?: number;
+  retry?: boolean | number | ClientRetryOptions;
+  retryMutations?: boolean;
 }
 
 export interface AppApiRouteMap {
@@ -6537,6 +6563,24 @@ export interface ControllerFragmentHandle<TInput extends Record<string, any> = R
   ): Promise<{ ok?: boolean; refreshed: string[]; errors?: Error[]; skipped?: boolean; canceled?: boolean }>;
 }
 
+export interface ControllerErrorMeta {
+  action?: string;
+  task?: string;
+  event?: Event;
+  actionEl?: HTMLElement | null;
+  phase?: 'action' | 'task' | 'connect' | 'disconnect';
+  [key: string]: unknown;
+}
+
+export type ControllerErrorHandler<
+  TState extends Record<string, any> = Record<string, any>,
+  TTasks extends Record<string, ClientTask> = Record<string, ClientTask>
+> = (
+  err: Error | ClientRequestError,
+  ctx: ControllerContext<TState, TTasks>,
+  meta?: ControllerErrorMeta
+) => void | boolean;
+
 export interface ControllerContext<
   TState extends Record<string, any> = Record<string, any>,
   TTasks extends Record<string, ClientTask> = Record<string, ClientTask>
@@ -6551,6 +6595,9 @@ export interface ControllerContext<
   readonly signal: AbortSignal;
   readonly isConnected: () => boolean;
   readonly isDisposed: () => boolean;
+  readonly lastError: Error | null;
+  clearError(): void;
+  onError(listener: (err: Error, meta?: ControllerErrorMeta) => void): () => void;
   task<TData = any, TArgs extends unknown[] = any[]>(
     runFn: (...args: TArgs) => Promise<TData>,
     options?: ClientTaskOptions
@@ -6572,7 +6619,7 @@ export interface ControllerContext<
   refresh<TInput extends Record<string, any> = Record<string, any>>(
     idOrName: string,
     nextInput?: Partial<TInput> & Record<string, unknown>,
-    options?: { replaceInput?: boolean }
+    options?: { replaceInput?: boolean; timeout?: number }
   ): Promise<{ ok?: boolean; refreshed: string[]; errors?: Error[]; skipped?: boolean; canceled?: boolean }>;
   fragment<TInput extends Record<string, any> = Record<string, any>>(
     idOrName: string
@@ -6619,6 +6666,9 @@ export interface ControllerDefinition<
       [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> }
     >
   ) => void;
+  onError?: ControllerErrorHandler<
+    [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> }
+  >;
   actions?: {
     [actionName: string]: ControllerActionHandler<
       [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> }

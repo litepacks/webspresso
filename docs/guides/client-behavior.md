@@ -280,6 +280,144 @@ API routes declare invalidated tags using `apiResult(data, { invalidate })` or `
 - **Parent/Child Deduplication**: If both a parent fragment and a nested child fragment are invalidated in the same batch, only the parent fragment is requested from the server (`deduplicateParentChildFragments`).
 - **Zero-Match Skip**: If an API response invalidates tags that no active fragment on the current page depends on, zero network requests are made.
 
+### 6.4 Multi-Fragment Pages: Architecture & Placement
+A single page can host multiple SSR fragments, each responsible for an independent region of the screen (e.g. counters, data tables, sidebars, activity streams):
+
+```js
+// pages/dashboard.js
+const { defineFragment } = require('webspresso');
+
+module.exports = {
+  fragments: {
+    summary: defineFragment({
+      template: 'partials/dashboard-summary.njk',
+      dependsOn: ['orders', 'users'],
+      async load({ db, ctx }) {
+        const orderCount = await ctx.memo('count:orders', () => db.getRepository('Order').count());
+        const userCount = await ctx.memo('count:users', () => db.getRepository('User').count());
+        return { orderCount, userCount };
+      },
+    }),
+    ordersList: defineFragment({
+      template: 'partials/dashboard-orders.njk',
+      dependsOn: ['orders'],
+      schema: ({ z }) => ({ limit: z.coerce.number().default(10) }),
+      async load({ db, input }) {
+        const orders = await db.getRepository('Order').query().limit(input.limit).find();
+        return { orders };
+      },
+    }),
+    notifications: defineFragment({
+      template: 'partials/dashboard-notifications.njk',
+      dependsOn: ['notifications'],
+      async load({ db, user }) {
+        const unread = await db.getRepository('Notification').find({ userId: user.id, isRead: false });
+        return { unread };
+      },
+    }),
+  },
+  async load() {
+    return { title: 'Dashboard' };
+  },
+};
+```
+
+In the Nunjucks template (`pages/dashboard.njk`), fragments are rendered anywhere using `{{ fsy.fragment('name', input?, options?) }}`:
+
+```html
+{% extends "layout.njk" %}
+
+{% block content %}
+  <header>
+    <h1>{{ title }}</h1>
+    {{ fsy.fragment('summary') }}
+  </header>
+
+  <main class="grid grid-cols-3 gap-6">
+    <div class="col-span-2">
+      <!-- Passing input schema parameters -->
+      {{ fsy.fragment('ordersList', { limit: 10 }) }}
+    </div>
+
+    <aside>
+      <!-- Optional explicit instance ID if the same fragment appears multiple times -->
+      {{ fsy.fragment('notifications', {}, { id: 'sidebar-notifications' }) }}
+    </aside>
+  </main>
+{% endblock %}
+```
+
+#### Definition Name (`name`) vs Instance ID (`instanceId`)
+- `data-w-fragment="name"` indicates the fragment definition to load on the server.
+- `data-w-fragment-id="instanceId"` uniquely identifies the specific DOM element on the page.
+- If omitted, Webspresso automatically assigns deterministic instance IDs (`name:default`, `name:1`, etc.).
+- When the server returns refreshed HTML, each fragment updates its corresponding DOM container by `instanceId`.
+
+### 6.5 Parent-Child (Nested) Fragments & Automatic Deduplication
+Fragments can be nested inside one another (a parent fragment wrapping a child fragment):
+
+```html
+<!-- Parent Fragment -->
+<div data-w-fragment="projectDetail" data-w-fragment-id="project-1" data-w-depends-on="tasks">
+  <h2>Project Alpha</h2>
+
+  <!-- Nested Child Fragment -->
+  <div data-w-fragment="taskList" data-w-fragment-id="tasks-1" data-w-depends-on="tasks">
+    <ul>...</ul>
+  </div>
+</div>
+```
+
+#### The `deduplicateParentChildFragments` Invariant
+When a task mutation occurs and invalidates `'tasks'`:
+1. Both `projectDetail` (parent) and `taskList` (child) match the invalidated tag.
+2. Webspresso inspects the DOM hierarchy using `element.contains()`.
+3. Because `taskList` is inside `projectDetail`'s DOM subtree, **Webspresso automatically strips the child from the outgoing batch request!**
+4. Only `projectDetail` is requested from `POST /__webspresso/fragments`.
+5. When the server re-renders `projectDetail`, its template inherently renders the fresh `taskList` inside it.
+6. This eliminates redundant SQL queries, double payload transfers, and conflicting DOM patch races.
+
+### 6.6 Inter-Fragment Communication Patterns
+Fragments in Webspresso communicate across 4 distinct mechanisms depending on the scope of the interaction:
+
+1. **Tag-Based Invalidation (`dependsOn` + `invalidate`)**:
+   - The primary decoupling mechanism. Mutations return `apiResult(data, { invalidate: ['orders'] })`.
+   - All active fragments declaring `dependsOn: ['orders']` refresh automatically in a single batched HTTP request.
+2. **Server-Side Request-Scoped Memoization (`ctx.memo`)**:
+   - When multiple sibling fragments refresh together, shared queries inside `load()` use `ctx.memo('key', fn)`.
+   - The query executes once; subsequent fragments in the same batch receive the cached promise. The cache is destroyed immediately when the request finishes.
+3. **Programmatic Controller Control (`ctx.refresh` & `ctx.fragment`)**:
+   - A client controller can read another fragment's active input or trigger an explicit refresh with new parameters:
+     ```ts
+     // Read active input of another fragment
+     const currentLimit = ctx.fragment('ordersList').input.limit;
+
+     // Trigger explicit refresh with updated input
+     await ctx.refresh('ordersList', { limit: currentLimit + 10 });
+     ```
+4. **Decoupled DOM CustomEvents (`ctx.emit` & `ctx.on`)**:
+   - When a controller in Fragment A performs an action, it emits a standard DOM CustomEvent:
+     ```ts
+     // In CategorySidebar controller:
+     ctx.emit('category:selected', { categoryId: el.dataset.id });
+     ```
+   - A controller in Fragment B listens and reacts:
+     ```ts
+     // In ProductGrid controller:
+     connect(ctx) {
+       return ctx.on(window, 'category:selected', (evt: CustomEvent) => {
+         ctx.refresh('productsList', { categoryId: evt.detail.categoryId });
+       });
+     }
+     ```
+
+### 6.7 Single-Ownership Rule, Morphing & State Preservation
+During fragment morphing (`morphDomTrees`), Webspresso guarantees smooth UX via the **Single-Ownership Rule**:
+- **Dirty Inputs Never Overwritten**: Form fields being edited by the user are preserved and will not be overwritten by incoming server HTML.
+- **Focus & Selection Retained**: Active element focus (`document.activeElement`) and text selection (`selectionStart`/`selectionEnd`) are maintained across DOM patches.
+- **Controller Lifecycle Intact**: Controller instances, listeners, and Datastar reactive signals survive across fragment refreshes without unmounting or losing local client state.
+- **Monotonic Version Tracking (`reqVersion`)**: Every fragment tracks a strictly increasing version counter. Out-of-order responses from slow network requests are discarded and never overwrite newer DOM state.
+
 ---
 
 ## 7. Asset Bundling, Build Pipeline & Production Serving
@@ -572,6 +710,84 @@ Older versions of Webspresso included internal Alpine.js bundling via `clientRun
 2. **Add the Alpine `<script>` tag** in `views/layout.njk` as shown in Section 11.1 above.
 3. **Configure Helmet CSP** in `createApp({ helmet })` if deploying to production with a strict CSP.
 4. **Remove `alpinejs`** from `package.json` if you were previously installing it solely as a Webspresso peer dependency.
+
+---
+
+## 12. Client Resilience & Fault Tolerance
+
+Webspresso provides enterprise-grade client resilience primitives to ensure smooth user experiences over spotty network connections.
+
+### 12.1 Fetch Request Timeouts
+Set explicit timeouts on any API request to prevent hanging promises:
+```ts
+// Aborts request after 5000ms if server does not respond
+const data = await ctx.api.get('/api/analytics', { timeout: 5000 });
+```
+When a timeout triggers, `ClientRequestError` is thrown with:
+- `err.kind === 'timeout'`
+- `err.isTimedOut === true`
+- `err.status === 408`
+- `err.code === 'REQUEST_TIMED_OUT'`
+
+### 12.2 Idempotent Retry Engine
+Automatically retry transient network failures and 5xx gateway errors on idempotent requests (`GET` and `HEAD`):
+```ts
+const stats = await ctx.api.get('/api/stats', {
+  retry: {
+    count: 3,                 // Maximum retry attempts
+    delay: 300,               // Initial backoff delay (ms)
+    maxDelay: 5000,           // Maximum backoff cap (ms)
+    backoff: 'exponential',    // 'exponential' | 'linear'
+    statusCodes: [408, 429, 502, 503, 504],
+    onRetry: (err, attempt, delay) => {
+      console.warn(`Retry attempt ${attempt} after ${delay}ms`);
+    },
+  },
+});
+```
+
+> [!WARNING]
+> **Mutation Safety Policy**: State-changing methods (`POST`, `PUT`, `PATCH`, `DELETE`) are **never** retried automatically by default. This prevents duplicate side effects (e.g. charging a credit card multiple times). If an endpoint is proven idempotent, you may explicitly pass `retryMutations: true`.
+
+### 12.3 Fragment Batch Refresh Timeout
+All SSR fragment batch refreshes have a default timeout of 15,000ms. You can configure or override this per coordinator or per refresh invocation:
+```ts
+// Per-refresh override
+await ctx.refresh('dashboard', { view: 'monthly' }, { timeout: 8000 });
+```
+
+### 12.4 Declarative Expression Logic
+Datastar attributes (`data-w-show`, `data-w-class`, `data-w-disabled`, etc.) support standard boolean logic operators (`&&`, `||`, `!`) and parenthesized grouping without `eval`:
+```html
+<div data-w-show="isLoaded && !hasError">Dashboard Ready</div>
+<div data-w-show="status === 'active' || status === 'pending'">In Progress</div>
+<div data-w-show="(role === 'admin' || role === 'owner') && isVerified">Restricted Actions</div>
+```
+
+### 12.5 Controller Error Boundaries
+Catch and handle action throws, async rejections, and task errors with structured boundaries:
+```ts
+export default defineController({
+  name: 'cart',
+
+  // Definition-level error hook
+  onError(err, ctx, meta) {
+    console.error(`[${ctx.name}] Action ${meta.action} failed:`, err);
+  },
+
+  actions: {
+    checkout({ api, lastError, clearError }) {
+      clearError();
+      return api.post('/api/checkout');
+    },
+  },
+});
+```
+- **`ctx.lastError`**: Accessible inside actions and lifecycle hooks.
+- **`ctx.clearError()`**: Resets `ctx.lastError`.
+- **`ctx.onError(listener)`**: Dynamic listener with automatic disconnect cleanup.
+- **`w-controller:error` DOM Event**: Bubbles up the DOM tree, allowing parent elements or global handlers to catch and report errors.
+
 
 
 

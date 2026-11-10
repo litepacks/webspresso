@@ -239,6 +239,123 @@ function resolveOperand(state, token) {
 }
 
 /**
+ * Safely strips balanced enclosing parentheses if the entire expression is wrapped in them:
+ * e.g. `(a && b)` -> `a && b`, but `(a && b) || (c && d)` is left unchanged.
+ *
+ * @param {string} raw
+ * @returns {string}
+ */
+function stripOuterParens(raw) {
+  let s = raw.trim();
+  while (s.startsWith('(') && s.endsWith(')')) {
+    let depth = 0;
+    let matched = true;
+    for (let i = 0; i < s.length - 1; i++) {
+      const ch = s[i];
+      if (ch === '(') depth++;
+      else if (ch === ')') {
+        depth--;
+        if (depth === 0) {
+          matched = false;
+          break;
+        }
+      }
+    }
+    if (matched) {
+      s = s.slice(1, -1).trim();
+    } else {
+      break;
+    }
+  }
+  return s;
+}
+
+/**
+ * Split an expression by an operator (e.g. '||', '&&') only at the top level
+ * (outside single/double quotes and outside balanced parentheses).
+ *
+ * @param {string} expr
+ * @param {string} op
+ * @returns {string[]|null}
+ */
+function splitTopLevel(expr, op) {
+  const parts = [];
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let depth = 0;
+  let lastIndex = 0;
+  const opLen = op.length;
+  const len = expr.length;
+
+  for (let i = 0; i < len; i++) {
+    const ch = expr[i];
+    const prev = i > 0 ? expr[i - 1] : '';
+
+    if (ch === "'" && !inDoubleQuote && prev !== '\\') {
+      inSingleQuote = !inSingleQuote;
+    } else if (ch === '"' && !inSingleQuote && prev !== '\\') {
+      inDoubleQuote = !inDoubleQuote;
+    } else if (!inSingleQuote && !inDoubleQuote) {
+      if (ch === '(') {
+        depth++;
+      } else if (ch === ')') {
+        if (depth > 0) depth--;
+      } else if (depth === 0 && expr.slice(i, i + opLen) === op) {
+        parts.push(expr.slice(lastIndex, i).trim());
+        lastIndex = i + opLen;
+        i += opLen - 1;
+      }
+    }
+  }
+
+  if (parts.length > 0) {
+    parts.push(expr.slice(lastIndex).trim());
+    return parts;
+  }
+
+  return null;
+}
+
+/**
+ * Find the first comparison operator at the top level outside quotes and parentheses.
+ */
+function findTopLevelComparison(expr) {
+  const operators = ['===', '!==', '==', '!=', '>=', '<=', '>', '<'];
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let depth = 0;
+  const len = expr.length;
+
+  for (let i = 0; i < len; i++) {
+    const ch = expr[i];
+    const prev = i > 0 ? expr[i - 1] : '';
+
+    if (ch === "'" && !inDoubleQuote && prev !== '\\') {
+      inSingleQuote = !inSingleQuote;
+    } else if (ch === '"' && !inSingleQuote && prev !== '\\') {
+      inDoubleQuote = !inDoubleQuote;
+    } else if (!inSingleQuote && !inDoubleQuote) {
+      if (ch === '(') {
+        depth++;
+      } else if (ch === ')') {
+        if (depth > 0) depth--;
+      } else if (depth === 0 && i > 0) {
+        for (const op of operators) {
+          if (expr.slice(i, i + op.length) === op) {
+            return {
+              op,
+              left: expr.slice(0, i).trim(),
+              right: expr.slice(i + op.length).trim(),
+            };
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Safely evaluate a declarative binding expression against controller state without
  * naive regex transformations or `eval`/`new Function`.
  *
@@ -246,6 +363,8 @@ function resolveOperand(state, token) {
  *   - Property path: `count`, `user.name`, `items.length`
  *   - Negation: `!pending`, `!!error`
  *   - Simple comparisons: `status === 'active'`, `count > 0`, `step !== 1`
+ *   - Logical operators: `isReady && !hasError`, `status === 'a' || status === 'b'`
+ *   - Parenthesized groups: `(a || b) && c`
  *
  * @param {object} state
  * @param {string} rawExpr
@@ -253,39 +372,55 @@ function resolveOperand(state, token) {
  */
 function evaluateStateExpression(state, rawExpr) {
   if (typeof rawExpr !== 'string') return undefined;
-  const expr = rawExpr.trim();
+  const expr = stripOuterParens(rawExpr.trim());
   if (!expr) return undefined;
 
-  // Check simple comparison operators in precedence order
-  const operators = ['===', '!==', '==', '!=', '>=', '<=', '>', '<'];
-  for (const op of operators) {
-    const idx = expr.indexOf(op);
-    if (idx > 0) {
-      const leftRaw = expr.slice(0, idx).trim();
-      const rightRaw = expr.slice(idx + op.length).trim();
-      if (leftRaw && rightRaw) {
-        const left = resolveOperand(state, leftRaw);
-        const right = resolveOperand(state, rightRaw);
-        switch (op) {
-          case '===':
-          case '==':
-            return left === right;
-          case '!==':
-          case '!=':
-            return left !== right;
-          case '>=':
-            return Number(left) >= Number(right);
-          case '<=':
-            return Number(left) <= Number(right);
-          case '>':
-            return Number(left) > Number(right);
-          case '<':
-            return Number(left) < Number(right);
-        }
-      }
+  // 1. Logical OR (||) - lowest precedence, evaluated first so that A || B && C splits into A and (B && C)
+  const orParts = splitTopLevel(expr, '||');
+  if (orParts && orParts.length > 1) {
+    let result = false;
+    for (const part of orParts) {
+      result = evaluateStateExpression(state, part);
+      if (result) return result;
+    }
+    return result;
+  }
+
+  // 2. Logical AND (&&) - higher precedence than ||
+  const andParts = splitTopLevel(expr, '&&');
+  if (andParts && andParts.length > 1) {
+    let result = true;
+    for (const part of andParts) {
+      result = evaluateStateExpression(state, part);
+      if (!result) return result;
+    }
+    return result;
+  }
+
+  // 3. Comparison operators (===, !==, ==, !=, >=, <=, >, <) outside quotes
+  const comp = findTopLevelComparison(expr);
+  if (comp && comp.left && comp.right) {
+    const left = resolveOperand(state, comp.left);
+    const right = resolveOperand(state, comp.right);
+    switch (comp.op) {
+      case '===':
+      case '==':
+        return left === right;
+      case '!==':
+      case '!=':
+        return left !== right;
+      case '>=':
+        return Number(left) >= Number(right);
+      case '<=':
+        return Number(left) <= Number(right);
+      case '>':
+        return Number(left) > Number(right);
+      case '<':
+        return Number(left) < Number(right);
     }
   }
 
+  // 4. Negations (!!, !)
   if (expr.startsWith('!!')) {
     return Boolean(evaluateStateExpression(state, expr.slice(2)));
   }
@@ -293,6 +428,7 @@ function evaluateStateExpression(state, rawExpr) {
     return !Boolean(evaluateStateExpression(state, expr.slice(1)));
   }
 
+  // 5. Literal token or property path lookup
   return resolveOperand(state, expr);
 }
 

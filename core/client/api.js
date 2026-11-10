@@ -27,17 +27,21 @@ const RESERVED_OPTION_KEYS = new Set([
   'csrfToken',
   'parseResponse',
   'onRefreshError',
+  'timeout',
+  'retry',
+  'retryMutations',
+  'raw',
 ]);
 
 /**
  * Structured Client Request Error
- * Distinguishes 'http', 'network', 'validation', and 'canceled' failure modes.
+ * Distinguishes 'http', 'network', 'validation', 'canceled', and 'timeout' failure modes.
  */
 class ClientRequestError extends Error {
   /**
    * @param {string} message
    * @param {object} details
-   * @param {'http'|'network'|'validation'|'canceled'} details.kind
+   * @param {'http'|'network'|'validation'|'canceled'|'timeout'} details.kind
    * @param {number|null} [details.status]
    * @param {string} [details.code]
    * @param {string} [details.method]
@@ -50,6 +54,7 @@ class ClientRequestError extends Error {
    * @param {unknown} [details.data]
    * @param {boolean} [details.isDropped]
    * @param {boolean} [details.isSuperseded]
+   * @param {boolean} [details.isTimedOut]
    * @param {Error} [details.cause]
    */
   constructor(message, details = {}) {
@@ -70,6 +75,11 @@ class ClientRequestError extends Error {
     this.isValidation = this.kind === 'validation';
     this.isNetwork = this.kind === 'network';
     this.isHttp = this.kind === 'http';
+    this.isTimedOut =
+      this.kind === 'timeout' ||
+      Boolean(details.isTimedOut) ||
+      this.code === 'REQUEST_TIMED_OUT' ||
+      this.status === 408;
     this.isDropped = Boolean(details.isDropped);
     this.isSuperseded = Boolean(details.isSuperseded);
     this.serverRollbackGuaranteed = false;
@@ -83,6 +93,7 @@ class ClientRequestError extends Error {
 }
 
 function defaultCodeForKind(kind, status) {
+  if (kind === 'timeout' || status === 408) return 'REQUEST_TIMED_OUT';
   if (kind === 'validation') return 'VALIDATION_ERROR';
   if (kind === 'canceled') return 'REQUEST_CANCELED';
   if (kind === 'network') return 'NETWORK_ERROR';
@@ -431,9 +442,13 @@ function normalizeGetArgs(inputOrOptions, explicitOptions) {
     'query' in inputOrOptions ||
     'params' in inputOrOptions ||
     'policy' in inputOrOptions ||
+    'concurrency' in inputOrOptions ||
     'key' in inputOrOptions ||
     'signal' in inputOrOptions ||
-    'headers' in inputOrOptions;
+    'headers' in inputOrOptions ||
+    'timeout' in inputOrOptions ||
+    'retry' in inputOrOptions ||
+    'retryMutations' in inputOrOptions;
 
   if (hasExplicitWrapper && keys.every((k) => RESERVED_OPTION_KEYS.has(k))) {
     return { ...inputOrOptions };
@@ -454,6 +469,132 @@ function normalizeGetArgs(inputOrOptions, explicitOptions) {
   }
   opts.query = query;
   return opts;
+}
+
+/**
+ * Normalize retry options into an actionable execution descriptor.
+ * Never allows retries on mutations unless `retryMutations: true` is explicitly opted into.
+ *
+ * @param {boolean|number|object} [retryOpt]
+ * @param {string} upperMethod
+ * @param {boolean} [retryMutations=false]
+ * @returns {object|null}
+ */
+function normalizeRetryConfig(retryOpt, upperMethod, retryMutations = false) {
+  if (!retryOpt) return null;
+
+  // Strict invariant: never automatically retry mutation methods (POST, PUT, PATCH, DELETE)
+  if (MUTATION_METHODS.has(upperMethod) && !retryMutations) {
+    return null;
+  }
+
+  let count = 0;
+  let delay = 300;
+  let maxDelay = 5000;
+  let backoff = 'exponential';
+  let statusCodes = new Set([408, 429, 502, 503, 504]);
+  let onRetry = null;
+
+  if (typeof retryOpt === 'number') {
+    count = Math.max(0, Math.floor(retryOpt));
+  } else if (retryOpt === true) {
+    count = 2;
+  } else if (typeof retryOpt === 'object' && retryOpt !== null) {
+    count = typeof retryOpt.count === 'number' ? Math.max(0, Math.floor(retryOpt.count)) : 2;
+    if (typeof retryOpt.delay === 'number') delay = Math.max(0, retryOpt.delay);
+    if (typeof retryOpt.maxDelay === 'number') maxDelay = Math.max(delay, retryOpt.maxDelay);
+    if (retryOpt.backoff === 'linear' || retryOpt.backoff === 'exponential') {
+      backoff = retryOpt.backoff;
+    }
+    if (Array.isArray(retryOpt.statusCodes)) {
+      statusCodes = new Set(retryOpt.statusCodes);
+    }
+    if (typeof retryOpt.onRetry === 'function') {
+      onRetry = retryOpt.onRetry;
+    }
+  }
+
+  if (count <= 0) return null;
+
+  return {
+    count,
+    delay,
+    maxDelay,
+    backoff,
+    statusCodes,
+    onRetry,
+  };
+}
+
+/**
+ * Determine whether an error is transient and eligible for retry.
+ */
+function isRetryableError(err, statusCodes) {
+  if (!err) return false;
+  // Canceled, dropped, or superseded requests must never retry
+  if (err.isCanceled || err.isDropped || err.isSuperseded) return false;
+  // Network failures and timeouts are retryable
+  if (err.kind === 'network' || err.kind === 'timeout' || err.isTimedOut) return true;
+  // Transient HTTP status codes
+  if (typeof err.status === 'number' && statusCodes && statusCodes.has(err.status)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Calculate retry delay with jitter.
+ */
+function calculateRetryDelay(attempt, config) {
+  const base = config.delay;
+  const max = config.maxDelay;
+  let calculated;
+  if (config.backoff === 'linear') {
+    calculated = base * attempt;
+  } else {
+    calculated = base * Math.pow(2, attempt - 1);
+  }
+  const jitter = Math.random() * 50;
+  return Math.min(max, calculated + jitter);
+}
+
+/**
+ * Abortable delay helper that rejects immediately if any signal aborts during wait.
+ */
+function abortableSleep(ms, signals = []) {
+  return new Promise((resolve, reject) => {
+    for (const sig of signals) {
+      if (sig && sig.aborted) {
+        return reject(new Error('Sleep aborted'));
+      }
+    }
+
+    let timer = null;
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      for (const sig of signals) {
+        if (sig && typeof sig.removeEventListener === 'function') {
+          sig.removeEventListener('abort', onAbort);
+        }
+      }
+    };
+
+    const onAbort = () => {
+      cleanup();
+      reject(new Error('Sleep aborted'));
+    };
+
+    for (const sig of signals) {
+      if (sig && typeof sig.addEventListener === 'function') {
+        sig.addEventListener('abort', onAbort, { once: true });
+      }
+    }
+
+    timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+  });
 }
 
 /**
@@ -551,11 +692,83 @@ function createApiClient(config = {}) {
     }
 
     // Policy: 'queue' -> Chain onto existing queue for this key
+    const retryConfig = normalizeRetryConfig(
+      options.retry,
+      upperMethod,
+      Boolean(options.retryMutations)
+    );
+
+    async function executeWithRetry(runFn) {
+      if (!retryConfig) {
+        return runFn(requestId);
+      }
+
+      let attempt = 0;
+      while (true) {
+        attempt++;
+        const currentReqId = attempt === 1 ? requestId : `req_${++reqCounter}_${Date.now()}`;
+        try {
+          return await runFn(currentReqId);
+        } catch (err) {
+          const canRetry =
+            attempt <= retryConfig.count &&
+            isConnected() &&
+            (!lifecycleSignal || !lifecycleSignal.aborted) &&
+            (!options.signal || !options.signal.aborted) &&
+            isRetryableError(err, retryConfig.statusCodes);
+
+          if (!canRetry) {
+            throw err;
+          }
+
+          const delayMs = calculateRetryDelay(attempt, retryConfig);
+
+          if (typeof retryConfig.onRetry === 'function') {
+            try {
+              retryConfig.onRetry(err, attempt, delayMs);
+            } catch (_cbErr) {
+              // Ignore callback error
+            }
+          }
+
+          if (debug && typeof debug.trackRequestRetry === 'function') {
+            debug.trackRequestRetry({
+              requestId: currentReqId,
+              key: requestKey,
+              attempt,
+              delay: delayMs,
+              error: err,
+            });
+          }
+
+          const activeSignals = [options.signal, lifecycleSignal].filter(Boolean);
+          try {
+            await abortableSleep(delayMs, activeSignals);
+          } catch (_sleepErr) {
+            throw new ClientRequestError(
+              `Request canceled during retry backoff (${upperMethod} ${requestUrl}).`,
+              {
+                kind: 'canceled',
+                code: 'REQUEST_CANCELED',
+                method: upperMethod,
+                url: requestUrl,
+                key: requestKey,
+              }
+            );
+          }
+        }
+      }
+    }
+
     if (policy === 'queue') {
       const prevTail = queueMap.get(requestKey) || Promise.resolve();
       const nextTask = prevTail
         .catch(() => {})
-        .then(() => runSingleRequest(upperMethod, requestUrl, body, options, requestKey, requestId, 'queue'));
+        .then(() =>
+          executeWithRetry((subReqId) =>
+            runSingleRequest(upperMethod, requestUrl, body, options, requestKey, subReqId, 'queue')
+          )
+        );
       queueMap.set(
         requestKey,
         nextTask.catch(() => {})
@@ -563,13 +776,24 @@ function createApiClient(config = {}) {
       return nextTask;
     }
 
-    return runSingleRequest(upperMethod, requestUrl, body, options, requestKey, requestId, policy);
+    return executeWithRetry((subReqId) =>
+      runSingleRequest(upperMethod, requestUrl, body, options, requestKey, subReqId, policy)
+    );
   }
 
   async function runSingleRequest(upperMethod, requestUrl, body, options, requestKey, requestId, policy) {
     const abortController = new AbortController();
     let superseded = false;
+    let timedOut = false;
+    let timeoutTimer = null;
     let currentSeq = 1;
+
+    if (typeof options.timeout === 'number' && options.timeout > 0) {
+      timeoutTimer = setTimeout(() => {
+        timedOut = true;
+        abortController.abort();
+      }, options.timeout);
+    }
 
     // Policy: 'latest' -> Abort previous in-flight request for this key and increment sequence
     if (policy === 'latest') {
@@ -656,10 +880,34 @@ function createApiClient(config = {}) {
           signal: abortController.signal,
         });
       } catch (fetchErr) {
+        if (timeoutTimer) {
+          clearTimeout(timeoutTimer);
+          timeoutTimer = null;
+        }
         const latestEntry = policy === 'latest' ? latestMap.get(requestKey) : null;
         if (latestEntry && (latestEntry.seq !== currentSeq || latestEntry.superseded)) {
           superseded = true;
         }
+
+        if (timedOut) {
+          if (debug) {
+            debug.trackRequestEnd(requestId, { status: 'failed', errorKind: 'timeout' });
+          }
+          throw new ClientRequestError(
+            `Request timed out after ${options.timeout}ms (${upperMethod} ${requestUrl}).`,
+            {
+              kind: 'timeout',
+              status: 408,
+              code: 'REQUEST_TIMED_OUT',
+              method: upperMethod,
+              url: requestUrl,
+              key: requestKey,
+              isTimedOut: true,
+              cause: fetchErr,
+            }
+          );
+        }
+
         const isAbort =
           superseded ||
           abortController.signal.aborted ||
@@ -797,7 +1045,27 @@ function createApiClient(config = {}) {
       if (status === 204 || status === 205) {
         parsedBody = undefined;
       } else if (typeof response.text === 'function') {
-        const rawText = await response.text();
+        let rawText;
+        try {
+          rawText = await response.text();
+        } catch (bodyErr) {
+          if (timedOut) {
+            throw new ClientRequestError(
+              `Request timed out after ${options.timeout}ms (${upperMethod} ${requestUrl}).`,
+              {
+                kind: 'timeout',
+                status: 408,
+                code: 'REQUEST_TIMED_OUT',
+                method: upperMethod,
+                url: requestUrl,
+                key: requestKey,
+                isTimedOut: true,
+                cause: bodyErr,
+              }
+            );
+          }
+          throw bodyErr;
+        }
         checkSupersededOrDisconnected();
         if (!rawText || !rawText.trim()) {
           parsedBody = undefined;
@@ -811,7 +1079,26 @@ function createApiClient(config = {}) {
           parsedBody = rawText;
         }
       } else if (typeof response.json === 'function') {
-        parsedBody = await response.json();
+        try {
+          parsedBody = await response.json();
+        } catch (bodyErr) {
+          if (timedOut) {
+            throw new ClientRequestError(
+              `Request timed out after ${options.timeout}ms (${upperMethod} ${requestUrl}).`,
+              {
+                kind: 'timeout',
+                status: 408,
+                code: 'REQUEST_TIMED_OUT',
+                method: upperMethod,
+                url: requestUrl,
+                key: requestKey,
+                isTimedOut: true,
+                cause: bodyErr,
+              }
+            );
+          }
+          throw bodyErr;
+        }
         checkSupersededOrDisconnected();
       }
 
@@ -916,6 +1203,10 @@ function createApiClient(config = {}) {
 
       return data;
     } finally {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+      }
       const set = inFlightMap.get(requestKey);
       if (set) {
         set.delete(requestId);
@@ -1029,5 +1320,9 @@ module.exports = {
   buildRequestUrl,
   extractValidationErrors,
   unwrapApiResultAndInvalidate,
+  normalizeRetryConfig,
+  isRetryableError,
+  calculateRetryDelay,
+  abortableSleep,
 };
 

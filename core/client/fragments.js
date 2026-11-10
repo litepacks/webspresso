@@ -106,6 +106,7 @@ function createFragmentCoordinator(options = {}) {
   const endpoint = options.endpoint || DEFAULT_FRAGMENT_ENDPOINT;
   const datastar = options.datastar || options.adapter;
   const debug = options.debug || null;
+  const defaultTimeout = typeof options.timeout === 'number' ? options.timeout : 15000;
 
   // Map<instanceId, { instanceId, name, pagePath, input, dependsOn: Set<string>, version: number, el: Element, abortController: AbortController|null }>
   const instances = new Map();
@@ -266,7 +267,7 @@ function createFragmentCoordinator(options = {}) {
    * Execute a network refresh for a list of target fragment descriptors:
    * `Array<{ instanceId, name, pagePath, input, reqVersion }>`
    */
-  async function executeBatchRefresh(targets, chainIds = [], abortSignal = null) {
+  async function executeBatchRefresh(targets, chainIds = [], abortSignal = null, batchTimeout = defaultTimeout) {
     if (!targets || targets.length === 0) {
       return { refreshed: [], skipped: true };
     }
@@ -312,6 +313,27 @@ function createFragmentCoordinator(options = {}) {
       });
     }
 
+    const batchAbortController = new AbortController();
+    let timeoutTimer = null;
+    let timedOut = false;
+    const timeoutMs = typeof batchTimeout === 'number' ? batchTimeout : defaultTimeout;
+
+    if (timeoutMs > 0) {
+      timeoutTimer = setTimeout(() => {
+        timedOut = true;
+        batchAbortController.abort();
+      }, timeoutMs);
+    }
+
+    const onCallerAbort = () => batchAbortController.abort();
+    if (abortSignal) {
+      if (abortSignal.aborted) {
+        batchAbortController.abort();
+      } else {
+        abortSignal.addEventListener('abort', onCallerAbort, { once: true });
+      }
+    }
+
     let response;
     try {
       response = await fetchImpl(endpoint, {
@@ -319,11 +341,45 @@ function createFragmentCoordinator(options = {}) {
         headers,
         body: JSON.stringify(requestPayload),
         credentials: 'same-origin',
-        signal: abortSignal || undefined,
+        signal: batchAbortController.signal,
       });
     } catch (err) {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+      }
+      if (abortSignal) {
+        try {
+          abortSignal.removeEventListener('abort', onCallerAbort);
+        } catch (_e) {}
+      }
+
+      if (timedOut) {
+        if (debug) {
+          debug.trackRequestEnd(reqId, {
+            status: 'failed',
+            errorKind: 'timeout',
+          });
+        }
+        const timeoutError = new Error(`Fragment refresh timed out after ${timeoutMs}ms.`);
+        timeoutError.code = 'FRAGMENT_REFRESH_TIMEOUT';
+        timeoutError.isTimedOut = true;
+        lastFailedBatch = { targets, chainIds };
+        for (const cid of chainIds) {
+          if (debug) {
+            debug.recordChainRefresh(cid, {
+              fragmentIds: targets.map((t) => t.instanceId),
+              status: 'failed',
+              error: timeoutError,
+            });
+          }
+        }
+        throw timeoutError;
+      }
+
       const isAbort =
         (abortSignal && abortSignal.aborted) ||
+        batchAbortController.signal.aborted ||
         (err && (err.name === 'AbortError' || err.code === 'ABORT_ERR'));
 
       if (debug) {
@@ -346,6 +402,16 @@ function createFragmentCoordinator(options = {}) {
         }
       }
       throw err;
+    } finally {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+      }
+      if (abortSignal) {
+        try {
+          abortSignal.removeEventListener('abort', onCallerAbort);
+        } catch (_e) {}
+      }
     }
 
     let body = null;
@@ -638,7 +704,7 @@ function createFragmentCoordinator(options = {}) {
       };
     });
 
-    return executeBatchRefresh(targets, [], abortController.signal);
+    return executeBatchRefresh(targets, [], abortController.signal, refreshOpts.timeout);
   }
 
   /**

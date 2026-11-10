@@ -89,6 +89,9 @@ function defineController(definition = {}) {
   if (definition.tasks !== undefined && (typeof definition.tasks !== 'object' || definition.tasks === null)) {
     throw new TypeError('defineController({ tasks }) must be an object of task factory functions.');
   }
+  if (definition.onError !== undefined && typeof definition.onError !== 'function') {
+    throw new TypeError('defineController({ onError }) must be an error handler function `(err, ctx, meta) => void`.');
+  }
 
   // Pre-validate collision between state and computed properties
   if (definition.computed && typeof definition.computed === 'object') {
@@ -114,6 +117,7 @@ function defineController(definition = {}) {
     tasks: definition.tasks && typeof definition.tasks === 'object' ? definition.tasks : {},
     connect: typeof definition.connect === 'function' ? definition.connect : null,
     disconnect: typeof definition.disconnect === 'function' ? definition.disconnect : null,
+    onError: typeof definition.onError === 'function' ? definition.onError : null,
     actions: definition.actions && typeof definition.actions === 'object' ? definition.actions : {},
   });
 }
@@ -293,6 +297,48 @@ function createControllerRuntime(options = {}) {
     const scopedTasks = {};
     const scopedTasksList = [];
     let currentActionEl = null;
+    let lastError = null;
+    const dynamicErrorListeners = new Set();
+
+    function handleControllerError(err, meta = {}) {
+      if (!err || err.isCanceled) {
+        return;
+      }
+
+      lastError = err;
+
+      // 1. Controller definition onError hook
+      if (typeof reg.definition.onError === 'function') {
+        try {
+          reg.definition.onError(err, ctx, meta);
+        } catch (hookErr) {
+          if (debug) {
+            debug.trackCleanupError(instanceId, controllerName, 'onError', hookErr);
+          }
+        }
+      }
+
+      // 2. Dynamic ctx.onError listeners
+      for (const listener of Array.from(dynamicErrorListeners)) {
+        try {
+          listener(err, meta);
+        } catch (_listenerErr) {
+          // Ignore
+        }
+      }
+
+      // 3. Dispatch bubbling CustomEvent 'w-controller:error' on rootEl
+      emitEvent(
+        'w-controller:error',
+        {
+          error: err,
+          instanceId,
+          controllerName,
+          ...meta,
+        },
+        { bubbles: true, cancelable: true }
+      );
+    }
 
     let taskSeq = 0;
     function createTaskInstance(runFnOrConfig, options = {}) {
@@ -398,6 +444,10 @@ function createControllerRuntime(options = {}) {
           }
           _error = err;
           updateSignal('error', err);
+          handleControllerError(err, {
+            task: taskKey,
+            phase: 'task',
+          });
           throw err;
         } finally {
           if (inFlightAbort === abortCtrl) {
@@ -708,6 +758,21 @@ function createControllerRuntime(options = {}) {
       signal: lifecycleAbort.signal,
       isConnected,
       isDisposed: () => !isConnected(),
+      get lastError() {
+        return lastError;
+      },
+      clearError() {
+        lastError = null;
+      },
+      onError(listener) {
+        if (typeof listener !== 'function') return () => {};
+        dynamicErrorListeners.add(listener);
+        const unregister = () => {
+          dynamicErrorListeners.delete(listener);
+        };
+        cleanupCallbacks.push(unregister);
+        return unregister;
+      },
       invalidate: (tags) => (fragments ? fragments.invalidate(tags) : Promise.resolve({ refreshed: [] })),
       refresh: (idOrName, input, opts) =>
         fragments ? fragments.refresh(idOrName, input, opts) : Promise.resolve({ refreshed: [] }),
@@ -754,12 +819,24 @@ function createControllerRuntime(options = {}) {
           return res.catch((err) => {
             // Ignore canceled/superseded request errors on disconnected or superseded instances
             if (err && err.isCanceled) return undefined;
+            handleControllerError(err, {
+              action: actionName,
+              event,
+              actionEl,
+              phase: 'action',
+            });
             throw err;
           });
         }
         return res;
       } catch (err) {
         if (err && err.isCanceled) return undefined;
+        handleControllerError(err, {
+          action: actionName,
+          event,
+          actionEl,
+          phase: 'action',
+        });
         throw err;
       } finally {
         currentActionEl = null;
@@ -803,6 +880,7 @@ function createControllerRuntime(options = {}) {
           cleanupCallbacks.push(userCleanup);
         }
       } catch (err) {
+        handleControllerError(err, { phase: 'connect' });
         if (debug) {
           debug.trackCleanupError(instanceId, controllerName, 'connect', err);
         }
@@ -837,6 +915,7 @@ function createControllerRuntime(options = {}) {
           try {
             reg.definition.disconnect(ctx);
           } catch (err) {
+            handleControllerError(err, { phase: 'disconnect' });
             if (debug) {
               debug.trackCleanupError(instanceId, controllerName, 'disconnect', err);
             }
@@ -887,6 +966,8 @@ function createControllerRuntime(options = {}) {
 
         // Dispose isolated Datastar signals for this instance
         stateManager.dispose();
+        dynamicErrorListeners.clear();
+        lastError = null;
 
         const mapOnEl = elementInstances.get(rootEl);
         if (mapOnEl) {

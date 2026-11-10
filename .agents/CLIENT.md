@@ -32,6 +32,24 @@ This guide covers Webspresso's Datastar-powered, SSR-integrated, strongly-typed 
 
 ---
 
+## 2.1 Multi-Fragment Architecture & Inter-Fragment Communication
+
+When multiple SSR fragments exist on a single page:
+
+1. **Fragment Name vs Instance ID**:
+   - `data-w-fragment="name"` indicates the fragment definition to invoke on the server.
+   - `data-w-fragment-id="instanceId"` distinguishes distinct instances on the page (e.g. `list:default`, `list:sidebar`).
+2. **Parent-Child Deduplication (`deduplicateParentChildFragments`)**:
+   - If fragment B is nested inside fragment A's DOM subtree and both are invalidated by the same mutation tag, **fragment B is automatically dropped from the outgoing network request**.
+   - Only fragment A is requested. Because rendering fragment A on the server inherently renders fragment B, this avoids duplicate SQL queries, dual network roundtrips, and conflicting DOM patch races.
+3. **Communication Channels Between Fragments**:
+   - **Tag Invalidation (`dependsOn`)**: Decoupled, multi-fragment refresh coalesced into a single `POST /__webspresso/fragments` HTTP call.
+   - **Request Memoization (`ctx.memo`)**: Co-refreshed fragments share cached loaders/queries within the same request lifecycle.
+   - **Programmatic Control (`ctx.refresh` / `ctx.fragment`)**: A controller can read another fragment's active input via `ctx.fragment('ordersList').input` or trigger a reload with new parameters: `await ctx.refresh('ordersList', { limit: 20 })`.
+   - **DOM CustomEvents (`ctx.emit` / `ctx.on`)**: Controllers within sibling fragments communicate via decoupled custom events (e.g. `ctx.emit('category:selected', { id })` and `ctx.on(window, 'category:selected', ...)`).
+
+---
+
 ## 3. Two-Way Data Binding (`data-w-model`)
 
 Replace manual DOM reading/writing (`target('searchInput')?.value`, `input.value = ''`) with declarative `data-w-model="path"`:
@@ -313,4 +331,91 @@ export default defineController({
   - IE11 is not supported (Proxy cannot be fully polyfilled).
 - **Progressive Enhancement**:
   - Webspresso is 100% HTML-First SSR. If JS is disabled or fails to load, server HTML renders with 0ms delay, and standard HTML `<form>` submits continue working natively via HTTP POST.
+
+---
+
+## 12. Client Resilience & Error Boundaries
+
+### 12.1 Fetch Request Timeout (`timeout`)
+Prevent hanging network requests by specifying `timeout` (in milliseconds) on any `ctx.api` call:
+```ts
+// Aborts via AbortController after 5000ms if server does not respond
+const data = await ctx.api.get('/api/reports/analytics', { timeout: 5000 });
+```
+When a timeout occurs, `ctx.api` throws a structured `ClientRequestError` with:
+- `err.kind === 'timeout'`
+- `err.isTimedOut === true`
+- `err.status === 408`
+- `err.code === 'REQUEST_TIMED_OUT'`
+
+### 12.2 Idempotent Retry Engine (`retry`)
+Safely retry transient failures on idempotent `GET` and `HEAD` requests:
+```ts
+// Retries up to 3 times with exponential backoff + randomized jitter
+const stats = await ctx.api.get('/api/stats', {
+  retry: {
+    count: 3,
+    delay: 300,        // base backoff delay (ms)
+    maxDelay: 5000,    // maximum backoff delay (ms)
+    backoff: 'exponential', // 'exponential' | 'linear'
+    statusCodes: [408, 429, 502, 503, 504], // transient HTTP status codes
+    onRetry: (err, attempt, delay) => {
+      console.warn(`Retrying request (attempt ${attempt}) after ${delay}ms:`, err);
+    },
+  },
+});
+```
+> [!IMPORTANT]
+> **Strict Mutation Protection**: Mutations (`POST`, `PUT`, `PATCH`, `DELETE`) are **NEVER** retried automatically by default, even if `retry` is passed. Automatic retries on state-changing endpoints can duplicate side effects (e.g. charging a payment twice). To explicitly opt into retrying an idempotent mutation, pass `retryMutations: true`.
+> Requests that are aborted, superseded by newer requests (`policy: 'latest'`), or dropped (`policy: 'drop'`) are **never** retried.
+
+### 12.3 Fragment Batch Refresh Timeout
+Fragment batch refreshes enforce a default timeout of 15,000ms so network dropouts never freeze the UI:
+```ts
+// Override timeout for a specific refresh invocation
+await ctx.refresh('feed', { page: 1 }, { timeout: 8000 });
+```
+If a fragment refresh times out, it throws a structured error with `err.code === 'FRAGMENT_REFRESH_TIMEOUT'` and `err.isTimedOut === true`.
+
+### 12.4 Declarative Expression Logic (`&&`, `||`, Parentheses)
+`data-w-show`, `data-w-class`, and other declarative Datastar attributes support logical operators with standard operator precedence and short-circuit evaluation:
+```html
+<!-- Logical AND with negation -->
+<div data-w-show="isReady && !hasError">Ready to go!</div>
+
+<!-- Logical OR with comparisons -->
+<span data-w-show="status === 'active' || status === 'pending'">Processing</span>
+
+<!-- Operator precedence & parenthesized grouping -->
+<div data-w-show="(role === 'admin' || role === 'editor') && isVerified">Staff Access</div>
+
+<!-- String literals with operator characters are preserved without false splits -->
+<div data-w-show="category === 'Rock && Roll'">Music Category</div>
+```
+
+### 12.5 Controller Error Boundary (`onError` & `w-controller:error`)
+Controllers provide isolated error boundaries for synchronous and asynchronous action throws and task failures:
+```ts
+export default defineController({
+  name: 'profile-editor',
+  state: () => ({ saving: false }),
+
+  // 1. Definition-level error boundary
+  onError(err, ctx, meta) {
+    console.error(`[${ctx.name}] Error during ${meta.phase}:`, err);
+    // ctx.lastError is automatically recorded
+  },
+
+  actions: {
+    async save({ state, api, lastError, clearError }) {
+      clearError(); // reset last error
+      await api.post('/api/profile', { ... });
+    },
+  },
+});
+```
+- **Context Access**: Read the most recent error via `ctx.lastError` and reset via `ctx.clearError()`.
+- **Dynamic Listeners**: Attach dynamic listeners with `ctx.onError((err, meta) => void)` which automatically unregister on disconnect.
+- **DOM Bubbling Event**: When an error occurs, `rootEl` dispatches a bubbling `w-controller:error` `CustomEvent` (`evt.detail = { error, controllerName, instanceId, action, phase }`) that can be caught at any container boundary or by global loggers.
+
 
