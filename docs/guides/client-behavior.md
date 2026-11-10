@@ -788,6 +788,137 @@ export default defineController({
 - **`ctx.onError(listener)`**: Dynamic listener with automatic disconnect cleanup.
 - **`w-controller:error` DOM Event**: Bubbles up the DOM tree, allowing parent elements or global handlers to catch and report errors.
 
+---
+
+## 13. Client Storage & State Persistence (`core/client/storage`)
+
+Webspresso provides a zero-dependency, namespace-isolated, quota-safe Client Storage API supporting `localStorage`, `sessionStorage`, and an in-memory `MemoryStorage` fallback for SSR and headless test environments.
+
+### 13.1 StorageAdapter & Namespacing (`createClientStorage`)
+
+Access storage via `createClientStorage` or the pre-configured `defaultStorage` singleton:
+
+```ts
+import { defaultStorage } from 'webspresso/client';
+
+// Local storage with 'w:' prefix (e.g. 'w:theme')
+defaultStorage.local.set('theme', 'dark');
+const theme = defaultStorage.local.get('theme', 'light');
+
+// Session storage
+defaultStorage.session.set('wizard_step', 2);
+
+// Controller-scoped storage (e.g. 'w:cart:items')
+const cartStorage = defaultStorage.scoped('cart');
+cartStorage.local.set('items', [{ id: 101, qty: 1 }]);
+```
+
+#### Key Safety Invariants:
+- **Prefix Isolation**: All keys are prefixed with `w:` (or a custom prefix). Calling `adapter.clear()` **only removes keys belonging to its own namespace**, preserving third-party tokens and Google Analytics storage.
+- **Safe JSON Serialization**: Complex objects, arrays, numbers, and booleans are serialized and deserialized automatically. If stored data is corrupted or plain text, it safely falls back to the raw string.
+- **Quota & Permission Resilience**: If `localStorage` throws `QuotaExceededError` or is blocked by private browsing mode, calls return `false` or fallback defaults gracefully without crashing the UI.
+
+### 13.2 Declarative Controller State Persistence (`persist`)
+
+Controllers can declare which state properties automatically hydrate on mount and sync back to storage on mutation:
+
+```ts
+import { defineController } from 'webspresso/client';
+
+export default defineController({
+  name: 'product-filters',
+  state: () => ({
+    search: '',
+    category: 'all',
+    inStockOnly: false,
+    resultsCount: 0, // untracked
+  }),
+
+  // Declarative persistence options
+  persist: {
+    keys: ['search', 'category', 'inStockOnly'],
+    storage: 'local', // 'local' | 'session' | 'memory'
+    debounce: 100,    // debounce storage writes (ms, default 50)
+  },
+
+  actions: {
+    reset(ctx) {
+      ctx.state.search = '';
+      ctx.state.category = 'all';
+      ctx.state.inStockOnly = false;
+      ctx.clearPersistedState(); // cleans up stored record
+    },
+  },
+});
+```
+
+- **Shorthand Syntax**:
+  - `persist: ['search', 'category']` (persists to `local` storage by default).
+  - `persist: 'session'` (persists all state keys to `session` storage).
+- **Programmatic Context Storage**: Inside any action or lifecycle hook, access `ctx.storage.local`, `ctx.storage.session`, `ctx.storage.memory`, or `ctx.storage.global`.
+- **Cleanup**: `ctx.clearPersistedState()` removes the controller's stored record from storage.
+
+### 13.3 Form Draft Persistence (`data-w-persist-draft`)
+
+Prevent accidental data loss when users refresh or navigate away from long forms:
+
+```html
+<form data-w-form="articleForm" data-w-persist-draft="local">
+  <input type="text" name="title" required>
+  <textarea name="content" rows="6"></textarea>
+
+  <!-- Passwords and sensitive fields are automatically excluded -->
+  <input type="password" name="current_password">
+
+  <!-- Explicit opt-out for specific inputs -->
+  <input type="text" name="captcha" data-w-no-draft="true">
+
+  <button type="submit">Publish Article</button>
+</form>
+```
+
+#### Behavior & Features:
+1. **Auto-Restoration**: On form initialization, if a saved draft exists, values are populated into the form inputs and a bubbling `w-form:draft-restored` event is dispatched.
+2. **Auto-Saving**: Any change or input event debounces and saves the form draft to `localStorage` or `sessionStorage`.
+3. **Sensitive Field Exclusion**: Form draft persistence **strictly excludes**:
+   - `input[type="password"]`
+   - `input[type="file"]`
+   - Inputs with `data-w-no-draft="true"` or `data-w-persist="false"`
+4. **Auto-Clearing on Success**: Once the form successfully submits via `ctx.forms('articleForm').submit()`, the draft is automatically erased from storage.
+5. **Programmatic Form Handle API**:
+   ```ts
+   const form = ctx.forms('articleForm');
+   form.hasDraft;      // boolean
+   form.saveDraft();   // manually trigger draft save
+   form.restoreDraft();// manually re-apply draft
+   form.clearDraft();  // clear stored draft
+   ```
+
+### 13.4 Fragment Input Persistence (`data-w-persist-input`)
+
+Maintain filter state across page reloads or tab navigation by persisting fragment parameters:
+
+```html
+<div
+  data-w-fragment="dashboardMetrics"
+  data-w-persist-input="session"
+  data-w-fragment-input='{"timeframe":"30d","currency":"USD"}'>
+  <!-- Fragment HTML content -->
+</div>
+```
+
+- When the page loads, if `data-w-fragment-input` is empty or defaults, the fragment coordinator checks storage and restores previously selected inputs (`timeframe`, `currency`).
+- Whenever the fragment is refreshed via `ctx.refresh('dashboardMetrics', { timeframe: '90d' })`, the updated parameters are automatically saved to storage.
+- Coordinator helpers:
+  ```ts
+  // Read stored parameters
+  const saved = coordinator.getStoredInput('dashboardMetrics');
+
+  // Clear stored parameters
+  coordinator.clearStoredInput('dashboardMetrics');
+  ```
+
+
 
 
 

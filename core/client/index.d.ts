@@ -39,5 +39,10 @@ export {
   bootLiteClient,
   createDatastarAdapter,
   createClientDebugger,
+  StorageAdapter,
+  ClientStorage,
+  ControllerPersistConfig,
+  createClientStorage,
+  defaultStorage,
 } from '../../index';
 

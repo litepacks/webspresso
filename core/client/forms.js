@@ -1,5 +1,7 @@
 'use strict';
 
+const { defaultStorage } = require('./storage');
+
 /**
  * Webspresso Native HTML Form Layer & Typed Form Handle
  *
@@ -401,6 +403,89 @@ function createFormHandle(formEl, options = {}) {
   const errorListeners = new Set();
   const stateListeners = new Set();
 
+  // Form draft persistence setup (sessionStorage by default, or localStorage)
+  const rawDraftAttr = formEl
+    ? formEl.getAttribute('data-w-persist-draft') || formEl.getAttribute('data-w-draft')
+    : null;
+  const isDraftEnabled =
+    options.persistDraft !== undefined
+      ? Boolean(options.persistDraft)
+      : rawDraftAttr !== null && rawDraftAttr !== 'false';
+
+  let draftStorageType = 'session';
+  if (typeof options.persistDraft === 'string') {
+    draftStorageType = options.persistDraft.toLowerCase() === 'local' ? 'local' : 'session';
+  } else if (rawDraftAttr && rawDraftAttr.toLowerCase() === 'local') {
+    draftStorageType = 'local';
+  }
+
+  const draftKey =
+    options.draftKey ||
+    (formEl && (formEl.getAttribute('data-w-draft-key') || formEl.getAttribute('data-w-persist-key'))) ||
+    `form_draft:${formName || 'anon'}`;
+
+  const draftStorage =
+    (options.storage && options.storage[draftStorageType]) ||
+    (draftStorageType === 'local' ? defaultStorage.local : defaultStorage.session);
+
+  function extractDraftValues(el) {
+    if (!el || typeof el.querySelectorAll !== 'function') return {};
+    const { data } = parseFormElement(el);
+    const safeData = {};
+    for (const [key, val] of Object.entries(data)) {
+      const ctrl = el.querySelector(`[name="${key}"], [name="${key}[]"]`);
+      if (!ctrl) {
+        safeData[key] = val;
+        continue;
+      }
+      const type = (ctrl.type || '').toLowerCase();
+      if (type === 'password' || type === 'file') continue;
+      if (ctrl.hasAttribute('data-w-no-draft') || ctrl.getAttribute('data-w-persist') === 'false') continue;
+      safeData[key] = val;
+    }
+    return safeData;
+  }
+
+  function saveDraft() {
+    if (!formEl || !isDraftEnabled) return false;
+    const draftPayload = extractDraftValues(formEl);
+    return draftStorage.set(draftKey, draftPayload);
+  }
+
+  function restoreDraft() {
+    if (!formEl || !isDraftEnabled) return false;
+    const saved = draftStorage.get(draftKey, null);
+    if (saved && typeof saved === 'object' && Object.keys(saved).length > 0) {
+      fill(saved, { baseline: false });
+      if (typeof formEl.dispatchEvent === 'function') {
+        const CustomEventCtor =
+          (formEl.ownerDocument && formEl.ownerDocument.defaultView && formEl.ownerDocument.defaultView.CustomEvent) ||
+          (typeof CustomEvent !== 'undefined' ? CustomEvent : null);
+        if (CustomEventCtor) {
+          formEl.dispatchEvent(
+            new CustomEventCtor('w-form:draft-restored', {
+              bubbles: true,
+              cancelable: true,
+              detail: { form: handle, draft: saved, key: draftKey },
+            })
+          );
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function clearDraft() {
+    if (!isDraftEnabled) return false;
+    return draftStorage.remove(draftKey);
+  }
+
+  function hasDraft() {
+    if (!isDraftEnabled) return false;
+    return draftStorage.has(draftKey);
+  }
+
   function notifyStateChange() {
     for (const fn of stateListeners) {
       try {
@@ -799,6 +884,10 @@ function createFormHandle(formEl, options = {}) {
         initialSnapshot = captureInitialFormSnapshot(formEl);
       }
 
+      if (isDraftEnabled) {
+        clearDraft();
+      }
+
       // Invoke registered success hooks. Note: Any background fragment refresh failure
       // is handled by the fragment coordinator and NEVER puts this form into validation error state!
       for (const listener of successListeners) {
@@ -859,6 +948,7 @@ function createFormHandle(formEl, options = {}) {
   }
 
   // Listen to native submit and input/change events on `formEl`
+  let draftDebounceTimer = null;
   const onDomInput = (evt) => {
     dirty = computeFormDirty(formEl, initialSnapshot);
     const target = evt && evt.target;
@@ -872,6 +962,12 @@ function createFormHandle(formEl, options = {}) {
           syncErrorsToDom(false);
         }
       }
+    }
+    if (isDraftEnabled) {
+      if (draftDebounceTimer) clearTimeout(draftDebounceTimer);
+      draftDebounceTimer = setTimeout(() => {
+        saveDraft();
+      }, 150);
     }
     notifyStateChange();
   };
@@ -900,7 +996,9 @@ function createFormHandle(formEl, options = {}) {
   // Initialize hidden state on empty error placeholders
   syncErrorsToDom(false);
 
-  const handle = {
+  let handle = null;
+
+  handle = {
     name: formName,
     el: formEl,
     get pending() {
@@ -938,6 +1036,12 @@ function createFormHandle(formEl, options = {}) {
       return parseFormElement(formEl, submitter).data;
     },
     fill,
+    saveDraft,
+    restoreDraft,
+    clearDraft,
+    get hasDraft() {
+      return hasDraft();
+    },
     setAction,
     setRouteParams,
     setDisabled,
@@ -1007,6 +1111,10 @@ function createFormHandle(formEl, options = {}) {
 
   if (debug) {
     debug.recordEvent('form:bind', { name: formName });
+  }
+
+  if (isDraftEnabled) {
+    restoreDraft();
   }
 
   return handle;

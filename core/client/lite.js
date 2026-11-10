@@ -36,6 +36,13 @@ const {
   deduplicateParentChildFragments,
 } = require('./fragments');
 
+const {
+  createClientStorage,
+  defaultStorage,
+  StorageAdapter,
+  MemoryStorage,
+} = require('./storage');
+
 const { NOOP_DEBUGGER } = require('./utils');
 
 let _serverFragments = null;
@@ -160,5 +167,9 @@ module.exports = {
   apiResult: (data, meta) => getServerFragments().apiResult(data, meta),
   isApiResultEnvelope: (val) => getServerFragments().isApiResultEnvelope(val),
   defineFragment: (def) => getServerFragments().defineFragment(def),
+  createClientStorage,
+  defaultStorage,
+  StorageAdapter,
+  MemoryStorage,
 };
 

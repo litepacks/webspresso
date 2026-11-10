@@ -52,6 +52,10 @@
       "types": "./index.d.ts",
       "default": "./core/client/forms.js"
     },
+    "./client/storage": {
+      "types": "./index.d.ts",
+      "default": "./core/client/storage.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {

@@ -418,4 +418,72 @@ export default defineController({
 - **Dynamic Listeners**: Attach dynamic listeners with `ctx.onError((err, meta) => void)` which automatically unregister on disconnect.
 - **DOM Bubbling Event**: When an error occurs, `rootEl` dispatches a bubbling `w-controller:error` `CustomEvent` (`evt.detail = { error, controllerName, instanceId, action, phase }`) that can be caught at any container boundary or by global loggers.
 
+---
+
+## 13. Client Storage & State Persistence (`core/client/storage`)
+
+Webspresso includes a zero-dependency, namespaced, quota-safe storage abstraction for offline resilience, form draft preservation, and state hydration.
+
+### 13.1 Namespacing & Safety
+- **Prefix Isolation**: All entries default to `w:` namespace (`w:<key>` or `w:<controller>:<key>`). Calling `adapter.clear()` only purges keys matching the adapter's prefix, never disturbing third-party browser storage.
+- **Zero-Crash Resilience**: Catches `QuotaExceededError`, security/permission blocks, or corrupted JSON strings, falling back safely without unhandled exceptions.
+- **SSR / Node.js Mocking**: In non-browser environments, seamlessly utilizes an in-memory `MemoryStorage` backend.
+
+### 13.2 Declarative Controller State Persistence (`persist`)
+```ts
+export default defineController({
+  name: 'filters',
+  state: () => ({ search: '', category: 'all', page: 1 }),
+
+  // Persist specific keys to localStorage with 50ms write debounce
+  persist: {
+    keys: ['search', 'category'],
+    storage: 'local', // 'local' | 'session' | 'memory'
+    debounce: 50,
+  },
+
+  actions: {
+    reset(ctx) {
+      ctx.state.search = '';
+      ctx.state.category = 'all';
+      ctx.clearPersistedState(); // Clears stored entry
+    },
+  },
+});
+```
+
+### 13.3 Programmatic Context Storage (`ctx.storage`)
+- `ctx.storage.local`: Scoped to `w:<controllerName>:` in `localStorage`.
+- `ctx.storage.session`: Scoped to `w:<controllerName>:` in `sessionStorage`.
+- `ctx.storage.memory`: In-memory volatile store.
+- `ctx.storage.scoped(sub)`: Further nested sub-namespaces (e.g. `w:<controllerName>:<subprefix>:`).
+- `ctx.storage.global`: Root application storage (`w:` prefix).
+
+### 13.4 Form Draft Persistence (`data-w-persist-draft`)
+```html
+<form data-w-form="checkout" data-w-persist-draft="session">
+  <input type="text" name="shipping_address">
+  <!-- Sensitive fields are automatically excluded -->
+  <input type="password" name="password">
+  <input type="file" name="attachment">
+  <input type="text" name="cvv" data-w-no-draft="true">
+  <button type="submit">Submit</button>
+</form>
+```
+- Restores draft on mount and emits bubbling `w-form:draft-restored` event.
+- Excludes passwords, file inputs, and fields marked `data-w-no-draft="true"`.
+- Clears draft automatically on successful submit.
+- Programmatic API on form handle: `form.saveDraft()`, `form.restoreDraft()`, `form.clearDraft()`, `form.hasDraft`.
+
+### 13.5 Fragment Input Persistence (`data-w-persist-input`)
+```html
+<div data-w-fragment="ordersList" data-w-persist-input="session">
+  <!-- Contents -->
+</div>
+```
+- Hydrates fragment input parameters from storage on initial mount if server HTML provides empty defaults.
+- Updates storage automatically when fragment is refreshed with new inputs.
+- Coordinator access: `coordinator.getStoredInput('ordersList')`, `coordinator.clearStoredInput('ordersList')`.
+
+
 

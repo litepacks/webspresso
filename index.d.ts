@@ -6506,6 +6506,33 @@ export interface ClientApiClient {
   abortAll(): void;
 }
 
+export interface StorageAdapter {
+  readonly type: 'local' | 'session' | 'memory';
+  readonly prefix: string;
+  get<T = any>(key: string, defaultValue?: T): T;
+  set(key: string, value: any): boolean;
+  remove(key: string): boolean;
+  has(key: string): boolean;
+  keys(): string[];
+  clear(): boolean;
+  scoped(subPrefix: string): StorageAdapter;
+}
+
+export interface ClientStorage {
+  readonly local: StorageAdapter;
+  readonly session: StorageAdapter;
+  readonly memory: StorageAdapter;
+  readonly prefix: string;
+  scoped(subPrefix: string): ClientStorage;
+}
+
+export interface ControllerPersistConfig<TState extends Record<string, any> = Record<string, any>> {
+  keys?: (keyof TState & string)[];
+  storage?: 'local' | 'session' | 'memory';
+  key?: string;
+  debounce?: number;
+}
+
 export interface ClientFormSubmitResult<TData = any> {
   ok: boolean;
   data?: TData;
@@ -6537,6 +6564,10 @@ export interface ClientFormHandle<
   clear(): void;
   setErrors(fieldErrors?: Partial<Record<keyof TValues & string, string>>, formError?: string): void;
   clearErrors(): void;
+  saveDraft(): boolean;
+  restoreDraft(): boolean;
+  clearDraft(): boolean;
+  readonly hasDraft: boolean;
   submit(submitter?: HTMLElement | null): Promise<ClientFormSubmitResult<TResponse>>;
   onSuccess(callback: (data: TResponse, meta: { refreshOk: boolean; refreshError: Error | null }) => void): () => void;
   destroy(): void;
@@ -6597,6 +6628,8 @@ export interface ControllerContext<
   readonly isDisposed: () => boolean;
   readonly lastError: Error | null;
   clearError(): void;
+  readonly storage: ClientStorage & { readonly global: ClientStorage; readonly root: ClientStorage };
+  clearPersistedState(): void;
   onError(listener: (err: Error, meta?: ControllerErrorMeta) => void): () => void;
   task<TData = any, TArgs extends unknown[] = any[]>(
     runFn: (...args: TArgs) => Promise<TData>,
@@ -6669,6 +6702,7 @@ export interface ControllerDefinition<
   onError?: ControllerErrorHandler<
     [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> }
   >;
+  persist?: ControllerPersistConfig<TState> | (keyof TState & string)[] | 'local' | 'session' | null;
   actions?: {
     [actionName: string]: ControllerActionHandler<
       [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> }
@@ -6752,6 +6786,8 @@ export function createLiteClientRuntime(options?: Record<string, unknown>): Reco
 export function bootLiteClient(options?: Record<string, unknown>): Record<string, any>;
 export function createDatastarAdapter(options?: Record<string, unknown>): Record<string, any>;
 export function createClientDebugger(options?: { enabled?: boolean; maxEvents?: number }): Record<string, any>;
+export function createClientStorage(options?: { prefix?: string }): ClientStorage;
+export declare const defaultStorage: ClientStorage;
 
 export declare const client: {
   defineController: typeof defineController;
@@ -6770,5 +6806,7 @@ export declare const client: {
   isApiResultEnvelope: typeof isApiResultEnvelope;
   createDatastarAdapter: typeof createDatastarAdapter;
   createClientDebugger: typeof createClientDebugger;
+  createClientStorage: typeof createClientStorage;
+  defaultStorage: typeof defaultStorage;
   [key: string]: any;
 };

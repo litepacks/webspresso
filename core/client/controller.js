@@ -17,6 +17,7 @@
 
 const { createFormHandle } = require('./forms');
 const { createApiClient } = require('./api');
+const { defaultStorage, createClientStorage } = require('./storage');
 
 let instanceSeq = 0;
 
@@ -92,6 +93,17 @@ function defineController(definition = {}) {
   if (definition.onError !== undefined && typeof definition.onError !== 'function') {
     throw new TypeError('defineController({ onError }) must be an error handler function `(err, ctx, meta) => void`.');
   }
+  if (definition.persist !== undefined && definition.persist !== null) {
+    const p = definition.persist;
+    const isArr = Array.isArray(p);
+    const isStr = typeof p === 'string';
+    const isObj = typeof p === 'object' && p !== null && !isArr;
+    if (!isArr && !isStr && !isObj) {
+      throw new TypeError(
+        'defineController({ persist }) must be an array of keys, storage type string ("local" | "session"), or a config object { keys?, storage?, key?, debounce? }.'
+      );
+    }
+  }
 
   // Pre-validate collision between state and computed properties
   if (definition.computed && typeof definition.computed === 'object') {
@@ -118,8 +130,49 @@ function defineController(definition = {}) {
     connect: typeof definition.connect === 'function' ? definition.connect : null,
     disconnect: typeof definition.disconnect === 'function' ? definition.disconnect : null,
     onError: typeof definition.onError === 'function' ? definition.onError : null,
+    persist: definition.persist || null,
     actions: definition.actions && typeof definition.actions === 'object' ? definition.actions : {},
   });
+}
+
+/**
+ * Normalize controller persist configuration.
+ *
+ * @param {any} persistOpt
+ * @param {string|null} controllerName
+ * @returns {{ keys: string[]|null, storageType: 'local'|'session'|'memory', storageKey: string, debounce: number }|null}
+ */
+function normalizePersistConfig(persistOpt, controllerName) {
+  if (!persistOpt) return null;
+  let keys = null;
+  let storageType = 'local';
+  let storageKey = 'state';
+  let isGlobal = false;
+  let debounce = 50;
+
+  if (Array.isArray(persistOpt)) {
+    keys = persistOpt.map(String);
+  } else if (typeof persistOpt === 'string') {
+    const s = persistOpt.trim().toLowerCase();
+    storageType = s === 'session' ? 'session' : 'local';
+  } else if (typeof persistOpt === 'object' && persistOpt !== null) {
+    if (Array.isArray(persistOpt.keys)) {
+      keys = persistOpt.keys.map(String);
+    }
+    if (persistOpt.storage === 'session' || persistOpt.storage === 'memory') {
+      storageType = persistOpt.storage;
+    }
+    if (typeof persistOpt.key === 'string' && persistOpt.key.trim()) {
+      storageKey = persistOpt.key.trim();
+    }
+    if (Boolean(persistOpt.global)) {
+      isGlobal = true;
+    }
+    if (typeof persistOpt.debounce === 'number') {
+      debounce = Math.max(0, persistOpt.debounce);
+    }
+  }
+  return { keys, storageType, storageKey, isGlobal, debounce };
 }
 
 /**
@@ -205,11 +258,18 @@ function createControllerRuntime(options = {}) {
    * @param {string} [meta.sourcePath]
    * @param {string[]} [meta.aliases]
    */
-  function register(name, rawDef, meta = {}) {
+  function register(nameOrDef, rawDef, meta = {}) {
+    let name = nameOrDef;
+    let actualDef = rawDef;
+    if (typeof nameOrDef === 'object' && nameOrDef !== null && !rawDef) {
+      actualDef = nameOrDef;
+      name = actualDef.name || (actualDef.default && actualDef.default.name) || null;
+    }
+
     const def =
-      rawDef && rawDef.__isWebspressoController
-        ? rawDef
-        : defineController(rawDef && rawDef.default ? rawDef.default : rawDef);
+      actualDef && actualDef.__isWebspressoController
+        ? actualDef
+        : defineController(actualDef && actualDef.default ? actualDef.default : actualDef);
 
     const canonicalName = String(name || def.name || '').trim();
     if (!canonicalName) {
@@ -727,6 +787,24 @@ function createControllerRuntime(options = {}) {
     let state = null;
     let ctx = null;
 
+    const controllerStorage = defaultStorage.scoped(controllerName || 'anon');
+    const storageCtx = Object.freeze({
+      local: controllerStorage.local,
+      session: controllerStorage.session,
+      memory: controllerStorage.memory,
+      scoped: (sub) => controllerStorage.scoped(sub),
+      global: defaultStorage,
+      root: defaultStorage,
+    });
+    const persistConfig = normalizePersistConfig(reg.definition.persist, controllerName);
+    function resolvePersistDriver(pConfig) {
+      if (!pConfig) return storageCtx.local;
+      if (pConfig.isGlobal) {
+        return defaultStorage[pConfig.storageType] || defaultStorage.local;
+      }
+      return storageCtx[pConfig.storageType] || storageCtx.local;
+    }
+
     // 6. Context object passed to `connect(ctx)` and `actions[name](ctx, event, actionEl)`
     ctx = Object.freeze({
       instanceId,
@@ -741,6 +819,13 @@ function createControllerRuntime(options = {}) {
       targets: targetsAccessor,
       tasks: tasksProxy,
       task: createTaskInstance,
+      storage: storageCtx,
+      clearPersistedState: () => {
+        if (persistConfig) {
+          const driver = resolvePersistDriver(persistConfig);
+          driver.remove(persistConfig.storageKey);
+        }
+      },
       param: (name, maybeEl) => {
         if (!name) return null;
         const el = maybeEl || currentActionEl;
@@ -805,6 +890,20 @@ function createControllerRuntime(options = {}) {
       () => ctx
     );
     state = stateManager.state;
+
+    // Hydrate persisted state if defined
+    if (persistConfig) {
+      const driver = resolvePersistDriver(persistConfig);
+      const savedData = driver.get(persistConfig.storageKey, null);
+      if (savedData && typeof savedData === 'object' && !Array.isArray(savedData)) {
+        for (const [k, v] of Object.entries(savedData)) {
+          if (persistConfig.keys && !persistConfig.keys.includes(k)) continue;
+          if (Object.prototype.hasOwnProperty.call(initialRawState, k)) {
+            state[k] = v;
+          }
+        }
+      }
+    }
 
     function invokeAction(actionName, event, actionEl) {
       if (!isConnected()) return undefined;
@@ -872,6 +971,43 @@ function createControllerRuntime(options = {}) {
 
     rebindDom();
 
+    // Auto-sync persisted state changes back to storage
+    if (persistConfig) {
+      const driver = resolvePersistDriver(persistConfig);
+      let persistTimer = null;
+      let lastSavedJson = '';
+
+      const stopPersistEffect = registerEffect(() => {
+        if (!isConnected()) return;
+        const keysToTrack = persistConfig.keys || Object.keys(initialRawState);
+        const payload = {};
+        for (const k of keysToTrack) {
+          payload[k] = state[k];
+        }
+
+        const serialized = JSON.stringify(payload);
+        if (serialized === lastSavedJson) return;
+
+        const writeToStorage = () => {
+          if (!isConnected()) return;
+          driver.set(persistConfig.storageKey, payload);
+          lastSavedJson = serialized;
+        };
+
+        if (persistConfig.debounce > 0) {
+          if (persistTimer) clearTimeout(persistTimer);
+          persistTimer = setTimeout(writeToStorage, persistConfig.debounce);
+        } else {
+          writeToStorage();
+        }
+      });
+
+      cleanupCallbacks.push(() => {
+        if (persistTimer) clearTimeout(persistTimer);
+        if (typeof stopPersistEffect === 'function') stopPersistEffect();
+      });
+    }
+
     // 8. Run `connect(ctx)` lifecycle hook
     if (reg.definition.connect) {
       try {
@@ -893,6 +1029,7 @@ function createControllerRuntime(options = {}) {
       el: rootEl,
       state,
       ctx,
+      invokeAction,
       actions: new Proxy({}, {
         get(_target, prop) {
           if (typeof prop === 'string') {

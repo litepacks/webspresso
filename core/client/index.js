@@ -60,6 +60,14 @@ const {
   summarizePayloadSafely,
 } = require('./debug');
 
+const {
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
+} = require('./storage');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -343,5 +351,12 @@ module.exports = {
   // Debug & Telemetry
   createClientDebugger,
   summarizePayloadSafely,
+
+  // Client Storage & Persistence
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
 };
 

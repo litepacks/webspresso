@@ -1,5 +1,7 @@
 'use strict';
 
+const { defaultStorage } = require('./storage');
+
 /**
  * Webspresso Client-Side SSR Fragment Coordinator & Invalidation Engine
  *
@@ -152,25 +154,49 @@ function createFragmentCoordinator(options = {}) {
       const input = parseFragmentInputAttr(el.getAttribute('data-w-fragment-input'));
       const dependsOn = new Set(parseDependsOnAttr(el.getAttribute('data-w-depends-on')));
 
+      // Fragment input persistence setup
+      const rawPersistInput =
+        el.getAttribute('data-w-persist-input') ||
+        (el.getAttribute('data-w-persist') === 'input' ? 'session' : null);
+      const isInputPersistEnabled = Boolean(rawPersistInput && rawPersistInput !== 'false');
+      const inputStorageType = rawPersistInput && rawPersistInput.toLowerCase() === 'local' ? 'local' : 'session';
+      const inputStorageKey =
+        el.getAttribute('data-w-persist-key') ||
+        el.getAttribute('data-w-input-key') ||
+        `frag_input:${name}`;
+
+      let effectiveInput = input;
+      if (isInputPersistEnabled) {
+        const store = inputStorageType === 'local' ? defaultStorage.local : defaultStorage.session;
+        if (!el.hasAttribute('data-w-fragment-input') || Object.keys(effectiveInput).length === 0) {
+          const stored = store.get(inputStorageKey, null);
+          if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+            effectiveInput = stored;
+          }
+        }
+      }
+
       const existing = instances.get(instanceId);
       if (existing) {
         existing.name = name;
         existing.pagePath = pagePath;
         existing.el = el;
         existing.dependsOn = dependsOn;
-        if (el.hasAttribute('data-w-fragment-input')) {
-          existing.input = input;
+        if (el.hasAttribute('data-w-fragment-input') || isInputPersistEnabled) {
+          existing.input = effectiveInput;
         }
+        existing.persistInput = isInputPersistEnabled ? { type: inputStorageType, key: inputStorageKey } : null;
       } else {
         instances.set(instanceId, {
           instanceId,
           name,
           pagePath,
-          input,
+          input: effectiveInput,
           dependsOn,
           version: 0,
           el,
           abortController: null,
+          persistInput: isInputPersistEnabled ? { type: inputStorageType, key: inputStorageKey } : null,
         });
       }
     }
@@ -230,6 +256,10 @@ function createFragmentCoordinator(options = {}) {
     ) {
       inst.input = fragmentPayload.input;
       inst.el.setAttribute('data-w-fragment-input', JSON.stringify(fragmentPayload.input));
+      if (inst.persistInput) {
+        const store = inst.persistInput.type === 'local' ? defaultStorage.local : defaultStorage.session;
+        store.set(inst.persistInput.key, fragmentPayload.input);
+      }
     }
 
     if (datastar && typeof datastar.patchFragmentElement === 'function') {
@@ -693,6 +723,10 @@ function createFragmentCoordinator(options = {}) {
         if (inst.el && typeof inst.el.setAttribute === 'function') {
           inst.el.setAttribute('data-w-fragment-input', JSON.stringify(inst.input));
         }
+        if (inst.persistInput) {
+          const store = inst.persistInput.type === 'local' ? defaultStorage.local : defaultStorage.session;
+          store.set(inst.persistInput.key, inst.input);
+        }
       }
 
       return {
@@ -787,6 +821,14 @@ function createFragmentCoordinator(options = {}) {
     getInstances() {
       syncDomInstances();
       return Array.from(instances.values());
+    },
+    getStoredInput(instanceIdOrName, storageType = 'session') {
+      const store = storageType === 'local' ? defaultStorage.local : defaultStorage.session;
+      return store.get(`frag_input:${instanceIdOrName}`, null);
+    },
+    clearStoredInput(instanceIdOrName, storageType = 'session') {
+      const store = storageType === 'local' ? defaultStorage.local : defaultStorage.session;
+      return store.remove(`frag_input:${instanceIdOrName}`);
     },
     get hasFailedRefresh() {
       return Boolean(lastFailedBatch);
