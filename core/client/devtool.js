@@ -18,6 +18,14 @@ const { defaultStorage } = require('./storage');
 
 const DEVTOOL_HOST_ID = 'webspresso-client-devtools-host';
 
+const PKG_VERSION = (() => {
+  try {
+    return require('../../package.json').version || '0.0.110';
+  } catch (_) {
+    return '0.0.110';
+  }
+})();
+
 /**
  * Connect to Redux DevTools browser extension if installed.
  */
@@ -845,7 +853,7 @@ function mountDevtool(runtime, options = {}) {
         <!-- Footer -->
         <div class="ws-footer">
           <span>Shortcuts: <strong>Alt + W</strong> to toggle • Console: <code>window.__WEBSPRESSO_DEVTOOLS__</code></span>
-          <span style="color:#a1a1aa;">Webspresso v0.0.109</span>
+          <span style="color:#a1a1aa;">Webspresso v${PKG_VERSION}</span>
         </div>
       </div>
     `;

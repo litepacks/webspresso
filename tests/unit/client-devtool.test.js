@@ -194,3 +194,4 @@ describe('Client DevTools Dock & Inspector (`core/client/devtool.js`)', () => {
     });
   });
 });
+
