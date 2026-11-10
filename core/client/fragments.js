@@ -419,7 +419,7 @@ function createFragmentCoordinator(options = {}) {
         });
       }
       if (isAbort) {
-        return { refreshed: [], canceled: true };
+        return { ok: false, refreshed: [], canceled: true };
       }
       lastFailedBatch = { targets, chainIds };
       for (const cid of chainIds) {
@@ -525,6 +525,7 @@ function createFragmentCoordinator(options = {}) {
     }
 
     return {
+      ok: true,
       refreshed: refreshedIds,
       errors: [],
       timings: {
@@ -548,7 +549,7 @@ function createFragmentCoordinator(options = {}) {
     }
 
     if (pendingTags.size === 0) {
-      return { refreshed: [], skipped: true };
+      return { ok: true, refreshed: [], skipped: true };
     }
 
     const tagsToFlush = new Set(pendingTags);
@@ -583,7 +584,7 @@ function createFragmentCoordinator(options = {}) {
           });
         }
       }
-      return { refreshed: [], skipped: true };
+      return { ok: true, refreshed: [], skipped: true };
     }
 
     // Parent/Child deduplication: if parent & child are both invalidated, parent refresh covers child
@@ -698,7 +699,16 @@ function createFragmentCoordinator(options = {}) {
     }
 
     if (matched.length === 0) {
-      return { refreshed: [], skipped: true };
+      const skippedRes = { ok: true, refreshed: [], skipped: true };
+      if (typeof refreshOpts.onSuccess === 'function') {
+        await refreshOpts.onSuccess(skippedRes);
+      }
+      if (typeof refreshOpts.onSettled === 'function') {
+        await refreshOpts.onSettled(skippedRes, null);
+      } else if (typeof refreshOpts.onComplete === 'function') {
+        await refreshOpts.onComplete(skippedRes, null);
+      }
+      return skippedRes;
     }
 
     const deduped = deduplicateParentChildFragments(matched);
@@ -738,7 +748,45 @@ function createFragmentCoordinator(options = {}) {
       };
     });
 
-    return executeBatchRefresh(targets, [], abortController.signal, refreshOpts.timeout);
+    try {
+      const result = await executeBatchRefresh(targets, [], abortController.signal, refreshOpts.timeout);
+      const enrichedResult = { ok: true, ...result };
+      if (!enrichedResult.canceled && enrichedResult.ok !== false) {
+        if (typeof refreshOpts.onSuccess === 'function') {
+          await refreshOpts.onSuccess(enrichedResult);
+        }
+      }
+      if (typeof refreshOpts.onSettled === 'function') {
+        await refreshOpts.onSettled(enrichedResult, null);
+      } else if (typeof refreshOpts.onComplete === 'function') {
+        await refreshOpts.onComplete(enrichedResult, null);
+      }
+      return enrichedResult;
+    } catch (err) {
+      const failHandler = refreshOpts.onFailure || refreshOpts.onError;
+      if (typeof failHandler === 'function') {
+        try {
+          await failHandler(err);
+        } catch (callbackErr) {
+          throw callbackErr;
+        }
+      }
+      if (typeof refreshOpts.onSettled === 'function') {
+        await refreshOpts.onSettled(null, err);
+      } else if (typeof refreshOpts.onComplete === 'function') {
+        await refreshOpts.onComplete(null, err);
+      }
+
+      if (refreshOpts.throwOnError !== true && (typeof failHandler === 'function' || refreshOpts.throwOnError === false)) {
+        return {
+          ok: false,
+          error: err,
+          refreshed: [],
+          timings: { loadMs: 0, renderMs: 0 },
+        };
+      }
+      throw err;
+    }
   }
 
   /**

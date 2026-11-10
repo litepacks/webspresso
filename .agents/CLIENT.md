@@ -92,25 +92,30 @@ export default defineController({
   actions: {
     async applyFilters({ state, refresh }) {
       const next = { ...state.draft };
-      const res = await refresh('list', { ...next, page: 1 });
-      if (res && res.ok !== false) {
-        state.applied = next;
-        state.page = 1;
-      }
+      await refresh('list', { ...next, page: 1 }, {
+        onSuccess() {
+          state.applied = next;
+          state.page = 1;
+        },
+      });
     },
     async nextPage({ state, refresh }) {
       const next = state.page + 1;
-      const res = await refresh('list', { ...state.applied, page: next });
-      if (res && res.ok !== false) state.page = next;
+      await refresh('list', { ...state.applied, page: next }, {
+        onSuccess() {
+          state.page = next;
+        },
+      });
     },
     async resetFilters({ state, refresh }) {
       const initial = { search: '', status: 'all', priority: 'all' };
-      const res = await refresh('list', { ...initial, page: 1 });
-      if (res && res.ok !== false) {
-        state.draft = { ...initial };
-        state.applied = { ...initial };
-        state.page = 1;
-      }
+      await refresh('list', { ...initial, page: 1 }, {
+        onSuccess() {
+          state.draft = { ...initial };
+          state.applied = { ...initial };
+          state.page = 1;
+        },
+      });
     },
   },
 });
@@ -369,13 +374,31 @@ const stats = await ctx.api.get('/api/stats', {
 > **Strict Mutation Protection**: Mutations (`POST`, `PUT`, `PATCH`, `DELETE`) are **NEVER** retried automatically by default, even if `retry` is passed. Automatic retries on state-changing endpoints can duplicate side effects (e.g. charging a payment twice). To explicitly opt into retrying an idempotent mutation, pass `retryMutations: true`.
 > Requests that are aborted, superseded by newer requests (`policy: 'latest'`), or dropped (`policy: 'drop'`) are **never** retried.
 
-### 12.3 Fragment Batch Refresh Timeout
-Fragment batch refreshes enforce a default timeout of 15,000ms so network dropouts never freeze the UI:
+### 12.3 Fragment Batch Refresh Timeout & Lifecycle Callbacks
+Fragment batch refreshes enforce a default timeout of 15,000ms. In addition, the 3rd parameter options object supports declarative lifecycle callbacks (`onSuccess`, `onFailure`, `onError`, `onSettled` / `onComplete`):
 ```ts
-// Override timeout for a specific refresh invocation
-await ctx.refresh('feed', { page: 1 }, { timeout: 8000 });
+// Declarative callbacks with custom timeout
+await ctx.refresh('feed', { page: 1 }, {
+  timeout: 8000,
+  onSuccess(res) {
+    state.page = 1;
+    console.log('Feed loaded:', res.refreshed);
+  },
+  onFailure(err) {
+    state.errorMessage = err.message; // Suppresses uncaught rejection by default
+  },
+  onSettled(res, err) {
+    state.loading = false;
+  },
+  throwOnError: false, // Set to true to re-throw after calling onFailure
+});
+
+// Or direct promise inspection
+const res = await ctx.refresh('feed', { page: 1 });
+if (res.ok) {
+  state.page = 1;
+}
 ```
-If a fragment refresh times out, it throws a structured error with `err.code === 'FRAGMENT_REFRESH_TIMEOUT'` and `err.isTimedOut === true`.
 
 ### 12.4 Declarative Expression Logic (`&&`, `||`, Parentheses)
 `data-w-show`, `data-w-class`, and other declarative Datastar attributes support logical operators with standard operator precedence and short-circuit evaluation:

@@ -392,9 +392,17 @@ Fragments in Webspresso communicate across 4 distinct mechanisms depending on th
      // Read active input of another fragment
      const currentLimit = ctx.fragment('ordersList').input.limit;
 
-     // Trigger explicit refresh with updated input
-     await ctx.refresh('ordersList', { limit: currentLimit + 10 });
+     // Trigger explicit refresh with updated input and lifecycle callbacks
+     await ctx.refresh('ordersList', { limit: currentLimit + 10 }, {
+       onSuccess(res) {
+         console.log('Orders refreshed:', res.refreshed);
+       },
+       onFailure(err) {
+         console.error('Failed to load orders:', err.message);
+       },
+     });
      ```
+   - Supports declarative callbacks (`onSuccess`, `onFailure`, `onError`, `onSettled`) or standard promise evaluation (`const res = await ctx.refresh(...)`). If `onFailure` is provided, rejection is suppressed by default so error states can be handled without `try/catch` boilerplate.
 4. **Decoupled DOM CustomEvents (`ctx.emit` & `ctx.on`)**:
    - When a controller in Fragment A performs an action, it emits a standard DOM CustomEvent:
      ```ts
@@ -749,11 +757,52 @@ const stats = await ctx.api.get('/api/stats', {
 > [!WARNING]
 > **Mutation Safety Policy**: State-changing methods (`POST`, `PUT`, `PATCH`, `DELETE`) are **never** retried automatically by default. This prevents duplicate side effects (e.g. charging a credit card multiple times). If an endpoint is proven idempotent, you may explicitly pass `retryMutations: true`.
 
-### 12.3 Fragment Batch Refresh Timeout
-All SSR fragment batch refreshes have a default timeout of 15,000ms. You can configure or override this per coordinator or per refresh invocation:
+### 12.3 Fragment Batch Refresh Timeout & Lifecycle Callbacks
+All SSR fragment batch refreshes have a default timeout of 15,000ms. In addition, `refresh()` accepts a 3rd parameter options object supporting timeout, declarative lifecycle callbacks (`onSuccess`, `onFailure`, `onSettled`), and error handling controls:
+
 ```ts
-// Per-refresh override
-await ctx.refresh('dashboard', { view: 'monthly' }, { timeout: 8000 });
+await ctx.refresh('dashboard', { view: 'monthly' }, {
+  timeout: 8000, // custom timeout in ms
+
+  // Invoked on successful fragment fetch and morph
+  onSuccess(res) {
+    state.appliedView = 'monthly';
+    state.lastUpdated = new Date().toLocaleTimeString();
+  },
+
+  // Invoked on network error, HTTP 5xx, or timeout (suppresses uncaught promise rejection by default)
+  onFailure(err) {
+    state.errorMessage = err.message;
+    state.hasFailed = true;
+  },
+
+  // Always invoked after completion (whether succeeded or failed)
+  onSettled(res, err) {
+    state.isLoading = false;
+  },
+
+  // Set to true if you want the promise to reject even when onFailure is provided
+  throwOnError: false,
+});
+```
+
+#### Dual Paradigm: Callbacks vs Promise Await
+Both styles work seamlessly and can even be combined:
+```ts
+// 1. Declarative Callback Style
+await ctx.refresh('todos-list', nextFilters, {
+  onSuccess() {
+    state.applied = nextFilters;
+    state.page = 1;
+  },
+});
+
+// 2. Direct Promise & res.ok Inspection
+const res = await ctx.refresh('todos-list', nextFilters);
+if (res.ok) {
+  state.applied = nextFilters;
+  state.page = 1;
+}
 ```
 
 ### 12.4 Declarative Expression Logic

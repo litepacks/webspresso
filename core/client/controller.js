@@ -858,16 +858,32 @@ function createControllerRuntime(options = {}) {
         cleanupCallbacks.push(unregister);
         return unregister;
       },
-      invalidate: (tags) => (fragments ? fragments.invalidate(tags) : Promise.resolve({ refreshed: [] })),
-      refresh: (idOrName, input, opts) =>
-        fragments ? fragments.refresh(idOrName, input, opts) : Promise.resolve({ refreshed: [] }),
+      invalidate: (tags) => (fragments ? fragments.invalidate(tags) : Promise.resolve({ ok: true, refreshed: [] })),
+      refresh: async (idOrName, input, opts) => {
+        if (!fragments) {
+          const empty = { ok: true, refreshed: [], skipped: true };
+          if (opts && typeof opts.onSuccess === 'function') await opts.onSuccess(empty);
+          if (opts && typeof opts.onSettled === 'function') await opts.onSettled(empty, null);
+          else if (opts && typeof opts.onComplete === 'function') await opts.onComplete(empty, null);
+          return empty;
+        }
+        return fragments.refresh(idOrName, input, opts);
+      },
       fragment: (idOrName) => ({
         get input() {
           const inst = fragments && fragments.getInstance ? fragments.getInstance(idOrName) : null;
           return inst && inst.input ? { ...inst.input } : {};
         },
-        refresh: (input, opts) =>
-          fragments ? fragments.refresh(idOrName, input, opts) : Promise.resolve({ refreshed: [] }),
+        refresh: (input, opts) => {
+          if (!fragments) {
+            const empty = { ok: true, refreshed: [], skipped: true };
+            if (opts && typeof opts.onSuccess === 'function') {
+              return Promise.resolve(opts.onSuccess(empty)).then(() => empty);
+            }
+            return Promise.resolve(empty);
+          }
+          return fragments.refresh(idOrName, input, opts);
+        },
       }),
     });
 

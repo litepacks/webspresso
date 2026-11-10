@@ -12,6 +12,8 @@ export {
   ClientFormHandle,
   ClientFormFillOptions,
   ControllerFormsRegistry,
+  FragmentRefreshResult,
+  FragmentRefreshOptions,
   ControllerFragmentHandle,
   ControllerContext,
   ControllerErrorMeta,

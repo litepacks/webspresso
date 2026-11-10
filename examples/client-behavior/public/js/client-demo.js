@@ -1,5 +1,299 @@
 (function() {
   var modules = {
+    "./utils": function(module, exports, require) {
+'use strict';
+
+/**
+ * Webspresso Client Shared Micro-utilities (`core/client/utils.js`)
+ * Zero-dependency, lightweight helpers to avoid duplicate logic across client modules.
+ */
+
+/**
+ * Check if a value is a non-null object.
+ * @param {unknown} val
+ * @returns {val is Record<string, unknown>}
+ */
+function isObject(val) {
+  return val !== null && typeof val === 'object';
+}
+
+/**
+ * Check if a value is a plain JavaScript object (not an Array, Map, FormData, etc.).
+ * @param {unknown} val
+ * @returns {boolean}
+ */
+function isPlainObject(val) {
+  return isObject(val) && !Array.isArray(val) && Object.prototype.toString.call(val) === '[object Object]';
+}
+
+/**
+ * Check if a value is thenable (Promise-like).
+ * @param {unknown} val
+ * @returns {boolean}
+ */
+function isPromise(val) {
+  return val !== null && (typeof val === 'object' || typeof val === 'function') && typeof val.then === 'function';
+}
+
+/**
+ * Safe string trim helper.
+ * @param {unknown} str
+ * @returns {string}
+ */
+function safeTrim(str) {
+  return typeof str === 'string' ? str.trim() : '';
+}
+
+/**
+ * Resolve a dot-separated property path on an object (e.g. "user.profile.name" or "items.length").
+ * Protects against prototype pollution (`__proto__`, `prototype`, `constructor`).
+ *
+ * @param {object} target
+ * @param {string} rawPath
+ * @returns {unknown}
+ */
+function getByPath(target, rawPath) {
+  if (!target || typeof rawPath !== 'string') return undefined;
+  const trimmed = rawPath.trim();
+  if (!trimmed) return undefined;
+  const parts = trimmed.split('.');
+  let current = target;
+  for (let i = 0; i < parts.length; i++) {
+    if (current === null || current === undefined) return undefined;
+    const key = parts[i].trim();
+    if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
+      return undefined;
+    }
+    current = current[key];
+  }
+  return current;
+}
+
+/**
+ * Set a dot-separated property path on an object (e.g. "filter.search").
+ * Protects against prototype pollution (`__proto__`, `prototype`, `constructor`).
+ *
+ * @param {object} target
+ * @param {string} rawPath
+ * @param {unknown} value
+ */
+function setByPath(target, rawPath, value) {
+  if (!target || typeof rawPath !== 'string') return;
+  const trimmed = rawPath.trim();
+  if (!trimmed) return;
+  const parts = trimmed.split('.');
+  let current = target;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i].trim();
+    if (key === '__proto__' || key === 'prototype' || key === 'constructor') return;
+    if (current[key] === null || typeof current[key] !== 'object') {
+      current[key] = {};
+    }
+    current = current[key];
+  }
+  const lastKey = parts[parts.length - 1].trim();
+  if (lastKey === '__proto__' || lastKey === 'prototype' || lastKey === 'constructor') return;
+  current[lastKey] = value;
+}
+
+/**
+ * Reusable zero-allocation no-op debugger for production and disabled-by-default states.
+ */
+const NOOP_DEBUGGER = Object.freeze({
+  enabled: false,
+  setEnabled() {},
+  trackControllerMount() {},
+  trackControllerUnmount() {},
+  trackCleanupError() {},
+  trackRequestStart() {
+    return { requestId: '', status: 'in-flight' };
+  },
+  trackRequestEnd() {
+    return { status: 'completed' };
+  },
+  trackDiscardedResponse() {
+    return { reason: 'stale' };
+  },
+  startCausalChain() {
+    return '';
+  },
+  recordChainRefresh() {},
+  recordChainPatch() {},
+  recordEvent() {},
+  getSnapshot() {
+    return {
+      enabled: false,
+      activeControllers: [],
+      activeRequests: [],
+      causalChains: [],
+      fragmentTimings: [],
+      discardedResponses: [],
+      cleanupErrors: [],
+      events: [],
+    };
+  },
+  clear() {},
+});
+
+module.exports = {
+  isObject,
+  isPlainObject,
+  isPromise,
+  safeTrim,
+  getByPath,
+  setByPath,
+  NOOP_DEBUGGER,
+};
+
+
+},
+    "../utils": function(module, exports, require) {
+'use strict';
+
+/**
+ * Webspresso Client Shared Micro-utilities (`core/client/utils.js`)
+ * Zero-dependency, lightweight helpers to avoid duplicate logic across client modules.
+ */
+
+/**
+ * Check if a value is a non-null object.
+ * @param {unknown} val
+ * @returns {val is Record<string, unknown>}
+ */
+function isObject(val) {
+  return val !== null && typeof val === 'object';
+}
+
+/**
+ * Check if a value is a plain JavaScript object (not an Array, Map, FormData, etc.).
+ * @param {unknown} val
+ * @returns {boolean}
+ */
+function isPlainObject(val) {
+  return isObject(val) && !Array.isArray(val) && Object.prototype.toString.call(val) === '[object Object]';
+}
+
+/**
+ * Check if a value is thenable (Promise-like).
+ * @param {unknown} val
+ * @returns {boolean}
+ */
+function isPromise(val) {
+  return val !== null && (typeof val === 'object' || typeof val === 'function') && typeof val.then === 'function';
+}
+
+/**
+ * Safe string trim helper.
+ * @param {unknown} str
+ * @returns {string}
+ */
+function safeTrim(str) {
+  return typeof str === 'string' ? str.trim() : '';
+}
+
+/**
+ * Resolve a dot-separated property path on an object (e.g. "user.profile.name" or "items.length").
+ * Protects against prototype pollution (`__proto__`, `prototype`, `constructor`).
+ *
+ * @param {object} target
+ * @param {string} rawPath
+ * @returns {unknown}
+ */
+function getByPath(target, rawPath) {
+  if (!target || typeof rawPath !== 'string') return undefined;
+  const trimmed = rawPath.trim();
+  if (!trimmed) return undefined;
+  const parts = trimmed.split('.');
+  let current = target;
+  for (let i = 0; i < parts.length; i++) {
+    if (current === null || current === undefined) return undefined;
+    const key = parts[i].trim();
+    if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
+      return undefined;
+    }
+    current = current[key];
+  }
+  return current;
+}
+
+/**
+ * Set a dot-separated property path on an object (e.g. "filter.search").
+ * Protects against prototype pollution (`__proto__`, `prototype`, `constructor`).
+ *
+ * @param {object} target
+ * @param {string} rawPath
+ * @param {unknown} value
+ */
+function setByPath(target, rawPath, value) {
+  if (!target || typeof rawPath !== 'string') return;
+  const trimmed = rawPath.trim();
+  if (!trimmed) return;
+  const parts = trimmed.split('.');
+  let current = target;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i].trim();
+    if (key === '__proto__' || key === 'prototype' || key === 'constructor') return;
+    if (current[key] === null || typeof current[key] !== 'object') {
+      current[key] = {};
+    }
+    current = current[key];
+  }
+  const lastKey = parts[parts.length - 1].trim();
+  if (lastKey === '__proto__' || lastKey === 'prototype' || lastKey === 'constructor') return;
+  current[lastKey] = value;
+}
+
+/**
+ * Reusable zero-allocation no-op debugger for production and disabled-by-default states.
+ */
+const NOOP_DEBUGGER = Object.freeze({
+  enabled: false,
+  setEnabled() {},
+  trackControllerMount() {},
+  trackControllerUnmount() {},
+  trackCleanupError() {},
+  trackRequestStart() {
+    return { requestId: '', status: 'in-flight' };
+  },
+  trackRequestEnd() {
+    return { status: 'completed' };
+  },
+  trackDiscardedResponse() {
+    return { reason: 'stale' };
+  },
+  startCausalChain() {
+    return '';
+  },
+  recordChainRefresh() {},
+  recordChainPatch() {},
+  recordEvent() {},
+  getSnapshot() {
+    return {
+      enabled: false,
+      activeControllers: [],
+      activeRequests: [],
+      causalChains: [],
+      fragmentTimings: [],
+      discardedResponses: [],
+      cleanupErrors: [],
+      events: [],
+    };
+  },
+  clear() {},
+});
+
+module.exports = {
+  isObject,
+  isPlainObject,
+  isPromise,
+  safeTrim,
+  getByPath,
+  setByPath,
+  NOOP_DEBUGGER,
+};
+
+
+},
     "./adapter/datastar": function(module, exports, require) {
 'use strict';
 
@@ -26,6 +320,8 @@
  *    100% contract-compatible signal/effect/plugin engine and DOM morphing implementation when the
  *    external package is not installed in `node_modules`.
  */
+
+const { getByPath, setByPath } = require('../utils');
 
 const PluginType = {
   Attribute: 1,
@@ -222,56 +518,6 @@ function createSignalsEngine() {
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve a dot-separated property path on an object (e.g. "user.profile.name" or "items.length").
- *
- * @param {object} target
- * @param {string} rawPath
- * @returns {unknown}
- */
-function getByPath(target, rawPath) {
-  if (!target || typeof rawPath !== 'string') return undefined;
-  const trimmed = rawPath.trim();
-  if (!trimmed) return undefined;
-  const parts = trimmed.split('.');
-  let current = target;
-  for (let i = 0; i < parts.length; i++) {
-    if (current === null || current === undefined) return undefined;
-    const key = parts[i].trim();
-    if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
-      return undefined;
-    }
-    current = current[key];
-  }
-  return current;
-}
-
-/**
- * Set a dot-separated property path on an object (e.g. "filter.search").
- *
- * @param {object} target
- * @param {string} rawPath
- * @param {unknown} value
- */
-function setByPath(target, rawPath, value) {
-  if (!target || typeof rawPath !== 'string') return;
-  const trimmed = rawPath.trim();
-  if (!trimmed) return;
-  const parts = trimmed.split('.');
-  let current = target;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const key = parts[i].trim();
-    if (key === '__proto__' || key === 'prototype' || key === 'constructor') return;
-    if (current[key] === null || typeof current[key] !== 'object') {
-      current[key] = {};
-    }
-    current = current[key];
-  }
-  const lastKey = parts[parts.length - 1].trim();
-  if (lastKey === '__proto__' || lastKey === 'prototype' || lastKey === 'constructor') return;
-  current[lastKey] = value;
-}
-
-/**
  * Parse a literal token (string, number, boolean, null, undefined) or resolve as state path.
  */
 function resolveOperand(state, token) {
@@ -290,6 +536,123 @@ function resolveOperand(state, token) {
 }
 
 /**
+ * Safely strips balanced enclosing parentheses if the entire expression is wrapped in them:
+ * e.g. `(a && b)` -> `a && b`, but `(a && b) || (c && d)` is left unchanged.
+ *
+ * @param {string} raw
+ * @returns {string}
+ */
+function stripOuterParens(raw) {
+  let s = raw.trim();
+  while (s.startsWith('(') && s.endsWith(')')) {
+    let depth = 0;
+    let matched = true;
+    for (let i = 0; i < s.length - 1; i++) {
+      const ch = s[i];
+      if (ch === '(') depth++;
+      else if (ch === ')') {
+        depth--;
+        if (depth === 0) {
+          matched = false;
+          break;
+        }
+      }
+    }
+    if (matched) {
+      s = s.slice(1, -1).trim();
+    } else {
+      break;
+    }
+  }
+  return s;
+}
+
+/**
+ * Split an expression by an operator (e.g. '||', '&&') only at the top level
+ * (outside single/double quotes and outside balanced parentheses).
+ *
+ * @param {string} expr
+ * @param {string} op
+ * @returns {string[]|null}
+ */
+function splitTopLevel(expr, op) {
+  const parts = [];
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let depth = 0;
+  let lastIndex = 0;
+  const opLen = op.length;
+  const len = expr.length;
+
+  for (let i = 0; i < len; i++) {
+    const ch = expr[i];
+    const prev = i > 0 ? expr[i - 1] : '';
+
+    if (ch === "'" && !inDoubleQuote && prev !== '\\') {
+      inSingleQuote = !inSingleQuote;
+    } else if (ch === '"' && !inSingleQuote && prev !== '\\') {
+      inDoubleQuote = !inDoubleQuote;
+    } else if (!inSingleQuote && !inDoubleQuote) {
+      if (ch === '(') {
+        depth++;
+      } else if (ch === ')') {
+        if (depth > 0) depth--;
+      } else if (depth === 0 && expr.slice(i, i + opLen) === op) {
+        parts.push(expr.slice(lastIndex, i).trim());
+        lastIndex = i + opLen;
+        i += opLen - 1;
+      }
+    }
+  }
+
+  if (parts.length > 0) {
+    parts.push(expr.slice(lastIndex).trim());
+    return parts;
+  }
+
+  return null;
+}
+
+/**
+ * Find the first comparison operator at the top level outside quotes and parentheses.
+ */
+function findTopLevelComparison(expr) {
+  const operators = ['===', '!==', '==', '!=', '>=', '<=', '>', '<'];
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let depth = 0;
+  const len = expr.length;
+
+  for (let i = 0; i < len; i++) {
+    const ch = expr[i];
+    const prev = i > 0 ? expr[i - 1] : '';
+
+    if (ch === "'" && !inDoubleQuote && prev !== '\\') {
+      inSingleQuote = !inSingleQuote;
+    } else if (ch === '"' && !inSingleQuote && prev !== '\\') {
+      inDoubleQuote = !inDoubleQuote;
+    } else if (!inSingleQuote && !inDoubleQuote) {
+      if (ch === '(') {
+        depth++;
+      } else if (ch === ')') {
+        if (depth > 0) depth--;
+      } else if (depth === 0 && i > 0) {
+        for (const op of operators) {
+          if (expr.slice(i, i + op.length) === op) {
+            return {
+              op,
+              left: expr.slice(0, i).trim(),
+              right: expr.slice(i + op.length).trim(),
+            };
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Safely evaluate a declarative binding expression against controller state without
  * naive regex transformations or `eval`/`new Function`.
  *
@@ -297,6 +660,8 @@ function resolveOperand(state, token) {
  *   - Property path: `count`, `user.name`, `items.length`
  *   - Negation: `!pending`, `!!error`
  *   - Simple comparisons: `status === 'active'`, `count > 0`, `step !== 1`
+ *   - Logical operators: `isReady && !hasError`, `status === 'a' || status === 'b'`
+ *   - Parenthesized groups: `(a || b) && c`
  *
  * @param {object} state
  * @param {string} rawExpr
@@ -304,39 +669,55 @@ function resolveOperand(state, token) {
  */
 function evaluateStateExpression(state, rawExpr) {
   if (typeof rawExpr !== 'string') return undefined;
-  const expr = rawExpr.trim();
+  const expr = stripOuterParens(rawExpr.trim());
   if (!expr) return undefined;
 
-  // Check simple comparison operators in precedence order
-  const operators = ['===', '!==', '==', '!=', '>=', '<=', '>', '<'];
-  for (const op of operators) {
-    const idx = expr.indexOf(op);
-    if (idx > 0) {
-      const leftRaw = expr.slice(0, idx).trim();
-      const rightRaw = expr.slice(idx + op.length).trim();
-      if (leftRaw && rightRaw) {
-        const left = resolveOperand(state, leftRaw);
-        const right = resolveOperand(state, rightRaw);
-        switch (op) {
-          case '===':
-          case '==':
-            return left === right;
-          case '!==':
-          case '!=':
-            return left !== right;
-          case '>=':
-            return Number(left) >= Number(right);
-          case '<=':
-            return Number(left) <= Number(right);
-          case '>':
-            return Number(left) > Number(right);
-          case '<':
-            return Number(left) < Number(right);
-        }
-      }
+  // 1. Logical OR (||) - lowest precedence, evaluated first so that A || B && C splits into A and (B && C)
+  const orParts = splitTopLevel(expr, '||');
+  if (orParts && orParts.length > 1) {
+    let result = false;
+    for (const part of orParts) {
+      result = evaluateStateExpression(state, part);
+      if (result) return result;
+    }
+    return result;
+  }
+
+  // 2. Logical AND (&&) - higher precedence than ||
+  const andParts = splitTopLevel(expr, '&&');
+  if (andParts && andParts.length > 1) {
+    let result = true;
+    for (const part of andParts) {
+      result = evaluateStateExpression(state, part);
+      if (!result) return result;
+    }
+    return result;
+  }
+
+  // 3. Comparison operators (===, !==, ==, !=, >=, <=, >, <) outside quotes
+  const comp = findTopLevelComparison(expr);
+  if (comp && comp.left && comp.right) {
+    const left = resolveOperand(state, comp.left);
+    const right = resolveOperand(state, comp.right);
+    switch (comp.op) {
+      case '===':
+      case '==':
+        return left === right;
+      case '!==':
+      case '!=':
+        return left !== right;
+      case '>=':
+        return Number(left) >= Number(right);
+      case '<=':
+        return Number(left) <= Number(right);
+      case '>':
+        return Number(left) > Number(right);
+      case '<':
+        return Number(left) < Number(right);
     }
   }
 
+  // 4. Negations (!!, !)
   if (expr.startsWith('!!')) {
     return Boolean(evaluateStateExpression(state, expr.slice(2)));
   }
@@ -344,6 +725,7 @@ function evaluateStateExpression(state, rawExpr) {
     return !Boolean(evaluateStateExpression(state, expr.slice(1)));
   }
 
+  // 5. Literal token or property path lookup
   return resolveOperand(state, expr);
 }
 
@@ -1335,17 +1717,21 @@ const RESERVED_OPTION_KEYS = new Set([
   'csrfToken',
   'parseResponse',
   'onRefreshError',
+  'timeout',
+  'retry',
+  'retryMutations',
+  'raw',
 ]);
 
 /**
  * Structured Client Request Error
- * Distinguishes 'http', 'network', 'validation', and 'canceled' failure modes.
+ * Distinguishes 'http', 'network', 'validation', 'canceled', and 'timeout' failure modes.
  */
 class ClientRequestError extends Error {
   /**
    * @param {string} message
    * @param {object} details
-   * @param {'http'|'network'|'validation'|'canceled'} details.kind
+   * @param {'http'|'network'|'validation'|'canceled'|'timeout'} details.kind
    * @param {number|null} [details.status]
    * @param {string} [details.code]
    * @param {string} [details.method]
@@ -1358,6 +1744,7 @@ class ClientRequestError extends Error {
    * @param {unknown} [details.data]
    * @param {boolean} [details.isDropped]
    * @param {boolean} [details.isSuperseded]
+   * @param {boolean} [details.isTimedOut]
    * @param {Error} [details.cause]
    */
   constructor(message, details = {}) {
@@ -1378,6 +1765,11 @@ class ClientRequestError extends Error {
     this.isValidation = this.kind === 'validation';
     this.isNetwork = this.kind === 'network';
     this.isHttp = this.kind === 'http';
+    this.isTimedOut =
+      this.kind === 'timeout' ||
+      Boolean(details.isTimedOut) ||
+      this.code === 'REQUEST_TIMED_OUT' ||
+      this.status === 408;
     this.isDropped = Boolean(details.isDropped);
     this.isSuperseded = Boolean(details.isSuperseded);
     this.serverRollbackGuaranteed = false;
@@ -1391,6 +1783,7 @@ class ClientRequestError extends Error {
 }
 
 function defaultCodeForKind(kind, status) {
+  if (kind === 'timeout' || status === 408) return 'REQUEST_TIMED_OUT';
   if (kind === 'validation') return 'VALIDATION_ERROR';
   if (kind === 'canceled') return 'REQUEST_CANCELED';
   if (kind === 'network') return 'NETWORK_ERROR';
@@ -1739,9 +2132,13 @@ function normalizeGetArgs(inputOrOptions, explicitOptions) {
     'query' in inputOrOptions ||
     'params' in inputOrOptions ||
     'policy' in inputOrOptions ||
+    'concurrency' in inputOrOptions ||
     'key' in inputOrOptions ||
     'signal' in inputOrOptions ||
-    'headers' in inputOrOptions;
+    'headers' in inputOrOptions ||
+    'timeout' in inputOrOptions ||
+    'retry' in inputOrOptions ||
+    'retryMutations' in inputOrOptions;
 
   if (hasExplicitWrapper && keys.every((k) => RESERVED_OPTION_KEYS.has(k))) {
     return { ...inputOrOptions };
@@ -1762,6 +2159,132 @@ function normalizeGetArgs(inputOrOptions, explicitOptions) {
   }
   opts.query = query;
   return opts;
+}
+
+/**
+ * Normalize retry options into an actionable execution descriptor.
+ * Never allows retries on mutations unless `retryMutations: true` is explicitly opted into.
+ *
+ * @param {boolean|number|object} [retryOpt]
+ * @param {string} upperMethod
+ * @param {boolean} [retryMutations=false]
+ * @returns {object|null}
+ */
+function normalizeRetryConfig(retryOpt, upperMethod, retryMutations = false) {
+  if (!retryOpt) return null;
+
+  // Strict invariant: never automatically retry mutation methods (POST, PUT, PATCH, DELETE)
+  if (MUTATION_METHODS.has(upperMethod) && !retryMutations) {
+    return null;
+  }
+
+  let count = 0;
+  let delay = 300;
+  let maxDelay = 5000;
+  let backoff = 'exponential';
+  let statusCodes = new Set([408, 429, 502, 503, 504]);
+  let onRetry = null;
+
+  if (typeof retryOpt === 'number') {
+    count = Math.max(0, Math.floor(retryOpt));
+  } else if (retryOpt === true) {
+    count = 2;
+  } else if (typeof retryOpt === 'object' && retryOpt !== null) {
+    count = typeof retryOpt.count === 'number' ? Math.max(0, Math.floor(retryOpt.count)) : 2;
+    if (typeof retryOpt.delay === 'number') delay = Math.max(0, retryOpt.delay);
+    if (typeof retryOpt.maxDelay === 'number') maxDelay = Math.max(delay, retryOpt.maxDelay);
+    if (retryOpt.backoff === 'linear' || retryOpt.backoff === 'exponential') {
+      backoff = retryOpt.backoff;
+    }
+    if (Array.isArray(retryOpt.statusCodes)) {
+      statusCodes = new Set(retryOpt.statusCodes);
+    }
+    if (typeof retryOpt.onRetry === 'function') {
+      onRetry = retryOpt.onRetry;
+    }
+  }
+
+  if (count <= 0) return null;
+
+  return {
+    count,
+    delay,
+    maxDelay,
+    backoff,
+    statusCodes,
+    onRetry,
+  };
+}
+
+/**
+ * Determine whether an error is transient and eligible for retry.
+ */
+function isRetryableError(err, statusCodes) {
+  if (!err) return false;
+  // Canceled, dropped, or superseded requests must never retry
+  if (err.isCanceled || err.isDropped || err.isSuperseded) return false;
+  // Network failures and timeouts are retryable
+  if (err.kind === 'network' || err.kind === 'timeout' || err.isTimedOut) return true;
+  // Transient HTTP status codes
+  if (typeof err.status === 'number' && statusCodes && statusCodes.has(err.status)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Calculate retry delay with jitter.
+ */
+function calculateRetryDelay(attempt, config) {
+  const base = config.delay;
+  const max = config.maxDelay;
+  let calculated;
+  if (config.backoff === 'linear') {
+    calculated = base * attempt;
+  } else {
+    calculated = base * Math.pow(2, attempt - 1);
+  }
+  const jitter = Math.random() * 50;
+  return Math.min(max, calculated + jitter);
+}
+
+/**
+ * Abortable delay helper that rejects immediately if any signal aborts during wait.
+ */
+function abortableSleep(ms, signals = []) {
+  return new Promise((resolve, reject) => {
+    for (const sig of signals) {
+      if (sig && sig.aborted) {
+        return reject(new Error('Sleep aborted'));
+      }
+    }
+
+    let timer = null;
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      for (const sig of signals) {
+        if (sig && typeof sig.removeEventListener === 'function') {
+          sig.removeEventListener('abort', onAbort);
+        }
+      }
+    };
+
+    const onAbort = () => {
+      cleanup();
+      reject(new Error('Sleep aborted'));
+    };
+
+    for (const sig of signals) {
+      if (sig && typeof sig.addEventListener === 'function') {
+        sig.addEventListener('abort', onAbort, { once: true });
+      }
+    }
+
+    timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+  });
 }
 
 /**
@@ -1859,11 +2382,83 @@ function createApiClient(config = {}) {
     }
 
     // Policy: 'queue' -> Chain onto existing queue for this key
+    const retryConfig = normalizeRetryConfig(
+      options.retry,
+      upperMethod,
+      Boolean(options.retryMutations)
+    );
+
+    async function executeWithRetry(runFn) {
+      if (!retryConfig) {
+        return runFn(requestId);
+      }
+
+      let attempt = 0;
+      while (true) {
+        attempt++;
+        const currentReqId = attempt === 1 ? requestId : `req_${++reqCounter}_${Date.now()}`;
+        try {
+          return await runFn(currentReqId);
+        } catch (err) {
+          const canRetry =
+            attempt <= retryConfig.count &&
+            isConnected() &&
+            (!lifecycleSignal || !lifecycleSignal.aborted) &&
+            (!options.signal || !options.signal.aborted) &&
+            isRetryableError(err, retryConfig.statusCodes);
+
+          if (!canRetry) {
+            throw err;
+          }
+
+          const delayMs = calculateRetryDelay(attempt, retryConfig);
+
+          if (typeof retryConfig.onRetry === 'function') {
+            try {
+              retryConfig.onRetry(err, attempt, delayMs);
+            } catch (_cbErr) {
+              // Ignore callback error
+            }
+          }
+
+          if (debug && typeof debug.trackRequestRetry === 'function') {
+            debug.trackRequestRetry({
+              requestId: currentReqId,
+              key: requestKey,
+              attempt,
+              delay: delayMs,
+              error: err,
+            });
+          }
+
+          const activeSignals = [options.signal, lifecycleSignal].filter(Boolean);
+          try {
+            await abortableSleep(delayMs, activeSignals);
+          } catch (_sleepErr) {
+            throw new ClientRequestError(
+              `Request canceled during retry backoff (${upperMethod} ${requestUrl}).`,
+              {
+                kind: 'canceled',
+                code: 'REQUEST_CANCELED',
+                method: upperMethod,
+                url: requestUrl,
+                key: requestKey,
+              }
+            );
+          }
+        }
+      }
+    }
+
     if (policy === 'queue') {
       const prevTail = queueMap.get(requestKey) || Promise.resolve();
       const nextTask = prevTail
         .catch(() => {})
-        .then(() => runSingleRequest(upperMethod, requestUrl, body, options, requestKey, requestId, 'queue'));
+        .then(() =>
+          executeWithRetry((subReqId) =>
+            runSingleRequest(upperMethod, requestUrl, body, options, requestKey, subReqId, 'queue')
+          )
+        );
       queueMap.set(
         requestKey,
         nextTask.catch(() => {})
@@ -1871,13 +2466,24 @@ function createApiClient(config = {}) {
       return nextTask;
     }
 
-    return runSingleRequest(upperMethod, requestUrl, body, options, requestKey, requestId, policy);
+    return executeWithRetry((subReqId) =>
+      runSingleRequest(upperMethod, requestUrl, body, options, requestKey, subReqId, policy)
+    );
   }
 
   async function runSingleRequest(upperMethod, requestUrl, body, options, requestKey, requestId, policy) {
     const abortController = new AbortController();
     let superseded = false;
+    let timedOut = false;
+    let timeoutTimer = null;
     let currentSeq = 1;
+
+    if (typeof options.timeout === 'number' && options.timeout > 0) {
+      timeoutTimer = setTimeout(() => {
+        timedOut = true;
+        abortController.abort();
+      }, options.timeout);
+    }
 
     // Policy: 'latest' -> Abort previous in-flight request for this key and increment sequence
     if (policy === 'latest') {
@@ -1964,10 +2570,34 @@ function createApiClient(config = {}) {
           signal: abortController.signal,
         });
       } catch (fetchErr) {
+        if (timeoutTimer) {
+          clearTimeout(timeoutTimer);
+          timeoutTimer = null;
+        }
         const latestEntry = policy === 'latest' ? latestMap.get(requestKey) : null;
         if (latestEntry && (latestEntry.seq !== currentSeq || latestEntry.superseded)) {
           superseded = true;
         }
+
+        if (timedOut) {
+          if (debug) {
+            debug.trackRequestEnd(requestId, { status: 'failed', errorKind: 'timeout' });
+          }
+          throw new ClientRequestError(
+            `Request timed out after ${options.timeout}ms (${upperMethod} ${requestUrl}).`,
+            {
+              kind: 'timeout',
+              status: 408,
+              code: 'REQUEST_TIMED_OUT',
+              method: upperMethod,
+              url: requestUrl,
+              key: requestKey,
+              isTimedOut: true,
+              cause: fetchErr,
+            }
+          );
+        }
+
         const isAbort =
           superseded ||
           abortController.signal.aborted ||
@@ -2105,7 +2735,27 @@ function createApiClient(config = {}) {
       if (status === 204 || status === 205) {
         parsedBody = undefined;
       } else if (typeof response.text === 'function') {
-        const rawText = await response.text();
+        let rawText;
+        try {
+          rawText = await response.text();
+        } catch (bodyErr) {
+          if (timedOut) {
+            throw new ClientRequestError(
+              `Request timed out after ${options.timeout}ms (${upperMethod} ${requestUrl}).`,
+              {
+                kind: 'timeout',
+                status: 408,
+                code: 'REQUEST_TIMED_OUT',
+                method: upperMethod,
+                url: requestUrl,
+                key: requestKey,
+                isTimedOut: true,
+                cause: bodyErr,
+              }
+            );
+          }
+          throw bodyErr;
+        }
         checkSupersededOrDisconnected();
         if (!rawText || !rawText.trim()) {
           parsedBody = undefined;
@@ -2119,7 +2769,26 @@ function createApiClient(config = {}) {
           parsedBody = rawText;
         }
       } else if (typeof response.json === 'function') {
-        parsedBody = await response.json();
+        try {
+          parsedBody = await response.json();
+        } catch (bodyErr) {
+          if (timedOut) {
+            throw new ClientRequestError(
+              `Request timed out after ${options.timeout}ms (${upperMethod} ${requestUrl}).`,
+              {
+                kind: 'timeout',
+                status: 408,
+                code: 'REQUEST_TIMED_OUT',
+                method: upperMethod,
+                url: requestUrl,
+                key: requestKey,
+                isTimedOut: true,
+                cause: bodyErr,
+              }
+            );
+          }
+          throw bodyErr;
+        }
         checkSupersededOrDisconnected();
       }
 
@@ -2224,6 +2893,10 @@ function createApiClient(config = {}) {
 
       return data;
     } finally {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+      }
       const set = inFlightMap.get(requestKey);
       if (set) {
         set.delete(requestId);
@@ -2337,12 +3010,18 @@ module.exports = {
   buildRequestUrl,
   extractValidationErrors,
   unwrapApiResultAndInvalidate,
+  normalizeRetryConfig,
+  isRetryableError,
+  calculateRetryDelay,
+  abortableSleep,
 };
 
 
 },
     "./forms": function(module, exports, require) {
 'use strict';
+
+const { defaultStorage } = require('./storage');
 
 /**
  * Webspresso Native HTML Form Layer & Typed Form Handle
@@ -2745,6 +3424,89 @@ function createFormHandle(formEl, options = {}) {
   const errorListeners = new Set();
   const stateListeners = new Set();
 
+  // Form draft persistence setup (sessionStorage by default, or localStorage)
+  const rawDraftAttr = formEl
+    ? formEl.getAttribute('data-w-persist-draft') || formEl.getAttribute('data-w-draft')
+    : null;
+  const isDraftEnabled =
+    options.persistDraft !== undefined
+      ? Boolean(options.persistDraft)
+      : rawDraftAttr !== null && rawDraftAttr !== 'false';
+
+  let draftStorageType = 'session';
+  if (typeof options.persistDraft === 'string') {
+    draftStorageType = options.persistDraft.toLowerCase() === 'local' ? 'local' : 'session';
+  } else if (rawDraftAttr && rawDraftAttr.toLowerCase() === 'local') {
+    draftStorageType = 'local';
+  }
+
+  const draftKey =
+    options.draftKey ||
+    (formEl && (formEl.getAttribute('data-w-draft-key') || formEl.getAttribute('data-w-persist-key'))) ||
+    `form_draft:${formName || 'anon'}`;
+
+  const draftStorage =
+    (options.storage && options.storage[draftStorageType]) ||
+    (draftStorageType === 'local' ? defaultStorage.local : defaultStorage.session);
+
+  function extractDraftValues(el) {
+    if (!el || typeof el.querySelectorAll !== 'function') return {};
+    const { data } = parseFormElement(el);
+    const safeData = {};
+    for (const [key, val] of Object.entries(data)) {
+      const ctrl = el.querySelector(`[name="${key}"], [name="${key}[]"]`);
+      if (!ctrl) {
+        safeData[key] = val;
+        continue;
+      }
+      const type = (ctrl.type || '').toLowerCase();
+      if (type === 'password' || type === 'file') continue;
+      if (ctrl.hasAttribute('data-w-no-draft') || ctrl.getAttribute('data-w-persist') === 'false') continue;
+      safeData[key] = val;
+    }
+    return safeData;
+  }
+
+  function saveDraft() {
+    if (!formEl || !isDraftEnabled) return false;
+    const draftPayload = extractDraftValues(formEl);
+    return draftStorage.set(draftKey, draftPayload);
+  }
+
+  function restoreDraft() {
+    if (!formEl || !isDraftEnabled) return false;
+    const saved = draftStorage.get(draftKey, null);
+    if (saved && typeof saved === 'object' && Object.keys(saved).length > 0) {
+      fill(saved, { baseline: false });
+      if (typeof formEl.dispatchEvent === 'function') {
+        const CustomEventCtor =
+          (formEl.ownerDocument && formEl.ownerDocument.defaultView && formEl.ownerDocument.defaultView.CustomEvent) ||
+          (typeof CustomEvent !== 'undefined' ? CustomEvent : null);
+        if (CustomEventCtor) {
+          formEl.dispatchEvent(
+            new CustomEventCtor('w-form:draft-restored', {
+              bubbles: true,
+              cancelable: true,
+              detail: { form: handle, draft: saved, key: draftKey },
+            })
+          );
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function clearDraft() {
+    if (!isDraftEnabled) return false;
+    return draftStorage.remove(draftKey);
+  }
+
+  function hasDraft() {
+    if (!isDraftEnabled) return false;
+    return draftStorage.has(draftKey);
+  }
+
   function notifyStateChange() {
     for (const fn of stateListeners) {
       try {
@@ -3143,6 +3905,10 @@ function createFormHandle(formEl, options = {}) {
         initialSnapshot = captureInitialFormSnapshot(formEl);
       }
 
+      if (isDraftEnabled) {
+        clearDraft();
+      }
+
       // Invoke registered success hooks. Note: Any background fragment refresh failure
       // is handled by the fragment coordinator and NEVER puts this form into validation error state!
       for (const listener of successListeners) {
@@ -3203,6 +3969,7 @@ function createFormHandle(formEl, options = {}) {
   }
 
   // Listen to native submit and input/change events on `formEl`
+  let draftDebounceTimer = null;
   const onDomInput = (evt) => {
     dirty = computeFormDirty(formEl, initialSnapshot);
     const target = evt && evt.target;
@@ -3216,6 +3983,12 @@ function createFormHandle(formEl, options = {}) {
           syncErrorsToDom(false);
         }
       }
+    }
+    if (isDraftEnabled) {
+      if (draftDebounceTimer) clearTimeout(draftDebounceTimer);
+      draftDebounceTimer = setTimeout(() => {
+        saveDraft();
+      }, 150);
     }
     notifyStateChange();
   };
@@ -3244,7 +4017,9 @@ function createFormHandle(formEl, options = {}) {
   // Initialize hidden state on empty error placeholders
   syncErrorsToDom(false);
 
-  const handle = {
+  let handle = null;
+
+  handle = {
     name: formName,
     el: formEl,
     get pending() {
@@ -3282,6 +4057,12 @@ function createFormHandle(formEl, options = {}) {
       return parseFormElement(formEl, submitter).data;
     },
     fill,
+    saveDraft,
+    restoreDraft,
+    clearDraft,
+    get hasDraft() {
+      return hasDraft();
+    },
     setAction,
     setRouteParams,
     setDisabled,
@@ -3353,6 +4134,10 @@ function createFormHandle(formEl, options = {}) {
     debug.recordEvent('form:bind', { name: formName });
   }
 
+  if (isDraftEnabled) {
+    restoreDraft();
+  }
+
   return handle;
 }
 
@@ -3361,6 +4146,348 @@ module.exports = {
   isControlDisabled,
   coerceScalarControlValue,
   createFormHandle,
+};
+
+
+},
+    "./storage": function(module, exports, require) {
+'use strict';
+
+/**
+ * Webspresso Client Storage & Persistence Layer (`core/client/storage.js`)
+ *
+ * Capabilities:
+ * - Unified, SSR-safe Storage Adapter for `localStorage`, `sessionStorage`, and in-memory fallback.
+ * - Graceful fallback to `MemoryStorage` when running in Node.js (SSR), sandboxed iframes,
+ *   or when private browsing blocks web storage with SecurityError/DOMException.
+ * - Automatic JSON serialization and deserialization with fallback to raw strings.
+ * - Built-in namespace prefixing (default: `w:`) to prevent collision with other applications.
+ * - Safe `clear()` that only removes keys belonging to the current namespace prefix.
+ * - Quota error resilience: catches `QuotaExceededError` without throwing fatal runtime crashes.
+ * - Sub-namespace scoping via `storage.scoped(prefix)`.
+ */
+
+/**
+ * Map-backed standard Storage implementation for Node.js SSR and private browsing fallbacks.
+ */
+class MemoryStorage {
+  constructor() {
+    this._data = new Map();
+  }
+
+  get length() {
+    return this._data.size;
+  }
+
+  getItem(key) {
+    const k = String(key);
+    return this._data.has(k) ? this._data.get(k) : null;
+  }
+
+  setItem(key, value) {
+    this._data.set(String(key), String(value));
+  }
+
+  removeItem(key) {
+    this._data.delete(String(key));
+  }
+
+  clear() {
+    this._data.clear();
+  }
+
+  key(index) {
+    const idx = Number(index);
+    if (idx < 0 || idx >= this._data.size) return null;
+    let i = 0;
+    for (const k of this._data.keys()) {
+      if (i === idx) return k;
+      i++;
+    }
+    return null;
+  }
+}
+
+const GLOBAL_STORAGE_KEY = '__webspresso_memory_storage__';
+if (!globalThis[GLOBAL_STORAGE_KEY]) {
+  globalThis[GLOBAL_STORAGE_KEY] = {
+    local: new MemoryStorage(),
+    session: new MemoryStorage(),
+    memory: new MemoryStorage(),
+  };
+}
+const sharedMemoryBackends = globalThis[GLOBAL_STORAGE_KEY];
+
+/**
+ * Safely probe and acquire the native browser storage backend or fallback to MemoryStorage.
+ *
+ * @param {'local' | 'session' | 'memory'} type
+ * @returns {Storage | MemoryStorage}
+ */
+function getNativeStorageBackend(type) {
+  if (type === 'memory' || typeof window === 'undefined') {
+    return sharedMemoryBackends[type] || sharedMemoryBackends.local;
+  }
+
+  try {
+    const storage = type === 'session' ? window.sessionStorage : window.localStorage;
+    if (!storage || typeof storage.getItem !== 'function' || typeof storage.setItem !== 'function') {
+      return sharedMemoryBackends[type] || sharedMemoryBackends.local;
+    }
+    // Verify write access (Safari private browsing or sandboxed iframes may throw here)
+    const probeKey = '__w_storage_probe__';
+    storage.setItem(probeKey, '1');
+    storage.removeItem(probeKey);
+    return storage;
+  } catch (_e) {
+    return sharedMemoryBackends[type] || sharedMemoryBackends.local;
+  }
+}
+
+/**
+ * Strongly-typed, prefix-aware storage adapter.
+ */
+class StorageAdapter {
+  /**
+   * @param {'local' | 'session' | 'memory'} type
+   * @param {object} [options]
+   * @param {string} [options.prefix='w:']
+   * @param {Storage | MemoryStorage} [options.backend]
+   */
+  constructor(type = 'local', options = {}) {
+    this.type = type;
+    this.prefix = options.prefix !== undefined ? String(options.prefix) : 'w:';
+    this._backend = options.backend || null;
+  }
+
+  /**
+   * Resolve active storage backend.
+   * @private
+   */
+  _getBackend() {
+    if (!this._backend) {
+      this._backend = getNativeStorageBackend(this.type);
+    }
+    return this._backend;
+  }
+
+  /**
+   * Build prefixed key.
+   * @private
+   */
+  _fullKey(key) {
+    return `${this.prefix}${key}`;
+  }
+
+  /**
+   * Retrieve and deserialize a value from storage.
+   *
+   * @param {string} key
+   * @param {any} [defaultValue=null]
+   * @returns {any}
+   */
+  get(key, defaultValue = null) {
+    if (!key) return defaultValue;
+    try {
+      const backend = this._getBackend();
+      const raw = backend.getItem(this._fullKey(key));
+      if (raw === null || raw === undefined) {
+        return defaultValue;
+      }
+      try {
+        return JSON.parse(raw);
+      } catch (_parseErr) {
+        // Return raw string if not valid JSON
+        return raw;
+      }
+    } catch (_err) {
+      return defaultValue;
+    }
+  }
+
+  /**
+   * Serialize and store a value in storage.
+   *
+   * @param {string} key
+   * @param {any} value - If undefined, the key is removed
+   * @returns {boolean} True if successfully stored, false on failure (e.g. quota exceeded)
+   */
+  set(key, value) {
+    if (!key) return false;
+    if (value === undefined) {
+      return this.remove(key);
+    }
+    try {
+      const backend = this._getBackend();
+      const serialized = JSON.stringify(value);
+      backend.setItem(this._fullKey(key), serialized);
+      return true;
+    } catch (_err) {
+      // QuotaExceededError or security restrictions
+      return false;
+    }
+  }
+
+  /**
+   * Remove a key from storage.
+   *
+   * @param {string} key
+   * @returns {boolean}
+   */
+  remove(key) {
+    if (!key) return false;
+    try {
+      const backend = this._getBackend();
+      backend.removeItem(this._fullKey(key));
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+
+  /**
+   * Check whether a key exists in storage.
+   *
+   * @param {string} key
+   * @returns {boolean}
+   */
+  has(key) {
+    if (!key) return false;
+    try {
+      const backend = this._getBackend();
+      return backend.getItem(this._fullKey(key)) !== null;
+    } catch (_err) {
+      return false;
+    }
+  }
+
+  /**
+   * List all unprefixed keys stored under this adapter's namespace prefix.
+   *
+   * @returns {string[]}
+   */
+  keys() {
+    try {
+      const backend = this._getBackend();
+      const result = [];
+      const prefixLen = this.prefix.length;
+
+      if (backend instanceof MemoryStorage) {
+        for (const k of backend._data.keys()) {
+          if (!this.prefix || k.startsWith(this.prefix)) {
+            result.push(k.slice(prefixLen));
+          }
+        }
+        return result;
+      }
+
+      if (typeof backend.length === 'number') {
+        for (let i = 0; i < backend.length; i++) {
+          const k = backend.key(i);
+          if (k && (!this.prefix || k.startsWith(this.prefix))) {
+            result.push(k.slice(prefixLen));
+          }
+        }
+      }
+      return result;
+    } catch (_err) {
+      return [];
+    }
+  }
+
+  /**
+   * Clear only keys belonging to this adapter's prefix. Never touches outside keys.
+   *
+   * @returns {boolean}
+   */
+  clear() {
+    try {
+      const backend = this._getBackend();
+      if (!this.prefix) {
+        backend.clear();
+        return true;
+      }
+      const matchedKeys = this.keys();
+      for (const k of matchedKeys) {
+        backend.removeItem(this._fullKey(k));
+      }
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+
+  /**
+   * Create a sub-scoped storage adapter inheriting the same backend.
+   *
+   * @param {string} subPrefix
+   * @returns {StorageAdapter}
+   */
+  scoped(subPrefix) {
+    const clean = String(subPrefix || '').trim();
+    const nextPrefix = clean ? `${this.prefix}${clean}:` : this.prefix;
+    return new StorageAdapter(this.type, {
+      prefix: nextPrefix,
+      backend: this._getBackend(),
+    });
+  }
+}
+
+/**
+ * Create a complete client storage bundle exposing `local`, `session`, `memory`, and `scoped()`.
+ *
+ * @param {object} [options]
+ * @param {string} [options.prefix='w:'] - Root key namespace prefix
+ * @param {Storage | MemoryStorage} [options.localBackend] - Custom backend for localStorage
+ * @param {Storage | MemoryStorage} [options.sessionBackend] - Custom backend for sessionStorage
+ * @param {MemoryStorage} [options.memoryBackend] - Custom backend for memory storage
+ * @returns {ClientStorage}
+ */
+function createClientStorage(options = {}) {
+  const prefix = options.prefix !== undefined ? String(options.prefix) : 'w:';
+  const local = new StorageAdapter('local', {
+    prefix,
+    backend: options.localBackend || null,
+  });
+  const session = new StorageAdapter('session', {
+    prefix,
+    backend: options.sessionBackend || null,
+  });
+  const memory = new StorageAdapter('memory', {
+    prefix,
+    backend: options.memoryBackend || null,
+  });
+
+  return Object.freeze({
+    local,
+    session,
+    memory,
+    get prefix() {
+      return prefix;
+    },
+    scoped(subPrefix) {
+      const clean = String(subPrefix || '').trim();
+      const nextPrefix = clean ? `${prefix}${clean}:` : prefix;
+      return createClientStorage({
+        ...options,
+        prefix: nextPrefix,
+        localBackend: local._getBackend(),
+        sessionBackend: session._getBackend(),
+        memoryBackend: memory._getBackend(),
+      });
+    },
+  });
+}
+
+const defaultStorage = createClientStorage();
+
+module.exports = {
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
+  sharedMemoryBackends,
 };
 
 
@@ -3385,6 +4512,7 @@ module.exports = {
 
 const { createFormHandle } = require('./forms');
 const { createApiClient } = require('./api');
+const { defaultStorage, createClientStorage } = require('./storage');
 
 let instanceSeq = 0;
 
@@ -3457,6 +4585,20 @@ function defineController(definition = {}) {
   if (definition.tasks !== undefined && (typeof definition.tasks !== 'object' || definition.tasks === null)) {
     throw new TypeError('defineController({ tasks }) must be an object of task factory functions.');
   }
+  if (definition.onError !== undefined && typeof definition.onError !== 'function') {
+    throw new TypeError('defineController({ onError }) must be an error handler function `(err, ctx, meta) => void`.');
+  }
+  if (definition.persist !== undefined && definition.persist !== null) {
+    const p = definition.persist;
+    const isArr = Array.isArray(p);
+    const isStr = typeof p === 'string';
+    const isObj = typeof p === 'object' && p !== null && !isArr;
+    if (!isArr && !isStr && !isObj) {
+      throw new TypeError(
+        'defineController({ persist }) must be an array of keys, storage type string ("local" | "session"), or a config object { keys?, storage?, key?, debounce? }.'
+      );
+    }
+  }
 
   // Pre-validate collision between state and computed properties
   if (definition.computed && typeof definition.computed === 'object') {
@@ -3482,8 +4624,50 @@ function defineController(definition = {}) {
     tasks: definition.tasks && typeof definition.tasks === 'object' ? definition.tasks : {},
     connect: typeof definition.connect === 'function' ? definition.connect : null,
     disconnect: typeof definition.disconnect === 'function' ? definition.disconnect : null,
+    onError: typeof definition.onError === 'function' ? definition.onError : null,
+    persist: definition.persist || null,
     actions: definition.actions && typeof definition.actions === 'object' ? definition.actions : {},
   });
+}
+
+/**
+ * Normalize controller persist configuration.
+ *
+ * @param {any} persistOpt
+ * @param {string|null} controllerName
+ * @returns {{ keys: string[]|null, storageType: 'local'|'session'|'memory', storageKey: string, debounce: number }|null}
+ */
+function normalizePersistConfig(persistOpt, controllerName) {
+  if (!persistOpt) return null;
+  let keys = null;
+  let storageType = 'local';
+  let storageKey = 'state';
+  let isGlobal = false;
+  let debounce = 50;
+
+  if (Array.isArray(persistOpt)) {
+    keys = persistOpt.map(String);
+  } else if (typeof persistOpt === 'string') {
+    const s = persistOpt.trim().toLowerCase();
+    storageType = s === 'session' ? 'session' : 'local';
+  } else if (typeof persistOpt === 'object' && persistOpt !== null) {
+    if (Array.isArray(persistOpt.keys)) {
+      keys = persistOpt.keys.map(String);
+    }
+    if (persistOpt.storage === 'session' || persistOpt.storage === 'memory') {
+      storageType = persistOpt.storage;
+    }
+    if (typeof persistOpt.key === 'string' && persistOpt.key.trim()) {
+      storageKey = persistOpt.key.trim();
+    }
+    if (Boolean(persistOpt.global)) {
+      isGlobal = true;
+    }
+    if (typeof persistOpt.debounce === 'number') {
+      debounce = Math.max(0, persistOpt.debounce);
+    }
+  }
+  return { keys, storageType, storageKey, isGlobal, debounce };
 }
 
 /**
@@ -3569,11 +4753,18 @@ function createControllerRuntime(options = {}) {
    * @param {string} [meta.sourcePath]
    * @param {string[]} [meta.aliases]
    */
-  function register(name, rawDef, meta = {}) {
+  function register(nameOrDef, rawDef, meta = {}) {
+    let name = nameOrDef;
+    let actualDef = rawDef;
+    if (typeof nameOrDef === 'object' && nameOrDef !== null && !rawDef) {
+      actualDef = nameOrDef;
+      name = actualDef.name || (actualDef.default && actualDef.default.name) || null;
+    }
+
     const def =
-      rawDef && rawDef.__isWebspressoController
-        ? rawDef
-        : defineController(rawDef && rawDef.default ? rawDef.default : rawDef);
+      actualDef && actualDef.__isWebspressoController
+        ? actualDef
+        : defineController(actualDef && actualDef.default ? actualDef.default : actualDef);
 
     const canonicalName = String(name || def.name || '').trim();
     if (!canonicalName) {
@@ -3661,6 +4852,48 @@ function createControllerRuntime(options = {}) {
     const scopedTasks = {};
     const scopedTasksList = [];
     let currentActionEl = null;
+    let lastError = null;
+    const dynamicErrorListeners = new Set();
+
+    function handleControllerError(err, meta = {}) {
+      if (!err || err.isCanceled) {
+        return;
+      }
+
+      lastError = err;
+
+      // 1. Controller definition onError hook
+      if (typeof reg.definition.onError === 'function') {
+        try {
+          reg.definition.onError(err, ctx, meta);
+        } catch (hookErr) {
+          if (debug) {
+            debug.trackCleanupError(instanceId, controllerName, 'onError', hookErr);
+          }
+        }
+      }
+
+      // 2. Dynamic ctx.onError listeners
+      for (const listener of Array.from(dynamicErrorListeners)) {
+        try {
+          listener(err, meta);
+        } catch (_listenerErr) {
+          // Ignore
+        }
+      }
+
+      // 3. Dispatch bubbling CustomEvent 'w-controller:error' on rootEl
+      emitEvent(
+        'w-controller:error',
+        {
+          error: err,
+          instanceId,
+          controllerName,
+          ...meta,
+        },
+        { bubbles: true, cancelable: true }
+      );
+    }
 
     let taskSeq = 0;
     function createTaskInstance(runFnOrConfig, options = {}) {
@@ -3766,6 +4999,10 @@ function createControllerRuntime(options = {}) {
           }
           _error = err;
           updateSignal('error', err);
+          handleControllerError(err, {
+            task: taskKey,
+            phase: 'task',
+          });
           throw err;
         } finally {
           if (inFlightAbort === abortCtrl) {
@@ -4045,6 +5282,24 @@ function createControllerRuntime(options = {}) {
     let state = null;
     let ctx = null;
 
+    const controllerStorage = defaultStorage.scoped(controllerName || 'anon');
+    const storageCtx = Object.freeze({
+      local: controllerStorage.local,
+      session: controllerStorage.session,
+      memory: controllerStorage.memory,
+      scoped: (sub) => controllerStorage.scoped(sub),
+      global: defaultStorage,
+      root: defaultStorage,
+    });
+    const persistConfig = normalizePersistConfig(reg.definition.persist, controllerName);
+    function resolvePersistDriver(pConfig) {
+      if (!pConfig) return storageCtx.local;
+      if (pConfig.isGlobal) {
+        return defaultStorage[pConfig.storageType] || defaultStorage.local;
+      }
+      return storageCtx[pConfig.storageType] || storageCtx.local;
+    }
+
     // 6. Context object passed to `connect(ctx)` and `actions[name](ctx, event, actionEl)`
     ctx = Object.freeze({
       instanceId,
@@ -4059,6 +5314,13 @@ function createControllerRuntime(options = {}) {
       targets: targetsAccessor,
       tasks: tasksProxy,
       task: createTaskInstance,
+      storage: storageCtx,
+      clearPersistedState: () => {
+        if (persistConfig) {
+          const driver = resolvePersistDriver(persistConfig);
+          driver.remove(persistConfig.storageKey);
+        }
+      },
       param: (name, maybeEl) => {
         if (!name) return null;
         const el = maybeEl || currentActionEl;
@@ -4076,16 +5338,47 @@ function createControllerRuntime(options = {}) {
       signal: lifecycleAbort.signal,
       isConnected,
       isDisposed: () => !isConnected(),
-      invalidate: (tags) => (fragments ? fragments.invalidate(tags) : Promise.resolve({ refreshed: [] })),
-      refresh: (idOrName, input, opts) =>
-        fragments ? fragments.refresh(idOrName, input, opts) : Promise.resolve({ refreshed: [] }),
+      get lastError() {
+        return lastError;
+      },
+      clearError() {
+        lastError = null;
+      },
+      onError(listener) {
+        if (typeof listener !== 'function') return () => {};
+        dynamicErrorListeners.add(listener);
+        const unregister = () => {
+          dynamicErrorListeners.delete(listener);
+        };
+        cleanupCallbacks.push(unregister);
+        return unregister;
+      },
+      invalidate: (tags) => (fragments ? fragments.invalidate(tags) : Promise.resolve({ ok: true, refreshed: [] })),
+      refresh: async (idOrName, input, opts) => {
+        if (!fragments) {
+          const empty = { ok: true, refreshed: [], skipped: true };
+          if (opts && typeof opts.onSuccess === 'function') await opts.onSuccess(empty);
+          if (opts && typeof opts.onSettled === 'function') await opts.onSettled(empty, null);
+          else if (opts && typeof opts.onComplete === 'function') await opts.onComplete(empty, null);
+          return empty;
+        }
+        return fragments.refresh(idOrName, input, opts);
+      },
       fragment: (idOrName) => ({
         get input() {
           const inst = fragments && fragments.getInstance ? fragments.getInstance(idOrName) : null;
           return inst && inst.input ? { ...inst.input } : {};
         },
-        refresh: (input, opts) =>
-          fragments ? fragments.refresh(idOrName, input, opts) : Promise.resolve({ refreshed: [] }),
+        refresh: (input, opts) => {
+          if (!fragments) {
+            const empty = { ok: true, refreshed: [], skipped: true };
+            if (opts && typeof opts.onSuccess === 'function') {
+              return Promise.resolve(opts.onSuccess(empty)).then(() => empty);
+            }
+            return Promise.resolve(empty);
+          }
+          return fragments.refresh(idOrName, input, opts);
+        },
       }),
     });
 
@@ -4109,6 +5402,20 @@ function createControllerRuntime(options = {}) {
     );
     state = stateManager.state;
 
+    // Hydrate persisted state if defined
+    if (persistConfig) {
+      const driver = resolvePersistDriver(persistConfig);
+      const savedData = driver.get(persistConfig.storageKey, null);
+      if (savedData && typeof savedData === 'object' && !Array.isArray(savedData)) {
+        for (const [k, v] of Object.entries(savedData)) {
+          if (persistConfig.keys && !persistConfig.keys.includes(k)) continue;
+          if (Object.prototype.hasOwnProperty.call(initialRawState, k)) {
+            state[k] = v;
+          }
+        }
+      }
+    }
+
     function invokeAction(actionName, event, actionEl) {
       if (!isConnected()) return undefined;
       const fn = reg.definition.actions[actionName];
@@ -4122,12 +5429,24 @@ function createControllerRuntime(options = {}) {
           return res.catch((err) => {
             // Ignore canceled/superseded request errors on disconnected or superseded instances
             if (err && err.isCanceled) return undefined;
+            handleControllerError(err, {
+              action: actionName,
+              event,
+              actionEl,
+              phase: 'action',
+            });
             throw err;
           });
         }
         return res;
       } catch (err) {
         if (err && err.isCanceled) return undefined;
+        handleControllerError(err, {
+          action: actionName,
+          event,
+          actionEl,
+          phase: 'action',
+        });
         throw err;
       } finally {
         currentActionEl = null;
@@ -4163,6 +5482,43 @@ function createControllerRuntime(options = {}) {
 
     rebindDom();
 
+    // Auto-sync persisted state changes back to storage
+    if (persistConfig) {
+      const driver = resolvePersistDriver(persistConfig);
+      let persistTimer = null;
+      let lastSavedJson = '';
+
+      const stopPersistEffect = registerEffect(() => {
+        if (!isConnected()) return;
+        const keysToTrack = persistConfig.keys || Object.keys(initialRawState);
+        const payload = {};
+        for (const k of keysToTrack) {
+          payload[k] = state[k];
+        }
+
+        const serialized = JSON.stringify(payload);
+        if (serialized === lastSavedJson) return;
+
+        const writeToStorage = () => {
+          if (!isConnected()) return;
+          driver.set(persistConfig.storageKey, payload);
+          lastSavedJson = serialized;
+        };
+
+        if (persistConfig.debounce > 0) {
+          if (persistTimer) clearTimeout(persistTimer);
+          persistTimer = setTimeout(writeToStorage, persistConfig.debounce);
+        } else {
+          writeToStorage();
+        }
+      });
+
+      cleanupCallbacks.push(() => {
+        if (persistTimer) clearTimeout(persistTimer);
+        if (typeof stopPersistEffect === 'function') stopPersistEffect();
+      });
+    }
+
     // 8. Run `connect(ctx)` lifecycle hook
     if (reg.definition.connect) {
       try {
@@ -4171,6 +5527,7 @@ function createControllerRuntime(options = {}) {
           cleanupCallbacks.push(userCleanup);
         }
       } catch (err) {
+        handleControllerError(err, { phase: 'connect' });
         if (debug) {
           debug.trackCleanupError(instanceId, controllerName, 'connect', err);
         }
@@ -4183,6 +5540,7 @@ function createControllerRuntime(options = {}) {
       el: rootEl,
       state,
       ctx,
+      invokeAction,
       actions: new Proxy({}, {
         get(_target, prop) {
           if (typeof prop === 'string') {
@@ -4205,6 +5563,7 @@ function createControllerRuntime(options = {}) {
           try {
             reg.definition.disconnect(ctx);
           } catch (err) {
+            handleControllerError(err, { phase: 'disconnect' });
             if (debug) {
               debug.trackCleanupError(instanceId, controllerName, 'disconnect', err);
             }
@@ -4255,6 +5614,8 @@ function createControllerRuntime(options = {}) {
 
         // Dispose isolated Datastar signals for this instance
         stateManager.dispose();
+        dynamicErrorListeners.clear();
+        lastError = null;
 
         const mapOnEl = elementInstances.get(rootEl);
         if (mapOnEl) {
@@ -4452,6 +5813,8 @@ module.exports = {
     "./fragments": function(module, exports, require) {
 'use strict';
 
+const { defaultStorage } = require('./storage');
+
 /**
  * Webspresso Client-Side SSR Fragment Coordinator & Invalidation Engine
  *
@@ -4558,6 +5921,7 @@ function createFragmentCoordinator(options = {}) {
   const endpoint = options.endpoint || DEFAULT_FRAGMENT_ENDPOINT;
   const datastar = options.datastar || options.adapter;
   const debug = options.debug || null;
+  const defaultTimeout = typeof options.timeout === 'number' ? options.timeout : 15000;
 
   // Map<instanceId, { instanceId, name, pagePath, input, dependsOn: Set<string>, version: number, el: Element, abortController: AbortController|null }>
   const instances = new Map();
@@ -4603,25 +5967,49 @@ function createFragmentCoordinator(options = {}) {
       const input = parseFragmentInputAttr(el.getAttribute('data-w-fragment-input'));
       const dependsOn = new Set(parseDependsOnAttr(el.getAttribute('data-w-depends-on')));
 
+      // Fragment input persistence setup
+      const rawPersistInput =
+        el.getAttribute('data-w-persist-input') ||
+        (el.getAttribute('data-w-persist') === 'input' ? 'session' : null);
+      const isInputPersistEnabled = Boolean(rawPersistInput && rawPersistInput !== 'false');
+      const inputStorageType = rawPersistInput && rawPersistInput.toLowerCase() === 'local' ? 'local' : 'session';
+      const inputStorageKey =
+        el.getAttribute('data-w-persist-key') ||
+        el.getAttribute('data-w-input-key') ||
+        `frag_input:${name}`;
+
+      let effectiveInput = input;
+      if (isInputPersistEnabled) {
+        const store = inputStorageType === 'local' ? defaultStorage.local : defaultStorage.session;
+        if (!el.hasAttribute('data-w-fragment-input') || Object.keys(effectiveInput).length === 0) {
+          const stored = store.get(inputStorageKey, null);
+          if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+            effectiveInput = stored;
+          }
+        }
+      }
+
       const existing = instances.get(instanceId);
       if (existing) {
         existing.name = name;
         existing.pagePath = pagePath;
         existing.el = el;
         existing.dependsOn = dependsOn;
-        if (el.hasAttribute('data-w-fragment-input')) {
-          existing.input = input;
+        if (el.hasAttribute('data-w-fragment-input') || isInputPersistEnabled) {
+          existing.input = effectiveInput;
         }
+        existing.persistInput = isInputPersistEnabled ? { type: inputStorageType, key: inputStorageKey } : null;
       } else {
         instances.set(instanceId, {
           instanceId,
           name,
           pagePath,
-          input,
+          input: effectiveInput,
           dependsOn,
           version: 0,
           el,
           abortController: null,
+          persistInput: isInputPersistEnabled ? { type: inputStorageType, key: inputStorageKey } : null,
         });
       }
     }
@@ -4681,6 +6069,10 @@ function createFragmentCoordinator(options = {}) {
     ) {
       inst.input = fragmentPayload.input;
       inst.el.setAttribute('data-w-fragment-input', JSON.stringify(fragmentPayload.input));
+      if (inst.persistInput) {
+        const store = inst.persistInput.type === 'local' ? defaultStorage.local : defaultStorage.session;
+        store.set(inst.persistInput.key, fragmentPayload.input);
+      }
     }
 
     if (datastar && typeof datastar.patchFragmentElement === 'function') {
@@ -4718,7 +6110,7 @@ function createFragmentCoordinator(options = {}) {
    * Execute a network refresh for a list of target fragment descriptors:
    * `Array<{ instanceId, name, pagePath, input, reqVersion }>`
    */
-  async function executeBatchRefresh(targets, chainIds = [], abortSignal = null) {
+  async function executeBatchRefresh(targets, chainIds = [], abortSignal = null, batchTimeout = defaultTimeout) {
     if (!targets || targets.length === 0) {
       return { refreshed: [], skipped: true };
     }
@@ -4764,6 +6156,27 @@ function createFragmentCoordinator(options = {}) {
       });
     }
 
+    const batchAbortController = new AbortController();
+    let timeoutTimer = null;
+    let timedOut = false;
+    const timeoutMs = typeof batchTimeout === 'number' ? batchTimeout : defaultTimeout;
+
+    if (timeoutMs > 0) {
+      timeoutTimer = setTimeout(() => {
+        timedOut = true;
+        batchAbortController.abort();
+      }, timeoutMs);
+    }
+
+    const onCallerAbort = () => batchAbortController.abort();
+    if (abortSignal) {
+      if (abortSignal.aborted) {
+        batchAbortController.abort();
+      } else {
+        abortSignal.addEventListener('abort', onCallerAbort, { once: true });
+      }
+    }
+
     let response;
     try {
       response = await fetchImpl(endpoint, {
@@ -4771,11 +6184,45 @@ function createFragmentCoordinator(options = {}) {
         headers,
         body: JSON.stringify(requestPayload),
         credentials: 'same-origin',
-        signal: abortSignal || undefined,
+        signal: batchAbortController.signal,
       });
     } catch (err) {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+      }
+      if (abortSignal) {
+        try {
+          abortSignal.removeEventListener('abort', onCallerAbort);
+        } catch (_e) {}
+      }
+
+      if (timedOut) {
+        if (debug) {
+          debug.trackRequestEnd(reqId, {
+            status: 'failed',
+            errorKind: 'timeout',
+          });
+        }
+        const timeoutError = new Error(`Fragment refresh timed out after ${timeoutMs}ms.`);
+        timeoutError.code = 'FRAGMENT_REFRESH_TIMEOUT';
+        timeoutError.isTimedOut = true;
+        lastFailedBatch = { targets, chainIds };
+        for (const cid of chainIds) {
+          if (debug) {
+            debug.recordChainRefresh(cid, {
+              fragmentIds: targets.map((t) => t.instanceId),
+              status: 'failed',
+              error: timeoutError,
+            });
+          }
+        }
+        throw timeoutError;
+      }
+
       const isAbort =
         (abortSignal && abortSignal.aborted) ||
+        batchAbortController.signal.aborted ||
         (err && (err.name === 'AbortError' || err.code === 'ABORT_ERR'));
 
       if (debug) {
@@ -4785,7 +6232,7 @@ function createFragmentCoordinator(options = {}) {
         });
       }
       if (isAbort) {
-        return { refreshed: [], canceled: true };
+        return { ok: false, refreshed: [], canceled: true };
       }
       lastFailedBatch = { targets, chainIds };
       for (const cid of chainIds) {
@@ -4798,6 +6245,16 @@ function createFragmentCoordinator(options = {}) {
         }
       }
       throw err;
+    } finally {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+      }
+      if (abortSignal) {
+        try {
+          abortSignal.removeEventListener('abort', onCallerAbort);
+        } catch (_e) {}
+      }
     }
 
     let body = null;
@@ -4881,6 +6338,7 @@ function createFragmentCoordinator(options = {}) {
     }
 
     return {
+      ok: true,
       refreshed: refreshedIds,
       errors: [],
       timings: {
@@ -4904,7 +6362,7 @@ function createFragmentCoordinator(options = {}) {
     }
 
     if (pendingTags.size === 0) {
-      return { refreshed: [], skipped: true };
+      return { ok: true, refreshed: [], skipped: true };
     }
 
     const tagsToFlush = new Set(pendingTags);
@@ -4939,7 +6397,7 @@ function createFragmentCoordinator(options = {}) {
           });
         }
       }
-      return { refreshed: [], skipped: true };
+      return { ok: true, refreshed: [], skipped: true };
     }
 
     // Parent/Child deduplication: if parent & child are both invalidated, parent refresh covers child
@@ -5054,7 +6512,16 @@ function createFragmentCoordinator(options = {}) {
     }
 
     if (matched.length === 0) {
-      return { refreshed: [], skipped: true };
+      const skippedRes = { ok: true, refreshed: [], skipped: true };
+      if (typeof refreshOpts.onSuccess === 'function') {
+        await refreshOpts.onSuccess(skippedRes);
+      }
+      if (typeof refreshOpts.onSettled === 'function') {
+        await refreshOpts.onSettled(skippedRes, null);
+      } else if (typeof refreshOpts.onComplete === 'function') {
+        await refreshOpts.onComplete(skippedRes, null);
+      }
+      return skippedRes;
     }
 
     const deduped = deduplicateParentChildFragments(matched);
@@ -5079,6 +6546,10 @@ function createFragmentCoordinator(options = {}) {
         if (inst.el && typeof inst.el.setAttribute === 'function') {
           inst.el.setAttribute('data-w-fragment-input', JSON.stringify(inst.input));
         }
+        if (inst.persistInput) {
+          const store = inst.persistInput.type === 'local' ? defaultStorage.local : defaultStorage.session;
+          store.set(inst.persistInput.key, inst.input);
+        }
       }
 
       return {
@@ -5090,7 +6561,45 @@ function createFragmentCoordinator(options = {}) {
       };
     });
 
-    return executeBatchRefresh(targets, [], abortController.signal);
+    try {
+      const result = await executeBatchRefresh(targets, [], abortController.signal, refreshOpts.timeout);
+      const enrichedResult = { ok: true, ...result };
+      if (!enrichedResult.canceled && enrichedResult.ok !== false) {
+        if (typeof refreshOpts.onSuccess === 'function') {
+          await refreshOpts.onSuccess(enrichedResult);
+        }
+      }
+      if (typeof refreshOpts.onSettled === 'function') {
+        await refreshOpts.onSettled(enrichedResult, null);
+      } else if (typeof refreshOpts.onComplete === 'function') {
+        await refreshOpts.onComplete(enrichedResult, null);
+      }
+      return enrichedResult;
+    } catch (err) {
+      const failHandler = refreshOpts.onFailure || refreshOpts.onError;
+      if (typeof failHandler === 'function') {
+        try {
+          await failHandler(err);
+        } catch (callbackErr) {
+          throw callbackErr;
+        }
+      }
+      if (typeof refreshOpts.onSettled === 'function') {
+        await refreshOpts.onSettled(null, err);
+      } else if (typeof refreshOpts.onComplete === 'function') {
+        await refreshOpts.onComplete(null, err);
+      }
+
+      if (refreshOpts.throwOnError !== true && (typeof failHandler === 'function' || refreshOpts.throwOnError === false)) {
+        return {
+          ok: false,
+          error: err,
+          refreshed: [],
+          timings: { loadMs: 0, renderMs: 0 },
+        };
+      }
+      throw err;
+    }
   }
 
   /**
@@ -5174,6 +6683,14 @@ function createFragmentCoordinator(options = {}) {
       syncDomInstances();
       return Array.from(instances.values());
     },
+    getStoredInput(instanceIdOrName, storageType = 'session') {
+      const store = storageType === 'local' ? defaultStorage.local : defaultStorage.session;
+      return store.get(`frag_input:${instanceIdOrName}`, null);
+    },
+    clearStoredInput(instanceIdOrName, storageType = 'session') {
+      const store = storageType === 'local' ? defaultStorage.local : defaultStorage.session;
+      return store.remove(`frag_input:${instanceIdOrName}`);
+    },
     get hasFailedRefresh() {
       return Boolean(lastFailedBatch);
     },
@@ -5200,6 +6717,8 @@ module.exports = {
  * fragment timings (loadMs, renderMs, patchMs), discarded stale responses,
  * and lifecycle cleanup errors without logging raw form values or sensitive payloads.
  */
+
+const { NOOP_DEBUGGER } = require('./utils');
 
 const SENSITIVE_KEY_PATTERN = /password|passwd|secret|token|authorization|cookie|credit|card|cvv|ssn|api[-_]?key/i;
 
@@ -5245,14 +6764,9 @@ function summarizePayloadSafely(payload, includeSafePrimitives = false) {
 }
 
 /**
- * Create a client debug collector instance.
- *
- * @param {object} [options]
- * @param {boolean} [options.enabled=false]
- * @param {number} [options.maxEvents=200]
- * @param {(entry: object) => void} [options.logger]
+ * Internal active debugger implementation that allocates tracking ring buffers.
  */
-function createClientDebugger(options = {}) {
+function createActiveDebugger(options = {}) {
   let enabled = Boolean(options.enabled);
   const maxEvents = typeof options.maxEvents === 'number' && options.maxEvents > 0 ? options.maxEvents : 200;
   const customLogger = typeof options.logger === 'function' ? options.logger : null;
@@ -5486,6 +7000,76 @@ function createClientDebugger(options = {}) {
   return api;
 }
 
+/**
+ * Create a client debug collector instance.
+ * Returns a zero-allocation stub if debugging is disabled.
+ *
+ * @param {object} [options]
+ * @param {boolean} [options.enabled=false]
+ * @param {number} [options.maxEvents=200]
+ * @param {(entry: object) => void} [options.logger]
+ */
+function createClientDebugger(options = {}) {
+  if (!options.enabled && process.env.NODE_ENV === 'production') {
+    return NOOP_DEBUGGER;
+  }
+  if (!options.enabled && !options.logger && !options.maxEvents) {
+    let activeInstance = null;
+    return {
+      get enabled() {
+        return activeInstance ? activeInstance.enabled : false;
+      },
+      setEnabled(val) {
+        if (val && !activeInstance) {
+          activeInstance = createActiveDebugger({ ...options, enabled: true });
+        } else if (activeInstance) {
+          activeInstance.setEnabled(val);
+        }
+      },
+      trackControllerMount(id, name, el) {
+        if (activeInstance) activeInstance.trackControllerMount(id, name, el);
+      },
+      trackControllerUnmount(id, name) {
+        if (activeInstance) activeInstance.trackControllerUnmount(id, name);
+      },
+      trackCleanupError(id, name, p, err) {
+        if (activeInstance) activeInstance.trackCleanupError(id, name, p, err);
+      },
+      trackRequestStart(args) {
+        return activeInstance
+          ? activeInstance.trackRequestStart(args)
+          : { requestId: args.requestId, status: 'in-flight' };
+      },
+      trackRequestEnd(id, out) {
+        return activeInstance ? activeInstance.trackRequestEnd(id, out) : { status: 'completed' };
+      },
+      trackDiscardedResponse(args) {
+        return activeInstance ? activeInstance.trackDiscardedResponse(args) : { reason: args.reason };
+      },
+      startCausalChain(args) {
+        return activeInstance ? activeInstance.startCausalChain(args) : '';
+      },
+      recordChainRefresh(id, args) {
+        if (activeInstance) activeInstance.recordChainRefresh(id, args);
+      },
+      recordChainPatch(id, args) {
+        if (activeInstance) activeInstance.recordChainPatch(id, args);
+      },
+      recordEvent(t, d) {
+        return activeInstance ? activeInstance.recordEvent(t, d) : null;
+      },
+      getSnapshot() {
+        return activeInstance ? activeInstance.getSnapshot() : NOOP_DEBUGGER.getSnapshot();
+      },
+      clear() {
+        if (activeInstance) activeInstance.clear();
+      },
+    };
+  }
+
+  return createActiveDebugger(options);
+}
+
 module.exports = {
   createClientDebugger,
   summarizePayloadSafely,
@@ -5556,6 +7140,14 @@ const {
   summarizePayloadSafely,
 } = require('./debug');
 
+const {
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
+} = require('./storage');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -5753,6 +7345,12 @@ module.exports = {
   deriveControllerNameFromPath,
   createClientRuntime,
   bootClient,
+  get createLiteClientRuntime() {
+    return require('./lite').createLiteClientRuntime;
+  },
+  get bootLiteClient() {
+    return require('./lite').bootLiteClient;
+  },
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
@@ -5833,6 +7431,13 @@ module.exports = {
   // Debug & Telemetry
   createClientDebugger,
   summarizePayloadSafely,
+
+  // Client Storage & Persistence
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
 };
 
 
@@ -5900,6 +7505,14 @@ const {
   summarizePayloadSafely,
 } = require('./debug');
 
+const {
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
+} = require('./storage');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -6097,6 +7710,12 @@ module.exports = {
   deriveControllerNameFromPath,
   createClientRuntime,
   bootClient,
+  get createLiteClientRuntime() {
+    return require('./lite').createLiteClientRuntime;
+  },
+  get bootLiteClient() {
+    return require('./lite').bootLiteClient;
+  },
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
@@ -6177,6 +7796,13 @@ module.exports = {
   // Debug & Telemetry
   createClientDebugger,
   summarizePayloadSafely,
+
+  // Client Storage & Persistence
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
 };
 
 
@@ -6244,6 +7870,14 @@ const {
   summarizePayloadSafely,
 } = require('./debug');
 
+const {
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
+} = require('./storage');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -6441,6 +8075,12 @@ module.exports = {
   deriveControllerNameFromPath,
   createClientRuntime,
   bootClient,
+  get createLiteClientRuntime() {
+    return require('./lite').createLiteClientRuntime;
+  },
+  get bootLiteClient() {
+    return require('./lite').bootLiteClient;
+  },
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
@@ -6521,6 +8161,13 @@ module.exports = {
   // Debug & Telemetry
   createClientDebugger,
   summarizePayloadSafely,
+
+  // Client Storage & Persistence
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
 };
 
 
@@ -6588,6 +8235,14 @@ const {
   summarizePayloadSafely,
 } = require('./debug');
 
+const {
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
+} = require('./storage');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -6785,6 +8440,12 @@ module.exports = {
   deriveControllerNameFromPath,
   createClientRuntime,
   bootClient,
+  get createLiteClientRuntime() {
+    return require('./lite').createLiteClientRuntime;
+  },
+  get bootLiteClient() {
+    return require('./lite').bootLiteClient;
+  },
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
@@ -6865,6 +8526,13 @@ module.exports = {
   // Debug & Telemetry
   createClientDebugger,
   summarizePayloadSafely,
+
+  // Client Storage & Persistence
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
 };
 
 
@@ -6932,6 +8600,14 @@ const {
   summarizePayloadSafely,
 } = require('./debug');
 
+const {
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
+} = require('./storage');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -7129,6 +8805,12 @@ module.exports = {
   deriveControllerNameFromPath,
   createClientRuntime,
   bootClient,
+  get createLiteClientRuntime() {
+    return require('./lite').createLiteClientRuntime;
+  },
+  get bootLiteClient() {
+    return require('./lite').bootLiteClient;
+  },
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
@@ -7209,6 +8891,13 @@ module.exports = {
   // Debug & Telemetry
   createClientDebugger,
   summarizePayloadSafely,
+
+  // Client Storage & Persistence
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
 };
 
 
@@ -7276,6 +8965,14 @@ const {
   summarizePayloadSafely,
 } = require('./debug');
 
+const {
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
+} = require('./storage');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -7473,6 +9170,12 @@ module.exports = {
   deriveControllerNameFromPath,
   createClientRuntime,
   bootClient,
+  get createLiteClientRuntime() {
+    return require('./lite').createLiteClientRuntime;
+  },
+  get bootLiteClient() {
+    return require('./lite').bootLiteClient;
+  },
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
@@ -7553,6 +9256,13 @@ module.exports = {
   // Debug & Telemetry
   createClientDebugger,
   summarizePayloadSafely,
+
+  // Client Storage & Persistence
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
 };
 
 
@@ -7620,6 +9330,14 @@ const {
   summarizePayloadSafely,
 } = require('./debug');
 
+const {
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
+} = require('./storage');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -7817,6 +9535,12 @@ module.exports = {
   deriveControllerNameFromPath,
   createClientRuntime,
   bootClient,
+  get createLiteClientRuntime() {
+    return require('./lite').createLiteClientRuntime;
+  },
+  get bootLiteClient() {
+    return require('./lite').bootLiteClient;
+  },
   createControllerRuntime,
   queryScopedTargets,
   isTargetInControllerScope,
@@ -7897,6 +9621,13 @@ module.exports = {
   // Debug & Telemetry
   createClientDebugger,
   summarizePayloadSafely,
+
+  // Client Storage & Persistence
+  MemoryStorage,
+  StorageAdapter,
+  getNativeStorageBackend,
+  createClientStorage,
+  defaultStorage,
 };
 
 
@@ -7955,17 +9686,18 @@ exports.default = (0, client_1.defineController)({
     actions: {
         async applyFilters({ state, refresh }) {
             const next = { ...state.draft };
-            const res = await refresh('todos-list', {
+            await refresh('todos-list', {
                 search: next.search,
                 status: next.status,
                 priority: next.priority,
                 page: 1,
                 limit: 4,
+            }, {
+                onSuccess() {
+                    state.applied = next;
+                    state.page = 1;
+                },
             });
-            if (res && res.ok !== false) {
-                state.applied = next;
-                state.page = 1;
-            }
         },
         async setQuickStatus({ state, refresh }, _event, actionEl) {
             if (!actionEl)
@@ -7973,17 +9705,18 @@ exports.default = (0, client_1.defineController)({
             const nextStatus = actionEl.getAttribute('data-status') || 'all';
             state.draft.status = nextStatus;
             const next = { ...state.draft };
-            const res = await refresh('todos-list', {
+            await refresh('todos-list', {
                 search: next.search,
                 status: next.status,
                 priority: next.priority,
                 page: 1,
                 limit: 4,
+            }, {
+                onSuccess() {
+                    state.applied = next;
+                    state.page = 1;
+                },
             });
-            if (res && res.ok !== false) {
-                state.applied = next;
-                state.page = 1;
-            }
         },
         async setQuickPriority({ state, refresh }, _event, actionEl) {
             if (!actionEl)
@@ -7992,58 +9725,62 @@ exports.default = (0, client_1.defineController)({
             const nextPriority = state.draft.priority === clicked ? 'all' : clicked;
             state.draft.priority = nextPriority;
             const next = { ...state.draft };
-            const res = await refresh('todos-list', {
+            await refresh('todos-list', {
                 search: next.search,
                 status: next.status,
                 priority: next.priority,
                 page: 1,
                 limit: 4,
+            }, {
+                onSuccess() {
+                    state.applied = next;
+                    state.page = 1;
+                },
             });
-            if (res && res.ok !== false) {
-                state.applied = next;
-                state.page = 1;
-            }
         },
         async resetFilters({ state, refresh }) {
             const initial = { search: '', status: 'all', priority: 'all' };
-            const res = await refresh('todos-list', {
+            await refresh('todos-list', {
                 search: '',
                 status: 'all',
                 priority: 'all',
                 page: 1,
                 limit: 4,
+            }, {
+                onSuccess() {
+                    state.draft = { ...initial };
+                    state.applied = { ...initial };
+                    state.page = 1;
+                },
             });
-            if (res && res.ok !== false) {
-                state.draft = { ...initial };
-                state.applied = { ...initial };
-                state.page = 1;
-            }
         },
         async nextPage({ state, refresh }) {
             const nextPageNum = Number(state.page || 1) + 1;
-            const res = await refresh('todos-list', {
+            await refresh('todos-list', {
                 search: state.applied.search,
                 status: state.applied.status,
                 priority: state.applied.priority,
                 page: nextPageNum,
                 limit: 4,
+            }, {
+                onSuccess() {
+                    state.page = nextPageNum;
+                },
             });
-            if (res && res.ok !== false) {
-                state.page = nextPageNum;
-            }
         },
         async prevPage({ state, refresh }) {
             const prevPageNum = Math.max(1, Number(state.page || 1) - 1);
-            const res = await refresh('todos-list', {
+            await refresh('todos-list', {
                 search: state.applied.search,
                 status: state.applied.status,
                 priority: state.applied.priority,
                 page: prevPageNum,
                 limit: 4,
+            }, {
+                onSuccess() {
+                    state.page = prevPageNum;
+                },
             });
-            if (res && res.ok !== false) {
-                state.page = prevPageNum;
-            }
         },
         async selectTodoForEdit({ state, forms, api }, _event, actionEl) {
             if (!actionEl)

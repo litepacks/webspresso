@@ -33,6 +33,7 @@ function buildBrowserDemoBundle(rootDir) {
     './adapter/datastar': path.join(repoRoot, 'core/client/adapter/datastar.js'),
     './api': path.join(repoRoot, 'core/client/api.js'),
     './forms': path.join(repoRoot, 'core/client/forms.js'),
+    './storage': path.join(repoRoot, 'core/client/storage.js'),
     './controller': path.join(repoRoot, 'core/client/controller.js'),
     './fragments': path.join(repoRoot, 'core/client/fragments.js'),
     './debug': path.join(repoRoot, 'core/client/debug.js'),

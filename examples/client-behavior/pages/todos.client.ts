@@ -52,18 +52,18 @@ export default defineController({
   actions: {
     async applyFilters({ state, refresh }) {
       const next = { ...state.draft };
-      const res = await refresh('todos-list', {
+      await refresh('todos-list', {
         search: next.search,
         status: next.status,
         priority: next.priority,
         page: 1,
         limit: 4,
+      }, {
+        onSuccess() {
+          state.applied = next;
+          state.page = 1;
+        },
       });
-
-      if (res && res.ok !== false) {
-        state.applied = next;
-        state.page = 1;
-      }
     },
 
     async setQuickStatus({ state, refresh }, _event, actionEl) {
@@ -72,18 +72,18 @@ export default defineController({
       state.draft.status = nextStatus;
 
       const next = { ...state.draft };
-      const res = await refresh('todos-list', {
+      await refresh('todos-list', {
         search: next.search,
         status: next.status,
         priority: next.priority,
         page: 1,
         limit: 4,
+      }, {
+        onSuccess() {
+          state.applied = next;
+          state.page = 1;
+        },
       });
-
-      if (res && res.ok !== false) {
-        state.applied = next;
-        state.page = 1;
-      }
     },
 
     async setQuickPriority({ state, refresh }, _event, actionEl) {
@@ -93,65 +93,65 @@ export default defineController({
       state.draft.priority = nextPriority;
 
       const next = { ...state.draft };
-      const res = await refresh('todos-list', {
+      await refresh('todos-list', {
         search: next.search,
         status: next.status,
         priority: next.priority,
         page: 1,
         limit: 4,
+      }, {
+        onSuccess() {
+          state.applied = next;
+          state.page = 1;
+        },
       });
-
-      if (res && res.ok !== false) {
-        state.applied = next;
-        state.page = 1;
-      }
     },
 
     async resetFilters({ state, refresh }) {
       const initial = { search: '', status: 'all', priority: 'all' };
-      const res = await refresh('todos-list', {
+      await refresh('todos-list', {
         search: '',
         status: 'all',
         priority: 'all',
         page: 1,
         limit: 4,
+      }, {
+        onSuccess() {
+          state.draft = { ...initial };
+          state.applied = { ...initial };
+          state.page = 1;
+        },
       });
-
-      if (res && res.ok !== false) {
-        state.draft = { ...initial };
-        state.applied = { ...initial };
-        state.page = 1;
-      }
     },
 
     async nextPage({ state, refresh }) {
       const nextPageNum = Number(state.page || 1) + 1;
-      const res = await refresh('todos-list', {
+      await refresh('todos-list', {
         search: state.applied.search,
         status: state.applied.status,
         priority: state.applied.priority,
         page: nextPageNum,
         limit: 4,
+      }, {
+        onSuccess() {
+          state.page = nextPageNum;
+        },
       });
-
-      if (res && res.ok !== false) {
-        state.page = nextPageNum;
-      }
     },
 
     async prevPage({ state, refresh }) {
       const prevPageNum = Math.max(1, Number(state.page || 1) - 1);
-      const res = await refresh('todos-list', {
+      await refresh('todos-list', {
         search: state.applied.search,
         status: state.applied.status,
         priority: state.applied.priority,
         page: prevPageNum,
         limit: 4,
+      }, {
+        onSuccess() {
+          state.page = prevPageNum;
+        },
       });
-
-      if (res && res.ok !== false) {
-        state.page = prevPageNum;
-      }
     },
 
     async selectTodoForEdit({ state, forms, api }, _event, actionEl) {

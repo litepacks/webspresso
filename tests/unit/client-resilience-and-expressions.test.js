@@ -256,6 +256,194 @@ describe('Client Resilience & Expression Enhancements', () => {
 
       env.restore();
     });
+
+    it('invokes onSuccess and onSettled on successful refresh with res.ok === true', async () => {
+      const env = createMiniDomEnvironment(`
+        <div data-w-fragment="todos" data-w-fragment-id="todos:1" data-w-fragment-page="/todos">
+          <p>Initial todos</p>
+        </div>
+      `);
+
+      const mockFetch = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            fragments: {
+              'todos:1': {
+                html: '<div data-w-fragment="todos" data-w-fragment-id="todos:1"><p>Updated todos</p></div>',
+                loadMs: 5,
+                renderMs: 2,
+              },
+            },
+          }),
+          { status: 200 }
+        )
+      );
+
+      const coordinator = createFragmentCoordinator({
+        fetch: mockFetch,
+        root: env.document,
+      });
+
+      coordinator.syncDomInstances();
+
+      let successRes = null;
+      let settledRes = null;
+      let settledErr = undefined;
+
+      const res = await coordinator.refresh(
+        'todos',
+        { page: 2 },
+        {
+          onSuccess(result) {
+            successRes = result;
+          },
+          onSettled(result, error) {
+            settledRes = result;
+            settledErr = error;
+          },
+        }
+      );
+
+      expect(res.ok).toBe(true);
+      expect(res.refreshed).toContain('todos:1');
+      expect(successRes).not.toBeNull();
+      expect(successRes.ok).toBe(true);
+      expect(settledRes).not.toBeNull();
+      expect(settledRes.ok).toBe(true);
+      expect(settledErr).toBeNull();
+
+      env.restore();
+    });
+
+    it('invokes onFailure / onError on refresh failure and suppresses rejection by default', async () => {
+      const env = createMiniDomEnvironment(`
+        <div data-w-fragment="todos" data-w-fragment-id="todos:1" data-w-fragment-page="/todos">
+          <p>Initial todos</p>
+        </div>
+      `);
+
+      const mockFetch = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ error: { message: 'Database connection failed' } }),
+          { status: 500 }
+        )
+      );
+
+      const coordinator = createFragmentCoordinator({
+        fetch: mockFetch,
+        root: env.document,
+      });
+
+      coordinator.syncDomInstances();
+
+      let capturedError = null;
+      let settledRes = undefined;
+      let settledErr = null;
+
+      // When onFailure is provided, refresh should NOT throw an unhandled rejection
+      const res = await coordinator.refresh(
+        'todos',
+        { page: 2 },
+        {
+          onFailure(err) {
+            capturedError = err;
+          },
+          onSettled(result, error) {
+            settledRes = result;
+            settledErr = error;
+          },
+        }
+      );
+
+      expect(res.ok).toBe(false);
+      expect(res.error).toBeDefined();
+      expect(capturedError).not.toBeNull();
+      expect(capturedError.message).toContain('Database connection failed');
+      expect(capturedError.status).toBe(500);
+      expect(settledRes).toBeNull();
+      expect(settledErr).toBe(capturedError);
+
+      env.restore();
+    });
+
+    it('invokes onFailure and rethrows when throwOnError: true is explicitly provided', async () => {
+      const env = createMiniDomEnvironment(`
+        <div data-w-fragment="todos" data-w-fragment-id="todos:1" data-w-fragment-page="/todos">
+          <p>Initial todos</p>
+        </div>
+      `);
+
+      const mockFetch = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ error: { message: 'Server crash' } }),
+          { status: 503 }
+        )
+      );
+
+      const coordinator = createFragmentCoordinator({
+        fetch: mockFetch,
+        root: env.document,
+      });
+
+      coordinator.syncDomInstances();
+
+      let callbackFired = false;
+      let thrownError = null;
+
+      try {
+        await coordinator.refresh(
+          'todos',
+          { page: 2 },
+          {
+            throwOnError: true,
+            onFailure(err) {
+              callbackFired = true;
+              expect(err.status).toBe(503);
+            },
+          }
+        );
+      } catch (e) {
+        thrownError = e;
+      }
+
+      expect(callbackFired).toBe(true);
+      expect(thrownError).not.toBeNull();
+      expect(thrownError.status).toBe(503);
+
+      env.restore();
+    });
+
+    it('calls onSuccess and onSettled when target fragment does not exist on page', async () => {
+      const env = createMiniDomEnvironment(`<div>No fragments here</div>`);
+      const coordinator = createFragmentCoordinator({ root: env.document });
+      coordinator.syncDomInstances();
+
+      let successFired = false;
+      let settledFired = false;
+
+      const res = await coordinator.refresh(
+        'missing-fragment',
+        {},
+        {
+          onSuccess(result) {
+            successFired = true;
+            expect(result.skipped).toBe(true);
+          },
+          onSettled(result, err) {
+            settledFired = true;
+            expect(result.skipped).toBe(true);
+            expect(err).toBeNull();
+          },
+        }
+      );
+
+      expect(res.ok).toBe(true);
+      expect(res.skipped).toBe(true);
+      expect(successFired).toBe(true);
+      expect(settledFired).toBe(true);
+
+      env.restore();
+    });
   });
 
   describe('4. Declarative Logical Operators in Expressions (&&, ||)', () => {

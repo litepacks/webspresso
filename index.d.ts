@@ -6586,12 +6586,36 @@ export interface ControllerFormsRegistry {
   all(): ClientFormHandle[];
 }
 
+export interface FragmentRefreshResult {
+  ok: boolean;
+  refreshed: string[];
+  errors?: Error[];
+  skipped?: boolean;
+  canceled?: boolean;
+  error?: Error | null;
+  timings?: {
+    loadMs: number;
+    renderMs: number;
+  };
+}
+
+export interface FragmentRefreshOptions {
+  replaceInput?: boolean;
+  timeout?: number;
+  throwOnError?: boolean;
+  onSuccess?: (result: FragmentRefreshResult) => void | Promise<void>;
+  onFailure?: (error: Error) => void | Promise<void>;
+  onError?: (error: Error) => void | Promise<void>;
+  onSettled?: (result: FragmentRefreshResult | null, error: Error | null) => void | Promise<void>;
+  onComplete?: (result: FragmentRefreshResult | null, error: Error | null) => void | Promise<void>;
+}
+
 export interface ControllerFragmentHandle<TInput extends Record<string, any> = Record<string, any>> {
   readonly input: TInput;
   refresh(
     nextInput?: Partial<TInput> & Record<string, unknown>,
-    options?: { replaceInput?: boolean }
-  ): Promise<{ ok?: boolean; refreshed: string[]; errors?: Error[]; skipped?: boolean; canceled?: boolean }>;
+    options?: FragmentRefreshOptions
+  ): Promise<FragmentRefreshResult>;
 }
 
 export interface ControllerErrorMeta {
@@ -6652,8 +6676,8 @@ export interface ControllerContext<
   refresh<TInput extends Record<string, any> = Record<string, any>>(
     idOrName: string,
     nextInput?: Partial<TInput> & Record<string, unknown>,
-    options?: { replaceInput?: boolean; timeout?: number }
-  ): Promise<{ ok?: boolean; refreshed: string[]; errors?: Error[]; skipped?: boolean; canceled?: boolean }>;
+    options?: FragmentRefreshOptions
+  ): Promise<FragmentRefreshResult>;
   fragment<TInput extends Record<string, any> = Record<string, any>>(
     idOrName: string
   ): ControllerFragmentHandle<TInput>;
