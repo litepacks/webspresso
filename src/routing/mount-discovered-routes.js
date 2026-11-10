@@ -120,8 +120,15 @@ function mountDiscoveredRoutes(app, routeTable, context) {
       resolveMiddlewareList: (mwList) => resolveMiddlewares(mwList, context.middlewares || {}),
     });
 
-    app.get('/__webspresso/fragments', fragmentRefreshHandler);
-    app.post('/__webspresso/fragments', fragmentRefreshHandler);
+    const { rateLimit } = require('../../core/rate-limit');
+    const fragmentLimiter = rateLimit({
+      window: 60000,
+      limit: 300,
+      skip: () => process.env.NODE_ENV === 'test',
+    });
+
+    app.get('/__webspresso/fragments', fragmentLimiter, fragmentRefreshHandler);
+    app.post('/__webspresso/fragments', fragmentLimiter, fragmentRefreshHandler);
   }
 
   // Phase 1: Mount static routes immediately

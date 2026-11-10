@@ -2574,10 +2574,19 @@ function abortableSleep(ms, signals = []) {
  * @param {() => boolean} [config.isConnected] - Controller connection check
  * @param {object} [config.debug] - Client debugger instance
  */
+function trimTrailingSlashes(str) {
+  if (!str) return '';
+  let end = str.length;
+  while (end > 0 && str.charCodeAt(end - 1) === 47) {
+    end--;
+  }
+  return end === str.length ? str : str.slice(0, end);
+}
+
 function createApiClient(config = {}) {
   const fetchImpl =
     config.fetch || (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
-  const baseUrl = config.baseUrl ? String(config.baseUrl).replace(/\/+$/, '') : '';
+  const baseUrl = config.baseUrl ? trimTrailingSlashes(String(config.baseUrl)) : '';
   const lifecycleSignal = config.lifecycleSignal || null;
   const isConnected = typeof config.isConnected === 'function' ? config.isConnected : () => true;
   const debug = config.debug || null;
@@ -3309,6 +3318,40 @@ const { defaultStorage } = require('./storage');
  * - Separation of `reset()` (restores initial default values) vs `clear()` (empties all controls)
  * - Mutation success vs refresh failure separation: a refresh failure never puts a succeeded form into validation error state
  */
+
+/**
+ * Validate that a redirect URL uses a safe protocol (http/https) or relative path
+ * to prevent DOM-based XSS (e.g. javascript: URIs) and protocol injection.
+ *
+ * @param {string} target
+ * @returns {boolean}
+ */
+function isSafeRedirectUrl(target) {
+  if (!target || typeof target !== 'string') return false;
+  const trimmed = target.trim();
+  if (!trimmed) return false;
+
+  // Block control characters
+  if (/[\u0000-\u001F\u007F-\u009F]/.test(trimmed)) return false;
+
+  // Block protocol-relative URLs (//example.com) and backslash traversal (/\ or \\)
+  if (trimmed.startsWith('//') || trimmed.startsWith('/\\') || trimmed.startsWith('\\')) {
+    return false;
+  }
+
+  // Relative path starting with single slash (e.g. /dashboard)
+  if (trimmed.startsWith('/')) {
+    return true;
+  }
+
+  // Absolute URL: MUST explicitly parse as http: or https:
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 let errorIdSeq = 0;
 
@@ -4194,7 +4237,7 @@ function createFormHandle(formEl, options = {}) {
         submitOptions.redirectOnSuccess ||
         (formEl && formEl.getAttribute('data-w-redirect')) ||
         null;
-      if (redirectTarget) {
+      if (redirectTarget && isSafeRedirectUrl(redirectTarget)) {
         if (typeof options.navigate === 'function') {
           options.navigate(redirectTarget);
         } else if (typeof window !== 'undefined' && window.location) {
@@ -4420,6 +4463,7 @@ module.exports = {
   isControlDisabled,
   coerceScalarControlValue,
   createFormHandle,
+  isSafeRedirectUrl,
 };
 
 
@@ -4804,34 +4848,67 @@ let instanceSeq = 0;
  * @param {string} filePath
  * @returns {string}
  */
+function stripBrackets(str) {
+  return str.replace(/[\[\]]/g, '');
+}
+
+function extractAfterMarker(path, marker) {
+  const candidates = ['/src/' + marker, 'src/' + marker, '/' + marker, marker];
+  for (const cand of candidates) {
+    const idx = path.lastIndexOf(cand);
+    if (idx !== -1) {
+      if (cand.startsWith('/') || idx === 0) {
+        return path.slice(idx + cand.length);
+      }
+    }
+  }
+  return null;
+}
+
+function stripClientExtension(path) {
+  const exts = ['.client.ts', '.client.tsx', '.client.js', '.client.jsx', '.client.mjs', '.client.cjs'];
+  const lower = path.toLowerCase();
+  for (const ext of exts) {
+    if (lower.endsWith(ext)) {
+      return path.slice(0, -ext.length);
+    }
+  }
+  return path;
+}
+
 function deriveControllerNameFromPath(filePath) {
   if (!filePath || typeof filePath !== 'string') return '';
   const normalized = filePath.replace(/\\/g, '/');
+  const withoutExt = stripClientExtension(normalized);
 
-  // Strip extension (.client.ts, .client.js, .client.mjs, etc.)
-  const withoutExt = normalized.replace(/\.client\.(?:ts|tsx|js|jsx|mjs|cjs)$/i, '');
-
-  // Check if under views/components/ or views/
-  const compMatch = withoutExt.match(/(?:^|\/)(?:src\/)?views\/components\/(.+)$/);
-  if (compMatch) {
-    return compMatch[1].replace(/\//g, '--').replace(/\[([^\]]+)\]/g, '$1');
+  // Check if under views/components/
+  const compRel = extractAfterMarker(withoutExt, 'views/components/');
+  if (compRel) {
+    return stripBrackets(compRel.split('/').join('--'));
   }
 
-  const viewsMatch = withoutExt.match(/(?:^|\/)(?:src\/)?views\/(.+)$/);
-  if (viewsMatch) {
-    const rel = viewsMatch[1];
-    const base = rel.split('/').pop();
-    return (base || rel).replace(/\[([^\]]+)\]/g, '$1');
+  // Check if under views/
+  const viewsRel = extractAfterMarker(withoutExt, 'views/');
+  if (viewsRel) {
+    const base = viewsRel.split('/').pop() || viewsRel;
+    return stripBrackets(base);
   }
 
-  const pagesMatch = withoutExt.match(/(?:^|\/)(?:src\/)?pages\/(.+)$/);
-  if (pagesMatch) {
-    const rel = pagesMatch[1].replace(/\/index$/, '') || 'index';
-    return rel.replace(/\//g, '--').replace(/\[([^\]]+)\]/g, '$1');
+  // Check if under pages/
+  const pagesRel = extractAfterMarker(withoutExt, 'pages/');
+  if (pagesRel) {
+    let rel = pagesRel;
+    if (rel.endsWith('/index')) {
+      rel = rel.slice(0, -6);
+    }
+    if (!rel || rel === 'index') {
+      rel = 'index';
+    }
+    return stripBrackets(rel.split('/').join('--'));
   }
 
   const base = withoutExt.split('/').pop() || withoutExt;
-  return base.replace(/\[([^\]]+)\]/g, '$1');
+  return stripBrackets(base);
 }
 
 /**

@@ -609,6 +609,15 @@ async function resolvePendingSsrFragments(html, req) {
   return output;
 }
 
+function trimTrailingSlashes(str) {
+  if (!str) return '';
+  let end = str.length;
+  while (end > 0 && str.charCodeAt(end - 1) === 47) {
+    end--;
+  }
+  return end === str.length ? str : str.slice(0, end);
+}
+
 /**
  * Match a concrete request pathname (e.g. `/notes/42`) against discovered page route entries.
  * Extracts route `:params` when matched.
@@ -619,11 +628,11 @@ async function resolvePendingSsrFragments(html, req) {
  */
 function matchPageEntryByPath(pagePath, pageEntries) {
   if (!pagePath || !Array.isArray(pageEntries)) return null;
-  const cleanPath = String(pagePath).split('?')[0].replace(/\/+$/, '') || '/';
+  const cleanPath = trimTrailingSlashes(String(pagePath).split('?')[0]) || '/';
 
   // 1. Exact static match
   for (const entry of pageEntries) {
-    const routePattern = entry.routePath.replace(/\/+$/, '') || '/';
+    const routePattern = trimTrailingSlashes(entry.routePath) || '/';
     if (routePattern === cleanPath) {
       return { entry, params: {} };
     }
@@ -631,7 +640,7 @@ function matchPageEntryByPath(pagePath, pageEntries) {
 
   // 2. Dynamic `:param` match
   for (const entry of pageEntries) {
-    const routePattern = entry.routePath.replace(/\/+$/, '') || '/';
+    const routePattern = trimTrailingSlashes(entry.routePath) || '/';
     if (!routePattern.includes(':')) continue;
     const paramNames = [];
     const regexSource =

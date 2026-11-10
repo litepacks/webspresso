@@ -633,35 +633,99 @@ function serializeNode(node) {
 function parseHtmlNodes(html, doc) {
   const root = new MiniElement('ROOT', doc);
   const stack = [root];
-  const tokenRegex = /<!--[\s\S]*?-->|<!DOCTYPE[^>]*>|<\/([a-zA-Z0-9_-]+)\s*>|<([a-zA-Z0-9_-]+)((?:"[^"]*"|'[^']*'|[^'">])*)(\/?)>|([^<]+)/gi;
-  let match;
+  let i = 0;
+  const len = html ? html.length : 0;
 
-  while ((match = tokenRegex.exec(html)) !== null) {
-    const [, closeTag, openTag, rawAttrs, selfClosing, textChunk] = match;
-    const current = stack[stack.length - 1];
-
-    if (closeTag) {
-      const upperClose = closeTag.toUpperCase();
-      for (let i = stack.length - 1; i > 0; i--) {
-        if (stack[i].tagName === upperClose) {
-          stack.length = i;
-          break;
-        }
+  while (i < len) {
+    const nextLt = html.indexOf('<', i);
+    if (nextLt === -1) {
+      const text = html.slice(i);
+      if (text) {
+        stack[stack.length - 1].appendChild(new MiniTextNode(decodeEntities(text), doc));
       }
-    } else if (openTag) {
-      const upperOpen = openTag.toUpperCase();
-      if (upperOpen === '!DOCTYPE') continue;
+      break;
+    }
+
+    if (nextLt > i) {
+      const text = html.slice(i, nextLt);
+      stack[stack.length - 1].appendChild(new MiniTextNode(decodeEntities(text), doc));
+      i = nextLt;
+    }
+
+    // Now html[i] === '<'
+    if (html.startsWith('<!--', i)) {
+      const commentEnd = html.indexOf('-->', i + 4);
+      i = commentEnd === -1 ? len : commentEnd + 3;
+      continue;
+    }
+
+    if (html.startsWith('<!', i)) {
+      const docEnd = html.indexOf('>', i + 2);
+      i = docEnd === -1 ? len : docEnd + 1;
+      continue;
+    }
+
+    if (html.startsWith('</', i)) {
+      const closeEnd = html.indexOf('>', i + 2);
+      if (closeEnd !== -1) {
+        const tag = html.slice(i + 2, closeEnd).trim().toUpperCase();
+        for (let s = stack.length - 1; s > 0; s--) {
+          if (stack[s].tagName === tag) {
+            stack.length = s;
+            break;
+          }
+        }
+        i = closeEnd + 1;
+        continue;
+      }
+    }
+
+    // Opening or self-closing tag: <tag ...>
+    // Find closing '>' taking quotes into account
+    let inQuote = null;
+    let tagEnd = -1;
+    for (let j = i + 1; j < len; j++) {
+      const ch = html[j];
+      if (inQuote) {
+        if (ch === inQuote) inQuote = null;
+      } else if (ch === '"' || ch === "'") {
+        inQuote = ch;
+      } else if (ch === '>') {
+        tagEnd = j;
+        break;
+      }
+    }
+
+    if (tagEnd === -1) {
+      const text = html.slice(i);
+      stack[stack.length - 1].appendChild(new MiniTextNode(decodeEntities(text), doc));
+      break;
+    }
+
+    let tagContent = html.slice(i + 1, tagEnd).trim();
+    let selfClosing = false;
+    if (tagContent.endsWith('/')) {
+      selfClosing = true;
+      tagContent = tagContent.slice(0, -1).trim();
+    }
+
+    const firstSpace = tagContent.search(/\s/);
+    const rawTagName = firstSpace === -1 ? tagContent : tagContent.slice(0, firstSpace);
+    const rawAttrs = firstSpace === -1 ? '' : tagContent.slice(firstSpace + 1);
+
+    if (rawTagName && /^[a-zA-Z0-9_-]+$/.test(rawTagName)) {
+      const upperOpen = rawTagName.toUpperCase();
       const el = new MiniElement(upperOpen, doc);
-      parseAttributesInto(el, rawAttrs || '');
-      current.appendChild(el);
+      if (rawAttrs) parseAttributesInto(el, rawAttrs);
+      stack[stack.length - 1].appendChild(el);
       if (!selfClosing && !VOID_TAGS.has(upperOpen)) {
         stack.push(el);
       }
-    } else if (textChunk !== undefined) {
-      if (textChunk.length > 0) {
-        current.appendChild(new MiniTextNode(decodeEntities(textChunk), doc));
-      }
+    } else {
+      stack[stack.length - 1].appendChild(new MiniTextNode(decodeEntities(html.slice(i, tagEnd + 1)), doc));
     }
+
+    i = tagEnd + 1;
   }
 
   return [...root.childNodes];

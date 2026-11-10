@@ -816,4 +816,6 @@ Object.defineProperties(module.exports, {
   sendApiResult: { get: () => require('./core/client').sendApiResult, enumerable: true, configurable: true },
   createDatastarAdapter: { get: () => require('./core/client').createDatastarAdapter, enumerable: true, configurable: true },
   createClientDebugger: { get: () => require('./core/client').createClientDebugger, enumerable: true, configurable: true },
+  defaultStorage: { get: () => require('./core/client').defaultStorage, enumerable: true, configurable: true },
+  createClientStorage: { get: () => require('./core/client').createClientStorage, enumerable: true, configurable: true },
 });

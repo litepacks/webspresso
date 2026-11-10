@@ -1649,12 +1649,9 @@ function mountPages(app, options) {
             : mountConfig;
           const routeHooks = isDev ? (config?.hooks || EMPTY_OBJECT) : staticRouteHooks;
           if (isDev) {
-            let configMtime = null;
-            if (route.hasCompanionConfig && route.configPath) {
-              try {
-                configMtime = fs.statSync(route.configPath).mtimeMs;
-              } catch (_) {}
-            }
+            const configMtime = (route.hasCompanionConfig && route.configPath)
+              ? (routeConfigDevCache.get(route.configPath)?.mtime ?? null)
+              : null;
             const rawMw = config?.middleware;
             const mwSig = Array.isArray(rawMw)
               ? rawMw.map((m) => (typeof m === 'string' ? m : (Array.isArray(m) ? JSON.stringify(m) : (m?.name || 'fn')))).join(',')
@@ -2001,11 +1998,18 @@ function mountPages(app, options) {
       resolveMiddlewareList: (mwList) => resolveMiddlewares(mwList, middlewares),
     });
 
+    const { rateLimit } = require('../core/rate-limit');
+    const fragmentLimiter = rateLimit({
+      window: 60000,
+      limit: 300,
+      skip: () => process.env.NODE_ENV === 'test',
+    });
+
     if (typeof app.get === 'function') {
-      app.get('/__webspresso/fragments', fragmentRefreshHandler);
+      app.get('/__webspresso/fragments', fragmentLimiter, fragmentRefreshHandler);
     }
     if (typeof app.post === 'function') {
-      app.post('/__webspresso/fragments', fragmentRefreshHandler);
+      app.post('/__webspresso/fragments', fragmentLimiter, fragmentRefreshHandler);
     }
   }
 

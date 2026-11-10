@@ -15,6 +15,40 @@ const { defaultStorage } = require('./storage');
  * - Mutation success vs refresh failure separation: a refresh failure never puts a succeeded form into validation error state
  */
 
+/**
+ * Validate that a redirect URL uses a safe protocol (http/https) or relative path
+ * to prevent DOM-based XSS (e.g. javascript: URIs) and protocol injection.
+ *
+ * @param {string} target
+ * @returns {boolean}
+ */
+function isSafeRedirectUrl(target) {
+  if (!target || typeof target !== 'string') return false;
+  const trimmed = target.trim();
+  if (!trimmed) return false;
+
+  // Block control characters
+  if (/[\u0000-\u001F\u007F-\u009F]/.test(trimmed)) return false;
+
+  // Block protocol-relative URLs (//example.com) and backslash traversal (/\ or \\)
+  if (trimmed.startsWith('//') || trimmed.startsWith('/\\') || trimmed.startsWith('\\')) {
+    return false;
+  }
+
+  // Relative path starting with single slash (e.g. /dashboard)
+  if (trimmed.startsWith('/')) {
+    return true;
+  }
+
+  // Absolute URL: MUST explicitly parse as http: or https:
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 let errorIdSeq = 0;
 
 /**
@@ -899,7 +933,7 @@ function createFormHandle(formEl, options = {}) {
         submitOptions.redirectOnSuccess ||
         (formEl && formEl.getAttribute('data-w-redirect')) ||
         null;
-      if (redirectTarget) {
+      if (redirectTarget && isSafeRedirectUrl(redirectTarget)) {
         if (typeof options.navigate === 'function') {
           options.navigate(redirectTarget);
         } else if (typeof window !== 'undefined' && window.location) {
@@ -1125,5 +1159,6 @@ module.exports = {
   isControlDisabled,
   coerceScalarControlValue,
   createFormHandle,
+  isSafeRedirectUrl,
 };
 

@@ -121,7 +121,7 @@ describe.sequential('Admin Panel Offline Zero-CDN Static Assets', () => {
   it('renders inline scripts that parse, so the theme sync bootstrap runs', async () => {
     const res = await request(app).get('/_admin').expect(200);
 
-    const inlineScripts = [...res.text.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+    const inlineScripts = [...res.text.matchAll(/<script>([\s\S]*?)<\/script>/gi)].map((m) => m[1]);
     const themeScript = inlineScripts.find((s) => s.includes('webspresso-admin-theme'));
 
     expect(themeScript).toBeDefined();

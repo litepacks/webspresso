@@ -35,34 +35,67 @@ let instanceSeq = 0;
  * @param {string} filePath
  * @returns {string}
  */
+function stripBrackets(str) {
+  return str.replace(/[\[\]]/g, '');
+}
+
+function extractAfterMarker(path, marker) {
+  const candidates = ['/src/' + marker, 'src/' + marker, '/' + marker, marker];
+  for (const cand of candidates) {
+    const idx = path.lastIndexOf(cand);
+    if (idx !== -1) {
+      if (cand.startsWith('/') || idx === 0) {
+        return path.slice(idx + cand.length);
+      }
+    }
+  }
+  return null;
+}
+
+function stripClientExtension(path) {
+  const exts = ['.client.ts', '.client.tsx', '.client.js', '.client.jsx', '.client.mjs', '.client.cjs'];
+  const lower = path.toLowerCase();
+  for (const ext of exts) {
+    if (lower.endsWith(ext)) {
+      return path.slice(0, -ext.length);
+    }
+  }
+  return path;
+}
+
 function deriveControllerNameFromPath(filePath) {
   if (!filePath || typeof filePath !== 'string') return '';
   const normalized = filePath.replace(/\\/g, '/');
+  const withoutExt = stripClientExtension(normalized);
 
-  // Strip extension (.client.ts, .client.js, .client.mjs, etc.)
-  const withoutExt = normalized.replace(/\.client\.(?:ts|tsx|js|jsx|mjs|cjs)$/i, '');
-
-  // Check if under views/components/ or views/
-  const compMatch = withoutExt.match(/(?:^|\/)(?:src\/)?views\/components\/(.+)$/);
-  if (compMatch) {
-    return compMatch[1].replace(/\//g, '--').replace(/\[([^\]]+)\]/g, '$1');
+  // Check if under views/components/
+  const compRel = extractAfterMarker(withoutExt, 'views/components/');
+  if (compRel) {
+    return stripBrackets(compRel.split('/').join('--'));
   }
 
-  const viewsMatch = withoutExt.match(/(?:^|\/)(?:src\/)?views\/(.+)$/);
-  if (viewsMatch) {
-    const rel = viewsMatch[1];
-    const base = rel.split('/').pop();
-    return (base || rel).replace(/\[([^\]]+)\]/g, '$1');
+  // Check if under views/
+  const viewsRel = extractAfterMarker(withoutExt, 'views/');
+  if (viewsRel) {
+    const base = viewsRel.split('/').pop() || viewsRel;
+    return stripBrackets(base);
   }
 
-  const pagesMatch = withoutExt.match(/(?:^|\/)(?:src\/)?pages\/(.+)$/);
-  if (pagesMatch) {
-    const rel = pagesMatch[1].replace(/\/index$/, '') || 'index';
-    return rel.replace(/\//g, '--').replace(/\[([^\]]+)\]/g, '$1');
+  // Check if under pages/
+  const pagesRel = extractAfterMarker(withoutExt, 'pages/');
+  if (pagesRel) {
+    let rel = pagesRel;
+    if (rel.endsWith('/index')) {
+      rel = rel.slice(0, -6);
+    }
+    if (!rel || rel === 'index') {
+      rel = 'index';
+    }
+    return stripBrackets(rel.split('/').join('--'));
   }
 
   const base = withoutExt.split('/').pop() || withoutExt;
-  return base.replace(/\[([^\]]+)\]/g, '$1');
+  return stripBrackets(base);
 }
 
 /**

@@ -1366,6 +1366,19 @@ function createApp(options = {}) {
   const limitsOpt = options.limits ?? options.server?.limits;
   const activeLimits = setupLimitsMiddleware(app, limitsOpt);
 
+  // Ensure default empty object for body on mutating requests if not populated
+  // and halt processing if request has timed out (after body parsers)
+  app.use((req, res, next) => {
+    if (timeouts.request !== false && req.timedout) return;
+    if (req.body === undefined && (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH')) {
+      if (!req._skipBodyDefault) {
+        req.body = {};
+      }
+    }
+    next();
+  });
+
+
   // Hardened, prototype-safe Query Parser with DoS depth & parameter limits
   const queryParserOpt = options.queryParser ?? options.server?.queryParser;
   if (queryParserOpt === false) {
@@ -1415,17 +1428,6 @@ function createApp(options = {}) {
   }
   app.use(createFlashMiddleware(flashConfig));
   
-  // Ensure default empty object for body on mutating requests if not populated
-  // and halt processing if request has timed out (after body parsers)
-  app.use((req, res, next) => {
-    if (timeouts.request !== false && req.timedout) return;
-    if (req.body === undefined && (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH')) {
-      if (!req._skipBodyDefault) {
-        req.body = {};
-      }
-    }
-    next();
-  });
 
   // Native Health & Readiness Probes (/healthz & /readyz)
   const { setupHealthMiddleware } = require('../core/health');

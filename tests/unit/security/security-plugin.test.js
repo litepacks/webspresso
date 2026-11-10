@@ -312,8 +312,9 @@ describe('Webspresso Security Shield Plugin', () => {
 
       const statsRes = await request(app).get('/stats');
       expect(statsRes.status).toBe(200);
-      expect(statsRes.body.status).toBe('ok');
-      expect(statsRes.body.incidents24h).toBe(1);
+      const statsBody = statsRes.body?.status ? statsRes.body : JSON.parse(statsRes.text);
+      expect(statsBody.status).toBe('ok');
+      expect(statsBody.incidents24h).toBe(1);
 
       const incidentsRes = await request(app).get('/incidents');
       expect(incidentsRes.status).toBe(200);

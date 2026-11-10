@@ -610,10 +610,19 @@ function abortableSleep(ms, signals = []) {
  * @param {() => boolean} [config.isConnected] - Controller connection check
  * @param {object} [config.debug] - Client debugger instance
  */
+function trimTrailingSlashes(str) {
+  if (!str) return '';
+  let end = str.length;
+  while (end > 0 && str.charCodeAt(end - 1) === 47) {
+    end--;
+  }
+  return end === str.length ? str : str.slice(0, end);
+}
+
 function createApiClient(config = {}) {
   const fetchImpl =
     config.fetch || (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
-  const baseUrl = config.baseUrl ? String(config.baseUrl).replace(/\/+$/, '') : '';
+  const baseUrl = config.baseUrl ? trimTrailingSlashes(String(config.baseUrl)) : '';
   const lifecycleSignal = config.lifecycleSignal || null;
   const isConnected = typeof config.isConnected === 'function' ? config.isConnected : () => true;
   const debug = config.debug || null;
