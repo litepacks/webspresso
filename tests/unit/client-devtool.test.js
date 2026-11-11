@@ -192,6 +192,25 @@ describe('Client DevTools Dock & Inspector (`core/client/devtool.js`)', () => {
       expect(domEnv.window.__WEBSPRESSO_DEVTOOLS__).toBeUndefined();
       devtool = null;
     });
+
+    it('only renders DB Studio and Admin Panel buttons in Studio tab when attached', () => {
+      devtool = mountDevtool(runtime, { open: true });
+      const host = domEnv.document.getElementById('webspresso-client-devtools-host');
+      const shadow = host.shadowRoot || host;
+
+      const studioTabBtn = shadow.querySelector('button[data-tab="studio"]');
+      studioTabBtn.dispatchEvent(new domEnv.window.Event('click', { bubbles: true }));
+
+      let content = shadow.querySelector('.ws-content');
+      expect(content.textContent).toContain('Dev Live Reload Hub');
+      expect(content.textContent).not.toContain('Open DB Studio');
+      expect(content.textContent).not.toContain('Open /_admin');
+
+      devtool.setMeta({ hasStudio: true, hasAdmin: true, adminPath: '/_admin' });
+      content = shadow.querySelector('.ws-content');
+      expect(content.textContent).toContain('Open DB Studio');
+      expect(content.textContent).toContain('Open /_admin');
+    });
   });
 });
 

@@ -29,7 +29,7 @@ When tasked with a feature or bugfix, **immediately consult the corresponding to
 | **Form Builder, ModelForms & Flash (`core/forms`)** | [`.agents/FORMS.md`](FORMS.md) | `core/forms/`, `fsy.field`, `fsy.formFor` |
 | **Security Shield & Threat Defense (`securityPlugin`)** | [`../docs/guides/security.md`](../docs/guides/security.md) | `plugins/security/`, `core/services/builtins/security.js` |
 | **AI Token Streaming & SSE (`core/stream`)** | [`.agents/STREAMING.md`](STREAMING.md) | `core/stream/`, `core/sse/`, `res.streamText` |
-| **Client Behavior, SSR Fragments & Typed Forms (`core/client`)** | [`.agents/CLIENT.md`](CLIENT.md) & [`../docs/guides/client-behavior.md`](../docs/guides/client-behavior.md) | `core/client/`, `pages/*.client.ts`, `defineController`, `defineFragment` |
+| **Client Behavior, SSR Fragments, Services & Auto-Revalidation (`core/client`)** | [`.agents/CLIENT.md`](CLIENT.md) & [`../docs/guides/client-behavior.md`](../docs/guides/client-behavior.md) | `core/client/`, `pages/*.client.ts`, `defineController`, `defineFragment`, `defineClientService` |
 | **API Signatures & Types Verification** | [`index.d.ts`](../index.d.ts) | **Canonical Ground Truth** |
 
 ---
@@ -83,6 +83,7 @@ This `.agents/` customization root is organized into modular topic guides:
 32. **[Ambient Context & Composable Hooks](.agents/CONTEXT.md)** — Built-in execution context powered by `AsyncLocalStorage` (`core/context`), eliminating prop drilling across loaders, services, models, and workers with `useContext`, `useDb`, `useAuth`, `useUser`, `useService`, `useLogger`, `useReq`, `useRes`, `useParams`, `useQuery`, `useTransaction`, and `withContext`.
 33. **[Form Builder, ModelForms & Flash Messages](.agents/FORMS.md)** — Built-in form generation and flash state management (`core/forms`), preserving old input and validation errors across redirects (`res.withOldInput()`, `res.flash()`), accessible form inputs (`fsy.field()`), and model-driven forms (`fsy.formFor()`).
 34. **[Security Shield & Threat Defense](../docs/guides/security.md)** — Zero-dependency threat defense suite (`plugins/security`), native WAF, Helmet-alternative HTTP security headers, IP firewall & CIDR auto-ban, honeypots, LFI/traversal guard, brute-force shield, and Mithril.js Admin Security Cockpit.
+35. **[Client Behavior, SSR Fragments, Shared Services & Auto-Revalidation](.agents/CLIENT.md)** — HTML-First client runtime (`core/client`, ~30.0 KB Brotli full / ~16.1 KB Brotli lite), `defineController`, `defineFragment`, `apiResult` invalidation, React Query-style auto-revalidation (`staleTime`, `refetchOnWindowFocus`, `refetchOnReconnect`, `refetchInterval`), shared lazy client services (`defineClientService`), optional UI hosts (`mountHost`), `watch`, typed forms, and namespaced storage.
 
 ---
 

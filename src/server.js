@@ -1517,6 +1517,34 @@ function createApp(options = {}) {
     options: typeof devReloadOption === 'object' ? devReloadOption : {},
     enabled: devReloadEnabled,
     logger: logging ? console : null,
+    getDevMeta: () => {
+      const pluginsList =
+        pluginManager && pluginManager.plugins instanceof Map
+          ? Array.from(pluginManager.plugins.keys())
+          : [];
+      const hasDb = Boolean(options.db || core.db || (app.locals && app.locals.db));
+      const hasStudio = Boolean(
+        hasDb ||
+          options.studio ||
+          pluginsList.includes('studio') ||
+          pluginsList.includes('db-studio')
+      );
+      const hasAdmin = Boolean(
+        pluginsList.includes('admin-panel') ||
+          pluginsList.includes('adminPanel') ||
+          pluginsList.includes('admin') ||
+          app.adminApi ||
+          (app.locals && app.locals.adminRegistry)
+      );
+      const adminPath = (app.locals && app.locals.adminBasePath) || '/_admin';
+      return {
+        hasDb,
+        hasStudio,
+        hasAdmin,
+        adminPath,
+        plugins: pluginsList,
+      };
+    },
   });
 
   if (devReloadHub) {

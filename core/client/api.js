@@ -13,6 +13,8 @@
  * - Raw & streaming escape hatches (`api.raw`, `api.stream`)
  */
 
+const { isArray, isNumber } = require('./utils');
+
 const VALID_POLICIES = new Set(['latest', 'drop', 'queue', 'parallel']);
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const RESERVED_OPTION_KEYS = new Set([
@@ -68,7 +70,7 @@ class ClientRequestError extends Error {
     this.key = details.key || '';
     this.fieldErrors = details.fieldErrors || {};
     this.fieldErrorList = details.fieldErrorList || {};
-    this.issues = Array.isArray(details.issues) ? details.issues : [];
+    this.issues = isArray(details.issues) ? details.issues : [];
     this.formError = details.formError || null;
     this.data = details.data !== undefined ? details.data : null;
     this.isCanceled = this.kind === 'canceled';
@@ -176,7 +178,7 @@ function buildRequestUrl(urlTemplate, params, query) {
   const searchParams = new URLSearchParams();
   for (const [key, rawVal] of Object.entries(query)) {
     if (rawVal === undefined) continue;
-    if (Array.isArray(rawVal)) {
+    if (isArray(rawVal)) {
       for (const item of rawVal) {
         if (item === undefined) continue;
         searchParams.append(key, item instanceof Date ? item.toISOString() : String(item));
@@ -205,7 +207,7 @@ function containsBinaryValue(value) {
   if (typeof Blob !== 'undefined' && value instanceof Blob) return true;
   if (typeof File !== 'undefined' && value instanceof File) return true;
   if (typeof FormData !== 'undefined' && value instanceof FormData) return true;
-  if (Array.isArray(value)) {
+  if (isArray(value)) {
     return value.some(containsBinaryValue);
   }
   for (const v of Object.values(value)) {
@@ -221,7 +223,7 @@ function objectToFormData(obj) {
   const fd = new FormData();
   for (const [key, val] of Object.entries(obj)) {
     if (val === undefined) continue;
-    if (Array.isArray(val)) {
+    if (isArray(val)) {
       for (const item of val) {
         if (item === undefined) continue;
         if (typeof Blob !== 'undefined' && item instanceof Blob) {
@@ -307,9 +309,9 @@ function extractValidationErrors(payload) {
 
   // 1. Direct fieldErrors map (e.g. { title: 'Required' } or { title: ['Required'] })
   const rawFieldErrors = errObj.fieldErrors || payload.fieldErrors || errObj.fields || null;
-  if (rawFieldErrors && typeof rawFieldErrors === 'object' && !Array.isArray(rawFieldErrors)) {
+  if (rawFieldErrors && typeof rawFieldErrors === 'object' && !isArray(rawFieldErrors)) {
     for (const [field, msgOrArr] of Object.entries(rawFieldErrors)) {
-      const list = Array.isArray(msgOrArr) ? msgOrArr.map(String) : [String(msgOrArr)];
+      const list = isArray(msgOrArr) ? msgOrArr.map(String) : [String(msgOrArr)];
       if (list.length > 0) {
         fieldErrors[field] = list[0];
         fieldErrorList[field] = list;
@@ -320,17 +322,17 @@ function extractValidationErrors(payload) {
 
   // 2. Zod / Webspresso `issues` or `details` array
   const rawIssues =
-    (Array.isArray(errObj.issues) && errObj.issues) ||
-    (Array.isArray(payload.issues) && payload.issues) ||
-    (Array.isArray(errObj.details) && errObj.details) ||
-    (Array.isArray(payload.details) && payload.details) ||
-    (Array.isArray(errObj.errors) && errObj.errors) ||
+    (isArray(errObj.issues) && errObj.issues) ||
+    (isArray(payload.issues) && payload.issues) ||
+    (isArray(errObj.details) && errObj.details) ||
+    (isArray(payload.details) && payload.details) ||
+    (isArray(errObj.errors) && errObj.errors) ||
     [];
 
   for (const issue of rawIssues) {
     if (!issue || typeof issue !== 'object') continue;
     let rawPath = '';
-    if (Array.isArray(issue.path)) {
+    if (isArray(issue.path)) {
       // Strip leading 'body' / 'query' / 'params' prefix from route validation paths
       const cleanParts =
         issue.path.length > 1 &&
@@ -393,8 +395,8 @@ function unwrapApiResultAndInvalidate(parsedBody, responseHeaders) {
   if (
     parsedBody &&
     typeof parsedBody === 'object' &&
-    !Array.isArray(parsedBody) &&
-    Array.isArray(parsedBody.invalidate) &&
+    !isArray(parsedBody) &&
+    isArray(parsedBody.invalidate) &&
     'data' in parsedBody
   ) {
     for (const tag of parsedBody.invalidate) {
@@ -495,18 +497,18 @@ function normalizeRetryConfig(retryOpt, upperMethod, retryMutations = false) {
   let statusCodes = new Set([408, 429, 502, 503, 504]);
   let onRetry = null;
 
-  if (typeof retryOpt === 'number') {
+  if (isNumber(retryOpt)) {
     count = Math.max(0, Math.floor(retryOpt));
   } else if (retryOpt === true) {
     count = 2;
   } else if (typeof retryOpt === 'object' && retryOpt !== null) {
-    count = typeof retryOpt.count === 'number' ? Math.max(0, Math.floor(retryOpt.count)) : 2;
-    if (typeof retryOpt.delay === 'number') delay = Math.max(0, retryOpt.delay);
-    if (typeof retryOpt.maxDelay === 'number') maxDelay = Math.max(delay, retryOpt.maxDelay);
+    count = isNumber(retryOpt.count) ? Math.max(0, Math.floor(retryOpt.count)) : 2;
+    if (isNumber(retryOpt.delay)) delay = Math.max(0, retryOpt.delay);
+    if (isNumber(retryOpt.maxDelay)) maxDelay = Math.max(delay, retryOpt.maxDelay);
     if (retryOpt.backoff === 'linear' || retryOpt.backoff === 'exponential') {
       backoff = retryOpt.backoff;
     }
-    if (Array.isArray(retryOpt.statusCodes)) {
+    if (isArray(retryOpt.statusCodes)) {
       statusCodes = new Set(retryOpt.statusCodes);
     }
     if (typeof retryOpt.onRetry === 'function') {
@@ -536,7 +538,7 @@ function isRetryableError(err, statusCodes) {
   // Network failures and timeouts are retryable
   if (err.kind === 'network' || err.kind === 'timeout' || err.isTimedOut) return true;
   // Transient HTTP status codes
-  if (typeof err.status === 'number' && statusCodes && statusCodes.has(err.status)) {
+  if (isNumber(err.status) && statusCodes && statusCodes.has(err.status)) {
     return true;
   }
   return false;
@@ -797,7 +799,7 @@ function createApiClient(config = {}) {
     let timeoutTimer = null;
     let currentSeq = 1;
 
-    if (typeof options.timeout === 'number' && options.timeout > 0) {
+    if (isNumber(options.timeout) && options.timeout > 0) {
       timeoutTimer = setTimeout(() => {
         timedOut = true;
         abortController.abort();

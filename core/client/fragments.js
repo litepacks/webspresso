@@ -1,6 +1,7 @@
 'use strict';
 
 const { defaultStorage } = require('./storage');
+const { isArray, isNumber, parseDurationMs, parseRefetchMode, uid } = require('./utils');
 
 /**
  * Webspresso Client-Side SSR Fragment Coordinator & Invalidation Engine
@@ -33,7 +34,7 @@ function parseDependsOnAttr(raw) {
   if (trimmed.startsWith('[')) {
     try {
       const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) {
+      if (isArray(parsed)) {
         return parsed.map((s) => String(s).trim()).filter(Boolean);
       }
     } catch (_e) {
@@ -58,7 +59,7 @@ function parseFragmentInputAttr(raw) {
   if (!trimmed) return {};
   try {
     const parsed = JSON.parse(trimmed);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    return parsed && typeof parsed === 'object' && !isArray(parsed) ? parsed : {};
   } catch (_e) {
     return {};
   }
@@ -108,9 +109,24 @@ function createFragmentCoordinator(options = {}) {
   const endpoint = options.endpoint || DEFAULT_FRAGMENT_ENDPOINT;
   const datastar = options.datastar || options.adapter;
   const debug = options.debug || null;
-  const defaultTimeout = typeof options.timeout === 'number' ? options.timeout : 15000;
+  const defaultTimeout = isNumber(options.timeout) ? options.timeout : 15000;
 
-  // Map<instanceId, { instanceId, name, pagePath, input, dependsOn: Set<string>, version: number, el: Element, abortController: AbortController|null }>
+  // React Query-style automatic revalidation defaults
+  const defaultStaleTime = parseDurationMs(options.staleTime, 0);
+  const defaultRefetchOnWindowFocus = parseRefetchMode(
+    options.refetchOnWindowFocus !== undefined ? options.refetchOnWindowFocus : options.refetchOnFocus,
+    false
+  );
+  const defaultRefetchOnReconnect = parseRefetchMode(options.refetchOnReconnect, false);
+  const defaultRefetchOnMount = parseRefetchMode(
+    options.refetchOnMount !== undefined ? options.refetchOnMount : options.refetchOnVisit,
+    false
+  );
+  const defaultRefetchInterval = parseDurationMs(options.refetchInterval, 0);
+  const defaultRefetchIntervalInBackground =
+    parseRefetchMode(options.refetchIntervalInBackground, false) === true;
+
+  // Map<instanceId, { instanceId, name, pagePath, input, dependsOn: Set<string>, version: number, el: Element, abortController: AbortController|null, ... }>
   const instances = new Map();
 
   // Coalescing & in-flight state for tag invalidations
@@ -122,91 +138,378 @@ function createFragmentCoordinator(options = {}) {
   let lastFailedBatch = null;
   const inflightBatchWaiters = [];
 
-  /**
-   * Scan DOM and synchronize tracked `[data-w-fragment]` instances.
-   */
-  function syncDomInstances(containerEl) {
-    const root = containerEl || getRoot();
-    if (!root || typeof root.querySelectorAll !== 'function') return [];
+  // Automatic refetch (focus / reconnect / mount / interval) state
+  const pendingAutoInstanceIds = new Set();
+  let autoBatchScheduled = false;
+  let focusDebounceTimer = null;
+  let isDisposed = false;
+  let lifecycleListenersAttached = false;
 
-    const elements = Array.from(root.querySelectorAll('[data-w-fragment]'));
-    if (root.nodeType === 1 && root.hasAttribute && root.hasAttribute('data-w-fragment')) {
-      elements.unshift(root);
+  function isDocumentHidden() {
+    const root = getRoot();
+    const doc = root && root.nodeType === 9 ? root : root && root.ownerDocument ? root.ownerDocument : typeof document !== 'undefined' ? document : null;
+    return Boolean(doc && doc.visibilityState === 'hidden');
+  }
+
+  function isInstanceStale(inst, mode) {
+    if (!inst || !mode) return false;
+    if (mode === 'always') return true;
+    const staleMs = isNumber(inst.staleTime) ? inst.staleTime : 0;
+    if (staleMs <= 0) return true;
+    const elapsed = Date.now() - (inst.lastUpdatedAt || 0);
+    return elapsed >= staleMs;
+  }
+
+  function clearInstanceInterval(inst) {
+    if (inst && inst.intervalTimer) {
+      clearInterval(inst.intervalTimer);
+      inst.intervalTimer = null;
+      inst.activeIntervalMs = 0;
     }
+  }
 
-    const seenIds = new Set();
-
-    for (let i = 0; i < elements.length; i++) {
-      const el = elements[i];
-      const name = (el.getAttribute('data-w-fragment') || '').trim();
-      if (!name) continue;
-
-      let instanceId = (el.getAttribute('data-w-fragment-id') || '').trim();
-      if (!instanceId) {
-        instanceId = i === 0 ? `${name}:default` : `${name}:${i}`;
-        el.setAttribute('data-w-fragment-id', instanceId);
+  function syncInstanceInterval(inst) {
+    if (!inst || isDisposed) return;
+    const targetMs = isNumber(inst.refetchInterval) && inst.refetchInterval > 0 ? inst.refetchInterval : 0;
+    if (targetMs <= 0) {
+      clearInstanceInterval(inst);
+      return;
+    }
+    if (inst.intervalTimer && inst.activeIntervalMs === targetMs) {
+      return;
+    }
+    clearInstanceInterval(inst);
+    inst.activeIntervalMs = targetMs;
+    inst.intervalTimer = setInterval(() => {
+      if (isDisposed || !inst.el || inst.el.isConnected === false) {
+        clearInstanceInterval(inst);
+        return;
       }
+      if (!inst.refetchIntervalInBackground && isDocumentHidden()) {
+        return;
+      }
+      scheduleAutoRefresh([inst.instanceId], 'interval');
+    }, targetMs);
+    if (inst.intervalTimer && typeof inst.intervalTimer.unref === 'function') {
+      inst.intervalTimer.unref();
+    }
+  }
 
-      seenIds.add(instanceId);
-      const pagePath =
-        (el.getAttribute('data-w-fragment-page') || '').trim() ||
-        (typeof window !== 'undefined' && window.location ? window.location.pathname : '/');
-      const input = parseFragmentInputAttr(el.getAttribute('data-w-fragment-input'));
-      const dependsOn = new Set(parseDependsOnAttr(el.getAttribute('data-w-depends-on')));
+  function scheduleAutoRefresh(instanceIds, reason = 'auto') {
+    if (isDisposed || !isArray(instanceIds) || instanceIds.length === 0) return;
+    for (const id of instanceIds) {
+      if (id) pendingAutoInstanceIds.add(id);
+    }
+    if (autoBatchScheduled || pendingAutoInstanceIds.size === 0) return;
+    autoBatchScheduled = true;
 
-      // Fragment input persistence setup
-      const rawPersistInput =
-        el.getAttribute('data-w-persist-input') ||
-        (el.getAttribute('data-w-persist') === 'input' ? 'session' : null);
-      const isInputPersistEnabled = Boolean(rawPersistInput && rawPersistInput !== 'false');
-      const inputStorageType = rawPersistInput && rawPersistInput.toLowerCase() === 'local' ? 'local' : 'session';
-      const inputStorageKey =
-        el.getAttribute('data-w-persist-key') ||
-        el.getAttribute('data-w-input-key') ||
-        `frag_input:${name}`;
+    Promise.resolve().then(async () => {
+      autoBatchScheduled = false;
+      if (isDisposed || pendingAutoInstanceIds.size === 0) return;
+      const idsToRefresh = Array.from(pendingAutoInstanceIds);
+      pendingAutoInstanceIds.clear();
 
-      let effectiveInput = input;
-      if (isInputPersistEnabled) {
-        const store = inputStorageType === 'local' ? defaultStorage.local : defaultStorage.session;
-        if (!el.hasAttribute('data-w-fragment-input') || Object.keys(effectiveInput).length === 0) {
-          const stored = store.get(inputStorageKey, null);
-          if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
-            effectiveInput = stored;
-          }
+      // Skip background auto-refresh if a mutation invalidation batch is currently in flight
+      if (inFlightBatchCount > 0) return;
+
+      const candidates = [];
+      for (const id of idsToRefresh) {
+        const inst = instances.get(id);
+        if (inst && inst.el && inst.el.isConnected !== false && !inst.abortController) {
+          candidates.push(inst);
         }
       }
+      if (candidates.length === 0) return;
 
-      const existing = instances.get(instanceId);
-      if (existing) {
-        existing.name = name;
-        existing.pagePath = pagePath;
-        existing.el = el;
-        existing.dependsOn = dependsOn;
-        if (el.hasAttribute('data-w-fragment-input') || isInputPersistEnabled) {
-          existing.input = effectiveInput;
-        }
-        existing.persistInput = isInputPersistEnabled ? { type: inputStorageType, key: inputStorageKey } : null;
-      } else {
-        instances.set(instanceId, {
-          instanceId,
-          name,
-          pagePath,
-          input: effectiveInput,
-          dependsOn,
-          version: 0,
-          el,
-          abortController: null,
-          persistInput: isInputPersistEnabled ? { type: inputStorageType, key: inputStorageKey } : null,
+      const deduped = deduplicateParentChildFragments(candidates);
+      const targets = deduped.map((inst) => {
+        inst.version += 1;
+        return {
+          instanceId: inst.instanceId,
+          name: inst.name,
+          pagePath: inst.pagePath,
+          input: { ...inst.input },
+          reqVersion: inst.version,
+        };
+      });
+
+      if (debug && typeof debug.recordEvent === 'function') {
+        debug.recordEvent('fragment:auto-refetch', {
+          reason,
+          fragments: targets.map((t) => t.instanceId),
         });
       }
+
+      try {
+        await executeBatchRefresh(targets);
+      } catch (_err) {
+        // Background auto-refetch errors are non-fatal
+      }
+    });
+  }
+
+  function triggerFocusRefetch() {
+    if (isDisposed || isDocumentHidden()) return;
+    if (focusDebounceTimer) clearTimeout(focusDebounceTimer);
+    focusDebounceTimer = setTimeout(() => {
+      focusDebounceTimer = null;
+      if (isDisposed || isDocumentHidden()) return;
+      scanDomInstances();
+      const matchedIds = [];
+      for (const inst of instances.values()) {
+        if (isInstanceStale(inst, inst.refetchOnWindowFocus)) {
+          matchedIds.push(inst.instanceId);
+        }
+      }
+      if (matchedIds.length > 0) {
+        scheduleAutoRefresh(matchedIds, 'window-focus');
+      }
+    }, 20);
+  }
+
+  function triggerReconnectRefetch() {
+    if (isDisposed) return;
+    scanDomInstances();
+    const matchedIds = [];
+    for (const inst of instances.values()) {
+      if (isInstanceStale(inst, inst.refetchOnReconnect)) {
+        matchedIds.push(inst.instanceId);
+      }
+    }
+    if (matchedIds.length > 0) {
+      scheduleAutoRefresh(matchedIds, 'reconnect');
+    }
+  }
+
+  function onVisibilityChange() {
+    if (!isDocumentHidden()) {
+      triggerFocusRefetch();
+    }
+  }
+
+  function onPageShow(event) {
+    if (isDisposed) return;
+    if (event && event.persisted) {
+      scanDomInstances();
+      const matchedIds = [];
+      for (const inst of instances.values()) {
+        const mode = inst.refetchOnMount || inst.refetchOnWindowFocus;
+        if (isInstanceStale(inst, mode)) {
+          matchedIds.push(inst.instanceId);
+        }
+      }
+      if (matchedIds.length > 0) {
+        scheduleAutoRefresh(matchedIds, 'pageshow');
+      }
+    }
+  }
+
+  function ensureLifecycleListeners() {
+    if (lifecycleListenersAttached || isDisposed) return;
+    const root = getRoot();
+    const doc = root && root.nodeType === 9 ? root : root && root.ownerDocument ? root.ownerDocument : typeof document !== 'undefined' ? document : null;
+    const win = (doc && doc.defaultView) || (typeof window !== 'undefined' ? window : null);
+
+    if (doc && typeof doc.addEventListener === 'function') {
+      doc.addEventListener('visibilitychange', onVisibilityChange);
+    }
+    if (win && typeof win.addEventListener === 'function') {
+      win.addEventListener('focus', triggerFocusRefetch);
+      win.addEventListener('online', triggerReconnectRefetch);
+      win.addEventListener('pageshow', onPageShow);
+    }
+    lifecycleListenersAttached = true;
+  }
+
+  function removeLifecycleListeners() {
+    if (!lifecycleListenersAttached) return;
+    const root = getRoot();
+    const doc = root && root.nodeType === 9 ? root : root && root.ownerDocument ? root.ownerDocument : typeof document !== 'undefined' ? document : null;
+    const win = (doc && doc.defaultView) || (typeof window !== 'undefined' ? window : null);
+
+    if (doc && typeof doc.removeEventListener === 'function') {
+      doc.removeEventListener('visibilitychange', onVisibilityChange);
+    }
+    if (win && typeof win.removeEventListener === 'function') {
+      win.removeEventListener('focus', triggerFocusRefetch);
+      win.removeEventListener('online', triggerReconnectRefetch);
+      win.removeEventListener('pageshow', onPageShow);
+    }
+    lifecycleListenersAttached = false;
+  }
+
+  function syncSingleElement(el, index, seenIds) {
+    const name = (el.getAttribute('data-w-fragment') || '').trim();
+    if (!name) return;
+
+    let instanceId = (el.getAttribute('data-w-fragment-id') || '').trim();
+    if (!instanceId) {
+      instanceId = index === 0 ? `${name}:default` : `${name}:${index}`;
+      el.setAttribute('data-w-fragment-id', instanceId);
+    }
+
+    if (seenIds) seenIds.add(instanceId);
+
+    const existing = instances.get(instanceId);
+    const rawInput = el.getAttribute('data-w-fragment-input');
+    const rawDepends = el.getAttribute('data-w-depends-on');
+    const rawStale = el.getAttribute('data-w-stale-time');
+    const rawInterval = el.getAttribute('data-w-refetch-interval');
+
+    // Fast-path: if the same DOM element is already registered and its reactive attributes are unchanged,
+    // skip JSON.parse, Set allocation, storage lookup, and timer reconfiguration.
+    if (
+      existing &&
+      existing.el === el &&
+      existing.name === name &&
+      existing._rawInput === rawInput &&
+      existing._rawDepends === rawDepends &&
+      existing._rawStale === rawStale &&
+      existing._rawInterval === rawInterval
+    ) {
+      return;
+    }
+
+    const pagePath =
+      (el.getAttribute('data-w-fragment-page') || '').trim() ||
+      (typeof window !== 'undefined' && window.location ? window.location.pathname : '/');
+    const input =
+      existing && existing.el === el && existing._rawInput === rawInput
+        ? existing.input
+        : parseFragmentInputAttr(rawInput);
+    const dependsOn =
+      existing && existing.el === el && existing._rawDepends === rawDepends
+        ? existing.dependsOn
+        : new Set(parseDependsOnAttr(rawDepends));
+
+    // Fragment input persistence setup
+    const rawPersistInput =
+      el.getAttribute('data-w-persist-input') ||
+      (el.getAttribute('data-w-persist') === 'input' ? 'session' : null);
+    const isInputPersistEnabled = Boolean(rawPersistInput && rawPersistInput !== 'false');
+    const inputStorageType = rawPersistInput && rawPersistInput.toLowerCase() === 'local' ? 'local' : 'session';
+    const inputStorageKey =
+      el.getAttribute('data-w-persist-key') ||
+      el.getAttribute('data-w-input-key') ||
+      `frag_input:${name}`;
+
+    let effectiveInput = input;
+    if (isInputPersistEnabled) {
+      const store = inputStorageType === 'local' ? defaultStorage.local : defaultStorage.session;
+      if (rawInput === null || Object.keys(effectiveInput).length === 0) {
+        const stored = store.get(inputStorageKey, null);
+        if (stored && typeof stored === 'object' && !isArray(stored)) {
+          effectiveInput = stored;
+        }
+      }
+    }
+
+    // Parse React Query-style automatic revalidation attributes
+    const staleTime = parseDurationMs(rawStale, defaultStaleTime);
+    const rawFocusAttr =
+      el.getAttribute('data-w-refetch-on-focus') ??
+      el.getAttribute('data-w-refetch-on-window-focus');
+    const refetchOnWindowFocus = parseRefetchMode(rawFocusAttr, defaultRefetchOnWindowFocus);
+    const refetchOnReconnect = parseRefetchMode(
+      el.getAttribute('data-w-refetch-on-reconnect'),
+      defaultRefetchOnReconnect
+    );
+    const rawMountAttr =
+      el.getAttribute('data-w-refetch-on-mount') ??
+      el.getAttribute('data-w-refetch-on-visit');
+    const refetchOnMount = parseRefetchMode(rawMountAttr, defaultRefetchOnMount);
+    const refetchInterval = parseDurationMs(rawInterval, defaultRefetchInterval);
+    const refetchIntervalInBackground =
+      parseRefetchMode(
+        el.getAttribute('data-w-refetch-in-background'),
+        defaultRefetchIntervalInBackground
+      ) === true;
+
+    if (refetchOnWindowFocus || refetchOnReconnect || refetchOnMount) {
+      ensureLifecycleListeners();
+    }
+
+    if (existing) {
+      existing.name = name;
+      existing.pagePath = pagePath;
+      existing.el = el;
+      existing.dependsOn = dependsOn;
+      if (rawInput !== null || isInputPersistEnabled) {
+        existing.input = effectiveInput;
+      }
+      existing.persistInput = isInputPersistEnabled ? { type: inputStorageType, key: inputStorageKey } : null;
+      existing.staleTime = staleTime;
+      existing.refetchOnWindowFocus = refetchOnWindowFocus;
+      existing.refetchOnReconnect = refetchOnReconnect;
+      existing.refetchOnMount = refetchOnMount;
+      existing.refetchInterval = refetchInterval;
+      existing.refetchIntervalInBackground = refetchIntervalInBackground;
+      existing._rawInput = rawInput;
+      existing._rawDepends = rawDepends;
+      existing._rawStale = rawStale;
+      existing._rawInterval = rawInterval;
+      syncInstanceInterval(existing);
+    } else {
+      const created = {
+        instanceId,
+        name,
+        pagePath,
+        input: effectiveInput,
+        dependsOn,
+        version: 0,
+        el,
+        abortController: null,
+        persistInput: isInputPersistEnabled ? { type: inputStorageType, key: inputStorageKey } : null,
+        lastUpdatedAt: Date.now(),
+        staleTime,
+        refetchOnWindowFocus,
+        refetchOnReconnect,
+        refetchOnMount,
+        refetchInterval,
+        refetchIntervalInBackground,
+        intervalTimer: null,
+        activeIntervalMs: 0,
+        _rawInput: rawInput,
+        _rawDepends: rawDepends,
+        _rawStale: rawStale,
+        _rawInterval: rawInterval,
+      };
+      instances.set(instanceId, created);
+      syncInstanceInterval(created);
+      if (refetchOnMount === 'always' || (refetchOnMount === true && staleTime <= 0)) {
+        scheduleAutoRefresh([instanceId], 'mount');
+      }
+    }
+  }
+
+  /**
+   * Internal DOM scan without allocating a return array.
+   */
+  function scanDomInstances(containerEl) {
+    const defaultRoot = getRoot();
+    const root = containerEl || defaultRoot;
+    if (!root || typeof root.querySelectorAll !== 'function') return;
+
+    const isFullScan = !containerEl || containerEl === defaultRoot;
+    const seenIds = isFullScan ? new Set() : null;
+    const nodeList = root.querySelectorAll('[data-w-fragment]');
+    let idx = 0;
+
+    if (root.nodeType === 1 && root.hasAttribute && root.hasAttribute('data-w-fragment')) {
+      syncSingleElement(root, idx++, seenIds);
+    }
+
+    for (let i = 0, len = nodeList.length; i < len; i++) {
+      syncSingleElement(nodeList[i], idx++, seenIds);
     }
 
     // Prune disconnected instances if scanning full root
-    if (!containerEl || containerEl === getRoot()) {
+    if (isFullScan) {
       for (const [id, inst] of instances.entries()) {
         const disconnected =
           !seenIds.has(id) || (inst.el && inst.el.isConnected === false);
         if (disconnected) {
+          clearInstanceInterval(inst);
           if (inst.abortController) {
             try {
               inst.abortController.abort();
@@ -218,7 +521,13 @@ function createFragmentCoordinator(options = {}) {
         }
       }
     }
+  }
 
+  /**
+   * Scan DOM and synchronize tracked `[data-w-fragment]` instances.
+   */
+  function syncDomInstances(containerEl) {
+    scanDomInstances(containerEl);
     return Array.from(instances.values());
   }
 
@@ -255,7 +564,9 @@ function createFragmentCoordinator(options = {}) {
       pendingTags.size === 0
     ) {
       inst.input = fragmentPayload.input;
-      inst.el.setAttribute('data-w-fragment-input', JSON.stringify(fragmentPayload.input));
+      const serializedInput = JSON.stringify(fragmentPayload.input);
+      inst.el.setAttribute('data-w-fragment-input', serializedInput);
+      inst._rawInput = serializedInput;
       if (inst.persistInput) {
         const store = inst.persistInput.type === 'local' ? defaultStorage.local : defaultStorage.session;
         store.set(inst.persistInput.key, fragmentPayload.input);
@@ -272,9 +583,10 @@ function createFragmentCoordinator(options = {}) {
     }
 
     const patchMs = Math.max(0, Date.now() - patchStart);
+    inst.lastUpdatedAt = Date.now();
 
     // Re-sync nested fragment instances that may have been updated inside this parent fragment
-    syncDomInstances(inst.el);
+    scanDomInstances(inst.el);
 
     if (typeof options.onAfterPatch === 'function') {
       options.onAfterPatch(inst.el, inst);
@@ -331,7 +643,7 @@ function createFragmentCoordinator(options = {}) {
       })),
     };
 
-    const reqId = `frag_req_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const reqId = uid('frag_req', 4);
     if (debug) {
       debug.trackRequestStart({
         requestId: reqId,
@@ -346,7 +658,7 @@ function createFragmentCoordinator(options = {}) {
     const batchAbortController = new AbortController();
     let timeoutTimer = null;
     let timedOut = false;
-    const timeoutMs = typeof batchTimeout === 'number' ? batchTimeout : defaultTimeout;
+    const timeoutMs = isNumber(batchTimeout) ? batchTimeout : defaultTimeout;
 
     if (timeoutMs > 0) {
       timeoutTimer = setTimeout(() => {
@@ -498,8 +810,8 @@ function createFragmentCoordinator(options = {}) {
       const inst = instances.get(target.instanceId);
       const fragResult = resultsMap[target.instanceId] || resultsMap[target.name];
       if (!inst || !fragResult) continue;
-      if (typeof fragResult.loadMs === 'number') totalLoadMs += fragResult.loadMs;
-      if (typeof fragResult.renderMs === 'number') totalRenderMs += fragResult.renderMs;
+      if (isNumber(fragResult.loadMs)) totalLoadMs += fragResult.loadMs;
+      if (isNumber(fragResult.renderMs)) totalRenderMs += fragResult.renderMs;
 
       const applied = applyFragmentPatch(
         inst,
@@ -519,7 +831,7 @@ function createFragmentCoordinator(options = {}) {
           status: 'ok',
           loadMs: totalLoadMs,
           renderMs: totalRenderMs,
-          totalServerMs: body && typeof body.totalMs === 'number' ? body.totalMs : null,
+          totalServerMs: body && isNumber(body.totalMs) ? body.totalMs : null,
         });
       }
     }
@@ -557,7 +869,7 @@ function createFragmentCoordinator(options = {}) {
     pendingTags.clear();
     pendingChains.length = 0;
 
-    syncDomInstances();
+    scanDomInstances();
 
     // Find all mounted fragment instances whose `dependsOn` intersects `tagsToFlush`
     const matchingInstances = [];
@@ -636,7 +948,7 @@ function createFragmentCoordinator(options = {}) {
    * @returns {Promise<{ refreshed: string[], skipped?: boolean }>}
    */
   function invalidate(tags, meta = {}) {
-    const tagList = Array.isArray(tags) ? tags : [tags];
+    const tagList = isArray(tags) ? tags : [tags];
     for (const raw of tagList) {
       if (typeof raw === 'string' && raw.trim()) {
         pendingTags.add(raw.trim());
@@ -685,7 +997,7 @@ function createFragmentCoordinator(options = {}) {
    * @param {object} [refreshOpts]
    */
   async function refresh(idOrName, nextInput, refreshOpts = {}) {
-    syncDomInstances();
+    scanDomInstances();
 
     const matched = [];
     if (instances.has(idOrName)) {
@@ -731,7 +1043,9 @@ function createFragmentCoordinator(options = {}) {
           ? { ...nextInput }
           : { ...inst.input, ...nextInput };
         if (inst.el && typeof inst.el.setAttribute === 'function') {
-          inst.el.setAttribute('data-w-fragment-input', JSON.stringify(inst.input));
+          const serializedInput = JSON.stringify(inst.input);
+          inst.el.setAttribute('data-w-fragment-input', serializedInput);
+          inst._rawInput = serializedInput;
         }
         if (inst.persistInput) {
           const store = inst.persistInput.type === 'local' ? defaultStorage.local : defaultStorage.session;
@@ -825,10 +1139,10 @@ function createFragmentCoordinator(options = {}) {
     invalidate,
     refresh,
     refreshFragments(items = []) {
-      if (!Array.isArray(items) || items.length === 0) {
+      if (!isArray(items) || items.length === 0) {
         return Promise.resolve({ refreshed: [], skipped: true });
       }
-      syncDomInstances();
+      scanDomInstances();
       for (const item of items) {
         const key = item.instanceId || item.name;
         const inst = instances.get(key) || Array.from(instances.values()).find((i) => i.name === key);
@@ -836,7 +1150,9 @@ function createFragmentCoordinator(options = {}) {
           if (item.input && typeof item.input === 'object') {
             inst.input = { ...item.input };
             if (inst.el && typeof inst.el.setAttribute === 'function') {
-              inst.el.setAttribute('data-w-fragment-input', JSON.stringify(inst.input));
+              const serializedInput = JSON.stringify(inst.input);
+              inst.el.setAttribute('data-w-fragment-input', serializedInput);
+              inst._rawInput = serializedInput;
             }
           }
           pendingTags.add(inst.name);
@@ -847,8 +1163,8 @@ function createFragmentCoordinator(options = {}) {
       return flushInvalidations();
     },
     findFragmentsByTags(tags = []) {
-      syncDomInstances();
-      const tagSet = new Set((Array.isArray(tags) ? tags : [tags]).map((t) => String(t || '').trim()).filter(Boolean));
+      scanDomInstances();
+      const tagSet = new Set((isArray(tags) ? tags : [tags]).map((t) => String(t || '').trim()).filter(Boolean));
       const matching = [];
       for (const inst of instances.values()) {
         for (const t of tagSet) {
@@ -863,11 +1179,15 @@ function createFragmentCoordinator(options = {}) {
     retryFailed,
     retryLastFailed: retryFailed,
     getInstance(instanceId) {
-      syncDomInstances();
+      const hit = instances.get(instanceId);
+      if (hit && (!hit.el || hit.el.isConnected !== false)) {
+        return hit;
+      }
+      scanDomInstances();
       return instances.get(instanceId) || null;
     },
     getInstances() {
-      syncDomInstances();
+      scanDomInstances();
       return Array.from(instances.values());
     },
     getStoredInput(instanceIdOrName, storageType = 'session') {
@@ -880,6 +1200,24 @@ function createFragmentCoordinator(options = {}) {
     },
     get hasFailedRefresh() {
       return Boolean(lastFailedBatch);
+    },
+    dispose() {
+      isDisposed = true;
+      if (focusDebounceTimer) {
+        clearTimeout(focusDebounceTimer);
+        focusDebounceTimer = null;
+      }
+      pendingAutoInstanceIds.clear();
+      removeLifecycleListeners();
+      for (const inst of instances.values()) {
+        clearInstanceInterval(inst);
+        if (inst.abortController) {
+          try {
+            inst.abortController.abort();
+          } catch (_e) {}
+          inst.abortController = null;
+        }
+      }
     },
   };
 }

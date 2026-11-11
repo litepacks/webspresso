@@ -999,8 +999,16 @@ describe('Datastar Client Behavior Layer — Refactored Infrastructure Tests', (
       expect(snap.events).toHaveLength(0);
     });
 
-    it('verifies shared micro-utilities (getByPath, setByPath, isPlainObject)', () => {
-      const { getByPath, setByPath, isPlainObject, isPromise } = require('../../core/client/utils');
+    it('verifies shared micro-utilities (getByPath, setByPath, isPlainObject, isArray, isNumber, randomId, uid)', () => {
+      const { getByPath, setByPath, isPlainObject, isPromise, isArray, isNumber, randomId, uid } = require('../../core/client/utils');
+
+      expect(isArray([1, 2])).toBe(true);
+      expect(isArray({ length: 2 })).toBe(false);
+      expect(isNumber(42)).toBe(true);
+      expect(isNumber(NaN)).toBe(false);
+      expect(isNumber('42')).toBe(false);
+      expect(randomId(5)).toHaveLength(5);
+      expect(uid('evt')).toMatch(/^evt_\d+_[a-z0-9]{5}$/);
 
       const target = { user: { profile: { age: 30 } } };
       expect(getByPath(target, 'user.profile.age')).toBe(30);

@@ -53,7 +53,30 @@ const SERVER_ONLY_PACKAGES = new Set([
 ]);
 
 const SERVER_ONLY_INTERNAL_PATTERN =
-  /(?:^|\/)(?:core\/(?:orm|services|auth|secrets|queue|mail|http|metrics|health|rate-limit)|src\/(?:server|file-router|api|pages)|models|services|jobs|migrations|pages\/api)(?:\/|$)/;
+  /(?:^(?:src\/)?(?:models|services|jobs|migrations|pages\/api)|(?:^|\/)(?:core\/(?:orm|services|auth|secrets|queue|mail|http|metrics|health|rate-limit)|src\/(?:server|file-router|api|pages)))(?:\/|$)/;
+
+function isClientServiceFile(resolvedBase) {
+  const candidates = [
+    resolvedBase,
+    `${resolvedBase}.ts`,
+    `${resolvedBase}.js`,
+    `${resolvedBase}.mjs`,
+    `${resolvedBase}.tsx`,
+    `${resolvedBase}.jsx`,
+  ];
+  for (const cand of candidates) {
+    if (cand.includes('.client.')) return true;
+    if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+      try {
+        const content = fs.readFileSync(cand, 'utf8');
+        if (/\bdefineClientService\b/.test(content)) {
+          return true;
+        }
+      } catch (_) {}
+    }
+  }
+  return false;
+}
 
 const DEFAULT_ENTRYPOINTS = [
   'src/client/main.js',
@@ -290,6 +313,9 @@ function checkServerImportViolation(specifier, importerPath, cwd = process.cwd()
     const relToRoot = path.relative(cwd, resolved).replace(/\\/g, '/');
 
     if (SERVER_ONLY_INTERNAL_PATTERN.test(relToRoot)) {
+      if (/^(?:src\/)?services(?:\/|$)/.test(relToRoot) && isClientServiceFile(resolved)) {
+        return { forbidden: false };
+      }
       return {
         forbidden: true,
         reason: `Server module "${relToRoot}" (imported as "${raw}" in "${path.relative(cwd, importerPath)}") cannot be bundled into browser code.`,
@@ -700,6 +726,8 @@ function createDevBundler(options = {}, devReloadHub = null) {
     validateClientBundleBoundaries(entryPoints, cwd);
 
     const outbase = options.outbase || (fs.existsSync(path.resolve(cwd, 'src/client')) ? path.resolve(cwd, 'src/client') : undefined);
+    const splitting = options.splitting !== undefined ? Boolean(options.splitting) : format === 'esm';
+    const chunkNames = options.chunkNames || 'chunks/[name]-[hash]';
     const esbuildConfig = {
       entryPoints,
       outdir,
@@ -708,6 +736,12 @@ function createDevBundler(options = {}, devReloadHub = null) {
       minify,
       target,
       format,
+      splitting,
+      ...(splitting ? { chunkNames } : {}),
+      define: {
+        'process.env.NODE_ENV': '"development"',
+        ...(options.define || {}),
+      },
       metafile,
       outbase,
       plugins: [createServerBoundaryPlugin(cwd), devReloadPlugin, ...userPlugins],
@@ -804,6 +838,7 @@ async function buildBundle(options = {}) {
       publicDir,
       manifestPath,
       hash: options.hash !== false,
+      splitting: options.splitting !== false && (options.format || 'esm') === 'esm',
     });
   }
 
@@ -812,8 +847,10 @@ async function buildBundle(options = {}) {
   const sourcemap = options.sourcemap !== undefined ? options.sourcemap : true;
   const target = options.target || ['es2020'];
   const format = options.format || 'esm';
+  const splitting = options.splitting !== undefined ? Boolean(options.splitting) : format === 'esm';
   const outbase = options.outbase || (fs.existsSync(path.resolve(cwd, 'src/client')) ? path.resolve(cwd, 'src/client') : undefined);
   const entryNames = options.entryNames || (options.hash !== false ? '[dir]/[name].[hash]' : '[dir]/[name]');
+  const chunkNames = options.chunkNames || (options.hash !== false ? 'chunks/[name].[hash]' : 'chunks/[name]');
   const userPlugins = Array.isArray(options.plugins) ? options.plugins : [];
 
   const manifestPlugin = createManifestPlugin({
@@ -838,6 +875,8 @@ async function buildBundle(options = {}) {
     sourcemap,
     target,
     format,
+    splitting,
+    ...(splitting ? { chunkNames } : {}),
     entryNames,
     outbase,
     metafile: true,
@@ -858,12 +897,34 @@ async function buildBundle(options = {}) {
   };
 }
 
+function resolveLocalModuleFile(importerAbsPath, specifier) {
+  if (!specifier || !specifier.startsWith('.')) return null;
+  const baseResolved = path.resolve(path.dirname(importerAbsPath), specifier);
+  const candidates = [
+    baseResolved,
+    `${baseResolved}.ts`,
+    `${baseResolved}.js`,
+    `${baseResolved}.mjs`,
+    `${baseResolved}.tsx`,
+    `${baseResolved}.jsx`,
+    `${baseResolved}.css`,
+    path.join(baseResolved, 'index.ts'),
+    path.join(baseResolved, 'index.js'),
+  ];
+  for (const cand of candidates) {
+    if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+      return cand;
+    }
+  }
+  return null;
+}
+
 /**
  * Built-in fallback asset builder when esbuild is not installed in node_modules.
- * Compiles `.ts` / `.js` client entrypoints, hashes filenames for cache-busting,
- * and writes `manifest.json`.
+ * Compiles `.ts` / `.js` client entrypoints, splits dynamic `import()` modules
+ * and shared chunks into `chunks/`, hashes filenames for cache-busting, and writes `manifest.json`.
  */
-function buildBundleFallback({ cwd, entryPoints, outdir, publicDir, manifestPath, hash = true }) {
+function buildBundleFallback({ cwd, entryPoints, outdir, publicDir, manifestPath, hash = true, splitting = true }) {
   const crypto = require('crypto');
   let ts = null;
   try {
@@ -880,22 +941,116 @@ function buildBundleFallback({ cwd, entryPoints, outdir, publicDir, manifestPath
     : entryPoints;
 
   const metafile = { inputs: {}, outputs: {} };
+  const emittedChunksBySource = new Map(); // absSourcePath -> { absOut, relFromOutdir, relOutput }
 
-  for (const [entryKey, rawFilePath] of Object.entries(entriesMap)) {
-    const absIn = path.resolve(cwd, rawFilePath);
-    if (!fs.existsSync(absIn)) continue;
-    const rawCode = fs.readFileSync(absIn, 'utf8');
-    let outCode = rawCode;
-
-    if ((absIn.endsWith('.ts') || absIn.endsWith('.tsx')) && ts) {
+  function transpileSource(absFile, rawCode) {
+    if ((absFile.endsWith('.ts') || absFile.endsWith('.tsx')) && ts) {
       const transpiled = ts.transpileModule(rawCode, {
         compilerOptions: {
           module: ts.ModuleKind.ESNext,
           target: ts.ScriptTarget.ES2020,
         },
-        fileName: absIn,
+        fileName: absFile,
       });
-      outCode = transpiled.outputText;
+      return transpiled.outputText;
+    }
+    return rawCode;
+  }
+
+  function emitChunkModule(absModulePath) {
+    if (emittedChunksBySource.has(absModulePath)) {
+      return emittedChunksBySource.get(absModulePath);
+    }
+    if (!fs.existsSync(absModulePath)) return null;
+
+    const rawCode = fs.readFileSync(absModulePath, 'utf8');
+    const isCss = absModulePath.endsWith('.css');
+    let outCode = isCss ? rawCode : transpileSource(absModulePath, rawCode);
+
+    // Reserve placeholder to prevent infinite recursion on circular imports
+    const baseName = path.basename(absModulePath, path.extname(absModulePath)).replace(/\.client$/i, '');
+    const placeholder = { absOut: '', relFromOutdir: '', relOutput: '' };
+    emittedChunksBySource.set(absModulePath, placeholder);
+
+    const chunkImports = [];
+    if (!isCss && splitting) {
+      const placeholderOutDir = path.join(outdir, 'chunks');
+      outCode = rewriteModuleImports(absModulePath, outCode, placeholderOutDir, chunkImports);
+    }
+
+    const digest = hash
+      ? '.' + crypto.createHash('sha256').update(outCode).digest('hex').slice(0, 8).toUpperCase()
+      : '';
+    const ext = isCss ? '.css' : '.js';
+    const relFromOutdir = `chunks/${baseName}${digest}${ext}`;
+    const absOut = path.join(outdir, relFromOutdir);
+    fs.mkdirSync(path.dirname(absOut), { recursive: true });
+    fs.writeFileSync(absOut, outCode, 'utf8');
+
+    const relInput = path.relative(cwd, absModulePath).replace(/\\/g, '/');
+    const relOutput = path.relative(cwd, absOut).replace(/\\/g, '/');
+    metafile.inputs[relInput] = { bytes: Buffer.byteLength(rawCode, 'utf8') };
+    metafile.outputs[relOutput] = {
+      bytes: Buffer.byteLength(outCode, 'utf8'),
+      imports: chunkImports,
+      inputs: {
+        [relInput]: { bytesInOutput: Buffer.byteLength(outCode, 'utf8') },
+      },
+    };
+
+    placeholder.absOut = absOut;
+    placeholder.relFromOutdir = relFromOutdir;
+    placeholder.relOutput = relOutput;
+    return placeholder;
+  }
+
+  function rewriteModuleImports(importerAbsPath, code, emitterOutDir, collectedImports) {
+    // 1. Rewrite dynamic `import('./...')`
+    let rewritten = code.replace(
+      /\bimport\s*\(\s*(['"])(\.[^'"]+)\1\s*\)/g,
+      (fullMatch, quote, spec) => {
+        const resolved = resolveLocalModuleFile(importerAbsPath, spec);
+        if (!resolved) return fullMatch;
+        const chunkInfo = emitChunkModule(resolved);
+        if (!chunkInfo || !chunkInfo.absOut) return fullMatch;
+        let relSpec = path.relative(emitterOutDir, chunkInfo.absOut).replace(/\\/g, '/');
+        if (!relSpec.startsWith('.')) relSpec = './' + relSpec;
+        collectedImports.push({ path: chunkInfo.relOutput, kind: 'dynamic-import' });
+        return `import(${quote}${relSpec}${quote})`;
+      }
+    );
+
+    // 2. Rewrite static relative `import ... from './...'` / `export ... from './...'`
+    rewritten = rewritten.replace(
+      /(\b(?:import|export)\s+(?:[\s\S]*?\bfrom\s+)?)(['"])(\.[^'"]+)\2/g,
+      (fullMatch, prefix, quote, spec) => {
+        const resolved = resolveLocalModuleFile(importerAbsPath, spec);
+        if (!resolved) return fullMatch;
+        const chunkInfo = emitChunkModule(resolved);
+        if (!chunkInfo || !chunkInfo.absOut) return fullMatch;
+        let relSpec = path.relative(emitterOutDir, chunkInfo.absOut).replace(/\\/g, '/');
+        if (!relSpec.startsWith('.')) relSpec = './' + relSpec;
+        collectedImports.push({ path: chunkInfo.relOutput, kind: 'import-statement' });
+        if (resolved.endsWith('.css')) {
+          return `/* css: ${relSpec} */`;
+        }
+        return `${prefix}${quote}${relSpec}${quote}`;
+      }
+    );
+
+    return rewritten;
+  }
+
+  for (const [entryKey, rawFilePath] of Object.entries(entriesMap)) {
+    const absIn = path.resolve(cwd, rawFilePath);
+    if (!fs.existsSync(absIn)) continue;
+    const rawCode = fs.readFileSync(absIn, 'utf8');
+    let outCode = transpileSource(absIn, rawCode);
+
+    const entryOutDir = path.dirname(path.join(outdir, `${entryKey}.js`));
+    const entryImports = [];
+    if (splitting) {
+      outCode = rewriteModuleImports(absIn, outCode, entryOutDir, entryImports);
     }
 
     const digest = hash
@@ -912,10 +1067,16 @@ function buildBundleFallback({ cwd, entryPoints, outdir, publicDir, manifestPath
     metafile.outputs[relOutput] = {
       entryPoint: relInput,
       bytes: Buffer.byteLength(outCode, 'utf8'),
+      imports: entryImports,
+      inputs: {
+        [relInput]: { bytesInOutput: Buffer.byteLength(outCode, 'utf8') },
+      },
     };
   }
 
-  const manifest = generateManifest(metafile, { outdir, publicDir });
+  const relOutdir = path.relative(cwd, outdir).replace(/\\/g, '/') || 'public/dist';
+  const relPublicDir = path.relative(cwd, publicDir).replace(/\\/g, '/') || 'public';
+  const manifest = generateManifest(metafile, { outdir: relOutdir, publicDir: relPublicDir });
   fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
 

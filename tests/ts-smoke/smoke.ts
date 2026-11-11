@@ -33,6 +33,11 @@ import {
   type PaginatedResult,
   type WebspressoApplication,
   defineController,
+  defineClientService,
+  bootClient,
+  createClientRuntime,
+  type InferClientService,
+  type InferClientServicesMap,
 } from '../..';
 import { z } from 'zod';
 
@@ -328,8 +333,96 @@ const sampleController = defineController({
     },
   },
 });
-void sampleController;
+// 5. Client Services & Optional UI Host Type Inference + Compile-Time Safety
+const sampleClientServices = {
+  toast: defineClientService({
+    load: async ({ mountHost }) => {
+      const host = mountHost('toast', { className: 'toast-container' });
+      const _hostEl: HTMLElement = host.el;
+      void _hostEl;
+      return {
+        default: () => ({
+          success(message: string): string {
+            return message;
+          },
+          dismiss(id?: string): void {
+            void id;
+          },
+        }),
+      };
+    },
+  }),
+  clipboard: defineClientService({
+    create: () => ({
+      async copy(text: string): Promise<boolean> {
+        return Boolean(text);
+      },
+    }),
+  }),
+};
 
+type SampleToastApi = InferClientService<typeof sampleClientServices.toast>;
+type SampleServicesMap = InferClientServicesMap<typeof sampleClientServices>;
+const _sampleToastCheck: SampleToastApi = {
+  success: (msg: string) => msg,
+  dismiss: () => {},
+};
+void _sampleToastCheck;
 
+const typedRuntime = createClientRuntime({
+  services: sampleClientServices,
+});
 
+const typedBootRuntime = bootClient({
+  services: sampleClientServices,
+});
+void typedBootRuntime;
+
+async function verifyClientServiceTypes() {
+  const toast = await typedRuntime.services.get('toast');
+  const id: string = toast.success('Saved');
+  toast.dismiss(id);
+
+  const clipboard = await typedRuntime.services.get('clipboard');
+  const copied: boolean = await clipboard.copy('hello');
+  void copied;
+
+  // Unknown service name must fail at compile time
+  // @ts-expect-error - Unknown client service name
+  await typedRuntime.services.get('unknownService');
+
+  // Non-existent method on resolved service must fail at compile time
+  // @ts-expect-error - Method does not exist on inferred toast service
+  toast.nonExistentMethod();
+}
+void verifyClientServiceTypes;
+
+const controllerWithTypedServices = defineController<
+  { savedCount: number },
+  Record<string, never>,
+  Record<string, never>,
+  typeof sampleClientServices
+>({
+  state: () => ({ savedCount: 0 }),
+  connect({ forms }) {
+    const form = forms.get<{ title: string }, { id: number }>('note-form');
+    form.onSuccess(async (_data, { services, values }) => {
+      const titleVal: string = values.title;
+      void titleVal;
+      const toast = await services.get('toast');
+      toast.success('Created');
+      // @ts-expect-error - Unknown service in form hook
+      await services.get('invalidService');
+    });
+  },
+  actions: {
+    async save({ state, services }) {
+      const toast = await services.get('toast');
+      toast.success(`Saved #${++state.savedCount}`);
+      // @ts-expect-error - Unknown service in controller action
+      await services.get('missing');
+    },
+  },
+});
+void controllerWithTypedServices;
 

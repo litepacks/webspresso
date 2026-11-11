@@ -18,7 +18,15 @@
 const { createFormHandle } = require('./forms');
 const { createApiClient } = require('./api');
 const { defaultStorage, createClientStorage } = require('./storage');
-const { decorateElement } = require('./utils');
+const { createClientServiceRegistry } = require('./services');
+const {
+  isArray,
+  isNumber,
+  decorateElement,
+  parseDurationMs,
+  parseRefetchMode,
+  setElementBusyState,
+} = require('./utils');
 
 let instanceSeq = 0;
 let activeControllerContext = null;
@@ -43,7 +51,7 @@ function deepTouch(val, visited = new Set()) {
     return;
   }
   visited.add(val);
-  if (Array.isArray(val)) {
+  if (isArray(val)) {
     for (let i = 0; i < val.length; i++) {
       deepTouch(val[i], visited);
     }
@@ -60,14 +68,14 @@ function deepCloneOrSnapshot(val) {
   try {
     return JSON.parse(JSON.stringify(val));
   } catch {
-    return Array.isArray(val) ? [...val] : { ...val };
+    return isArray(val) ? [...val] : { ...val };
   }
 }
 
 function deepEqual(a, b) {
   if (Object.is(a, b)) return true;
   if (a === null || typeof a !== 'object' || b === null || typeof b !== 'object') return false;
-  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (isArray(a) !== isArray(b)) return false;
   const keysA = Object.keys(a);
   const keysB = Object.keys(b);
   if (keysA.length !== keysB.length) return false;
@@ -81,7 +89,7 @@ function deepEqual(a, b) {
 }
 
 function hasArrayChanged(newArr, oldArr) {
-  if (!Array.isArray(newArr) || !Array.isArray(oldArr)) return !Object.is(newArr, oldArr);
+  if (!isArray(newArr) || !isArray(oldArr)) return !Object.is(newArr, oldArr);
   if (newArr.length !== oldArr.length) return true;
   for (let i = 0; i < newArr.length; i++) {
     if (!Object.is(newArr[i], oldArr[i])) return true;
@@ -108,7 +116,7 @@ function createStandaloneWatch(engine, source, callback, options = {}) {
   let getter;
   if (typeof source === 'function') {
     getter = source;
-  } else if (Array.isArray(source)) {
+  } else if (isArray(source)) {
     getter = () => source.map((s) => (typeof s === 'function' ? s() : s));
   } else {
     getter = () => source;
@@ -147,14 +155,14 @@ function createStandaloneWatch(engine, source, callback, options = {}) {
     let newValue;
     try {
       newValue = getter();
-      if ((deep || (source && typeof source === 'object' && typeof source !== 'function' && !Array.isArray(source))) && newValue && typeof newValue === 'object') {
+      if ((deep || (source && typeof source === 'object' && typeof source !== 'function' && !isArray(source))) && newValue && typeof newValue === 'object') {
         deepTouch(newValue);
       }
     } catch (_err) {
       return;
     }
 
-    const isArr = Array.isArray(source);
+    const isArr = isArray(source);
 
     if (isFirstRun) {
       isFirstRun = false;
@@ -325,7 +333,7 @@ function defineController(definition = {}) {
   }
   if (definition.persist !== undefined && definition.persist !== null) {
     const p = definition.persist;
-    const isArr = Array.isArray(p);
+    const isArr = isArray(p);
     const isStr = typeof p === 'string';
     const isObj = typeof p === 'object' && p !== null && !isArr;
     if (!isArr && !isStr && !isObj) {
@@ -381,13 +389,13 @@ function normalizePersistConfig(persistOpt, controllerName) {
   let isGlobal = false;
   let debounce = 50;
 
-  if (Array.isArray(persistOpt)) {
+  if (isArray(persistOpt)) {
     keys = persistOpt.map(String);
   } else if (typeof persistOpt === 'string') {
     const s = persistOpt.trim().toLowerCase();
     storageType = s === 'session' ? 'session' : 'local';
   } else if (typeof persistOpt === 'object' && persistOpt !== null) {
-    if (Array.isArray(persistOpt.keys)) {
+    if (isArray(persistOpt.keys)) {
       keys = persistOpt.keys.map(String);
     }
     if (persistOpt.storage === 'session' || persistOpt.storage === 'memory') {
@@ -399,7 +407,7 @@ function normalizePersistConfig(persistOpt, controllerName) {
     if (Boolean(persistOpt.global)) {
       isGlobal = true;
     }
-    if (typeof persistOpt.debounce === 'number') {
+    if (isNumber(persistOpt.debounce)) {
       debounce = Math.max(0, persistOpt.debounce);
     }
   }
@@ -470,6 +478,14 @@ function createControllerRuntime(options = {}) {
   const debug = options.debug || null;
   const baseApiConfig = options.apiConfig || {};
   const lazyLoader = typeof options.lazyLoader === 'function' ? options.lazyLoader : null;
+  const services =
+    options.services && typeof options.services.get === 'function'
+      ? options.services
+      : createClientServiceRegistry({
+          root: options.root || null,
+          debug,
+          services: options.services || undefined,
+        });
 
   // Registered controller definitions: name -> { name, definition, sourcePath }
   const definitions = new Map();
@@ -534,7 +550,7 @@ function createControllerRuntime(options = {}) {
     };
     definitions.set(canonicalName, entry);
 
-    if (Array.isArray(meta.aliases)) {
+    if (isArray(meta.aliases)) {
       for (const alias of meta.aliases) {
         if (alias && !definitions.has(alias)) {
           definitions.set(alias, entry);
@@ -587,6 +603,79 @@ function createControllerRuntime(options = {}) {
     const scopedForms = new Map();
     const scopedTasks = {};
     const scopedTasksList = [];
+    const busyActionCounts = new Map();
+    let totalBusyActions = 0;
+    const busySignalPrefix = `__w_inst_${instanceId}.__busy`;
+    datastar.engine.signals.setValue(`${busySignalPrefix}.any`, false);
+
+    function syncAnyBusySignal() {
+      let busy = totalBusyActions > 0;
+      if (!busy) {
+        for (let i = 0; i < scopedTasksList.length; i++) {
+          if (scopedTasksList[i].pending) {
+            busy = true;
+            break;
+          }
+        }
+      }
+      datastar.engine.signals.setValue(`${busySignalPrefix}.any`, busy);
+    }
+
+    function setActionBusy(actionName, delta) {
+      const prevCount = busyActionCounts.get(actionName) || 0;
+      const nextCount = Math.max(0, prevCount + delta);
+      if (nextCount === 0) {
+        busyActionCounts.delete(actionName);
+      } else {
+        busyActionCounts.set(actionName, nextCount);
+      }
+      totalBusyActions = Math.max(0, totalBusyActions + delta);
+      datastar.engine.signals.setValue(`${busySignalPrefix}.action_${actionName}`, nextCount > 0);
+      syncAnyBusySignal();
+    }
+
+    function isActionBusy(actionName) {
+      if (!actionName) return false;
+      datastar.engine.signals.value(`${busySignalPrefix}.action_${actionName}`);
+      return (busyActionCounts.get(actionName) || 0) > 0;
+    }
+
+    function checkIsBusy() {
+      datastar.engine.signals.value(`${busySignalPrefix}.any`);
+      if (totalBusyActions > 0) return true;
+      for (let i = 0; i < scopedTasksList.length; i++) {
+        if (scopedTasksList[i].pending) return true;
+      }
+      return false;
+    }
+
+    function isLoadingTargetActive(rawSpec) {
+      const spec = typeof rawSpec === 'string' ? rawSpec.trim() : '';
+      if (!spec || spec === 'true') {
+        return checkIsBusy();
+      }
+      const parts = spec.split(',').map((s) => s.trim()).filter(Boolean);
+      for (let i = 0; i < parts.length; i++) {
+        const token = parts[i];
+        if (reg.definition.actions && Object.prototype.hasOwnProperty.call(reg.definition.actions, token)) {
+          if (isActionBusy(token)) return true;
+          continue;
+        }
+        if (
+          Object.prototype.hasOwnProperty.call(scopedTasks, token) ||
+          (reg.definition.tasks && Object.prototype.hasOwnProperty.call(reg.definition.tasks, token))
+        ) {
+          const t = getTask(token);
+          if (t && t.pending) return true;
+          continue;
+        }
+        if (Boolean(datastar.evaluateStateExpression(state, token))) {
+          return true;
+        }
+      }
+      return false;
+    }
+
     let currentActionEl = null;
     let lastError = null;
     const dynamicErrorListeners = new Set();
@@ -647,10 +736,29 @@ function createControllerRuntime(options = {}) {
       const taskKey = taskOpts.key || `task_${++taskSeq}`;
       const signalPrefix = `__w_inst_${instanceId}.task_${taskKey}`;
 
+      // React Query-style automatic revalidation options for tasks
+      const staleTimeMs = parseDurationMs(taskOpts.staleTime, 0);
+      const refetchOnMountMode = parseRefetchMode(
+        taskOpts.refetchOnMount !== undefined ? taskOpts.refetchOnMount : taskOpts.refetchOnVisit,
+        false
+      );
+      const refetchOnFocusMode = parseRefetchMode(
+        taskOpts.refetchOnWindowFocus !== undefined ? taskOpts.refetchOnWindowFocus : taskOpts.refetchOnFocus,
+        false
+      );
+      const refetchOnReconnectMode = parseRefetchMode(taskOpts.refetchOnReconnect, false);
+      const refetchIntervalMs = parseDurationMs(taskOpts.refetchInterval, 0);
+      const refetchIntervalInBg =
+        parseRefetchMode(taskOpts.refetchIntervalInBackground, false) === true;
+
       let currentRunVersion = 0;
       let activeRuns = 0;
       let inFlightAbort = null;
       let queuedPromise = Promise.resolve();
+      let _lastUpdatedAt = 0;
+      let taskIntervalTimer = null;
+      let focusDebounceTimer = null;
+      const taskCleanupListeners = [];
 
       datastar.engine.signals.setValue(`${signalPrefix}.pending`, false);
       datastar.engine.signals.setValue(`${signalPrefix}.data`, null);
@@ -662,8 +770,19 @@ function createControllerRuntime(options = {}) {
       let _error = null;
       let _stale = false;
 
+      function isTaskStale(mode = true) {
+        if (!mode) return false;
+        if (mode === 'always') return true;
+        if (_lastUpdatedAt === 0) return true;
+        if (staleTimeMs <= 0) return true;
+        return Date.now() - _lastUpdatedAt >= staleTimeMs;
+      }
+
       function updateSignal(name, val) {
         datastar.engine.signals.setValue(`${signalPrefix}.${name}`, val);
+        if (name === 'pending') {
+          syncAnyBusySignal();
+        }
       }
 
       async function run(...args) {
@@ -722,6 +841,7 @@ function createControllerRuntime(options = {}) {
           _data = result;
           _error = null;
           _stale = false;
+          _lastUpdatedAt = Date.now();
           updateSignal('data', result);
           updateSignal('error', null);
           updateSignal('stale', false);
@@ -787,15 +907,102 @@ function createControllerRuntime(options = {}) {
         },
         get stale() {
           datastar.engine.signals.value(`${signalPrefix}.stale`);
-          return _stale;
+          return _stale || (_lastUpdatedAt > 0 && staleTimeMs > 0 && Date.now() - _lastUpdatedAt >= staleTimeMs);
         },
+        get lastUpdatedAt() {
+          return _lastUpdatedAt;
+        },
+        isStale: () => isTaskStale(true),
         run,
         cancel,
         dispose() {
+          if (taskIntervalTimer) {
+            clearInterval(taskIntervalTimer);
+            taskIntervalTimer = null;
+          }
+          if (focusDebounceTimer) {
+            clearTimeout(focusDebounceTimer);
+            focusDebounceTimer = null;
+          }
+          while (taskCleanupListeners.length > 0) {
+            const removeFn = taskCleanupListeners.pop();
+            try {
+              removeFn();
+            } catch (_e) {}
+          }
           cancel();
           datastar.engine.signals.remove(signalPrefix);
         },
       };
+
+      // Set up automatic background revalidation (mount / focus / reconnect / interval)
+      const doc = (rootEl && rootEl.ownerDocument) || (typeof document !== 'undefined' ? document : null);
+      const win = (doc && doc.defaultView) || (typeof window !== 'undefined' ? window : null);
+
+      function isDocHidden() {
+        return Boolean(doc && doc.visibilityState === 'hidden');
+      }
+
+      if (refetchOnMountMode) {
+        Promise.resolve().then(() => {
+          if (isConnected() && isTaskStale(refetchOnMountMode)) {
+            run().catch(() => {});
+          }
+        });
+      }
+
+      if (refetchOnFocusMode) {
+        const onTaskFocus = () => {
+          if (!isConnected() || isDocHidden()) return;
+          if (focusDebounceTimer) clearTimeout(focusDebounceTimer);
+          focusDebounceTimer = setTimeout(() => {
+            focusDebounceTimer = null;
+            if (isConnected() && !isDocHidden() && activeRuns === 0 && isTaskStale(refetchOnFocusMode)) {
+              run().catch(() => {});
+            }
+          }, 20);
+        };
+        const onVisChange = () => {
+          if (!isDocHidden()) onTaskFocus();
+        };
+        if (doc && typeof doc.addEventListener === 'function') {
+          doc.addEventListener('visibilitychange', onVisChange);
+          taskCleanupListeners.push(() => doc.removeEventListener('visibilitychange', onVisChange));
+        }
+        if (win && typeof win.addEventListener === 'function') {
+          win.addEventListener('focus', onTaskFocus);
+          taskCleanupListeners.push(() => win.removeEventListener('focus', onTaskFocus));
+        }
+      }
+
+      if (refetchOnReconnectMode && win && typeof win.addEventListener === 'function') {
+        const onTaskOnline = () => {
+          if (isConnected() && activeRuns === 0 && isTaskStale(refetchOnReconnectMode)) {
+            run().catch(() => {});
+          }
+        };
+        win.addEventListener('online', onTaskOnline);
+        taskCleanupListeners.push(() => win.removeEventListener('online', onTaskOnline));
+      }
+
+      if (refetchIntervalMs > 0) {
+        taskIntervalTimer = setInterval(() => {
+          if (!isConnected()) {
+            if (taskIntervalTimer) {
+              clearInterval(taskIntervalTimer);
+              taskIntervalTimer = null;
+            }
+            return;
+          }
+          if (!refetchIntervalInBg && isDocHidden()) return;
+          if (activeRuns === 0) {
+            run().catch(() => {});
+          }
+        }, refetchIntervalMs);
+        if (taskIntervalTimer && typeof taskIntervalTimer.unref === 'function') {
+          taskIntervalTimer.unref();
+        }
+      }
 
       scopedTasksList.push(taskObj);
       return taskObj;
@@ -826,7 +1033,7 @@ function createControllerRuntime(options = {}) {
         getter = () => source(ctx);
       } else if (typeof source === 'string') {
         getter = () => resolveStatePath(state, source);
-      } else if (Array.isArray(source)) {
+      } else if (isArray(source)) {
         getter = () =>
           source.map((s) =>
             typeof s === 'function'
@@ -876,7 +1083,7 @@ function createControllerRuntime(options = {}) {
         let newValue;
         try {
           newValue = getter();
-          if ((deep || (source && typeof source === 'object' && typeof source !== 'function' && !Array.isArray(source))) && newValue && typeof newValue === 'object') {
+          if ((deep || (source && typeof source === 'object' && typeof source !== 'function' && !isArray(source))) && newValue && typeof newValue === 'object') {
             deepTouch(newValue);
           }
         } catch (err) {
@@ -884,7 +1091,7 @@ function createControllerRuntime(options = {}) {
           return;
         }
 
-        const isArr = Array.isArray(source);
+        const isArr = isArray(source);
 
         if (isFirstRun) {
           isFirstRun = false;
@@ -1069,6 +1276,7 @@ function createControllerRuntime(options = {}) {
         api: scopedApi,
         datastar,
         debug,
+        services,
         ...formOptions,
       });
       scopedForms.set(handle.name, handle);
@@ -1168,6 +1376,7 @@ function createControllerRuntime(options = {}) {
         return state;
       },
       api: scopedApi,
+      services,
       forms: formsAccessor,
       target: targetAccessor,
       targets: targetsAccessor,
@@ -1201,6 +1410,10 @@ function createControllerRuntime(options = {}) {
       signal: lifecycleAbort.signal,
       isConnected,
       isDisposed: () => !isConnected(),
+      get isBusy() {
+        return checkIsBusy();
+      },
+      isActionBusy,
       get lastError() {
         return lastError;
       },
@@ -1269,7 +1482,7 @@ function createControllerRuntime(options = {}) {
     if (persistConfig) {
       const driver = resolvePersistDriver(persistConfig);
       const savedData = driver.get(persistConfig.storageKey, null);
-      if (savedData && typeof savedData === 'object' && !Array.isArray(savedData)) {
+      if (savedData && typeof savedData === 'object' && !isArray(savedData)) {
         for (const [k, v] of Object.entries(savedData)) {
           if (persistConfig.keys && !persistConfig.keys.includes(k)) continue;
           if (Object.prototype.hasOwnProperty.call(initialRawState, k)) {
@@ -1308,6 +1521,36 @@ function createControllerRuntime(options = {}) {
       if (typeof fn !== 'function') {
         return undefined;
       }
+
+      // Guard against duplicate clicks while an async action on this exact element is already in-flight
+      if (
+        actionEl &&
+        actionEl.__wActionBusy === true &&
+        (!actionEl.hasAttribute || !actionEl.hasAttribute('data-w-allow-concurrent'))
+      ) {
+        if (event && typeof event.preventDefault === 'function') {
+          event.preventDefault();
+        }
+        return undefined;
+      }
+
+      // Built-in `data-w-confirm` guard
+      if (actionEl && typeof actionEl.getAttribute === 'function') {
+        const confirmMsg = actionEl.getAttribute('data-w-confirm');
+        if (confirmMsg !== null && confirmMsg !== '') {
+          const confirmFn =
+            typeof window !== 'undefined' && typeof window.confirm === 'function'
+              ? window.confirm.bind(window)
+              : null;
+          if (confirmFn && !confirmFn(confirmMsg)) {
+            if (event && typeof event.preventDefault === 'function') {
+              event.preventDefault();
+            }
+            return undefined;
+          }
+        }
+      }
+
       const decoratedEl = decorateElement(actionEl);
       currentActionEl = decoratedEl || null;
       const prevContext = activeControllerContext;
@@ -1315,17 +1558,28 @@ function createControllerRuntime(options = {}) {
       try {
         const res = fn(ctx, event, decoratedEl);
         if (res && typeof res.then === 'function') {
-          return res.catch((err) => {
-            // Ignore canceled/superseded request errors on disconnected or superseded instances
-            if (err && err.isCanceled) return undefined;
-            handleControllerError(err, {
-              action: actionName,
-              event,
-              actionEl: decoratedEl,
-              phase: 'action',
-            });
-            throw err;
-          });
+          setActionBusy(actionName, 1);
+          setElementBusyState(actionEl, true);
+          return res.then(
+            (val) => {
+              setActionBusy(actionName, -1);
+              setElementBusyState(actionEl, false);
+              return val;
+            },
+            (err) => {
+              setActionBusy(actionName, -1);
+              setElementBusyState(actionEl, false);
+              // Ignore canceled/superseded request errors on disconnected or superseded instances
+              if (err && err.isCanceled) return undefined;
+              handleControllerError(err, {
+                action: actionName,
+                event,
+                actionEl: decoratedEl,
+                phase: 'action',
+              });
+              throw err;
+            }
+          );
         }
         return res;
       } catch (err) {
@@ -1353,6 +1607,7 @@ function createControllerRuntime(options = {}) {
         state,
         invokeAction,
         isConnected,
+        isLoadingTargetActive,
       });
       domDisposers.push(unbind);
 
@@ -1364,7 +1619,7 @@ function createControllerRuntime(options = {}) {
         const formsInScope = rootEl.querySelectorAll('form[data-w-form]');
         for (let i = 0; i < formsInScope.length; i++) {
           if (isTargetInControllerScope(rootEl, formsInScope[i])) {
-            createFormHandle(formsInScope[i], { api: scopedApi, datastar, debug });
+            createFormHandle(formsInScope[i], { api: scopedApi, datastar, debug, services });
           }
         }
       }
@@ -1433,6 +1688,7 @@ function createControllerRuntime(options = {}) {
       name: controllerName,
       el: rootEl,
       state,
+      tasks: tasksProxy,
       ctx,
       invokeAction,
       actions: new Proxy({}, {
@@ -1642,6 +1898,7 @@ function createControllerRuntime(options = {}) {
           api: defaultApi,
           datastar,
           debug,
+          services,
         });
         standaloneForms.set(formEl, handle);
       }
@@ -1666,6 +1923,7 @@ function createControllerRuntime(options = {}) {
 
   return {
     register,
+    services,
     hasController(name) {
       return definitions.has(name);
     },

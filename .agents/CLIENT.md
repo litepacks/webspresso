@@ -175,6 +175,34 @@ export default defineController({
 - **Instance Isolated**: Computed values of instance A never leak to instance B.
 - **Lifecycle Cleanup**: Automatically cleaned up on controller unmount.
 
+### 5.1 Automatic Action & Task Busy States (`data-w-loading`, `data-w-loading-text`, `data-w-confirm`)
+
+Async controller actions (`actions.save`) and `<form data-w-form>` submissions automatically manage button busy states and double-click protection without manual state booleans:
+
+```html
+<!-- 1. Automatic busy attribute, disabled state, text swap, class toggle & confirmation -->
+<button
+  data-w-click="deletePost"
+  data-w-confirm="Are you sure you want to delete this record?"
+  data-w-loading-text="Deleting..."
+  data-w-loading-class="opacity-50 cursor-wait">
+  Delete
+</button>
+
+<!-- 2. Declarative loading indicators (visible while action/task is running) -->
+<button data-w-click="save">
+  <span data-w-loading-hide="save">Save Changes</span>
+  <span data-w-loading="save">Saving...</span>
+</button>
+
+<!-- 3. Controller-wide or task-specific loading indicator -->
+<div data-w-loading>Processing...</div>
+<div data-w-loading="loadStats">Loading statistics...</div>
+```
+
+- **Double-Click Guard**: While an async action on an element is in flight (`data-w-busy="true"`), duplicate clicks on that element are ignored (unless `data-w-allow-concurrent` is present).
+- **Reactive Context Properties**: `ctx.isBusy` (boolean: whether any action or task is pending) and `ctx.isActionBusy('save')` (boolean) are reactive and can be read in `computed`, `watch`, or `data-w-show="$busy"`.
+
 ---
 
 ## 6. Typed Form Handle (`createFormHandle` / `ctx.forms`)
@@ -424,14 +452,17 @@ bootClient({
 ## 11. Bundle Size & Browser Support Matrix
 
 - **Runtime Size (Zero External Dependencies)**:
-  - Full client runtime (`webspresso/core/client` = signals + forms + API client + SSR fragment reconciler + lifecycle tasks + two-way binding): **~26 KB Gzip** / **~21.8 KB Brotli** (~75 KB minified).
-  - Lite client runtime (`webspresso/client/lite` = SSR fragments + native forms + API client, without reactive signals engine): **~9.5 KB Gzip** / **~8.2 KB Brotli** (~30 KB minified).
-  - Datastar Signals & DOM Adapter alone: **~10.8 KB Gzip** / **~9.4 KB Brotli**.
+  - Full client runtime (`webspresso/core/client` = signals + controllers + watchers + forms + API client + SSR fragment reconciler & auto-revalidation + lifecycle tasks + client services & lazy UI hosts + storage, with `devtool.js` & `debug.js` stripped in production): **~34.4 KB Gzip** / **~30.0 KB Brotli** (~109.3 KB minified).
+  - Lite client runtime (`webspresso/client/lite` = SSR fragments & auto-revalidation + native forms + API client + storage, with lazy service registry): **~18.2 KB Gzip** / **~16.1 KB Brotli** (~56.1 KB minified).
+  - Datastar Signals & DOM Adapter alone: **~7.0 KB Gzip** / **~6.2 KB Brotli** (~20.0 KB minified).
+  - Client Services & Lazy UI Host (`core/client/services.js` + `host.js`): **~4.2 KB Gzip** / **~3.8 KB Brotli** (~11.3 KB minified).
+  - Namespaced Client Storage (`core/client/storage.js`): **~1.1 KB Gzip** / **~1.0 KB Brotli** (~2.9 KB minified).
 - **A-la-Carte Subpath Exports**:
-  - `webspresso/client` → Full suite (`bootClient`, `defineController`)
-  - `webspresso/client/lite` → Micro-footprint server-driven runtime (`bootLiteClient`, `createFormHandle`, `invalidate`)
-  - `webspresso/client/fragments` → Pure fragment coordinator and morphing
-  - `webspresso/client/forms` → Native form enhancement and validation
+  - `webspresso/client` → Full suite (`bootClient`, `defineController`, `defineClientService`, `watch`)
+  - `webspresso/client/lite` → Micro-footprint server-driven runtime (`bootLiteClient`, `createFormHandle`, `invalidate`, `defineClientService`)
+  - `webspresso/client/fragments` → Pure fragment coordinator, auto-revalidation, and morphing
+  - `webspresso/client/forms` → Native form enhancement, lifecycle hooks, and validation
+  - `webspresso/client/storage` → Namespaced `localStorage`/`sessionStorage`/`memory` wrapper
 - **Browser Compatibility**:
   - Chrome 80+, Safari 14+ (macOS & iOS), Firefox 78+ ESR / 80+, Edge 80+.
   - Global web traffic coverage: **>97.8%**.
@@ -610,6 +641,52 @@ export default defineController({
 - Hydrates fragment input parameters from storage on initial mount if server HTML provides empty defaults.
 - Updates storage automatically when fragment is refreshed with new inputs.
 - Coordinator access: `coordinator.getStoredInput('ordersList')`, `coordinator.clearStoredInput('ordersList')`.
+
+---
+
+## 14. Client Services & Optional Lazy UI Hosts (`core/client/services` & `core/client/host`)
+
+Applications can define shared, lazy-loaded client services (e.g. toast notifications, confirm dialogs, clipboard helpers) without adding UI widget opinions to core:
+
+- **Registration (`defineClientService`)**:
+  ```ts
+  import { bootClient, defineClientService, type InferClientServicesMap } from 'webspresso/client';
+
+  export const services = {
+    toast: defineClientService({ load: () => import('./services/toast') }),
+    clipboard: defineClientService({ load: () => import('./services/clipboard') }),
+  };
+
+  declare module 'webspresso' {
+    interface AppClientServices extends InferClientServicesMap<typeof services> {}
+  }
+
+  bootClient({ services });
+  ```
+- **Explicit Lazy Resolution (`ctx.services.get(name)`)**:
+  - In controller actions/hooks: `const toast = await services.get('toast');`
+  - In form hooks: `form.onSuccess(async (data, { services }) => { const toast = await services.get('toast'); ... })`
+  - Side-effect service errors inside `form.onSuccess` are isolated so they never mark a completed form mutation as rolled back or failed.
+- **Lifecycle & Isolation Invariants**:
+  - Scoped per `ClientRuntime` instance (shared across controllers in the same runtime; isolated across separate runtimes).
+  - Concurrent `services.get(name)` calls share a single initialization promise.
+  - Failed initialization cleans up partial resources/hosts and evicts the failed promise so subsequent calls can retry.
+  - Unmounting a controller never disposes shared services; `runtime.destroy()` idempotently disposes all services, aborts/cleans late-resolving initializations, and unmounts UI hosts.
+- **Optional UI Host (`mountHost`)**:
+  - DOM-less services never allocate a host manager or touch the DOM.
+  - Services that need shared UI call `mountHost(key, options)` inside `create(ctx)` to attach to a layout target or lazily create `<div data-w-host="<key>">` outside fragment patch regions, protected from removal during `morphDomTrees`.
+
+---
+
+## 15. React Query-Style Automatic Invalidation & Background Refetching
+
+SSR Fragments (`defineFragment` / `[data-w-fragment]`), controller `tasks`, and `bootClient` support React Query-style automatic background revalidation:
+
+- **Options**: `staleTime` (`number | '5s'`), `refetchOnWindowFocus` (`boolean | 'always'`), `refetchOnReconnect` (`boolean | 'always'`), `refetchOnMount` (`boolean | 'always'`), `refetchInterval` (`number | '10s' | false`), `refetchIntervalInBackground` (`boolean`, default `false`).
+- **DOM Attributes**: `data-w-stale-time`, `data-w-refetch-on-focus`, `data-w-refetch-on-reconnect`, `data-w-refetch-on-mount`, `data-w-refetch-interval`, `data-w-refetch-in-background`.
+- **Coalescing & Cleanup**: Multiple fragments triggered on window focus, reconnect, or interval ticks are deduplicated and batched into a single `POST /__webspresso/fragments` call. Hidden tabs pause `refetchInterval` by default (`refetchIntervalInBackground: false`), and all timers/listeners are cleaned up on unmount or `runtime.destroy()`.
+
+
 
 
 

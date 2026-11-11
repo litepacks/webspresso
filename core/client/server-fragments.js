@@ -15,12 +15,13 @@
 const { z } = require('../validation');
 const { ValidationError, NotFoundError, BadRequestError, UnauthorizedError, ForbiddenError } = require('../errors');
 const { onTransactionCommit, getAmbientTransaction } = require('../orm/transaction');
+const { isArray, isNumber } = require('./utils');
 
 /**
  * Execute an array of Express-style middlewares sequentially.
  */
 async function runMiddlewares(middlewares, req, res) {
-  if (!Array.isArray(middlewares) || middlewares.length === 0) return;
+  if (!isArray(middlewares) || middlewares.length === 0) return;
   for (const mw of middlewares) {
     if (typeof mw !== 'function') continue;
     await new Promise((resolve, reject) => {
@@ -89,11 +90,28 @@ function defineFragment(config = {}) {
   }
   return {
     template: config.template.trim(),
-    dependsOn: Array.isArray(config.dependsOn) ? config.dependsOn.map(String) : [],
+    dependsOn: isArray(config.dependsOn) ? config.dependsOn.map(String) : [],
     schema: config.schema || null,
     auth: config.auth !== undefined ? config.auth : null,
-    middleware: Array.isArray(config.middleware) ? config.middleware : [],
+    middleware: isArray(config.middleware) ? config.middleware : [],
     load: typeof config.load === 'function' ? config.load : null,
+    staleTime: config.staleTime !== undefined ? config.staleTime : undefined,
+    refetchOnWindowFocus:
+      config.refetchOnWindowFocus !== undefined
+        ? config.refetchOnWindowFocus
+        : config.refetchOnFocus !== undefined
+          ? config.refetchOnFocus
+          : undefined,
+    refetchOnReconnect: config.refetchOnReconnect !== undefined ? config.refetchOnReconnect : undefined,
+    refetchOnMount:
+      config.refetchOnMount !== undefined
+        ? config.refetchOnMount
+        : config.refetchOnVisit !== undefined
+          ? config.refetchOnVisit
+          : undefined,
+    refetchInterval: config.refetchInterval !== undefined ? config.refetchInterval : undefined,
+    refetchIntervalInBackground:
+      config.refetchIntervalInBackground !== undefined ? config.refetchIntervalInBackground : undefined,
   };
 }
 
@@ -114,7 +132,7 @@ function defineFragment(config = {}) {
  * @returns {{ __isWebspressoApiResult: true, data: T, invalidate: string[], status?: number, headers?: Record<string, string> }}
  */
 function apiResult(data, meta = {}) {
-  const rawInvalidate = meta && Array.isArray(meta.invalidate) ? meta.invalidate : [];
+  const rawInvalidate = meta && isArray(meta.invalidate) ? meta.invalidate : [];
   const invalidate = Array.from(
     new Set(rawInvalidate.filter((t) => typeof t === 'string' && t.trim()).map((t) => t.trim()))
   );
@@ -122,7 +140,7 @@ function apiResult(data, meta = {}) {
     __isWebspressoApiResult: true,
     data,
     invalidate,
-    status: meta && typeof meta.status === 'number' ? meta.status : undefined,
+    status: meta && isNumber(meta.status) ? meta.status : undefined,
     headers: meta && meta.headers && typeof meta.headers === 'object' ? { ...meta.headers } : undefined,
   };
 }
@@ -131,11 +149,11 @@ function apiResult(data, meta = {}) {
  * Check whether a value returned by an API handler is an `apiResult` or `{ data, invalidate }` envelope.
  */
 function isApiResultEnvelope(val) {
-  if (!val || typeof val !== 'object' || Array.isArray(val)) return false;
+  if (!val || typeof val !== 'object' || isArray(val)) return false;
   if (val.__isWebspressoApiResult === true) return true;
   if (
     'data' in val &&
-    Array.isArray(val.invalidate) &&
+    isArray(val.invalidate) &&
     val.invalidate.every((item) => typeof item === 'string')
   ) {
     return true;
@@ -153,7 +171,7 @@ function isApiResultEnvelope(val) {
  */
 function sendApiResult(req, res, rawResult) {
   const status = rawResult.status || (res.statusCode && res.statusCode !== 200 ? res.statusCode : 200);
-  const rawTags = Array.isArray(rawResult.invalidate) ? rawResult.invalidate : [];
+  const rawTags = isArray(rawResult.invalidate) ? rawResult.invalidate : [];
   const tags = Array.from(
     new Set(rawTags.filter((t) => typeof t === 'string' && t.trim()).map((t) => t.trim()))
   );
@@ -265,7 +283,7 @@ function ensureRequestMemo(req, ctx) {
  * @returns {Record<string, unknown>}
  */
 function validateFragmentInput(fragmentName, fragmentDef, rawInput = {}) {
-  const inputObj = rawInput && typeof rawInput === 'object' && !Array.isArray(rawInput) ? rawInput : {};
+  const inputObj = rawInput && typeof rawInput === 'object' && !isArray(rawInput) ? rawInput : {};
   if (!fragmentDef || !fragmentDef.schema) {
     return { ...inputObj };
   }
@@ -295,7 +313,7 @@ function validateFragmentInput(fragmentName, fragmentDef, rawInput = {}) {
     const parsed = resolvedSchema.safeParse(inputObj);
     if (!parsed.success) {
       const issues = (parsed.error && parsed.error.issues ? parsed.error.issues : []).map((iss) => ({
-        path: Array.isArray(iss.path) ? iss.path.join('.') : String(iss.path || ''),
+        path: isArray(iss.path) ? iss.path.join('.') : String(iss.path || ''),
         message: iss.message,
         code: iss.code,
       }));
@@ -329,18 +347,18 @@ async function enforceFragmentAuth(fragmentName, fragmentDef, req, ctx) {
     if (!user) {
       throw new UnauthorizedError(`Authentication required to access fragment "${fragmentName}".`);
     }
-    const roles = Array.isArray(user.roles) ? user.roles : user.role ? [user.role] : [];
+    const roles = isArray(user.roles) ? user.roles : user.role ? [user.role] : [];
     if (!roles.includes(authRule)) {
       throw new ForbiddenError(`Role "${authRule}" required to access fragment "${fragmentName}".`);
     }
     return;
   }
 
-  if (Array.isArray(authRule)) {
+  if (isArray(authRule)) {
     if (!user) {
       throw new UnauthorizedError(`Authentication required to access fragment "${fragmentName}".`);
     }
-    const roles = Array.isArray(user.roles) ? user.roles : user.role ? [user.role] : [];
+    const roles = isArray(user.roles) ? user.roles : user.role ? [user.role] : [];
     if (!authRule.some((r) => roles.includes(r))) {
       throw new ForbiddenError(`Insufficient role to access fragment "${fragmentName}".`);
     }
@@ -363,7 +381,22 @@ async function enforceFragmentAuth(fragmentName, fragmentDef, req, ctx) {
  * Notice: ONLY validated filter/pagination `input` is serialized in `data-w-fragment-input`.
  * Server loader data (`fragmentData`) is NEVER serialized as props!
  */
-function wrapFragmentRootHtml({ name, instanceId, pagePath, dependsOn, validatedInput, innerHtml, tag = 'div', className = '' }) {
+function wrapFragmentRootHtml({
+  name,
+  instanceId,
+  pagePath,
+  dependsOn,
+  validatedInput,
+  innerHtml,
+  tag = 'div',
+  className = '',
+  staleTime,
+  refetchOnWindowFocus,
+  refetchOnReconnect,
+  refetchOnMount,
+  refetchInterval,
+  refetchIntervalInBackground,
+}) {
   const safeTag = /^[a-zA-Z][a-zA-Z0-9-]*$/.test(tag || 'div') ? tag : 'div';
   const attrs = [
     `data-w-fragment="${escapeHtmlAttr(name)}"`,
@@ -371,12 +404,36 @@ function wrapFragmentRootHtml({ name, instanceId, pagePath, dependsOn, validated
     `data-w-fragment-page="${escapeHtmlAttr(pagePath || '/')}"`,
   ];
 
-  if (Array.isArray(dependsOn) && dependsOn.length > 0) {
+  if (isArray(dependsOn) && dependsOn.length > 0) {
     attrs.push(`data-w-depends-on="${escapeHtmlAttr(dependsOn.join(','))}"`);
   }
 
   if (validatedInput && typeof validatedInput === 'object' && Object.keys(validatedInput).length > 0) {
     attrs.push(`data-w-fragment-input="${escapeHtmlAttr(JSON.stringify(validatedInput))}"`);
+  }
+
+  if (staleTime !== undefined && staleTime !== null && staleTime !== false) {
+    attrs.push(`data-w-stale-time="${escapeHtmlAttr(String(staleTime))}"`);
+  }
+
+  if (refetchOnWindowFocus !== undefined && refetchOnWindowFocus !== null) {
+    attrs.push(`data-w-refetch-on-focus="${escapeHtmlAttr(String(refetchOnWindowFocus))}"`);
+  }
+
+  if (refetchOnReconnect !== undefined && refetchOnReconnect !== null) {
+    attrs.push(`data-w-refetch-on-reconnect="${escapeHtmlAttr(String(refetchOnReconnect))}"`);
+  }
+
+  if (refetchOnMount !== undefined && refetchOnMount !== null) {
+    attrs.push(`data-w-refetch-on-mount="${escapeHtmlAttr(String(refetchOnMount))}"`);
+  }
+
+  if (refetchInterval !== undefined && refetchInterval !== null && refetchInterval !== false) {
+    attrs.push(`data-w-refetch-interval="${escapeHtmlAttr(String(refetchInterval))}"`);
+  }
+
+  if (refetchIntervalInBackground !== undefined && refetchIntervalInBackground !== null) {
+    attrs.push(`data-w-refetch-in-background="${escapeHtmlAttr(String(refetchIntervalInBackground))}"`);
   }
 
   if (className) {
@@ -432,7 +489,7 @@ async function executeAndRenderFragment({
   ensureRequestMemo(req, ctx);
 
   // 1. Run fragment-specific middlewares if any
-  if (Array.isArray(fragmentDef.middleware) && fragmentDef.middleware.length > 0) {
+  if (isArray(fragmentDef.middleware) && fragmentDef.middleware.length > 0) {
     await runMiddlewares(fragmentDef.middleware, req, res);
   }
 
@@ -494,6 +551,27 @@ async function executeAndRenderFragment({
     innerHtml,
     tag: options.tag || 'div',
     className: options.class || options.className || '',
+    staleTime: options.staleTime !== undefined ? options.staleTime : fragmentDef.staleTime,
+    refetchOnWindowFocus:
+      options.refetchOnWindowFocus !== undefined
+        ? options.refetchOnWindowFocus
+        : options.refetchOnFocus !== undefined
+          ? options.refetchOnFocus
+          : fragmentDef.refetchOnWindowFocus,
+    refetchOnReconnect:
+      options.refetchOnReconnect !== undefined ? options.refetchOnReconnect : fragmentDef.refetchOnReconnect,
+    refetchOnMount:
+      options.refetchOnMount !== undefined
+        ? options.refetchOnMount
+        : options.refetchOnVisit !== undefined
+          ? options.refetchOnVisit
+          : fragmentDef.refetchOnMount,
+    refetchInterval:
+      options.refetchInterval !== undefined ? options.refetchInterval : fragmentDef.refetchInterval,
+    refetchIntervalInBackground:
+      options.refetchIntervalInBackground !== undefined
+        ? options.refetchIntervalInBackground
+        : fragmentDef.refetchIntervalInBackground,
   });
 
   return {
@@ -588,7 +666,7 @@ function attachSsrFragmentHelper({ req, res, ctx, pageMod, pagePath, nunjucksEnv
  * @returns {Promise<string>}
  */
 async function resolvePendingSsrFragments(html, req) {
-  if (typeof html !== 'string' || !req || !Array.isArray(req.__pendingSsrFragments)) {
+  if (typeof html !== 'string' || !req || !isArray(req.__pendingSsrFragments)) {
     return html;
   }
 
@@ -627,7 +705,7 @@ function trimTrailingSlashes(str) {
  * @returns {{ entry: object, params: Record<string, string> }|null}
  */
 function matchPageEntryByPath(pagePath, pageEntries) {
-  if (!pagePath || !Array.isArray(pageEntries)) return null;
+  if (!pagePath || !isArray(pageEntries)) return null;
   const cleanPath = trimTrailingSlashes(String(pagePath).split('?')[0]) || '/';
 
   // 1. Exact static match
@@ -722,7 +800,7 @@ function createFragmentRefreshHandler(config) {
           },
         ];
       } else {
-        if (!Array.isArray(payload.fragments) || payload.fragments.length === 0) {
+        if (!isArray(payload.fragments) || payload.fragments.length === 0) {
           throw new BadRequestError('Fragment refresh request requires a non-empty `fragments` array.');
         }
         requestedFragments = payload.fragments;
@@ -755,12 +833,12 @@ function createFragmentRefreshHandler(config) {
       }
 
       // 1. Execute page-level cascading middlewares (`_hooks.js`) and page route `middleware`
-      if (Array.isArray(entry.cascadingMiddlewares) && entry.cascadingMiddlewares.length > 0) {
+      if (isArray(entry.cascadingMiddlewares) && entry.cascadingMiddlewares.length > 0) {
         await runMiddlewares(entry.cascadingMiddlewares, req, res);
         if (res.headersSent) return;
       }
 
-      if (pageMod && Array.isArray(pageMod.middleware) && pageMod.middleware.length > 0) {
+      if (pageMod && isArray(pageMod.middleware) && pageMod.middleware.length > 0) {
         const resolvedPageMws =
           typeof resolveMiddlewareList === 'function'
             ? resolveMiddlewareList(pageMod.middleware)

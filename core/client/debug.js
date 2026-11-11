@@ -8,7 +8,7 @@
  * and lifecycle cleanup errors without logging raw form values or sensitive payloads.
  */
 
-const { NOOP_DEBUGGER } = require('./utils');
+const { isArray, isNumber, NOOP_DEBUGGER, uid } = require('./utils');
 
 const SENSITIVE_KEY_PATTERN = /password|passwd|secret|token|authorization|cookie|credit|card|cvv|ssn|api[-_]?key/i;
 
@@ -32,7 +32,7 @@ function summarizePayloadSafely(payload, includeSafePrimitives = false) {
   if (typeof Blob !== 'undefined' && payload instanceof Blob) {
     return { type: 'Blob', size: payload.size, mimeType: payload.type || 'application/octet-stream' };
   }
-  if (Array.isArray(payload)) {
+  if (isArray(payload)) {
     return { type: 'Array', length: payload.length };
   }
   if (typeof payload === 'object') {
@@ -58,7 +58,7 @@ function summarizePayloadSafely(payload, includeSafePrimitives = false) {
  */
 function createActiveDebugger(options = {}) {
   let enabled = Boolean(options.enabled);
-  const maxEvents = typeof options.maxEvents === 'number' && options.maxEvents > 0 ? options.maxEvents : 200;
+  const maxEvents = isNumber(options.maxEvents) && options.maxEvents > 0 ? options.maxEvents : 200;
   const customLogger = typeof options.logger === 'function' ? options.logger : null;
 
   const events = [];
@@ -73,7 +73,7 @@ function createActiveDebugger(options = {}) {
 
   function pushEvent(type, detail = {}) {
     const entry = {
-      id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id: uid('evt'),
       type,
       timestamp: Date.now(),
       ...detail,
@@ -192,7 +192,7 @@ function createActiveDebugger(options = {}) {
           completedAt: Date.now(),
         },
         invalidation: {
-          tags: Array.isArray(tags) ? [...tags] : [],
+          tags: isArray(tags) ? [...tags] : [],
           triggeredAt: Date.now(),
         },
         refresh: null,
@@ -215,11 +215,11 @@ function createActiveDebugger(options = {}) {
     recordChainRefresh(chainId, { fragmentIds, status, loadMs, renderMs, totalServerMs, error }) {
       const chain = chainId ? causalChains.get(chainId) : null;
       const refreshData = {
-        fragmentIds: Array.isArray(fragmentIds) ? [...fragmentIds] : [],
+        fragmentIds: isArray(fragmentIds) ? [...fragmentIds] : [],
         status: status || 'ok',
-        loadMs: typeof loadMs === 'number' ? loadMs : null,
-        renderMs: typeof renderMs === 'number' ? renderMs : null,
-        totalServerMs: typeof totalServerMs === 'number' ? totalServerMs : null,
+        loadMs: isNumber(loadMs) ? loadMs : null,
+        renderMs: isNumber(renderMs) ? renderMs : null,
+        totalServerMs: isNumber(totalServerMs) ? totalServerMs : null,
         error: error ? String(error.message || error) : null,
         completedAt: Date.now(),
       };
@@ -234,9 +234,9 @@ function createActiveDebugger(options = {}) {
       const patchData = {
         instanceId,
         fragmentName: fragmentName || null,
-        patchMs: typeof patchMs === 'number' ? patchMs : 0,
-        loadMs: typeof loadMs === 'number' ? loadMs : null,
-        renderMs: typeof renderMs === 'number' ? renderMs : null,
+        patchMs: isNumber(patchMs) ? patchMs : 0,
+        loadMs: isNumber(loadMs) ? loadMs : null,
+        renderMs: isNumber(renderMs) ? renderMs : null,
         completedAt: Date.now(),
       };
       if (chain) {

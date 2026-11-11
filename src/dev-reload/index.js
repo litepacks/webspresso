@@ -315,6 +315,21 @@ function createDevReloadHub(config = {}) {
 
   let activeNunjucksEnv = nunjucksEnv;
   let onTemplateChangeCallback = onTemplateChange;
+  let getDevMetaCallback = typeof config.getDevMeta === 'function' ? config.getDevMeta : null;
+
+  function resolveDevMetaJson() {
+    if (typeof getDevMetaCallback !== 'function') return null;
+    try {
+      const meta = getDevMetaCallback();
+      if (!meta || typeof meta !== 'object') return null;
+      return JSON.stringify(meta)
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/&/g, '\\u0026');
+    } catch (_) {
+      return null;
+    }
+  }
 
   function broadcast(type, payload = {}) {
     if (isClosed) return;
@@ -375,6 +390,9 @@ function createDevReloadHub(config = {}) {
     setOnTemplateChange: (fn) => {
       onTemplateChangeCallback = fn;
     },
+    setDevMetaProvider: (fn) => {
+      getDevMetaCallback = fn;
+    },
     invalidateTemplateCache,
     triggerTemplateReload: (filename, reason = 'template') => {
       onTemplateFileChanged(filename, reason);
@@ -418,6 +436,12 @@ function createDevReloadHub(config = {}) {
   // Client JS route handler
   function handleScript(req, res) {
     res.type('application/javascript');
+    const metaJson = resolveDevMetaJson();
+    if (metaJson) {
+      const metaPrefix = `(function(){if(typeof window!=='undefined'){window.__WEBSPRESSO_DEV_META__=${metaJson};if(window.__WEBSPRESSO_DEVTOOLS__&&typeof window.__WEBSPRESSO_DEVTOOLS__.setMeta==='function'){window.__WEBSPRESSO_DEVTOOLS__.setMeta(window.__WEBSPRESSO_DEV_META__);}}})();\n`;
+      res.send(metaPrefix + CLIENT_RUNTIME_SCRIPT);
+      return;
+    }
     res.send(CLIENT_RUNTIME_SCRIPT);
   }
 
@@ -429,7 +453,11 @@ function createDevReloadHub(config = {}) {
     const origSend = res.send.bind(res);
     res.send = function(body) {
       if (typeof body === 'string' && body.includes('</body>')) {
-        const scriptTag = `<script defer src="${CLIENT_SCRIPT_PATH}"></script>`;
+        const metaJson = resolveDevMetaJson();
+        const metaTag = metaJson
+          ? `<script>window.__WEBSPRESSO_DEV_META__=${metaJson};</script>\n`
+          : '';
+        const scriptTag = `${metaTag}<script defer src="${CLIENT_SCRIPT_PATH}"></script>`;
         if (!body.includes(CLIENT_SCRIPT_PATH)) {
           body = body.replace('</body>', scriptTag + '\n</body>');
         }

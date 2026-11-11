@@ -29,6 +29,17 @@
           client handles instant filtering, accessible validation, and protected live draft editing.
         </p>
       </div>
+      <div class="header-actions" data-w-controller="quick-share" data-testid="quick-share-widget">
+        <button
+          type="button"
+          class="btn-ghost btn-sm"
+          data-w-on:click="sharePage"
+          data-share-text="Task & Engineering Backlog"
+          data-testid="share-page-btn"
+        >
+          📋 Copy Workspace Title
+        </button>
+      </div>
     </header>
 
     <!-- 1. SSR Fragment: Summary KPI + Progress Bar + Bulk Actions -->
@@ -123,6 +134,7 @@
               </select>
 
               <button type="button" class="btn-ghost btn-sm" data-w-on:click="resetFilters">Reset</button>
+              <button type="button" class="btn-ghost btn-sm" data-w-on:click="copyFilterSummary" data-testid="copy-filter-summary-btn">📋 Copy Filter</button>
             </div>
           </div>
 

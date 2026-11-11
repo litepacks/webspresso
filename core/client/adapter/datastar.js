@@ -24,7 +24,7 @@
  *    external package is not installed in `node_modules`.
  */
 
-const { getByPath, setByPath } = require('../utils');
+const { isArray, getByPath, setByPath } = require('../utils');
 
 const PluginType = {
   Attribute: 1,
@@ -507,10 +507,14 @@ function createIsolatedControllerState(
           return Reflect.get(obj, prop, receiver);
         }
 
-        // Allow accessing tasks on root state
+        // Allow accessing tasks and busy status on root state
         if (!basePath && prop === 'tasks') {
           const ctx = getContext();
           return ctx && ctx.tasks ? ctx.tasks : undefined;
+        }
+        if (!basePath && (prop === '$busy' || prop === 'isBusy') && !Object.prototype.hasOwnProperty.call(obj, prop)) {
+          const ctx = getContext();
+          return ctx ? Boolean(ctx.isBusy) : false;
         }
 
         // Check if accessing a root-level computed property
@@ -523,7 +527,7 @@ function createIsolatedControllerState(
         // Track signal dependency in Datastar signals store
         engine.signals.value(signalKeyFor(path));
         // If accessing array length or methods, also subscribe to the array path itself
-        if (Array.isArray(obj) && basePath) {
+        if (isArray(obj) && basePath) {
           engine.signals.value(signalKeyFor(basePath));
         }
         const val = Reflect.get(obj, prop, receiver);
@@ -562,21 +566,21 @@ function createIsolatedControllerState(
         const prevValue = obj[prop];
         const path = basePath ? `${basePath}.${String(prop)}` : String(prop);
 
-        if (Object.is(prevValue, rawNext) && !Array.isArray(obj)) {
+        if (Object.is(prevValue, rawNext) && !isArray(obj)) {
           return true;
         }
 
         Reflect.set(obj, prop, rawNext, receiver);
 
         // Seed nested keys if setting an object
-        if (rawNext !== null && typeof rawNext === 'object' && !Array.isArray(rawNext)) {
+        if (rawNext !== null && typeof rawNext === 'object' && !isArray(rawNext)) {
           for (const [k, v] of Object.entries(rawNext)) {
             engine.signals.setValue(signalKeyFor(`${path}.${k}`), v);
           }
         }
         engine.signals.setValue(signalKeyFor(path), rawNext);
         if (basePath) {
-          engine.signals.setValue(signalKeyFor(basePath), Array.isArray(obj) ? [...obj] : { ...obj });
+          engine.signals.setValue(signalKeyFor(basePath), isArray(obj) ? [...obj] : { ...obj });
         }
         return true;
       },
@@ -609,13 +613,13 @@ function createIsolatedControllerState(
     for (const [key, val] of Object.entries(initialState)) {
       const cloned =
         val !== null && typeof val === 'object'
-          ? Array.isArray(val)
+          ? isArray(val)
             ? [...val]
             : { ...val }
           : val;
       rawStore[key] = cloned;
       engine.signals.setValue(signalKeyFor(key), cloned);
-      if (cloned !== null && typeof cloned === 'object' && !Array.isArray(cloned)) {
+      if (cloned !== null && typeof cloned === 'object' && !isArray(cloned)) {
         for (const [subKey, subVal] of Object.entries(cloned)) {
           engine.signals.setValue(signalKeyFor(`${key}.${subKey}`), subVal);
         }
@@ -734,6 +738,8 @@ function getMorphNodeKey(node) {
   if (node.id) return `id:${node.id}`;
   const wKey = node.getAttribute('data-w-key');
   if (wKey) return `wkey:${wKey}`;
+  const hostKey = node.getAttribute('data-w-host');
+  if (hostKey) return `host:${hostKey}`;
   const fragId = node.getAttribute('data-w-fragment-id');
   if (fragId) return `frag:${fragId}`;
   const formName = node.getAttribute('data-w-form');
@@ -850,6 +856,11 @@ function morphDomTrees(toEl, fromEl, ctx = {}) {
     }
   }
 
+  // If `toEl` is a client service UI host (`data-w-host`), the service owns its DOM contents
+  if (toEl.hasAttribute && toEl.hasAttribute('data-w-host')) {
+    return toEl;
+  }
+
   // If `toEl` has `data-w-text`, client state owns its textContent; do not overwrite from server HTML
   if (ownership.text) {
     return toEl;
@@ -951,10 +962,13 @@ function morphDomTrees(toEl, fromEl, ctx = {}) {
     }
   }
 
-  // Remove leftover existing children that were not matched
+  // Remove leftover existing children that were not matched (preserve client service UI hosts)
   for (let i = 0; i < existingChildren.length; i++) {
     const oldChild = existingChildren[i];
     if (!usedExisting.has(oldChild) && oldChild.parentNode === toEl) {
+      if (oldChild.nodeType === 1 && oldChild.hasAttribute && oldChild.hasAttribute('data-w-host')) {
+        continue;
+      }
       if (oldChild.nodeType === 1 && typeof ctx.onBeforeNodeRemove === 'function') {
         ctx.onBeforeNodeRemove(oldChild);
       }
@@ -1124,10 +1138,31 @@ function createDatastarAdapter(options = {}) {
     return bindings;
   }
 
+  function toggleElementVisibility(el, visible, initialDisplay) {
+    if (visible) {
+      el.removeAttribute('hidden');
+      if (el.style && el.style.display === 'none') {
+        el.style.display = initialDisplay;
+      }
+    } else {
+      el.setAttribute('hidden', '');
+      if (el.style) {
+        el.style.display = 'none';
+      }
+    }
+  }
+
   /**
    * Bind V1 declarative attributes inside `rootEl` for a controller instance.
    */
-  function bindControllerDom({ instanceId, rootEl, state, invokeAction, isConnected }) {
+  function bindControllerDom({
+    instanceId,
+    rootEl,
+    state,
+    invokeAction,
+    isConnected,
+    isLoadingTargetActive,
+  }) {
     if (!boundElementsByInstance.has(instanceId)) {
       boundElementsByInstance.set(instanceId, new WeakSet());
     }
@@ -1161,16 +1196,31 @@ function createDatastarAdapter(options = {}) {
         const initialDisplay = el.style && el.style.display && el.style.display !== 'none' ? el.style.display : '';
         const stop = engine.effect(() => {
           if (!isConnected()) return;
-          const visible = Boolean(evaluateStateExpression(state, expr));
-          if (visible) {
-            el.removeAttribute('hidden');
-            if (el.style && el.style.display === 'none') {
-              el.style.display = initialDisplay;
-            }
-          } else {
-            el.setAttribute('hidden', '');
-            if (el.style) {
-              el.style.display = 'none';
+          toggleElementVisibility(el, Boolean(evaluateStateExpression(state, expr)), initialDisplay);
+        });
+        disposers.push(stop);
+      }
+
+      // 2b. data-w-loading & data-w-loading-hide (declarative action/task busy indicators)
+      if (el.hasAttribute('data-w-loading') || el.hasAttribute('data-w-loading-hide')) {
+        const isHide = el.hasAttribute('data-w-loading-hide');
+        const rawSpec = el.getAttribute(isHide ? 'data-w-loading-hide' : 'data-w-loading') || '';
+        const initialDisplay = el.style && el.style.display && el.style.display !== 'none' ? el.style.display : '';
+        const loadingClasses = (el.getAttribute('data-w-loading-class') || '')
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean);
+        const stop = engine.effect(() => {
+          if (!isConnected()) return;
+          const active =
+            typeof isLoadingTargetActive === 'function'
+              ? Boolean(isLoadingTargetActive(rawSpec))
+              : Boolean(evaluateStateExpression(state, rawSpec || '$busy'));
+          toggleElementVisibility(el, isHide ? !active : active, initialDisplay);
+          if (loadingClasses.length > 0 && el.classList) {
+            for (let c = 0; c < loadingClasses.length; c++) {
+              if (active) el.classList.add(loadingClasses[c]);
+              else el.classList.remove(loadingClasses[c]);
             }
           }
         });
@@ -1249,7 +1299,7 @@ function createDatastarAdapter(options = {}) {
             const currentVal = getByPath(state, modelPath);
 
             if (type === 'checkbox') {
-              if (Array.isArray(currentVal)) {
+              if (isArray(currentVal)) {
                 el.checked = currentVal.map(String).includes(String(el.value));
               } else {
                 el.checked = Boolean(currentVal);
@@ -1257,7 +1307,7 @@ function createDatastarAdapter(options = {}) {
             } else if (type === 'radio') {
               el.checked = String(currentVal) === String(el.value);
             } else if (el.tagName === 'SELECT' && el.multiple) {
-              const arr = Array.isArray(currentVal) ? currentVal.map(String) : [];
+              const arr = isArray(currentVal) ? currentVal.map(String) : [];
               const opts = el.options || [];
               for (let j = 0; j < opts.length; j++) {
                 opts[j].selected = arr.includes(String(opts[j].value));
@@ -1282,7 +1332,7 @@ function createDatastarAdapter(options = {}) {
 
             if (type === 'checkbox') {
               const cur = getByPath(state, modelPath);
-              if (Array.isArray(cur)) {
+              if (isArray(cur)) {
                 const next = el.checked
                   ? Array.from(new Set([...cur, el.value]))
                   : cur.filter((item) => String(item) !== String(el.value));

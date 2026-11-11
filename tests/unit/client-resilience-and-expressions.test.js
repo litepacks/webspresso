@@ -1054,4 +1054,306 @@ describe('Client Resilience & Expression Enhancements', () => {
       env.restore();
     });
   });
+
+  describe('8. React Query-Style Automatic Invalidation & Background Refetching', () => {
+    it('refetches stale fragments on window focus / visibilitychange and respects staleTime', async () => {
+      const env = createMiniDomEnvironment(`
+        <div id="app">
+          <div data-w-fragment="summary" data-w-fragment-id="summary-1" data-w-refetch-on-focus="true" data-w-stale-time="5000">
+            <span id="sum-val">10</span>
+          </div>
+          <div data-w-fragment="feed" data-w-fragment-id="feed-1" data-w-refetch-on-focus="true" data-w-stale-time="0">
+            <span id="feed-val">A</span>
+          </div>
+        </div>
+      `);
+
+      let requestBodies = [];
+      const mockFetch = vi.fn().mockImplementation(async (_url, options) => {
+        const body = JSON.parse(options.body);
+        requestBodies.push(body);
+        return new Response(
+          JSON.stringify({
+            fragments: {
+              'summary-1': { html: '<span id="sum-val">20</span>' },
+              'feed-1': { html: '<span id="feed-val">B</span>' },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      });
+
+      const coordinator = createFragmentCoordinator({
+        fetch: mockFetch,
+        root: env.document,
+      });
+      coordinator.syncDomInstances();
+
+      // 1. Immediately after mount, summary-1 is within its 5000ms staleTime, while feed-1 has staleTime=0
+      env.window.dispatchEvent(new env.window.Event('focus'));
+      await new Promise((r) => setTimeout(r, 40));
+
+      expect(requestBodies).toHaveLength(1);
+      expect(requestBodies[0].fragments.map((f) => f.instanceId)).toEqual(['feed-1']);
+      expect(env.document.getElementById('feed-val').textContent).toBe('B');
+
+      // 2. Expire summary-1's lastUpdatedAt and trigger focus again
+      coordinator.getInstance('summary-1').lastUpdatedAt = Date.now() - 6000;
+      env.window.dispatchEvent(new env.window.Event('focus'));
+      await new Promise((r) => setTimeout(r, 40));
+
+      expect(requestBodies).toHaveLength(2);
+      expect(requestBodies[1].fragments.map((f) => f.instanceId).sort()).toEqual(['feed-1', 'summary-1']);
+      expect(env.document.getElementById('sum-val').textContent).toBe('20');
+
+      coordinator.dispose();
+      env.restore();
+    });
+
+    it('refetches fragments on network reconnect (online) and periodic refetchInterval (pausing when hidden)', async () => {
+      const env = createMiniDomEnvironment(`
+        <div id="app">
+          <div data-w-fragment="metrics" data-w-fragment-id="metrics-1" data-w-refetch-on-reconnect="true" data-w-refetch-interval="40">
+            <span id="m-val">1</span>
+          </div>
+        </div>
+      `);
+
+      let count = 1;
+      const mockFetch = vi.fn().mockImplementation(async () => {
+        count += 1;
+        return new Response(
+          JSON.stringify({
+            fragments: {
+              'metrics-1': { html: `<span id="m-val">${count}</span>` },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      });
+
+      const coordinator = createFragmentCoordinator({
+        fetch: mockFetch,
+        root: env.document,
+      });
+      coordinator.syncDomInstances();
+
+      // Wait for at least 1 interval tick
+      await new Promise((r) => setTimeout(r, 65));
+      expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(1);
+
+      // Hide document -> interval should pause
+      env.document.visibilityState = 'hidden';
+      const callsBeforeHiddenWait = mockFetch.mock.calls.length;
+      await new Promise((r) => setTimeout(r, 90));
+      expect(mockFetch.mock.calls.length).toBe(callsBeforeHiddenWait);
+
+      // Trigger online reconnect event
+      env.document.visibilityState = 'visible';
+      env.window.dispatchEvent(new env.window.Event('online'));
+      await new Promise((r) => setTimeout(r, 25));
+      expect(mockFetch.mock.calls.length).toBeGreaterThan(callsBeforeHiddenWait);
+
+      coordinator.dispose();
+      env.restore();
+    });
+
+    it('supports refetchOnMount, refetchOnWindowFocus, and refetchInterval on controller tasks', async () => {
+      const env = createMiniDomEnvironment(`
+        <div data-w-controller="live-stats"></div>
+      `);
+
+      const datastar = createDatastarAdapter();
+      const runtime = createControllerRuntime({ datastar });
+      let runCount = 0;
+
+      runtime.register(
+        defineController({
+          name: 'live-stats',
+          tasks: {
+            poll: () => ({
+              run: async () => {
+                runCount += 1;
+                return { count: runCount };
+              },
+              refetchOnMount: true,
+              refetchOnWindowFocus: true,
+              staleTime: 0,
+            }),
+          },
+        })
+      );
+
+      const rootEl = env.document.querySelector('[data-w-controller="live-stats"]');
+      const inst = runtime.mountControllerOnElement(rootEl, 'live-stats');
+
+      // Wait microtask for refetchOnMount
+      await new Promise((r) => setTimeout(r, 15));
+      expect(runCount).toBe(1);
+      expect(inst.tasks.poll.data).toEqual({ count: 1 });
+
+      // Trigger window focus
+      env.window.dispatchEvent(new env.window.Event('focus'));
+      await new Promise((r) => setTimeout(r, 35));
+      expect(runCount).toBe(2);
+      expect(inst.tasks.poll.data).toEqual({ count: 2 });
+
+      inst.destroy();
+      env.restore();
+    });
+  });
+
+  describe('9. Automatic Action & Task Busy States, Double-Click Guard & data-w-loading', () => {
+    it('automatically sets data-w-busy, disabled, data-w-loading-text, data-w-loading-class, prevents double-clicks, and toggles data-w-loading indicators', async () => {
+      const env = createMiniDomEnvironment(`
+        <div data-w-controller="busy-demo">
+          <button id="save-btn" data-w-click="save" data-w-loading-text="Kaydediliyor..." data-w-loading-class="opacity-50 cursor-wait">Kaydet</button>
+          <span id="global-spinner" data-w-loading>Yükleniyor...</span>
+          <span id="save-spinner" data-w-loading="save" data-w-loading-class="animate-spin">Kaydediliyor Spinner</span>
+          <span id="save-idle-label" data-w-loading-hide="save">Hazır</span>
+          <span id="task-spinner" data-w-loading="syncData">Task Çalışıyor</span>
+        </div>
+      `);
+
+      const datastar = createDatastarAdapter();
+      const runtime = createControllerRuntime({ datastar });
+
+      let resolveSave;
+      let resolveTask;
+      let saveCallCount = 0;
+
+      runtime.register(
+        defineController({
+          name: 'busy-demo',
+          tasks: {
+            syncData: () => () =>
+              new Promise((r) => {
+                resolveTask = r;
+              }),
+          },
+          actions: {
+            save() {
+              saveCallCount += 1;
+              return new Promise((r) => {
+                resolveSave = r;
+              });
+            },
+          },
+        })
+      );
+
+      const rootEl = env.document.querySelector('[data-w-controller="busy-demo"]');
+      const inst = runtime.mountControllerOnElement(rootEl, 'busy-demo');
+
+      const saveBtn = env.document.getElementById('save-btn');
+      const globalSpinner = env.document.getElementById('global-spinner');
+      const saveSpinner = env.document.getElementById('save-spinner');
+      const saveIdleLabel = env.document.getElementById('save-idle-label');
+      const taskSpinner = env.document.getElementById('task-spinner');
+
+      // Initial idle state
+      expect(inst.ctx.isBusy).toBe(false);
+      expect(inst.ctx.isActionBusy('save')).toBe(false);
+      expect(globalSpinner.hasAttribute('hidden')).toBe(true);
+      expect(saveSpinner.hasAttribute('hidden')).toBe(true);
+      expect(saveIdleLabel.hasAttribute('hidden')).toBe(false);
+      expect(taskSpinner.hasAttribute('hidden')).toBe(true);
+
+      // Trigger save action on saveBtn
+      const actionPromise = inst.invokeAction('save', null, saveBtn);
+      expect(saveCallCount).toBe(1);
+      expect(inst.ctx.isBusy).toBe(true);
+      expect(inst.ctx.isActionBusy('save')).toBe(true);
+      expect(saveBtn.getAttribute('data-w-busy')).toBe('true');
+      expect(saveBtn.getAttribute('aria-busy')).toBe('true');
+      expect(saveBtn.disabled).toBe(true);
+      expect(saveBtn.textContent).toBe('Kaydediliyor...');
+      expect(saveBtn.classList.contains('opacity-50')).toBe(true);
+      expect(saveBtn.classList.contains('cursor-wait')).toBe(true);
+
+      // Declarative indicators updated automatically
+      expect(globalSpinner.hasAttribute('hidden')).toBe(false);
+      expect(saveSpinner.hasAttribute('hidden')).toBe(false);
+      expect(saveSpinner.classList.contains('animate-spin')).toBe(true);
+      expect(saveIdleLabel.hasAttribute('hidden')).toBe(true);
+
+      // Duplicate click while busy is ignored!
+      const duplicateRes = inst.invokeAction('save', null, saveBtn);
+      expect(duplicateRes).toBeUndefined();
+      expect(saveCallCount).toBe(1);
+
+      // Resolve save action
+      resolveSave('done');
+      await actionPromise;
+
+      expect(inst.ctx.isBusy).toBe(false);
+      expect(inst.ctx.isActionBusy('save')).toBe(false);
+      expect(saveBtn.hasAttribute('data-w-busy')).toBe(false);
+      expect(saveBtn.disabled).toBe(false);
+      expect(saveBtn.textContent).toBe('Kaydet');
+      expect(saveBtn.classList.contains('opacity-50')).toBe(false);
+      expect(globalSpinner.hasAttribute('hidden')).toBe(true);
+      expect(saveSpinner.hasAttribute('hidden')).toBe(true);
+      expect(saveSpinner.classList.contains('animate-spin')).toBe(false);
+      expect(saveIdleLabel.hasAttribute('hidden')).toBe(false);
+
+      // Now run task and verify globalSpinner + taskSpinner react
+      const taskPromise = inst.tasks.syncData.run();
+      expect(inst.ctx.isBusy).toBe(true);
+      expect(globalSpinner.hasAttribute('hidden')).toBe(false);
+      expect(taskSpinner.hasAttribute('hidden')).toBe(false);
+
+      resolveTask({ ok: true });
+      await taskPromise;
+      expect(inst.ctx.isBusy).toBe(false);
+      expect(globalSpinner.hasAttribute('hidden')).toBe(true);
+      expect(taskSpinner.hasAttribute('hidden')).toBe(true);
+
+      inst.destroy();
+      env.restore();
+    });
+
+    it('enforces data-w-confirm before executing an action', () => {
+      const env = createMiniDomEnvironment(`
+        <div data-w-controller="confirm-demo">
+          <button id="del-btn" data-w-click="remove" data-w-confirm="Silmek istediğinize emin misiniz?">Sil</button>
+        </div>
+      `);
+
+      const datastar = createDatastarAdapter();
+      const runtime = createControllerRuntime({ datastar });
+      let removed = false;
+
+      runtime.register(
+        defineController({
+          name: 'confirm-demo',
+          actions: {
+            remove() {
+              removed = true;
+            },
+          },
+        })
+      );
+
+      const rootEl = env.document.querySelector('[data-w-controller="confirm-demo"]');
+      const inst = runtime.mountControllerOnElement(rootEl, 'confirm-demo');
+      const delBtn = env.document.getElementById('del-btn');
+
+      // 1. User cancels confirmation
+      env.window.confirm = vi.fn().mockReturnValue(false);
+      global.window.confirm = env.window.confirm;
+      inst.invokeAction('remove', null, delBtn);
+      expect(env.window.confirm).toHaveBeenCalledWith('Silmek istediğinize emin misiniz?');
+      expect(removed).toBe(false);
+
+      // 2. User accepts confirmation
+      env.window.confirm = vi.fn().mockReturnValue(true);
+      global.window.confirm = env.window.confirm;
+      inst.invokeAction('remove', null, delBtn);
+      expect(removed).toBe(true);
+
+      inst.destroy();
+      env.restore();
+    });
+  });
 });

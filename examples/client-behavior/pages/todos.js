@@ -30,6 +30,9 @@ module.exports = {
     summary: defineFragment({
       template: 'partials/todos-summary.njk',
       dependsOn: ['todos'],
+      staleTime: '5s',
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
       async load({ memo }) {
         const summary = await memo('todos:summary', () => getTodosSummary());
         return { summary };
@@ -39,6 +42,9 @@ module.exports = {
     list: defineFragment({
       template: 'partials/todos-list.njk',
       dependsOn: ['todos'],
+      staleTime: '5s',
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
       schema: ({ z }) => ({
         search: z.string().max(100).optional().default(''),
         status: z.enum(['all', 'active', 'completed']).optional().default('all'),

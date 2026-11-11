@@ -73,15 +73,26 @@ module.exports = defineApi({
 - **Template**: `pages/products/[id].njk`
 - **Companion Loader**: `pages/products/[id].js`
 
-### Companion Loader (`definePage`)
+### Companion Loader (`definePage` & `defineFragment`)
 
 ```javascript
-const { definePage, useDb, useParams } = require('webspresso');
+const { definePage, defineFragment, useDb, useParams } = require('webspresso');
 
 module.exports = definePage({
   middleware: ['auth'], // optional
   head: {
     title: 'Product Details',
+  },
+  fragments: {
+    productReviews: defineFragment({
+      tags: ['reviews'],
+      staleTime: '15s',
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      load: async ({ db }) => ({
+        reviews: await db.getRepository('Review').find(),
+      }),
+    }),
   },
   load: async ({ req, res, db, ctx }) => {
     // Both parameter injection ({ req, db }) and hooks (useDb(), useParams()) are fully supported

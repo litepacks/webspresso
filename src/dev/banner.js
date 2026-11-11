@@ -154,7 +154,10 @@ function collectBannerSummary(context = {}) {
     hasAdmin = Boolean(context.hasAdmin);
   } else if (pluginManager && pluginManager.plugins instanceof Map) {
     pluginsList = Array.from(pluginManager.plugins.keys());
-    hasAdmin = pluginManager.plugins.has('adminPanel') || pluginManager.plugins.has('admin');
+    hasAdmin =
+      pluginManager.plugins.has('admin-panel') ||
+      pluginManager.plugins.has('adminPanel') ||
+      pluginManager.plugins.has('admin');
   } else {
     hasAdmin = true;
   }

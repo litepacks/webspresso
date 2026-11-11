@@ -58,11 +58,6 @@ const {
 } = require('./fragments');
 
 const {
-  createClientDebugger,
-  summarizePayloadSafely,
-} = require('./debug');
-
-const {
   MemoryStorage,
   StorageAdapter,
   getNativeStorageBackend,
@@ -71,10 +66,62 @@ const {
 } = require('./storage');
 
 const {
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
-} = require('./devtool');
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+} = require('./services');
+
+const {
+  createClientHostManager,
+} = require('./host');
+
+const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+
+const NOOP_DEVTOOL_HANDLE = Object.freeze({
+  open() {},
+  close() {},
+  toggle() {},
+  refresh() {},
+  destroy() {},
+});
+
+let _debugMod = null;
+function getDebugModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_debugMod) {
+      _debugMod = require('./debug');
+    }
+    return _debugMod;
+  }
+  return {
+    createClientDebugger: () => NOOP_DEBUGGER,
+    summarizePayloadSafely: () => null,
+  };
+}
+
+let _devtoolMod = null;
+function getDevtoolModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_devtoolMod) {
+      _devtoolMod = require('./devtool');
+    }
+    return _devtoolMod;
+  }
+  return {
+    mountDevtool: () => NOOP_DEVTOOL_HANDLE,
+    highlightElement: () => {},
+    setupReduxDevToolsBridge: () => null,
+  };
+}
+
+let _liteMod = null;
+function getLiteModule() {
+  if (!_liteMod) {
+    const reqFn = typeof module !== 'undefined' && module.require ? module.require.bind(module) : require;
+    _liteMod = reqFn('./lite');
+  }
+  return _liteMod;
+}
 
 let _serverFragments = null;
 function getServerFragments() {
@@ -106,10 +153,12 @@ function createClientRuntime(options = {}) {
     options.debugger ||
     (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
       ? options.debug
-      : createClientDebugger({
-          enabled: Boolean(options.debug),
-          logger: options.debugLogger,
-        }));
+      : options.debug
+        ? getDebugModule().createClientDebugger({
+            enabled: true,
+            logger: options.debugLogger,
+          })
+        : NOOP_DEBUGGER);
 
   const datastar = createDatastarAdapter({
     datastar: options.datastar,
@@ -124,6 +173,14 @@ function createClientRuntime(options = {}) {
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    staleTime: options.staleTime,
+    refetchOnWindowFocus: options.refetchOnWindowFocus,
+    refetchOnFocus: options.refetchOnFocus,
+    refetchOnReconnect: options.refetchOnReconnect,
+    refetchOnMount: options.refetchOnMount,
+    refetchOnVisit: options.refetchOnVisit,
+    refetchInterval: options.refetchInterval,
+    refetchIntervalInBackground: options.refetchIntervalInBackground,
     getCsrfToken: options.getCsrfToken || (() => discoverCsrfToken(rootOption)),
     onBeforeNodeRemove(removedEl) {
       if (controllers) {
@@ -153,11 +210,26 @@ function createClientRuntime(options = {}) {
 
   const api = createApiClient(apiConfig);
 
+  let runtime = null;
+
+  const services =
+    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+      ? options.services
+      : createClientServiceRegistry({
+          root: rootOption,
+          api,
+          debug,
+          getRuntime: () => runtime,
+          services: options.services,
+        });
+
   controllers = createControllerRuntime({
+    root: rootOption,
     datastar,
     fragments,
     debug,
     apiConfig,
+    services,
     lazyLoader: options.lazyLoader,
   });
 
@@ -216,24 +288,37 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
+    if (fragments && typeof fragments.dispose === 'function') {
+      fragments.dispose();
+    }
+    services.dispose();
+    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+      try {
+        runtime.devtool.destroy();
+      } catch (_e) {}
+      runtime.devtool = null;
+    }
   }
 
-  const runtime = {
+  runtime = {
     api,
+    services,
     fragments,
     controllers,
     datastar,
     adapter: datastar,
     debug,
     register: (name, def, meta) => controllers.register(name, def, meta),
+    registerService: (name, def) => services.register(name, def),
     mount,
     unmount,
     destroy,
+    dispose: destroy,
     getControllerInstance: (el, name) => controllers.getInstanceForElement(el, name),
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
-    mountDevtool: (opts) => mountDevtool(runtime, opts),
+    mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
       create: (formEl, formOpts = {}) =>
@@ -241,6 +326,7 @@ function createClientRuntime(options = {}) {
           api,
           datastar,
           debug,
+          services,
           ...formOpts,
         }),
     },
@@ -257,7 +343,32 @@ function createClientRuntime(options = {}) {
  * Boot the client runtime on DOMContentLoaded (or immediately if ready).
  */
 function bootClient(options = {}) {
+  const bootRoot = options.root || options.document || (typeof document !== 'undefined' ? document : null);
+  if (
+    options.hmr !== false &&
+    bootRoot &&
+    bootRoot.__wBootedClientRuntime &&
+    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+  ) {
+    try {
+      bootRoot.__wBootedClientRuntime.destroy();
+    } catch (_e) {}
+  }
+
   const runtime = createClientRuntime(options);
+  if (bootRoot && (typeof bootRoot === 'object' || typeof bootRoot === 'function')) {
+    try {
+      Object.defineProperty(bootRoot, '__wBootedClientRuntime', {
+        value: runtime,
+        configurable: true,
+        enumerable: false,
+        writable: true,
+      });
+    } catch (_e) {
+      bootRoot.__wBootedClientRuntime = runtime;
+    }
+  }
+
   const shouldMountDevtools =
     options.devtools === true ||
     (options.devtools !== false &&
@@ -271,7 +382,7 @@ function bootClient(options = {}) {
     const onReady = () => {
       runtime.mount();
       if (shouldMountDevtools) {
-        runtime.devtool = mountDevtool(runtime, options.devtoolsOptions || {});
+        runtime.devtool = getDevtoolModule().mountDevtool(runtime, options.devtoolsOptions || {});
       }
     };
     if (document.readyState === 'loading') {
@@ -290,10 +401,10 @@ module.exports = {
   createClientRuntime,
   bootClient,
   get createLiteClientRuntime() {
-    return require('./lite').createLiteClientRuntime;
+    return getLiteModule().createLiteClientRuntime;
   },
   get bootLiteClient() {
-    return require('./lite').bootLiteClient;
+    return getLiteModule().bootLiteClient;
   },
   createControllerRuntime,
   queryScopedTargets,
@@ -369,17 +480,31 @@ module.exports = {
   createDatastarAdapter,
   createSignalsEngine,
   evaluateStateExpression,
+  isArray,
+  isNumber,
+  randomId,
+  uid,
   getByPath,
   setByPath,
   morphDomTrees,
   parseHtmlFragment,
 
   // Debug & Telemetry & DevTools
-  createClientDebugger,
-  summarizePayloadSafely,
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
+  get createClientDebugger() {
+    return getDebugModule().createClientDebugger;
+  },
+  get summarizePayloadSafely() {
+    return getDebugModule().summarizePayloadSafely;
+  },
+  get mountDevtool() {
+    return getDevtoolModule().mountDevtool;
+  },
+  get highlightElement() {
+    return getDevtoolModule().highlightElement;
+  },
+  get setupReduxDevToolsBridge() {
+    return getDevtoolModule().setupReduxDevToolsBridge;
+  },
 
   // Client Storage & Persistence
   MemoryStorage,
@@ -387,5 +512,11 @@ module.exports = {
   getNativeStorageBackend,
   createClientStorage,
   defaultStorage,
+
+  // Client Services & Optional Lazy UI Hosts
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+  createClientHostManager,
 };
 

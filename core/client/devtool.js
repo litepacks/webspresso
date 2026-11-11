@@ -15,16 +15,15 @@
  */
 
 const { defaultStorage } = require('./storage');
+const { isArray, isNumber } = require('./utils');
 
 const DEVTOOL_HOST_ID = 'webspresso-client-devtools-host';
 
-const PKG_VERSION = (() => {
-  try {
-    return require('../../package.json').version || '0.0.110';
-  } catch (_) {
-    return '0.0.110';
-  }
-})();
+const PKG_VERSION =
+  (typeof window !== 'undefined' &&
+    window.__WEBSPRESSO_DEV_META__ &&
+    window.__WEBSPRESSO_DEV_META__.version) ||
+  '0.0.110';
 
 /**
  * Connect to Redux DevTools browser extension if installed.
@@ -176,9 +175,60 @@ function mountDevtool(runtime, options = {}) {
   const position = options.position || 'bottom-right';
   const isRight = position.includes('right');
   const studioUrl = options.studioUrl || 'http://localhost:4567';
+  let metaOverrides =
+    options.meta && typeof options.meta === 'object' ? { ...options.meta } : {};
   let isOpen = Boolean(options.open);
   let activeTab = 'controllers'; // 'controllers' | 'fragments' | 'network' | 'storage' | 'studio'
   let selectedControllerId = null;
+
+  function resolveDevFeatures() {
+    const winMeta =
+      typeof window !== 'undefined' &&
+      window.__WEBSPRESSO_DEV_META__ &&
+      typeof window.__WEBSPRESSO_DEV_META__ === 'object'
+        ? window.__WEBSPRESSO_DEV_META__
+        : {};
+    const merged = { ...winMeta, ...metaOverrides };
+    const pluginsList = isArray(merged.plugins)
+      ? merged.plugins
+      : isArray(options.plugins)
+        ? options.plugins
+        : [];
+
+    const hasStudio =
+      options.hasStudio !== undefined
+        ? Boolean(options.hasStudio)
+        : merged.hasStudio !== undefined
+          ? Boolean(merged.hasStudio)
+          : merged.hasDb !== undefined
+            ? Boolean(merged.hasDb)
+            : Boolean(
+                options.studioUrl ||
+                  pluginsList.includes('studio') ||
+                  pluginsList.includes('db-studio')
+              );
+
+    const hasAdmin =
+      options.hasAdmin !== undefined
+        ? Boolean(options.hasAdmin)
+        : merged.hasAdmin !== undefined
+          ? Boolean(merged.hasAdmin)
+          : Boolean(
+              options.adminPath ||
+                options.adminUrl ||
+                pluginsList.includes('admin-panel') ||
+                pluginsList.includes('adminPanel') ||
+                pluginsList.includes('admin')
+            );
+
+    const adminPath = merged.adminPath || options.adminPath || options.adminUrl || '/_admin';
+    return {
+      hasStudio,
+      hasAdmin,
+      adminPath,
+      plugins: pluginsList,
+    };
+  }
 
   // Initialize Redux DevTools extension bridge if available
   const reduxBridge = setupReduxDevToolsBridge(runtime);
@@ -257,6 +307,8 @@ function mountDevtool(runtime, options = {}) {
       flex-direction: column;
       overflow: hidden;
       z-index: 999999;
+    }
+    .ws-drawer.ws-drawer-enter {
       animation: wsFadeIn 0.15s ease-out;
     }
     @keyframes wsFadeIn {
@@ -753,6 +805,37 @@ function mountDevtool(runtime, options = {}) {
   }
 
   function renderStudioTab() {
+    const features = resolveDevFeatures();
+
+    const studioCardHtml = features.hasStudio
+      ? `
+        <div class="ws-card" style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-weight:700;color:#fbbf24;font-size:13px;">🗄️ Webspresso DB Studio</div>
+            <div style="font-size:10px;color:#a1a1aa;margin-top:2px;">Visual database browser, query runner, and table inspector.</div>
+            <div style="font-size:9px;color:#71717a;margin-top:4px;">Run in terminal: <code>npx webspresso studio</code> (port 4567)</div>
+          </div>
+          <a href="${studioUrl}" target="_blank" rel="noopener noreferrer" class="ws-btn ws-btn-primary" id="ws-btn-open-studio" style="text-decoration:none;">
+            Open DB Studio ↗
+          </a>
+        </div>
+      `
+      : '';
+
+    const adminCardHtml = features.hasAdmin
+      ? `
+        <div class="ws-card" style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-weight:700;color:#38bdf8;font-size:13px;">⚙️ Admin Panel SPA</div>
+            <div style="font-size:10px;color:#a1a1aa;margin-top:2px;">Mithril.js model CRUD and staff administration cockpit.</div>
+          </div>
+          <a href="${features.adminPath}" target="_blank" rel="noopener noreferrer" class="ws-btn" id="ws-btn-open-admin" style="text-decoration:none;">
+            Open ${features.adminPath} ↗
+          </a>
+        </div>
+      `
+      : '';
+
     return `
       <div>
         <div style="margin-bottom:16px;">
@@ -760,26 +843,8 @@ function mountDevtool(runtime, options = {}) {
           <p style="font-size:10px;color:#71717a;">Direct shortcuts to Webspresso's integrated developer productivity tools.</p>
         </div>
 
-        <div class="ws-card" style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
-          <div>
-            <div style="font-weight:700;color:#fbbf24;font-size:13px;">🗄️ Webspresso DB Studio</div>
-            <div style="font-size:10px;color:#a1a1aa;margin-top:2px;">Visual database browser, query runner, and table inspector.</div>
-            <div style="font-size:9px;color:#71717a;margin-top:4px;">Run in terminal: <code>npx webspresso studio</code> (port 4567)</div>
-          </div>
-          <a href="${studioUrl}" target="_blank" rel="noopener noreferrer" class="ws-btn ws-btn-primary" style="text-decoration:none;">
-            Open DB Studio ↗
-          </a>
-        </div>
-
-        <div class="ws-card" style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
-          <div>
-            <div style="font-weight:700;color:#38bdf8;font-size:13px;">⚙️ Admin Panel SPA</div>
-            <div style="font-size:10px;color:#a1a1aa;margin-top:2px;">Mithril.js model CRUD and staff administration cockpit.</div>
-          </div>
-          <a href="/_admin" target="_blank" rel="noopener noreferrer" class="ws-btn" style="text-decoration:none;">
-            Open /_admin ↗
-          </a>
-        </div>
+        ${studioCardHtml}
+        ${adminCardHtml}
 
         <div class="ws-card" style="display:flex;align-items:center;justify-content:space-between;">
           <div>
@@ -859,6 +924,9 @@ function mountDevtool(runtime, options = {}) {
     `;
   }
 
+  let lastRenderedHtml = '';
+  let wasOpen = false;
+
   function findInShadow(id) {
     if (shadow && typeof shadow.getElementById === 'function') {
       return shadow.getElementById(id);
@@ -866,8 +934,39 @@ function mountDevtool(runtime, options = {}) {
     return shadow && typeof shadow.querySelector === 'function' ? shadow.querySelector(`#${id}`) : null;
   }
 
-  function updateDom() {
-    container.innerHTML = isOpen ? renderDrawer() : renderPill();
+  function updateDom(force = false) {
+    const nextHtml = isOpen ? renderDrawer() : renderPill();
+    if (!force && nextHtml === lastRenderedHtml && isOpen === wasOpen) {
+      return;
+    }
+
+    // Preserve scroll positions inside drawer before updating DOM
+    let prevContentScrollTop = 0;
+    const prevContentEl =
+      isOpen && wasOpen && shadow && typeof shadow.querySelector === 'function'
+        ? shadow.querySelector('.ws-content')
+        : null;
+    if (prevContentEl) {
+      prevContentScrollTop = prevContentEl.scrollTop || 0;
+    }
+
+    lastRenderedHtml = nextHtml;
+    const openingTransition = isOpen && !wasOpen;
+    wasOpen = isOpen;
+
+    container.innerHTML = nextHtml;
+    if (openingTransition) {
+      const drawerEl = findInShadow('ws-devtool-drawer');
+      if (drawerEl && drawerEl.classList) {
+        drawerEl.classList.add('ws-drawer-enter');
+      }
+    }
+    if (prevContentScrollTop > 0 && shadow && typeof shadow.querySelector === 'function') {
+      const nextContentEl = shadow.querySelector('.ws-content');
+      if (nextContentEl) {
+        nextContentEl.scrollTop = prevContentScrollTop;
+      }
+    }
     bindEvents();
   }
 
@@ -1043,7 +1142,7 @@ function mountDevtool(runtime, options = {}) {
   document.addEventListener('keydown', onKeyDown);
 
   // Periodic polling to keep snapshots live
-  const pollIntervalMs = typeof options.pollInterval === 'number' ? options.pollInterval : 2000;
+  const pollIntervalMs = isNumber(options.pollInterval) ? options.pollInterval : 2000;
   let pollTimer = null;
   if (pollIntervalMs > 0) {
     pollTimer = setInterval(() => {
@@ -1075,6 +1174,12 @@ function mountDevtool(runtime, options = {}) {
     },
     isOpen() {
       return isOpen;
+    },
+    setMeta(nextMeta = {}) {
+      if (nextMeta && typeof nextMeta === 'object') {
+        metaOverrides = { ...metaOverrides, ...nextMeta };
+        updateDom();
+      }
     },
     getSnapshot() {
       return {

@@ -81,7 +81,8 @@ npx webspresso add tailwind --upgrade
 
 ## 🏗️ Core Architecture Overview
 
-- **`pages/` & `pages/api/`**: File-based SSR templates (`.njk`), companion data loaders (`.js`), and method-suffixed API endpoints (`.get.js`, `.post.js`).
+- **`pages/` & `pages/api/`**: File-based SSR templates (`.njk`), companion data loaders (`.js`), SSR fragments (`defineFragment`), and method-suffixed API endpoints (`.get.js`, `.post.js`).
+- **`core/client` (`webspresso/client`)**: Zero-dependency reactive client behavior runtime (~30.0 KB Brotli full / ~16.1 KB Brotli lite) with `defineController`, `defineFragment`, `apiResult(..., { invalidate })`, React Query-style auto-revalidation (`staleTime`, `refetchOnWindowFocus`, `refetchOnReconnect`, `refetchInterval`), shared lazy client services (`defineClientService`), optional UI hosts (`mountHost`), `watch`, typed forms, and namespaced storage. See [`webspresso-client-behavior`](../webspresso-client-behavior/SKILL.md).
 - **`services/`**: Auto-discovered domain services mapping to dot-separated names (`'user.create'`), with declarative validation, RBAC, timeouts, and transaction propagation.
 - **Ambient Context & Composable Hooks (`core/context`)**: Zero-dependency `AsyncLocalStorage` hooks (`useContext`, `useDb`, `useAuth`, `useUser`, `useService`, `useLogger`, `useReq`, `useRes`, `useParams`, `useQuery`, `useTransaction`, `useBreaker`, `withContext`) eliminating prop drilling across services, loaders, and background jobs.
 - **`models/`**: Schema-driven ORM models with `zdb` definitions, repositories, relations, scopes, and query cache.

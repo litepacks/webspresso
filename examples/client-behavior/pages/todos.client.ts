@@ -37,6 +37,9 @@ export default defineController({
     insights: ({ api }) => ({
       run: () => api.get('/api/todos/insights'),
       concurrency: 'latest',
+      staleTime: '10s',
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
     }),
   },
 
@@ -44,6 +47,22 @@ export default defineController({
     const createForm = forms.get('create-todo', {
       resetOnSuccess: true,
     });
+    if (createForm) {
+      createForm.onSuccess(async (_data, { services }) => {
+        if (!services.has('toast')) return;
+        const toast = await services.get('toast');
+        toast.success('Task added.');
+      });
+    }
+
+    const editForm = forms.get('edit-todo');
+    if (editForm) {
+      editForm.onSuccess(async (_data, { services }) => {
+        if (!services.has('toast')) return;
+        const toast = await services.get('toast');
+        toast.success('Draft saved.');
+      });
+    }
 
     // Vue-style reactive watcher: monitors selected task id and supports onCleanup
     watch(
@@ -210,8 +229,23 @@ export default defineController({
       }
     },
 
-    async loadInsights({ tasks }) {
+    async loadInsights({ tasks, services }) {
       await tasks.insights.run();
+      if (services.has('toast')) {
+        const toast = await services.get('toast');
+        toast.success('Insights updated.');
+      }
+    },
+
+    async copyFilterSummary({ state, services }) {
+      const { search, status, priority } = state.applied;
+      const summary = `Filter: ${status}/${priority}${search ? ` • "${search}"` : ''} • Page ${state.page}`;
+      const clipboard = await services.get('clipboard');
+      await clipboard.copy(summary);
+      if (services.has('toast')) {
+        const toast = await services.get('toast');
+        toast.success('Filter summary copied.');
+      }
     },
   },
 });

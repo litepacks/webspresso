@@ -268,6 +268,54 @@ function decorateElement(el) {
   return el;
 }
 
+/**
+ * Parse a duration value (number in ms, numeric string, or human duration string like '500ms', '10s', '2m', '1h')
+ * into milliseconds. Returns `defaultMs` (0) when false/null/undefined/invalid.
+ *
+ * @param {unknown} val
+ * @param {number} [defaultMs=0]
+ * @returns {number}
+ */
+function parseDurationMs(val, defaultMs = 0) {
+  if (val === false || val === null || val === undefined || val === '' || val === 'false') {
+    return 0;
+  }
+  if (typeof val === 'number') {
+    return Number.isFinite(val) && val > 0 ? Math.floor(val) : 0;
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim().toLowerCase();
+    if (!trimmed || trimmed === 'false' || trimmed === '0') return 0;
+    const match = /^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/.exec(trimmed);
+    if (!match) return defaultMs;
+    const num = parseFloat(match[1]);
+    if (!Number.isFinite(num) || num <= 0) return 0;
+    const unit = match[2] || 'ms';
+    if (unit === 's') return Math.floor(num * 1000);
+    if (unit === 'm') return Math.floor(num * 60 * 1000);
+    if (unit === 'h') return Math.floor(num * 60 * 60 * 1000);
+    return Math.floor(num);
+  }
+  return defaultMs;
+}
+
+/**
+ * Normalize a React Query-style refetch policy (`true`, `false`, `'always'`, `'true'`, `'false'`).
+ *
+ * @param {unknown} val
+ * @param {boolean|'always'} [defaultMode=false]
+ * @returns {boolean|'always'}
+ */
+function parseRefetchMode(val, defaultMode = false) {
+  if (val === undefined || val === null || val === '') {
+    return defaultMode;
+  }
+  if (val === 'always') return 'always';
+  if (val === true || val === 'true' || val === '1') return true;
+  if (val === false || val === 'false' || val === '0') return false;
+  return Boolean(val);
+}
+
 module.exports = {
   isObject,
   isPlainObject,
@@ -280,6 +328,8 @@ module.exports = {
   toKebabCase,
   parseDataValue,
   decorateElement,
+  parseDurationMs,
+  parseRefetchMode,
 };
 
 
@@ -552,6 +602,54 @@ function decorateElement(el) {
   return el;
 }
 
+/**
+ * Parse a duration value (number in ms, numeric string, or human duration string like '500ms', '10s', '2m', '1h')
+ * into milliseconds. Returns `defaultMs` (0) when false/null/undefined/invalid.
+ *
+ * @param {unknown} val
+ * @param {number} [defaultMs=0]
+ * @returns {number}
+ */
+function parseDurationMs(val, defaultMs = 0) {
+  if (val === false || val === null || val === undefined || val === '' || val === 'false') {
+    return 0;
+  }
+  if (typeof val === 'number') {
+    return Number.isFinite(val) && val > 0 ? Math.floor(val) : 0;
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim().toLowerCase();
+    if (!trimmed || trimmed === 'false' || trimmed === '0') return 0;
+    const match = /^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/.exec(trimmed);
+    if (!match) return defaultMs;
+    const num = parseFloat(match[1]);
+    if (!Number.isFinite(num) || num <= 0) return 0;
+    const unit = match[2] || 'ms';
+    if (unit === 's') return Math.floor(num * 1000);
+    if (unit === 'm') return Math.floor(num * 60 * 1000);
+    if (unit === 'h') return Math.floor(num * 60 * 60 * 1000);
+    return Math.floor(num);
+  }
+  return defaultMs;
+}
+
+/**
+ * Normalize a React Query-style refetch policy (`true`, `false`, `'always'`, `'true'`, `'false'`).
+ *
+ * @param {unknown} val
+ * @param {boolean|'always'} [defaultMode=false]
+ * @returns {boolean|'always'}
+ */
+function parseRefetchMode(val, defaultMode = false) {
+  if (val === undefined || val === null || val === '') {
+    return defaultMode;
+  }
+  if (val === 'always') return 'always';
+  if (val === true || val === 'true' || val === '1') return true;
+  if (val === false || val === 'false' || val === '0') return false;
+  return Boolean(val);
+}
+
 module.exports = {
   isObject,
   isPlainObject,
@@ -564,6 +662,8 @@ module.exports = {
   toKebabCase,
   parseDataValue,
   decorateElement,
+  parseDurationMs,
+  parseRefetchMode,
 };
 
 
@@ -1305,6 +1405,8 @@ function getMorphNodeKey(node) {
   if (node.id) return `id:${node.id}`;
   const wKey = node.getAttribute('data-w-key');
   if (wKey) return `wkey:${wKey}`;
+  const hostKey = node.getAttribute('data-w-host');
+  if (hostKey) return `host:${hostKey}`;
   const fragId = node.getAttribute('data-w-fragment-id');
   if (fragId) return `frag:${fragId}`;
   const formName = node.getAttribute('data-w-form');
@@ -1421,6 +1523,11 @@ function morphDomTrees(toEl, fromEl, ctx = {}) {
     }
   }
 
+  // If `toEl` is a client service UI host (`data-w-host`), the service owns its DOM contents
+  if (toEl.hasAttribute && toEl.hasAttribute('data-w-host')) {
+    return toEl;
+  }
+
   // If `toEl` has `data-w-text`, client state owns its textContent; do not overwrite from server HTML
   if (ownership.text) {
     return toEl;
@@ -1522,10 +1629,13 @@ function morphDomTrees(toEl, fromEl, ctx = {}) {
     }
   }
 
-  // Remove leftover existing children that were not matched
+  // Remove leftover existing children that were not matched (preserve client service UI hosts)
   for (let i = 0; i < existingChildren.length; i++) {
     const oldChild = existingChildren[i];
     if (!usedExisting.has(oldChild) && oldChild.parentNode === toEl) {
+      if (oldChild.nodeType === 1 && oldChild.hasAttribute && oldChild.hasAttribute('data-w-host')) {
+        continue;
+      }
       if (oldChild.nodeType === 1 && typeof ctx.onBeforeNodeRemove === 'function') {
         ctx.onBeforeNodeRemove(oldChild);
       }
@@ -3731,11 +3841,15 @@ function computeFormDirty(formEl, initialSnapshot) {
  */
 function createFormHandle(formEl, options = {}) {
   if (formEl && formEl.__wFormHandle) {
+    if (options.services && typeof formEl.__wFormHandle.__setServices === 'function') {
+      formEl.__wFormHandle.__setServices(options.services);
+    }
     return formEl.__wFormHandle;
   }
 
   const api = options.api;
   const debug = options.debug || null;
+  let services = options.services || null;
   const formName =
     (formEl && formEl.getAttribute && formEl.getAttribute('data-w-form')) ||
     (formEl && formEl.getAttribute && formEl.getAttribute('name')) ||
@@ -4238,9 +4352,18 @@ function createFormHandle(formEl, options = {}) {
       }
 
       // Invoke registered success hooks. Note: Any background fragment refresh failure
-      // is handled by the fragment coordinator and NEVER puts this form into validation error state!
+      // or side-effect service error in onSuccess NEVER puts a succeeded form into validation error
+      // state or makes the completed mutation appear rolled back!
+      let hookError = null;
       for (const listener of successListeners) {
-        await listener(responseData, { values: payloadData, form: handle });
+        try {
+          await listener(responseData, { values: payloadData, form: handle, services });
+        } catch (listenerErr) {
+          if (!hookError) hookError = listenerErr;
+          if (debug && typeof debug.trackCleanupError === 'function') {
+            debug.trackCleanupError(`form_${formName}`, formName, 'form:onSuccess', listenerErr);
+          }
+        }
       }
 
       // Explicit redirect behavior
@@ -4266,7 +4389,7 @@ function createFormHandle(formEl, options = {}) {
         }
       }
 
-      return { ok: true, submitted: true, data: responseData, refreshOk, refreshError };
+      return { ok: true, submitted: true, data: responseData, refreshOk, refreshError, hookError };
     } catch (err) {
       if (err && err.kind === 'validation') {
         fieldErrors = { ...(err.fieldErrors || {}) };
@@ -4281,7 +4404,7 @@ function createFormHandle(formEl, options = {}) {
 
       for (const listener of errorListeners) {
         try {
-          await listener(err, { values: payloadData, form: handle });
+          await listener(err, { values: payloadData, form: handle, services });
         } catch (_e) {
           // Ignore
         }
@@ -4350,6 +4473,12 @@ function createFormHandle(formEl, options = {}) {
   handle = {
     name: formName,
     el: formEl,
+    get services() {
+      return services;
+    },
+    __setServices(nextServices) {
+      if (nextServices) services = nextServices;
+    },
     get pending() {
       return pending;
     },
@@ -4821,6 +4950,2276 @@ module.exports = {
 
 
 },
+    "./host": function(module, exports, require) {
+'use strict';
+
+/**
+ * Webspresso Client UI Host Lifecycle Helper (`core/client/host.js`)
+ *
+ * Manages optional, lazy DOM host containers for client services that need
+ * to render shared UI outside normal SSR fragment patch regions.
+ *
+ * Principles:
+ * - Zero DOM creation until a service explicitly requests a host (`mountHost`).
+ * - Idempotent per host key within a runtime: repeated calls return the same host handle
+ *   and never create duplicate DOM containers.
+ * - Supports attaching to an existing layout element (`target` / `selector` / `[data-w-host]`)
+ *   or lazily creating a container appended outside fragment areas (default: `document.body`).
+ * - Clean unmount and resource disposal contract when the owning service or runtime is destroyed.
+ * - Agnostic to UI rendering: does not impose any template language, virtual DOM, or widget type.
+ */
+
+const { decorateElement } = require('./utils');
+
+/**
+ * Resolve the owning Document from a root Document or Element.
+ *
+ * @param {Document|Element|null} [root]
+ * @returns {Document|null}
+ */
+function resolveDocument(root) {
+  if (root) {
+    if (root.nodeType === 9) return root;
+    if (root.ownerDocument) return root.ownerDocument;
+  }
+  return typeof document !== 'undefined' ? document : null;
+}
+
+/**
+ * Resolve the default mount container outside `[data-w-fragment]` areas.
+ *
+ * @param {Document|Element|null} [root]
+ * @param {Document|null} [doc]
+ * @returns {Element|null}
+ */
+function resolveDefaultContainer(root, doc) {
+  if (root && root.nodeType === 1 && root.tagName !== 'HTML') {
+    // If a custom element root was passed and is not inside a fragment, use it or doc.body
+    if (doc && doc.body && (root === doc.body || root === doc.documentElement)) {
+      return doc.body;
+    }
+    if (!doc || !doc.body) {
+      return root;
+    }
+  }
+  if (doc) {
+    return doc.body || doc.documentElement || null;
+  }
+  return root && root.nodeType === 1 ? root : null;
+}
+
+/**
+ * Create a runtime-scoped UI Host Manager.
+ *
+ * @param {object} [options]
+ * @param {Document|Element|null} [options.root]
+ * @param {object} [options.debug]
+ * @returns {object}
+ */
+function createClientHostManager(options = {}) {
+  const root = options.root || null;
+  const debug = options.debug || null;
+  const activeHosts = new Map(); // key -> hostRecord
+  let disposed = false;
+
+  /**
+   * Mount or retrieve a shared UI host by key.
+   *
+   * @param {string|object} [keyOrOptions]
+   * @param {object} [maybeOptions]
+   * @param {string} [defaultKey]
+   */
+  function mount(keyOrOptions = {}, maybeOptions = {}, defaultKey = 'default') {
+    if (disposed) {
+      const err = new Error('Cannot mount UI host on a disposed client runtime.');
+      err.code = 'CLIENT_RUNTIME_DISPOSED';
+      throw err;
+    }
+
+    let opts = {};
+    let key = defaultKey;
+
+    if (typeof keyOrOptions === 'string') {
+      key = keyOrOptions.trim() || defaultKey;
+      opts = maybeOptions && typeof maybeOptions === 'object' ? maybeOptions : {};
+    } else if (keyOrOptions && typeof keyOrOptions === 'object') {
+      opts = keyOrOptions;
+      if (typeof opts.key === 'string' && opts.key.trim()) {
+        key = opts.key.trim();
+      } else if (typeof opts.name === 'string' && opts.name.trim()) {
+        key = opts.name.trim();
+      }
+    }
+
+    if (!key) {
+      throw new TypeError('mountHost() requires a non-empty host key.');
+    }
+
+    const existing = activeHosts.get(key);
+    if (existing && existing.mounted) {
+      // If the element is still connected (or in a headless/custom tree), reuse it
+      if (!existing.el || existing.el.isConnected !== false || !existing.created) {
+        return existing.handle;
+      }
+      // If a created host element was externally removed from DOM, clean up before re-creating
+      existing.handle.unmount();
+    }
+
+    const doc = resolveDocument(opts.root || root);
+    let el = null;
+    let created = false;
+    const prevAttributes = new Map();
+
+    // 1. Explicit target Element
+    if (opts.target && opts.target.nodeType === 1) {
+      el = opts.target;
+    }
+
+    // 2. Explicit CSS selector
+    if (!el && typeof opts.selector === 'string' && opts.selector.trim()) {
+      const searchRoot = opts.root || root || doc;
+      if (searchRoot && typeof searchRoot.querySelector === 'function') {
+        el = searchRoot.querySelector(opts.selector.trim());
+      }
+      if (!el && doc && searchRoot !== doc && typeof doc.querySelector === 'function') {
+        el = doc.querySelector(opts.selector.trim());
+      }
+    }
+
+    // 3. Existing layout placeholder `[data-w-host="<key>"]` not owned by another active host manager
+    if (!el && opts.createOnly !== true) {
+      const searchRoot = opts.root || root || doc;
+      if (searchRoot && typeof searchRoot.querySelectorAll === 'function') {
+        const candidates = searchRoot.querySelectorAll(`[data-w-host="${key}"]`);
+        for (let i = 0; i < candidates.length; i++) {
+          const cand = candidates[i];
+          if (!cand.__wHostManager || cand.__wHostManager === api) {
+            el = cand;
+            break;
+          }
+        }
+      }
+    }
+
+    // 4. Create a new host container outside fragment regions
+    if (!el) {
+      if (!doc || typeof doc.createElement !== 'function') {
+        const err = new Error(`Cannot create UI host "${key}": no Document is available in the current environment.`);
+        err.code = 'CLIENT_HOST_NO_DOCUMENT';
+        throw err;
+      }
+      const tagName = typeof opts.tagName === 'string' && opts.tagName.trim() ? opts.tagName.trim() : 'div';
+      el = doc.createElement(tagName);
+      created = true;
+
+      const container =
+        (opts.container && opts.container.nodeType === 1 ? opts.container : null) ||
+        resolveDefaultContainer(opts.root || root, doc);
+
+      if (container && typeof container.appendChild === 'function') {
+        container.appendChild(el);
+      }
+    }
+
+    function recordAndSetAttr(attrName, attrVal) {
+      if (!el || typeof el.setAttribute !== 'function') return;
+      if (!created && !prevAttributes.has(attrName)) {
+        prevAttributes.set(attrName, el.hasAttribute(attrName) ? el.getAttribute(attrName) : null);
+      }
+      el.setAttribute(attrName, String(attrVal));
+    }
+
+    recordAndSetAttr('data-w-host', key);
+
+    if (typeof opts.id === 'string' && opts.id.trim()) {
+      recordAndSetAttr('id', opts.id.trim());
+    }
+
+    if (typeof opts.className === 'string' && opts.className.trim()) {
+      if (created) {
+        el.className = opts.className.trim();
+      } else {
+        recordAndSetAttr('class', opts.className.trim());
+      }
+    }
+
+    if (opts.attributes && typeof opts.attributes === 'object') {
+      for (const [attrName, attrVal] of Object.entries(opts.attributes)) {
+        if (attrVal === undefined || attrVal === null || attrVal === false) continue;
+        recordAndSetAttr(attrName, attrVal === true ? '' : String(attrVal));
+      }
+    }
+
+    try {
+      Object.defineProperty(el, '__wHostManager', {
+        value: api,
+        configurable: true,
+        enumerable: false,
+        writable: true,
+      });
+    } catch (_e) {
+      el.__wHostManager = api;
+    }
+
+    const decoratedEl = decorateElement(el);
+    const unmountCallbacks = [];
+    let isMounted = true;
+
+    function onUnmount(fn) {
+      if (typeof fn !== 'function') return () => {};
+      if (!isMounted) {
+        try {
+          fn();
+        } catch (_e) {}
+        return () => {};
+      }
+      unmountCallbacks.push(fn);
+      return () => {
+        const idx = unmountCallbacks.indexOf(fn);
+        if (idx !== -1) unmountCallbacks.splice(idx, 1);
+      };
+    }
+
+    function clear() {
+      if (el) {
+        el.innerHTML = '';
+      }
+    }
+
+    function unmount() {
+      if (!isMounted) return;
+      isMounted = false;
+      activeHosts.delete(key);
+
+      for (let i = unmountCallbacks.length - 1; i >= 0; i--) {
+        try {
+          unmountCallbacks[i](decoratedEl);
+        } catch (err) {
+          if (debug && typeof debug.trackCleanupError === 'function') {
+            debug.trackCleanupError(`host_${key}`, key, 'host:unmount', err);
+          }
+        }
+      }
+      unmountCallbacks.length = 0;
+
+      if (el) {
+        if (el.__wHostManager === api) {
+          delete el.__wHostManager;
+        }
+        if (created) {
+          if (el.parentNode && typeof el.parentNode.removeChild === 'function') {
+            el.parentNode.removeChild(el);
+          } else if (typeof el.remove === 'function') {
+            el.remove();
+          }
+        } else {
+          if (opts.clearOnUnmount !== false) {
+            el.innerHTML = '';
+          }
+          for (const [attrName, prevVal] of prevAttributes.entries()) {
+            if (prevVal === null) {
+              el.removeAttribute(attrName);
+            } else {
+              el.setAttribute(attrName, prevVal);
+            }
+          }
+        }
+      }
+
+      if (debug && typeof debug.recordEvent === 'function') {
+        debug.recordEvent('host:unmount', { key, created });
+      }
+    }
+
+    const handle = Object.freeze({
+      key,
+      el: decoratedEl,
+      created,
+      get mounted() {
+        return isMounted;
+      },
+      clear,
+      onUnmount,
+      unmount,
+      destroy: unmount,
+    });
+
+    activeHosts.set(key, {
+      key,
+      el: decoratedEl,
+      created,
+      get mounted() {
+        return isMounted;
+      },
+      handle,
+    });
+
+    if (debug && typeof debug.recordEvent === 'function') {
+      debug.recordEvent('host:mount', { key, created });
+    }
+
+    return handle;
+  }
+
+  function get(key) {
+    const record = activeHosts.get(String(key || '').trim());
+    return record && record.mounted ? record.handle : null;
+  }
+
+  function has(key) {
+    const record = activeHosts.get(String(key || '').trim());
+    return Boolean(record && record.mounted);
+  }
+
+  function unmount(key) {
+    const record = activeHosts.get(String(key || '').trim());
+    if (record && record.mounted) {
+      record.handle.unmount();
+      return true;
+    }
+    return false;
+  }
+
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    const records = Array.from(activeHosts.values());
+    activeHosts.clear();
+    for (let i = records.length - 1; i >= 0; i--) {
+      try {
+        records[i].handle.unmount();
+      } catch (err) {
+        if (debug && typeof debug.trackCleanupError === 'function') {
+          debug.trackCleanupError(`host_${records[i].key}`, records[i].key, 'host:dispose', err);
+        }
+      }
+    }
+  }
+
+  const api = {
+    mount,
+    get,
+    has,
+    unmount,
+    dispose,
+    get isDisposed() {
+      return disposed;
+    },
+  };
+
+  return api;
+}
+
+module.exports = {
+  createClientHostManager,
+  resolveDocument,
+  resolveDefaultContainer,
+};
+
+
+},
+    "./services": function(module, exports, require) {
+'use strict';
+
+/**
+ * Webspresso Client Services Registry & Lifecycle Manager (`core/client/services.js`)
+ *
+ * Provides runtime-scoped, lazily-initialized, strongly-typed shared client services
+ * with optional lazy UI host mounting.
+ *
+ * Principles:
+ * - Agnostic core: Core knows nothing about specific application services (toast, modal, etc.).
+ * - Explicit lazy resolution: `const svc = await services.get('name')` — no magic Proxy
+ *   hiding sync/async boundaries.
+ * - Runtime-scoped isolation: Shared across controllers/forms within the same runtime;
+ *   isolated across separate runtimes and SSR requests.
+ * - Single-flight initialization: Concurrent `services.get('name')` calls share one promise.
+ * - Failure recovery: Failed initialization cleans up partial resources/hosts and evicts
+ *   the failed promise from cache so subsequent calls can retry.
+ * - Deterministic teardown: Controller disconnect does NOT dispose shared services;
+ *   `runtime.destroy()` disposes all initialized services, in-flight initializations, and UI hosts.
+ */
+
+const { createClientHostManager } = require('./host');
+const { defaultStorage } = require('./storage');
+
+function createServiceError(message, code, serviceName, cause) {
+  const err = new Error(message);
+  err.name = 'ClientServiceError';
+  err.code = code;
+  if (serviceName) {
+    err.serviceName = serviceName;
+  }
+  if (cause !== undefined) {
+    err.cause = cause;
+  }
+  return err;
+}
+
+/**
+ * Define a client service for registration in `bootClient({ services })` or `createClientRuntime({ services })`.
+ *
+ * Supports:
+ * - `defineClientService({ load: () => import('./services/toast') })`
+ * - `defineClientService({ create(ctx) { ... }, dispose?(instance, ctx) { ... } })`
+ * - `defineClientService((ctx) => ({ ... }))`
+ *
+ * @template TService
+ * @param {object | ((ctx: object) => TService | Promise<TService>)} definition
+ * @returns {object}
+ */
+function defineClientService(definition) {
+  if (typeof definition === 'function') {
+    return Object.freeze({
+      __isWebspressoClientService: true,
+      load: null,
+      create: definition,
+      dispose: null,
+    });
+  }
+
+  if (!definition || typeof definition !== 'object') {
+    throw new TypeError('defineClientService() requires a configuration object or factory function.');
+  }
+
+  const load = typeof definition.load === 'function' ? definition.load : null;
+  const create =
+    typeof definition.create === 'function'
+      ? definition.create
+      : typeof definition.setup === 'function'
+        ? definition.setup
+        : null;
+  const dispose = typeof definition.dispose === 'function' ? definition.dispose : null;
+
+  if (!load && !create) {
+    throw new TypeError(
+      'defineClientService() requires either a `load` function (`() => import(...)`) or a `create` / `setup` factory function.'
+    );
+  }
+
+  return Object.freeze({
+    __isWebspressoClientService: true,
+    name: definition.name ? String(definition.name).trim() : null,
+    load,
+    create,
+    dispose,
+  });
+}
+
+/**
+ * Resolve a service instance from a dynamically loaded module or factory descriptor.
+ */
+async function instantiateFromLoadedModule(loaded, outerDef, serviceCtx, registerDispose) {
+  if (outerDef.dispose) {
+    registerDispose(outerDef.dispose);
+  }
+
+  // If the outer definition provided both `load` and `create`/`setup`, invoke outer `create`
+  if (outerDef.load && outerDef.create) {
+    return await outerDef.create(serviceCtx, loaded);
+  }
+
+  if (!outerDef.load && outerDef.create) {
+    const res = await outerDef.create(serviceCtx);
+    if (res && typeof res === 'object' && res.__isWebspressoClientService) {
+      return instantiateFromLoadedModule(res, { load: null, create: null, dispose: null }, serviceCtx, registerDispose);
+    }
+    return res;
+  }
+
+  if (loaded === null || loaded === undefined) {
+    return loaded;
+  }
+
+  // 1. Direct `defineClientService` descriptor
+  if (typeof loaded === 'object' && loaded.__isWebspressoClientService) {
+    if (typeof loaded.dispose === 'function') {
+      registerDispose(loaded.dispose);
+    }
+    if (typeof loaded.load === 'function') {
+      const nested = await loaded.load(serviceCtx);
+      return instantiateFromLoadedModule(
+        nested,
+        { load: null, create: loaded.create, dispose: null },
+        serviceCtx,
+        registerDispose
+      );
+    }
+    if (typeof loaded.create === 'function') {
+      return await loaded.create(serviceCtx);
+    }
+    return loaded;
+  }
+
+  // 2. Direct factory function
+  if (typeof loaded === 'function') {
+    const produced = await loaded(serviceCtx);
+    if (produced && typeof produced === 'object' && produced.__isWebspressoClientService) {
+      return instantiateFromLoadedModule(
+        produced,
+        { load: null, create: null, dispose: null },
+        serviceCtx,
+        registerDispose
+      );
+    }
+    return produced;
+  }
+
+  // 3. Module namespace or object with `default` export
+  if (typeof loaded === 'object') {
+    if ('default' in loaded && loaded.default !== undefined) {
+      const defExport = loaded.default;
+      if (typeof loaded.dispose === 'function') {
+        registerDispose(loaded.dispose);
+      }
+      if (defExport && typeof defExport === 'object' && defExport.__isWebspressoClientService) {
+        return instantiateFromLoadedModule(
+          defExport,
+          { load: null, create: null, dispose: null },
+          serviceCtx,
+          registerDispose
+        );
+      }
+      if (typeof defExport === 'function') {
+        const produced = await defExport(serviceCtx);
+        if (produced && typeof produced === 'object' && produced.__isWebspressoClientService) {
+          return instantiateFromLoadedModule(
+            produced,
+            { load: null, create: null, dispose: null },
+            serviceCtx,
+            registerDispose
+          );
+        }
+        return produced;
+      }
+      if (defExport && typeof defExport === 'object') {
+        if (typeof defExport.dispose === 'function') {
+          registerDispose(defExport.dispose);
+        }
+        if (typeof defExport.create === 'function') {
+          return await defExport.create(serviceCtx);
+        }
+        if (typeof defExport.setup === 'function') {
+          return await defExport.setup(serviceCtx);
+        }
+      }
+      return defExport;
+    }
+
+    // 4. Named lifecycle exports on module namespace (`createService`, `setup`, `create`)
+    if (typeof loaded.dispose === 'function') {
+      registerDispose(loaded.dispose);
+    }
+    if (typeof loaded.createService === 'function') {
+      return await loaded.createService(serviceCtx);
+    }
+    if (typeof loaded.setup === 'function') {
+      return await loaded.setup(serviceCtx);
+    }
+    if (typeof loaded.create === 'function') {
+      return await loaded.create(serviceCtx);
+    }
+  }
+
+  return loaded;
+}
+
+/**
+ * Create a runtime-scoped Client Service Registry.
+ *
+ * @param {object} [options]
+ * @param {Document|Element|null} [options.root]
+ * @param {object} [options.api]
+ * @param {object} [options.storage]
+ * @param {object} [options.debug]
+ * @param {() => object} [options.getRuntime]
+ * @param {Record<string, object|Function>} [options.services]
+ */
+function createClientServiceRegistry(options = {}) {
+  const root = options.root || null;
+  const api = options.api || null;
+  const baseStorage = options.storage || defaultStorage;
+  const debug = options.debug || null;
+  const getRuntime = typeof options.getRuntime === 'function' ? options.getRuntime : () => null;
+
+  // Registered service definitions: name -> normalized definition
+  const definitions = new Map();
+  // Runtime state per service: name -> ServiceEntry
+  const entries = new Map();
+  // Initialization order for deterministic reverse disposal
+  const initOrder = [];
+  // Lazy host manager (only allocated if a service requests a UI host)
+  let sharedHostManager = null;
+  let disposed = false;
+
+  function ensureHostManager() {
+    if (!sharedHostManager) {
+      sharedHostManager = createClientHostManager({ root, debug });
+    }
+    return sharedHostManager;
+  }
+
+  /**
+   * Register a single client service definition.
+   * Does NOT import or execute the service implementation at registration time.
+   *
+   * @param {string} name
+   * @param {object|Function} rawDef
+   */
+  function register(name, rawDef) {
+    if (disposed) {
+      throw createServiceError(
+        `Cannot register client service "${name}" on a disposed runtime.`,
+        'CLIENT_RUNTIME_DISPOSED',
+        name
+      );
+    }
+    const cleanName = String(name || '').trim();
+    if (!cleanName) {
+      throw new TypeError('Service registration requires a non-empty service name.');
+    }
+
+    const normalized =
+      rawDef && rawDef.__isWebspressoClientService ? rawDef : defineClientService(rawDef);
+
+    const existingEntry = entries.get(cleanName);
+    if (existingEntry && existingEntry.definition !== normalized) {
+      // If HMR or re-registration replaces an uninitialized or existing definition
+      if (existingEntry.status === 'ready' || existingEntry.status === 'initializing') {
+        disposeEntry(existingEntry);
+        entries.delete(cleanName);
+      }
+    }
+
+    definitions.set(cleanName, normalized);
+    return normalized;
+  }
+
+  function registerAll(servicesMap) {
+    if (!servicesMap || typeof servicesMap !== 'object') return;
+    for (const [name, def] of Object.entries(servicesMap)) {
+      if (def !== undefined && def !== null) {
+        register(name, def);
+      }
+    }
+  }
+
+  /**
+   * Clean up all resources, callbacks, and UI hosts associated with a single service attempt/entry.
+   */
+  function cleanupAttemptResources(attempt, serviceName, phase = 'service:dispose') {
+    if (attempt.cleanedUp) return;
+    attempt.cleanedUp = true;
+
+    try {
+      attempt.abortController.abort();
+    } catch (_e) {}
+
+    // 1. Run explicit dispose hook(s)
+    const ranDisposeFns = new Set();
+    for (let i = attempt.disposeFns.length - 1; i >= 0; i--) {
+      const fn = attempt.disposeFns[i];
+      if (typeof fn !== 'function' || ranDisposeFns.has(fn)) continue;
+      ranDisposeFns.add(fn);
+      try {
+        fn(attempt.instance, attempt.serviceCtx);
+      } catch (err) {
+        if (debug && typeof debug.trackCleanupError === 'function') {
+          debug.trackCleanupError(`service_${serviceName}`, serviceName, phase, err);
+        }
+      }
+    }
+
+    // 2. If instance itself has a `.dispose()` method not already in disposeFns, invoke it when no explicit dispose hook was provided
+    if (
+      attempt.disposeFns.length === 0 &&
+      attempt.instance &&
+      typeof attempt.instance === 'object' &&
+      typeof attempt.instance.dispose === 'function' &&
+      !ranDisposeFns.has(attempt.instance.dispose)
+    ) {
+      try {
+        attempt.instance.dispose();
+      } catch (err) {
+        if (debug && typeof debug.trackCleanupError === 'function') {
+          debug.trackCleanupError(`service_${serviceName}`, serviceName, phase, err);
+        }
+      }
+    }
+
+    // 3. Run registered `onCleanup` callbacks in LIFO order
+    for (let i = attempt.cleanups.length - 1; i >= 0; i--) {
+      try {
+        attempt.cleanups[i]();
+      } catch (err) {
+        if (debug && typeof debug.trackCleanupError === 'function') {
+          debug.trackCleanupError(`service_${serviceName}`, serviceName, `${phase}:cleanup`, err);
+        }
+      }
+    }
+    attempt.cleanups.length = 0;
+
+    // 4. Unmount any UI hosts mounted by this service
+    const hosts = Array.from(attempt.hosts);
+    attempt.hosts.clear();
+    for (let i = hosts.length - 1; i >= 0; i--) {
+      try {
+        hosts[i].unmount();
+      } catch (err) {
+        if (debug && typeof debug.trackCleanupError === 'function') {
+          debug.trackCleanupError(`service_${serviceName}`, serviceName, `${phase}:host`, err);
+        }
+      }
+    }
+  }
+
+  function disposeEntry(entry) {
+    if (!entry || entry.disposed) return;
+    entry.disposed = true;
+    const wasReady = entry.status === 'ready';
+    entry.status = 'disposed';
+    entry.initPromise = null;
+    entry.instance = undefined;
+
+    if (entry.activeAttempt) {
+      cleanupAttemptResources(entry.activeAttempt, entry.name, 'service:dispose');
+      entry.activeAttempt = null;
+    }
+
+    if (wasReady && debug && typeof debug.recordEvent === 'function') {
+      debug.recordEvent('service:dispose', { name: entry.name });
+    }
+  }
+
+  /**
+   * Lazily resolve and initialize a registered service by name.
+   *
+   * @template K
+   * @param {K} name
+   * @returns {Promise<any>}
+   */
+  async function get(name) {
+    const cleanName = String(name || '').trim();
+
+    if (disposed) {
+      throw createServiceError(
+        `Cannot resolve client service "${cleanName}": client runtime has been disposed.`,
+        'CLIENT_RUNTIME_DISPOSED',
+        cleanName
+      );
+    }
+
+    const def = definitions.get(cleanName);
+    if (!def) {
+      throw createServiceError(
+        `Unknown client service "${cleanName}". Register it in bootClient({ services }) or createClientRuntime({ services }).`,
+        'UNKNOWN_CLIENT_SERVICE',
+        cleanName
+      );
+    }
+
+    let entry = entries.get(cleanName);
+    if (entry) {
+      if (entry.status === 'ready') {
+        return entry.instance;
+      }
+      if (entry.status === 'initializing' && entry.initPromise) {
+        return entry.initPromise;
+      }
+    }
+
+    const attempt = {
+      abortController: new AbortController(),
+      cleanups: [],
+      disposeFns: [],
+      hosts: new Set(),
+      instance: undefined,
+      serviceCtx: null,
+      cleanedUp: false,
+    };
+
+    const scopedStorage =
+      baseStorage && typeof baseStorage.scoped === 'function'
+        ? baseStorage.scoped(`service:${cleanName}`)
+        : defaultStorage.scoped(`service:${cleanName}`);
+
+    function onCleanup(fn) {
+      if (typeof fn !== 'function') return () => {};
+      if (disposed || attempt.cleanedUp) {
+        try {
+          fn();
+        } catch (_e) {}
+        return () => {};
+      }
+      attempt.cleanups.push(fn);
+      return () => {
+        const idx = attempt.cleanups.indexOf(fn);
+        if (idx !== -1) attempt.cleanups.splice(idx, 1);
+      };
+    }
+
+    function mountServiceHost(keyOrOptions = {}, maybeOptions = {}) {
+      if (disposed || attempt.cleanedUp) {
+        throw createServiceError(
+          `Cannot mount UI host for service "${cleanName}": runtime or service is disposed.`,
+          'CLIENT_RUNTIME_DISPOSED',
+          cleanName
+        );
+      }
+      const hostMgr = ensureHostManager();
+      const handle = hostMgr.mount(keyOrOptions, maybeOptions, cleanName);
+      attempt.hosts.add(handle);
+      return handle;
+    }
+
+    const hostHelper = Object.freeze({
+      mount: mountServiceHost,
+      get: (hostKey = cleanName) => (sharedHostManager ? sharedHostManager.get(hostKey) : null),
+      has: (hostKey = cleanName) => (sharedHostManager ? sharedHostManager.has(hostKey) : false),
+      unmount: (hostKey = cleanName) => {
+        if (!sharedHostManager) return false;
+        const h = sharedHostManager.get(hostKey);
+        if (h) attempt.hosts.delete(h);
+        return sharedHostManager.unmount(hostKey);
+      },
+    });
+
+    const serviceCtx = Object.freeze({
+      name: cleanName,
+      api,
+      storage: Object.freeze({
+        local: scopedStorage.local,
+        session: scopedStorage.session,
+        memory: scopedStorage.memory,
+        scoped: (sub) => scopedStorage.scoped(sub),
+        global: baseStorage,
+        root: baseStorage,
+      }),
+      signal: attempt.abortController.signal,
+      root,
+      get runtime() {
+        return getRuntime();
+      },
+      services: registryApi,
+      host: hostHelper,
+      mountHost: mountServiceHost,
+      onCleanup,
+      onDispose: onCleanup,
+      isDisposed: () => disposed || attempt.cleanedUp,
+    });
+
+    attempt.serviceCtx = serviceCtx;
+
+    entry = {
+      name: cleanName,
+      definition: def,
+      status: 'initializing',
+      instance: undefined,
+      initPromise: null,
+      activeAttempt: attempt,
+      disposed: false,
+    };
+    entries.set(cleanName, entry);
+
+    if (debug && typeof debug.recordEvent === 'function') {
+      debug.recordEvent('service:init', { name: cleanName });
+    }
+
+    const initPromise = (async () => {
+      try {
+        const rawLoaded = def.load ? await def.load(serviceCtx) : null;
+
+        // Check if runtime or entry was disposed while `load()` was in flight
+        if (disposed || entry.disposed) {
+          cleanupAttemptResources(attempt, cleanName, 'service:late-init-dispose');
+          throw createServiceError(
+            `Client service "${cleanName}" initialization aborted because runtime was disposed.`,
+            'CLIENT_RUNTIME_DISPOSED',
+            cleanName
+          );
+        }
+
+        const instance = await instantiateFromLoadedModule(
+          rawLoaded,
+          def,
+          serviceCtx,
+          (disposeFn) => {
+            if (typeof disposeFn === 'function') {
+              attempt.disposeFns.push(disposeFn);
+            }
+          }
+        );
+
+        attempt.instance = instance;
+
+        // Check again if runtime or entry was disposed while `create()` / `setup()` was in flight
+        if (disposed || entry.disposed) {
+          cleanupAttemptResources(attempt, cleanName, 'service:late-init-dispose');
+          throw createServiceError(
+            `Client service "${cleanName}" initialization aborted because runtime was disposed.`,
+            'CLIENT_RUNTIME_DISPOSED',
+            cleanName
+          );
+        }
+
+        entry.status = 'ready';
+        entry.instance = instance;
+        entry.initPromise = null;
+        if (!initOrder.includes(cleanName)) {
+          initOrder.push(cleanName);
+        }
+
+        if (debug && typeof debug.recordEvent === 'function') {
+          debug.recordEvent('service:ready', {
+            name: cleanName,
+            hasHost: attempt.hosts.size > 0,
+          });
+        }
+
+        return instance;
+      } catch (err) {
+        // Clean up any partial resources or hosts created before the error
+        cleanupAttemptResources(attempt, cleanName, 'service:init-error-cleanup');
+
+        // Evict failed initialization from cache so subsequent calls can retry (unless runtime is disposed)
+        if (!disposed && !entry.disposed && entries.get(cleanName) === entry) {
+          entries.delete(cleanName);
+        }
+
+        if (debug && typeof debug.recordEvent === 'function') {
+          debug.recordEvent('service:error', {
+            name: cleanName,
+            code: err && err.code ? err.code : null,
+            message: err && err.message ? String(err.message) : String(err),
+          });
+        }
+
+        throw err;
+      }
+    })();
+
+    entry.initPromise = initPromise;
+    return initPromise;
+  }
+
+  function has(name) {
+    return definitions.has(String(name || '').trim());
+  }
+
+  function isInitialized(name) {
+    const entry = entries.get(String(name || '').trim());
+    return Boolean(entry && entry.status === 'ready');
+  }
+
+  function peek(name) {
+    const entry = entries.get(String(name || '').trim());
+    return entry && entry.status === 'ready' ? entry.instance : undefined;
+  }
+
+  /**
+   * Idempotently dispose all initialized and in-flight services and their UI hosts.
+   */
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+
+    // 1. Dispose in reverse initialization order first
+    for (let i = initOrder.length - 1; i >= 0; i--) {
+      const name = initOrder[i];
+      const entry = entries.get(name);
+      if (entry) {
+        disposeEntry(entry);
+      }
+    }
+    initOrder.length = 0;
+
+    // 2. Dispose any remaining in-flight entries
+    for (const entry of Array.from(entries.values())) {
+      disposeEntry(entry);
+    }
+    entries.clear();
+
+    // 3. Dispose shared host manager if allocated
+    if (sharedHostManager) {
+      sharedHostManager.dispose();
+      sharedHostManager = null;
+    }
+  }
+
+  if (options.services && typeof options.services === 'object') {
+    registerAll(options.services);
+  }
+
+  const registryApi = {
+    register,
+    registerAll,
+    get,
+    has,
+    isInitialized,
+    peek,
+    dispose,
+    destroy: dispose,
+    get isDisposed() {
+      return disposed;
+    },
+    get hostManager() {
+      return sharedHostManager;
+    },
+  };
+
+  return registryApi;
+}
+
+module.exports = {
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+};
+
+},
+    "./devtool": function(module, exports, require) {
+'use strict';
+
+/**
+ * Webspresso Client DevTools Dock & Inspector
+ *
+ * Integrated development-mode toolbar and inspector for Webspresso client applications:
+ *   - 🎮 Controllers: Live reactive state, computed values, bound forms, tasks (with manual trigger), watchers
+ *   - 🧩 Fragments: Live SSR fragments, input parameters, dependsOn tags, on-demand refresh & DOM highlight
+ *   - 🌐 Network & Causal Chains: Client API timeline, concurrency policies, invalidation-to-patch chains
+ *   - 💾 Storage: Webspresso namespaced local/session storage viewer and cleaner
+ *   - 🛠️ Studio & Server: Direct link to Webspresso DB Studio, Admin Panel, and SSE live-reload status
+ *   - 🔌 Redux DevTools Bridge: Auto-connects to browser Redux DevTools extension if present
+ *   - ⌨️ Hotkey: Alt+W (or Cmd+Shift+D) toggles the dock
+ *   - 🖥️ Console API: window.__WEBSPRESSO_DEVTOOLS__
+ */
+
+const { defaultStorage } = require('./storage');
+
+const DEVTOOL_HOST_ID = 'webspresso-client-devtools-host';
+
+const PKG_VERSION = (() => {
+  try {
+    return require('../../package.json').version || '0.0.110';
+  } catch (_) {
+    return '0.0.110';
+  }
+})();
+
+/**
+ * Connect to Redux DevTools browser extension if installed.
+ */
+function setupReduxDevToolsBridge(runtime) {
+  if (typeof window === 'undefined' || !window.__REDUX_DEVTOOLS_EXTENSION__) {
+    return null;
+  }
+  try {
+    const devTools = window.__REDUX_DEVTOOLS_EXTENSION__.connect({
+      name: 'Webspresso Client',
+      features: {
+        jump: false,
+        skip: false,
+        reorder: false,
+        dispatch: false,
+        test: false,
+      },
+    });
+
+    function getCombinedState() {
+      const stateObj = {};
+      const instances = runtime.controllers ? runtime.controllers.getActiveInstances() : [];
+      for (const inst of instances) {
+        stateObj[inst.name || inst.instanceId] = inst.state ? { ...inst.state } : {};
+      }
+      return stateObj;
+    }
+
+    devTools.init(getCombinedState());
+
+    // Dispatches state snapshot when events occur
+    if (runtime.debug && typeof runtime.debug.getSnapshot === 'function') {
+      const origRecordEvent = runtime.debug.recordEvent;
+      if (typeof origRecordEvent === 'function') {
+        runtime.debug.recordEvent = function (type, detail) {
+          const res = origRecordEvent.call(this, type, detail);
+          try {
+            devTools.send({ type: `[Webspresso] ${type}`, ...detail }, getCombinedState());
+          } catch (_) {}
+          return res;
+        };
+      }
+    }
+
+    return devTools;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Format JSON with syntax-colored HTML or safe text.
+ */
+function formatJsonHtml(data) {
+  if (data === undefined) return '<span style="color:#71717a">undefined</span>';
+  if (data === null) return '<span style="color:#f43f5e">null</span>';
+  try {
+    const jsonStr = JSON.stringify(data, null, 2);
+    return jsonStr
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+        let cls = 'color:#38bdf8;'; // number
+        if (/^"/.test(match)) {
+          if (/:$/.test(match)) {
+            cls = 'color:#a78bfa;font-weight:600;'; // key
+          } else {
+            cls = 'color:#34d399;'; // string
+          }
+        } else if (/true|false/.test(match)) {
+          cls = 'color:#fbbf24;'; // boolean
+        } else if (/null/.test(match)) {
+          cls = 'color:#f43f5e;'; // null
+        }
+        return `<span style="${cls}">${match}</span>`;
+      });
+  } catch (_) {
+    return String(data);
+  }
+}
+
+/**
+ * Highlight a DOM element with a temporary pulsing outline.
+ */
+function highlightElement(el) {
+  if (!el || !el.style) return false;
+  try {
+    if (typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    const origOutline = el.style.outline;
+    const origOutlineOffset = el.style.outlineOffset;
+    const origBoxShadow = el.style.boxShadow;
+    const origTransition = el.style.transition;
+
+    el.style.transition = 'outline 0.2s, box-shadow 0.2s';
+    el.style.outline = '3px solid #f59e0b';
+    el.style.outlineOffset = '4px';
+    el.style.boxShadow = '0 0 25px rgba(245, 158, 11, 0.7)';
+
+    setTimeout(() => {
+      try {
+        el.style.outline = origOutline;
+        el.style.outlineOffset = origOutlineOffset;
+        el.style.boxShadow = origBoxShadow;
+        el.style.transition = origTransition;
+      } catch (_) {}
+    }, 2000);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * Mount the Webspresso Client DevTool onto the document.
+ *
+ * @param {object} runtime - Webspresso Client Runtime instance
+ * @param {object} [options]
+ * @param {string} [options.position='bottom-right'] - 'bottom-right' | 'bottom-left'
+ * @param {boolean} [options.open=false] - Initial drawer open state
+ * @param {number} [options.pollInterval=1500] - Snapshot refresh interval (ms)
+ * @param {string} [options.studioUrl='http://localhost:4567'] - URL to Webspresso DB Studio
+ * @returns {object} DevTools handle with open(), close(), toggle(), destroy()
+ */
+function mountDevtool(runtime, options = {}) {
+  if (typeof document === 'undefined') {
+    return {
+      open: () => {},
+      close: () => {},
+      toggle: () => {},
+      destroy: () => {},
+      isOpen: () => false,
+      getSnapshot: () => ({}),
+    };
+  }
+
+  // Prevent multiple devtool instances on the same page
+  const existing = document.getElementById(DEVTOOL_HOST_ID);
+  if (existing) {
+    if (existing.__webspressoDevtoolInstance) {
+      return existing.__webspressoDevtoolInstance;
+    }
+    existing.remove();
+  }
+
+  const position = options.position || 'bottom-right';
+  const isRight = position.includes('right');
+  const studioUrl = options.studioUrl || 'http://localhost:4567';
+  let metaOverrides =
+    options.meta && typeof options.meta === 'object' ? { ...options.meta } : {};
+  let isOpen = Boolean(options.open);
+  let activeTab = 'controllers'; // 'controllers' | 'fragments' | 'network' | 'storage' | 'studio'
+  let selectedControllerId = null;
+
+  function resolveDevFeatures() {
+    const winMeta =
+      typeof window !== 'undefined' &&
+      window.__WEBSPRESSO_DEV_META__ &&
+      typeof window.__WEBSPRESSO_DEV_META__ === 'object'
+        ? window.__WEBSPRESSO_DEV_META__
+        : {};
+    const merged = { ...winMeta, ...metaOverrides };
+    const pluginsList = Array.isArray(merged.plugins)
+      ? merged.plugins
+      : Array.isArray(options.plugins)
+        ? options.plugins
+        : [];
+
+    const hasStudio =
+      options.hasStudio !== undefined
+        ? Boolean(options.hasStudio)
+        : merged.hasStudio !== undefined
+          ? Boolean(merged.hasStudio)
+          : merged.hasDb !== undefined
+            ? Boolean(merged.hasDb)
+            : Boolean(
+                options.studioUrl ||
+                  pluginsList.includes('studio') ||
+                  pluginsList.includes('db-studio')
+              );
+
+    const hasAdmin =
+      options.hasAdmin !== undefined
+        ? Boolean(options.hasAdmin)
+        : merged.hasAdmin !== undefined
+          ? Boolean(merged.hasAdmin)
+          : Boolean(
+              options.adminPath ||
+                options.adminUrl ||
+                pluginsList.includes('admin-panel') ||
+                pluginsList.includes('adminPanel') ||
+                pluginsList.includes('admin')
+            );
+
+    const adminPath = merged.adminPath || options.adminPath || options.adminUrl || '/_admin';
+    return {
+      hasStudio,
+      hasAdmin,
+      adminPath,
+      plugins: pluginsList,
+    };
+  }
+
+  // Initialize Redux DevTools extension bridge if available
+  const reduxBridge = setupReduxDevToolsBridge(runtime);
+
+  // Host container
+  const host = document.createElement('div');
+  host.id = DEVTOOL_HOST_ID;
+  host.style.cssText = 'position:fixed;z-index:999998;pointer-events:none;';
+
+  // Use Shadow DOM to completely isolate styles from user CSS
+  const shadow = typeof host.attachShadow === 'function' ? host.attachShadow({ mode: 'open' }) : host;
+
+  // Style block
+  const styleEl = document.createElement('style');
+  styleEl.textContent = `
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    .ws-devtool-root {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      color: #f4f4f5;
+      line-height: 1.5;
+      pointer-events: auto;
+    }
+    .ws-pill {
+      position: fixed;
+      bottom: 16px;
+      ${isRight ? 'right: 16px;' : 'left: 16px;'}
+      background: #18181b;
+      border: 1px solid #3f3f46;
+      border-radius: 9999px;
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5), 0 0 10px rgba(0,0,0,0.3);
+      user-select: none;
+      transition: all 0.2s ease;
+      z-index: 999998;
+    }
+    .ws-pill:hover {
+      background: #27272a;
+      border-color: #f59e0b;
+      transform: translateY(-1px);
+      box-shadow: 0 12px 30px -5px rgba(245,158,11,0.25);
+    }
+    .ws-pill-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 9999px;
+      font-size: 10px;
+      font-weight: 700;
+      background: #27272a;
+      color: #a1a1aa;
+    }
+    .ws-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      display: inline-block;
+      box-shadow: 0 0 8px #10b981;
+    }
+    .ws-drawer {
+      position: fixed;
+      bottom: 16px;
+      ${isRight ? 'right: 16px;' : 'left: 16px;'}
+      width: min(780px, calc(100vw - 32px));
+      height: 520px;
+      max-height: calc(100vh - 32px);
+      background: #09090b;
+      border: 1px solid #27272a;
+      border-radius: 12px;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7), 0 0 30px rgba(0,0,0,0.5);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 999999;
+    }
+    .ws-drawer.ws-drawer-enter {
+      animation: wsFadeIn 0.15s ease-out;
+    }
+    @keyframes wsFadeIn {
+      from { opacity: 0; transform: scale(0.98) translateY(6px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .ws-header {
+      background: #121215;
+      border-bottom: 1px solid #27272a;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      user-select: none;
+    }
+    .ws-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 13px;
+      color: #fbbf24;
+    }
+    .ws-tabs {
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .ws-tabs::-webkit-scrollbar { display: none; }
+    .ws-tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: #a1a1aa;
+      padding: 5px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .ws-tab-btn:hover {
+      background: #27272a;
+      color: #f4f4f5;
+    }
+    .ws-tab-btn.active {
+      background: #27272a;
+      border-color: #3f3f46;
+      color: #fbbf24;
+    }
+    .ws-btn {
+      background: #27272a;
+      border: 1px solid #3f3f46;
+      color: #f4f4f5;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .ws-btn:hover {
+      background: #3f3f46;
+      border-color: #71717a;
+      color: #fff;
+    }
+    .ws-btn-primary {
+      background: #d97706;
+      border-color: #f59e0b;
+      color: #fff;
+    }
+    .ws-btn-primary:hover {
+      background: #f59e0b;
+    }
+    .ws-btn-sm {
+      padding: 2px 7px;
+      font-size: 10px;
+    }
+    .ws-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      background: #09090b;
+    }
+    .ws-footer {
+      background: #121215;
+      border-top: 1px solid #27272a;
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #71717a;
+    }
+    .ws-code-block {
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 11px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .ws-card {
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .ws-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .ws-badge-success { background: #064e3b; color: #34d399; }
+    .ws-badge-warning { background: #78350f; color: #fbbf24; }
+    .ws-badge-info { background: #1e3a8a; color: #60a5fa; }
+    .ws-badge-danger { background: #881337; color: #fb7185; }
+  `;
+  shadow.appendChild(styleEl);
+
+  const container = document.createElement('div');
+  container.className = 'ws-devtool-root';
+  shadow.appendChild(container);
+
+  // --- Snapshot Data Fetchers ---
+  function getControllersSnapshot() {
+    if (!runtime.controllers) return [];
+    return runtime.controllers.getActiveInstances().map((inst) => ({
+      instanceId: inst.instanceId,
+      name: inst.name,
+      tagName: inst.el ? inst.el.tagName.toLowerCase() : 'div',
+      isConnected: Boolean(inst.isConnected),
+      state: inst.state ? { ...inst.state } : {},
+      el: inst.el,
+      actions: inst.actions ? Object.keys(inst.actions) : [],
+    }));
+  }
+
+  function getFragmentsSnapshot() {
+    if (!runtime.fragments) return [];
+    return runtime.fragments.getInstances().map((inst) => ({
+      instanceId: inst.instanceId,
+      name: inst.name,
+      input: inst.input ? { ...inst.input } : {},
+      dependsOn: inst.dependsOn ? Array.from(inst.dependsOn) : [],
+      version: inst.version || 1,
+      pagePath: inst.pagePath || '/',
+      el: inst.el,
+    }));
+  }
+
+  function getNetworkSnapshot() {
+    if (!runtime.debug || typeof runtime.debug.getSnapshot !== 'function') return [];
+    const snap = runtime.debug.getSnapshot();
+    return {
+      activeRequests: snap.activeRequests || [],
+      causalChains: snap.causalChains || [],
+      fragmentTimings: snap.fragmentTimings || [],
+      events: snap.events || [],
+    };
+  }
+
+  function getStorageSnapshot() {
+    const localEntries = [];
+    const sessionEntries = [];
+    try {
+      if (typeof localStorage !== 'undefined') {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('w:')) {
+            localEntries.push({ key: k, value: localStorage.getItem(k) });
+          }
+        }
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const k = sessionStorage.key(i);
+          if (k && k.startsWith('w:')) {
+            sessionEntries.push({ key: k, value: sessionStorage.getItem(k) });
+          }
+        }
+      }
+    } catch (_) {}
+    return { localEntries, sessionEntries };
+  }
+
+  // --- Renderers ---
+  function renderPill() {
+    const controllers = getControllersSnapshot();
+    const fragments = getFragmentsSnapshot();
+    return `
+      <div class="ws-pill" id="ws-devtool-pill" title="Toggle Webspresso Client DevTools (Alt+W)">
+        <span style="font-weight:700;color:#fbbf24;">⚡ Webspresso</span>
+        <span class="ws-pill-badge">${controllers.length} ctrl${controllers.length !== 1 ? 's' : ''}</span>
+        <span class="ws-pill-badge">${fragments.length} frag${fragments.length !== 1 ? 's' : ''}</span>
+        <span class="ws-dot" title="Dev server connected"></span>
+      </div>
+    `;
+  }
+
+  function renderControllersTab(controllers) {
+    if (controllers.length === 0) {
+      return `
+        <div class="ws-card" style="text-align:center;padding:32px;color:#a1a1aa;">
+          <p style="font-size:14px;margin-bottom:6px;">No active controllers found on this page.</p>
+          <p style="font-size:11px;color:#71717a;">Define a controller with <code>defineController(...)</code> and mount with <code>data-controller="..."</code>.</p>
+        </div>
+      `;
+    }
+
+    if (!selectedControllerId || !controllers.find((c) => c.instanceId === selectedControllerId)) {
+      selectedControllerId = controllers[0].instanceId;
+    }
+    const current = controllers.find((c) => c.instanceId === selectedControllerId) || controllers[0];
+
+    return `
+      <div style="display:grid;grid-template-columns:220px 1fr;gap:14px;height:100%;">
+        <!-- Sidebar list -->
+        <div style="border-right:1px solid #27272a;padding-right:12px;overflow-y:auto;">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#71717a;margin-bottom:8px;">Mounted Controllers (${controllers.length})</div>
+          ${controllers
+            .map(
+              (c) => `
+            <div
+              class="ws-card ws-controller-item"
+              data-inst-id="${c.instanceId}"
+              style="cursor:pointer;padding:8px 10px;margin-bottom:6px;${
+                c.instanceId === current.instanceId ? 'border-color:#f59e0b;background:#27272a;' : ''
+              }">
+              <div style="font-weight:700;color:#f4f4f5;">${c.name || 'anonymous'}</div>
+              <div style="font-size:10px;color:#a1a1aa;">&lt;${c.tagName}&gt; • ${c.instanceId}</div>
+            </div>
+          `
+            )
+            .join('')}
+        </div>
+
+        <!-- Details pane -->
+        <div style="overflow-y:auto;padding-right:4px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <div>
+              <h3 style="font-size:14px;font-weight:700;color:#fff;">${current.name || 'anonymous'}</h3>
+              <p style="font-size:10px;color:#71717a;">Instance: ${current.instanceId} • Connected: ${current.isConnected ? '✅' : '❌'}</p>
+            </div>
+            <button class="ws-btn ws-btn-sm" id="ws-btn-highlight-ctrl" data-inst-id="${current.instanceId}">
+              🎯 Highlight in DOM
+            </button>
+          </div>
+
+          <!-- Reactive State -->
+          <div class="ws-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <strong style="color:#fbbf24;font-size:11px;">REACTIVE STATE</strong>
+              <button class="ws-btn ws-btn-sm" id="ws-btn-copy-state" data-inst-id="${current.instanceId}">📋 Copy</button>
+            </div>
+            <div class="ws-code-block">${formatJsonHtml(current.state)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderFragmentsTab(fragments) {
+    if (fragments.length === 0) {
+      return `
+        <div class="ws-card" style="text-align:center;padding:32px;color:#a1a1aa;">
+          <p style="font-size:14px;margin-bottom:6px;">No SSR fragments found in DOM.</p>
+          <p style="font-size:11px;color:#71717a;">Mark elements with <code>data-w-fragment="name"</code> to enable targeted server partial refreshes.</p>
+        </div>
+      `;
+    }
+
+    return `
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div>
+            <strong style="font-size:13px;color:#fff;">Active SSR Fragments (${fragments.length})</strong>
+            <p style="font-size:10px;color:#71717a;">Targeted server-rendered DOM segments that can be refreshed independently.</p>
+          </div>
+          <button class="ws-btn ws-btn-primary ws-btn-sm" id="ws-btn-refresh-all-frags">
+            🔄 Refresh All
+          </button>
+        </div>
+
+        ${fragments
+          .map(
+            (f) => `
+          <div class="ws-card" style="margin-bottom:10px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <div>
+                <strong style="color:#38bdf8;font-size:12px;">${f.name}</strong>
+                <span style="font-size:10px;color:#71717a;margin-left:6px;">#${f.instanceId}</span>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <button class="ws-btn ws-btn-sm" id="ws-btn-highlight-frag" data-inst-id="${f.instanceId}">
+                  🎯 Highlight
+                </button>
+                <button class="ws-btn ws-btn-primary ws-btn-sm" id="ws-btn-refresh-frag" data-frag-name="${f.name}">
+                  🔄 Refresh
+                </button>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;">
+              <div>
+                <span style="color:#a1a1aa;">Depends On Tags:</span>
+                ${
+                  f.dependsOn.length > 0
+                    ? f.dependsOn.map((t) => `<span class="ws-badge ws-badge-info" style="margin-left:4px;">${t}</span>`).join('')
+                    : '<span style="color:#71717a;margin-left:4px;">(none)</span>'
+                }
+              </div>
+              <div>
+                <span style="color:#a1a1aa;">Version:</span>
+                <span style="color:#f4f4f5;margin-left:4px;">${f.version}</span>
+              </div>
+            </div>
+            ${
+              Object.keys(f.input).length > 0
+                ? `<div style="margin-top:6px;"><span style="color:#a1a1aa;font-size:10px;">Parameters:</span><div class="ws-code-block" style="margin-top:4px;padding:6px;">${formatJsonHtml(
+                    f.input
+                  )}</div></div>`
+                : ''
+            }
+          </div>
+        `
+          )
+          .join('')}
+      </div>
+    `;
+  }
+
+  function renderNetworkTab(network) {
+    const { activeRequests, causalChains, fragmentTimings } = network;
+    return `
+      <div>
+        <div style="margin-bottom:12px;">
+          <strong style="font-size:13px;color:#fff;">Client Network & Causal Invalidation Chains</strong>
+          <p style="font-size:10px;color:#71717a;">Tracks API calls, concurrency policies (latest, drop), and mutation-to-patch timings.</p>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <div style="font-size:11px;font-weight:700;color:#fbbf24;margin-bottom:6px;">IN-FLIGHT & RECENT REQUESTS</div>
+          ${
+            activeRequests.length === 0
+              ? '<div class="ws-card" style="padding:10px;color:#71717a;">No active or tracked requests in ring buffer.</div>'
+              : activeRequests
+                  .map(
+                    (r) => `
+            <div class="ws-card" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;margin-bottom:6px;">
+              <div>
+                <span class="ws-badge ws-badge-${r.method === 'GET' ? 'info' : 'warning'}">${r.method}</span>
+                <span style="font-weight:600;margin-left:6px;">${r.url}</span>
+              </div>
+              <div style="font-size:10px;color:#a1a1aa;">
+                Policy: <span style="color:#38bdf8;">${r.policy || 'none'}</span> • Status: <span style="color:#34d399;">${r.status}</span>
+              </div>
+            </div>
+          `
+                  )
+                  .join('')
+          }
+        </div>
+
+        ${
+          causalChains.length > 0
+            ? `
+          <div style="margin-bottom:14px;">
+            <div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:6px;">CAUSAL CHAINS (MUTATION ➔ REFRESH ➔ PATCH)</div>
+            ${causalChains
+              .map(
+                (c) => `
+              <div class="ws-card" style="padding:10px;margin-bottom:6px;">
+                <div style="font-weight:600;color:#f4f4f5;font-size:11px;">Chain: ${c.chainId}</div>
+                <div class="ws-code-block" style="margin-top:4px;padding:6px;">${formatJsonHtml(c)}</div>
+              </div>
+            `
+              )
+              .join('')}
+          </div>
+        `
+            : ''
+        }
+
+        ${
+          fragmentTimings.length > 0
+            ? `
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#34d399;margin-bottom:6px;">RECENT FRAGMENT TIMINGS</div>
+            <div class="ws-card" style="padding:8px 12px;">
+              ${fragmentTimings
+                .slice(-5)
+                .map(
+                  (t) => `
+                <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #27272a;font-size:11px;">
+                  <span>${t.fragmentName || t.instanceId}</span>
+                  <span style="color:#fbbf24;">patch: ${t.patchMs}ms ${t.loadMs ? `(load: ${t.loadMs}ms, render: ${t.renderMs}ms)` : ''}</span>
+                </div>
+              `
+                )
+                .join('')}
+            </div>
+          </div>
+        `
+            : ''
+        }
+      </div>
+    `;
+  }
+
+  function renderStorageTab(storage) {
+    const { localEntries, sessionEntries } = storage;
+    const totalCount = localEntries.length + sessionEntries.length;
+
+    return `
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div>
+            <strong style="font-size:13px;color:#fff;">Webspresso Storage Inspector (${totalCount})</strong>
+            <p style="font-size:10px;color:#71717a;">Inspects namespaced keys (<code>w:*</code>) in localStorage and sessionStorage.</p>
+          </div>
+          <button class="ws-btn ws-btn-sm" id="ws-btn-clear-storage" style="color:#fb7185;border-color:#881337;">
+            🗑️ Clear Webspresso Storage
+          </button>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <div style="font-size:11px;font-weight:700;color:#38bdf8;margin-bottom:6px;">LOCAL STORAGE (w:*)</div>
+          ${
+            localEntries.length === 0
+              ? '<div class="ws-card" style="padding:8px 12px;color:#71717a;">No Webspresso entries in localStorage.</div>'
+              : localEntries
+                  .map(
+                    (e) => `
+            <div class="ws-card" style="margin-bottom:6px;">
+              <div style="font-weight:600;color:#38bdf8;font-size:11px;">${e.key}</div>
+              <div class="ws-code-block" style="margin-top:4px;padding:6px;">${formatJsonHtml(
+                (() => {
+                  try {
+                    return JSON.parse(e.value);
+                  } catch (_) {
+                    return e.value;
+                  }
+                })()
+              )}</div>
+            </div>
+          `
+                  )
+                  .join('')
+          }
+        </div>
+
+        <div>
+          <div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:6px;">SESSION STORAGE (w:*)</div>
+          ${
+            sessionEntries.length === 0
+              ? '<div class="ws-card" style="padding:8px 12px;color:#71717a;">No Webspresso entries in sessionStorage.</div>'
+              : sessionEntries
+                  .map(
+                    (e) => `
+            <div class="ws-card" style="margin-bottom:6px;">
+              <div style="font-weight:600;color:#a78bfa;font-size:11px;">${e.key}</div>
+              <div class="ws-code-block" style="margin-top:4px;padding:6px;">${formatJsonHtml(
+                (() => {
+                  try {
+                    return JSON.parse(e.value);
+                  } catch (_) {
+                    return e.value;
+                  }
+                })()
+              )}</div>
+            </div>
+          `
+                  )
+                  .join('')
+          }
+        </div>
+      </div>
+    `;
+  }
+
+  function renderStudioTab() {
+    const features = resolveDevFeatures();
+
+    const studioCardHtml = features.hasStudio
+      ? `
+        <div class="ws-card" style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-weight:700;color:#fbbf24;font-size:13px;">🗄️ Webspresso DB Studio</div>
+            <div style="font-size:10px;color:#a1a1aa;margin-top:2px;">Visual database browser, query runner, and table inspector.</div>
+            <div style="font-size:9px;color:#71717a;margin-top:4px;">Run in terminal: <code>npx webspresso studio</code> (port 4567)</div>
+          </div>
+          <a href="${studioUrl}" target="_blank" rel="noopener noreferrer" class="ws-btn ws-btn-primary" id="ws-btn-open-studio" style="text-decoration:none;">
+            Open DB Studio ↗
+          </a>
+        </div>
+      `
+      : '';
+
+    const adminCardHtml = features.hasAdmin
+      ? `
+        <div class="ws-card" style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-weight:700;color:#38bdf8;font-size:13px;">⚙️ Admin Panel SPA</div>
+            <div style="font-size:10px;color:#a1a1aa;margin-top:2px;">Mithril.js model CRUD and staff administration cockpit.</div>
+          </div>
+          <a href="${features.adminPath}" target="_blank" rel="noopener noreferrer" class="ws-btn" id="ws-btn-open-admin" style="text-decoration:none;">
+            Open ${features.adminPath} ↗
+          </a>
+        </div>
+      `
+      : '';
+
+    return `
+      <div>
+        <div style="margin-bottom:16px;">
+          <strong style="font-size:13px;color:#fff;">Developer Tools & Studio Integrations</strong>
+          <p style="font-size:10px;color:#71717a;">Direct shortcuts to Webspresso's integrated developer productivity tools.</p>
+        </div>
+
+        ${studioCardHtml}
+        ${adminCardHtml}
+
+        <div class="ws-card" style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-weight:700;color:#34d399;font-size:13px;">⚡ Dev Live Reload Hub</div>
+            <div style="font-size:10px;color:#a1a1aa;margin-top:2px;">SSE-based CSS hot reload and server page reload connection.</div>
+          </div>
+          <button class="ws-btn ws-btn-sm" id="ws-btn-force-reload">
+            🔄 Force Page Reload
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderDrawer() {
+    const controllers = getControllersSnapshot();
+    const fragments = getFragmentsSnapshot();
+    const network = getNetworkSnapshot();
+    const storage = getStorageSnapshot();
+
+    return `
+      <div class="ws-drawer" id="ws-devtool-drawer">
+        <!-- Header -->
+        <div class="ws-header">
+          <div class="ws-title">
+            <span>⚡ Webspresso DevTools</span>
+            <span class="ws-badge ws-badge-warning">DEV</span>
+          </div>
+
+          <!-- Navigation tabs -->
+          <div class="ws-tabs">
+            <button class="ws-tab-btn ${activeTab === 'controllers' ? 'active' : ''}" data-tab="controllers">
+              🎮 Controllers (${controllers.length})
+            </button>
+            <button class="ws-tab-btn ${activeTab === 'fragments' ? 'active' : ''}" data-tab="fragments">
+              🧩 Fragments (${fragments.length})
+            </button>
+            <button class="ws-tab-btn ${activeTab === 'network' ? 'active' : ''}" data-tab="network">
+              🌐 Network
+            </button>
+            <button class="ws-tab-btn ${activeTab === 'storage' ? 'active' : ''}" data-tab="storage">
+              💾 Storage
+            </button>
+            <button class="ws-tab-btn ${activeTab === 'studio' ? 'active' : ''}" data-tab="studio">
+              🛠️ Studio
+            </button>
+          </div>
+
+          <!-- Controls -->
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button class="ws-btn ws-btn-sm" id="ws-btn-refresh-snap" title="Refresh Snapshot">🔄</button>
+            <button class="ws-btn ws-btn-sm" id="ws-btn-close" title="Minimize DevTools (Alt+W)">✕</button>
+          </div>
+        </div>
+
+        <!-- Body -->
+        <div class="ws-content">
+          ${
+            activeTab === 'controllers'
+              ? renderControllersTab(controllers)
+              : activeTab === 'fragments'
+                ? renderFragmentsTab(fragments)
+                : activeTab === 'network'
+                  ? renderNetworkTab(network)
+                  : activeTab === 'storage'
+                    ? renderStorageTab(storage)
+                    : renderStudioTab()
+          }
+        </div>
+
+        <!-- Footer -->
+        <div class="ws-footer">
+          <span>Shortcuts: <strong>Alt + W</strong> to toggle • Console: <code>window.__WEBSPRESSO_DEVTOOLS__</code></span>
+          <span style="color:#a1a1aa;">Webspresso v${PKG_VERSION}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  let lastRenderedHtml = '';
+  let wasOpen = false;
+
+  function findInShadow(id) {
+    if (shadow && typeof shadow.getElementById === 'function') {
+      return shadow.getElementById(id);
+    }
+    return shadow && typeof shadow.querySelector === 'function' ? shadow.querySelector(`#${id}`) : null;
+  }
+
+  function updateDom(force = false) {
+    const nextHtml = isOpen ? renderDrawer() : renderPill();
+    if (!force && nextHtml === lastRenderedHtml && isOpen === wasOpen) {
+      return;
+    }
+
+    // Preserve scroll positions inside drawer before updating DOM
+    let prevContentScrollTop = 0;
+    const prevContentEl =
+      isOpen && wasOpen && shadow && typeof shadow.querySelector === 'function'
+        ? shadow.querySelector('.ws-content')
+        : null;
+    if (prevContentEl) {
+      prevContentScrollTop = prevContentEl.scrollTop || 0;
+    }
+
+    lastRenderedHtml = nextHtml;
+    const openingTransition = isOpen && !wasOpen;
+    wasOpen = isOpen;
+
+    container.innerHTML = nextHtml;
+    if (openingTransition) {
+      const drawerEl = findInShadow('ws-devtool-drawer');
+      if (drawerEl && drawerEl.classList) {
+        drawerEl.classList.add('ws-drawer-enter');
+      }
+    }
+    if (prevContentScrollTop > 0 && shadow && typeof shadow.querySelector === 'function') {
+      const nextContentEl = shadow.querySelector('.ws-content');
+      if (nextContentEl) {
+        nextContentEl.scrollTop = prevContentScrollTop;
+      }
+    }
+    bindEvents();
+  }
+
+  function bindEvents() {
+    if (!isOpen) {
+      const pill = findInShadow('ws-devtool-pill');
+      if (pill) {
+        pill.addEventListener('click', () => {
+          isOpen = true;
+          updateDom();
+        });
+      }
+      return;
+    }
+
+    // Close button
+    const closeBtn = findInShadow('ws-btn-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        isOpen = false;
+        updateDom();
+      });
+    }
+
+    // Refresh snapshot button
+    const refreshSnapBtn = findInShadow('ws-btn-refresh-snap');
+    if (refreshSnapBtn) {
+      refreshSnapBtn.addEventListener('click', () => {
+        updateDom();
+      });
+    }
+
+    // Tab buttons
+    const tabBtns = shadow.querySelectorAll('.ws-tab-btn');
+    for (let i = 0; i < tabBtns.length; i++) {
+      tabBtns[i].addEventListener('click', (e) => {
+        const tab = e.currentTarget.getAttribute('data-tab');
+        if (tab) {
+          activeTab = tab;
+          updateDom();
+        }
+      });
+    }
+
+    // Controller selection in sidebar
+    const ctrlItems = shadow.querySelectorAll('.ws-controller-item');
+    for (let i = 0; i < ctrlItems.length; i++) {
+      ctrlItems[i].addEventListener('click', (e) => {
+        selectedControllerId = e.currentTarget.getAttribute('data-inst-id');
+        updateDom();
+      });
+    }
+
+    // Highlight controller in DOM
+    const hlCtrlBtn = findInShadow('ws-btn-highlight-ctrl');
+    if (hlCtrlBtn) {
+      hlCtrlBtn.addEventListener('click', (e) => {
+        const instId = e.currentTarget.getAttribute('data-inst-id');
+        const instances = runtime.controllers ? runtime.controllers.getActiveInstances() : [];
+        const target = instances.find((i) => i.instanceId === instId);
+        if (target && target.el) {
+          highlightElement(target.el);
+        }
+      });
+    }
+
+    // Copy state
+    const copyStateBtn = findInShadow('ws-btn-copy-state');
+    if (copyStateBtn) {
+      copyStateBtn.addEventListener('click', (e) => {
+        const instId = e.currentTarget.getAttribute('data-inst-id');
+        const instances = runtime.controllers ? runtime.controllers.getActiveInstances() : [];
+        const target = instances.find((i) => i.instanceId === instId);
+        if (target && target.state && typeof navigator !== 'undefined' && navigator.clipboard) {
+          navigator.clipboard.writeText(JSON.stringify(target.state, null, 2));
+          copyStateBtn.textContent = '✅ Copied!';
+          setTimeout(() => {
+            try {
+              copyStateBtn.textContent = '📋 Copy';
+            } catch (_) {}
+          }, 1500);
+        }
+      });
+    }
+
+    // Highlight fragment in DOM
+    const hlFragBtns = shadow.querySelectorAll('#ws-btn-highlight-frag');
+    for (let i = 0; i < hlFragBtns.length; i++) {
+      hlFragBtns[i].addEventListener('click', (e) => {
+        const instId = e.currentTarget.getAttribute('data-inst-id');
+        const frag = runtime.fragments ? runtime.fragments.getInstance(instId) : null;
+        if (frag && frag.el) {
+          highlightElement(frag.el);
+        }
+      });
+    }
+
+    // Refresh fragment on demand
+    const refreshFragBtns = shadow.querySelectorAll('#ws-btn-refresh-frag');
+    for (let i = 0; i < refreshFragBtns.length; i++) {
+      refreshFragBtns[i].addEventListener('click', async (e) => {
+        const name = e.currentTarget.getAttribute('data-frag-name');
+        if (name && runtime.fragments) {
+          const btn = e.currentTarget;
+          const origText = btn.textContent;
+          btn.textContent = '⏳ ...';
+          try {
+            await runtime.fragments.refresh(name);
+          } finally {
+            setTimeout(() => {
+              btn.textContent = origText;
+              updateDom();
+            }, 300);
+          }
+        }
+      });
+    }
+
+    // Refresh all fragments
+    const refreshAllBtn = findInShadow('ws-btn-refresh-all-frags');
+    if (refreshAllBtn) {
+      refreshAllBtn.addEventListener('click', async () => {
+        if (!runtime.fragments) return;
+        const origText = refreshAllBtn.textContent;
+        refreshAllBtn.textContent = '⏳ Refreshing...';
+        try {
+          const frags = runtime.fragments.getInstances();
+          for (const f of frags) {
+            await runtime.fragments.refresh(f.name);
+          }
+        } finally {
+          setTimeout(() => {
+            refreshAllBtn.textContent = origText;
+            updateDom();
+          }, 300);
+        }
+      });
+    }
+
+    // Clear Webspresso storage
+    const clearStorageBtn = findInShadow('ws-btn-clear-storage');
+    if (clearStorageBtn) {
+      clearStorageBtn.addEventListener('click', () => {
+        defaultStorage.local.clear();
+        defaultStorage.session.clear();
+        clearStorageBtn.textContent = '✅ Cleared!';
+        setTimeout(() => {
+          updateDom();
+        }, 800);
+      });
+    }
+
+    // Force page reload
+    const forceReloadBtn = findInShadow('ws-btn-force-reload');
+    if (forceReloadBtn) {
+      forceReloadBtn.addEventListener('click', () => {
+        if (typeof window !== 'undefined' && window.location) {
+          window.location.reload();
+        }
+      });
+    }
+  }
+
+  // Hotkey listener: Alt+W toggles the DevTool dock
+  function onKeyDown(e) {
+    if (e.altKey && (e.key === 'w' || e.key === 'W' || e.code === 'KeyW')) {
+      e.preventDefault();
+      isOpen = !isOpen;
+      updateDom();
+    }
+  }
+
+  document.addEventListener('keydown', onKeyDown);
+
+  // Periodic polling to keep snapshots live
+  const pollIntervalMs = typeof options.pollInterval === 'number' ? options.pollInterval : 2000;
+  let pollTimer = null;
+  if (pollIntervalMs > 0) {
+    pollTimer = setInterval(() => {
+      // If open, re-render to reflect live state changes
+      if (isOpen) {
+        updateDom();
+      }
+    }, pollIntervalMs);
+  }
+
+  // Mount into DOM
+  const targetBody = document.body || document.documentElement;
+  targetBody.appendChild(host);
+  updateDom();
+
+  // Public handle & window console export
+  const devtoolApi = {
+    open() {
+      isOpen = true;
+      updateDom();
+    },
+    close() {
+      isOpen = false;
+      updateDom();
+    },
+    toggle() {
+      isOpen = !isOpen;
+      updateDom();
+    },
+    isOpen() {
+      return isOpen;
+    },
+    setMeta(nextMeta = {}) {
+      if (nextMeta && typeof nextMeta === 'object') {
+        metaOverrides = { ...metaOverrides, ...nextMeta };
+        updateDom();
+      }
+    },
+    getSnapshot() {
+      return {
+        controllers: getControllersSnapshot(),
+        fragments: getFragmentsSnapshot(),
+        network: getNetworkSnapshot(),
+        storage: getStorageSnapshot(),
+      };
+    },
+    getState(controllerName) {
+      const controllers = getControllersSnapshot();
+      const match = controllers.find((c) => c.name === controllerName || c.instanceId === controllerName);
+      return match ? match.state : null;
+    },
+    refresh(fragmentName) {
+      return runtime.fragments ? runtime.fragments.refresh(fragmentName) : Promise.resolve();
+    },
+    highlight(controllerOrFragmentName) {
+      const controllers = getControllersSnapshot();
+      const ctrl = controllers.find((c) => c.name === controllerOrFragmentName || c.instanceId === controllerOrFragmentName);
+      if (ctrl && ctrl.el) {
+        return highlightElement(ctrl.el);
+      }
+      const fragments = getFragmentsSnapshot();
+      const frag = fragments.find((f) => f.name === controllerOrFragmentName || f.instanceId === controllerOrFragmentName);
+      if (frag && frag.el) {
+        return highlightElement(frag.el);
+      }
+      return false;
+    },
+    destroy() {
+      document.removeEventListener('keydown', onKeyDown);
+      if (pollTimer) clearInterval(pollTimer);
+      try {
+        host.remove();
+      } catch (_) {}
+      if (typeof window !== 'undefined' && window.__WEBSPRESSO_DEVTOOLS__ === devtoolApi) {
+        delete window.__WEBSPRESSO_DEVTOOLS__;
+      }
+    },
+  };
+
+  host.__webspressoDevtoolInstance = devtoolApi;
+
+  if (typeof window !== 'undefined') {
+    window.__WEBSPRESSO_DEVTOOLS__ = devtoolApi;
+  }
+
+  return devtoolApi;
+}
+
+module.exports = {
+  mountDevtool,
+  highlightElement,
+  setupReduxDevToolsBridge,
+  formatJsonHtml,
+};
+
+},
     "./controller": function(module, exports, require) {
 'use strict';
 
@@ -4842,7 +7241,8 @@ module.exports = {
 const { createFormHandle } = require('./forms');
 const { createApiClient } = require('./api');
 const { defaultStorage, createClientStorage } = require('./storage');
-const { decorateElement } = require('./utils');
+const { createClientServiceRegistry } = require('./services');
+const { decorateElement, parseDurationMs, parseRefetchMode } = require('./utils');
 
 let instanceSeq = 0;
 let activeControllerContext = null;
@@ -5294,6 +7694,14 @@ function createControllerRuntime(options = {}) {
   const debug = options.debug || null;
   const baseApiConfig = options.apiConfig || {};
   const lazyLoader = typeof options.lazyLoader === 'function' ? options.lazyLoader : null;
+  const services =
+    options.services && typeof options.services.get === 'function'
+      ? options.services
+      : createClientServiceRegistry({
+          root: options.root || null,
+          debug,
+          services: options.services || undefined,
+        });
 
   // Registered controller definitions: name -> { name, definition, sourcePath }
   const definitions = new Map();
@@ -5471,10 +7879,29 @@ function createControllerRuntime(options = {}) {
       const taskKey = taskOpts.key || `task_${++taskSeq}`;
       const signalPrefix = `__w_inst_${instanceId}.task_${taskKey}`;
 
+      // React Query-style automatic revalidation options for tasks
+      const staleTimeMs = parseDurationMs(taskOpts.staleTime, 0);
+      const refetchOnMountMode = parseRefetchMode(
+        taskOpts.refetchOnMount !== undefined ? taskOpts.refetchOnMount : taskOpts.refetchOnVisit,
+        false
+      );
+      const refetchOnFocusMode = parseRefetchMode(
+        taskOpts.refetchOnWindowFocus !== undefined ? taskOpts.refetchOnWindowFocus : taskOpts.refetchOnFocus,
+        false
+      );
+      const refetchOnReconnectMode = parseRefetchMode(taskOpts.refetchOnReconnect, false);
+      const refetchIntervalMs = parseDurationMs(taskOpts.refetchInterval, 0);
+      const refetchIntervalInBg =
+        parseRefetchMode(taskOpts.refetchIntervalInBackground, false) === true;
+
       let currentRunVersion = 0;
       let activeRuns = 0;
       let inFlightAbort = null;
       let queuedPromise = Promise.resolve();
+      let _lastUpdatedAt = 0;
+      let taskIntervalTimer = null;
+      let focusDebounceTimer = null;
+      const taskCleanupListeners = [];
 
       datastar.engine.signals.setValue(`${signalPrefix}.pending`, false);
       datastar.engine.signals.setValue(`${signalPrefix}.data`, null);
@@ -5485,6 +7912,14 @@ function createControllerRuntime(options = {}) {
       let _data = null;
       let _error = null;
       let _stale = false;
+
+      function isTaskStale(mode = true) {
+        if (!mode) return false;
+        if (mode === 'always') return true;
+        if (_lastUpdatedAt === 0) return true;
+        if (staleTimeMs <= 0) return true;
+        return Date.now() - _lastUpdatedAt >= staleTimeMs;
+      }
 
       function updateSignal(name, val) {
         datastar.engine.signals.setValue(`${signalPrefix}.${name}`, val);
@@ -5546,6 +7981,7 @@ function createControllerRuntime(options = {}) {
           _data = result;
           _error = null;
           _stale = false;
+          _lastUpdatedAt = Date.now();
           updateSignal('data', result);
           updateSignal('error', null);
           updateSignal('stale', false);
@@ -5611,15 +8047,102 @@ function createControllerRuntime(options = {}) {
         },
         get stale() {
           datastar.engine.signals.value(`${signalPrefix}.stale`);
-          return _stale;
+          return _stale || (_lastUpdatedAt > 0 && staleTimeMs > 0 && Date.now() - _lastUpdatedAt >= staleTimeMs);
         },
+        get lastUpdatedAt() {
+          return _lastUpdatedAt;
+        },
+        isStale: () => isTaskStale(true),
         run,
         cancel,
         dispose() {
+          if (taskIntervalTimer) {
+            clearInterval(taskIntervalTimer);
+            taskIntervalTimer = null;
+          }
+          if (focusDebounceTimer) {
+            clearTimeout(focusDebounceTimer);
+            focusDebounceTimer = null;
+          }
+          while (taskCleanupListeners.length > 0) {
+            const removeFn = taskCleanupListeners.pop();
+            try {
+              removeFn();
+            } catch (_e) {}
+          }
           cancel();
           datastar.engine.signals.remove(signalPrefix);
         },
       };
+
+      // Set up automatic background revalidation (mount / focus / reconnect / interval)
+      const doc = (rootEl && rootEl.ownerDocument) || (typeof document !== 'undefined' ? document : null);
+      const win = (doc && doc.defaultView) || (typeof window !== 'undefined' ? window : null);
+
+      function isDocHidden() {
+        return Boolean(doc && doc.visibilityState === 'hidden');
+      }
+
+      if (refetchOnMountMode) {
+        Promise.resolve().then(() => {
+          if (isConnected() && isTaskStale(refetchOnMountMode)) {
+            run().catch(() => {});
+          }
+        });
+      }
+
+      if (refetchOnFocusMode) {
+        const onTaskFocus = () => {
+          if (!isConnected() || isDocHidden()) return;
+          if (focusDebounceTimer) clearTimeout(focusDebounceTimer);
+          focusDebounceTimer = setTimeout(() => {
+            focusDebounceTimer = null;
+            if (isConnected() && !isDocHidden() && activeRuns === 0 && isTaskStale(refetchOnFocusMode)) {
+              run().catch(() => {});
+            }
+          }, 20);
+        };
+        const onVisChange = () => {
+          if (!isDocHidden()) onTaskFocus();
+        };
+        if (doc && typeof doc.addEventListener === 'function') {
+          doc.addEventListener('visibilitychange', onVisChange);
+          taskCleanupListeners.push(() => doc.removeEventListener('visibilitychange', onVisChange));
+        }
+        if (win && typeof win.addEventListener === 'function') {
+          win.addEventListener('focus', onTaskFocus);
+          taskCleanupListeners.push(() => win.removeEventListener('focus', onTaskFocus));
+        }
+      }
+
+      if (refetchOnReconnectMode && win && typeof win.addEventListener === 'function') {
+        const onTaskOnline = () => {
+          if (isConnected() && activeRuns === 0 && isTaskStale(refetchOnReconnectMode)) {
+            run().catch(() => {});
+          }
+        };
+        win.addEventListener('online', onTaskOnline);
+        taskCleanupListeners.push(() => win.removeEventListener('online', onTaskOnline));
+      }
+
+      if (refetchIntervalMs > 0) {
+        taskIntervalTimer = setInterval(() => {
+          if (!isConnected()) {
+            if (taskIntervalTimer) {
+              clearInterval(taskIntervalTimer);
+              taskIntervalTimer = null;
+            }
+            return;
+          }
+          if (!refetchIntervalInBg && isDocHidden()) return;
+          if (activeRuns === 0) {
+            run().catch(() => {});
+          }
+        }, refetchIntervalMs);
+        if (taskIntervalTimer && typeof taskIntervalTimer.unref === 'function') {
+          taskIntervalTimer.unref();
+        }
+      }
 
       scopedTasksList.push(taskObj);
       return taskObj;
@@ -5893,6 +8416,7 @@ function createControllerRuntime(options = {}) {
         api: scopedApi,
         datastar,
         debug,
+        services,
         ...formOptions,
       });
       scopedForms.set(handle.name, handle);
@@ -5992,6 +8516,7 @@ function createControllerRuntime(options = {}) {
         return state;
       },
       api: scopedApi,
+      services,
       forms: formsAccessor,
       target: targetAccessor,
       targets: targetsAccessor,
@@ -6188,7 +8713,7 @@ function createControllerRuntime(options = {}) {
         const formsInScope = rootEl.querySelectorAll('form[data-w-form]');
         for (let i = 0; i < formsInScope.length; i++) {
           if (isTargetInControllerScope(rootEl, formsInScope[i])) {
-            createFormHandle(formsInScope[i], { api: scopedApi, datastar, debug });
+            createFormHandle(formsInScope[i], { api: scopedApi, datastar, debug, services });
           }
         }
       }
@@ -6257,6 +8782,7 @@ function createControllerRuntime(options = {}) {
       name: controllerName,
       el: rootEl,
       state,
+      tasks: tasksProxy,
       ctx,
       invokeAction,
       actions: new Proxy({}, {
@@ -6466,6 +8992,7 @@ function createControllerRuntime(options = {}) {
           api: defaultApi,
           datastar,
           debug,
+          services,
         });
         standaloneForms.set(formEl, handle);
       }
@@ -6490,6 +9017,7 @@ function createControllerRuntime(options = {}) {
 
   return {
     register,
+    services,
     hasController(name) {
       return definitions.has(name);
     },
@@ -6534,6 +9062,7 @@ module.exports = {
 'use strict';
 
 const { defaultStorage } = require('./storage');
+const { parseDurationMs, parseRefetchMode } = require('./utils');
 
 /**
  * Webspresso Client-Side SSR Fragment Coordinator & Invalidation Engine
@@ -6643,7 +9172,22 @@ function createFragmentCoordinator(options = {}) {
   const debug = options.debug || null;
   const defaultTimeout = typeof options.timeout === 'number' ? options.timeout : 15000;
 
-  // Map<instanceId, { instanceId, name, pagePath, input, dependsOn: Set<string>, version: number, el: Element, abortController: AbortController|null }>
+  // React Query-style automatic revalidation defaults
+  const defaultStaleTime = parseDurationMs(options.staleTime, 0);
+  const defaultRefetchOnWindowFocus = parseRefetchMode(
+    options.refetchOnWindowFocus !== undefined ? options.refetchOnWindowFocus : options.refetchOnFocus,
+    false
+  );
+  const defaultRefetchOnReconnect = parseRefetchMode(options.refetchOnReconnect, false);
+  const defaultRefetchOnMount = parseRefetchMode(
+    options.refetchOnMount !== undefined ? options.refetchOnMount : options.refetchOnVisit,
+    false
+  );
+  const defaultRefetchInterval = parseDurationMs(options.refetchInterval, 0);
+  const defaultRefetchIntervalInBackground =
+    parseRefetchMode(options.refetchIntervalInBackground, false) === true;
+
+  // Map<instanceId, { instanceId, name, pagePath, input, dependsOn: Set<string>, version: number, el: Element, abortController: AbortController|null, ... }>
   const instances = new Map();
 
   // Coalescing & in-flight state for tag invalidations
@@ -6654,6 +9198,206 @@ function createFragmentCoordinator(options = {}) {
   let followUpNeeded = false;
   let lastFailedBatch = null;
   const inflightBatchWaiters = [];
+
+  // Automatic refetch (focus / reconnect / mount / interval) state
+  const pendingAutoInstanceIds = new Set();
+  let autoBatchScheduled = false;
+  let focusDebounceTimer = null;
+  let isDisposed = false;
+  let lifecycleListenersAttached = false;
+
+  function isDocumentHidden() {
+    const root = getRoot();
+    const doc = root && root.nodeType === 9 ? root : root && root.ownerDocument ? root.ownerDocument : typeof document !== 'undefined' ? document : null;
+    return Boolean(doc && doc.visibilityState === 'hidden');
+  }
+
+  function isInstanceStale(inst, mode) {
+    if (!inst || !mode) return false;
+    if (mode === 'always') return true;
+    const staleMs = typeof inst.staleTime === 'number' ? inst.staleTime : 0;
+    if (staleMs <= 0) return true;
+    const elapsed = Date.now() - (inst.lastUpdatedAt || 0);
+    return elapsed >= staleMs;
+  }
+
+  function clearInstanceInterval(inst) {
+    if (inst && inst.intervalTimer) {
+      clearInterval(inst.intervalTimer);
+      inst.intervalTimer = null;
+      inst.activeIntervalMs = 0;
+    }
+  }
+
+  function syncInstanceInterval(inst) {
+    if (!inst || isDisposed) return;
+    const targetMs = typeof inst.refetchInterval === 'number' && inst.refetchInterval > 0 ? inst.refetchInterval : 0;
+    if (targetMs <= 0) {
+      clearInstanceInterval(inst);
+      return;
+    }
+    if (inst.intervalTimer && inst.activeIntervalMs === targetMs) {
+      return;
+    }
+    clearInstanceInterval(inst);
+    inst.activeIntervalMs = targetMs;
+    inst.intervalTimer = setInterval(() => {
+      if (isDisposed || !inst.el || inst.el.isConnected === false) {
+        clearInstanceInterval(inst);
+        return;
+      }
+      if (!inst.refetchIntervalInBackground && isDocumentHidden()) {
+        return;
+      }
+      scheduleAutoRefresh([inst.instanceId], 'interval');
+    }, targetMs);
+    if (inst.intervalTimer && typeof inst.intervalTimer.unref === 'function') {
+      inst.intervalTimer.unref();
+    }
+  }
+
+  function scheduleAutoRefresh(instanceIds, reason = 'auto') {
+    if (isDisposed || !Array.isArray(instanceIds) || instanceIds.length === 0) return;
+    for (const id of instanceIds) {
+      if (id) pendingAutoInstanceIds.add(id);
+    }
+    if (autoBatchScheduled || pendingAutoInstanceIds.size === 0) return;
+    autoBatchScheduled = true;
+
+    Promise.resolve().then(async () => {
+      autoBatchScheduled = false;
+      if (isDisposed || pendingAutoInstanceIds.size === 0) return;
+      const idsToRefresh = Array.from(pendingAutoInstanceIds);
+      pendingAutoInstanceIds.clear();
+
+      // Skip background auto-refresh if a mutation invalidation batch is currently in flight
+      if (inFlightBatchCount > 0) return;
+
+      const candidates = [];
+      for (const id of idsToRefresh) {
+        const inst = instances.get(id);
+        if (inst && inst.el && inst.el.isConnected !== false && !inst.abortController) {
+          candidates.push(inst);
+        }
+      }
+      if (candidates.length === 0) return;
+
+      const deduped = deduplicateParentChildFragments(candidates);
+      const targets = deduped.map((inst) => {
+        inst.version += 1;
+        return {
+          instanceId: inst.instanceId,
+          name: inst.name,
+          pagePath: inst.pagePath,
+          input: { ...inst.input },
+          reqVersion: inst.version,
+        };
+      });
+
+      if (debug && typeof debug.recordEvent === 'function') {
+        debug.recordEvent('fragment:auto-refetch', {
+          reason,
+          fragments: targets.map((t) => t.instanceId),
+        });
+      }
+
+      try {
+        await executeBatchRefresh(targets);
+      } catch (_err) {
+        // Background auto-refetch errors are non-fatal
+      }
+    });
+  }
+
+  function triggerFocusRefetch() {
+    if (isDisposed || isDocumentHidden()) return;
+    if (focusDebounceTimer) clearTimeout(focusDebounceTimer);
+    focusDebounceTimer = setTimeout(() => {
+      focusDebounceTimer = null;
+      if (isDisposed || isDocumentHidden()) return;
+      syncDomInstances();
+      const matchedIds = [];
+      for (const inst of instances.values()) {
+        if (isInstanceStale(inst, inst.refetchOnWindowFocus)) {
+          matchedIds.push(inst.instanceId);
+        }
+      }
+      if (matchedIds.length > 0) {
+        scheduleAutoRefresh(matchedIds, 'window-focus');
+      }
+    }, 20);
+  }
+
+  function triggerReconnectRefetch() {
+    if (isDisposed) return;
+    syncDomInstances();
+    const matchedIds = [];
+    for (const inst of instances.values()) {
+      if (isInstanceStale(inst, inst.refetchOnReconnect)) {
+        matchedIds.push(inst.instanceId);
+      }
+    }
+    if (matchedIds.length > 0) {
+      scheduleAutoRefresh(matchedIds, 'reconnect');
+    }
+  }
+
+  function onVisibilityChange() {
+    if (!isDocumentHidden()) {
+      triggerFocusRefetch();
+    }
+  }
+
+  function onPageShow(event) {
+    if (isDisposed) return;
+    if (event && event.persisted) {
+      syncDomInstances();
+      const matchedIds = [];
+      for (const inst of instances.values()) {
+        const mode = inst.refetchOnMount || inst.refetchOnWindowFocus;
+        if (isInstanceStale(inst, mode)) {
+          matchedIds.push(inst.instanceId);
+        }
+      }
+      if (matchedIds.length > 0) {
+        scheduleAutoRefresh(matchedIds, 'pageshow');
+      }
+    }
+  }
+
+  function ensureLifecycleListeners() {
+    if (lifecycleListenersAttached || isDisposed) return;
+    const root = getRoot();
+    const doc = root && root.nodeType === 9 ? root : root && root.ownerDocument ? root.ownerDocument : typeof document !== 'undefined' ? document : null;
+    const win = (doc && doc.defaultView) || (typeof window !== 'undefined' ? window : null);
+
+    if (doc && typeof doc.addEventListener === 'function') {
+      doc.addEventListener('visibilitychange', onVisibilityChange);
+    }
+    if (win && typeof win.addEventListener === 'function') {
+      win.addEventListener('focus', triggerFocusRefetch);
+      win.addEventListener('online', triggerReconnectRefetch);
+      win.addEventListener('pageshow', onPageShow);
+    }
+    lifecycleListenersAttached = true;
+  }
+
+  function removeLifecycleListeners() {
+    if (!lifecycleListenersAttached) return;
+    const root = getRoot();
+    const doc = root && root.nodeType === 9 ? root : root && root.ownerDocument ? root.ownerDocument : typeof document !== 'undefined' ? document : null;
+    const win = (doc && doc.defaultView) || (typeof window !== 'undefined' ? window : null);
+
+    if (doc && typeof doc.removeEventListener === 'function') {
+      doc.removeEventListener('visibilitychange', onVisibilityChange);
+    }
+    if (win && typeof win.removeEventListener === 'function') {
+      win.removeEventListener('focus', triggerFocusRefetch);
+      win.removeEventListener('online', triggerReconnectRefetch);
+      win.removeEventListener('pageshow', onPageShow);
+    }
+    lifecycleListenersAttached = false;
+  }
 
   /**
    * Scan DOM and synchronize tracked `[data-w-fragment]` instances.
@@ -6709,6 +9453,34 @@ function createFragmentCoordinator(options = {}) {
         }
       }
 
+      // Parse React Query-style automatic revalidation attributes
+      const staleTime = parseDurationMs(el.getAttribute('data-w-stale-time'), defaultStaleTime);
+      const rawFocusAttr =
+        el.getAttribute('data-w-refetch-on-focus') ??
+        el.getAttribute('data-w-refetch-on-window-focus');
+      const refetchOnWindowFocus = parseRefetchMode(rawFocusAttr, defaultRefetchOnWindowFocus);
+      const refetchOnReconnect = parseRefetchMode(
+        el.getAttribute('data-w-refetch-on-reconnect'),
+        defaultRefetchOnReconnect
+      );
+      const rawMountAttr =
+        el.getAttribute('data-w-refetch-on-mount') ??
+        el.getAttribute('data-w-refetch-on-visit');
+      const refetchOnMount = parseRefetchMode(rawMountAttr, defaultRefetchOnMount);
+      const refetchInterval = parseDurationMs(
+        el.getAttribute('data-w-refetch-interval'),
+        defaultRefetchInterval
+      );
+      const refetchIntervalInBackground =
+        parseRefetchMode(
+          el.getAttribute('data-w-refetch-in-background'),
+          defaultRefetchIntervalInBackground
+        ) === true;
+
+      if (refetchOnWindowFocus || refetchOnReconnect || refetchOnMount) {
+        ensureLifecycleListeners();
+      }
+
       const existing = instances.get(instanceId);
       if (existing) {
         existing.name = name;
@@ -6719,8 +9491,15 @@ function createFragmentCoordinator(options = {}) {
           existing.input = effectiveInput;
         }
         existing.persistInput = isInputPersistEnabled ? { type: inputStorageType, key: inputStorageKey } : null;
+        existing.staleTime = staleTime;
+        existing.refetchOnWindowFocus = refetchOnWindowFocus;
+        existing.refetchOnReconnect = refetchOnReconnect;
+        existing.refetchOnMount = refetchOnMount;
+        existing.refetchInterval = refetchInterval;
+        existing.refetchIntervalInBackground = refetchIntervalInBackground;
+        syncInstanceInterval(existing);
       } else {
-        instances.set(instanceId, {
+        const created = {
           instanceId,
           name,
           pagePath,
@@ -6730,7 +9509,21 @@ function createFragmentCoordinator(options = {}) {
           el,
           abortController: null,
           persistInput: isInputPersistEnabled ? { type: inputStorageType, key: inputStorageKey } : null,
-        });
+          lastUpdatedAt: Date.now(),
+          staleTime,
+          refetchOnWindowFocus,
+          refetchOnReconnect,
+          refetchOnMount,
+          refetchInterval,
+          refetchIntervalInBackground,
+          intervalTimer: null,
+          activeIntervalMs: 0,
+        };
+        instances.set(instanceId, created);
+        syncInstanceInterval(created);
+        if (refetchOnMount === 'always' || (refetchOnMount === true && staleTime <= 0)) {
+          scheduleAutoRefresh([instanceId], 'mount');
+        }
       }
     }
 
@@ -6740,6 +9533,7 @@ function createFragmentCoordinator(options = {}) {
         const disconnected =
           !seenIds.has(id) || (inst.el && inst.el.isConnected === false);
         if (disconnected) {
+          clearInstanceInterval(inst);
           if (inst.abortController) {
             try {
               inst.abortController.abort();
@@ -6805,6 +9599,7 @@ function createFragmentCoordinator(options = {}) {
     }
 
     const patchMs = Math.max(0, Date.now() - patchStart);
+    inst.lastUpdatedAt = Date.now();
 
     // Re-sync nested fragment instances that may have been updated inside this parent fragment
     syncDomInstances(inst.el);
@@ -7414,6 +10209,24 @@ function createFragmentCoordinator(options = {}) {
     get hasFailedRefresh() {
       return Boolean(lastFailedBatch);
     },
+    dispose() {
+      isDisposed = true;
+      if (focusDebounceTimer) {
+        clearTimeout(focusDebounceTimer);
+        focusDebounceTimer = null;
+      }
+      pendingAutoInstanceIds.clear();
+      removeLifecycleListeners();
+      for (const inst of instances.values()) {
+        clearInstanceInterval(inst);
+        if (inst.abortController) {
+          try {
+            inst.abortController.abort();
+          } catch (_e) {}
+          inst.abortController = null;
+        }
+      }
+    },
   };
 }
 
@@ -7876,6 +10689,16 @@ const {
   setupReduxDevToolsBridge,
 } = require('./devtool');
 
+const {
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+} = require('./services');
+
+const {
+  createClientHostManager,
+} = require('./host');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -7924,6 +10747,14 @@ function createClientRuntime(options = {}) {
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    staleTime: options.staleTime,
+    refetchOnWindowFocus: options.refetchOnWindowFocus,
+    refetchOnFocus: options.refetchOnFocus,
+    refetchOnReconnect: options.refetchOnReconnect,
+    refetchOnMount: options.refetchOnMount,
+    refetchOnVisit: options.refetchOnVisit,
+    refetchInterval: options.refetchInterval,
+    refetchIntervalInBackground: options.refetchIntervalInBackground,
     getCsrfToken: options.getCsrfToken || (() => discoverCsrfToken(rootOption)),
     onBeforeNodeRemove(removedEl) {
       if (controllers) {
@@ -7953,11 +10784,26 @@ function createClientRuntime(options = {}) {
 
   const api = createApiClient(apiConfig);
 
+  let runtime = null;
+
+  const services =
+    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+      ? options.services
+      : createClientServiceRegistry({
+          root: rootOption,
+          api,
+          debug,
+          getRuntime: () => runtime,
+          services: options.services,
+        });
+
   controllers = createControllerRuntime({
+    root: rootOption,
     datastar,
     fragments,
     debug,
     apiConfig,
+    services,
     lazyLoader: options.lazyLoader,
   });
 
@@ -8016,19 +10862,32 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
+    if (fragments && typeof fragments.dispose === 'function') {
+      fragments.dispose();
+    }
+    services.dispose();
+    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+      try {
+        runtime.devtool.destroy();
+      } catch (_e) {}
+      runtime.devtool = null;
+    }
   }
 
-  const runtime = {
+  runtime = {
     api,
+    services,
     fragments,
     controllers,
     datastar,
     adapter: datastar,
     debug,
     register: (name, def, meta) => controllers.register(name, def, meta),
+    registerService: (name, def) => services.register(name, def),
     mount,
     unmount,
     destroy,
+    dispose: destroy,
     getControllerInstance: (el, name) => controllers.getInstanceForElement(el, name),
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
@@ -8041,6 +10900,7 @@ function createClientRuntime(options = {}) {
           api,
           datastar,
           debug,
+          services,
           ...formOpts,
         }),
     },
@@ -8057,7 +10917,32 @@ function createClientRuntime(options = {}) {
  * Boot the client runtime on DOMContentLoaded (or immediately if ready).
  */
 function bootClient(options = {}) {
+  const bootRoot = options.root || options.document || (typeof document !== 'undefined' ? document : null);
+  if (
+    options.hmr !== false &&
+    bootRoot &&
+    bootRoot.__wBootedClientRuntime &&
+    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+  ) {
+    try {
+      bootRoot.__wBootedClientRuntime.destroy();
+    } catch (_e) {}
+  }
+
   const runtime = createClientRuntime(options);
+  if (bootRoot && (typeof bootRoot === 'object' || typeof bootRoot === 'function')) {
+    try {
+      Object.defineProperty(bootRoot, '__wBootedClientRuntime', {
+        value: runtime,
+        configurable: true,
+        enumerable: false,
+        writable: true,
+      });
+    } catch (_e) {
+      bootRoot.__wBootedClientRuntime = runtime;
+    }
+  }
+
   const shouldMountDevtools =
     options.devtools === true ||
     (options.devtools !== false &&
@@ -8187,6 +11072,12 @@ module.exports = {
   getNativeStorageBackend,
   createClientStorage,
   defaultStorage,
+
+  // Client Services & Optional Lazy UI Hosts
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+  createClientHostManager,
 };
 
 
@@ -8270,6 +11161,16 @@ const {
   setupReduxDevToolsBridge,
 } = require('./devtool');
 
+const {
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+} = require('./services');
+
+const {
+  createClientHostManager,
+} = require('./host');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -8318,6 +11219,14 @@ function createClientRuntime(options = {}) {
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    staleTime: options.staleTime,
+    refetchOnWindowFocus: options.refetchOnWindowFocus,
+    refetchOnFocus: options.refetchOnFocus,
+    refetchOnReconnect: options.refetchOnReconnect,
+    refetchOnMount: options.refetchOnMount,
+    refetchOnVisit: options.refetchOnVisit,
+    refetchInterval: options.refetchInterval,
+    refetchIntervalInBackground: options.refetchIntervalInBackground,
     getCsrfToken: options.getCsrfToken || (() => discoverCsrfToken(rootOption)),
     onBeforeNodeRemove(removedEl) {
       if (controllers) {
@@ -8347,11 +11256,26 @@ function createClientRuntime(options = {}) {
 
   const api = createApiClient(apiConfig);
 
+  let runtime = null;
+
+  const services =
+    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+      ? options.services
+      : createClientServiceRegistry({
+          root: rootOption,
+          api,
+          debug,
+          getRuntime: () => runtime,
+          services: options.services,
+        });
+
   controllers = createControllerRuntime({
+    root: rootOption,
     datastar,
     fragments,
     debug,
     apiConfig,
+    services,
     lazyLoader: options.lazyLoader,
   });
 
@@ -8410,19 +11334,32 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
+    if (fragments && typeof fragments.dispose === 'function') {
+      fragments.dispose();
+    }
+    services.dispose();
+    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+      try {
+        runtime.devtool.destroy();
+      } catch (_e) {}
+      runtime.devtool = null;
+    }
   }
 
-  const runtime = {
+  runtime = {
     api,
+    services,
     fragments,
     controllers,
     datastar,
     adapter: datastar,
     debug,
     register: (name, def, meta) => controllers.register(name, def, meta),
+    registerService: (name, def) => services.register(name, def),
     mount,
     unmount,
     destroy,
+    dispose: destroy,
     getControllerInstance: (el, name) => controllers.getInstanceForElement(el, name),
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
@@ -8435,6 +11372,7 @@ function createClientRuntime(options = {}) {
           api,
           datastar,
           debug,
+          services,
           ...formOpts,
         }),
     },
@@ -8451,7 +11389,32 @@ function createClientRuntime(options = {}) {
  * Boot the client runtime on DOMContentLoaded (or immediately if ready).
  */
 function bootClient(options = {}) {
+  const bootRoot = options.root || options.document || (typeof document !== 'undefined' ? document : null);
+  if (
+    options.hmr !== false &&
+    bootRoot &&
+    bootRoot.__wBootedClientRuntime &&
+    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+  ) {
+    try {
+      bootRoot.__wBootedClientRuntime.destroy();
+    } catch (_e) {}
+  }
+
   const runtime = createClientRuntime(options);
+  if (bootRoot && (typeof bootRoot === 'object' || typeof bootRoot === 'function')) {
+    try {
+      Object.defineProperty(bootRoot, '__wBootedClientRuntime', {
+        value: runtime,
+        configurable: true,
+        enumerable: false,
+        writable: true,
+      });
+    } catch (_e) {
+      bootRoot.__wBootedClientRuntime = runtime;
+    }
+  }
+
   const shouldMountDevtools =
     options.devtools === true ||
     (options.devtools !== false &&
@@ -8581,6 +11544,12 @@ module.exports = {
   getNativeStorageBackend,
   createClientStorage,
   defaultStorage,
+
+  // Client Services & Optional Lazy UI Hosts
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+  createClientHostManager,
 };
 
 
@@ -8664,6 +11633,16 @@ const {
   setupReduxDevToolsBridge,
 } = require('./devtool');
 
+const {
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+} = require('./services');
+
+const {
+  createClientHostManager,
+} = require('./host');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -8712,6 +11691,14 @@ function createClientRuntime(options = {}) {
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    staleTime: options.staleTime,
+    refetchOnWindowFocus: options.refetchOnWindowFocus,
+    refetchOnFocus: options.refetchOnFocus,
+    refetchOnReconnect: options.refetchOnReconnect,
+    refetchOnMount: options.refetchOnMount,
+    refetchOnVisit: options.refetchOnVisit,
+    refetchInterval: options.refetchInterval,
+    refetchIntervalInBackground: options.refetchIntervalInBackground,
     getCsrfToken: options.getCsrfToken || (() => discoverCsrfToken(rootOption)),
     onBeforeNodeRemove(removedEl) {
       if (controllers) {
@@ -8741,11 +11728,26 @@ function createClientRuntime(options = {}) {
 
   const api = createApiClient(apiConfig);
 
+  let runtime = null;
+
+  const services =
+    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+      ? options.services
+      : createClientServiceRegistry({
+          root: rootOption,
+          api,
+          debug,
+          getRuntime: () => runtime,
+          services: options.services,
+        });
+
   controllers = createControllerRuntime({
+    root: rootOption,
     datastar,
     fragments,
     debug,
     apiConfig,
+    services,
     lazyLoader: options.lazyLoader,
   });
 
@@ -8804,19 +11806,32 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
+    if (fragments && typeof fragments.dispose === 'function') {
+      fragments.dispose();
+    }
+    services.dispose();
+    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+      try {
+        runtime.devtool.destroy();
+      } catch (_e) {}
+      runtime.devtool = null;
+    }
   }
 
-  const runtime = {
+  runtime = {
     api,
+    services,
     fragments,
     controllers,
     datastar,
     adapter: datastar,
     debug,
     register: (name, def, meta) => controllers.register(name, def, meta),
+    registerService: (name, def) => services.register(name, def),
     mount,
     unmount,
     destroy,
+    dispose: destroy,
     getControllerInstance: (el, name) => controllers.getInstanceForElement(el, name),
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
@@ -8829,6 +11844,7 @@ function createClientRuntime(options = {}) {
           api,
           datastar,
           debug,
+          services,
           ...formOpts,
         }),
     },
@@ -8845,7 +11861,32 @@ function createClientRuntime(options = {}) {
  * Boot the client runtime on DOMContentLoaded (or immediately if ready).
  */
 function bootClient(options = {}) {
+  const bootRoot = options.root || options.document || (typeof document !== 'undefined' ? document : null);
+  if (
+    options.hmr !== false &&
+    bootRoot &&
+    bootRoot.__wBootedClientRuntime &&
+    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+  ) {
+    try {
+      bootRoot.__wBootedClientRuntime.destroy();
+    } catch (_e) {}
+  }
+
   const runtime = createClientRuntime(options);
+  if (bootRoot && (typeof bootRoot === 'object' || typeof bootRoot === 'function')) {
+    try {
+      Object.defineProperty(bootRoot, '__wBootedClientRuntime', {
+        value: runtime,
+        configurable: true,
+        enumerable: false,
+        writable: true,
+      });
+    } catch (_e) {
+      bootRoot.__wBootedClientRuntime = runtime;
+    }
+  }
+
   const shouldMountDevtools =
     options.devtools === true ||
     (options.devtools !== false &&
@@ -8975,6 +12016,12 @@ module.exports = {
   getNativeStorageBackend,
   createClientStorage,
   defaultStorage,
+
+  // Client Services & Optional Lazy UI Hosts
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+  createClientHostManager,
 };
 
 
@@ -9058,6 +12105,16 @@ const {
   setupReduxDevToolsBridge,
 } = require('./devtool');
 
+const {
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+} = require('./services');
+
+const {
+  createClientHostManager,
+} = require('./host');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -9106,6 +12163,14 @@ function createClientRuntime(options = {}) {
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    staleTime: options.staleTime,
+    refetchOnWindowFocus: options.refetchOnWindowFocus,
+    refetchOnFocus: options.refetchOnFocus,
+    refetchOnReconnect: options.refetchOnReconnect,
+    refetchOnMount: options.refetchOnMount,
+    refetchOnVisit: options.refetchOnVisit,
+    refetchInterval: options.refetchInterval,
+    refetchIntervalInBackground: options.refetchIntervalInBackground,
     getCsrfToken: options.getCsrfToken || (() => discoverCsrfToken(rootOption)),
     onBeforeNodeRemove(removedEl) {
       if (controllers) {
@@ -9135,11 +12200,26 @@ function createClientRuntime(options = {}) {
 
   const api = createApiClient(apiConfig);
 
+  let runtime = null;
+
+  const services =
+    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+      ? options.services
+      : createClientServiceRegistry({
+          root: rootOption,
+          api,
+          debug,
+          getRuntime: () => runtime,
+          services: options.services,
+        });
+
   controllers = createControllerRuntime({
+    root: rootOption,
     datastar,
     fragments,
     debug,
     apiConfig,
+    services,
     lazyLoader: options.lazyLoader,
   });
 
@@ -9198,19 +12278,32 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
+    if (fragments && typeof fragments.dispose === 'function') {
+      fragments.dispose();
+    }
+    services.dispose();
+    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+      try {
+        runtime.devtool.destroy();
+      } catch (_e) {}
+      runtime.devtool = null;
+    }
   }
 
-  const runtime = {
+  runtime = {
     api,
+    services,
     fragments,
     controllers,
     datastar,
     adapter: datastar,
     debug,
     register: (name, def, meta) => controllers.register(name, def, meta),
+    registerService: (name, def) => services.register(name, def),
     mount,
     unmount,
     destroy,
+    dispose: destroy,
     getControllerInstance: (el, name) => controllers.getInstanceForElement(el, name),
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
@@ -9223,6 +12316,7 @@ function createClientRuntime(options = {}) {
           api,
           datastar,
           debug,
+          services,
           ...formOpts,
         }),
     },
@@ -9239,7 +12333,32 @@ function createClientRuntime(options = {}) {
  * Boot the client runtime on DOMContentLoaded (or immediately if ready).
  */
 function bootClient(options = {}) {
+  const bootRoot = options.root || options.document || (typeof document !== 'undefined' ? document : null);
+  if (
+    options.hmr !== false &&
+    bootRoot &&
+    bootRoot.__wBootedClientRuntime &&
+    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+  ) {
+    try {
+      bootRoot.__wBootedClientRuntime.destroy();
+    } catch (_e) {}
+  }
+
   const runtime = createClientRuntime(options);
+  if (bootRoot && (typeof bootRoot === 'object' || typeof bootRoot === 'function')) {
+    try {
+      Object.defineProperty(bootRoot, '__wBootedClientRuntime', {
+        value: runtime,
+        configurable: true,
+        enumerable: false,
+        writable: true,
+      });
+    } catch (_e) {
+      bootRoot.__wBootedClientRuntime = runtime;
+    }
+  }
+
   const shouldMountDevtools =
     options.devtools === true ||
     (options.devtools !== false &&
@@ -9369,6 +12488,12 @@ module.exports = {
   getNativeStorageBackend,
   createClientStorage,
   defaultStorage,
+
+  // Client Services & Optional Lazy UI Hosts
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+  createClientHostManager,
 };
 
 
@@ -9452,6 +12577,16 @@ const {
   setupReduxDevToolsBridge,
 } = require('./devtool');
 
+const {
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+} = require('./services');
+
+const {
+  createClientHostManager,
+} = require('./host');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -9500,6 +12635,14 @@ function createClientRuntime(options = {}) {
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    staleTime: options.staleTime,
+    refetchOnWindowFocus: options.refetchOnWindowFocus,
+    refetchOnFocus: options.refetchOnFocus,
+    refetchOnReconnect: options.refetchOnReconnect,
+    refetchOnMount: options.refetchOnMount,
+    refetchOnVisit: options.refetchOnVisit,
+    refetchInterval: options.refetchInterval,
+    refetchIntervalInBackground: options.refetchIntervalInBackground,
     getCsrfToken: options.getCsrfToken || (() => discoverCsrfToken(rootOption)),
     onBeforeNodeRemove(removedEl) {
       if (controllers) {
@@ -9529,11 +12672,26 @@ function createClientRuntime(options = {}) {
 
   const api = createApiClient(apiConfig);
 
+  let runtime = null;
+
+  const services =
+    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+      ? options.services
+      : createClientServiceRegistry({
+          root: rootOption,
+          api,
+          debug,
+          getRuntime: () => runtime,
+          services: options.services,
+        });
+
   controllers = createControllerRuntime({
+    root: rootOption,
     datastar,
     fragments,
     debug,
     apiConfig,
+    services,
     lazyLoader: options.lazyLoader,
   });
 
@@ -9592,19 +12750,32 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
+    if (fragments && typeof fragments.dispose === 'function') {
+      fragments.dispose();
+    }
+    services.dispose();
+    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+      try {
+        runtime.devtool.destroy();
+      } catch (_e) {}
+      runtime.devtool = null;
+    }
   }
 
-  const runtime = {
+  runtime = {
     api,
+    services,
     fragments,
     controllers,
     datastar,
     adapter: datastar,
     debug,
     register: (name, def, meta) => controllers.register(name, def, meta),
+    registerService: (name, def) => services.register(name, def),
     mount,
     unmount,
     destroy,
+    dispose: destroy,
     getControllerInstance: (el, name) => controllers.getInstanceForElement(el, name),
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
@@ -9617,6 +12788,7 @@ function createClientRuntime(options = {}) {
           api,
           datastar,
           debug,
+          services,
           ...formOpts,
         }),
     },
@@ -9633,7 +12805,32 @@ function createClientRuntime(options = {}) {
  * Boot the client runtime on DOMContentLoaded (or immediately if ready).
  */
 function bootClient(options = {}) {
+  const bootRoot = options.root || options.document || (typeof document !== 'undefined' ? document : null);
+  if (
+    options.hmr !== false &&
+    bootRoot &&
+    bootRoot.__wBootedClientRuntime &&
+    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+  ) {
+    try {
+      bootRoot.__wBootedClientRuntime.destroy();
+    } catch (_e) {}
+  }
+
   const runtime = createClientRuntime(options);
+  if (bootRoot && (typeof bootRoot === 'object' || typeof bootRoot === 'function')) {
+    try {
+      Object.defineProperty(bootRoot, '__wBootedClientRuntime', {
+        value: runtime,
+        configurable: true,
+        enumerable: false,
+        writable: true,
+      });
+    } catch (_e) {
+      bootRoot.__wBootedClientRuntime = runtime;
+    }
+  }
+
   const shouldMountDevtools =
     options.devtools === true ||
     (options.devtools !== false &&
@@ -9763,6 +12960,12 @@ module.exports = {
   getNativeStorageBackend,
   createClientStorage,
   defaultStorage,
+
+  // Client Services & Optional Lazy UI Hosts
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+  createClientHostManager,
 };
 
 
@@ -9846,6 +13049,16 @@ const {
   setupReduxDevToolsBridge,
 } = require('./devtool');
 
+const {
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+} = require('./services');
+
+const {
+  createClientHostManager,
+} = require('./host');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -9894,6 +13107,14 @@ function createClientRuntime(options = {}) {
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    staleTime: options.staleTime,
+    refetchOnWindowFocus: options.refetchOnWindowFocus,
+    refetchOnFocus: options.refetchOnFocus,
+    refetchOnReconnect: options.refetchOnReconnect,
+    refetchOnMount: options.refetchOnMount,
+    refetchOnVisit: options.refetchOnVisit,
+    refetchInterval: options.refetchInterval,
+    refetchIntervalInBackground: options.refetchIntervalInBackground,
     getCsrfToken: options.getCsrfToken || (() => discoverCsrfToken(rootOption)),
     onBeforeNodeRemove(removedEl) {
       if (controllers) {
@@ -9923,11 +13144,26 @@ function createClientRuntime(options = {}) {
 
   const api = createApiClient(apiConfig);
 
+  let runtime = null;
+
+  const services =
+    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+      ? options.services
+      : createClientServiceRegistry({
+          root: rootOption,
+          api,
+          debug,
+          getRuntime: () => runtime,
+          services: options.services,
+        });
+
   controllers = createControllerRuntime({
+    root: rootOption,
     datastar,
     fragments,
     debug,
     apiConfig,
+    services,
     lazyLoader: options.lazyLoader,
   });
 
@@ -9986,19 +13222,32 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
+    if (fragments && typeof fragments.dispose === 'function') {
+      fragments.dispose();
+    }
+    services.dispose();
+    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+      try {
+        runtime.devtool.destroy();
+      } catch (_e) {}
+      runtime.devtool = null;
+    }
   }
 
-  const runtime = {
+  runtime = {
     api,
+    services,
     fragments,
     controllers,
     datastar,
     adapter: datastar,
     debug,
     register: (name, def, meta) => controllers.register(name, def, meta),
+    registerService: (name, def) => services.register(name, def),
     mount,
     unmount,
     destroy,
+    dispose: destroy,
     getControllerInstance: (el, name) => controllers.getInstanceForElement(el, name),
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
@@ -10011,6 +13260,7 @@ function createClientRuntime(options = {}) {
           api,
           datastar,
           debug,
+          services,
           ...formOpts,
         }),
     },
@@ -10027,7 +13277,32 @@ function createClientRuntime(options = {}) {
  * Boot the client runtime on DOMContentLoaded (or immediately if ready).
  */
 function bootClient(options = {}) {
+  const bootRoot = options.root || options.document || (typeof document !== 'undefined' ? document : null);
+  if (
+    options.hmr !== false &&
+    bootRoot &&
+    bootRoot.__wBootedClientRuntime &&
+    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+  ) {
+    try {
+      bootRoot.__wBootedClientRuntime.destroy();
+    } catch (_e) {}
+  }
+
   const runtime = createClientRuntime(options);
+  if (bootRoot && (typeof bootRoot === 'object' || typeof bootRoot === 'function')) {
+    try {
+      Object.defineProperty(bootRoot, '__wBootedClientRuntime', {
+        value: runtime,
+        configurable: true,
+        enumerable: false,
+        writable: true,
+      });
+    } catch (_e) {
+      bootRoot.__wBootedClientRuntime = runtime;
+    }
+  }
+
   const shouldMountDevtools =
     options.devtools === true ||
     (options.devtools !== false &&
@@ -10157,6 +13432,12 @@ module.exports = {
   getNativeStorageBackend,
   createClientStorage,
   defaultStorage,
+
+  // Client Services & Optional Lazy UI Hosts
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+  createClientHostManager,
 };
 
 
@@ -10240,6 +13521,16 @@ const {
   setupReduxDevToolsBridge,
 } = require('./devtool');
 
+const {
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+} = require('./services');
+
+const {
+  createClientHostManager,
+} = require('./host');
+
 let _serverFragments = null;
 function getServerFragments() {
   if (!_serverFragments) {
@@ -10288,6 +13579,14 @@ function createClientRuntime(options = {}) {
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    staleTime: options.staleTime,
+    refetchOnWindowFocus: options.refetchOnWindowFocus,
+    refetchOnFocus: options.refetchOnFocus,
+    refetchOnReconnect: options.refetchOnReconnect,
+    refetchOnMount: options.refetchOnMount,
+    refetchOnVisit: options.refetchOnVisit,
+    refetchInterval: options.refetchInterval,
+    refetchIntervalInBackground: options.refetchIntervalInBackground,
     getCsrfToken: options.getCsrfToken || (() => discoverCsrfToken(rootOption)),
     onBeforeNodeRemove(removedEl) {
       if (controllers) {
@@ -10317,11 +13616,26 @@ function createClientRuntime(options = {}) {
 
   const api = createApiClient(apiConfig);
 
+  let runtime = null;
+
+  const services =
+    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+      ? options.services
+      : createClientServiceRegistry({
+          root: rootOption,
+          api,
+          debug,
+          getRuntime: () => runtime,
+          services: options.services,
+        });
+
   controllers = createControllerRuntime({
+    root: rootOption,
     datastar,
     fragments,
     debug,
     apiConfig,
+    services,
     lazyLoader: options.lazyLoader,
   });
 
@@ -10380,19 +13694,32 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
+    if (fragments && typeof fragments.dispose === 'function') {
+      fragments.dispose();
+    }
+    services.dispose();
+    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+      try {
+        runtime.devtool.destroy();
+      } catch (_e) {}
+      runtime.devtool = null;
+    }
   }
 
-  const runtime = {
+  runtime = {
     api,
+    services,
     fragments,
     controllers,
     datastar,
     adapter: datastar,
     debug,
     register: (name, def, meta) => controllers.register(name, def, meta),
+    registerService: (name, def) => services.register(name, def),
     mount,
     unmount,
     destroy,
+    dispose: destroy,
     getControllerInstance: (el, name) => controllers.getInstanceForElement(el, name),
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
@@ -10405,6 +13732,7 @@ function createClientRuntime(options = {}) {
           api,
           datastar,
           debug,
+          services,
           ...formOpts,
         }),
     },
@@ -10421,7 +13749,32 @@ function createClientRuntime(options = {}) {
  * Boot the client runtime on DOMContentLoaded (or immediately if ready).
  */
 function bootClient(options = {}) {
+  const bootRoot = options.root || options.document || (typeof document !== 'undefined' ? document : null);
+  if (
+    options.hmr !== false &&
+    bootRoot &&
+    bootRoot.__wBootedClientRuntime &&
+    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+  ) {
+    try {
+      bootRoot.__wBootedClientRuntime.destroy();
+    } catch (_e) {}
+  }
+
   const runtime = createClientRuntime(options);
+  if (bootRoot && (typeof bootRoot === 'object' || typeof bootRoot === 'function')) {
+    try {
+      Object.defineProperty(bootRoot, '__wBootedClientRuntime', {
+        value: runtime,
+        configurable: true,
+        enumerable: false,
+        writable: true,
+      });
+    } catch (_e) {
+      bootRoot.__wBootedClientRuntime = runtime;
+    }
+  }
+
   const shouldMountDevtools =
     options.devtools === true ||
     (options.devtools !== false &&
@@ -10551,8 +13904,126 @@ module.exports = {
   getNativeStorageBackend,
   createClientStorage,
   defaultStorage,
+
+  // Client Services & Optional Lazy UI Hosts
+  defineClientService,
+  createClientServiceRegistry,
+  createServiceError,
+  createClientHostManager,
 };
 
+
+},
+    "./services/toast": function(module, exports, require) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const client_1 = require("../../../core/client");
+let toastSeq = 0;
+exports.default = (0, client_1.defineClientService)({
+    create({ mountHost, onCleanup }) {
+        const host = mountHost('toast', {
+            className: 'demo-toast-host',
+            attributes: {
+                role: 'status',
+                'aria-live': 'polite',
+            },
+        });
+        const items = new Map();
+        function dismiss(id) {
+            if (!id) {
+                for (const el of items.values()) {
+                    if (el.parentNode)
+                        el.parentNode.removeChild(el);
+                }
+                items.clear();
+                return;
+            }
+            const target = items.get(id);
+            if (target) {
+                if (target.parentNode)
+                    target.parentNode.removeChild(target);
+                items.delete(id);
+            }
+        }
+        function success(message) {
+            const id = `toast_${++toastSeq}`;
+            const doc = host.el.ownerDocument || document;
+            const itemEl = doc.createElement('div');
+            itemEl.className = 'demo-toast-item';
+            itemEl.setAttribute('data-toast-id', id);
+            itemEl.textContent = String(message || '');
+            if (typeof itemEl.addEventListener === 'function') {
+                itemEl.addEventListener('click', () => dismiss(id));
+            }
+            host.el.appendChild(itemEl);
+            items.set(id, itemEl);
+            return id;
+        }
+        onCleanup(() => {
+            items.clear();
+        });
+        return {
+            success,
+            dismiss,
+            count: () => items.size,
+        };
+    },
+});
+
+},
+    "./services/clipboard": function(module, exports, require) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const client_1 = require("../../../core/client");
+exports.default = (0, client_1.defineClientService)({
+    create({ onCleanup }) {
+        let lastValue = null;
+        async function copy(text) {
+            const value = String(text ?? '');
+            lastValue = value;
+            if (typeof navigator !== 'undefined' &&
+                navigator.clipboard &&
+                typeof navigator.clipboard.writeText === 'function') {
+                try {
+                    await navigator.clipboard.writeText(value);
+                }
+                catch (_e) {
+                    // Fallback retains in-memory lastValue in headless/non-HTTPS environments
+                }
+            }
+            return true;
+        }
+        onCleanup(() => {
+            lastValue = null;
+        });
+        return {
+            copy,
+            lastCopied: () => lastValue,
+        };
+    },
+});
+
+},
+    "./components/quick-share.client": function(module, exports, require) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const client_1 = require("../../../core/client");
+exports.default = (0, client_1.defineController)({
+    name: 'quick-share',
+    state: () => ({
+        copiedCount: 0,
+    }),
+    actions: {
+        async sharePage({ state, services }, _event, actionEl) {
+            const label = actionEl?.data('share-text') || 'Task & Engineering Backlog';
+            const clipboard = await services.get('clipboard');
+            await clipboard.copy(label);
+            state.copiedCount += 1;
+            const toast = await services.get('toast');
+            toast.success(`Copied: ${label}`);
+        },
+    },
+});
 
 },
     "./pages/todos.client": function(module, exports, require) {
@@ -10595,12 +14066,32 @@ exports.default = (0, client_1.defineController)({
         insights: ({ api }) => ({
             run: () => api.get('/api/todos/insights'),
             concurrency: 'latest',
+            staleTime: '10s',
+            refetchOnWindowFocus: true,
+            refetchOnReconnect: true,
         }),
     },
     connect({ forms, state }) {
         const createForm = forms.get('create-todo', {
             resetOnSuccess: true,
         });
+        if (createForm) {
+            createForm.onSuccess(async (_data, { services }) => {
+                if (!services.has('toast'))
+                    return;
+                const toast = await services.get('toast');
+                toast.success('Task added.');
+            });
+        }
+        const editForm = forms.get('edit-todo');
+        if (editForm) {
+            editForm.onSuccess(async (_data, { services }) => {
+                if (!services.has('toast'))
+                    return;
+                const toast = await services.get('toast');
+                toast.success('Draft saved.');
+            });
+        }
         // Vue-style reactive watcher: monitors selected task id and supports onCleanup
         (0, client_1.watch)(() => state.selectedTodoId, (newId, _oldId, onCleanup) => {
             let active = true;
@@ -10752,8 +14243,22 @@ exports.default = (0, client_1.defineController)({
                 editForm.reset();
             }
         },
-        async loadInsights({ tasks }) {
+        async loadInsights({ tasks, services }) {
             await tasks.insights.run();
+            if (services.has('toast')) {
+                const toast = await services.get('toast');
+                toast.success('Insights updated.');
+            }
+        },
+        async copyFilterSummary({ state, services }) {
+            const { search, status, priority } = state.applied;
+            const summary = `Filter: ${status}/${priority}${search ? ` • "${search}"` : ''} • Page ${state.page}`;
+            const clipboard = await services.get('clipboard');
+            await clipboard.copy(summary);
+            if (services.has('toast')) {
+                const toast = await services.get('toast');
+                toast.success('Filter summary copied.');
+            }
         },
     },
 });
@@ -10761,18 +14266,60 @@ exports.default = (0, client_1.defineController)({
 },
     "./client-entry": function(module, exports, require) {
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.services = void 0;
+exports.startExampleClient = startExampleClient;
 const client_1 = require("../../core/client");
 const todos_client_1 = __importDefault(require("./pages/todos.client"));
-(0, client_1.bootClient)({
-    debug: true,
-    controllers: {
-        todos: todos_client_1.default,
-    },
-});
+const quick_share_client_1 = __importDefault(require("./components/quick-share.client"));
+exports.services = {
+    toast: (0, client_1.defineClientService)({
+        load: () => Promise.resolve().then(() => __importStar(require('./services/toast'))),
+    }),
+    clipboard: (0, client_1.defineClientService)({
+        load: () => Promise.resolve().then(() => __importStar(require('./services/clipboard'))),
+    }),
+};
+function startExampleClient(options = {}) {
+    return (0, client_1.bootClient)({
+        debug: true,
+        services: exports.services,
+        controllers: {
+            todos: todos_client_1.default,
+            'quick-share': quick_share_client_1.default,
+        },
+        ...options,
+    });
+}
+if (typeof document !== 'undefined') {
+    startExampleClient();
+}
 
 }
   };

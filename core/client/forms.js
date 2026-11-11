@@ -1,6 +1,7 @@
 'use strict';
 
 const { defaultStorage } = require('./storage');
+const { isArray, setElementBusyState } = require('./utils');
 
 /**
  * Webspresso Native HTML Form Layer & Typed Form Handle
@@ -202,12 +203,12 @@ function parseFormElement(formEl, submitterOrOptions = null) {
   function appendValue(normName, val, forceArray) {
     if (val === undefined) return;
     if (forceArray) {
-      if (!Array.isArray(data[normName])) {
+      if (!isArray(data[normName])) {
         data[normName] = [];
       }
       data[normName].push(val);
     } else if (normName in data) {
-      if (!Array.isArray(data[normName])) {
+      if (!isArray(data[normName])) {
         data[normName] = [data[normName]];
       }
       data[normName].push(val);
@@ -326,7 +327,7 @@ function parseFormElement(formEl, submitterOrOptions = null) {
     formData = new FormData();
     for (const [key, val] of Object.entries(data)) {
       if (val === undefined) continue;
-      if (Array.isArray(val)) {
+      if (isArray(val)) {
         for (const item of val) {
           if (item === undefined) continue;
           if (typeof Blob !== 'undefined' && item instanceof Blob) {
@@ -416,11 +417,15 @@ function computeFormDirty(formEl, initialSnapshot) {
  */
 function createFormHandle(formEl, options = {}) {
   if (formEl && formEl.__wFormHandle) {
+    if (options.services && typeof formEl.__wFormHandle.__setServices === 'function') {
+      formEl.__wFormHandle.__setServices(options.services);
+    }
     return formEl.__wFormHandle;
   }
 
   const api = options.api;
   const debug = options.debug || null;
+  let services = options.services || null;
   const formName =
     (formEl && formEl.getAttribute && formEl.getAttribute('data-w-form')) ||
     (formEl && formEl.getAttribute && formEl.getAttribute('name')) ||
@@ -615,32 +620,32 @@ function createFormHandle(formEl, options = {}) {
    * Toggle pending state on the form and submit buttons to prevent double submissions.
    */
   function setPendingState(nextPending, activeSubmitter = null) {
-    pending = Boolean(nextPending);
+    const next = Boolean(nextPending);
+    if (pending === next) return;
+    pending = next;
     if (!formEl) return;
 
     if (pending) {
       formEl.setAttribute('aria-busy', 'true');
       formEl.setAttribute('data-w-pending', 'true');
+      formEl.setAttribute('data-w-busy', 'true');
     } else {
       formEl.removeAttribute('aria-busy');
       formEl.removeAttribute('data-w-pending');
+      formEl.removeAttribute('data-w-busy');
     }
 
     const submitButtons = formEl.querySelectorAll
       ? formEl.querySelectorAll('button[type="submit"], button:not([type]), input[type="submit"]')
       : [];
+    let submitterHandled = false;
     for (let i = 0; i < submitButtons.length; i++) {
       const btn = submitButtons[i];
-      if (btn.hasAttribute('data-w-disabled')) continue; // Managed by controller binding
-      if (pending) {
-        btn.__wWasDisabled = Boolean(btn.disabled);
-        btn.disabled = true;
-      } else if (!btn.__wWasDisabled) {
-        btn.disabled = false;
-      }
+      if (btn === activeSubmitter) submitterHandled = true;
+      setElementBusyState(btn, pending);
     }
-    if (activeSubmitter && !activeSubmitter.hasAttribute('data-w-disabled')) {
-      activeSubmitter.disabled = pending;
+    if (activeSubmitter && !submitterHandled) {
+      setElementBusyState(activeSubmitter, pending);
     }
     notifyStateChange();
   }
@@ -734,7 +739,7 @@ function createFormHandle(formEl, options = {}) {
         if (type === 'file') continue; // Browser security prevents setting file input value
 
         if (type === 'checkbox') {
-          if (Array.isArray(val)) {
+          if (isArray(val)) {
             ctrl.checked = val.map(String).includes(String(ctrl.value));
           } else {
             ctrl.checked = Boolean(val);
@@ -743,7 +748,7 @@ function createFormHandle(formEl, options = {}) {
           ctrl.checked = String(val) === String(ctrl.value);
         } else if (ctrl.tagName === 'SELECT') {
           if (ctrl.multiple) {
-            const arr = Array.isArray(val) ? val.map(String) : [String(val)];
+            const arr = isArray(val) ? val.map(String) : [String(val)];
             const opts = ctrl.options || [];
             for (let j = 0; j < opts.length; j++) {
               opts[j].selected = arr.includes(String(opts[j].value));
@@ -923,9 +928,18 @@ function createFormHandle(formEl, options = {}) {
       }
 
       // Invoke registered success hooks. Note: Any background fragment refresh failure
-      // is handled by the fragment coordinator and NEVER puts this form into validation error state!
+      // or side-effect service error in onSuccess NEVER puts a succeeded form into validation error
+      // state or makes the completed mutation appear rolled back!
+      let hookError = null;
       for (const listener of successListeners) {
-        await listener(responseData, { values: payloadData, form: handle });
+        try {
+          await listener(responseData, { values: payloadData, form: handle, services });
+        } catch (listenerErr) {
+          if (!hookError) hookError = listenerErr;
+          if (debug && typeof debug.trackCleanupError === 'function') {
+            debug.trackCleanupError(`form_${formName}`, formName, 'form:onSuccess', listenerErr);
+          }
+        }
       }
 
       // Explicit redirect behavior
@@ -951,7 +965,7 @@ function createFormHandle(formEl, options = {}) {
         }
       }
 
-      return { ok: true, submitted: true, data: responseData, refreshOk, refreshError };
+      return { ok: true, submitted: true, data: responseData, refreshOk, refreshError, hookError };
     } catch (err) {
       if (err && err.kind === 'validation') {
         fieldErrors = { ...(err.fieldErrors || {}) };
@@ -966,7 +980,7 @@ function createFormHandle(formEl, options = {}) {
 
       for (const listener of errorListeners) {
         try {
-          await listener(err, { values: payloadData, form: handle });
+          await listener(err, { values: payloadData, form: handle, services });
         } catch (_e) {
           // Ignore
         }
@@ -1035,6 +1049,12 @@ function createFormHandle(formEl, options = {}) {
   handle = {
     name: formName,
     el: formEl,
+    get services() {
+      return services;
+    },
+    __setServices(nextServices) {
+      if (nextServices) services = nextServices;
+    },
     get pending() {
       return pending;
     },

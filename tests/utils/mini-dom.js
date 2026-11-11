@@ -182,6 +182,44 @@ class MiniElement {
     else this.removeAttribute('id');
   }
 
+  get className() {
+    return this.getAttribute('class') || '';
+  }
+
+  set className(v) {
+    if (v) this.setAttribute('class', v);
+    else this.removeAttribute('class');
+  }
+
+  get classList() {
+    const self = this;
+    function getTokens() {
+      return (self.className || '').split(/\s+/).filter(Boolean);
+    }
+    return {
+      add(...tokens) {
+        const set = new Set(getTokens());
+        for (const t of tokens) if (t) set.add(t);
+        self.className = Array.from(set).join(' ');
+      },
+      remove(...tokens) {
+        const set = new Set(getTokens());
+        for (const t of tokens) set.delete(t);
+        self.className = Array.from(set).join(' ');
+      },
+      contains(token) {
+        return getTokens().includes(token);
+      },
+      toggle(token, force) {
+        const has = this.contains(token);
+        const next = force !== undefined ? Boolean(force) : !has;
+        if (next) this.add(token);
+        else this.remove(token);
+        return next;
+      },
+    };
+  }
+
   get name() {
     return this.getAttribute('name') || '';
   }
@@ -396,6 +434,12 @@ class MiniElement {
     return child;
   }
 
+  remove() {
+    if (this.parentNode) {
+      this.parentNode.removeChild(this);
+    }
+  }
+
   replaceWith(newNode) {
     if (!this.parentNode) return;
     this.parentNode.insertBefore(newNode, this);
@@ -579,6 +623,7 @@ class MiniDocument extends MiniElement {
     this.nodeType = 9;
     this.ownerDocument = this;
     this.readyState = 'complete';
+    this.visibilityState = 'visible';
     this.cookie = '';
     this.documentElement = new MiniElement('HTML', this);
     this.head = new MiniElement('HEAD', this);
@@ -844,6 +889,7 @@ function createMiniDomEnvironment(html = '', url = 'http://localhost/notes') {
   }
 
   const parsedUrl = new URL(url, 'http://localhost');
+  const winTarget = new MiniElement('#WINDOW', null);
   const win = {
     document: doc,
     location: {
@@ -854,6 +900,15 @@ function createMiniDomEnvironment(html = '', url = 'http://localhost/notes') {
         this.href = String(nextUrl);
       },
     },
+    addEventListener(type, listener, options) {
+      return winTarget.addEventListener(type, listener, options);
+    },
+    removeEventListener(type, listener) {
+      return winTarget.removeEventListener(type, listener);
+    },
+    dispatchEvent(event) {
+      return winTarget.dispatchEvent(event);
+    },
     CustomEvent: MiniCustomEvent,
     Event: MiniEvent,
     HTMLElement: MiniElement,
@@ -863,6 +918,7 @@ function createMiniDomEnvironment(html = '', url = 'http://localhost/notes') {
     HTMLSelectElement: MiniElement,
     HTMLTextAreaElement: MiniElement,
   };
+  doc.defaultView = win;
 
   const prevGlobals = {
     document: globalThis.document,

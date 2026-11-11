@@ -799,6 +799,9 @@ Object.defineProperties(module.exports, {
   // Datastar Client Behavior Layer & SSR Fragments (core/client)
   client: { get: () => require('./core/client'), enumerable: true, configurable: true },
   defineController: { get: () => require('./core/client').defineController, enumerable: true, configurable: true },
+  defineClientService: { get: () => require('./core/client').defineClientService, enumerable: true, configurable: true },
+  createClientServiceRegistry: { get: () => require('./core/client').createClientServiceRegistry, enumerable: true, configurable: true },
+  createClientHostManager: { get: () => require('./core/client').createClientHostManager, enumerable: true, configurable: true },
   deriveControllerNameFromPath: { get: () => require('./core/client').deriveControllerNameFromPath, enumerable: true, configurable: true },
   createClientRuntime: { get: () => require('./core/client').createClientRuntime, enumerable: true, configurable: true },
   bootClient: { get: () => require('./core/client').bootClient, enumerable: true, configurable: true },

@@ -37,25 +37,40 @@ Client behavior files live alongside pages or views using `.client.ts` or `.clie
 
 ```ts
 // pages/notes.client.ts
-import { defineController } from 'webspresso/core/client';
+import { defineController } from 'webspresso/client';
 
 export default defineController({
   state: () => ({
     filter: '',
     statsLoaded: false,
     totalNotes: 0,
+    lastSavedTitle: '',
   }),
 
   connect(ctx) {
     // Scoped DOM query (never crosses into nested child controllers)
     const searchInput = ctx.target('search');
 
-    // Reactive effect cleaned up automatically when element disconnects
-    ctx.effect(() => {
-      if (ctx.state.filter.length > 0) {
-        ctx.emit('notes:filter-change', { filter: ctx.state.filter });
-      }
+    // Subscribe to form submission lifecycle hooks (returns unsubscribe cleanup)
+    const createForm = ctx.forms.get('create-note', { clearOnSuccess: true });
+    const offSuccess = createForm?.onSuccess((note) => {
+      ctx.state.lastSavedTitle = note.title;
+      ctx.emit('notes:created', { id: note.id });
     });
+
+    // Vue-style reactive watcher cleaned up automatically when element disconnects
+    ctx.watch(
+      () => ctx.state.filter,
+      (filter) => {
+        if (filter.length > 0) {
+          ctx.emit('notes:filter-change', { filter });
+        }
+      }
+    );
+
+    return () => {
+      offSuccess?.();
+    };
   },
 
   actions: {
@@ -76,12 +91,16 @@ All reactive bindings are mediated through `core/client/adapter/datastar.js` usi
 | :--- | :--- | :--- |
 | `data-w-controller` | Mounts a controller instance on the element | `data-w-controller="notes"` |
 | `data-w-target` | Marks a scoped child element for `ctx.target(name)` / `ctx.targets(name)` | `data-w-target="counter"` |
-| `data-w-on:<event>` | Binds a DOM event to a controller action | `data-w-on:click="loadStats"` |
+| `data-w-on:<event>` / `data-w-click` | Binds a DOM event (or click shorthand) to a controller action | `data-w-on:click="loadStats"` / `data-w-click="loadStats"` |
 | `data-w-text` | Binds element `textContent` to controller state or computed getter | `data-w-text="totalNotes"` |
-| `data-w-show` | Toggles element `hidden` state from a boolean state or computed path | `data-w-show="statsLoaded"` |
+| `data-w-show` | Toggles element `hidden` state from a boolean expression or computed path | `data-w-show="statsLoaded && !hasError"` |
+| `data-w-class` | Conditionally toggles CSS classes from state expressions | `data-w-class="{'is-active': isOpen}"` |
 | `data-w-disabled` | Toggles `disabled` property/attribute from a boolean state or task signal | `data-w-disabled="tasks.stats.pending"` |
 | `data-w-model` | Two-way binding between form control (`input`/`select`/`textarea`) and state | `data-w-model="draft.search"` |
-| `data-w-form` | Binds native HTML `<form>` enhancement and validation lifecycle | `data-w-form="create-note"` |
+| `data-w-form` | Binds native HTML `<form>` enhancement, validation, and submission lifecycle | `data-w-form="create-note"` |
+| `data-w-error` / `data-w-form-error` | Displays accessible field-level or form-level validation errors | `<span data-w-error="title"></span>` |
+| `data-w-persist-draft` | Auto-saves & restores unsubmitted form drafts (`session` or `local`) | `data-w-persist-draft="session"` |
+| `data-w-persist-input` | Persists SSR fragment filter/pagination input (`session` or `local`) | `data-w-persist-input="session"` |
 
 ### 3.2 Two-Way Binding (`data-w-model`) & Elimination of Direct DOM Manipulation
 Controllers no longer query or mutate DOM elements directly (e.g. `target('input')?.value = ''`). Instead, use `data-w-model="path"`:
@@ -92,27 +111,47 @@ Controllers no longer query or mutate DOM elements directly (e.g. `target('input
 - **File Input Exclusion**: File inputs are excluded from programmatic value bindings for browser security.
 
 ### 3.3 Draft vs Applied Filter Pattern
-Toolbars and search bars keep draft inputs decoupled from the active query:
+Toolbars and search bars keep draft inputs decoupled from the active query, updating `applied` state inside `refresh(..., { onSuccess })` only after the fragment refresh succeeds:
 ```ts
 export default defineController({
   state: () => ({
     draft: { search: '', status: 'all', priority: 'all' },
     applied: { search: '', status: 'all', priority: 'all' },
     page: 1,
+    filterError: null as string | null,
   }),
   actions: {
     async applyFilters({ state, refresh }) {
       const next = { ...state.draft };
-      const res = await refresh('list', { ...next, page: 1 });
-      if (res && res.ok !== false) {
-        state.applied = next;
-        state.page = 1;
-      }
+      await refresh('list', { ...next, page: 1 }, {
+        onSuccess() {
+          state.applied = next;
+          state.page = 1;
+          state.filterError = null;
+        },
+        onFailure(err) {
+          state.filterError = err.message;
+        },
+      });
     },
     async nextPage({ state, refresh }) {
       const next = state.page + 1;
-      const res = await refresh('list', { ...state.applied, page: next });
-      if (res && res.ok !== false) state.page = next;
+      await refresh('list', { ...state.applied, page: next }, {
+        onSuccess() {
+          state.page = next;
+        },
+      });
+    },
+    async resetFilters({ state, refresh }) {
+      const initial = { search: '', status: 'all', priority: 'all' };
+      await refresh('list', { ...initial, page: 1 }, {
+        onSuccess() {
+          state.draft = { ...initial };
+          state.applied = { ...initial };
+          state.page = 1;
+          state.filterError = null;
+        },
+      });
     },
   },
 });
@@ -153,7 +192,7 @@ actions: {
 ### 3.6 Lifecycle & Automatic Cleanup
 - **Instance Isolation**: Multiple instances of the same controller on a page have completely isolated `state` objects and signal namespaces.
 - **No Stale Target Caching**: `ctx.target(name)` and `ctx.targets(name)` query the live DOM dynamically on each call and never return elements belonging to nested child controllers of the same type.
-- **Automatic Teardown**: When a controller root is removed from the DOM, all `ctx.on()`, `ctx.effect()`, `ctx.interval()`, `ctx.timeout()`, `ctx.tasks`, and `ctx.signal()` resources are automatically disposed. Late async callbacks checking `ctx.isDisposed()` are prevented from mutating detached state.
+- **Automatic Teardown**: When a controller root is removed from the DOM, all `ctx.on()`, `ctx.watch()`, `ctx.effect()`, `ctx.interval()`, `ctx.timeout()`, `ctx.onError()`, `ctx.tasks`, scoped forms, and `ctx.signal` resources are automatically disposed. Late async callbacks checking `ctx.isDisposed()` are prevented from mutating detached state.
 
 ### 3.7 Action Element `.data()` API
 All action elements (`actionEl`) and target elements (`ctx.target(name)`) are enhanced with a chainable, type-coercing `.data(key?, val?)` helper:
@@ -164,7 +203,7 @@ All action elements (`actionEl`) and target elements (`ctx.target(name)`) are en
 ```
 ```ts
 actions: {
-  filterByStatus({ state, refresh }, event, actionEl) {
+  filterByStatus({ state, refresh, target }, _event, actionEl) {
     // 1. Read with automatic primitive coercion (numbers, booleans, JSON)
     const status = actionEl.data('status');       // 'active'
     const page = actionEl.data('page');           // 1 (number, not string)
@@ -172,13 +211,17 @@ actions: {
     const isOpenCamel = actionEl.data('isOpen');  // true (camelCase alias)
 
     // 2. Read all data attributes as a dictionary
-    const allData = actionEl.data();             // { status: 'active', page: 1, isOpen: true }
+    const allData = actionEl.data();              // { status: 'active', page: 1, isOpen: true }
 
-    // 3. Chainable setter (updates dataset and data-* attribute)
+    // 3. Chainable single or batch setter (updates dataset and data-* attribute)
     actionEl.data('status', 'archived');
+    actionEl.data({ page: 2, isOpen: false });
 
-    // 4. Also available on targets!
-    ctx.target('counterBadge').data('count', 5);
+    // 4. Remove attribute by passing null or undefined
+    actionEl.data('is-open', null);
+
+    // 5. Also available on targets!
+    target('counterBadge')?.data('count', 5);
   },
 }
 ```
@@ -199,9 +242,9 @@ actions: {
   - `'drop'`: Drops new requests while a request with the same `key` is already in flight.
   - `'queue'`: Serializes requests with the same `key` in FIFO order.
   - `'parallel'`: Runs all requests concurrently.
-- **Zero Automatic Mutation Retries**: `POST`, `PUT`, `PATCH`, and `DELETE` requests are never automatically retried.
+- **Zero Automatic Mutation Retries**: `POST`, `PUT`, `PATCH`, and `DELETE` requests are never automatically retried unless `retryMutations: true` is explicitly specified.
 - **Error Classification (`ClientRequestError`)**:
-  - `err.kind`: `'validation'` (400/422 with `fieldErrors`), `'http'` (4xx/5xx), `'network'` (offline/DNS), or `'canceled'` (`AbortController`).
+  - `err.kind`: `'validation'` (400/422 with `fieldErrors`), `'http'` (4xx/5xx), `'network'` (offline/DNS), `'timeout'` (408 / `REQUEST_TIMED_OUT`), or `'canceled'` (`AbortController` / dropped / superseded).
 
 ---
 
@@ -222,22 +265,68 @@ When `parseFormElement(form)` serializes a form:
    - `type="number"` or `data-w-type="number"` coerces numeric strings to `number` (`NaN`-safe).
 6. **File Inputs (`<input type="file">`)**: Automatically switches submission payload to `FormData` when files are present.
 
-### 5.2 Accessibility, Validation & Reset Semantics
-- **Field Errors & Accessibility**: On HTTP 400/422 validation errors, `createFormHandle` populates `form.fieldErrors`, sets `aria-invalid="true"` and `aria-describedby` pointing to `[data-w-error-for="<field>"]`, and focuses the first invalid control.
-- **Double-Submit Protection**: While a submission is in flight, `form.pending` is `true`, `data-w-pending="true"` is set on the `<form>`, and duplicate submits are blocked.
+### 5.2 Accessibility, Validation & Post-Success Attributes
+- **Field Errors & Accessibility**: On HTTP 400/422 validation errors, `createFormHandle` populates `form.fieldErrors` and `form.formError`, sets `aria-invalid="true"` and `aria-describedby` pointing to `[data-w-error="<field>"]` (and `[data-w-form-error]` for form-level messages), and focuses the first invalid control.
+- **Double-Submit Protection**: While a submission is in flight, `form.pending` is `true`, `aria-busy="true"` and `data-w-pending="true"` are set on the `<form>`, submit buttons are disabled, and duplicate submits are blocked.
+- **Declarative Post-Success Attributes**:
+  - `data-w-clear="true"`: Clears all inputs to blank/unchecked state on successful submission.
+  - `data-w-reset="true"`: Resets all inputs back to their initial baseline values on successful submission.
+  - `data-w-redirect="/dashboard"`: Navigates safely to the target path after successful submission.
 - **`reset()` vs `clear()`**:
   - `form.reset()` restores all controls to their initial server-rendered default values (`defaultValue` / `defaultChecked` / `defaultSelected`) or current baseline values and clears errors.
   - `form.clear()` empties all text, number, select, and checkbox controls to blank/unchecked state and clears errors.
 - **Static Form Contract Checker**: `webspresso doctor` and `webspresso build` statically compare `<form action="/api/..." method="...">` field names in `.njk` templates against the target API route's `schema.body`/`schema.query`, reporting missing required fields, type mismatches, or dynamic `{{ ... }}` field names that cannot be verified statically.
 
-### 5.3 Programmatic Form Management & Client-Driven Edit Flow
-Forms retrieved via `ctx.forms.get('edit-todo')` provide a typed API:
-- `form.fill(values, { baseline: false })`: Fills form controls and sets `form.dirty = true`.
-- `form.fill(record, { baseline: true })`: Sets a new baseline (e.g. after fetching a record from an API endpoint), resets `form.dirty = false`, and clears previous errors.
-- `form.setAction(url)` / `form.setRouteParams(params)`: Updates form target URL.
-- `form.disabled = true`: Disables all form controls during async record loading.
+### 5.3 Form Lifecycle Hooks (`onSuccess`, `onError`) & Programmatic Control
+Forms retrieved via `ctx.forms.get('form-name', options?)` (or `ctx.forms('form-name')`) provide a rich programmatic handle and lifecycle hooks:
 
-#### Edit Flow Example:
+- **Lifecycle Subscriptions**:
+  - `form.onSuccess((data, { values, form }) => void)`: Invoked after a `2xx` mutation succeeds (returns an unsubscribe function).
+  - `form.onError((err, { values, form }) => void)`: Invoked when validation (`err.kind === 'validation'`) or HTTP/network submission fails (returns an unsubscribe function).
+  - `form.subscribe((form) => void)`: Invoked whenever `pending`, `dirty`, or error state changes.
+- **Programmatic Submission & Options**:
+  - `await form.submit({ resetOnSuccess, clearOnSuccess, redirectOnSuccess, throwOnError })`: Triggers validation and submission programmatically, returning `{ ok, submitted, data, refreshOk, refreshError }`.
+- **State & Field Manipulation**:
+  - `form.fill(values, { baseline: false })`: Fills form controls and sets `form.dirty = true`.
+  - `form.fill(record, { baseline: true })`: Sets a new baseline (e.g. after fetching a record from an API endpoint), resets `form.dirty = false`, and clears previous errors.
+  - `form.setAction(url)` / `form.setRouteParams(params)`: Updates form target URL.
+  - `form.disabled = true`: Disables all form controls during async record loading.
+
+#### Form `onSuccess` & `onError` Example:
+```ts
+export default defineController({
+  state: () => ({
+    modalOpen: false,
+    toastMessage: '',
+  }),
+
+  connect({ state, forms, emit }) {
+    const createForm = forms.get('create-todo', {
+      resetOnSuccess: true,
+    });
+    if (!createForm) return;
+
+    const offSuccess = createForm.onSuccess((createdTodo, { values }) => {
+      state.modalOpen = false;
+      state.toastMessage = `Created "${createdTodo.title}" (${values.priority})`;
+      emit('todo:created', { todo: createdTodo });
+    });
+
+    const offError = createForm.onError((err) => {
+      if (err.kind !== 'validation') {
+        state.toastMessage = `Could not save task: ${err.message}`;
+      }
+    });
+
+    return () => {
+      offSuccess();
+      offError();
+    };
+  },
+});
+```
+
+#### Client-Driven Edit Flow Example:
 ```html
 <button data-w-on:click="selectTodoForEdit" data-todo-id="{{ item.id }}">Edit</button>
 ```
@@ -248,10 +337,16 @@ async selectTodoForEdit({ state, forms, api }, _event, actionEl) {
   if (!id) return;
 
   const form = forms.get('edit-todo');
+  if (!form) return;
   if (form.dirty && !window.confirm('Discard unsaved changes?')) return;
 
+  state.selectedTodoId = Number(id);
+
   // Fetch record with stale response guard ('latest')
-  const todo = await api.get(`/api/todos/${id}`, { concurrency: 'latest' });
+  const todo = await api.get(`/api/todos/${id}`, {
+    key: 'todos:edit-fetch',
+    concurrency: 'latest',
+  });
   if (!todo || form.dirty) return;
 
   form.setAction(`/api/todos/${todo.id}`);
@@ -415,34 +510,46 @@ Fragments in Webspresso communicate across 4 distinct mechanisms depending on th
    - When multiple sibling fragments refresh together, shared queries inside `load()` use `ctx.memo('key', fn)`.
    - The query executes once; subsequent fragments in the same batch receive the cached promise. The cache is destroyed immediately when the request finishes.
 3. **Programmatic Controller Control (`ctx.refresh` & `ctx.fragment`)**:
-   - A client controller can read another fragment's active input or trigger an explicit refresh with new parameters:
+   - A client controller can read another fragment's active input or trigger an explicit refresh (via `ctx.refresh(...)` or `ctx.fragment('name').refresh(...)`) with lifecycle callbacks:
      ```ts
      // Read active input of another fragment
-     const currentLimit = ctx.fragment('ordersList').input.limit;
+     const ordersFrag = ctx.fragment('ordersList');
+     const nextLimit = (ordersFrag.input.limit ?? 10) + 10;
 
      // Trigger explicit refresh with updated input and lifecycle callbacks
-     await ctx.refresh('ordersList', { limit: currentLimit + 10 }, {
+     await ordersFrag.refresh({ limit: nextLimit }, {
        onSuccess(res) {
+         ctx.state.loadedLimit = nextLimit;
          console.log('Orders refreshed:', res.refreshed);
        },
        onFailure(err) {
-         console.error('Failed to load orders:', err.message);
+         ctx.state.errorMessage = err.message;
+       },
+       onSettled() {
+         ctx.state.isLoadingMore = false;
        },
      });
      ```
-   - Supports declarative callbacks (`onSuccess`, `onFailure`, `onError`, `onSettled`) or standard promise evaluation (`const res = await ctx.refresh(...)`). If `onFailure` is provided, rejection is suppressed by default so error states can be handled without `try/catch` boilerplate.
+   - Supports declarative callbacks (`onSuccess`, `onFailure` / `onError`, `onSettled` / `onComplete`) or standard promise evaluation (`const res = await ctx.refresh(...)`). If `onFailure` / `onError` is provided, rejection is suppressed by default (`throwOnError: false`) so error states can be handled without `try/catch` boilerplate.
 4. **Decoupled DOM CustomEvents (`ctx.emit` & `ctx.on`)**:
    - When a controller in Fragment A performs an action, it emits a standard DOM CustomEvent:
      ```ts
-     // In CategorySidebar controller:
-     ctx.emit('category:selected', { categoryId: el.dataset.id });
+     // In CategorySidebar controller action:
+     selectCategory(ctx, _event, actionEl) {
+       ctx.emit('category:selected', { categoryId: actionEl.data('id') });
+     }
      ```
-   - A controller in Fragment B listens and reacts:
+   - A controller in Fragment B listens and reacts with `onSuccess` state sync:
      ```ts
      // In ProductGrid controller:
      connect(ctx) {
        return ctx.on(window, 'category:selected', (evt: CustomEvent) => {
-         ctx.refresh('productsList', { categoryId: evt.detail.categoryId });
+         const { categoryId } = evt.detail;
+         ctx.refresh('productsList', { categoryId }, {
+           onSuccess() {
+             ctx.state.activeCategoryId = categoryId;
+           },
+         });
        });
      }
      ```
@@ -532,43 +639,50 @@ Webspresso’s client layer (`core/client`) is designed to be **zero-dependency*
 
 | Layer / Component | Minified Size | Gzip Compressed | Brotli Compressed (`br`) |
 | :--- | :--- | :--- | :--- |
-| **Datastar Signals & DOM Adapter** (`core/client/adapter/datastar.js`) | ~32 KB | **~10.8 KB** | **~9.4 KB** |
-| **Typed Forms & Validation Engine** (`core/client/forms.js`) | ~16 KB | **~4.9 KB** | **~4.1 KB** |
-| **Typed API Client & Concurrency Engine** (`core/client/api.js`) | ~15 KB | **~4.6 KB** | **~3.9 KB** |
-| **Controller & Tasks Runtime** (`core/client/controller.js`) | ~14 KB | **~4.4 KB** | **~3.8 KB** |
-| **SSR Fragment Reconciler & Batcher** (`core/client/fragments.js`) | ~10 KB | **~3.1 KB** | **~2.7 KB** |
-| **Shared Micro-Utilities** (`core/client/utils.js`) | ~2 KB | **~0.8 KB** | **~0.7 KB** |
-| **Lite Runtime** (`webspresso/client/lite`) | **~30 KB** | **~9.5 KB** | **~8.2 KB** |
-| **Full Client Behavior Runtime** (`webspresso/core/client`) | **~75 KB** | **~26 KB** | **~21.8 KB** |
+| **Controller, Watchers & Tasks Runtime** (`core/client/controller.js`) | ~22.3 KB | **~7.8 KB** | **~7.0 KB** |
+| **Datastar Signals & DOM Adapter** (`core/client/adapter/datastar.js`) | ~20.0 KB | **~7.0 KB** | **~6.2 KB** |
+| **Typed API Client & Concurrency Engine** (`core/client/api.js`) | ~16.1 KB | **~5.8 KB** | **~5.2 KB** |
+| **SSR Fragment Reconciler & Auto-Revalidation** (`core/client/fragments.js`) | ~15.1 KB | **~5.2 KB** | **~4.7 KB** |
+| **Client Services & Lazy UI Host** (`core/client/services.js` + `host.js`) | ~11.3 KB | **~4.2 KB** | **~3.8 KB** |
+| **Typed Forms, Hooks & Draft Persistence** (`core/client/forms.js`) | ~14.6 KB | **~5.2 KB** | **~4.7 KB** |
+| **Shared Micro-Utilities** (`core/client/utils.js`) | ~3.7 KB | **~1.6 KB** | **~1.4 KB** |
+| **Namespaced Client Storage** (`core/client/storage.js`) | ~2.9 KB | **~1.1 KB** | **~1.0 KB** |
+| **Lite Runtime** (`webspresso/client/lite`) | **~56.1 KB** | **~18.2 KB** | **~16.1 KB** |
+| **Full Client Behavior Runtime** (`webspresso/core/client`, production) | **~109.3 KB** | **~34.4 KB** | **~30.0 KB** |
+| **Dev-Only Client DevTools Dock** (`core/client/devtool.js`, stripped in prod) | ~30.6 KB | **~8.5 KB** | **~7.5 KB** |
 
 ### 8.2 A-la-Carte Subpath Imports (Micro-Footprints)
 
 Webspresso supports modular subpath imports through package exports so pages only load the capabilities they actually use:
 
 ```javascript
-// 1. Lite Server-Driven Runtime (~8.2 KB Brotli)
-// Ideal for landing pages, blogs, and marketing sites with SSR fragments and forms.
+// 1. Lite Server-Driven Runtime (~16.1 KB Brotli)
+// Ideal for landing pages, blogs, and marketing sites with SSR fragments, services, and forms.
 import { bootLiteClient } from 'webspresso/client/lite';
 bootLiteClient();
 
-// 2. Fragment-Only Reconciler (~2.7 KB Brotli)
-// Pure DOM morpher and invalidation receiver for static/read-only SSR pages.
+// 2. Fragment-Only Reconciler (~4.7 KB Brotli)
+// Pure DOM morpher, auto-revalidation, and invalidation receiver for SSR pages.
 import { createFragmentCoordinator } from 'webspresso/client/fragments';
 
-// 3. Form-Only Enhancement (~4.1 KB Brotli)
-// For simple contact/signup forms without reactive signals.
+// 3. Form-Only Enhancement (~4.7 KB Brotli)
+// For contact/signup forms with lifecycle hooks and draft persistence without reactive signals.
 import { createFormHandle } from 'webspresso/client/forms';
 
-// 4. Full Reactive Controller Runtime (~21.8 KB Brotli)
-// Complete suite: two-way binding, computed signals, tasks, forms, fragments.
-import { bootClient, defineController } from 'webspresso/client';
+// 4. Namespaced Storage Only (~1.0 KB Brotli)
+// Safe localStorage/sessionStorage/memory wrapper without UI runtime.
+import { createClientStorage, defaultStorage } from 'webspresso/client/storage';
+
+// 5. Full Reactive Controller Runtime (~30.0 KB Brotli)
+// Complete suite: two-way binding, computed signals, watchers, tasks, services, lazy UI hosts, forms, fragments.
+import { bootClient, defineController, defineClientService, watch } from 'webspresso/client';
 bootClient();
 ```
 
 ### 8.3 Production Build Optimizations (`webspresso build`)
 
 The production bundler applies zero-config compiler passes to strip unused developer code:
-- **Automatic Dead-Code Elimination**: `define: { 'process.env.NODE_ENV': '"production"' }` removes dev-only warnings and disables debug rings.
+- **Automatic Dead-Code Elimination**: `define: { 'process.env.NODE_ENV': '"production"' }` strips `core/client/devtool.js` and `core/client/debug.js` completely from production bundles.
 - **Debugger Stubbing**: Unused `createClientDebugger` rings and payload serializers are replaced with a zero-allocation frozen no-op stub (`NOOP_DEBUGGER`).
 - **Tree-Shaking & Dead-Branch Pruning**: `treeShaking: true` discards unreferenced controller or form helpers.
 - **License Deduplication**: `legalComments: 'none'` prevents duplicated comment blocks across chunks.
@@ -579,13 +693,14 @@ The production bundler applies zero-config compiler passes to strip unused devel
 ```
 Next.js Baseline Runtime      ████████████████████████████████ 85 KB (gzip)
 React 19 + React-DOM + Router ██████████████████████ 58 KB (gzip)
+Webspresso Full Client Layer  █████████████ 34.4 KB (gzip) / 30.0 KB (brotli)
 Vue 3 Core Runtime            █████████████ 34 KB (gzip)
-Webspresso Client Layer       █████████ 26 KB (gzip) / 21.8 KB (brotli)
+Webspresso Lite Runtime       ███████ 18.2 KB (gzip) / 16.1 KB (brotli)
 Alpine.js Core                ██████ 15 KB (gzip)
 ```
 
 > [!TIP]
-> Unlike heavy SPA frameworks that require 50–100 KB of initial JavaScript before anything renders, Webspresso sends **100% pre-rendered server HTML**. The client bundle is non-blocking (`defer` / `type="module"`) and only attaches behavior. With HTTP 103 Early Hints enabled, modern browsers download the ~22 KB Brotli bundle concurrently while the server renders the HTML response.
+> Unlike heavy SPA frameworks that require 50–100 KB of initial JavaScript before anything renders, Webspresso sends **100% pre-rendered server HTML**. The client bundle is non-blocking (`defer` / `type="module"`) and only attaches behavior. With HTTP 103 Early Hints enabled, modern browsers download the ~30.0 KB Brotli bundle concurrently while the server renders the HTML response.
 
 ---
 
@@ -786,36 +901,39 @@ const stats = await ctx.api.get('/api/stats', {
 > **Mutation Safety Policy**: State-changing methods (`POST`, `PUT`, `PATCH`, `DELETE`) are **never** retried automatically by default. This prevents duplicate side effects (e.g. charging a credit card multiple times). If an endpoint is proven idempotent, you may explicitly pass `retryMutations: true`.
 
 ### 12.3 Fragment Batch Refresh Timeout & Lifecycle Callbacks
-All SSR fragment batch refreshes have a default timeout of 15,000ms. In addition, `refresh()` accepts a 3rd parameter options object supporting timeout, declarative lifecycle callbacks (`onSuccess`, `onFailure`, `onSettled`), and error handling controls:
+All SSR fragment batch refreshes have a default timeout of 15,000ms. Both `ctx.refresh(idOrName, nextInput, options)` and `ctx.fragment(idOrName).refresh(nextInput, options)` accept an options object supporting timeouts, input replacement, declarative lifecycle callbacks (`onSuccess`, `onFailure` / `onError`, `onSettled` / `onComplete`), and error propagation controls:
 
 ```ts
 await ctx.refresh('dashboard', { view: 'monthly' }, {
-  timeout: 8000, // custom timeout in ms
+  timeout: 8000,       // custom timeout in ms (default: 15000)
+  replaceInput: false, // false merges into current input; true replaces entire input object
 
   // Invoked on successful fragment fetch and morph
   onSuccess(res) {
     state.appliedView = 'monthly';
     state.lastUpdated = new Date().toLocaleTimeString();
+    // res: { ok: true, refreshed: string[], timings: { loadMs, renderMs } }
   },
 
-  // Invoked on network error, HTTP 5xx, or timeout (suppresses uncaught promise rejection by default)
+  // Invoked on network error, HTTP 4xx/5xx, or timeout (alias: onError)
+  // Suppresses uncaught promise rejection by default unless throwOnError: true
   onFailure(err) {
     state.errorMessage = err.message;
     state.hasFailed = true;
   },
 
-  // Always invoked after completion (whether succeeded or failed)
+  // Always invoked after completion whether succeeded or failed (alias: onComplete)
   onSettled(res, err) {
     state.isLoading = false;
   },
 
-  // Set to true if you want the promise to reject even when onFailure is provided
+  // Set to true if you want the promise to reject even when onFailure/onError is provided
   throwOnError: false,
 });
 ```
 
 #### Dual Paradigm: Callbacks vs Promise Await
-Both styles work seamlessly and can even be combined:
+Both styles work seamlessly (via `ctx.refresh(...)` or `ctx.fragment('...').refresh(...)`) and can be combined:
 ```ts
 // 1. Declarative Callback Style
 await ctx.refresh('todos-list', nextFilters, {
@@ -823,10 +941,20 @@ await ctx.refresh('todos-list', nextFilters, {
     state.applied = nextFilters;
     state.page = 1;
   },
+  onFailure(err) {
+    state.errorBanner = err.message;
+  },
 });
 
-// 2. Direct Promise & res.ok Inspection
-const res = await ctx.refresh('todos-list', nextFilters);
+// 2. Scoped Fragment Handle with Callbacks
+await ctx.fragment('todos-list').refresh(nextFilters, {
+  onSuccess(res) {
+    console.log('Patched instances:', res.refreshed);
+  },
+});
+
+// 3. Direct Promise & res.ok Inspection (with throwOnError: false)
+const res = await ctx.refresh('todos-list', nextFilters, { throwOnError: false });
 if (res.ok) {
   state.applied = nextFilters;
   state.page = 1;
@@ -1011,7 +1139,7 @@ export default defineController({
     selectedId: null as number | null,
   }),
 
-  connect({ state, watch }) {
+  connect({ state, api, watch }) {
     let frame = 0;
     function stop() {
       if (frame) cancelAnimationFrame(frame);
@@ -1028,18 +1156,21 @@ export default defineController({
       { immediate: true },
     );
 
-    // 2. Side-Effect Cleanup with onCleanup
+    // 2. Side-Effect Cleanup with onCleanup & Typed API AbortSignal
     watch(
       () => state.selectedId,
-      (newId, oldId, onCleanup) => {
-        let active = true;
-        onCleanup(() => {
-          active = false;
-        });
-        if (newId) {
-          fetch(`/api/items/${newId}`)
-            .then(r => r.json())
-            .then(data => { if (active) console.log(data); });
+      async (newId, _oldId, onCleanup) => {
+        if (!newId) return;
+        const controller = new AbortController();
+        onCleanup(() => controller.abort());
+
+        try {
+          const data = await api.get(`/api/items/${newId}`, {
+            signal: controller.signal,
+          });
+          console.log('Loaded item:', data);
+        } catch (err: any) {
+          if (!err?.isCanceled) console.error(err);
         }
       },
       { immediate: true },
@@ -1162,6 +1293,210 @@ mountDevtool(runtime, {
    // Highlight element from console
    __WEBSPRESSO_DEVTOOLS__.highlight('todos');
    ```
+
+---
+
+## 16. Client Services & Optional Lazy UI Hosts (`defineClientService`)
+
+Webspresso provides a runtime-scoped, lazily-initialized, strongly-typed Client Services layer (`core/client/services` & `core/client/host`). It allows applications to register shared client capabilities—such as notifications/toasts, confirm dialogs, clipboard helpers, or analytics—without bloating the core framework or the initial entry bundle.
+
+> [!IMPORTANT]
+> **Agnostic Core Principle**: Core knows nothing about `toast`, `modal`, or `notification` by name. Services do not have to render UI, and defining a service never touches the DOM unless the service explicitly mounts a host via `mountHost`.
+
+### 16.1 Defining & Registering Services
+
+Define services with `defineClientService` and register them in your client bootstrap (`bootClient({ services })` or `createClientRuntime({ services })`):
+
+```ts
+// src/client/services/toast.ts (Application-level service with lazy UI host)
+import { defineClientService } from 'webspresso/client';
+
+export default defineClientService({
+  create({ mountHost, onCleanup }) {
+    // Lazily mounts (or attaches to) <div data-w-host="toast"> on document.body
+    const host = mountHost('toast', {
+      className: 'app-toast-stack',
+      attributes: { role: 'status', 'aria-live': 'polite' },
+    });
+
+    onCleanup(() => {
+      // Optional service-level teardown when runtime is disposed
+    });
+
+    return {
+      success(message: string) {
+        const item = document.createElement('div');
+        item.className = 'toast-item';
+        item.textContent = message;
+        host.el.appendChild(item);
+      },
+      dismiss() {
+        host.clear();
+      },
+    };
+  },
+});
+```
+
+```ts
+// src/client/services/clipboard.ts (DOM-less service — never creates a UI host)
+import { defineClientService } from 'webspresso/client';
+
+export default defineClientService({
+  create() {
+    return {
+      async copy(text: string): Promise<boolean> {
+        await navigator.clipboard?.writeText(text);
+        return true;
+      },
+    };
+  },
+});
+```
+
+```ts
+// src/client/main.ts (Application bootstrap + automatic TypeScript inference)
+import { bootClient, defineClientService, type InferClientServicesMap } from 'webspresso/client';
+
+export const services = {
+  toast: defineClientService({
+    load: () => import('./services/toast'),
+  }),
+  clipboard: defineClientService({
+    load: () => import('./services/clipboard'),
+  }),
+};
+
+// Augment AppClientServices once so all controllers and form hooks infer service types automatically:
+declare module 'webspresso' {
+  interface AppClientServices extends InferClientServicesMap<typeof services> {}
+}
+
+bootClient({ services });
+```
+
+### 16.2 Consuming Services in Controllers & Form Hooks
+
+Resolution is **explicitly asynchronous** (`await services.get('name')`) so lazy chunk loading and initialization boundaries are never hidden behind a magic Proxy:
+
+```ts
+import { defineController } from 'webspresso/client';
+
+export default defineController({
+  connect({ forms }) {
+    const form = forms.get('create-note', { resetOnSuccess: true });
+    if (form) {
+      // Form hooks receive the same runtime services registry
+      form.onSuccess(async (_data, { services }) => {
+        const toast = await services.get('toast');
+        toast.success('Not kaydedildi.');
+      });
+    }
+  },
+
+  actions: {
+    async save({ api, services }) {
+      await api.post('/api/notes', { title: 'Yeni not' });
+
+      const toast = await services.get('toast');
+      toast.success('Not kaydedildi.');
+    },
+
+    async copyShareLink({ services }, _evt, el) {
+      const clipboard = await services.get('clipboard');
+      await clipboard.copy(el.data('url') || window.location.href);
+    },
+  },
+});
+```
+
+### 16.3 Scope, Lifecycle & UI Host Contract
+
+1. **Runtime-Scoped Singleton**:
+   - A service is initialized on its first `services.get(name)` call and shared across all controllers and form hooks within the same `ClientRuntime`.
+   - Separate `createClientRuntime()` instances (and SSR requests) are completely isolated and never share service instances.
+2. **Single-Flight Concurrency & Retry on Failure**:
+   - Concurrent `services.get('toast')` calls share a single in-flight initialization `Promise`.
+   - If module loading or initialization fails, any partial resources or hosts created during the failed attempt are cleaned up immediately, and the failed entry is evicted from cache so a subsequent `services.get('toast')` call can retry.
+3. **Controller Disconnect vs Runtime Disposal**:
+   - Unmounting a controller (`unmountSubtree`) does **not** dispose shared runtime services or their UI hosts.
+   - Calling `runtime.destroy()` (or `runtime.dispose()`) idempotently disposes all initialized services, aborts in-flight initializations (cleaning up late-resolving resources immediately), and unmounts all created `[data-w-host]` containers.
+4. **Optional Lazy UI Host (`mountHost`)**:
+   - `mountHost(key, options)` attaches to an existing layout element (`selector` / `target` / `[data-w-host="<key>"]`) or lazily appends `<div data-w-host="<key>">` to `document.body` outside `[data-w-fragment]` areas.
+   - Repeated `mountHost(key)` calls for the same key return the existing host handle without creating duplicate DOM elements.
+   - Active `[data-w-host]` elements are protected during DOM morphing (`morphDomTrees`) and survive SSR fragment refreshes intact.
+5. **Browser Module Cache vs Runtime Instance Reuse**:
+   - **Module Download Cache**: The browser's native ES module loader caches the network download of `import('./services/toast')` per page session.
+   - **Runtime Instance Cache**: Each `ClientRuntime` caches the instantiated service object produced by `create(ctx)`. Disposing a runtime destroys the service instance and its DOM host; creating a new runtime re-runs `create(ctx)` without re-downloading the JS chunk over the network. On full-page navigation, the browser creates a fresh document and a fresh `ClientRuntime`.
+
+---
+
+## 17. React Query-Style Automatic Invalidation & Background Refetching
+
+Both SSR fragments (`defineFragment` / `[data-w-fragment]`) and client controller `tasks` support React Query-inspired automatic background revalidation on window focus, network reconnect, page visit/mount, and periodic intervals:
+
+| Option | HTML Attribute (`[data-w-fragment]`) | Type | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `staleTime` | `data-w-stale-time` | `number \| string` (`'5s'`, `'1m'`) | `0` | Duration a fragment or task is considered fresh after initial SSR or last refresh. |
+| `refetchOnWindowFocus` | `data-w-refetch-on-focus` | `boolean \| 'always'` | `false` | Automatically refreshes stale fragments/tasks when the browser tab/window regains focus. |
+| `refetchOnReconnect` | `data-w-refetch-on-reconnect` | `boolean \| 'always'` | `false` | Automatically refreshes stale fragments/tasks when network connectivity recovers (`online`). |
+| `refetchOnMount` | `data-w-refetch-on-mount` | `boolean \| 'always'` | `false` | Automatically refreshes when mounted or restored via BFCache (`pageshow`). |
+| `refetchInterval` | `data-w-refetch-interval` | `number \| string \| false` | `false` | Periodically refreshes at the specified interval (e.g. `10000` or `'10s'`). |
+| `refetchIntervalInBackground` | `data-w-refetch-in-background` | `boolean` | `false` | Whether periodic polling continues while `document.visibilityState === 'hidden'`. |
+
+### 17.1 Server-Side Fragment Configuration (`defineFragment`)
+
+```js
+// pages/todos.js
+const { defineFragment } = require('webspresso');
+
+exports.fragments = {
+  summary: defineFragment({
+    template: 'partials/todos-summary.njk',
+    dependsOn: ['todos'],
+    staleTime: '5s',
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: '30s',
+    async load({ memo }) {
+      return { summary: await memo('todos:summary', () => getTodosSummary()) };
+    },
+  }),
+};
+```
+
+Multiple fragments triggered simultaneously on window focus, reconnect, or interval ticks are automatically deduplicated (parent/child) and coalesced into a **single batched `POST /__webspresso/fragments` request**.
+
+### 17.2 Controller Tasks Configuration (`tasks`)
+
+```ts
+// pages/todos.client.ts
+export default defineController({
+  tasks: {
+    insights: ({ api }) => ({
+      run: () => api.get('/api/todos/insights'),
+      concurrency: 'latest',
+      staleTime: '10s',
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      refetchInterval: '30s',
+    }),
+  },
+});
+```
+
+### 17.3 Global Runtime Defaults (`bootClient`)
+
+```ts
+bootClient({
+  staleTime: '5s',
+  refetchOnWindowFocus: true,
+  refetchOnReconnect: true,
+});
+```
+
+
 
 
 

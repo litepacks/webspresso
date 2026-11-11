@@ -6421,11 +6421,15 @@ export interface AppApiRouteMap {
   DELETE: Record<string, { input: any; response: any }>;
 }
 
+export type ClientRefetchPolicy = boolean | 'always';
+
 export interface ClientTask<TData = any, TArgs extends unknown[] = any[]> {
   readonly pending: boolean;
   readonly data: TData | null;
   readonly error: ClientRequestError | Error | null;
   readonly stale: boolean;
+  readonly lastUpdatedAt: number;
+  isStale(): boolean;
   run(...args: TArgs): Promise<TData | undefined>;
   cancel(): void;
   dispose(): void;
@@ -6435,6 +6439,14 @@ export interface ClientTaskOptions {
   concurrency?: ClientConcurrencyPolicy;
   policy?: ClientConcurrencyPolicy;
   key?: string;
+  staleTime?: number | string;
+  refetchOnMount?: ClientRefetchPolicy;
+  refetchOnVisit?: ClientRefetchPolicy;
+  refetchOnWindowFocus?: ClientRefetchPolicy;
+  refetchOnFocus?: ClientRefetchPolicy;
+  refetchOnReconnect?: ClientRefetchPolicy;
+  refetchInterval?: number | string | false;
+  refetchIntervalInBackground?: boolean;
 }
 
 export interface ClientFormFillOptions {
@@ -6533,21 +6545,196 @@ export interface ControllerPersistConfig<TState extends Record<string, any> = Re
   debounce?: number;
 }
 
+export interface AppClientServices {}
+
+export interface ClientServiceMountHostOptions {
+  key?: string;
+  name?: string;
+  target?: HTMLElement | null;
+  selector?: string;
+  container?: HTMLElement | null;
+  root?: Document | HTMLElement | null;
+  tagName?: string;
+  id?: string;
+  className?: string;
+  attributes?: Record<string, string | number | boolean | null | undefined>;
+  createOnly?: boolean;
+  clearOnUnmount?: boolean;
+}
+
+export interface ClientServiceHostHandle {
+  readonly key: string;
+  readonly el: ControllerElement;
+  readonly created: boolean;
+  readonly mounted: boolean;
+  clear(): void;
+  onUnmount(cleanupFn: (el: ControllerElement) => void): () => void;
+  unmount(): void;
+  destroy(): void;
+}
+
+export interface ClientServiceHostHelper {
+  mount(keyOrOptions?: string | ClientServiceMountHostOptions, options?: ClientServiceMountHostOptions): ClientServiceHostHandle;
+  get(key?: string): ClientServiceHostHandle | null;
+  has(key?: string): boolean;
+  unmount(key?: string): boolean;
+}
+
+export interface ClientServiceContext<TServices = AppClientServices> {
+  readonly name: string;
+  readonly api: ClientApiClient;
+  readonly storage: ClientStorage & { readonly global: ClientStorage; readonly root: ClientStorage };
+  readonly signal: AbortSignal;
+  readonly root: Document | HTMLElement | null;
+  readonly runtime: ClientRuntime<TServices> | null;
+  readonly services: ClientServicesRegistry<TServices>;
+  readonly host: ClientServiceHostHelper;
+  mountHost(keyOrOptions?: string | ClientServiceMountHostOptions, options?: ClientServiceMountHostOptions): ClientServiceHostHandle;
+  onCleanup(cleanupFn: () => void): () => void;
+  onDispose(cleanupFn: () => void): () => void;
+  isDisposed(): boolean;
+}
+
+export interface ClientServiceDefinition<TService = any> {
+  readonly __isWebspressoClientService: true;
+  readonly __serviceType?: TService;
+  readonly name: string | null;
+  readonly load: ((ctx: ClientServiceContext) => Promise<any> | any) | null;
+  readonly create: ((ctx: ClientServiceContext, loaded?: any) => Promise<TService> | TService) | null;
+  readonly dispose: ((instance: TService, ctx: ClientServiceContext) => void | Promise<void>) | null;
+}
+
+export type InferClientServiceExport<T> =
+  T extends ClientServiceDefinition<infer S>
+    ? S
+    : T extends (...args: any[]) => infer R
+      ? Awaited<R> extends ClientServiceDefinition<infer S>
+        ? S
+        : Awaited<R>
+      : T extends { createService: (...args: any[]) => infer R }
+        ? Awaited<R>
+        : T extends { setup: (...args: any[]) => infer R }
+          ? Awaited<R>
+          : T extends { create: (...args: any[]) => infer R }
+            ? Awaited<R>
+            : T;
+
+export type InferClientService<T> =
+  T extends ClientServiceDefinition<infer S>
+    ? S
+    : T extends { default: infer D }
+      ? InferClientServiceExport<D>
+      : InferClientServiceExport<T>;
+
+export type InferClientServicesMap<TMap> = {
+  [K in keyof TMap]: InferClientService<TMap[K]>;
+};
+
+export type ResolvedClientServicesMap<TServices = AppClientServices> =
+  [keyof TServices] extends [never]
+    ? AppClientServices
+    : InferClientServicesMap<TServices>;
+
+export type ClientServiceKey<TServices = AppClientServices> =
+  [keyof ResolvedClientServicesMap<TServices>] extends [never]
+    ? string
+    : keyof ResolvedClientServicesMap<TServices> & string;
+
+export interface ClientServicesRegistry<TServices = AppClientServices> {
+  get<K extends ClientServiceKey<TServices>>(
+    name: K
+  ): Promise<
+    K extends keyof ResolvedClientServicesMap<TServices>
+      ? ResolvedClientServicesMap<TServices>[K]
+      : any
+  >;
+  has(name: string): boolean;
+  isInitialized(name: string): boolean;
+  peek<K extends ClientServiceKey<TServices>>(
+    name: K
+  ): K extends keyof ResolvedClientServicesMap<TServices>
+    ? ResolvedClientServicesMap<TServices>[K] | undefined
+    : any;
+  register<TDef>(name: string, definition: TDef): ClientServiceDefinition<InferClientService<TDef>>;
+  registerAll(services: Record<string, unknown>): void;
+  dispose(): void;
+  destroy(): void;
+  readonly isDisposed: boolean;
+}
+
+export function defineClientService<TLoaded, TService>(definition: {
+  name?: string;
+  load: (ctx: ClientServiceContext) => Promise<TLoaded> | TLoaded;
+  create: (ctx: ClientServiceContext, loaded: TLoaded) => Promise<TService> | TService;
+  dispose?: (instance: TService, ctx: ClientServiceContext) => void | Promise<void>;
+}): ClientServiceDefinition<TService>;
+
+export function defineClientService<TLoaded>(definition: {
+  name?: string;
+  load: (ctx: ClientServiceContext) => Promise<TLoaded> | TLoaded;
+  dispose?: (instance: InferClientService<TLoaded>, ctx: ClientServiceContext) => void | Promise<void>;
+}): ClientServiceDefinition<InferClientService<TLoaded>>;
+
+export function defineClientService<TService>(definition: {
+  name?: string;
+  create: (ctx: ClientServiceContext) => Promise<TService> | TService;
+  dispose?: (instance: TService, ctx: ClientServiceContext) => void | Promise<void>;
+}): ClientServiceDefinition<TService>;
+
+export function defineClientService<TService>(definition: {
+  name?: string;
+  setup: (ctx: ClientServiceContext) => Promise<TService> | TService;
+  dispose?: (instance: TService, ctx: ClientServiceContext) => void | Promise<void>;
+}): ClientServiceDefinition<TService>;
+
+export function defineClientService<TService>(
+  factory: (ctx: ClientServiceContext) => Promise<TService> | TService
+): ClientServiceDefinition<Awaited<TService>>;
+
+export function createClientServiceRegistry<TServices extends Record<string, any> = AppClientServices>(options?: {
+  root?: Document | HTMLElement | null;
+  api?: ClientApiClient;
+  storage?: ClientStorage;
+  debug?: Record<string, any>;
+  services?: TServices;
+}): ClientServicesRegistry<TServices>;
+
+export function createClientHostManager(options?: {
+  root?: Document | HTMLElement | null;
+  debug?: Record<string, any>;
+}): ClientServiceHostHelper & { dispose(): void; readonly isDisposed: boolean };
+
 export interface ClientFormSubmitResult<TData = any> {
   ok: boolean;
+  submitted?: boolean;
   data?: TData;
   refreshOk?: boolean;
   refreshError?: Error | null;
+  hookError?: Error | null;
   error?: ClientRequestError | Error;
   aborted?: boolean;
 }
 
+export interface ClientFormHookMeta<
+  TValues extends Record<string, any> = Record<string, any>,
+  TResponse = any,
+  TServices = AppClientServices
+> {
+  values: TValues;
+  form: ClientFormHandle<TValues, TResponse, TServices>;
+  services: ClientServicesRegistry<TServices>;
+  refreshOk?: boolean;
+  refreshError?: Error | null;
+}
+
 export interface ClientFormHandle<
   TValues extends Record<string, any> = Record<string, any>,
-  TResponse = any
+  TResponse = any,
+  TServices = AppClientServices
 > {
   readonly name: string;
   readonly el: HTMLFormElement | null;
+  readonly services: ClientServicesRegistry<TServices>;
   readonly pending: boolean;
   readonly dirty: boolean;
   readonly errors: Record<string, string>;
@@ -6568,22 +6755,39 @@ export interface ClientFormHandle<
   restoreDraft(): boolean;
   clearDraft(): boolean;
   readonly hasDraft: boolean;
-  submit(submitter?: HTMLElement | null): Promise<ClientFormSubmitResult<TResponse>>;
-  onSuccess(callback: (data: TResponse, meta: { refreshOk: boolean; refreshError: Error | null }) => void): () => void;
+  submit(submitter?: HTMLElement | null | Record<string, unknown>): Promise<ClientFormSubmitResult<TResponse>>;
+  onSuccess(
+    callback: (data: TResponse, meta: ClientFormHookMeta<TValues, TResponse, TServices>) => void | Promise<void>
+  ): () => void;
+  onError(
+    callback: (
+      error: ClientRequestError | Error,
+      meta: ClientFormHookMeta<TValues, TResponse, TServices>
+    ) => void | Promise<void>
+  ): () => void;
   destroy(): void;
 }
 
-export interface ControllerFormsRegistry {
+export interface ControllerFormsRegistry<TServices = AppClientServices> {
+  <TValues extends Record<string, any> = Record<string, any>, TResponse = any>(
+    formNameOrElement: string | HTMLFormElement,
+    options?: {
+      resetOnSuccess?: boolean;
+      clearOnSuccess?: boolean;
+      redirectOnSuccess?: string | ((data: TResponse) => string | void);
+      onSuccess?: (data: TResponse, meta: ClientFormHookMeta<TValues, TResponse, TServices>) => void | Promise<void>;
+    }
+  ): ClientFormHandle<TValues, TResponse, TServices>;
   get<TValues extends Record<string, any> = Record<string, any>, TResponse = any>(
     formNameOrElement: string | HTMLFormElement,
     options?: {
       resetOnSuccess?: boolean;
       clearOnSuccess?: boolean;
       redirectOnSuccess?: string | ((data: TResponse) => string | void);
-      onSuccess?: (data: TResponse, meta: { refreshOk: boolean; refreshError: Error | null }) => void;
+      onSuccess?: (data: TResponse, meta: ClientFormHookMeta<TValues, TResponse, TServices>) => void | Promise<void>;
     }
-  ): ClientFormHandle<TValues, TResponse>;
-  all(): ClientFormHandle[];
+  ): ClientFormHandle<TValues, TResponse, TServices>;
+  all(): ClientFormHandle<any, any, TServices>[];
 }
 
 export interface FragmentRefreshResult {
@@ -6653,27 +6857,32 @@ export interface WatchDescriptor<T = any> extends WatchOptions {
 
 export type ControllerErrorHandler<
   TState extends Record<string, any> = Record<string, any>,
-  TTasks extends Record<string, ClientTask> = Record<string, ClientTask>
+  TTasks extends Record<string, ClientTask> = Record<string, ClientTask>,
+  TServices = AppClientServices
 > = (
   err: Error | ClientRequestError,
-  ctx: ControllerContext<TState, TTasks>,
+  ctx: ControllerContext<TState, TTasks, TServices>,
   meta?: ControllerErrorMeta
 ) => void | boolean;
 
 export interface ControllerContext<
   TState extends Record<string, any> = Record<string, any>,
-  TTasks extends Record<string, ClientTask> = Record<string, ClientTask>
+  TTasks extends Record<string, ClientTask> = Record<string, ClientTask>,
+  TServices = AppClientServices
 > {
   readonly el: HTMLElement;
   readonly instanceId: string;
   readonly name: string;
   readonly state: TState;
   readonly api: ClientApiClient;
-  readonly forms: ControllerFormsRegistry;
+  readonly services: ClientServicesRegistry<TServices>;
+  readonly forms: ControllerFormsRegistry<TServices>;
   readonly tasks: TTasks;
   readonly signal: AbortSignal;
   readonly isConnected: () => boolean;
   readonly isDisposed: () => boolean;
+  readonly isBusy: boolean;
+  isActionBusy(actionName: string): boolean;
   readonly lastError: Error | null;
   clearError(): void;
   readonly storage: ClientStorage & { readonly global: ClientStorage; readonly root: ClientStorage };
@@ -6719,10 +6928,13 @@ export type ControllerComputedGetter<
 
 export type ControllerTaskFactory<
   TState extends Record<string, any> = Record<string, any>,
-  TData = any
+  TData = any,
+  TServices = AppClientServices
 > =
-  | ((ctx: ControllerContext<TState>) => ClientTask<TData> | { run: (...args: any[]) => Promise<TData>; concurrency?: ClientConcurrencyPolicy; key?: string })
-  | { run: (...args: any[]) => Promise<TData>; concurrency?: ClientConcurrencyPolicy; key?: string };
+  | ((
+      ctx: ControllerContext<TState, Record<string, ClientTask>, TServices>
+    ) => ClientTask<TData> | ({ run: (...args: any[]) => Promise<TData> } & ClientTaskOptions))
+  | ({ run: (...args: any[]) => Promise<TData> } & ClientTaskOptions);
 
 export interface ControllerElement extends HTMLElement {
   data(): Record<string, unknown>;
@@ -6733,9 +6945,10 @@ export interface ControllerElement extends HTMLElement {
 
 export type ControllerActionHandler<
   TState extends Record<string, any> = Record<string, any>,
-  TTasks extends Record<string, ClientTask> = Record<string, ClientTask>
+  TTasks extends Record<string, ClientTask> = Record<string, ClientTask>,
+  TServices = AppClientServices
 > = (
-  ctx: ControllerContext<TState, TTasks>,
+  ctx: ControllerContext<TState, TTasks, TServices>,
   event: Event,
   actionEl: ControllerElement
 ) => unknown | Promise<unknown>;
@@ -6743,7 +6956,8 @@ export type ControllerActionHandler<
 export interface ControllerDefinition<
   TState extends Record<string, any> = Record<string, any>,
   TComputed extends Record<string, ControllerComputedGetter<TState>> = Record<string, ControllerComputedGetter<TState>>,
-  TTasks extends Record<string, ControllerTaskFactory<TState>> = Record<string, ControllerTaskFactory<TState>>
+  TTasks extends Record<string, ControllerTaskFactory<TState, any, TServices>> = Record<string, ControllerTaskFactory<TState, any, any>>,
+  TServices = AppClientServices
 > {
   name?: string;
   state?: () => TState;
@@ -6751,22 +6965,30 @@ export interface ControllerDefinition<
   tasks?: TTasks;
   connect?: (
     ctx: ControllerContext<
-      [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> }
+      [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> },
+      Record<string, ClientTask>,
+      TServices
     >
   ) => void | (() => void);
   disconnect?: (
     ctx: ControllerContext<
-      [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> }
+      [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> },
+      Record<string, ClientTask>,
+      TServices
     >
   ) => void;
   onError?: ControllerErrorHandler<
-    [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> }
+    [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> },
+    Record<string, ClientTask>,
+    TServices
   >;
   persist?: ControllerPersistConfig<TState> | (keyof TState & string)[] | 'local' | 'session' | null;
   watch?: Record<string, WatchCallback<any> | WatchDescriptor<any>>;
   actions?: {
     [actionName: string]: ControllerActionHandler<
-      [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> }
+      [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> },
+      Record<string, ClientTask>,
+      TServices
     >;
   };
 }
@@ -6774,10 +6996,11 @@ export interface ControllerDefinition<
 export function defineController<
   TState extends Record<string, any> = Record<string, any>,
   TComputed extends Record<string, ControllerComputedGetter<TState>> = Record<string, ControllerComputedGetter<TState>>,
-  TTasks extends Record<string, ControllerTaskFactory<TState>> = Record<string, ControllerTaskFactory<TState>>
+  TTasks extends Record<string, ControllerTaskFactory<TState, any, TServices>> = Record<string, ControllerTaskFactory<TState, any, any>>,
+  TServices = AppClientServices
 >(
-  definition: ControllerDefinition<TState, TComputed, TTasks>
-): ControllerDefinition<TState, TComputed, TTasks> & { __isWebspressoController: true };
+  definition: ControllerDefinition<TState, TComputed, TTasks, TServices>
+): ControllerDefinition<TState, TComputed, TTasks, TServices> & { __isWebspressoController: true };
 
 export function watch<T = any>(
   source: WatchSource<T>,
@@ -6810,6 +7033,14 @@ export interface FragmentDefinition<TInput = Record<string, unknown>, TData = Re
   schema?: ZodTypeAny | Record<string, ZodTypeAny> | ((helpers: { z: typeof z }) => ZodTypeAny | Record<string, ZodTypeAny>);
   auth?: boolean | string | string[] | ((user: any, ctx: PageContext) => boolean | Promise<boolean>);
   middleware?: Array<string | import('express').RequestHandler>;
+  staleTime?: number | string;
+  refetchOnWindowFocus?: ClientRefetchPolicy;
+  refetchOnFocus?: ClientRefetchPolicy;
+  refetchOnReconnect?: ClientRefetchPolicy;
+  refetchOnMount?: ClientRefetchPolicy;
+  refetchOnVisit?: ClientRefetchPolicy;
+  refetchInterval?: number | string | false;
+  refetchIntervalInBackground?: boolean;
   load?: (context: FragmentLoaderContext<TInput>) => TData | Promise<TData>;
 }
 
@@ -6846,11 +7077,74 @@ export function parseFormElement(formEl: HTMLFormElement, options?: Record<strin
   hasFile: boolean;
   formData: FormData;
 };
+export interface ClientRuntimeOptions<TServices extends Record<string, any> = AppClientServices> {
+  root?: Document | Element;
+  document?: Document | Element;
+  fetch?: typeof fetch;
+  baseUrl?: string;
+  fragmentEndpoint?: string;
+  datastar?: Record<string, unknown>;
+  debug?: boolean | Record<string, unknown>;
+  devtools?: boolean;
+  devtoolsOptions?: Record<string, unknown>;
+  observe?: boolean;
+  hmr?: boolean;
+  staleTime?: number | string;
+  refetchOnWindowFocus?: ClientRefetchPolicy;
+  refetchOnFocus?: ClientRefetchPolicy;
+  refetchOnReconnect?: ClientRefetchPolicy;
+  refetchOnMount?: ClientRefetchPolicy;
+  refetchOnVisit?: ClientRefetchPolicy;
+  refetchInterval?: number | string | false;
+  refetchIntervalInBackground?: boolean;
+  lazyLoader?: (name: string, el: Element) => Promise<any>;
+  controllers?: Record<string, any>;
+  services?: TServices;
+  [key: string]: unknown;
+}
+
+export interface ClientRuntime<TServices = AppClientServices> {
+  readonly api: ClientApiClient;
+  readonly services: ClientServicesRegistry<TServices>;
+  readonly fragments: Record<string, any>;
+  readonly controllers: Record<string, any>;
+  readonly datastar: Record<string, any>;
+  readonly adapter: Record<string, any>;
+  readonly debug: Record<string, any>;
+  register(name: string, definition: any, meta?: Record<string, unknown>): any;
+  registerService<TDef>(name: string, definition: TDef): ClientServiceDefinition<InferClientService<TDef>>;
+  mount(targetRoot?: Document | Element): Promise<any[]>;
+  unmount(targetRoot?: Document | Element): void;
+  destroy(): void;
+  dispose(): void;
+  getControllerInstance(el: Element, name?: string): any;
+  getController(el: Element, name?: string): any;
+  invalidate(tags: string | string[], meta?: Record<string, unknown>): Promise<any>;
+  refresh(idOrName: string, input?: Record<string, unknown>, opts?: FragmentRefreshOptions): Promise<FragmentRefreshResult>;
+  mountDevtool(opts?: Record<string, unknown>): ClientDevtoolHandle;
+  forms: {
+    parse: typeof parseFormElement;
+    create<TValues extends Record<string, any> = Record<string, any>, TResponse = any>(
+      formEl: HTMLFormElement,
+      formOpts?: Record<string, unknown>
+    ): ClientFormHandle<TValues, TResponse, TServices>;
+  };
+  [key: string]: any;
+}
+
 export function createFragmentCoordinator(options?: Record<string, unknown>): Record<string, any>;
-export function createClientRuntime(options?: Record<string, unknown>): Record<string, any>;
-export function bootClient(options?: Record<string, unknown>): Record<string, any>;
-export function createLiteClientRuntime(options?: Record<string, unknown>): Record<string, any>;
-export function bootLiteClient(options?: Record<string, unknown>): Record<string, any>;
+export function createClientRuntime<TServices extends Record<string, any> = AppClientServices>(
+  options?: ClientRuntimeOptions<TServices>
+): ClientRuntime<TServices>;
+export function bootClient<TServices extends Record<string, any> = AppClientServices>(
+  options?: ClientRuntimeOptions<TServices>
+): ClientRuntime<TServices>;
+export function createLiteClientRuntime<TServices extends Record<string, any> = AppClientServices>(
+  options?: ClientRuntimeOptions<TServices>
+): Record<string, any> & { readonly services: ClientServicesRegistry<TServices> };
+export function bootLiteClient<TServices extends Record<string, any> = AppClientServices>(
+  options?: ClientRuntimeOptions<TServices>
+): Record<string, any> & { readonly services: ClientServicesRegistry<TServices> };
 export function createDatastarAdapter(options?: Record<string, unknown>): Record<string, any>;
 export function createClientDebugger(options?: { enabled?: boolean; maxEvents?: number }): Record<string, any>;
 export interface ClientDevtoolHandle {

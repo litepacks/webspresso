@@ -6,6 +6,22 @@
  */
 
 /**
+ * Check if a value is an Array.
+ * @param {unknown} val
+ * @returns {val is any[]}
+ */
+const isArray = Array.isArray;
+
+/**
+ * Check if a value is a finite number (`typeof val === 'number' && Number.isFinite(val)`).
+ * @param {unknown} val
+ * @returns {val is number}
+ */
+function isNumber(val) {
+  return typeof val === 'number' && Number.isFinite(val);
+}
+
+/**
  * Check if a value is a non-null object.
  * @param {unknown} val
  * @returns {val is Record<string, unknown>}
@@ -20,7 +36,7 @@ function isObject(val) {
  * @returns {boolean}
  */
 function isPlainObject(val) {
-  return isObject(val) && !Array.isArray(val) && Object.prototype.toString.call(val) === '[object Object]';
+  return isObject(val) && !isArray(val) && Object.prototype.toString.call(val) === '[object Object]';
 }
 
 /**
@@ -169,7 +185,7 @@ function parseDataValue(val) {
   if (val === 'undefined') return undefined;
   if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(val)) {
     const num = Number(val);
-    if (!Number.isNaN(num)) return num;
+    if (isNumber(num)) return num;
   }
   if ((val.startsWith('{') && val.endsWith('}')) || (val.startsWith('[') && val.endsWith(']'))) {
     try {
@@ -265,7 +281,172 @@ function decorateElement(el) {
   return el;
 }
 
+/**
+ * Parse a duration value (number in ms, numeric string, or human duration string like '500ms', '10s', '2m', '1h')
+ * into milliseconds. Returns `defaultMs` (0) when false/null/undefined/invalid.
+ *
+ * @param {unknown} val
+ * @param {number} [defaultMs=0]
+ * @returns {number}
+ */
+function parseDurationMs(val, defaultMs = 0) {
+  if (val === false || val === null || val === undefined || val === '' || val === 'false') {
+    return 0;
+  }
+  if (isNumber(val)) {
+    return val > 0 ? Math.floor(val) : 0;
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim().toLowerCase();
+    if (!trimmed || trimmed === 'false' || trimmed === '0') return 0;
+    const match = /^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/.exec(trimmed);
+    if (!match) return defaultMs;
+    const num = parseFloat(match[1]);
+    if (!isNumber(num) || num <= 0) return 0;
+    const unit = match[2] || 'ms';
+    if (unit === 's') return Math.floor(num * 1000);
+    if (unit === 'm') return Math.floor(num * 60 * 1000);
+    if (unit === 'h') return Math.floor(num * 60 * 60 * 1000);
+    return Math.floor(num);
+  }
+  return defaultMs;
+}
+
+/**
+ * Normalize a React Query-style refetch policy (`true`, `false`, `'always'`, `'true'`, `'false'`).
+ *
+ * @param {unknown} val
+ * @param {boolean|'always'} [defaultMode=false]
+ * @returns {boolean|'always'}
+ */
+function parseRefetchMode(val, defaultMode = false) {
+  if (val === undefined || val === null || val === '') {
+    return defaultMode;
+  }
+  if (val === 'always') return 'always';
+  if (val === true || val === 'true' || val === '1') return true;
+  if (val === false || val === 'false' || val === '0') return false;
+  return Boolean(val);
+}
+
+/**
+ * Generate a short base-36 random token (`Math.random().toString(36).slice(2, 2 + len)`).
+ *
+ * @param {number} [len=5]
+ * @returns {string}
+ */
+function randomId(len = 5) {
+  return Math.random().toString(36).slice(2, 2 + len);
+}
+
+/**
+ * Generate a timestamped unique ID with an optional prefix (e.g. `uid('evt')` -> `'evt_1730000000_a1b2c'`).
+ *
+ * @param {string} [prefix='id']
+ * @param {number} [len=5]
+ * @returns {string}
+ */
+function uid(prefix = 'id', len = 5) {
+  return `${prefix}_${Date.now()}_${randomId(len)}`;
+}
+
+/**
+ * Apply or restore automatic busy/loading state (`data-w-busy`, `aria-busy`, `disabled`,
+ * `data-w-loading-text` / `data-w-disable-with`, and `data-w-loading-class`) on an interactive element.
+ *
+ * @param {Element|null|undefined} el
+ * @param {boolean} isBusy
+ */
+function setElementBusyState(el, isBusy) {
+  if (!el || typeof el.setAttribute !== 'function') return;
+
+  if (isBusy) {
+    el.__wBusyCount = (el.__wBusyCount || 0) + 1;
+    if (el.__wBusyCount > 1) return;
+
+    el.__wActionBusy = true;
+    el.setAttribute('data-w-busy', 'true');
+    el.setAttribute('aria-busy', 'true');
+
+    const tag = el.tagName || '';
+    const isInteractive =
+      tag === 'BUTTON' ||
+      tag === 'INPUT' ||
+      tag === 'SELECT' ||
+      tag === 'TEXTAREA' ||
+      'disabled' in el ||
+      el.hasAttribute('data-w-loading-text') ||
+      el.hasAttribute('data-w-disable-with');
+
+    if (isInteractive && !el.hasAttribute('data-w-disabled') && !el.hasAttribute('data-w-no-disable')) {
+      el.__wWasDisabled = Boolean(el.disabled);
+      el.__wHadDisabledAttr = el.hasAttribute('disabled');
+      el.disabled = true;
+      el.setAttribute('disabled', '');
+      el.setAttribute('aria-disabled', 'true');
+    }
+
+    const loadingText = el.getAttribute('data-w-loading-text') ?? el.getAttribute('data-w-disable-with');
+    if (loadingText !== null) {
+      if (tag === 'INPUT' && (el.type === 'submit' || el.type === 'button')) {
+        el.__wOrigValue = el.value;
+        el.value = loadingText;
+      } else {
+        el.__wOrigText = el.textContent;
+        el.textContent = loadingText;
+      }
+    }
+
+    const loadingClass = safeTrim(el.getAttribute('data-w-loading-class'));
+    if (loadingClass && el.classList) {
+      const classes = loadingClass.split(/\s+/).filter(Boolean);
+      el.__wAddedClasses = classes;
+      for (let i = 0; i < classes.length; i++) {
+        el.classList.add(classes[i]);
+      }
+    }
+  } else {
+    if (!el.__wBusyCount) return;
+    el.__wBusyCount -= 1;
+    if (el.__wBusyCount > 0) return;
+
+    el.__wActionBusy = false;
+    el.removeAttribute('data-w-busy');
+    el.removeAttribute('aria-busy');
+
+    if (!el.hasAttribute('data-w-disabled') && !el.hasAttribute('data-w-no-disable')) {
+      if (!el.__wWasDisabled) {
+        el.disabled = false;
+        if (!el.__wHadDisabledAttr) {
+          el.removeAttribute('disabled');
+        }
+        el.removeAttribute('aria-disabled');
+      }
+      delete el.__wWasDisabled;
+      delete el.__wHadDisabledAttr;
+    }
+
+    if (el.__wOrigValue !== undefined) {
+      el.value = el.__wOrigValue;
+      delete el.__wOrigValue;
+    }
+    if (el.__wOrigText !== undefined) {
+      el.textContent = el.__wOrigText;
+      delete el.__wOrigText;
+    }
+
+    if (el.__wAddedClasses && el.classList) {
+      for (let i = 0; i < el.__wAddedClasses.length; i++) {
+        el.classList.remove(el.__wAddedClasses[i]);
+      }
+      delete el.__wAddedClasses;
+    }
+  }
+}
+
 module.exports = {
+  isArray,
+  isNumber,
   isObject,
   isPlainObject,
   isPromise,
@@ -277,5 +458,10 @@ module.exports = {
   toKebabCase,
   parseDataValue,
   decorateElement,
+  parseDurationMs,
+  parseRefetchMode,
+  randomId,
+  uid,
+  setElementBusyState,
 };
 
