@@ -5,6 +5,8 @@
  * (Supports Counter and Todo List examples without external DB setup)
  */
 
+const { defaultStorage } = require('../../core/client/storage');
+
 let counterValue = 0;
 
 const INITIAL_TODOS = [
@@ -61,6 +63,49 @@ const INITIAL_TODOS = [
 let nextTodoId = 7;
 let todos = INITIAL_TODOS.map((t) => ({ ...t }));
 
+const INITIAL_ACTIVITY = [
+  { id: 1, action: 'seed', summary: 'Workspace initialized with 6 engineering tasks', todoId: null },
+];
+let nextActivityId = 2;
+let activityLog = INITIAL_ACTIVITY.map((a) => ({ ...a }));
+
+const metrics = {
+  mutationCommits: 0,
+  summaryLoaderCalls: 0,
+  listLoaderCalls: 0,
+  activityLoaderCalls: 0,
+  sharedSnapshotComputations: 0,
+};
+
+const serverHooks = {
+  beforeCommit: null,
+  beforeFragmentLoad: null,
+};
+
+function setServerHooks(hooks = {}) {
+  serverHooks.beforeCommit = typeof hooks.beforeCommit === 'function' ? hooks.beforeCommit : null;
+  serverHooks.beforeFragmentLoad =
+    typeof hooks.beforeFragmentLoad === 'function' ? hooks.beforeFragmentLoad : null;
+}
+
+function getStoreMetrics() {
+  return { ...metrics };
+}
+
+function recordActivity(action, summary, todoId = null) {
+  const entry = {
+    id: nextActivityId++,
+    action,
+    summary,
+    todoId,
+  };
+  activityLog.unshift(entry);
+  if (activityLog.length > 30) {
+    activityLog.length = 30;
+  }
+  return entry;
+}
+
 function getCounter() {
   return counterValue;
 }
@@ -74,6 +119,20 @@ function resetStore() {
   counterValue = 0;
   nextTodoId = 7;
   todos = INITIAL_TODOS.map((t) => ({ ...t }));
+  nextActivityId = 2;
+  activityLog = INITIAL_ACTIVITY.map((a) => ({ ...a }));
+  metrics.mutationCommits = 0;
+  metrics.summaryLoaderCalls = 0;
+  metrics.listLoaderCalls = 0;
+  metrics.activityLoaderCalls = 0;
+  metrics.sharedSnapshotComputations = 0;
+  serverHooks.beforeCommit = null;
+  serverHooks.beforeFragmentLoad = null;
+  try {
+    defaultStorage.session.clear();
+    defaultStorage.local.clear();
+    defaultStorage.memory.clear();
+  } catch (_e) {}
 }
 
 function getTodosSummary() {
@@ -145,6 +204,8 @@ function createTodo({ title, priority = 'medium', category = 'architecture', not
     notes: String(todoNotes || '').trim(),
   };
   todos.unshift(created);
+  metrics.mutationCommits += 1;
+  recordActivity('create', `Created #${created.id}: ${created.title}`, created.id);
   return created;
 }
 
@@ -153,6 +214,12 @@ function toggleTodo(id) {
   const target = todos.find((t) => t.id === numId);
   if (!target) return null;
   target.completed = !target.completed;
+  metrics.mutationCommits += 1;
+  recordActivity(
+    'toggle',
+    `${target.completed ? 'Completed' : 'Reopened'} #${target.id}: ${target.title}`,
+    target.id
+  );
   return { ...target };
 }
 
@@ -175,6 +242,8 @@ function updateTodo(id, patch = {}) {
   if (patch.completed !== undefined) {
     target.completed = Boolean(patch.completed);
   }
+  metrics.mutationCommits += 1;
+  recordActivity('update', `Updated #${target.id}: ${target.title}`, target.id);
   return { ...target };
 }
 
@@ -182,7 +251,10 @@ function deleteTodo(id) {
   const numId = Number(id);
   const idx = todos.findIndex((t) => t.id === numId);
   if (idx === -1) return false;
+  const removed = todos[idx];
   todos.splice(idx, 1);
+  metrics.mutationCommits += 1;
+  recordActivity('delete', `Deleted #${removed.id}: ${removed.title}`, removed.id);
   return true;
 }
 
@@ -197,14 +269,41 @@ function bulkTodos(action) {
     nextTodoId = 7;
     todos = INITIAL_TODOS.map((t) => ({ ...t }));
   }
+  metrics.mutationCommits += 1;
+  recordActivity('bulk', `Executed bulk action: ${action}`, null);
   return getTodosSummary();
 }
 
-function getTodoInsights() {
+function getActivityFeed({ limit = 6 } = {}) {
+  const safeLimit = Math.max(1, Number(limit) || 6);
+  return {
+    items: activityLog.slice(0, safeLimit).map((a) => ({ ...a })),
+    totalEvents: activityLog.length,
+    mutationCommits: metrics.mutationCommits,
+  };
+}
+
+function getSharedWorkspaceSnapshot() {
+  metrics.sharedSnapshotComputations += 1;
+  return {
+    summary: getTodosSummary(),
+    activity: getActivityFeed({ limit: 6 }),
+    computedCount: metrics.sharedSnapshotComputations,
+  };
+}
+
+function getTodoInsights(options = {}) {
+  const categoryFilter =
+    options && typeof options.category === 'string' && options.category !== 'all'
+      ? options.category.trim().toLowerCase()
+      : null;
+  const scopedTodos = categoryFilter
+    ? todos.filter((t) => String(t.category || '').toLowerCase() === categoryFilter)
+    : todos;
   const summary = getTodosSummary();
   const byCategory = {};
   const byPriority = { high: 0, medium: 0, low: 0 };
-  for (const t of todos) {
+  for (const t of scopedTodos) {
     byCategory[t.category] = (byCategory[t.category] || 0) + 1;
     if (!t.completed) {
       byPriority[t.priority] = (byPriority[t.priority] || 0) + 1;
@@ -215,6 +314,8 @@ function getTodoInsights() {
 
   return {
     ...summary,
+    scopedCount: scopedTodos.length,
+    categoryFilter: categoryFilter || 'all',
     byCategory,
     byPriority,
     topCategory,
@@ -246,4 +347,10 @@ module.exports = {
   deleteTodo,
   bulkTodos,
   getTodoInsights,
+  getActivityFeed,
+  getSharedWorkspaceSnapshot,
+  getStoreMetrics,
+  setServerHooks,
+  serverHooks,
+  metrics,
 };

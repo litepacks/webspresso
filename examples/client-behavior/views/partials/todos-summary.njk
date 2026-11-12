@@ -60,4 +60,9 @@
       </form>
     </div>
   </div>
+
+  <!-- Nested Child SSR Fragment inside Parent Project Summary Fragment -->
+  <div class="nested-list-slot" data-testid="nested-list-slot">
+    {{ fsy.fragment('list', { search: initialSearch or '', status: initialStatus or 'all', priority: initialPriority or 'all', page: initialPage or 1, limit: 4 }, { instanceId: 'todos-list', persist: 'input' }) }}
+  </div>
 </div>

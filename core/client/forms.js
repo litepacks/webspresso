@@ -432,15 +432,28 @@ function createFormHandle(formEl, options = {}) {
     'form';
 
   let initialSnapshot = captureInitialFormSnapshot(formEl);
+  let baselineValues = parseFormElement(formEl).data;
   let pending = false;
   let dirty = false;
+  let inputRevision = 0;
   let fieldErrors = {};
   let formError = null;
+  let lastError = null;
   let lastData = null;
+  let draftDebounceTimer = null;
+  let resetTimer = null;
 
+  const beforeSubmitListeners = new Set();
   const successListeners = new Set();
   const errorListeners = new Set();
   const stateListeners = new Set();
+
+  function cancelDraftDebounce() {
+    if (draftDebounceTimer) {
+      clearTimeout(draftDebounceTimer);
+      draftDebounceTimer = null;
+    }
+  }
 
   // Form draft persistence setup (sessionStorage by default, or localStorage)
   const rawDraftAttr = formEl
@@ -458,10 +471,17 @@ function createFormHandle(formEl, options = {}) {
     draftStorageType = 'local';
   }
 
-  const draftKey =
+  const draftScope =
+    options.draftScope ||
+    (formEl && formEl.getAttribute && formEl.getAttribute('data-w-draft-scope')) ||
+    '';
+
+  const baseDraftKey =
     options.draftKey ||
     (formEl && (formEl.getAttribute('data-w-draft-key') || formEl.getAttribute('data-w-persist-key'))) ||
     `form_draft:${formName || 'anon'}`;
+
+  let draftKey = draftScope ? `${baseDraftKey}:${draftScope}` : baseDraftKey;
 
   const draftStorage =
     (options.storage && options.storage[draftStorageType]) ||
@@ -485,7 +505,22 @@ function createFormHandle(formEl, options = {}) {
     return safeData;
   }
 
+  function sanitizeDraftObject(raw) {
+    if (!raw || typeof raw !== 'object' || isArray(raw)) return null;
+    const clean = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      if (v === null || v === undefined || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+        clean[k] = v;
+      } else if (isArray(v) && v.every((item) => typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean')) {
+        clean[k] = v;
+      }
+    }
+    return Object.keys(clean).length > 0 ? clean : null;
+  }
+
   function saveDraft() {
+    cancelDraftDebounce();
     if (!formEl || !isDraftEnabled) return false;
     const draftPayload = extractDraftValues(formEl);
     return draftStorage.set(draftKey, draftPayload);
@@ -493,9 +528,15 @@ function createFormHandle(formEl, options = {}) {
 
   function restoreDraft() {
     if (!formEl || !isDraftEnabled) return false;
-    const saved = draftStorage.get(draftKey, null);
-    if (saved && typeof saved === 'object' && Object.keys(saved).length > 0) {
-      fill(saved, { baseline: false });
+    let saved = null;
+    try {
+      saved = draftStorage.get(draftKey, null);
+    } catch (_e) {
+      saved = null;
+    }
+    const cleanDraft = sanitizeDraftObject(saved);
+    if (cleanDraft) {
+      fill(cleanDraft, { baseline: false });
       if (typeof formEl.dispatchEvent === 'function') {
         const CustomEventCtor =
           (formEl.ownerDocument && formEl.ownerDocument.defaultView && formEl.ownerDocument.defaultView.CustomEvent) ||
@@ -505,7 +546,7 @@ function createFormHandle(formEl, options = {}) {
             new CustomEventCtor('w-form:draft-restored', {
               bubbles: true,
               cancelable: true,
-              detail: { form: handle, draft: saved, key: draftKey },
+              detail: { form: handle, draft: cleanDraft, key: draftKey },
             })
           );
         }
@@ -516,6 +557,7 @@ function createFormHandle(formEl, options = {}) {
   }
 
   function clearDraft() {
+    cancelDraftDebounce();
     if (!isDraftEnabled) return false;
     return draftStorage.remove(draftKey);
   }
@@ -523,6 +565,20 @@ function createFormHandle(formEl, options = {}) {
   function hasDraft() {
     if (!isDraftEnabled) return false;
     return draftStorage.has(draftKey);
+  }
+
+  function setDraftKey(nextKey, keyOpts = {}) {
+    cancelDraftDebounce();
+    if (typeof nextKey === 'string' && nextKey.trim()) {
+      draftKey = nextKey.trim();
+      if (formEl && typeof formEl.setAttribute === 'function') {
+        formEl.setAttribute('data-w-draft-key', draftKey);
+      }
+      if (keyOpts && keyOpts.restore === true && isDraftEnabled) {
+        restoreDraft();
+      }
+    }
+    return handle;
   }
 
   function notifyStateChange() {
@@ -654,6 +710,7 @@ function createFormHandle(formEl, options = {}) {
    * Reset form controls back to their initial default values (NOT emptying non-empty defaults).
    */
   function reset() {
+    cancelDraftDebounce();
     if (!formEl) return;
     if (typeof formEl.reset === 'function') {
       formEl.reset();
@@ -683,6 +740,7 @@ function createFormHandle(formEl, options = {}) {
    * Completely clear all user-editable controls to empty values (distinct from `reset()`).
    */
   function clear() {
+    cancelDraftDebounce();
     if (!formEl || typeof formEl.querySelectorAll !== 'function') return;
     const controls = formEl.querySelectorAll('input, select, textarea');
     for (let i = 0; i < controls.length; i++) {
@@ -719,11 +777,14 @@ function createFormHandle(formEl, options = {}) {
    *                                            snapshot, clears `dirty`, and clears previous validation errors.
    */
   function fill(values = {}, options = {}) {
-    if (!formEl || typeof formEl.querySelectorAll !== 'function' || !values || typeof values !== 'object') {
+    if (!formEl || typeof formEl.querySelectorAll !== 'function' || !values || typeof values !== 'object' || isArray(values)) {
       return handle;
     }
 
     const isBaseline = Boolean(options.baseline);
+    if (isBaseline) {
+      cancelDraftDebounce();
+    }
 
     for (const [key, val] of Object.entries(values)) {
       if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
@@ -757,6 +818,7 @@ function createFormHandle(formEl, options = {}) {
             ctrl.value = val === null || val === undefined ? '' : String(val);
           }
         } else {
+          if (val !== null && typeof val === 'object') continue;
           ctrl.value = val === null || val === undefined ? '' : String(val);
         }
 
@@ -768,9 +830,11 @@ function createFormHandle(formEl, options = {}) {
 
     if (isBaseline) {
       initialSnapshot = captureInitialFormSnapshot(formEl);
+      baselineValues = parseFormElement(formEl).data;
       dirty = false;
       fieldErrors = {};
       formError = null;
+      lastError = null;
       syncErrorsToDom(false);
     } else {
       dirty = computeFormDirty(formEl, initialSnapshot);
@@ -783,7 +847,9 @@ function createFormHandle(formEl, options = {}) {
 
   function setAction(url) {
     if (formEl && url) {
-      formEl.setAttribute('action', String(url));
+      const nextAction = String(url);
+      formEl.setAttribute('action', nextAction);
+      formEl.__wCustomAction = nextAction;
     }
     return handle;
   }
@@ -796,6 +862,7 @@ function createFormHandle(formEl, options = {}) {
       action = action.replace(new RegExp(`:${k}\\b`, 'g'), encodeURIComponent(String(v)));
     }
     formEl.setAttribute('action', action);
+    formEl.__wCustomAction = action;
     return handle;
   }
 
@@ -870,9 +937,23 @@ function createFormHandle(formEl, options = {}) {
 
     const { data: payloadData, formData, isMultipart } = parseFormElement(formEl, submitter);
 
+    // Execute beforeSubmit hooks before initiating network request
+    for (const guardFn of beforeSubmitListeners) {
+      let allowed = true;
+      try {
+        allowed = await guardFn(payloadData, { form: handle, submitter, action: actionUrl, method });
+      } catch (guardErr) {
+        return { ok: false, submitted: false, canceled: true, reason: 'before-submit-error', error: guardErr };
+      }
+      if (allowed === false) {
+        return { ok: false, submitted: false, canceled: true, reason: 'before-submit' };
+      }
+    }
+
     // Clear previous errors before request starts
     fieldErrors = {};
     formError = null;
+    lastError = null;
     syncErrorsToDom(false);
     setPendingState(true, submitter);
 
@@ -921,6 +1002,7 @@ function createFormHandle(formEl, options = {}) {
       } else {
         // Current state becomes the new clean baseline after successful save
         initialSnapshot = captureInitialFormSnapshot(formEl);
+        baselineValues = parseFormElement(formEl).data;
       }
 
       if (isDraftEnabled) {
@@ -967,6 +1049,7 @@ function createFormHandle(formEl, options = {}) {
 
       return { ok: true, submitted: true, data: responseData, refreshOk, refreshError, hookError };
     } catch (err) {
+      lastError = err || null;
       if (err && err.kind === 'validation') {
         fieldErrors = { ...(err.fieldErrors || {}) };
         formError = err.formError || (Object.keys(fieldErrors).length === 0 ? err.message : null);
@@ -996,8 +1079,8 @@ function createFormHandle(formEl, options = {}) {
   }
 
   // Listen to native submit and input/change events on `formEl`
-  let draftDebounceTimer = null;
   const onDomInput = (evt) => {
+    inputRevision += 1;
     dirty = computeFormDirty(formEl, initialSnapshot);
     const target = evt && evt.target;
     if (target && target.getAttribute) {
@@ -1012,8 +1095,9 @@ function createFormHandle(formEl, options = {}) {
       }
     }
     if (isDraftEnabled) {
-      if (draftDebounceTimer) clearTimeout(draftDebounceTimer);
+      cancelDraftDebounce();
       draftDebounceTimer = setTimeout(() => {
+        draftDebounceTimer = null;
         saveDraft();
       }, 150);
     }
@@ -1025,7 +1109,10 @@ function createFormHandle(formEl, options = {}) {
   };
 
   const onDomReset = () => {
-    setTimeout(() => {
+    cancelDraftDebounce();
+    if (resetTimer) clearTimeout(resetTimer);
+    resetTimer = setTimeout(() => {
+      resetTimer = null;
       dirty = false;
       fieldErrors = {};
       formError = null;
@@ -1062,8 +1149,17 @@ function createFormHandle(formEl, options = {}) {
       dirty = computeFormDirty(formEl, initialSnapshot);
       return dirty;
     },
+    get inputRevision() {
+      return inputRevision;
+    },
+    get draftKey() {
+      return draftKey;
+    },
     get values() {
       return parseFormElement(formEl).data;
+    },
+    get baseline() {
+      return { ...(baselineValues || {}) };
     },
     get errors() {
       return { ...fieldErrors };
@@ -1073,6 +1169,9 @@ function createFormHandle(formEl, options = {}) {
     },
     get formError() {
       return formError;
+    },
+    get lastError() {
+      return lastError;
     },
     get lastData() {
       return lastData;
@@ -1093,6 +1192,7 @@ function createFormHandle(formEl, options = {}) {
     saveDraft,
     restoreDraft,
     clearDraft,
+    setDraftKey,
     get hasDraft() {
       return hasDraft();
     },
@@ -1112,12 +1212,20 @@ function createFormHandle(formEl, options = {}) {
     clearErrors() {
       fieldErrors = {};
       formError = null;
+      lastError = null;
       syncErrorsToDom(false);
       notifyStateChange();
     },
     reset,
     clear,
     submit,
+    beforeSubmit(fn) {
+      if (typeof fn === 'function') {
+        beforeSubmitListeners.add(fn);
+        return () => beforeSubmitListeners.delete(fn);
+      }
+      return () => {};
+    },
     onSuccess(fn) {
       if (typeof fn === 'function') {
         successListeners.add(fn);
@@ -1140,6 +1248,11 @@ function createFormHandle(formEl, options = {}) {
       return () => {};
     },
     destroy() {
+      cancelDraftDebounce();
+      if (resetTimer) {
+        clearTimeout(resetTimer);
+        resetTimer = null;
+      }
       if (formEl && typeof formEl.removeEventListener === 'function') {
         formEl.removeEventListener('input', onDomInput);
         formEl.removeEventListener('change', onDomInput);
@@ -1149,6 +1262,7 @@ function createFormHandle(formEl, options = {}) {
       if (formEl) {
         delete formEl.__wFormHandle;
       }
+      beforeSubmitListeners.clear();
       successListeners.clear();
       errorListeners.clear();
       stateListeners.clear();

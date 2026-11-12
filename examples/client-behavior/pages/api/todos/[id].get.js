@@ -9,6 +9,14 @@ module.exports = defineApi({
     params: z.object({
       id: z.coerce.number().int().min(1),
     }),
+    response: z.object({
+      id: z.number(),
+      title: z.string(),
+      completed: z.boolean(),
+      priority: z.enum(['high', 'medium', 'low']),
+      category: z.string(),
+      notes: z.string(),
+    }),
   }),
   async handler(req) {
     const todo = getTodoById(req.input.params.id);

@@ -1,0 +1,25 @@
+<div class="demo-card activity-card" data-testid="todos-activity-feed">
+  <div class="activity-header">
+    <h2>⚡ Activity Feed</h2>
+    <span class="fragment-pill">Sibling Fragment: <code>todos-activity</code> (Memo #{{ sharedSnapshotCount }})</span>
+  </div>
+  <p class="card-hint">
+    Sibling SSR fragment subscribed to <code>dependsOn: ['todos']</code> and sharing request-scoped <code>ctx.memo('todos:overview')</code> with <code>todos-summary</code>.
+  </p>
+  <div class="activity-meta">
+    <span>Total Events: <strong data-testid="activity-total-events">{{ activity.totalEvents }}</strong></span>
+    <span>•</span>
+    <span>Commits: <strong data-testid="activity-mutation-commits">{{ activity.mutationCommits }}</strong></span>
+    <span>•</span>
+    <span>Memo Snapshot: <strong data-testid="activity-memo-seq">{{ sharedSnapshotCount }}</strong></span>
+  </div>
+  <ul class="activity-list" data-testid="activity-items">
+    {% for entry in activity.items %}
+      <li class="activity-row" data-w-key="activity-{{ entry.id }}" data-activity-action="{{ entry.action }}">
+        <span class="activity-badge action-{{ entry.action }}">{{ entry.action }}</span>
+        <span class="activity-summary">{{ entry.summary }}</span>
+      </li>
+    {% endfor %}
+  </ul>
+</div>
+

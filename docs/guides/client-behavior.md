@@ -639,16 +639,16 @@ Webspresso’s client layer (`core/client`) is designed to be **zero-dependency*
 
 | Layer / Component | Minified Size | Gzip Compressed | Brotli Compressed (`br`) |
 | :--- | :--- | :--- | :--- |
-| **Controller, Watchers & Tasks Runtime** (`core/client/controller.js`) | ~22.3 KB | **~7.8 KB** | **~7.0 KB** |
-| **Datastar Signals & DOM Adapter** (`core/client/adapter/datastar.js`) | ~20.0 KB | **~7.0 KB** | **~6.2 KB** |
+| **Controller, Watchers & Tasks Runtime** (`core/client/controller.js`) | ~23.9 KB | **~8.3 KB** | **~7.4 KB** |
+| **Datastar Signals & DOM Adapter** (`core/client/adapter/datastar.js`) | ~21.4 KB | **~7.4 KB** | **~6.6 KB** |
 | **Typed API Client & Concurrency Engine** (`core/client/api.js`) | ~16.1 KB | **~5.8 KB** | **~5.2 KB** |
-| **SSR Fragment Reconciler & Auto-Revalidation** (`core/client/fragments.js`) | ~15.1 KB | **~5.2 KB** | **~4.7 KB** |
-| **Client Services & Lazy UI Host** (`core/client/services.js` + `host.js`) | ~11.3 KB | **~4.2 KB** | **~3.8 KB** |
-| **Typed Forms, Hooks & Draft Persistence** (`core/client/forms.js`) | ~14.6 KB | **~5.2 KB** | **~4.7 KB** |
+| **SSR Fragment Reconciler & Auto-Revalidation** (`core/client/fragments.js`) | ~17.3 KB | **~5.8 KB** | **~5.3 KB** |
+| **Client Services & Lazy UI Host** (`core/client/services.js` + `host.js`) | ~11.4 KB | **~4.2 KB** | **~3.8 KB** |
+| **Typed Forms, Hooks & Draft Persistence** (`core/client/forms.js`) | ~16.2 KB | **~5.6 KB** | **~5.1 KB** |
 | **Shared Micro-Utilities** (`core/client/utils.js`) | ~3.7 KB | **~1.6 KB** | **~1.4 KB** |
 | **Namespaced Client Storage** (`core/client/storage.js`) | ~2.9 KB | **~1.1 KB** | **~1.0 KB** |
-| **Lite Runtime** (`webspresso/client/lite`) | **~56.1 KB** | **~18.2 KB** | **~16.1 KB** |
-| **Full Client Behavior Runtime** (`webspresso/core/client`, production) | **~109.3 KB** | **~34.4 KB** | **~30.0 KB** |
+| **Lite Runtime** (`webspresso/client/lite`) | **~59.3 KB** | **~19.1 KB** | **~16.9 KB** |
+| **Full Client Behavior Runtime** (`webspresso/core/client`, production) | **~116.1 KB** | **~36.3 KB** | **~31.6 KB** |
 | **Dev-Only Client DevTools Dock** (`core/client/devtool.js`, stripped in prod) | ~30.6 KB | **~8.5 KB** | **~7.5 KB** |
 
 ### 8.2 A-la-Carte Subpath Imports (Micro-Footprints)
@@ -656,16 +656,16 @@ Webspresso’s client layer (`core/client`) is designed to be **zero-dependency*
 Webspresso supports modular subpath imports through package exports so pages only load the capabilities they actually use:
 
 ```javascript
-// 1. Lite Server-Driven Runtime (~16.1 KB Brotli)
+// 1. Lite Server-Driven Runtime (~16.9 KB Brotli)
 // Ideal for landing pages, blogs, and marketing sites with SSR fragments, services, and forms.
 import { bootLiteClient } from 'webspresso/client/lite';
 bootLiteClient();
 
-// 2. Fragment-Only Reconciler (~4.7 KB Brotli)
+// 2. Fragment-Only Reconciler (~5.3 KB Brotli)
 // Pure DOM morpher, auto-revalidation, and invalidation receiver for SSR pages.
 import { createFragmentCoordinator } from 'webspresso/client/fragments';
 
-// 3. Form-Only Enhancement (~4.7 KB Brotli)
+// 3. Form-Only Enhancement (~5.1 KB Brotli)
 // For contact/signup forms with lifecycle hooks and draft persistence without reactive signals.
 import { createFormHandle } from 'webspresso/client/forms';
 
@@ -673,7 +673,7 @@ import { createFormHandle } from 'webspresso/client/forms';
 // Safe localStorage/sessionStorage/memory wrapper without UI runtime.
 import { createClientStorage, defaultStorage } from 'webspresso/client/storage';
 
-// 5. Full Reactive Controller Runtime (~30.0 KB Brotli)
+// 5. Full Reactive Controller Runtime (~31.6 KB Brotli)
 // Complete suite: two-way binding, computed signals, watchers, tasks, services, lazy UI hosts, forms, fragments.
 import { bootClient, defineController, defineClientService, watch } from 'webspresso/client';
 bootClient();
@@ -693,14 +693,14 @@ The production bundler applies zero-config compiler passes to strip unused devel
 ```
 Next.js Baseline Runtime      ████████████████████████████████ 85 KB (gzip)
 React 19 + React-DOM + Router ██████████████████████ 58 KB (gzip)
-Webspresso Full Client Layer  █████████████ 34.4 KB (gzip) / 30.0 KB (brotli)
+Webspresso Full Client Layer  ██████████████ 36.3 KB (gzip) / 31.6 KB (brotli)
 Vue 3 Core Runtime            █████████████ 34 KB (gzip)
-Webspresso Lite Runtime       ███████ 18.2 KB (gzip) / 16.1 KB (brotli)
+Webspresso Lite Runtime       ███████ 19.1 KB (gzip) / 16.9 KB (brotli)
 Alpine.js Core                ██████ 15 KB (gzip)
 ```
 
 > [!TIP]
-> Unlike heavy SPA frameworks that require 50–100 KB of initial JavaScript before anything renders, Webspresso sends **100% pre-rendered server HTML**. The client bundle is non-blocking (`defer` / `type="module"`) and only attaches behavior. With HTTP 103 Early Hints enabled, modern browsers download the ~30.0 KB Brotli bundle concurrently while the server renders the HTML response.
+> Unlike heavy SPA frameworks that require 50–100 KB of initial JavaScript before anything renders, Webspresso sends **100% pre-rendered server HTML**. The client bundle is non-blocking (`defer` / `type="module"`) and only attaches behavior. With HTTP 103 Early Hints enabled, modern browsers download the ~31.6 KB Brotli bundle concurrently while the server renders the HTML response.
 
 ---
 

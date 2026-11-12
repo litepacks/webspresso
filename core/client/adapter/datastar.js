@@ -218,6 +218,22 @@ function createSignalsEngine() {
       }
       return out;
     }
+
+    getSignalCount() {
+      return this._nodes.size;
+    }
+
+    getSubscriberCount() {
+      const runners = new Set();
+      for (const node of this._nodes.values()) {
+        for (const sub of node._subs) {
+          if (!sub.disposed) {
+            runners.add(sub);
+          }
+        }
+      }
+      return runners.size;
+    }
   }
 
   return {
@@ -760,7 +776,7 @@ function getMorphNodeKey(node) {
  * Sync attributes from `fromEl` onto `toEl` while respecting client-owned properties
  * and preserving active focus / form draft states.
  */
-function syncElementAttributes(toEl, fromEl, ownership) {
+function syncElementAttributes(toEl, fromEl, ownership, insideDirtyForm = false) {
   const fromAttrs = fromEl.attributes;
   const toAttrs = Array.from(toEl.attributes);
 
@@ -787,6 +803,9 @@ function syncElementAttributes(toEl, fromEl, ownership) {
     const attr = fromAttrs[i];
     if (ownership.disabled && attr.name === 'disabled') continue;
     if (ownership.show && attr.name === 'hidden') continue;
+    if (attr.name === 'action' && toEl.tagName === 'FORM' && (toEl.__wCustomAction || insideDirtyForm)) {
+      continue;
+    }
     if (toEl.getAttribute(attr.name) !== attr.value) {
       toEl.setAttribute(attr.name, attr.value);
     }
@@ -847,7 +866,7 @@ function morphDomTrees(toEl, fromEl, ctx = {}) {
   const isForm = toEl.tagName === 'FORM';
   const insideDirtyForm = Boolean(ctx.insideDirtyForm || (isForm && isFormDirtyOrPreserved(toEl)));
 
-  syncElementAttributes(toEl, fromEl, ownership);
+  syncElementAttributes(toEl, fromEl, ownership, insideDirtyForm);
 
   if (toEl.tagName === 'INPUT' || toEl.tagName === 'TEXTAREA' || toEl.tagName === 'SELECT') {
     syncFormControlValue(toEl, fromEl, ownership, insideDirtyForm);
@@ -896,7 +915,7 @@ function morphDomTrees(toEl, fromEl, ctx = {}) {
         }
       }
 
-      if (!match) {
+      if (!match && !key) {
         // Look ahead for a compatible unkeyed element with the same tagName and controller attribute
         for (let j = unkeyedCursor; j < existingChildren.length; j++) {
           const cand = existingChildren[j];
@@ -1063,7 +1082,7 @@ function createDatastarAdapter(options = {}) {
    * - Single binding per element/attribute per instance (`WeakMap` guard)
    * - All effects & listeners returned in a single cleanup function
    */
-  const boundElementsByInstance = new Map(); // instanceId -> WeakSet<Element>
+  const boundElementsByInstance = new Map(); // instanceId -> Map<Element, Array<() => void>>
 
   function isWithinControllerScope(rootEl, candidateEl) {
     if (candidateEl === rootEl) return true;
@@ -1164,30 +1183,46 @@ function createDatastarAdapter(options = {}) {
     isLoadingTargetActive,
   }) {
     if (!boundElementsByInstance.has(instanceId)) {
-      boundElementsByInstance.set(instanceId, new WeakSet());
+      boundElementsByInstance.set(instanceId, new Map());
     }
-    const boundSet = boundElementsByInstance.get(instanceId);
-    const disposers = [];
+    const elementDisposersMap = boundElementsByInstance.get(instanceId);
+
+    // Prune any previously bound elements that were detached/replaced by fragment patches
+    for (const [prevEl, prevDisposers] of Array.from(elementDisposersMap.entries())) {
+      const detached =
+        !prevEl ||
+        prevEl.isConnected === false ||
+        (rootEl && typeof rootEl.contains === 'function' && !rootEl.contains(prevEl));
+      if (detached) {
+        for (let d = 0; d < prevDisposers.length; d++) {
+          try {
+            prevDisposers[d]();
+          } catch (_e) {}
+        }
+        elementDisposersMap.delete(prevEl);
+      }
+    }
 
     const elements = collectScopedElements(rootEl);
 
     for (let i = 0; i < elements.length; i++) {
       const el = elements[i];
-      if (boundSet.has(el)) continue;
-      boundSet.add(el);
+      if (elementDisposersMap.has(el)) continue;
+      const elDisposers = [];
+      elementDisposersMap.set(el, elDisposers);
 
       // 1. data-w-text
       if (el.hasAttribute('data-w-text')) {
         const expr = el.getAttribute('data-w-text');
         const stop = engine.effect(() => {
-          if (!isConnected()) return;
+          if (!isConnected() || el.isConnected === false) return;
           const val = evaluateStateExpression(state, expr);
           const text = val === null || val === undefined ? '' : String(val);
           if (el.textContent !== text) {
             el.textContent = text;
           }
         });
-        disposers.push(stop);
+        elDisposers.push(stop);
       }
 
       // 2. data-w-show
@@ -1195,10 +1230,10 @@ function createDatastarAdapter(options = {}) {
         const expr = el.getAttribute('data-w-show');
         const initialDisplay = el.style && el.style.display && el.style.display !== 'none' ? el.style.display : '';
         const stop = engine.effect(() => {
-          if (!isConnected()) return;
+          if (!isConnected() || el.isConnected === false) return;
           toggleElementVisibility(el, Boolean(evaluateStateExpression(state, expr)), initialDisplay);
         });
-        disposers.push(stop);
+        elDisposers.push(stop);
       }
 
       // 2b. data-w-loading & data-w-loading-hide (declarative action/task busy indicators)
@@ -1211,7 +1246,7 @@ function createDatastarAdapter(options = {}) {
           .split(/\s+/)
           .filter(Boolean);
         const stop = engine.effect(() => {
-          if (!isConnected()) return;
+          if (!isConnected() || el.isConnected === false) return;
           const active =
             typeof isLoadingTargetActive === 'function'
               ? Boolean(isLoadingTargetActive(rawSpec))
@@ -1224,14 +1259,14 @@ function createDatastarAdapter(options = {}) {
             }
           }
         });
-        disposers.push(stop);
+        elDisposers.push(stop);
       }
 
       // 3. data-w-disabled
       if (el.hasAttribute('data-w-disabled')) {
         const expr = el.getAttribute('data-w-disabled');
         const stop = engine.effect(() => {
-          if (!isConnected()) return;
+          if (!isConnected() || el.isConnected === false) return;
           const disabled = Boolean(evaluateStateExpression(state, expr));
           if ('disabled' in el) {
             el.disabled = disabled;
@@ -1244,7 +1279,7 @@ function createDatastarAdapter(options = {}) {
             el.removeAttribute('aria-disabled');
           }
         });
-        disposers.push(stop);
+        elDisposers.push(stop);
       }
 
       // 4. data-w-model (two-way binding between input/select/textarea and controller state)
@@ -1286,7 +1321,7 @@ function createDatastarAdapter(options = {}) {
           };
           el.addEventListener('compositionstart', onCompositionStart);
           el.addEventListener('compositionend', onCompositionEnd);
-          disposers.push(() => {
+          elDisposers.push(() => {
             try {
               el.removeEventListener('compositionstart', onCompositionStart);
               el.removeEventListener('compositionend', onCompositionEnd);
@@ -1295,7 +1330,7 @@ function createDatastarAdapter(options = {}) {
 
           // State -> DOM effect (synchronizes changes in state to the DOM control)
           const stopModelEffect = engine.effect(() => {
-            if (!isConnected() || isComposing) return;
+            if (!isConnected() || el.isConnected === false || isComposing) return;
             const currentVal = getByPath(state, modelPath);
 
             if (type === 'checkbox') {
@@ -1319,7 +1354,7 @@ function createDatastarAdapter(options = {}) {
               }
             }
           });
-          disposers.push(stopModelEffect);
+          elDisposers.push(stopModelEffect);
 
           // DOM -> State listener (synchronizes user interactions to state)
           const evtType =
@@ -1328,7 +1363,7 @@ function createDatastarAdapter(options = {}) {
               : 'input';
 
           const onModelInput = () => {
-            if (!isConnected() || isComposing) return;
+            if (!isConnected() || el.isConnected === false || isComposing) return;
 
             if (type === 'checkbox') {
               const cur = getByPath(state, modelPath);
@@ -1360,7 +1395,7 @@ function createDatastarAdapter(options = {}) {
           };
 
           el.addEventListener(evtType, onModelInput);
-          disposers.push(() => el.removeEventListener(evtType, onModelInput));
+          elDisposers.push(() => el.removeEventListener(evtType, onModelInput));
         }
       }
 
@@ -1368,23 +1403,30 @@ function createDatastarAdapter(options = {}) {
       const eventBindings = extractEventBindings(el);
       for (const binding of eventBindings) {
         const listener = (event) => {
-          if (!isConnected()) return;
+          if (!isConnected() || el.isConnected === false) return;
           if (binding.modifiers.has('prevent')) event.preventDefault();
           if (binding.modifiers.has('stop')) event.stopPropagation();
           invokeAction(binding.actionName, event, el);
         };
         el.addEventListener(binding.eventName, listener);
-        disposers.push(() => el.removeEventListener(binding.eventName, listener));
+        elDisposers.push(() => el.removeEventListener(binding.eventName, listener));
       }
     }
 
     return function unbindInstanceDom() {
-      for (let i = 0; i < disposers.length; i++) {
-        try {
-          disposers[i]();
-        } catch (_err) {
-          // Ignore individual unbind errors
+      const map = boundElementsByInstance.get(instanceId);
+      if (map) {
+        for (const elDisposers of map.values()) {
+          for (let i = 0; i < elDisposers.length; i++) {
+            try {
+              elDisposers[i]();
+            } catch (_err) {
+              // Ignore individual unbind errors
+            }
+          }
         }
+        map.clear();
+        boundElementsByInstance.delete(instanceId);
       }
     };
   }
@@ -1394,13 +1436,52 @@ function createDatastarAdapter(options = {}) {
    */
   function patchFragmentElement(targetEl, htmlString, lifecycleCallbacks = {}) {
     if (!targetEl || typeof htmlString !== 'string') return targetEl;
-    const parsed = parseHtmlFragment(htmlString, targetEl.ownerDocument);
+    const doc = targetEl.ownerDocument || (typeof document !== 'undefined' ? document : null);
+    const parsed = parseHtmlFragment(htmlString, doc);
     if (!parsed) return targetEl;
+
+    // Capture active focus & text selection if inside targetEl before morphing
+    let focusedEl = null;
+    let selStart = null;
+    let selEnd = null;
+    if (
+      doc &&
+      doc.activeElement &&
+      typeof targetEl.contains === 'function' &&
+      targetEl.contains(doc.activeElement)
+    ) {
+      focusedEl = doc.activeElement;
+      try {
+        if (typeof focusedEl.selectionStart === 'number') selStart = focusedEl.selectionStart;
+        if (typeof focusedEl.selectionEnd === 'number') selEnd = focusedEl.selectionEnd;
+      } catch (_e) {}
+    }
 
     const morphed = morphDomTrees(targetEl, parsed, {
       onBeforeNodeRemove: lifecycleCallbacks.onBeforeNodeRemove,
       onNodeAdded: lifecycleCallbacks.onNodeAdded,
     });
+
+    // Restore focus & selection range if the focused element was preserved inside targetEl
+    if (
+      focusedEl &&
+      focusedEl.isConnected !== false &&
+      typeof targetEl.contains === 'function' &&
+      targetEl.contains(focusedEl)
+    ) {
+      try {
+        if (doc && doc.activeElement !== focusedEl && typeof focusedEl.focus === 'function') {
+          focusedEl.focus();
+        }
+        if (
+          typeof selStart === 'number' &&
+          typeof selEnd === 'number' &&
+          typeof focusedEl.setSelectionRange === 'function'
+        ) {
+          focusedEl.setSelectionRange(selStart, selEnd);
+        }
+      } catch (_e) {}
+    }
 
     // If external @starfederation/datastar is active, notify apply() on updated subtree
     if (externalDatastar && typeof externalDatastar.apply === 'function') {
@@ -1432,6 +1513,14 @@ function createDatastarAdapter(options = {}) {
     setByPath,
     isWithinControllerScope,
     collectScopedElements,
+    getBoundInstanceCount: () => boundElementsByInstance.size,
+    getBoundElementCount: () => {
+      let total = 0;
+      for (const m of boundElementsByInstance.values()) {
+        total += m.size;
+      }
+      return total;
+    },
   };
 }
 

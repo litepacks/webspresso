@@ -41,9 +41,13 @@ function resolveDocument(root) {
  */
 function resolveDefaultContainer(root, doc) {
   if (root && root.nodeType === 1 && root.tagName !== 'HTML') {
-    // If a custom element root was passed and is not inside a fragment, use it or doc.body
     if (doc && doc.body && (root === doc.body || root === doc.documentElement)) {
       return doc.body;
+    }
+    const insideFragment =
+      typeof root.closest === 'function' ? Boolean(root.closest('[data-w-fragment]')) : false;
+    if (!insideFragment) {
+      return root;
     }
     if (!doc || !doc.body) {
       return root;

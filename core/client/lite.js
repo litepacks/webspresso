@@ -3,7 +3,7 @@
 /**
  * Webspresso Lightweight Client Runtime (`core/client/lite.js`)
  *
- * Micro-footprint (~16.1 KB Brotli) client runtime for server-driven applications.
+ * Micro-footprint (~16.9 KB Brotli) client runtime for server-driven applications.
  * Includes:
  *   - SSR Fragment coordinator (batch refresh, invalidation, auto-revalidation, DOM morphing, focus preservation)
  *   - Native HTML Form enhancement (`<form data-w-form>`, validation errors, lifecycle hooks, draft persistence)

@@ -112,6 +112,12 @@ function defineFragment(config = {}) {
     refetchInterval: config.refetchInterval !== undefined ? config.refetchInterval : undefined,
     refetchIntervalInBackground:
       config.refetchIntervalInBackground !== undefined ? config.refetchIntervalInBackground : undefined,
+    persistInput:
+      config.persistInput !== undefined
+        ? config.persistInput
+        : config.persist !== undefined
+          ? config.persist
+          : undefined,
   };
 }
 
@@ -396,6 +402,7 @@ function wrapFragmentRootHtml({
   refetchOnMount,
   refetchInterval,
   refetchIntervalInBackground,
+  persistInput,
 }) {
   const safeTag = /^[a-zA-Z][a-zA-Z0-9-]*$/.test(tag || 'div') ? tag : 'div';
   const attrs = [
@@ -434,6 +441,12 @@ function wrapFragmentRootHtml({
 
   if (refetchIntervalInBackground !== undefined && refetchIntervalInBackground !== null) {
     attrs.push(`data-w-refetch-in-background="${escapeHtmlAttr(String(refetchIntervalInBackground))}"`);
+  }
+
+  if (persistInput !== undefined && persistInput !== null && persistInput !== false) {
+    const persistAttrVal =
+      persistInput === true || persistInput === 'input' ? 'session' : String(persistInput);
+    attrs.push(`data-w-persist-input="${escapeHtmlAttr(persistAttrVal)}"`);
   }
 
   if (className) {
@@ -572,6 +585,12 @@ async function executeAndRenderFragment({
       options.refetchIntervalInBackground !== undefined
         ? options.refetchIntervalInBackground
         : fragmentDef.refetchIntervalInBackground,
+    persistInput:
+      options.persistInput !== undefined
+        ? options.persistInput
+        : options.persist !== undefined
+          ? options.persist
+          : fragmentDef.persistInput,
   });
 
   return {
@@ -620,6 +639,24 @@ function attachSsrFragmentHelper({ req, res, ctx, pageMod, pagePath, nunjucksEnv
 
     const currentRenderCtx = typeof getRenderCtx === 'function' ? getRenderCtx() : { fsy };
 
+    // If refreshing a parent fragment that contains this nested child fragment,
+    // merge the active client-side child input (`req.__fragmentChildInputs`) over static template defaults
+    const childInputs = req && req.__fragmentChildInputs;
+    let effectiveRawInput = rawInput || {};
+    if (childInputs && typeof childInputs === 'object') {
+      const override = Object.prototype.hasOwnProperty.call(childInputs, instanceId)
+        ? childInputs[instanceId]
+        : instanceId === `${cleanName}:default` && Object.prototype.hasOwnProperty.call(childInputs, cleanName)
+          ? childInputs[cleanName]
+          : undefined;
+      if (override && typeof override === 'object' && !isArray(override)) {
+        effectiveRawInput =
+          effectiveRawInput && typeof effectiveRawInput === 'object' && !isArray(effectiveRawInput)
+            ? { ...effectiveRawInput, ...override }
+            : { ...override };
+      }
+    }
+
     // Queue execution on `req.__pendingSsrFragments` and return placeholder token
     const placeholderIndex = req.__pendingSsrFragments.length;
     const token = `<!--__WEBSPRESSO_SSR_FRAGMENT_${placeholderIndex}__-->`;
@@ -629,7 +666,7 @@ function attachSsrFragmentHelper({ req, res, ctx, pageMod, pagePath, nunjucksEnv
       fragmentDef,
       instanceId,
       pagePath,
-      rawInput: rawInput || {},
+      rawInput: effectiveRawInput,
       req,
       res,
       ctx,
@@ -856,6 +893,11 @@ function createFragmentRefreshHandler(config) {
       const fsy = typeof buildFsy === 'function' ? buildFsy(req) : {};
       const ctx = typeof buildContext === 'function' ? buildContext(req, res, { fsy }) : { req, res, fsy };
       ensureRequestMemo(req, ctx);
+
+      req.__fragmentChildInputs =
+        payload.childInputs && typeof payload.childInputs === 'object' && !isArray(payload.childInputs)
+          ? payload.childInputs
+          : null;
 
       const renderedInstanceIds = new Set();
       attachSsrFragmentHelper({

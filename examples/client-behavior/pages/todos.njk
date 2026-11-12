@@ -42,12 +42,9 @@
       </div>
     </header>
 
-    <!-- 1. SSR Fragment: Summary KPI + Progress Bar + Bulk Actions -->
-    {{ fsy.fragment('summary', {}, { instanceId: 'todos-summary' }) }}
-
-    <!-- 2. Main Two-Column Workspace -->
+    <!-- Main Two-Column Workspace -->
     <div class="todos-workspace">
-      <!-- Left Column: Quick-Add Composer + Filter Bar + SSR Task List -->
+      <!-- Left Column: Quick-Add Composer + Filter Bar + Parent Summary Fragment (with Nested Task List) -->
       <section class="todos-main-col">
         <!-- Quick-Add Task Composer -->
         <form
@@ -103,8 +100,8 @@
           <p data-w-form-error></p>
         </form>
 
-        <!-- Interactive Filter & Search Toolbar -->
-        <div class="todos-filter-panel">
+        <!-- 1. Interactive Filter & Search Toolbar -->
+        <div class="todos-filter-panel" data-testid="filter-toolbar">
           <div class="filter-top-bar">
             <div class="search-input-wrap">
               <span class="search-icon">⌕</span>
@@ -115,25 +112,26 @@
                 placeholder="Filter by title, category, or notes..."
                 data-w-target="searchInput"
                 data-w-model="draft.search"
-                data-w-on:input="applyFilters"
+                data-w-on:input="onSearchInput"
               >
             </div>
 
             <div class="filter-selects-group">
-              <select data-w-target="statusSelect" data-w-model="draft.status" data-w-on:change="applyFilters" aria-label="Filter by status">
+              <select data-w-target="statusSelect" data-w-model="draft.status" aria-label="Filter by status">
                 <option value="all">Status: All</option>
                 <option value="active">Status: Open</option>
                 <option value="completed">Status: Done</option>
               </select>
 
-              <select data-w-target="prioritySelect" data-w-model="draft.priority" data-w-on:change="applyFilters" aria-label="Filter by priority">
+              <select data-w-target="prioritySelect" data-w-model="draft.priority" aria-label="Filter by priority">
                 <option value="all">Priority: All</option>
                 <option value="high">Priority: High</option>
                 <option value="medium">Priority: Medium</option>
                 <option value="low">Priority: Low</option>
               </select>
 
-              <button type="button" class="btn-ghost btn-sm" data-w-on:click="resetFilters">Reset</button>
+              <button type="button" class="btn-primary btn-sm" data-w-on:click="applyFilters" data-testid="apply-filters-btn">Apply</button>
+              <button type="button" class="btn-ghost btn-sm" data-w-on:click="resetFilters" data-testid="reset-filters-btn">Reset</button>
               <button type="button" class="btn-ghost btn-sm" data-w-on:click="copyFilterSummary" data-testid="copy-filter-summary-btn">📋 Copy Filter</button>
             </div>
           </div>
@@ -149,27 +147,31 @@
             </div>
 
             <div class="pagination-controls">
-              <span class="active-filter-summary" data-w-text="filterSummaryText">Showing: All • Page 1</span>
+              <span class="draft-filter-summary" data-w-text="draftSummaryText" data-testid="draft-filter-summary">Draft: all/all</span>
+              <span class="meta-divider">•</span>
+              <span class="active-filter-summary" data-w-text="filterSummaryText" data-testid="applied-filter-summary">Filter: all/all • Page 1</span>
               <div class="pagination-btns">
-                <button type="button" class="btn-ghost btn-sm" data-w-on:click="prevPage">← Prev</button>
-                <button type="button" class="btn-ghost btn-sm" data-w-on:click="nextPage">Next →</button>
+                <button type="button" class="btn-ghost btn-sm" data-w-on:click="prevPage" data-testid="prev-page-btn">← Prev</button>
+                <button type="button" class="btn-ghost btn-sm" data-w-on:click="nextPage" data-testid="next-page-btn">Next →</button>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- SSR Fragment: Paginated Task List -->
-        {{ fsy.fragment('list', { search: initialSearch, status: initialStatus, priority: initialPriority, page: initialPage, limit: 4 }, { instanceId: 'todos-list' }) }}
+        <!-- 2. Parent SSR Fragment: Project Summary + Nested Paginated Task List -->
+        {{ fsy.fragment('summary', {}, { instanceId: 'todos-summary' }) }}
       </section>
 
-      <!-- Right Column: Sticky Draft Inspector + Client-Managed API Insights -->
+      <!-- Right Column: Sticky Draft Inspector + Insights Task + Sibling Activity Fragment + Stress Lab Control Panel -->
       <aside class="todos-side-col">
-        <!-- Protected Active Edit / Draft Inspector -->
+        <!-- 4. Protected Active Edit / Draft Inspector -->
         <form
           action="/api/todos/3"
           method="patch"
           data-w-form="edit-todo"
           data-w-preserve-draft="true"
+          data-w-persist-draft="session"
+          data-w-draft-scope="todo-3"
           id="todo-draft-form"
           class="demo-card draft-card"
           data-w-target="editForm"
@@ -181,7 +183,7 @@
               <span class="draft-shield-icon">🛡</span>
               <h2>Draft Inspector</h2>
             </div>
-            <span class="draft-badge" data-w-text="editingBadge">Task #3</span>
+            <span class="draft-badge" data-w-text="editingBadge" data-testid="editing-badge">Task #3</span>
           </div>
 
           <div class="draft-callout">
@@ -194,7 +196,7 @@
               id="draft-title-input"
               name="title"
               type="text"
-              value="Preserve unsaved draft and cursor focus during list refresh"
+              value="{{ initialEditTodo.title }}"
               data-w-target="editTitle"
               data-testid="edit-draft-title"
             >
@@ -205,14 +207,14 @@
             <div class="field-group">
               <label for="draft-priority-select">Priority</label>
               <select id="draft-priority-select" name="priority" data-w-target="editPriority">
-                <option value="high" selected>High (Critical)</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
+                <option value="high" {% if initialEditTodo.priority == 'high' %}selected{% endif %}>High (Critical)</option>
+                <option value="medium" {% if initialEditTodo.priority == 'medium' %}selected{% endif %}>Medium</option>
+                <option value="low" {% if initialEditTodo.priority == 'low' %}selected{% endif %}>Low</option>
               </select>
             </div>
             <div class="field-group">
               <label for="draft-category-input">Category</label>
-              <input id="draft-category-input" name="category" type="text" value="frontend" data-w-target="editCategory">
+              <input id="draft-category-input" name="category" type="text" value="{{ initialEditTodo.category }}" data-w-target="editCategory">
             </div>
           </div>
 
@@ -223,22 +225,22 @@
               name="notes"
               data-w-target="editNotes"
               data-testid="edit-draft-content"
-            >In-place DOM morphing keeps active form inputs and cursor position intact while fragments refresh.</textarea>
+            >{{ initialEditTodo.notes }}</textarea>
             <span data-w-error="notes"></span>
           </div>
 
           <div class="form-actions-row">
-            <button type="submit" class="btn-primary">Save Inspector Changes</button>
-            <button type="button" class="btn-ghost" data-w-on:click="resetDraftForm">Reset Draft</button>
+            <button type="submit" class="btn-primary" data-w-disabled="isLoadingRecord" data-testid="save-edit-btn">Save Inspector Changes</button>
+            <button type="button" class="btn-ghost" data-w-on:click="resetDraftForm" data-testid="reset-draft-btn">Reset Draft</button>
           </div>
           <p data-w-form-error></p>
         </form>
 
-        <!-- Client-Managed Data: Explicit Typed API Call writing to Controller State -->
+        <!-- 5. Client-Managed Data: Insights Task (latest, pending, error, stale, focus/reconnect/polling) -->
         <div class="demo-card insights-card">
           <div class="insights-header">
             <h2>📊 Live Telemetry &amp; Insights</h2>
-            <span class="client-pill">Client State (<code>api.get</code>)</span>
+            <span class="client-pill">Client Task (<code>tasks.insights</code>)</span>
           </div>
           <p class="card-hint">
             Fetches JSON from <code>GET /api/todos/insights</code> and binds it directly to controller-local Datastar signals (<code>data-w-text</code>, <code>data-w-show</code>).
@@ -254,11 +256,42 @@
             ↻ Fetch Live Insights via API
           </button>
 
+          <div class="insights-status-row">
+            <span data-testid="insights-pending-flag" data-w-text="tasks.insights.pending">false</span>
+            <span data-testid="insights-stale-flag" data-w-text="tasks.insights.stale">false</span>
+            <span data-testid="insights-error-text" data-w-text="insightsErrorText"></span>
+          </div>
+
           <div class="insights-result" data-w-show="hasInsights" data-testid="insights-panel" hidden>
             <p class="insights-headline" data-w-text="insightsHeadline" data-testid="insights-headline"></p>
             <p class="insights-detail" data-w-text="insightsDetail" data-testid="insights-detail"></p>
           </div>
         </div>
+
+        <!-- 3. Sibling SSR Fragment: Activity Feed (shares request-scoped memo with summary) -->
+        {{ fsy.fragment('activity', { limit: 6 }, { instanceId: 'todos-activity' }) }}
+
+        <!-- 7. Test Control & Fault Injection Area (Dev/Test Only) -->
+        {% if isDev != false %}
+        <div class="demo-card stress-lab-card" data-testid="stress-lab-panel">
+          <div class="insights-header">
+            <h2>🧪 Stress Lab Control &amp; Telemetry</h2>
+            <span class="client-pill">Dev / Test Only</span>
+          </div>
+          <div class="stress-lab-controls">
+            <button type="button" class="btn-ghost btn-sm" data-w-on:click="syncLabTelemetry" data-testid="lab-sync-btn">↻ Sync Telemetry</button>
+            <button type="button" class="btn-ghost btn-sm" data-w-on:click="retryFailedFragments" data-testid="lab-retry-refresh-btn">↺ Retry Failed Refresh</button>
+          </div>
+          <div class="stress-lab-metrics">
+            <div>Active Controllers: <code data-testid="lab-active-controllers" data-w-text="labActiveControllers"></code></div>
+            <div>Active Fragments: <code data-testid="lab-active-fragments" data-w-text="labActiveFragments"></code></div>
+            <div>Host Count: <code data-testid="lab-host-count" data-w-text="labHostCount">0</code></div>
+            <div>Request Order: <code data-testid="lab-request-order" data-w-text="labRequestOrder"></code></div>
+            <div>Patch Order: <code data-testid="lab-patch-order" data-w-text="labPatchOrder"></code></div>
+            <div>Assertions: <code data-testid="lab-assertions" data-w-text="labAssertions">READY</code></div>
+          </div>
+        </div>
+        {% endif %}
       </aside>
     </div>
   </main>

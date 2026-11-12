@@ -10,7 +10,7 @@ description: >-
 
 # Webspresso Client Behavior, SSR Fragments & Shared Services Skill
 
-Webspresso's client behavior layer (`core/client` / `webspresso/client`) follows a strict **HTML-First SSR** ownership model (~30.0 KB Brotli full runtime / ~16.1 KB Brotli lite runtime, zero external dependencies).
+Webspresso's client behavior layer (`core/client` / `webspresso/client`) follows a strict **HTML-First SSR** ownership model (~31.6 KB Brotli full runtime / ~16.9 KB Brotli lite runtime, zero external dependencies).
 
 ---
 

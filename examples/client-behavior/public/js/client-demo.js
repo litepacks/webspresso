@@ -9,6 +9,22 @@
  */
 
 /**
+ * Check if a value is an Array.
+ * @param {unknown} val
+ * @returns {val is any[]}
+ */
+const isArray = Array.isArray;
+
+/**
+ * Check if a value is a finite number (`typeof val === 'number' && Number.isFinite(val)`).
+ * @param {unknown} val
+ * @returns {val is number}
+ */
+function isNumber(val) {
+  return typeof val === 'number' && Number.isFinite(val);
+}
+
+/**
  * Check if a value is a non-null object.
  * @param {unknown} val
  * @returns {val is Record<string, unknown>}
@@ -23,7 +39,7 @@ function isObject(val) {
  * @returns {boolean}
  */
 function isPlainObject(val) {
-  return isObject(val) && !Array.isArray(val) && Object.prototype.toString.call(val) === '[object Object]';
+  return isObject(val) && !isArray(val) && Object.prototype.toString.call(val) === '[object Object]';
 }
 
 /**
@@ -172,7 +188,7 @@ function parseDataValue(val) {
   if (val === 'undefined') return undefined;
   if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(val)) {
     const num = Number(val);
-    if (!Number.isNaN(num)) return num;
+    if (isNumber(num)) return num;
   }
   if ((val.startsWith('{') && val.endsWith('}')) || (val.startsWith('[') && val.endsWith(']'))) {
     try {
@@ -280,8 +296,8 @@ function parseDurationMs(val, defaultMs = 0) {
   if (val === false || val === null || val === undefined || val === '' || val === 'false') {
     return 0;
   }
-  if (typeof val === 'number') {
-    return Number.isFinite(val) && val > 0 ? Math.floor(val) : 0;
+  if (isNumber(val)) {
+    return val > 0 ? Math.floor(val) : 0;
   }
   if (typeof val === 'string') {
     const trimmed = val.trim().toLowerCase();
@@ -289,7 +305,7 @@ function parseDurationMs(val, defaultMs = 0) {
     const match = /^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/.exec(trimmed);
     if (!match) return defaultMs;
     const num = parseFloat(match[1]);
-    if (!Number.isFinite(num) || num <= 0) return 0;
+    if (!isNumber(num) || num <= 0) return 0;
     const unit = match[2] || 'ms';
     if (unit === 's') return Math.floor(num * 1000);
     if (unit === 'm') return Math.floor(num * 60 * 1000);
@@ -316,7 +332,124 @@ function parseRefetchMode(val, defaultMode = false) {
   return Boolean(val);
 }
 
+/**
+ * Generate a short base-36 random token (`Math.random().toString(36).slice(2, 2 + len)`).
+ *
+ * @param {number} [len=5]
+ * @returns {string}
+ */
+function randomId(len = 5) {
+  return Math.random().toString(36).slice(2, 2 + len);
+}
+
+/**
+ * Generate a timestamped unique ID with an optional prefix (e.g. `uid('evt')` -> `'evt_1730000000_a1b2c'`).
+ *
+ * @param {string} [prefix='id']
+ * @param {number} [len=5]
+ * @returns {string}
+ */
+function uid(prefix = 'id', len = 5) {
+  return `${prefix}_${Date.now()}_${randomId(len)}`;
+}
+
+/**
+ * Apply or restore automatic busy/loading state (`data-w-busy`, `aria-busy`, `disabled`,
+ * `data-w-loading-text` / `data-w-disable-with`, and `data-w-loading-class`) on an interactive element.
+ *
+ * @param {Element|null|undefined} el
+ * @param {boolean} isBusy
+ */
+function setElementBusyState(el, isBusy) {
+  if (!el || typeof el.setAttribute !== 'function') return;
+
+  if (isBusy) {
+    el.__wBusyCount = (el.__wBusyCount || 0) + 1;
+    if (el.__wBusyCount > 1) return;
+
+    el.__wActionBusy = true;
+    el.setAttribute('data-w-busy', 'true');
+    el.setAttribute('aria-busy', 'true');
+
+    const tag = el.tagName || '';
+    const isInteractive =
+      tag === 'BUTTON' ||
+      tag === 'INPUT' ||
+      tag === 'SELECT' ||
+      tag === 'TEXTAREA' ||
+      'disabled' in el ||
+      el.hasAttribute('data-w-loading-text') ||
+      el.hasAttribute('data-w-disable-with');
+
+    if (isInteractive && !el.hasAttribute('data-w-disabled') && !el.hasAttribute('data-w-no-disable')) {
+      el.__wWasDisabled = Boolean(el.disabled);
+      el.__wHadDisabledAttr = el.hasAttribute('disabled');
+      el.disabled = true;
+      el.setAttribute('disabled', '');
+      el.setAttribute('aria-disabled', 'true');
+    }
+
+    const loadingText = el.getAttribute('data-w-loading-text') ?? el.getAttribute('data-w-disable-with');
+    if (loadingText !== null) {
+      if (tag === 'INPUT' && (el.type === 'submit' || el.type === 'button')) {
+        el.__wOrigValue = el.value;
+        el.value = loadingText;
+      } else {
+        el.__wOrigText = el.textContent;
+        el.textContent = loadingText;
+      }
+    }
+
+    const loadingClass = safeTrim(el.getAttribute('data-w-loading-class'));
+    if (loadingClass && el.classList) {
+      const classes = loadingClass.split(/\s+/).filter(Boolean);
+      el.__wAddedClasses = classes;
+      for (let i = 0; i < classes.length; i++) {
+        el.classList.add(classes[i]);
+      }
+    }
+  } else {
+    if (!el.__wBusyCount) return;
+    el.__wBusyCount -= 1;
+    if (el.__wBusyCount > 0) return;
+
+    el.__wActionBusy = false;
+    el.removeAttribute('data-w-busy');
+    el.removeAttribute('aria-busy');
+
+    if (!el.hasAttribute('data-w-disabled') && !el.hasAttribute('data-w-no-disable')) {
+      if (!el.__wWasDisabled) {
+        el.disabled = false;
+        if (!el.__wHadDisabledAttr) {
+          el.removeAttribute('disabled');
+        }
+        el.removeAttribute('aria-disabled');
+      }
+      delete el.__wWasDisabled;
+      delete el.__wHadDisabledAttr;
+    }
+
+    if (el.__wOrigValue !== undefined) {
+      el.value = el.__wOrigValue;
+      delete el.__wOrigValue;
+    }
+    if (el.__wOrigText !== undefined) {
+      el.textContent = el.__wOrigText;
+      delete el.__wOrigText;
+    }
+
+    if (el.__wAddedClasses && el.classList) {
+      for (let i = 0; i < el.__wAddedClasses.length; i++) {
+        el.classList.remove(el.__wAddedClasses[i]);
+      }
+      delete el.__wAddedClasses;
+    }
+  }
+}
+
 module.exports = {
+  isArray,
+  isNumber,
   isObject,
   isPlainObject,
   isPromise,
@@ -330,6 +463,9 @@ module.exports = {
   decorateElement,
   parseDurationMs,
   parseRefetchMode,
+  randomId,
+  uid,
+  setElementBusyState,
 };
 
 
@@ -343,6 +479,22 @@ module.exports = {
  */
 
 /**
+ * Check if a value is an Array.
+ * @param {unknown} val
+ * @returns {val is any[]}
+ */
+const isArray = Array.isArray;
+
+/**
+ * Check if a value is a finite number (`typeof val === 'number' && Number.isFinite(val)`).
+ * @param {unknown} val
+ * @returns {val is number}
+ */
+function isNumber(val) {
+  return typeof val === 'number' && Number.isFinite(val);
+}
+
+/**
  * Check if a value is a non-null object.
  * @param {unknown} val
  * @returns {val is Record<string, unknown>}
@@ -357,7 +509,7 @@ function isObject(val) {
  * @returns {boolean}
  */
 function isPlainObject(val) {
-  return isObject(val) && !Array.isArray(val) && Object.prototype.toString.call(val) === '[object Object]';
+  return isObject(val) && !isArray(val) && Object.prototype.toString.call(val) === '[object Object]';
 }
 
 /**
@@ -506,7 +658,7 @@ function parseDataValue(val) {
   if (val === 'undefined') return undefined;
   if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(val)) {
     const num = Number(val);
-    if (!Number.isNaN(num)) return num;
+    if (isNumber(num)) return num;
   }
   if ((val.startsWith('{') && val.endsWith('}')) || (val.startsWith('[') && val.endsWith(']'))) {
     try {
@@ -614,8 +766,8 @@ function parseDurationMs(val, defaultMs = 0) {
   if (val === false || val === null || val === undefined || val === '' || val === 'false') {
     return 0;
   }
-  if (typeof val === 'number') {
-    return Number.isFinite(val) && val > 0 ? Math.floor(val) : 0;
+  if (isNumber(val)) {
+    return val > 0 ? Math.floor(val) : 0;
   }
   if (typeof val === 'string') {
     const trimmed = val.trim().toLowerCase();
@@ -623,7 +775,7 @@ function parseDurationMs(val, defaultMs = 0) {
     const match = /^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/.exec(trimmed);
     if (!match) return defaultMs;
     const num = parseFloat(match[1]);
-    if (!Number.isFinite(num) || num <= 0) return 0;
+    if (!isNumber(num) || num <= 0) return 0;
     const unit = match[2] || 'ms';
     if (unit === 's') return Math.floor(num * 1000);
     if (unit === 'm') return Math.floor(num * 60 * 1000);
@@ -650,7 +802,124 @@ function parseRefetchMode(val, defaultMode = false) {
   return Boolean(val);
 }
 
+/**
+ * Generate a short base-36 random token (`Math.random().toString(36).slice(2, 2 + len)`).
+ *
+ * @param {number} [len=5]
+ * @returns {string}
+ */
+function randomId(len = 5) {
+  return Math.random().toString(36).slice(2, 2 + len);
+}
+
+/**
+ * Generate a timestamped unique ID with an optional prefix (e.g. `uid('evt')` -> `'evt_1730000000_a1b2c'`).
+ *
+ * @param {string} [prefix='id']
+ * @param {number} [len=5]
+ * @returns {string}
+ */
+function uid(prefix = 'id', len = 5) {
+  return `${prefix}_${Date.now()}_${randomId(len)}`;
+}
+
+/**
+ * Apply or restore automatic busy/loading state (`data-w-busy`, `aria-busy`, `disabled`,
+ * `data-w-loading-text` / `data-w-disable-with`, and `data-w-loading-class`) on an interactive element.
+ *
+ * @param {Element|null|undefined} el
+ * @param {boolean} isBusy
+ */
+function setElementBusyState(el, isBusy) {
+  if (!el || typeof el.setAttribute !== 'function') return;
+
+  if (isBusy) {
+    el.__wBusyCount = (el.__wBusyCount || 0) + 1;
+    if (el.__wBusyCount > 1) return;
+
+    el.__wActionBusy = true;
+    el.setAttribute('data-w-busy', 'true');
+    el.setAttribute('aria-busy', 'true');
+
+    const tag = el.tagName || '';
+    const isInteractive =
+      tag === 'BUTTON' ||
+      tag === 'INPUT' ||
+      tag === 'SELECT' ||
+      tag === 'TEXTAREA' ||
+      'disabled' in el ||
+      el.hasAttribute('data-w-loading-text') ||
+      el.hasAttribute('data-w-disable-with');
+
+    if (isInteractive && !el.hasAttribute('data-w-disabled') && !el.hasAttribute('data-w-no-disable')) {
+      el.__wWasDisabled = Boolean(el.disabled);
+      el.__wHadDisabledAttr = el.hasAttribute('disabled');
+      el.disabled = true;
+      el.setAttribute('disabled', '');
+      el.setAttribute('aria-disabled', 'true');
+    }
+
+    const loadingText = el.getAttribute('data-w-loading-text') ?? el.getAttribute('data-w-disable-with');
+    if (loadingText !== null) {
+      if (tag === 'INPUT' && (el.type === 'submit' || el.type === 'button')) {
+        el.__wOrigValue = el.value;
+        el.value = loadingText;
+      } else {
+        el.__wOrigText = el.textContent;
+        el.textContent = loadingText;
+      }
+    }
+
+    const loadingClass = safeTrim(el.getAttribute('data-w-loading-class'));
+    if (loadingClass && el.classList) {
+      const classes = loadingClass.split(/\s+/).filter(Boolean);
+      el.__wAddedClasses = classes;
+      for (let i = 0; i < classes.length; i++) {
+        el.classList.add(classes[i]);
+      }
+    }
+  } else {
+    if (!el.__wBusyCount) return;
+    el.__wBusyCount -= 1;
+    if (el.__wBusyCount > 0) return;
+
+    el.__wActionBusy = false;
+    el.removeAttribute('data-w-busy');
+    el.removeAttribute('aria-busy');
+
+    if (!el.hasAttribute('data-w-disabled') && !el.hasAttribute('data-w-no-disable')) {
+      if (!el.__wWasDisabled) {
+        el.disabled = false;
+        if (!el.__wHadDisabledAttr) {
+          el.removeAttribute('disabled');
+        }
+        el.removeAttribute('aria-disabled');
+      }
+      delete el.__wWasDisabled;
+      delete el.__wHadDisabledAttr;
+    }
+
+    if (el.__wOrigValue !== undefined) {
+      el.value = el.__wOrigValue;
+      delete el.__wOrigValue;
+    }
+    if (el.__wOrigText !== undefined) {
+      el.textContent = el.__wOrigText;
+      delete el.__wOrigText;
+    }
+
+    if (el.__wAddedClasses && el.classList) {
+      for (let i = 0; i < el.__wAddedClasses.length; i++) {
+        el.classList.remove(el.__wAddedClasses[i]);
+      }
+      delete el.__wAddedClasses;
+    }
+  }
+}
+
 module.exports = {
+  isArray,
+  isNumber,
   isObject,
   isPlainObject,
   isPromise,
@@ -664,6 +933,9 @@ module.exports = {
   decorateElement,
   parseDurationMs,
   parseRefetchMode,
+  randomId,
+  uid,
+  setElementBusyState,
 };
 
 
@@ -695,7 +967,7 @@ module.exports = {
  *    external package is not installed in `node_modules`.
  */
 
-const { getByPath, setByPath } = require('../utils');
+const { isArray, getByPath, setByPath } = require('../utils');
 
 const PluginType = {
   Attribute: 1,
@@ -888,6 +1160,22 @@ function createSignalsEngine() {
         out[k] = node.value;
       }
       return out;
+    }
+
+    getSignalCount() {
+      return this._nodes.size;
+    }
+
+    getSubscriberCount() {
+      const runners = new Set();
+      for (const node of this._nodes.values()) {
+        for (const sub of node._subs) {
+          if (!sub.disposed) {
+            runners.add(sub);
+          }
+        }
+      }
+      return runners.size;
     }
   }
 
@@ -1178,10 +1466,14 @@ function createIsolatedControllerState(
           return Reflect.get(obj, prop, receiver);
         }
 
-        // Allow accessing tasks on root state
+        // Allow accessing tasks and busy status on root state
         if (!basePath && prop === 'tasks') {
           const ctx = getContext();
           return ctx && ctx.tasks ? ctx.tasks : undefined;
+        }
+        if (!basePath && (prop === '$busy' || prop === 'isBusy') && !Object.prototype.hasOwnProperty.call(obj, prop)) {
+          const ctx = getContext();
+          return ctx ? Boolean(ctx.isBusy) : false;
         }
 
         // Check if accessing a root-level computed property
@@ -1194,7 +1486,7 @@ function createIsolatedControllerState(
         // Track signal dependency in Datastar signals store
         engine.signals.value(signalKeyFor(path));
         // If accessing array length or methods, also subscribe to the array path itself
-        if (Array.isArray(obj) && basePath) {
+        if (isArray(obj) && basePath) {
           engine.signals.value(signalKeyFor(basePath));
         }
         const val = Reflect.get(obj, prop, receiver);
@@ -1233,21 +1525,21 @@ function createIsolatedControllerState(
         const prevValue = obj[prop];
         const path = basePath ? `${basePath}.${String(prop)}` : String(prop);
 
-        if (Object.is(prevValue, rawNext) && !Array.isArray(obj)) {
+        if (Object.is(prevValue, rawNext) && !isArray(obj)) {
           return true;
         }
 
         Reflect.set(obj, prop, rawNext, receiver);
 
         // Seed nested keys if setting an object
-        if (rawNext !== null && typeof rawNext === 'object' && !Array.isArray(rawNext)) {
+        if (rawNext !== null && typeof rawNext === 'object' && !isArray(rawNext)) {
           for (const [k, v] of Object.entries(rawNext)) {
             engine.signals.setValue(signalKeyFor(`${path}.${k}`), v);
           }
         }
         engine.signals.setValue(signalKeyFor(path), rawNext);
         if (basePath) {
-          engine.signals.setValue(signalKeyFor(basePath), Array.isArray(obj) ? [...obj] : { ...obj });
+          engine.signals.setValue(signalKeyFor(basePath), isArray(obj) ? [...obj] : { ...obj });
         }
         return true;
       },
@@ -1280,13 +1572,13 @@ function createIsolatedControllerState(
     for (const [key, val] of Object.entries(initialState)) {
       const cloned =
         val !== null && typeof val === 'object'
-          ? Array.isArray(val)
+          ? isArray(val)
             ? [...val]
             : { ...val }
           : val;
       rawStore[key] = cloned;
       engine.signals.setValue(signalKeyFor(key), cloned);
-      if (cloned !== null && typeof cloned === 'object' && !Array.isArray(cloned)) {
+      if (cloned !== null && typeof cloned === 'object' && !isArray(cloned)) {
         for (const [subKey, subVal] of Object.entries(cloned)) {
           engine.signals.setValue(signalKeyFor(`${key}.${subKey}`), subVal);
         }
@@ -1427,7 +1719,7 @@ function getMorphNodeKey(node) {
  * Sync attributes from `fromEl` onto `toEl` while respecting client-owned properties
  * and preserving active focus / form draft states.
  */
-function syncElementAttributes(toEl, fromEl, ownership) {
+function syncElementAttributes(toEl, fromEl, ownership, insideDirtyForm = false) {
   const fromAttrs = fromEl.attributes;
   const toAttrs = Array.from(toEl.attributes);
 
@@ -1454,6 +1746,9 @@ function syncElementAttributes(toEl, fromEl, ownership) {
     const attr = fromAttrs[i];
     if (ownership.disabled && attr.name === 'disabled') continue;
     if (ownership.show && attr.name === 'hidden') continue;
+    if (attr.name === 'action' && toEl.tagName === 'FORM' && (toEl.__wCustomAction || insideDirtyForm)) {
+      continue;
+    }
     if (toEl.getAttribute(attr.name) !== attr.value) {
       toEl.setAttribute(attr.name, attr.value);
     }
@@ -1514,7 +1809,7 @@ function morphDomTrees(toEl, fromEl, ctx = {}) {
   const isForm = toEl.tagName === 'FORM';
   const insideDirtyForm = Boolean(ctx.insideDirtyForm || (isForm && isFormDirtyOrPreserved(toEl)));
 
-  syncElementAttributes(toEl, fromEl, ownership);
+  syncElementAttributes(toEl, fromEl, ownership, insideDirtyForm);
 
   if (toEl.tagName === 'INPUT' || toEl.tagName === 'TEXTAREA' || toEl.tagName === 'SELECT') {
     syncFormControlValue(toEl, fromEl, ownership, insideDirtyForm);
@@ -1563,7 +1858,7 @@ function morphDomTrees(toEl, fromEl, ctx = {}) {
         }
       }
 
-      if (!match) {
+      if (!match && !key) {
         // Look ahead for a compatible unkeyed element with the same tagName and controller attribute
         for (let j = unkeyedCursor; j < existingChildren.length; j++) {
           const cand = existingChildren[j];
@@ -1730,7 +2025,7 @@ function createDatastarAdapter(options = {}) {
    * - Single binding per element/attribute per instance (`WeakMap` guard)
    * - All effects & listeners returned in a single cleanup function
    */
-  const boundElementsByInstance = new Map(); // instanceId -> WeakSet<Element>
+  const boundElementsByInstance = new Map(); // instanceId -> Map<Element, Array<() => void>>
 
   function isWithinControllerScope(rootEl, candidateEl) {
     if (candidateEl === rootEl) return true;
@@ -1805,35 +2100,72 @@ function createDatastarAdapter(options = {}) {
     return bindings;
   }
 
+  function toggleElementVisibility(el, visible, initialDisplay) {
+    if (visible) {
+      el.removeAttribute('hidden');
+      if (el.style && el.style.display === 'none') {
+        el.style.display = initialDisplay;
+      }
+    } else {
+      el.setAttribute('hidden', '');
+      if (el.style) {
+        el.style.display = 'none';
+      }
+    }
+  }
+
   /**
    * Bind V1 declarative attributes inside `rootEl` for a controller instance.
    */
-  function bindControllerDom({ instanceId, rootEl, state, invokeAction, isConnected }) {
+  function bindControllerDom({
+    instanceId,
+    rootEl,
+    state,
+    invokeAction,
+    isConnected,
+    isLoadingTargetActive,
+  }) {
     if (!boundElementsByInstance.has(instanceId)) {
-      boundElementsByInstance.set(instanceId, new WeakSet());
+      boundElementsByInstance.set(instanceId, new Map());
     }
-    const boundSet = boundElementsByInstance.get(instanceId);
-    const disposers = [];
+    const elementDisposersMap = boundElementsByInstance.get(instanceId);
+
+    // Prune any previously bound elements that were detached/replaced by fragment patches
+    for (const [prevEl, prevDisposers] of Array.from(elementDisposersMap.entries())) {
+      const detached =
+        !prevEl ||
+        prevEl.isConnected === false ||
+        (rootEl && typeof rootEl.contains === 'function' && !rootEl.contains(prevEl));
+      if (detached) {
+        for (let d = 0; d < prevDisposers.length; d++) {
+          try {
+            prevDisposers[d]();
+          } catch (_e) {}
+        }
+        elementDisposersMap.delete(prevEl);
+      }
+    }
 
     const elements = collectScopedElements(rootEl);
 
     for (let i = 0; i < elements.length; i++) {
       const el = elements[i];
-      if (boundSet.has(el)) continue;
-      boundSet.add(el);
+      if (elementDisposersMap.has(el)) continue;
+      const elDisposers = [];
+      elementDisposersMap.set(el, elDisposers);
 
       // 1. data-w-text
       if (el.hasAttribute('data-w-text')) {
         const expr = el.getAttribute('data-w-text');
         const stop = engine.effect(() => {
-          if (!isConnected()) return;
+          if (!isConnected() || el.isConnected === false) return;
           const val = evaluateStateExpression(state, expr);
           const text = val === null || val === undefined ? '' : String(val);
           if (el.textContent !== text) {
             el.textContent = text;
           }
         });
-        disposers.push(stop);
+        elDisposers.push(stop);
       }
 
       // 2. data-w-show
@@ -1841,28 +2173,43 @@ function createDatastarAdapter(options = {}) {
         const expr = el.getAttribute('data-w-show');
         const initialDisplay = el.style && el.style.display && el.style.display !== 'none' ? el.style.display : '';
         const stop = engine.effect(() => {
-          if (!isConnected()) return;
-          const visible = Boolean(evaluateStateExpression(state, expr));
-          if (visible) {
-            el.removeAttribute('hidden');
-            if (el.style && el.style.display === 'none') {
-              el.style.display = initialDisplay;
-            }
-          } else {
-            el.setAttribute('hidden', '');
-            if (el.style) {
-              el.style.display = 'none';
+          if (!isConnected() || el.isConnected === false) return;
+          toggleElementVisibility(el, Boolean(evaluateStateExpression(state, expr)), initialDisplay);
+        });
+        elDisposers.push(stop);
+      }
+
+      // 2b. data-w-loading & data-w-loading-hide (declarative action/task busy indicators)
+      if (el.hasAttribute('data-w-loading') || el.hasAttribute('data-w-loading-hide')) {
+        const isHide = el.hasAttribute('data-w-loading-hide');
+        const rawSpec = el.getAttribute(isHide ? 'data-w-loading-hide' : 'data-w-loading') || '';
+        const initialDisplay = el.style && el.style.display && el.style.display !== 'none' ? el.style.display : '';
+        const loadingClasses = (el.getAttribute('data-w-loading-class') || '')
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean);
+        const stop = engine.effect(() => {
+          if (!isConnected() || el.isConnected === false) return;
+          const active =
+            typeof isLoadingTargetActive === 'function'
+              ? Boolean(isLoadingTargetActive(rawSpec))
+              : Boolean(evaluateStateExpression(state, rawSpec || '$busy'));
+          toggleElementVisibility(el, isHide ? !active : active, initialDisplay);
+          if (loadingClasses.length > 0 && el.classList) {
+            for (let c = 0; c < loadingClasses.length; c++) {
+              if (active) el.classList.add(loadingClasses[c]);
+              else el.classList.remove(loadingClasses[c]);
             }
           }
         });
-        disposers.push(stop);
+        elDisposers.push(stop);
       }
 
       // 3. data-w-disabled
       if (el.hasAttribute('data-w-disabled')) {
         const expr = el.getAttribute('data-w-disabled');
         const stop = engine.effect(() => {
-          if (!isConnected()) return;
+          if (!isConnected() || el.isConnected === false) return;
           const disabled = Boolean(evaluateStateExpression(state, expr));
           if ('disabled' in el) {
             el.disabled = disabled;
@@ -1875,7 +2222,7 @@ function createDatastarAdapter(options = {}) {
             el.removeAttribute('aria-disabled');
           }
         });
-        disposers.push(stop);
+        elDisposers.push(stop);
       }
 
       // 4. data-w-model (two-way binding between input/select/textarea and controller state)
@@ -1917,7 +2264,7 @@ function createDatastarAdapter(options = {}) {
           };
           el.addEventListener('compositionstart', onCompositionStart);
           el.addEventListener('compositionend', onCompositionEnd);
-          disposers.push(() => {
+          elDisposers.push(() => {
             try {
               el.removeEventListener('compositionstart', onCompositionStart);
               el.removeEventListener('compositionend', onCompositionEnd);
@@ -1926,11 +2273,11 @@ function createDatastarAdapter(options = {}) {
 
           // State -> DOM effect (synchronizes changes in state to the DOM control)
           const stopModelEffect = engine.effect(() => {
-            if (!isConnected() || isComposing) return;
+            if (!isConnected() || el.isConnected === false || isComposing) return;
             const currentVal = getByPath(state, modelPath);
 
             if (type === 'checkbox') {
-              if (Array.isArray(currentVal)) {
+              if (isArray(currentVal)) {
                 el.checked = currentVal.map(String).includes(String(el.value));
               } else {
                 el.checked = Boolean(currentVal);
@@ -1938,7 +2285,7 @@ function createDatastarAdapter(options = {}) {
             } else if (type === 'radio') {
               el.checked = String(currentVal) === String(el.value);
             } else if (el.tagName === 'SELECT' && el.multiple) {
-              const arr = Array.isArray(currentVal) ? currentVal.map(String) : [];
+              const arr = isArray(currentVal) ? currentVal.map(String) : [];
               const opts = el.options || [];
               for (let j = 0; j < opts.length; j++) {
                 opts[j].selected = arr.includes(String(opts[j].value));
@@ -1950,7 +2297,7 @@ function createDatastarAdapter(options = {}) {
               }
             }
           });
-          disposers.push(stopModelEffect);
+          elDisposers.push(stopModelEffect);
 
           // DOM -> State listener (synchronizes user interactions to state)
           const evtType =
@@ -1959,11 +2306,11 @@ function createDatastarAdapter(options = {}) {
               : 'input';
 
           const onModelInput = () => {
-            if (!isConnected() || isComposing) return;
+            if (!isConnected() || el.isConnected === false || isComposing) return;
 
             if (type === 'checkbox') {
               const cur = getByPath(state, modelPath);
-              if (Array.isArray(cur)) {
+              if (isArray(cur)) {
                 const next = el.checked
                   ? Array.from(new Set([...cur, el.value]))
                   : cur.filter((item) => String(item) !== String(el.value));
@@ -1991,7 +2338,7 @@ function createDatastarAdapter(options = {}) {
           };
 
           el.addEventListener(evtType, onModelInput);
-          disposers.push(() => el.removeEventListener(evtType, onModelInput));
+          elDisposers.push(() => el.removeEventListener(evtType, onModelInput));
         }
       }
 
@@ -1999,23 +2346,30 @@ function createDatastarAdapter(options = {}) {
       const eventBindings = extractEventBindings(el);
       for (const binding of eventBindings) {
         const listener = (event) => {
-          if (!isConnected()) return;
+          if (!isConnected() || el.isConnected === false) return;
           if (binding.modifiers.has('prevent')) event.preventDefault();
           if (binding.modifiers.has('stop')) event.stopPropagation();
           invokeAction(binding.actionName, event, el);
         };
         el.addEventListener(binding.eventName, listener);
-        disposers.push(() => el.removeEventListener(binding.eventName, listener));
+        elDisposers.push(() => el.removeEventListener(binding.eventName, listener));
       }
     }
 
     return function unbindInstanceDom() {
-      for (let i = 0; i < disposers.length; i++) {
-        try {
-          disposers[i]();
-        } catch (_err) {
-          // Ignore individual unbind errors
+      const map = boundElementsByInstance.get(instanceId);
+      if (map) {
+        for (const elDisposers of map.values()) {
+          for (let i = 0; i < elDisposers.length; i++) {
+            try {
+              elDisposers[i]();
+            } catch (_err) {
+              // Ignore individual unbind errors
+            }
+          }
         }
+        map.clear();
+        boundElementsByInstance.delete(instanceId);
       }
     };
   }
@@ -2025,13 +2379,52 @@ function createDatastarAdapter(options = {}) {
    */
   function patchFragmentElement(targetEl, htmlString, lifecycleCallbacks = {}) {
     if (!targetEl || typeof htmlString !== 'string') return targetEl;
-    const parsed = parseHtmlFragment(htmlString, targetEl.ownerDocument);
+    const doc = targetEl.ownerDocument || (typeof document !== 'undefined' ? document : null);
+    const parsed = parseHtmlFragment(htmlString, doc);
     if (!parsed) return targetEl;
+
+    // Capture active focus & text selection if inside targetEl before morphing
+    let focusedEl = null;
+    let selStart = null;
+    let selEnd = null;
+    if (
+      doc &&
+      doc.activeElement &&
+      typeof targetEl.contains === 'function' &&
+      targetEl.contains(doc.activeElement)
+    ) {
+      focusedEl = doc.activeElement;
+      try {
+        if (typeof focusedEl.selectionStart === 'number') selStart = focusedEl.selectionStart;
+        if (typeof focusedEl.selectionEnd === 'number') selEnd = focusedEl.selectionEnd;
+      } catch (_e) {}
+    }
 
     const morphed = morphDomTrees(targetEl, parsed, {
       onBeforeNodeRemove: lifecycleCallbacks.onBeforeNodeRemove,
       onNodeAdded: lifecycleCallbacks.onNodeAdded,
     });
+
+    // Restore focus & selection range if the focused element was preserved inside targetEl
+    if (
+      focusedEl &&
+      focusedEl.isConnected !== false &&
+      typeof targetEl.contains === 'function' &&
+      targetEl.contains(focusedEl)
+    ) {
+      try {
+        if (doc && doc.activeElement !== focusedEl && typeof focusedEl.focus === 'function') {
+          focusedEl.focus();
+        }
+        if (
+          typeof selStart === 'number' &&
+          typeof selEnd === 'number' &&
+          typeof focusedEl.setSelectionRange === 'function'
+        ) {
+          focusedEl.setSelectionRange(selStart, selEnd);
+        }
+      } catch (_e) {}
+    }
 
     // If external @starfederation/datastar is active, notify apply() on updated subtree
     if (externalDatastar && typeof externalDatastar.apply === 'function') {
@@ -2063,6 +2456,14 @@ function createDatastarAdapter(options = {}) {
     setByPath,
     isWithinControllerScope,
     collectScopedElements,
+    getBoundInstanceCount: () => boundElementsByInstance.size,
+    getBoundElementCount: () => {
+      let total = 0;
+      for (const m of boundElementsByInstance.values()) {
+        total += m.size;
+      }
+      return total;
+    },
   };
 }
 
@@ -2097,6 +2498,8 @@ module.exports = {
  * - Two-phase mutation -> invalidation dispatch where refresh failure never fails a succeeded mutation
  * - Raw & streaming escape hatches (`api.raw`, `api.stream`)
  */
+
+const { isArray, isNumber } = require('./utils');
 
 const VALID_POLICIES = new Set(['latest', 'drop', 'queue', 'parallel']);
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -2153,7 +2556,7 @@ class ClientRequestError extends Error {
     this.key = details.key || '';
     this.fieldErrors = details.fieldErrors || {};
     this.fieldErrorList = details.fieldErrorList || {};
-    this.issues = Array.isArray(details.issues) ? details.issues : [];
+    this.issues = isArray(details.issues) ? details.issues : [];
     this.formError = details.formError || null;
     this.data = details.data !== undefined ? details.data : null;
     this.isCanceled = this.kind === 'canceled';
@@ -2261,7 +2664,7 @@ function buildRequestUrl(urlTemplate, params, query) {
   const searchParams = new URLSearchParams();
   for (const [key, rawVal] of Object.entries(query)) {
     if (rawVal === undefined) continue;
-    if (Array.isArray(rawVal)) {
+    if (isArray(rawVal)) {
       for (const item of rawVal) {
         if (item === undefined) continue;
         searchParams.append(key, item instanceof Date ? item.toISOString() : String(item));
@@ -2290,7 +2693,7 @@ function containsBinaryValue(value) {
   if (typeof Blob !== 'undefined' && value instanceof Blob) return true;
   if (typeof File !== 'undefined' && value instanceof File) return true;
   if (typeof FormData !== 'undefined' && value instanceof FormData) return true;
-  if (Array.isArray(value)) {
+  if (isArray(value)) {
     return value.some(containsBinaryValue);
   }
   for (const v of Object.values(value)) {
@@ -2306,7 +2709,7 @@ function objectToFormData(obj) {
   const fd = new FormData();
   for (const [key, val] of Object.entries(obj)) {
     if (val === undefined) continue;
-    if (Array.isArray(val)) {
+    if (isArray(val)) {
       for (const item of val) {
         if (item === undefined) continue;
         if (typeof Blob !== 'undefined' && item instanceof Blob) {
@@ -2392,9 +2795,9 @@ function extractValidationErrors(payload) {
 
   // 1. Direct fieldErrors map (e.g. { title: 'Required' } or { title: ['Required'] })
   const rawFieldErrors = errObj.fieldErrors || payload.fieldErrors || errObj.fields || null;
-  if (rawFieldErrors && typeof rawFieldErrors === 'object' && !Array.isArray(rawFieldErrors)) {
+  if (rawFieldErrors && typeof rawFieldErrors === 'object' && !isArray(rawFieldErrors)) {
     for (const [field, msgOrArr] of Object.entries(rawFieldErrors)) {
-      const list = Array.isArray(msgOrArr) ? msgOrArr.map(String) : [String(msgOrArr)];
+      const list = isArray(msgOrArr) ? msgOrArr.map(String) : [String(msgOrArr)];
       if (list.length > 0) {
         fieldErrors[field] = list[0];
         fieldErrorList[field] = list;
@@ -2405,17 +2808,17 @@ function extractValidationErrors(payload) {
 
   // 2. Zod / Webspresso `issues` or `details` array
   const rawIssues =
-    (Array.isArray(errObj.issues) && errObj.issues) ||
-    (Array.isArray(payload.issues) && payload.issues) ||
-    (Array.isArray(errObj.details) && errObj.details) ||
-    (Array.isArray(payload.details) && payload.details) ||
-    (Array.isArray(errObj.errors) && errObj.errors) ||
+    (isArray(errObj.issues) && errObj.issues) ||
+    (isArray(payload.issues) && payload.issues) ||
+    (isArray(errObj.details) && errObj.details) ||
+    (isArray(payload.details) && payload.details) ||
+    (isArray(errObj.errors) && errObj.errors) ||
     [];
 
   for (const issue of rawIssues) {
     if (!issue || typeof issue !== 'object') continue;
     let rawPath = '';
-    if (Array.isArray(issue.path)) {
+    if (isArray(issue.path)) {
       // Strip leading 'body' / 'query' / 'params' prefix from route validation paths
       const cleanParts =
         issue.path.length > 1 &&
@@ -2478,8 +2881,8 @@ function unwrapApiResultAndInvalidate(parsedBody, responseHeaders) {
   if (
     parsedBody &&
     typeof parsedBody === 'object' &&
-    !Array.isArray(parsedBody) &&
-    Array.isArray(parsedBody.invalidate) &&
+    !isArray(parsedBody) &&
+    isArray(parsedBody.invalidate) &&
     'data' in parsedBody
   ) {
     for (const tag of parsedBody.invalidate) {
@@ -2580,18 +2983,18 @@ function normalizeRetryConfig(retryOpt, upperMethod, retryMutations = false) {
   let statusCodes = new Set([408, 429, 502, 503, 504]);
   let onRetry = null;
 
-  if (typeof retryOpt === 'number') {
+  if (isNumber(retryOpt)) {
     count = Math.max(0, Math.floor(retryOpt));
   } else if (retryOpt === true) {
     count = 2;
   } else if (typeof retryOpt === 'object' && retryOpt !== null) {
-    count = typeof retryOpt.count === 'number' ? Math.max(0, Math.floor(retryOpt.count)) : 2;
-    if (typeof retryOpt.delay === 'number') delay = Math.max(0, retryOpt.delay);
-    if (typeof retryOpt.maxDelay === 'number') maxDelay = Math.max(delay, retryOpt.maxDelay);
+    count = isNumber(retryOpt.count) ? Math.max(0, Math.floor(retryOpt.count)) : 2;
+    if (isNumber(retryOpt.delay)) delay = Math.max(0, retryOpt.delay);
+    if (isNumber(retryOpt.maxDelay)) maxDelay = Math.max(delay, retryOpt.maxDelay);
     if (retryOpt.backoff === 'linear' || retryOpt.backoff === 'exponential') {
       backoff = retryOpt.backoff;
     }
-    if (Array.isArray(retryOpt.statusCodes)) {
+    if (isArray(retryOpt.statusCodes)) {
       statusCodes = new Set(retryOpt.statusCodes);
     }
     if (typeof retryOpt.onRetry === 'function') {
@@ -2621,7 +3024,7 @@ function isRetryableError(err, statusCodes) {
   // Network failures and timeouts are retryable
   if (err.kind === 'network' || err.kind === 'timeout' || err.isTimedOut) return true;
   // Transient HTTP status codes
-  if (typeof err.status === 'number' && statusCodes && statusCodes.has(err.status)) {
+  if (isNumber(err.status) && statusCodes && statusCodes.has(err.status)) {
     return true;
   }
   return false;
@@ -2882,7 +3285,7 @@ function createApiClient(config = {}) {
     let timeoutTimer = null;
     let currentSeq = 1;
 
-    if (typeof options.timeout === 'number' && options.timeout > 0) {
+    if (isNumber(options.timeout) && options.timeout > 0) {
       timeoutTimer = setTimeout(() => {
         timedOut = true;
         abortController.abort();
@@ -3426,6 +3829,7 @@ module.exports = {
 'use strict';
 
 const { defaultStorage } = require('./storage');
+const { isArray, setElementBusyState } = require('./utils');
 
 /**
  * Webspresso Native HTML Form Layer & Typed Form Handle
@@ -3627,12 +4031,12 @@ function parseFormElement(formEl, submitterOrOptions = null) {
   function appendValue(normName, val, forceArray) {
     if (val === undefined) return;
     if (forceArray) {
-      if (!Array.isArray(data[normName])) {
+      if (!isArray(data[normName])) {
         data[normName] = [];
       }
       data[normName].push(val);
     } else if (normName in data) {
-      if (!Array.isArray(data[normName])) {
+      if (!isArray(data[normName])) {
         data[normName] = [data[normName]];
       }
       data[normName].push(val);
@@ -3751,7 +4155,7 @@ function parseFormElement(formEl, submitterOrOptions = null) {
     formData = new FormData();
     for (const [key, val] of Object.entries(data)) {
       if (val === undefined) continue;
-      if (Array.isArray(val)) {
+      if (isArray(val)) {
         for (const item of val) {
           if (item === undefined) continue;
           if (typeof Blob !== 'undefined' && item instanceof Blob) {
@@ -3856,15 +4260,28 @@ function createFormHandle(formEl, options = {}) {
     'form';
 
   let initialSnapshot = captureInitialFormSnapshot(formEl);
+  let baselineValues = parseFormElement(formEl).data;
   let pending = false;
   let dirty = false;
+  let inputRevision = 0;
   let fieldErrors = {};
   let formError = null;
+  let lastError = null;
   let lastData = null;
+  let draftDebounceTimer = null;
+  let resetTimer = null;
 
+  const beforeSubmitListeners = new Set();
   const successListeners = new Set();
   const errorListeners = new Set();
   const stateListeners = new Set();
+
+  function cancelDraftDebounce() {
+    if (draftDebounceTimer) {
+      clearTimeout(draftDebounceTimer);
+      draftDebounceTimer = null;
+    }
+  }
 
   // Form draft persistence setup (sessionStorage by default, or localStorage)
   const rawDraftAttr = formEl
@@ -3882,10 +4299,17 @@ function createFormHandle(formEl, options = {}) {
     draftStorageType = 'local';
   }
 
-  const draftKey =
+  const draftScope =
+    options.draftScope ||
+    (formEl && formEl.getAttribute && formEl.getAttribute('data-w-draft-scope')) ||
+    '';
+
+  const baseDraftKey =
     options.draftKey ||
     (formEl && (formEl.getAttribute('data-w-draft-key') || formEl.getAttribute('data-w-persist-key'))) ||
     `form_draft:${formName || 'anon'}`;
+
+  let draftKey = draftScope ? `${baseDraftKey}:${draftScope}` : baseDraftKey;
 
   const draftStorage =
     (options.storage && options.storage[draftStorageType]) ||
@@ -3909,7 +4333,22 @@ function createFormHandle(formEl, options = {}) {
     return safeData;
   }
 
+  function sanitizeDraftObject(raw) {
+    if (!raw || typeof raw !== 'object' || isArray(raw)) return null;
+    const clean = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      if (v === null || v === undefined || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+        clean[k] = v;
+      } else if (isArray(v) && v.every((item) => typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean')) {
+        clean[k] = v;
+      }
+    }
+    return Object.keys(clean).length > 0 ? clean : null;
+  }
+
   function saveDraft() {
+    cancelDraftDebounce();
     if (!formEl || !isDraftEnabled) return false;
     const draftPayload = extractDraftValues(formEl);
     return draftStorage.set(draftKey, draftPayload);
@@ -3917,9 +4356,15 @@ function createFormHandle(formEl, options = {}) {
 
   function restoreDraft() {
     if (!formEl || !isDraftEnabled) return false;
-    const saved = draftStorage.get(draftKey, null);
-    if (saved && typeof saved === 'object' && Object.keys(saved).length > 0) {
-      fill(saved, { baseline: false });
+    let saved = null;
+    try {
+      saved = draftStorage.get(draftKey, null);
+    } catch (_e) {
+      saved = null;
+    }
+    const cleanDraft = sanitizeDraftObject(saved);
+    if (cleanDraft) {
+      fill(cleanDraft, { baseline: false });
       if (typeof formEl.dispatchEvent === 'function') {
         const CustomEventCtor =
           (formEl.ownerDocument && formEl.ownerDocument.defaultView && formEl.ownerDocument.defaultView.CustomEvent) ||
@@ -3929,7 +4374,7 @@ function createFormHandle(formEl, options = {}) {
             new CustomEventCtor('w-form:draft-restored', {
               bubbles: true,
               cancelable: true,
-              detail: { form: handle, draft: saved, key: draftKey },
+              detail: { form: handle, draft: cleanDraft, key: draftKey },
             })
           );
         }
@@ -3940,6 +4385,7 @@ function createFormHandle(formEl, options = {}) {
   }
 
   function clearDraft() {
+    cancelDraftDebounce();
     if (!isDraftEnabled) return false;
     return draftStorage.remove(draftKey);
   }
@@ -3947,6 +4393,20 @@ function createFormHandle(formEl, options = {}) {
   function hasDraft() {
     if (!isDraftEnabled) return false;
     return draftStorage.has(draftKey);
+  }
+
+  function setDraftKey(nextKey, keyOpts = {}) {
+    cancelDraftDebounce();
+    if (typeof nextKey === 'string' && nextKey.trim()) {
+      draftKey = nextKey.trim();
+      if (formEl && typeof formEl.setAttribute === 'function') {
+        formEl.setAttribute('data-w-draft-key', draftKey);
+      }
+      if (keyOpts && keyOpts.restore === true && isDraftEnabled) {
+        restoreDraft();
+      }
+    }
+    return handle;
   }
 
   function notifyStateChange() {
@@ -4044,32 +4504,32 @@ function createFormHandle(formEl, options = {}) {
    * Toggle pending state on the form and submit buttons to prevent double submissions.
    */
   function setPendingState(nextPending, activeSubmitter = null) {
-    pending = Boolean(nextPending);
+    const next = Boolean(nextPending);
+    if (pending === next) return;
+    pending = next;
     if (!formEl) return;
 
     if (pending) {
       formEl.setAttribute('aria-busy', 'true');
       formEl.setAttribute('data-w-pending', 'true');
+      formEl.setAttribute('data-w-busy', 'true');
     } else {
       formEl.removeAttribute('aria-busy');
       formEl.removeAttribute('data-w-pending');
+      formEl.removeAttribute('data-w-busy');
     }
 
     const submitButtons = formEl.querySelectorAll
       ? formEl.querySelectorAll('button[type="submit"], button:not([type]), input[type="submit"]')
       : [];
+    let submitterHandled = false;
     for (let i = 0; i < submitButtons.length; i++) {
       const btn = submitButtons[i];
-      if (btn.hasAttribute('data-w-disabled')) continue; // Managed by controller binding
-      if (pending) {
-        btn.__wWasDisabled = Boolean(btn.disabled);
-        btn.disabled = true;
-      } else if (!btn.__wWasDisabled) {
-        btn.disabled = false;
-      }
+      if (btn === activeSubmitter) submitterHandled = true;
+      setElementBusyState(btn, pending);
     }
-    if (activeSubmitter && !activeSubmitter.hasAttribute('data-w-disabled')) {
-      activeSubmitter.disabled = pending;
+    if (activeSubmitter && !submitterHandled) {
+      setElementBusyState(activeSubmitter, pending);
     }
     notifyStateChange();
   }
@@ -4078,6 +4538,7 @@ function createFormHandle(formEl, options = {}) {
    * Reset form controls back to their initial default values (NOT emptying non-empty defaults).
    */
   function reset() {
+    cancelDraftDebounce();
     if (!formEl) return;
     if (typeof formEl.reset === 'function') {
       formEl.reset();
@@ -4107,6 +4568,7 @@ function createFormHandle(formEl, options = {}) {
    * Completely clear all user-editable controls to empty values (distinct from `reset()`).
    */
   function clear() {
+    cancelDraftDebounce();
     if (!formEl || typeof formEl.querySelectorAll !== 'function') return;
     const controls = formEl.querySelectorAll('input, select, textarea');
     for (let i = 0; i < controls.length; i++) {
@@ -4143,11 +4605,14 @@ function createFormHandle(formEl, options = {}) {
    *                                            snapshot, clears `dirty`, and clears previous validation errors.
    */
   function fill(values = {}, options = {}) {
-    if (!formEl || typeof formEl.querySelectorAll !== 'function' || !values || typeof values !== 'object') {
+    if (!formEl || typeof formEl.querySelectorAll !== 'function' || !values || typeof values !== 'object' || isArray(values)) {
       return handle;
     }
 
     const isBaseline = Boolean(options.baseline);
+    if (isBaseline) {
+      cancelDraftDebounce();
+    }
 
     for (const [key, val] of Object.entries(values)) {
       if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
@@ -4163,7 +4628,7 @@ function createFormHandle(formEl, options = {}) {
         if (type === 'file') continue; // Browser security prevents setting file input value
 
         if (type === 'checkbox') {
-          if (Array.isArray(val)) {
+          if (isArray(val)) {
             ctrl.checked = val.map(String).includes(String(ctrl.value));
           } else {
             ctrl.checked = Boolean(val);
@@ -4172,7 +4637,7 @@ function createFormHandle(formEl, options = {}) {
           ctrl.checked = String(val) === String(ctrl.value);
         } else if (ctrl.tagName === 'SELECT') {
           if (ctrl.multiple) {
-            const arr = Array.isArray(val) ? val.map(String) : [String(val)];
+            const arr = isArray(val) ? val.map(String) : [String(val)];
             const opts = ctrl.options || [];
             for (let j = 0; j < opts.length; j++) {
               opts[j].selected = arr.includes(String(opts[j].value));
@@ -4181,6 +4646,7 @@ function createFormHandle(formEl, options = {}) {
             ctrl.value = val === null || val === undefined ? '' : String(val);
           }
         } else {
+          if (val !== null && typeof val === 'object') continue;
           ctrl.value = val === null || val === undefined ? '' : String(val);
         }
 
@@ -4192,9 +4658,11 @@ function createFormHandle(formEl, options = {}) {
 
     if (isBaseline) {
       initialSnapshot = captureInitialFormSnapshot(formEl);
+      baselineValues = parseFormElement(formEl).data;
       dirty = false;
       fieldErrors = {};
       formError = null;
+      lastError = null;
       syncErrorsToDom(false);
     } else {
       dirty = computeFormDirty(formEl, initialSnapshot);
@@ -4207,7 +4675,9 @@ function createFormHandle(formEl, options = {}) {
 
   function setAction(url) {
     if (formEl && url) {
-      formEl.setAttribute('action', String(url));
+      const nextAction = String(url);
+      formEl.setAttribute('action', nextAction);
+      formEl.__wCustomAction = nextAction;
     }
     return handle;
   }
@@ -4220,6 +4690,7 @@ function createFormHandle(formEl, options = {}) {
       action = action.replace(new RegExp(`:${k}\\b`, 'g'), encodeURIComponent(String(v)));
     }
     formEl.setAttribute('action', action);
+    formEl.__wCustomAction = action;
     return handle;
   }
 
@@ -4294,9 +4765,23 @@ function createFormHandle(formEl, options = {}) {
 
     const { data: payloadData, formData, isMultipart } = parseFormElement(formEl, submitter);
 
+    // Execute beforeSubmit hooks before initiating network request
+    for (const guardFn of beforeSubmitListeners) {
+      let allowed = true;
+      try {
+        allowed = await guardFn(payloadData, { form: handle, submitter, action: actionUrl, method });
+      } catch (guardErr) {
+        return { ok: false, submitted: false, canceled: true, reason: 'before-submit-error', error: guardErr };
+      }
+      if (allowed === false) {
+        return { ok: false, submitted: false, canceled: true, reason: 'before-submit' };
+      }
+    }
+
     // Clear previous errors before request starts
     fieldErrors = {};
     formError = null;
+    lastError = null;
     syncErrorsToDom(false);
     setPendingState(true, submitter);
 
@@ -4345,6 +4830,7 @@ function createFormHandle(formEl, options = {}) {
       } else {
         // Current state becomes the new clean baseline after successful save
         initialSnapshot = captureInitialFormSnapshot(formEl);
+        baselineValues = parseFormElement(formEl).data;
       }
 
       if (isDraftEnabled) {
@@ -4391,6 +4877,7 @@ function createFormHandle(formEl, options = {}) {
 
       return { ok: true, submitted: true, data: responseData, refreshOk, refreshError, hookError };
     } catch (err) {
+      lastError = err || null;
       if (err && err.kind === 'validation') {
         fieldErrors = { ...(err.fieldErrors || {}) };
         formError = err.formError || (Object.keys(fieldErrors).length === 0 ? err.message : null);
@@ -4420,8 +4907,8 @@ function createFormHandle(formEl, options = {}) {
   }
 
   // Listen to native submit and input/change events on `formEl`
-  let draftDebounceTimer = null;
   const onDomInput = (evt) => {
+    inputRevision += 1;
     dirty = computeFormDirty(formEl, initialSnapshot);
     const target = evt && evt.target;
     if (target && target.getAttribute) {
@@ -4436,8 +4923,9 @@ function createFormHandle(formEl, options = {}) {
       }
     }
     if (isDraftEnabled) {
-      if (draftDebounceTimer) clearTimeout(draftDebounceTimer);
+      cancelDraftDebounce();
       draftDebounceTimer = setTimeout(() => {
+        draftDebounceTimer = null;
         saveDraft();
       }, 150);
     }
@@ -4449,7 +4937,10 @@ function createFormHandle(formEl, options = {}) {
   };
 
   const onDomReset = () => {
-    setTimeout(() => {
+    cancelDraftDebounce();
+    if (resetTimer) clearTimeout(resetTimer);
+    resetTimer = setTimeout(() => {
+      resetTimer = null;
       dirty = false;
       fieldErrors = {};
       formError = null;
@@ -4486,8 +4977,17 @@ function createFormHandle(formEl, options = {}) {
       dirty = computeFormDirty(formEl, initialSnapshot);
       return dirty;
     },
+    get inputRevision() {
+      return inputRevision;
+    },
+    get draftKey() {
+      return draftKey;
+    },
     get values() {
       return parseFormElement(formEl).data;
+    },
+    get baseline() {
+      return { ...(baselineValues || {}) };
     },
     get errors() {
       return { ...fieldErrors };
@@ -4497,6 +4997,9 @@ function createFormHandle(formEl, options = {}) {
     },
     get formError() {
       return formError;
+    },
+    get lastError() {
+      return lastError;
     },
     get lastData() {
       return lastData;
@@ -4517,6 +5020,7 @@ function createFormHandle(formEl, options = {}) {
     saveDraft,
     restoreDraft,
     clearDraft,
+    setDraftKey,
     get hasDraft() {
       return hasDraft();
     },
@@ -4536,12 +5040,20 @@ function createFormHandle(formEl, options = {}) {
     clearErrors() {
       fieldErrors = {};
       formError = null;
+      lastError = null;
       syncErrorsToDom(false);
       notifyStateChange();
     },
     reset,
     clear,
     submit,
+    beforeSubmit(fn) {
+      if (typeof fn === 'function') {
+        beforeSubmitListeners.add(fn);
+        return () => beforeSubmitListeners.delete(fn);
+      }
+      return () => {};
+    },
     onSuccess(fn) {
       if (typeof fn === 'function') {
         successListeners.add(fn);
@@ -4564,6 +5076,11 @@ function createFormHandle(formEl, options = {}) {
       return () => {};
     },
     destroy() {
+      cancelDraftDebounce();
+      if (resetTimer) {
+        clearTimeout(resetTimer);
+        resetTimer = null;
+      }
       if (formEl && typeof formEl.removeEventListener === 'function') {
         formEl.removeEventListener('input', onDomInput);
         formEl.removeEventListener('change', onDomInput);
@@ -4573,6 +5090,7 @@ function createFormHandle(formEl, options = {}) {
       if (formEl) {
         delete formEl.__wFormHandle;
       }
+      beforeSubmitListeners.clear();
       successListeners.clear();
       errorListeners.clear();
       stateListeners.clear();
@@ -4994,9 +5512,13 @@ function resolveDocument(root) {
  */
 function resolveDefaultContainer(root, doc) {
   if (root && root.nodeType === 1 && root.tagName !== 'HTML') {
-    // If a custom element root was passed and is not inside a fragment, use it or doc.body
     if (doc && doc.body && (root === doc.body || root === doc.documentElement)) {
       return doc.body;
+    }
+    const insideFragment =
+      typeof root.closest === 'function' ? Boolean(root.closest('[data-w-fragment]')) : false;
+    if (!insideFragment) {
+      return root;
     }
     if (!doc || !doc.body) {
       return root;
@@ -5410,118 +5932,50 @@ function defineClientService(definition) {
  * Resolve a service instance from a dynamically loaded module or factory descriptor.
  */
 async function instantiateFromLoadedModule(loaded, outerDef, serviceCtx, registerDispose) {
-  if (outerDef.dispose) {
-    registerDispose(outerDef.dispose);
-  }
+  if (outerDef.dispose) registerDispose(outerDef.dispose);
 
-  // If the outer definition provided both `load` and `create`/`setup`, invoke outer `create`
   if (outerDef.load && outerDef.create) {
     return await outerDef.create(serviceCtx, loaded);
   }
-
   if (!outerDef.load && outerDef.create) {
     const res = await outerDef.create(serviceCtx);
-    if (res && typeof res === 'object' && res.__isWebspressoClientService) {
-      return instantiateFromLoadedModule(res, { load: null, create: null, dispose: null }, serviceCtx, registerDispose);
-    }
-    return res;
+    return res && typeof res === 'object' && res.__isWebspressoClientService
+      ? instantiateFromLoadedModule(res, {}, serviceCtx, registerDispose)
+      : res;
   }
+  if (loaded == null) return loaded;
 
-  if (loaded === null || loaded === undefined) {
-    return loaded;
-  }
-
-  // 1. Direct `defineClientService` descriptor
-  if (typeof loaded === 'object' && loaded.__isWebspressoClientService) {
-    if (typeof loaded.dispose === 'function') {
-      registerDispose(loaded.dispose);
-    }
-    if (typeof loaded.load === 'function') {
-      const nested = await loaded.load(serviceCtx);
-      return instantiateFromLoadedModule(
-        nested,
-        { load: null, create: loaded.create, dispose: null },
-        serviceCtx,
-        registerDispose
-      );
-    }
-    if (typeof loaded.create === 'function') {
-      return await loaded.create(serviceCtx);
-    }
-    return loaded;
-  }
-
-  // 2. Direct factory function
-  if (typeof loaded === 'function') {
-    const produced = await loaded(serviceCtx);
-    if (produced && typeof produced === 'object' && produced.__isWebspressoClientService) {
-      return instantiateFromLoadedModule(
-        produced,
-        { load: null, create: null, dispose: null },
-        serviceCtx,
-        registerDispose
-      );
-    }
-    return produced;
-  }
-
-  // 3. Module namespace or object with `default` export
+  let target = loaded;
   if (typeof loaded === 'object') {
+    if (typeof loaded.dispose === 'function') registerDispose(loaded.dispose);
     if ('default' in loaded && loaded.default !== undefined) {
-      const defExport = loaded.default;
-      if (typeof loaded.dispose === 'function') {
-        registerDispose(loaded.dispose);
-      }
-      if (defExport && typeof defExport === 'object' && defExport.__isWebspressoClientService) {
-        return instantiateFromLoadedModule(
-          defExport,
-          { load: null, create: null, dispose: null },
-          serviceCtx,
-          registerDispose
-        );
-      }
-      if (typeof defExport === 'function') {
-        const produced = await defExport(serviceCtx);
-        if (produced && typeof produced === 'object' && produced.__isWebspressoClientService) {
-          return instantiateFromLoadedModule(
-            produced,
-            { load: null, create: null, dispose: null },
-            serviceCtx,
-            registerDispose
-          );
-        }
-        return produced;
-      }
-      if (defExport && typeof defExport === 'object') {
-        if (typeof defExport.dispose === 'function') {
-          registerDispose(defExport.dispose);
-        }
-        if (typeof defExport.create === 'function') {
-          return await defExport.create(serviceCtx);
-        }
-        if (typeof defExport.setup === 'function') {
-          return await defExport.setup(serviceCtx);
-        }
-      }
-      return defExport;
-    }
-
-    // 4. Named lifecycle exports on module namespace (`createService`, `setup`, `create`)
-    if (typeof loaded.dispose === 'function') {
-      registerDispose(loaded.dispose);
-    }
-    if (typeof loaded.createService === 'function') {
-      return await loaded.createService(serviceCtx);
-    }
-    if (typeof loaded.setup === 'function') {
-      return await loaded.setup(serviceCtx);
-    }
-    if (typeof loaded.create === 'function') {
-      return await loaded.create(serviceCtx);
+      target = loaded.default;
     }
   }
 
-  return loaded;
+  if (target && typeof target === 'object' && target.__isWebspressoClientService) {
+    if (typeof target.dispose === 'function') registerDispose(target.dispose);
+    if (typeof target.load === 'function') {
+      const nested = await target.load(serviceCtx);
+      return instantiateFromLoadedModule(nested, { create: target.create }, serviceCtx, registerDispose);
+    }
+    return typeof target.create === 'function' ? await target.create(serviceCtx) : target;
+  }
+
+  if (typeof target === 'function') {
+    const produced = await target(serviceCtx);
+    return produced && typeof produced === 'object' && produced.__isWebspressoClientService
+      ? instantiateFromLoadedModule(produced, {}, serviceCtx, registerDispose)
+      : produced;
+  }
+
+  if (target && typeof target === 'object') {
+    if (typeof target.dispose === 'function') registerDispose(target.dispose);
+    const fn = target.createService || target.create || target.setup;
+    if (typeof fn === 'function') return await fn.call(target, serviceCtx);
+  }
+
+  return target;
 }
 
 /**
@@ -5995,16 +6449,15 @@ module.exports = {
  */
 
 const { defaultStorage } = require('./storage');
+const { isArray, isNumber } = require('./utils');
 
 const DEVTOOL_HOST_ID = 'webspresso-client-devtools-host';
 
-const PKG_VERSION = (() => {
-  try {
-    return require('../../package.json').version || '0.0.110';
-  } catch (_) {
-    return '0.0.110';
-  }
-})();
+const PKG_VERSION =
+  (typeof window !== 'undefined' &&
+    window.__WEBSPRESSO_DEV_META__ &&
+    window.__WEBSPRESSO_DEV_META__.version) ||
+  '0.0.110';
 
 /**
  * Connect to Redux DevTools browser extension if installed.
@@ -6170,9 +6623,9 @@ function mountDevtool(runtime, options = {}) {
         ? window.__WEBSPRESSO_DEV_META__
         : {};
     const merged = { ...winMeta, ...metaOverrides };
-    const pluginsList = Array.isArray(merged.plugins)
+    const pluginsList = isArray(merged.plugins)
       ? merged.plugins
-      : Array.isArray(options.plugins)
+      : isArray(options.plugins)
         ? options.plugins
         : [];
 
@@ -7123,7 +7576,7 @@ function mountDevtool(runtime, options = {}) {
   document.addEventListener('keydown', onKeyDown);
 
   // Periodic polling to keep snapshots live
-  const pollIntervalMs = typeof options.pollInterval === 'number' ? options.pollInterval : 2000;
+  const pollIntervalMs = isNumber(options.pollInterval) ? options.pollInterval : 2000;
   let pollTimer = null;
   if (pollIntervalMs > 0) {
     pollTimer = setInterval(() => {
@@ -7242,7 +7695,14 @@ const { createFormHandle } = require('./forms');
 const { createApiClient } = require('./api');
 const { defaultStorage, createClientStorage } = require('./storage');
 const { createClientServiceRegistry } = require('./services');
-const { decorateElement, parseDurationMs, parseRefetchMode } = require('./utils');
+const {
+  isArray,
+  isNumber,
+  decorateElement,
+  parseDurationMs,
+  parseRefetchMode,
+  setElementBusyState,
+} = require('./utils');
 
 let instanceSeq = 0;
 let activeControllerContext = null;
@@ -7267,7 +7727,7 @@ function deepTouch(val, visited = new Set()) {
     return;
   }
   visited.add(val);
-  if (Array.isArray(val)) {
+  if (isArray(val)) {
     for (let i = 0; i < val.length; i++) {
       deepTouch(val[i], visited);
     }
@@ -7284,14 +7744,14 @@ function deepCloneOrSnapshot(val) {
   try {
     return JSON.parse(JSON.stringify(val));
   } catch {
-    return Array.isArray(val) ? [...val] : { ...val };
+    return isArray(val) ? [...val] : { ...val };
   }
 }
 
 function deepEqual(a, b) {
   if (Object.is(a, b)) return true;
   if (a === null || typeof a !== 'object' || b === null || typeof b !== 'object') return false;
-  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (isArray(a) !== isArray(b)) return false;
   const keysA = Object.keys(a);
   const keysB = Object.keys(b);
   if (keysA.length !== keysB.length) return false;
@@ -7305,7 +7765,7 @@ function deepEqual(a, b) {
 }
 
 function hasArrayChanged(newArr, oldArr) {
-  if (!Array.isArray(newArr) || !Array.isArray(oldArr)) return !Object.is(newArr, oldArr);
+  if (!isArray(newArr) || !isArray(oldArr)) return !Object.is(newArr, oldArr);
   if (newArr.length !== oldArr.length) return true;
   for (let i = 0; i < newArr.length; i++) {
     if (!Object.is(newArr[i], oldArr[i])) return true;
@@ -7332,7 +7792,7 @@ function createStandaloneWatch(engine, source, callback, options = {}) {
   let getter;
   if (typeof source === 'function') {
     getter = source;
-  } else if (Array.isArray(source)) {
+  } else if (isArray(source)) {
     getter = () => source.map((s) => (typeof s === 'function' ? s() : s));
   } else {
     getter = () => source;
@@ -7371,14 +7831,14 @@ function createStandaloneWatch(engine, source, callback, options = {}) {
     let newValue;
     try {
       newValue = getter();
-      if ((deep || (source && typeof source === 'object' && typeof source !== 'function' && !Array.isArray(source))) && newValue && typeof newValue === 'object') {
+      if ((deep || (source && typeof source === 'object' && typeof source !== 'function' && !isArray(source))) && newValue && typeof newValue === 'object') {
         deepTouch(newValue);
       }
     } catch (_err) {
       return;
     }
 
-    const isArr = Array.isArray(source);
+    const isArr = isArray(source);
 
     if (isFirstRun) {
       isFirstRun = false;
@@ -7549,7 +8009,7 @@ function defineController(definition = {}) {
   }
   if (definition.persist !== undefined && definition.persist !== null) {
     const p = definition.persist;
-    const isArr = Array.isArray(p);
+    const isArr = isArray(p);
     const isStr = typeof p === 'string';
     const isObj = typeof p === 'object' && p !== null && !isArr;
     if (!isArr && !isStr && !isObj) {
@@ -7605,13 +8065,13 @@ function normalizePersistConfig(persistOpt, controllerName) {
   let isGlobal = false;
   let debounce = 50;
 
-  if (Array.isArray(persistOpt)) {
+  if (isArray(persistOpt)) {
     keys = persistOpt.map(String);
   } else if (typeof persistOpt === 'string') {
     const s = persistOpt.trim().toLowerCase();
     storageType = s === 'session' ? 'session' : 'local';
   } else if (typeof persistOpt === 'object' && persistOpt !== null) {
-    if (Array.isArray(persistOpt.keys)) {
+    if (isArray(persistOpt.keys)) {
       keys = persistOpt.keys.map(String);
     }
     if (persistOpt.storage === 'session' || persistOpt.storage === 'memory') {
@@ -7623,7 +8083,7 @@ function normalizePersistConfig(persistOpt, controllerName) {
     if (Boolean(persistOpt.global)) {
       isGlobal = true;
     }
-    if (typeof persistOpt.debounce === 'number') {
+    if (isNumber(persistOpt.debounce)) {
       debounce = Math.max(0, persistOpt.debounce);
     }
   }
@@ -7711,6 +8171,7 @@ function createControllerRuntime(options = {}) {
   const activeInstances = new Map();
   // Standalone forms (forms without a controller wrapper)
   const standaloneForms = new WeakMap();
+  const activeStandaloneForms = new Set();
 
   /**
    * Register a controller definition with collision checking.
@@ -7766,7 +8227,7 @@ function createControllerRuntime(options = {}) {
     };
     definitions.set(canonicalName, entry);
 
-    if (Array.isArray(meta.aliases)) {
+    if (isArray(meta.aliases)) {
       for (const alias of meta.aliases) {
         if (alias && !definitions.has(alias)) {
           definitions.set(alias, entry);
@@ -7819,6 +8280,79 @@ function createControllerRuntime(options = {}) {
     const scopedForms = new Map();
     const scopedTasks = {};
     const scopedTasksList = [];
+    const busyActionCounts = new Map();
+    let totalBusyActions = 0;
+    const busySignalPrefix = `__w_inst_${instanceId}.__busy`;
+    datastar.engine.signals.setValue(`${busySignalPrefix}.any`, false);
+
+    function syncAnyBusySignal() {
+      let busy = totalBusyActions > 0;
+      if (!busy) {
+        for (let i = 0; i < scopedTasksList.length; i++) {
+          if (scopedTasksList[i].pending) {
+            busy = true;
+            break;
+          }
+        }
+      }
+      datastar.engine.signals.setValue(`${busySignalPrefix}.any`, busy);
+    }
+
+    function setActionBusy(actionName, delta) {
+      const prevCount = busyActionCounts.get(actionName) || 0;
+      const nextCount = Math.max(0, prevCount + delta);
+      if (nextCount === 0) {
+        busyActionCounts.delete(actionName);
+      } else {
+        busyActionCounts.set(actionName, nextCount);
+      }
+      totalBusyActions = Math.max(0, totalBusyActions + delta);
+      datastar.engine.signals.setValue(`${busySignalPrefix}.action_${actionName}`, nextCount > 0);
+      syncAnyBusySignal();
+    }
+
+    function isActionBusy(actionName) {
+      if (!actionName) return false;
+      datastar.engine.signals.value(`${busySignalPrefix}.action_${actionName}`);
+      return (busyActionCounts.get(actionName) || 0) > 0;
+    }
+
+    function checkIsBusy() {
+      datastar.engine.signals.value(`${busySignalPrefix}.any`);
+      if (totalBusyActions > 0) return true;
+      for (let i = 0; i < scopedTasksList.length; i++) {
+        if (scopedTasksList[i].pending) return true;
+      }
+      return false;
+    }
+
+    function isLoadingTargetActive(rawSpec) {
+      const spec = typeof rawSpec === 'string' ? rawSpec.trim() : '';
+      if (!spec || spec === 'true') {
+        return checkIsBusy();
+      }
+      const parts = spec.split(',').map((s) => s.trim()).filter(Boolean);
+      for (let i = 0; i < parts.length; i++) {
+        const token = parts[i];
+        if (reg.definition.actions && Object.prototype.hasOwnProperty.call(reg.definition.actions, token)) {
+          if (isActionBusy(token)) return true;
+          continue;
+        }
+        if (
+          Object.prototype.hasOwnProperty.call(scopedTasks, token) ||
+          (reg.definition.tasks && Object.prototype.hasOwnProperty.call(reg.definition.tasks, token))
+        ) {
+          const t = getTask(token);
+          if (t && t.pending) return true;
+          continue;
+        }
+        if (Boolean(datastar.evaluateStateExpression(state, token))) {
+          return true;
+        }
+      }
+      return false;
+    }
+
     let currentActionEl = null;
     let lastError = null;
     const dynamicErrorListeners = new Set();
@@ -7912,6 +8446,7 @@ function createControllerRuntime(options = {}) {
       let _data = null;
       let _error = null;
       let _stale = false;
+      let _lastArgs = [];
 
       function isTaskStale(mode = true) {
         if (!mode) return false;
@@ -7923,10 +8458,17 @@ function createControllerRuntime(options = {}) {
 
       function updateSignal(name, val) {
         datastar.engine.signals.setValue(`${signalPrefix}.${name}`, val);
+        if (name === 'pending') {
+          syncAnyBusySignal();
+        }
       }
 
       async function run(...args) {
         if (!isConnected()) return undefined;
+        if (args.length > 0) {
+          _lastArgs = [...args];
+        }
+        const effectiveArgs = args.length > 0 ? args : _lastArgs;
 
         if (policy === 'drop' && activeRuns > 0) {
           if (debug && typeof debug.trackDiscardedResponse === 'function') {
@@ -7942,12 +8484,12 @@ function createControllerRuntime(options = {}) {
 
         if (policy === 'queue') {
           const wait = queuedPromise;
-          const nextRun = wait.then(() => executeRun(...args)).catch(() => {});
+          const nextRun = wait.then(() => executeRun(...effectiveArgs)).catch(() => {});
           queuedPromise = nextRun;
           return nextRun;
         }
 
-        return executeRun(...args);
+        return executeRun(...effectiveArgs);
       }
 
       async function executeRun(...args) {
@@ -7974,7 +8516,7 @@ function createControllerRuntime(options = {}) {
         try {
           const result = await runFn(...args);
 
-          if (!isConnected() || runVersion !== currentRunVersion) {
+          if (!isConnected() || (policy !== 'parallel' && runVersion !== currentRunVersion)) {
             return undefined;
           }
 
@@ -7987,7 +8529,7 @@ function createControllerRuntime(options = {}) {
           updateSignal('stale', false);
           return result;
         } catch (err) {
-          if (!isConnected() || runVersion !== currentRunVersion) {
+          if (!isConnected() || (policy !== 'parallel' && runVersion !== currentRunVersion)) {
             return undefined;
           }
           if (err && (err.isCanceled || err.name === 'AbortError')) {
@@ -8005,7 +8547,11 @@ function createControllerRuntime(options = {}) {
             inFlightAbort = null;
           }
           activeRuns = Math.max(0, activeRuns - 1);
-          if (runVersion === currentRunVersion || activeRuns === 0) {
+          const shouldClearPending =
+            policy === 'parallel'
+              ? activeRuns === 0
+              : runVersion === currentRunVersion || activeRuns === 0;
+          if (shouldClearPending) {
             _pending = false;
             _stale = false;
             if (isConnected()) {
@@ -8051,6 +8597,9 @@ function createControllerRuntime(options = {}) {
         },
         get lastUpdatedAt() {
           return _lastUpdatedAt;
+        },
+        get lastArgs() {
+          return [..._lastArgs];
         },
         isStale: () => isTaskStale(true),
         run,
@@ -8173,7 +8722,7 @@ function createControllerRuntime(options = {}) {
         getter = () => source(ctx);
       } else if (typeof source === 'string') {
         getter = () => resolveStatePath(state, source);
-      } else if (Array.isArray(source)) {
+      } else if (isArray(source)) {
         getter = () =>
           source.map((s) =>
             typeof s === 'function'
@@ -8223,7 +8772,7 @@ function createControllerRuntime(options = {}) {
         let newValue;
         try {
           newValue = getter();
-          if ((deep || (source && typeof source === 'object' && typeof source !== 'function' && !Array.isArray(source))) && newValue && typeof newValue === 'object') {
+          if ((deep || (source && typeof source === 'object' && typeof source !== 'function' && !isArray(source))) && newValue && typeof newValue === 'object') {
             deepTouch(newValue);
           }
         } catch (err) {
@@ -8231,7 +8780,7 @@ function createControllerRuntime(options = {}) {
           return;
         }
 
-        const isArr = Array.isArray(source);
+        const isArr = isArray(source);
 
         if (isFirstRun) {
           isFirstRun = false;
@@ -8499,12 +9048,39 @@ function createControllerRuntime(options = {}) {
       root: defaultStorage,
     });
     const persistConfig = normalizePersistConfig(reg.definition.persist, controllerName);
+    let persistTimer = null;
+    let lastSavedJson = '';
+    const persistenceConflicts = [];
     function resolvePersistDriver(pConfig) {
       if (!pConfig) return storageCtx.local;
       if (pConfig.isGlobal) {
         return defaultStorage[pConfig.storageType] || defaultStorage.local;
       }
       return storageCtx[pConfig.storageType] || storageCtx.local;
+    }
+
+    function checkFragmentPersistenceConflict(idOrName, input) {
+      if (!persistConfig || !fragments || typeof fragments.getInstance !== 'function' || !input || typeof input !== 'object') {
+        return;
+      }
+      const inst =
+        fragments.getInstance(idOrName) ||
+        (typeof fragments.getInstances === 'function'
+          ? fragments.getInstances().find((i) => i.name === idOrName)
+          : null);
+      if (inst && inst.persistInput && inst.persistInput.key !== persistConfig.storageKey) {
+        const conflict = {
+          controller: controllerName,
+          controllerStorageKey: persistConfig.storageKey,
+          fragment: inst.instanceId,
+          fragmentStorageKey: inst.persistInput.key,
+          keys: Object.keys(input),
+        };
+        persistenceConflicts.push(conflict);
+        if (debug && typeof debug.recordEvent === 'function') {
+          debug.recordEvent('persist:conflict', conflict);
+        }
+      }
     }
 
     // 6. Context object passed to `connect(ctx)` and `actions[name](ctx, event, actionEl)`
@@ -8523,10 +9099,27 @@ function createControllerRuntime(options = {}) {
       tasks: tasksProxy,
       task: createTaskInstance,
       storage: storageCtx,
+      get persistenceConflicts() {
+        return [...persistenceConflicts];
+      },
       clearPersistedState: () => {
+        if (persistTimer) {
+          clearTimeout(persistTimer);
+          persistTimer = null;
+        }
         if (persistConfig) {
           const driver = resolvePersistDriver(persistConfig);
           driver.remove(persistConfig.storageKey);
+          if (state && initialRawState) {
+            const keysToTrack = persistConfig.keys || Object.keys(initialRawState);
+            const currentPayload = {};
+            for (const k of keysToTrack) {
+              currentPayload[k] = state[k];
+            }
+            lastSavedJson = JSON.stringify(currentPayload);
+          } else {
+            lastSavedJson = '';
+          }
         }
       },
       param: (name, maybeEl) => {
@@ -8550,6 +9143,10 @@ function createControllerRuntime(options = {}) {
       signal: lifecycleAbort.signal,
       isConnected,
       isDisposed: () => !isConnected(),
+      get isBusy() {
+        return checkIsBusy();
+      },
+      isActionBusy,
       get lastError() {
         return lastError;
       },
@@ -8566,7 +9163,12 @@ function createControllerRuntime(options = {}) {
         return unregister;
       },
       invalidate: (tags) => (fragments ? fragments.invalidate(tags) : Promise.resolve({ ok: true, refreshed: [] })),
+      retryFailedFragments: () =>
+        fragments && typeof fragments.retryFailed === 'function'
+          ? fragments.retryFailed()
+          : Promise.resolve({ refreshed: [], skipped: true }),
       refresh: async (idOrName, input, opts) => {
+        checkFragmentPersistenceConflict(idOrName, input);
         if (!fragments) {
           const empty = { ok: true, refreshed: [], skipped: true };
           if (opts && typeof opts.onSuccess === 'function') await opts.onSuccess(empty);
@@ -8582,6 +9184,7 @@ function createControllerRuntime(options = {}) {
           return inst && inst.input ? { ...inst.input } : {};
         },
         refresh: (input, opts) => {
+          checkFragmentPersistenceConflict(idOrName, input);
           if (!fragments) {
             const empty = { ok: true, refreshed: [], skipped: true };
             if (opts && typeof opts.onSuccess === 'function') {
@@ -8614,14 +9217,34 @@ function createControllerRuntime(options = {}) {
     );
     state = stateManager.state;
 
-    // Hydrate persisted state if defined
+    // Hydrate persisted state if defined (with schema-compatible type validation against corrupted storage)
     if (persistConfig) {
       const driver = resolvePersistDriver(persistConfig);
       const savedData = driver.get(persistConfig.storageKey, null);
-      if (savedData && typeof savedData === 'object' && !Array.isArray(savedData)) {
+      if (savedData && typeof savedData === 'object' && !isArray(savedData)) {
         for (const [k, v] of Object.entries(savedData)) {
           if (persistConfig.keys && !persistConfig.keys.includes(k)) continue;
-          if (Object.prototype.hasOwnProperty.call(initialRawState, k)) {
+          if (!Object.prototype.hasOwnProperty.call(initialRawState, k)) continue;
+          const initVal = initialRawState[k];
+          if (initVal !== null && typeof initVal === 'object' && !isArray(initVal)) {
+            if (v !== null && typeof v === 'object' && !isArray(v)) {
+              const merged = { ...initVal };
+              for (const [subKey, subVal] of Object.entries(v)) {
+                if (Object.prototype.hasOwnProperty.call(initVal, subKey)) {
+                  if (initVal[subKey] === null || typeof subVal === typeof initVal[subKey]) {
+                    merged[subKey] = subVal;
+                  }
+                } else {
+                  merged[subKey] = subVal;
+                }
+              }
+              state[k] = merged;
+            }
+          } else if (isArray(initVal)) {
+            if (isArray(v)) {
+              state[k] = v;
+            }
+          } else if (initVal === null || initVal === undefined || typeof v === typeof initVal) {
             state[k] = v;
           }
         }
@@ -8657,6 +9280,36 @@ function createControllerRuntime(options = {}) {
       if (typeof fn !== 'function') {
         return undefined;
       }
+
+      // Guard against duplicate clicks while an async action on this exact element is already in-flight
+      if (
+        actionEl &&
+        actionEl.__wActionBusy === true &&
+        (!actionEl.hasAttribute || !actionEl.hasAttribute('data-w-allow-concurrent'))
+      ) {
+        if (event && typeof event.preventDefault === 'function') {
+          event.preventDefault();
+        }
+        return undefined;
+      }
+
+      // Built-in `data-w-confirm` guard
+      if (actionEl && typeof actionEl.getAttribute === 'function') {
+        const confirmMsg = actionEl.getAttribute('data-w-confirm');
+        if (confirmMsg !== null && confirmMsg !== '') {
+          const confirmFn =
+            typeof window !== 'undefined' && typeof window.confirm === 'function'
+              ? window.confirm.bind(window)
+              : null;
+          if (confirmFn && !confirmFn(confirmMsg)) {
+            if (event && typeof event.preventDefault === 'function') {
+              event.preventDefault();
+            }
+            return undefined;
+          }
+        }
+      }
+
       const decoratedEl = decorateElement(actionEl);
       currentActionEl = decoratedEl || null;
       const prevContext = activeControllerContext;
@@ -8664,17 +9317,28 @@ function createControllerRuntime(options = {}) {
       try {
         const res = fn(ctx, event, decoratedEl);
         if (res && typeof res.then === 'function') {
-          return res.catch((err) => {
-            // Ignore canceled/superseded request errors on disconnected or superseded instances
-            if (err && err.isCanceled) return undefined;
-            handleControllerError(err, {
-              action: actionName,
-              event,
-              actionEl: decoratedEl,
-              phase: 'action',
-            });
-            throw err;
-          });
+          setActionBusy(actionName, 1);
+          setElementBusyState(actionEl, true);
+          return res.then(
+            (val) => {
+              setActionBusy(actionName, -1);
+              setElementBusyState(actionEl, false);
+              return val;
+            },
+            (err) => {
+              setActionBusy(actionName, -1);
+              setElementBusyState(actionEl, false);
+              // Ignore canceled/superseded request errors on disconnected or superseded instances
+              if (err && err.isCanceled) return undefined;
+              handleControllerError(err, {
+                action: actionName,
+                event,
+                actionEl: decoratedEl,
+                phase: 'action',
+              });
+              throw err;
+            }
+          );
         }
         return res;
       } catch (err) {
@@ -8702,8 +9366,19 @@ function createControllerRuntime(options = {}) {
         state,
         invokeAction,
         isConnected,
+        isLoadingTargetActive,
       });
-      domDisposers.push(unbind);
+      if (domDisposers.length === 0) {
+        domDisposers.push(unbind);
+      }
+
+      // Prune disconnected forms from scopedForms
+      for (const [fName, fh] of Array.from(scopedForms.entries())) {
+        if (!fh.el || fh.el.isConnected === false || !rootEl.contains(fh.el)) {
+          fh.destroy();
+          scopedForms.delete(fName);
+        }
+      }
 
       // Also auto-initialize any `<form data-w-form>` inside this controller's scope
       if (rootEl.tagName === 'FORM' && rootEl.hasAttribute('data-w-form')) {
@@ -8713,7 +9388,10 @@ function createControllerRuntime(options = {}) {
         const formsInScope = rootEl.querySelectorAll('form[data-w-form]');
         for (let i = 0; i < formsInScope.length; i++) {
           if (isTargetInControllerScope(rootEl, formsInScope[i])) {
-            createFormHandle(formsInScope[i], { api: scopedApi, datastar, debug, services });
+            const fh = createFormHandle(formsInScope[i], { api: scopedApi, datastar, debug, services });
+            if (fh && fh.name) {
+              scopedForms.set(fh.name, fh);
+            }
           }
         }
       }
@@ -8724,8 +9402,6 @@ function createControllerRuntime(options = {}) {
     // Auto-sync persisted state changes back to storage
     if (persistConfig) {
       const driver = resolvePersistDriver(persistConfig);
-      let persistTimer = null;
-      let lastSavedJson = '';
 
       const stopPersistEffect = registerEffect(() => {
         if (!isConnected()) return;
@@ -8910,6 +9586,11 @@ function createControllerRuntime(options = {}) {
       if (standaloneForm) {
         standaloneForm.destroy();
         standaloneForms.delete(node);
+        activeStandaloneForms.delete(standaloneForm);
+      } else if (node && node.__wFormHandle) {
+        try {
+          node.__wFormHandle.destroy();
+        } catch (_e) {}
       }
     }
   }
@@ -8995,6 +9676,7 @@ function createControllerRuntime(options = {}) {
           services,
         });
         standaloneForms.set(formEl, handle);
+        activeStandaloneForms.add(handle);
       }
     }
 
@@ -9038,10 +9720,19 @@ function createControllerRuntime(options = {}) {
     getActiveInstances() {
       return Array.from(activeInstances.values());
     },
+    getStandaloneFormCount() {
+      return activeStandaloneForms.size;
+    },
     destroyAll() {
       for (const inst of Array.from(activeInstances.values())) {
         inst.destroy();
       }
+      for (const fh of Array.from(activeStandaloneForms.values())) {
+        try {
+          fh.destroy();
+        } catch (_e) {}
+      }
+      activeStandaloneForms.clear();
     },
   };
 }
@@ -9062,7 +9753,7 @@ module.exports = {
 'use strict';
 
 const { defaultStorage } = require('./storage');
-const { parseDurationMs, parseRefetchMode } = require('./utils');
+const { isArray, isNumber, parseDurationMs, parseRefetchMode, uid } = require('./utils');
 
 /**
  * Webspresso Client-Side SSR Fragment Coordinator & Invalidation Engine
@@ -9095,7 +9786,7 @@ function parseDependsOnAttr(raw) {
   if (trimmed.startsWith('[')) {
     try {
       const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) {
+      if (isArray(parsed)) {
         return parsed.map((s) => String(s).trim()).filter(Boolean);
       }
     } catch (_e) {
@@ -9120,10 +9811,20 @@ function parseFragmentInputAttr(raw) {
   if (!trimmed) return {};
   try {
     const parsed = JSON.parse(trimmed);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    return parsed && typeof parsed === 'object' && !isArray(parsed) ? parsed : {};
   } catch (_e) {
     return {};
   }
+}
+
+function isStrictAncestor(parentEl, childEl) {
+  return Boolean(
+    parentEl &&
+      childEl &&
+      parentEl !== childEl &&
+      typeof parentEl.contains === 'function' &&
+      parentEl.contains(childEl)
+  );
 }
 
 /**
@@ -9140,7 +9841,7 @@ function deduplicateParentChildFragments(candidates) {
     if (!candidate.el) return true;
     for (const other of candidates) {
       if (other === candidate || !other.el) continue;
-      if (other.el !== candidate.el && typeof other.el.contains === 'function' && other.el.contains(candidate.el)) {
+      if (isStrictAncestor(other.el, candidate.el)) {
         return false;
       }
     }
@@ -9170,7 +9871,7 @@ function createFragmentCoordinator(options = {}) {
   const endpoint = options.endpoint || DEFAULT_FRAGMENT_ENDPOINT;
   const datastar = options.datastar || options.adapter;
   const debug = options.debug || null;
-  const defaultTimeout = typeof options.timeout === 'number' ? options.timeout : 15000;
+  const defaultTimeout = isNumber(options.timeout) ? options.timeout : 15000;
 
   // React Query-style automatic revalidation defaults
   const defaultStaleTime = parseDurationMs(options.staleTime, 0);
@@ -9201,7 +9902,9 @@ function createFragmentCoordinator(options = {}) {
 
   // Automatic refetch (focus / reconnect / mount / interval) state
   const pendingAutoInstanceIds = new Set();
+  const pendingAutoReasons = new Set();
   let autoBatchScheduled = false;
+  let autoBatchTimer = null;
   let focusDebounceTimer = null;
   let isDisposed = false;
   let lifecycleListenersAttached = false;
@@ -9215,7 +9918,7 @@ function createFragmentCoordinator(options = {}) {
   function isInstanceStale(inst, mode) {
     if (!inst || !mode) return false;
     if (mode === 'always') return true;
-    const staleMs = typeof inst.staleTime === 'number' ? inst.staleTime : 0;
+    const staleMs = isNumber(inst.staleTime) ? inst.staleTime : 0;
     if (staleMs <= 0) return true;
     const elapsed = Date.now() - (inst.lastUpdatedAt || 0);
     return elapsed >= staleMs;
@@ -9231,7 +9934,7 @@ function createFragmentCoordinator(options = {}) {
 
   function syncInstanceInterval(inst) {
     if (!inst || isDisposed) return;
-    const targetMs = typeof inst.refetchInterval === 'number' && inst.refetchInterval > 0 ? inst.refetchInterval : 0;
+    const targetMs = isNumber(inst.refetchInterval) && inst.refetchInterval > 0 ? inst.refetchInterval : 0;
     if (targetMs <= 0) {
       clearInstanceInterval(inst);
       return;
@@ -9256,81 +9959,100 @@ function createFragmentCoordinator(options = {}) {
     }
   }
 
+  async function flushAutoRefresh() {
+    autoBatchScheduled = false;
+    if (autoBatchTimer) {
+      clearTimeout(autoBatchTimer);
+      autoBatchTimer = null;
+    }
+    if (isDisposed || pendingAutoInstanceIds.size === 0) return;
+    const idsToRefresh = Array.from(pendingAutoInstanceIds);
+    const reasons = Array.from(pendingAutoReasons);
+    pendingAutoInstanceIds.clear();
+    pendingAutoReasons.clear();
+
+    // Skip background auto-refresh if a mutation invalidation batch is currently in flight
+    if (inFlightBatchCount > 0) return;
+
+    const candidates = [];
+    for (const id of idsToRefresh) {
+      const inst = instances.get(id);
+      if (
+        inst &&
+        inst.el &&
+        inst.el.isConnected !== false &&
+        !inst.abortController &&
+        !(inst.inFlightCount > 0)
+      ) {
+        candidates.push(inst);
+      }
+    }
+    if (candidates.length === 0) return;
+
+    const deduped = deduplicateParentChildFragments(candidates);
+    const targets = deduped.map((inst) => {
+      inst.version += 1;
+      return {
+        instanceId: inst.instanceId,
+        name: inst.name,
+        pagePath: inst.pagePath,
+        input: { ...inst.input },
+        reqVersion: inst.version,
+      };
+    });
+
+    if (debug && typeof debug.recordEvent === 'function') {
+      debug.recordEvent('fragment:auto-refetch', {
+        reason: reasons.length === 1 ? reasons[0] : reasons.join('+'),
+        reasons,
+        fragments: targets.map((t) => t.instanceId),
+      });
+    }
+
+    try {
+      await executeBatchRefresh(targets);
+    } catch (_err) {
+      // Background auto-refetch errors are non-fatal
+    }
+  }
+
   function scheduleAutoRefresh(instanceIds, reason = 'auto') {
-    if (isDisposed || !Array.isArray(instanceIds) || instanceIds.length === 0) return;
+    if (isDisposed || !isArray(instanceIds) || instanceIds.length === 0) return;
     for (const id of instanceIds) {
       if (id) pendingAutoInstanceIds.add(id);
     }
-    if (autoBatchScheduled || pendingAutoInstanceIds.size === 0) return;
-    autoBatchScheduled = true;
+    if (reason) pendingAutoReasons.add(reason);
+    if (pendingAutoInstanceIds.size === 0) return;
 
-    Promise.resolve().then(async () => {
-      autoBatchScheduled = false;
-      if (isDisposed || pendingAutoInstanceIds.size === 0) return;
-      const idsToRefresh = Array.from(pendingAutoInstanceIds);
-      pendingAutoInstanceIds.clear();
-
-      // Skip background auto-refresh if a mutation invalidation batch is currently in flight
-      if (inFlightBatchCount > 0) return;
-
-      const candidates = [];
-      for (const id of idsToRefresh) {
-        const inst = instances.get(id);
-        if (inst && inst.el && inst.el.isConnected !== false && !inst.abortController) {
-          candidates.push(inst);
-        }
+    if (reason === 'mount') {
+      if (!autoBatchScheduled) {
+        autoBatchScheduled = true;
+        Promise.resolve().then(flushAutoRefresh);
       }
-      if (candidates.length === 0) return;
+      return;
+    }
 
-      const deduped = deduplicateParentChildFragments(candidates);
-      const targets = deduped.map((inst) => {
-        inst.version += 1;
-        return {
-          instanceId: inst.instanceId,
-          name: inst.name,
-          pagePath: inst.pagePath,
-          input: { ...inst.input },
-          reqVersion: inst.version,
-        };
-      });
-
-      if (debug && typeof debug.recordEvent === 'function') {
-        debug.recordEvent('fragment:auto-refetch', {
-          reason,
-          fragments: targets.map((t) => t.instanceId),
-        });
-      }
-
-      try {
-        await executeBatchRefresh(targets);
-      } catch (_err) {
-        // Background auto-refetch errors are non-fatal
-      }
-    });
+    if (autoBatchTimer || autoBatchScheduled) return;
+    autoBatchTimer = setTimeout(flushAutoRefresh, 5);
   }
 
   function triggerFocusRefetch() {
     if (isDisposed || isDocumentHidden()) return;
-    if (focusDebounceTimer) clearTimeout(focusDebounceTimer);
-    focusDebounceTimer = setTimeout(() => {
-      focusDebounceTimer = null;
-      if (isDisposed || isDocumentHidden()) return;
-      syncDomInstances();
-      const matchedIds = [];
-      for (const inst of instances.values()) {
-        if (isInstanceStale(inst, inst.refetchOnWindowFocus)) {
-          matchedIds.push(inst.instanceId);
-        }
+    scanDomInstances();
+    const matchedIds = [];
+    for (const inst of instances.values()) {
+      if (isInstanceStale(inst, inst.refetchOnWindowFocus)) {
+        matchedIds.push(inst.instanceId);
       }
-      if (matchedIds.length > 0) {
-        scheduleAutoRefresh(matchedIds, 'window-focus');
-      }
-    }, 20);
+    }
+    if (matchedIds.length > 0) {
+      scheduleAutoRefresh(matchedIds, 'window-focus');
+    }
   }
 
   function triggerReconnectRefetch() {
     if (isDisposed) return;
-    syncDomInstances();
+    scanDomInstances();
     const matchedIds = [];
     for (const inst of instances.values()) {
       if (isInstanceStale(inst, inst.refetchOnReconnect)) {
@@ -9351,7 +10073,7 @@ function createFragmentCoordinator(options = {}) {
   function onPageShow(event) {
     if (isDisposed) return;
     if (event && event.persisted) {
-      syncDomInstances();
+      scanDomInstances();
       const matchedIds = [];
       for (const inst of instances.values()) {
         const mode = inst.refetchOnMount || inst.refetchOnWindowFocus;
@@ -9399,136 +10121,190 @@ function createFragmentCoordinator(options = {}) {
     lifecycleListenersAttached = false;
   }
 
-  /**
-   * Scan DOM and synchronize tracked `[data-w-fragment]` instances.
-   */
-  function syncDomInstances(containerEl) {
-    const root = containerEl || getRoot();
-    if (!root || typeof root.querySelectorAll !== 'function') return [];
+  function syncSingleElement(el, index, seenIds) {
+    const name = (el.getAttribute('data-w-fragment') || '').trim();
+    if (!name) return;
 
-    const elements = Array.from(root.querySelectorAll('[data-w-fragment]'));
-    if (root.nodeType === 1 && root.hasAttribute && root.hasAttribute('data-w-fragment')) {
-      elements.unshift(root);
+    let instanceId = (el.getAttribute('data-w-fragment-id') || '').trim();
+    if (!instanceId) {
+      instanceId = index === 0 ? `${name}:default` : `${name}:${index}`;
+      el.setAttribute('data-w-fragment-id', instanceId);
     }
 
-    const seenIds = new Set();
+    if (seenIds) seenIds.add(instanceId);
 
-    for (let i = 0; i < elements.length; i++) {
-      const el = elements[i];
-      const name = (el.getAttribute('data-w-fragment') || '').trim();
-      if (!name) continue;
+    const existing = instances.get(instanceId);
+    const rawInput = el.getAttribute('data-w-fragment-input');
+    const rawDepends = el.getAttribute('data-w-depends-on');
+    const rawStale = el.getAttribute('data-w-stale-time');
+    const rawInterval = el.getAttribute('data-w-refetch-interval');
 
-      let instanceId = (el.getAttribute('data-w-fragment-id') || '').trim();
-      if (!instanceId) {
-        instanceId = i === 0 ? `${name}:default` : `${name}:${i}`;
-        el.setAttribute('data-w-fragment-id', instanceId);
+    // Fast-path: if the same DOM element is already registered and its reactive attributes are unchanged,
+    // skip JSON.parse, Set allocation, storage lookup, and timer reconfiguration.
+    if (
+      existing &&
+      existing.el === el &&
+      existing.name === name &&
+      existing._rawInput === rawInput &&
+      existing._rawDepends === rawDepends &&
+      existing._rawStale === rawStale &&
+      existing._rawInterval === rawInterval
+    ) {
+      return;
+    }
+
+    const pagePath =
+      (el.getAttribute('data-w-fragment-page') || '').trim() ||
+      (typeof window !== 'undefined' && window.location ? window.location.pathname : '/');
+    const input =
+      existing && existing.el === el && existing._rawInput === rawInput
+        ? existing.input
+        : parseFragmentInputAttr(rawInput);
+    const dependsOn =
+      existing && existing.el === el && existing._rawDepends === rawDepends
+        ? existing.dependsOn
+        : new Set(parseDependsOnAttr(rawDepends));
+
+    // Fragment input persistence setup
+    const rawPersistInput =
+      el.getAttribute('data-w-persist-input') ||
+      (el.getAttribute('data-w-persist') === 'input' ? 'session' : null);
+    const isInputPersistEnabled = Boolean(rawPersistInput && rawPersistInput !== 'false');
+    const inputStorageType = rawPersistInput && rawPersistInput.toLowerCase() === 'local' ? 'local' : 'session';
+    const inputStorageKey =
+      el.getAttribute('data-w-persist-key') ||
+      el.getAttribute('data-w-input-key') ||
+      `frag_input:${name}`;
+
+    let effectiveInput = input;
+    let pendingRestoredInput = null;
+    if (!existing && isInputPersistEnabled) {
+      const store = inputStorageType === 'local' ? defaultStorage.local : defaultStorage.session;
+      let stored = store.get(inputStorageKey, null);
+      if (
+        (!stored || typeof stored !== 'object' || isArray(stored)) &&
+        inputStorageKey !== `frag_input:${instanceId}`
+      ) {
+        stored = store.get(`frag_input:${instanceId}`, null);
       }
+      if (stored && typeof stored === 'object' && !isArray(stored)) {
+        if (rawInput === null || Object.keys(effectiveInput).length === 0) {
+          effectiveInput = { ...stored };
+        } else if (JSON.stringify(stored) !== JSON.stringify(effectiveInput)) {
+          pendingRestoredInput = { ...stored };
+        }
+      }
+    }
 
-      seenIds.add(instanceId);
-      const pagePath =
-        (el.getAttribute('data-w-fragment-page') || '').trim() ||
-        (typeof window !== 'undefined' && window.location ? window.location.pathname : '/');
-      const input = parseFragmentInputAttr(el.getAttribute('data-w-fragment-input'));
-      const dependsOn = new Set(parseDependsOnAttr(el.getAttribute('data-w-depends-on')));
+    // Parse React Query-style automatic revalidation attributes
+    const staleTime = parseDurationMs(rawStale, defaultStaleTime);
+    const rawFocusAttr =
+      el.getAttribute('data-w-refetch-on-focus') ??
+      el.getAttribute('data-w-refetch-on-window-focus');
+    const refetchOnWindowFocus = parseRefetchMode(rawFocusAttr, defaultRefetchOnWindowFocus);
+    const refetchOnReconnect = parseRefetchMode(
+      el.getAttribute('data-w-refetch-on-reconnect'),
+      defaultRefetchOnReconnect
+    );
+    const rawMountAttr =
+      el.getAttribute('data-w-refetch-on-mount') ??
+      el.getAttribute('data-w-refetch-on-visit');
+    const refetchOnMount = parseRefetchMode(rawMountAttr, defaultRefetchOnMount);
+    const refetchInterval = parseDurationMs(rawInterval, defaultRefetchInterval);
+    const refetchIntervalInBackground =
+      parseRefetchMode(
+        el.getAttribute('data-w-refetch-in-background'),
+        defaultRefetchIntervalInBackground
+      ) === true;
 
-      // Fragment input persistence setup
-      const rawPersistInput =
-        el.getAttribute('data-w-persist-input') ||
-        (el.getAttribute('data-w-persist') === 'input' ? 'session' : null);
-      const isInputPersistEnabled = Boolean(rawPersistInput && rawPersistInput !== 'false');
-      const inputStorageType = rawPersistInput && rawPersistInput.toLowerCase() === 'local' ? 'local' : 'session';
-      const inputStorageKey =
-        el.getAttribute('data-w-persist-key') ||
-        el.getAttribute('data-w-input-key') ||
-        `frag_input:${name}`;
+    if (refetchOnWindowFocus || refetchOnReconnect || refetchOnMount) {
+      ensureLifecycleListeners();
+    }
 
-      let effectiveInput = input;
-      if (isInputPersistEnabled) {
-        const store = inputStorageType === 'local' ? defaultStorage.local : defaultStorage.session;
-        if (!el.hasAttribute('data-w-fragment-input') || Object.keys(effectiveInput).length === 0) {
-          const stored = store.get(inputStorageKey, null);
-          if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
-            effectiveInput = stored;
+    if (existing) {
+      existing.name = name;
+      existing.pagePath = pagePath;
+      existing.el = el;
+      existing.dependsOn = dependsOn;
+      if (rawInput !== null && rawInput !== existing._rawInput) {
+        existing.input = input;
+      }
+      existing.persistInput = isInputPersistEnabled ? { type: inputStorageType, key: inputStorageKey } : null;
+      existing.staleTime = staleTime;
+      existing.refetchOnWindowFocus = refetchOnWindowFocus;
+      existing.refetchOnReconnect = refetchOnReconnect;
+      existing.refetchOnMount = refetchOnMount;
+      existing.refetchInterval = refetchInterval;
+      existing.refetchIntervalInBackground = refetchIntervalInBackground;
+      existing._rawInput = rawInput;
+      existing._rawDepends = rawDepends;
+      existing._rawStale = rawStale;
+      existing._rawInterval = rawInterval;
+      syncInstanceInterval(existing);
+    } else {
+      const created = {
+        instanceId,
+        name,
+        pagePath,
+        input: effectiveInput,
+        restoredInput: pendingRestoredInput,
+        dependsOn,
+        version: 0,
+        el,
+        abortController: null,
+        inFlightCount: 0,
+        persistInput: isInputPersistEnabled ? { type: inputStorageType, key: inputStorageKey } : null,
+        lastUpdatedAt: Date.now(),
+        staleTime,
+        refetchOnWindowFocus,
+        refetchOnReconnect,
+        refetchOnMount,
+        refetchInterval,
+        refetchIntervalInBackground,
+        intervalTimer: null,
+        activeIntervalMs: 0,
+        _rawInput: rawInput,
+        _rawDepends: rawDepends,
+        _rawStale: rawStale,
+        _rawInterval: rawInterval,
+      };
+      instances.set(instanceId, created);
+      syncInstanceInterval(created);
+      if (pendingRestoredInput) {
+        Promise.resolve().then(() => {
+          if (!isDisposed && created.version === 0 && instances.get(instanceId) === created) {
+            refresh(instanceId, pendingRestoredInput).catch(() => {});
           }
-        }
+        });
+      } else if (refetchOnMount === 'always' || (refetchOnMount === true && staleTime <= 0)) {
+        scheduleAutoRefresh([instanceId], 'mount');
       }
+    }
+  }
 
-      // Parse React Query-style automatic revalidation attributes
-      const staleTime = parseDurationMs(el.getAttribute('data-w-stale-time'), defaultStaleTime);
-      const rawFocusAttr =
-        el.getAttribute('data-w-refetch-on-focus') ??
-        el.getAttribute('data-w-refetch-on-window-focus');
-      const refetchOnWindowFocus = parseRefetchMode(rawFocusAttr, defaultRefetchOnWindowFocus);
-      const refetchOnReconnect = parseRefetchMode(
-        el.getAttribute('data-w-refetch-on-reconnect'),
-        defaultRefetchOnReconnect
-      );
-      const rawMountAttr =
-        el.getAttribute('data-w-refetch-on-mount') ??
-        el.getAttribute('data-w-refetch-on-visit');
-      const refetchOnMount = parseRefetchMode(rawMountAttr, defaultRefetchOnMount);
-      const refetchInterval = parseDurationMs(
-        el.getAttribute('data-w-refetch-interval'),
-        defaultRefetchInterval
-      );
-      const refetchIntervalInBackground =
-        parseRefetchMode(
-          el.getAttribute('data-w-refetch-in-background'),
-          defaultRefetchIntervalInBackground
-        ) === true;
+  /**
+   * Internal DOM scan without allocating a return array.
+   */
+  function scanDomInstances(containerEl) {
+    const defaultRoot = getRoot();
+    const root = containerEl || defaultRoot;
+    if (!root || typeof root.querySelectorAll !== 'function') return;
 
-      if (refetchOnWindowFocus || refetchOnReconnect || refetchOnMount) {
-        ensureLifecycleListeners();
-      }
+    const isFullScan = !containerEl || containerEl === defaultRoot;
+    const seenIds = isFullScan ? new Set() : null;
+    const nodeList = root.querySelectorAll('[data-w-fragment]');
+    let idx = 0;
 
-      const existing = instances.get(instanceId);
-      if (existing) {
-        existing.name = name;
-        existing.pagePath = pagePath;
-        existing.el = el;
-        existing.dependsOn = dependsOn;
-        if (el.hasAttribute('data-w-fragment-input') || isInputPersistEnabled) {
-          existing.input = effectiveInput;
-        }
-        existing.persistInput = isInputPersistEnabled ? { type: inputStorageType, key: inputStorageKey } : null;
-        existing.staleTime = staleTime;
-        existing.refetchOnWindowFocus = refetchOnWindowFocus;
-        existing.refetchOnReconnect = refetchOnReconnect;
-        existing.refetchOnMount = refetchOnMount;
-        existing.refetchInterval = refetchInterval;
-        existing.refetchIntervalInBackground = refetchIntervalInBackground;
-        syncInstanceInterval(existing);
-      } else {
-        const created = {
-          instanceId,
-          name,
-          pagePath,
-          input: effectiveInput,
-          dependsOn,
-          version: 0,
-          el,
-          abortController: null,
-          persistInput: isInputPersistEnabled ? { type: inputStorageType, key: inputStorageKey } : null,
-          lastUpdatedAt: Date.now(),
-          staleTime,
-          refetchOnWindowFocus,
-          refetchOnReconnect,
-          refetchOnMount,
-          refetchInterval,
-          refetchIntervalInBackground,
-          intervalTimer: null,
-          activeIntervalMs: 0,
-        };
-        instances.set(instanceId, created);
-        syncInstanceInterval(created);
-        if (refetchOnMount === 'always' || (refetchOnMount === true && staleTime <= 0)) {
-          scheduleAutoRefresh([instanceId], 'mount');
-        }
-      }
+    if (root.nodeType === 1 && root.hasAttribute && root.hasAttribute('data-w-fragment')) {
+      syncSingleElement(root, idx++, seenIds);
+    }
+
+    for (let i = 0, len = nodeList.length; i < len; i++) {
+      syncSingleElement(nodeList[i], idx++, seenIds);
     }
 
     // Prune disconnected instances if scanning full root
-    if (!containerEl || containerEl === getRoot()) {
+    if (isFullScan) {
       for (const [id, inst] of instances.entries()) {
         const disconnected =
           !seenIds.has(id) || (inst.el && inst.el.isConnected === false);
@@ -9545,7 +10321,13 @@ function createFragmentCoordinator(options = {}) {
         }
       }
     }
+  }
 
+  /**
+   * Scan DOM and synchronize tracked `[data-w-fragment]` instances.
+   */
+  function syncDomInstances(containerEl) {
+    scanDomInstances(containerEl);
     return Array.from(instances.values());
   }
 
@@ -9553,7 +10335,7 @@ function createFragmentCoordinator(options = {}) {
    * Apply a single server fragment result `{ instanceId, name, html, input, loadMs, renderMs }`
    * to the DOM if and only if `reqVersion >= inst.version`.
    */
-  function applyFragmentPatch(inst, fragmentPayload, reqVersion, chainId = null) {
+  function applyFragmentPatch(inst, fragmentPayload, reqVersion, chainId = null, requestedInput = null) {
     if (!inst || !inst.el) return false;
 
     if (reqVersion < inst.version) {
@@ -9575,17 +10357,27 @@ function createFragmentCoordinator(options = {}) {
 
     const patchStart = Date.now();
 
+    const committedInput =
+      fragmentPayload.input && typeof fragmentPayload.input === 'object' && !isArray(fragmentPayload.input)
+        ? fragmentPayload.input
+        : requestedInput && typeof requestedInput === 'object' && !isArray(requestedInput)
+          ? requestedInput
+          : null;
+
     if (
-      fragmentPayload.input &&
-      typeof fragmentPayload.input === 'object' &&
+      committedInput &&
       !followUpNeeded &&
       pendingTags.size === 0
     ) {
-      inst.input = fragmentPayload.input;
-      inst.el.setAttribute('data-w-fragment-input', JSON.stringify(fragmentPayload.input));
+      inst.input = { ...committedInput };
+      const serializedInput = JSON.stringify(inst.input);
+      if (inst.el && typeof inst.el.setAttribute === 'function') {
+        inst.el.setAttribute('data-w-fragment-input', serializedInput);
+      }
+      inst._rawInput = serializedInput;
       if (inst.persistInput) {
         const store = inst.persistInput.type === 'local' ? defaultStorage.local : defaultStorage.session;
-        store.set(inst.persistInput.key, fragmentPayload.input);
+        store.set(inst.persistInput.key, inst.input);
       }
     }
 
@@ -9599,10 +10391,16 @@ function createFragmentCoordinator(options = {}) {
     }
 
     const patchMs = Math.max(0, Date.now() - patchStart);
-    inst.lastUpdatedAt = Date.now();
+    const now = Date.now();
+    inst.lastUpdatedAt = now;
 
     // Re-sync nested fragment instances that may have been updated inside this parent fragment
-    syncDomInstances(inst.el);
+    scanDomInstances(inst.el);
+    for (const otherInst of instances.values()) {
+      if (otherInst !== inst && otherInst.el && isStrictAncestor(inst.el, otherInst.el)) {
+        otherInst.lastUpdatedAt = now;
+      }
+    }
 
     if (typeof options.onAfterPatch === 'function') {
       options.onAfterPatch(inst.el, inst);
@@ -9649,6 +10447,26 @@ function createFragmentCoordinator(options = {}) {
       targets[0].pagePath ||
       (typeof window !== 'undefined' && window.location ? window.location.pathname : '/');
 
+    // Collect active inputs of any nested descendant fragments inside the requested parent targets
+    // so server-side parent re-rendering preserves nested child filters & pagination.
+    const childInputs = {};
+    let hasChildInputs = false;
+    for (const t of targets) {
+      const parentInst = instances.get(t.instanceId);
+      if (!parentInst || !parentInst.el) continue;
+      for (const otherInst of instances.values()) {
+        if (otherInst !== parentInst && otherInst.el && isStrictAncestor(parentInst.el, otherInst.el)) {
+          if (otherInst.input && typeof otherInst.input === 'object') {
+            childInputs[otherInst.instanceId] = { ...otherInst.input };
+            if (!childInputs[otherInst.name]) {
+              childInputs[otherInst.name] = { ...otherInst.input };
+            }
+            hasChildInputs = true;
+          }
+        }
+      }
+    }
+
     const requestPayload = {
       pagePath,
       fragments: targets.map((t) => ({
@@ -9657,9 +10475,32 @@ function createFragmentCoordinator(options = {}) {
         input: t.input || {},
         version: t.reqVersion,
       })),
+      ...(hasChildInputs ? { childInputs } : {}),
     };
 
-    const reqId = `frag_req_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    for (const t of targets) {
+      const inst = instances.get(t.instanceId);
+      if (inst) {
+        inst.inFlightCount = (inst.inFlightCount || 0) + 1;
+        if (inst.el && typeof inst.el.setAttribute === 'function') {
+          inst.el.setAttribute('aria-busy', 'true');
+        }
+      }
+    }
+
+    const decrementTargetBusy = () => {
+      for (const t of targets) {
+        const inst = instances.get(t.instanceId);
+        if (inst) {
+          inst.inFlightCount = Math.max(0, (inst.inFlightCount || 1) - 1);
+          if (inst.inFlightCount === 0 && inst.el && typeof inst.el.removeAttribute === 'function') {
+            inst.el.removeAttribute('aria-busy');
+          }
+        }
+      }
+    };
+
+    const reqId = uid('frag_req', 4);
     if (debug) {
       debug.trackRequestStart({
         requestId: reqId,
@@ -9674,7 +10515,7 @@ function createFragmentCoordinator(options = {}) {
     const batchAbortController = new AbortController();
     let timeoutTimer = null;
     let timedOut = false;
-    const timeoutMs = typeof batchTimeout === 'number' ? batchTimeout : defaultTimeout;
+    const timeoutMs = isNumber(batchTimeout) ? batchTimeout : defaultTimeout;
 
     if (timeoutMs > 0) {
       timeoutTimer = setTimeout(() => {
@@ -9702,6 +10543,7 @@ function createFragmentCoordinator(options = {}) {
         signal: batchAbortController.signal,
       });
     } catch (err) {
+      decrementTargetBusy();
       if (timeoutTimer) {
         clearTimeout(timeoutTimer);
         timeoutTimer = null;
@@ -9782,6 +10624,8 @@ function createFragmentCoordinator(options = {}) {
       }
     } catch (_e) {
       body = null;
+    } finally {
+      decrementTargetBusy();
     }
 
     if (!response.ok) {
@@ -9817,8 +10661,20 @@ function createFragmentCoordinator(options = {}) {
     }
 
     lastFailedBatch = null;
-    const resultsMap = (body && body.fragments) || {};
+    const rawFragments = (body && body.fragments) || {};
+    const resultsMap = {};
+    if (isArray(rawFragments)) {
+      for (const item of rawFragments) {
+        if (item && typeof item === 'object') {
+          if (item.instanceId) resultsMap[item.instanceId] = item;
+          if (item.name && !resultsMap[item.name]) resultsMap[item.name] = item;
+        }
+      }
+    } else if (rawFragments && typeof rawFragments === 'object') {
+      Object.assign(resultsMap, rawFragments);
+    }
     const refreshedIds = [];
+    let staleDiscardCount = 0;
     let totalLoadMs = 0;
     let totalRenderMs = 0;
 
@@ -9826,30 +10682,51 @@ function createFragmentCoordinator(options = {}) {
       const inst = instances.get(target.instanceId);
       const fragResult = resultsMap[target.instanceId] || resultsMap[target.name];
       if (!inst || !fragResult) continue;
-      if (typeof fragResult.loadMs === 'number') totalLoadMs += fragResult.loadMs;
-      if (typeof fragResult.renderMs === 'number') totalRenderMs += fragResult.renderMs;
+      if (target.reqVersion < inst.version) {
+        staleDiscardCount += 1;
+      }
+      if (isNumber(fragResult.loadMs)) totalLoadMs += fragResult.loadMs;
+      if (isNumber(fragResult.renderMs)) totalRenderMs += fragResult.renderMs;
 
       const applied = applyFragmentPatch(
         inst,
         fragResult,
         target.reqVersion,
-        chainIds[0] || null
+        chainIds[0] || null,
+        target.input
       );
       if (applied) {
         refreshedIds.push(target.instanceId);
       }
     }
 
+    const allSuperseded =
+      refreshedIds.length === 0 && staleDiscardCount > 0 && staleDiscardCount === targets.length;
+
     for (const cid of chainIds) {
       if (debug) {
         debug.recordChainRefresh(cid, {
           fragmentIds: refreshedIds,
-          status: 'ok',
+          status: allSuperseded ? 'superseded' : 'ok',
           loadMs: totalLoadMs,
           renderMs: totalRenderMs,
-          totalServerMs: body && typeof body.totalMs === 'number' ? body.totalMs : null,
+          totalServerMs: body && isNumber(body.totalMs) ? body.totalMs : null,
         });
       }
+    }
+
+    if (allSuperseded) {
+      return {
+        ok: false,
+        canceled: true,
+        superseded: true,
+        refreshed: [],
+        errors: [],
+        timings: {
+          loadMs: totalLoadMs,
+          renderMs: totalRenderMs,
+        },
+      };
     }
 
     return {
@@ -9885,7 +10762,7 @@ function createFragmentCoordinator(options = {}) {
     pendingTags.clear();
     pendingChains.length = 0;
 
-    syncDomInstances();
+    scanDomInstances();
 
     // Find all mounted fragment instances whose `dependsOn` intersects `tagsToFlush`
     const matchingInstances = [];
@@ -9964,7 +10841,7 @@ function createFragmentCoordinator(options = {}) {
    * @returns {Promise<{ refreshed: string[], skipped?: boolean }>}
    */
   function invalidate(tags, meta = {}) {
-    const tagList = Array.isArray(tags) ? tags : [tags];
+    const tagList = isArray(tags) ? tags : [tags];
     for (const raw of tagList) {
       if (typeof raw === 'string' && raw.trim()) {
         pendingTags.add(raw.trim());
@@ -10013,7 +10890,7 @@ function createFragmentCoordinator(options = {}) {
    * @param {object} [refreshOpts]
    */
   async function refresh(idOrName, nextInput, refreshOpts = {}) {
-    syncDomInstances();
+    scanDomInstances();
 
     const matched = [];
     if (instances.has(idOrName)) {
@@ -10054,32 +10931,35 @@ function createFragmentCoordinator(options = {}) {
       inst.abortController = abortController;
       inst.version += 1;
 
-      if (nextInput && typeof nextInput === 'object') {
-        inst.input = refreshOpts.replaceInput
-          ? { ...nextInput }
-          : { ...inst.input, ...nextInput };
-        if (inst.el && typeof inst.el.setAttribute === 'function') {
-          inst.el.setAttribute('data-w-fragment-input', JSON.stringify(inst.input));
-        }
-        if (inst.persistInput) {
-          const store = inst.persistInput.type === 'local' ? defaultStorage.local : defaultStorage.session;
-          store.set(inst.persistInput.key, inst.input);
-        }
-      }
+      const candidateInput =
+        nextInput && typeof nextInput === 'object'
+          ? refreshOpts.replaceInput
+            ? { ...nextInput }
+            : { ...inst.input, ...nextInput }
+          : { ...inst.input };
 
       return {
         instanceId: inst.instanceId,
         name: inst.name,
         pagePath: inst.pagePath,
-        input: { ...inst.input },
+        input: candidateInput,
         reqVersion: inst.version,
       };
     });
 
+    const clearOwnedAbortControllers = () => {
+      for (const inst of deduped) {
+        if (inst.abortController === abortController) {
+          inst.abortController = null;
+        }
+      }
+    };
+
     try {
       const result = await executeBatchRefresh(targets, [], abortController.signal, refreshOpts.timeout);
+      clearOwnedAbortControllers();
       const enrichedResult = { ok: true, ...result };
-      if (!enrichedResult.canceled && enrichedResult.ok !== false) {
+      if (!enrichedResult.canceled && !enrichedResult.superseded && enrichedResult.ok !== false) {
         if (typeof refreshOpts.onSuccess === 'function') {
           await refreshOpts.onSuccess(enrichedResult);
         }
@@ -10091,6 +10971,7 @@ function createFragmentCoordinator(options = {}) {
       }
       return enrichedResult;
     } catch (err) {
+      clearOwnedAbortControllers();
       const failHandler = refreshOpts.onFailure || refreshOpts.onError;
       if (typeof failHandler === 'function') {
         try {
@@ -10135,7 +11016,7 @@ function createFragmentCoordinator(options = {}) {
         inst.version += 1;
         retryTargets.push({
           ...t,
-          input: { ...inst.input },
+          input: t.input ? { ...t.input } : { ...inst.input },
           reqVersion: inst.version,
         });
       }
@@ -10153,10 +11034,10 @@ function createFragmentCoordinator(options = {}) {
     invalidate,
     refresh,
     refreshFragments(items = []) {
-      if (!Array.isArray(items) || items.length === 0) {
+      if (!isArray(items) || items.length === 0) {
         return Promise.resolve({ refreshed: [], skipped: true });
       }
-      syncDomInstances();
+      scanDomInstances();
       for (const item of items) {
         const key = item.instanceId || item.name;
         const inst = instances.get(key) || Array.from(instances.values()).find((i) => i.name === key);
@@ -10164,7 +11045,9 @@ function createFragmentCoordinator(options = {}) {
           if (item.input && typeof item.input === 'object') {
             inst.input = { ...item.input };
             if (inst.el && typeof inst.el.setAttribute === 'function') {
-              inst.el.setAttribute('data-w-fragment-input', JSON.stringify(inst.input));
+              const serializedInput = JSON.stringify(inst.input);
+              inst.el.setAttribute('data-w-fragment-input', serializedInput);
+              inst._rawInput = serializedInput;
             }
           }
           pendingTags.add(inst.name);
@@ -10175,8 +11058,8 @@ function createFragmentCoordinator(options = {}) {
       return flushInvalidations();
     },
     findFragmentsByTags(tags = []) {
-      syncDomInstances();
-      const tagSet = new Set((Array.isArray(tags) ? tags : [tags]).map((t) => String(t || '').trim()).filter(Boolean));
+      scanDomInstances();
+      const tagSet = new Set((isArray(tags) ? tags : [tags]).map((t) => String(t || '').trim()).filter(Boolean));
       const matching = [];
       for (const inst of instances.values()) {
         for (const t of tagSet) {
@@ -10191,19 +11074,35 @@ function createFragmentCoordinator(options = {}) {
     retryFailed,
     retryLastFailed: retryFailed,
     getInstance(instanceId) {
-      syncDomInstances();
+      const hit = instances.get(instanceId);
+      if (hit && (!hit.el || hit.el.isConnected !== false)) {
+        return hit;
+      }
+      scanDomInstances();
       return instances.get(instanceId) || null;
     },
     getInstances() {
-      syncDomInstances();
+      scanDomInstances();
       return Array.from(instances.values());
     },
     getStoredInput(instanceIdOrName, storageType = 'session') {
       const store = storageType === 'local' ? defaultStorage.local : defaultStorage.session;
-      return store.get(`frag_input:${instanceIdOrName}`, null);
+      const direct = store.get(`frag_input:${instanceIdOrName}`, null);
+      if (direct !== null) return direct;
+      const inst = instances.get(instanceIdOrName) || Array.from(instances.values()).find((i) => i.name === instanceIdOrName);
+      if (inst && inst.persistInput) {
+        const instStore = inst.persistInput.type === 'local' ? defaultStorage.local : defaultStorage.session;
+        return instStore.get(inst.persistInput.key, null);
+      }
+      return null;
     },
     clearStoredInput(instanceIdOrName, storageType = 'session') {
       const store = storageType === 'local' ? defaultStorage.local : defaultStorage.session;
+      const inst = instances.get(instanceIdOrName) || Array.from(instances.values()).find((i) => i.name === instanceIdOrName);
+      if (inst && inst.persistInput) {
+        const instStore = inst.persistInput.type === 'local' ? defaultStorage.local : defaultStorage.session;
+        instStore.remove(inst.persistInput.key);
+      }
       return store.remove(`frag_input:${instanceIdOrName}`);
     },
     get hasFailedRefresh() {
@@ -10215,7 +11114,12 @@ function createFragmentCoordinator(options = {}) {
         clearTimeout(focusDebounceTimer);
         focusDebounceTimer = null;
       }
+      if (autoBatchTimer) {
+        clearTimeout(autoBatchTimer);
+        autoBatchTimer = null;
+      }
       pendingAutoInstanceIds.clear();
+      pendingAutoReasons.clear();
       removeLifecycleListeners();
       for (const inst of instances.values()) {
         clearInstanceInterval(inst);
@@ -10251,7 +11155,7 @@ module.exports = {
  * and lifecycle cleanup errors without logging raw form values or sensitive payloads.
  */
 
-const { NOOP_DEBUGGER } = require('./utils');
+const { isArray, isNumber, NOOP_DEBUGGER, uid } = require('./utils');
 
 const SENSITIVE_KEY_PATTERN = /password|passwd|secret|token|authorization|cookie|credit|card|cvv|ssn|api[-_]?key/i;
 
@@ -10275,7 +11179,7 @@ function summarizePayloadSafely(payload, includeSafePrimitives = false) {
   if (typeof Blob !== 'undefined' && payload instanceof Blob) {
     return { type: 'Blob', size: payload.size, mimeType: payload.type || 'application/octet-stream' };
   }
-  if (Array.isArray(payload)) {
+  if (isArray(payload)) {
     return { type: 'Array', length: payload.length };
   }
   if (typeof payload === 'object') {
@@ -10301,7 +11205,7 @@ function summarizePayloadSafely(payload, includeSafePrimitives = false) {
  */
 function createActiveDebugger(options = {}) {
   let enabled = Boolean(options.enabled);
-  const maxEvents = typeof options.maxEvents === 'number' && options.maxEvents > 0 ? options.maxEvents : 200;
+  const maxEvents = isNumber(options.maxEvents) && options.maxEvents > 0 ? options.maxEvents : 200;
   const customLogger = typeof options.logger === 'function' ? options.logger : null;
 
   const events = [];
@@ -10316,7 +11220,7 @@ function createActiveDebugger(options = {}) {
 
   function pushEvent(type, detail = {}) {
     const entry = {
-      id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id: uid('evt'),
       type,
       timestamp: Date.now(),
       ...detail,
@@ -10435,7 +11339,7 @@ function createActiveDebugger(options = {}) {
           completedAt: Date.now(),
         },
         invalidation: {
-          tags: Array.isArray(tags) ? [...tags] : [],
+          tags: isArray(tags) ? [...tags] : [],
           triggeredAt: Date.now(),
         },
         refresh: null,
@@ -10458,11 +11362,11 @@ function createActiveDebugger(options = {}) {
     recordChainRefresh(chainId, { fragmentIds, status, loadMs, renderMs, totalServerMs, error }) {
       const chain = chainId ? causalChains.get(chainId) : null;
       const refreshData = {
-        fragmentIds: Array.isArray(fragmentIds) ? [...fragmentIds] : [],
+        fragmentIds: isArray(fragmentIds) ? [...fragmentIds] : [],
         status: status || 'ok',
-        loadMs: typeof loadMs === 'number' ? loadMs : null,
-        renderMs: typeof renderMs === 'number' ? renderMs : null,
-        totalServerMs: typeof totalServerMs === 'number' ? totalServerMs : null,
+        loadMs: isNumber(loadMs) ? loadMs : null,
+        renderMs: isNumber(renderMs) ? renderMs : null,
+        totalServerMs: isNumber(totalServerMs) ? totalServerMs : null,
         error: error ? String(error.message || error) : null,
         completedAt: Date.now(),
       };
@@ -10477,9 +11381,9 @@ function createActiveDebugger(options = {}) {
       const patchData = {
         instanceId,
         fragmentName: fragmentName || null,
-        patchMs: typeof patchMs === 'number' ? patchMs : 0,
-        loadMs: typeof loadMs === 'number' ? loadMs : null,
-        renderMs: typeof renderMs === 'number' ? renderMs : null,
+        patchMs: isNumber(patchMs) ? patchMs : 0,
+        loadMs: isNumber(loadMs) ? loadMs : null,
+        renderMs: isNumber(renderMs) ? renderMs : null,
         completedAt: Date.now(),
       };
       if (chain) {
@@ -10671,23 +11575,12 @@ const {
 } = require('./fragments');
 
 const {
-  createClientDebugger,
-  summarizePayloadSafely,
-} = require('./debug');
-
-const {
   MemoryStorage,
   StorageAdapter,
   getNativeStorageBackend,
   createClientStorage,
   defaultStorage,
 } = require('./storage');
-
-const {
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
-} = require('./devtool');
 
 const {
   defineClientService,
@@ -10698,6 +11591,54 @@ const {
 const {
   createClientHostManager,
 } = require('./host');
+
+const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+
+const NOOP_DEVTOOL_HANDLE = Object.freeze({
+  open() {},
+  close() {},
+  toggle() {},
+  refresh() {},
+  destroy() {},
+});
+
+let _debugMod = null;
+function getDebugModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_debugMod) {
+      _debugMod = require('./debug');
+    }
+    return _debugMod;
+  }
+  return {
+    createClientDebugger: () => NOOP_DEBUGGER,
+    summarizePayloadSafely: () => null,
+  };
+}
+
+let _devtoolMod = null;
+function getDevtoolModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_devtoolMod) {
+      _devtoolMod = require('./devtool');
+    }
+    return _devtoolMod;
+  }
+  return {
+    mountDevtool: () => NOOP_DEVTOOL_HANDLE,
+    highlightElement: () => {},
+    setupReduxDevToolsBridge: () => null,
+  };
+}
+
+let _liteMod = null;
+function getLiteModule() {
+  if (!_liteMod) {
+    const reqFn = typeof module !== 'undefined' && module.require ? module.require.bind(module) : require;
+    _liteMod = reqFn('./lite');
+  }
+  return _liteMod;
+}
 
 let _serverFragments = null;
 function getServerFragments() {
@@ -10729,10 +11670,12 @@ function createClientRuntime(options = {}) {
     options.debugger ||
     (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
       ? options.debug
-      : createClientDebugger({
-          enabled: Boolean(options.debug),
-          logger: options.debugLogger,
-        }));
+      : options.debug
+        ? getDebugModule().createClientDebugger({
+            enabled: true,
+            logger: options.debugLogger,
+          })
+        : NOOP_DEBUGGER);
 
   const datastar = createDatastarAdapter({
     datastar: options.datastar,
@@ -10892,7 +11835,7 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
-    mountDevtool: (opts) => mountDevtool(runtime, opts),
+    mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
       create: (formEl, formOpts = {}) =>
@@ -10956,7 +11899,7 @@ function bootClient(options = {}) {
     const onReady = () => {
       runtime.mount();
       if (shouldMountDevtools) {
-        runtime.devtool = mountDevtool(runtime, options.devtoolsOptions || {});
+        runtime.devtool = getDevtoolModule().mountDevtool(runtime, options.devtoolsOptions || {});
       }
     };
     if (document.readyState === 'loading') {
@@ -10975,10 +11918,10 @@ module.exports = {
   createClientRuntime,
   bootClient,
   get createLiteClientRuntime() {
-    return require('./lite').createLiteClientRuntime;
+    return getLiteModule().createLiteClientRuntime;
   },
   get bootLiteClient() {
-    return require('./lite').bootLiteClient;
+    return getLiteModule().bootLiteClient;
   },
   createControllerRuntime,
   queryScopedTargets,
@@ -11054,17 +11997,31 @@ module.exports = {
   createDatastarAdapter,
   createSignalsEngine,
   evaluateStateExpression,
+  isArray,
+  isNumber,
+  randomId,
+  uid,
   getByPath,
   setByPath,
   morphDomTrees,
   parseHtmlFragment,
 
   // Debug & Telemetry & DevTools
-  createClientDebugger,
-  summarizePayloadSafely,
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
+  get createClientDebugger() {
+    return getDebugModule().createClientDebugger;
+  },
+  get summarizePayloadSafely() {
+    return getDebugModule().summarizePayloadSafely;
+  },
+  get mountDevtool() {
+    return getDevtoolModule().mountDevtool;
+  },
+  get highlightElement() {
+    return getDevtoolModule().highlightElement;
+  },
+  get setupReduxDevToolsBridge() {
+    return getDevtoolModule().setupReduxDevToolsBridge;
+  },
 
   // Client Storage & Persistence
   MemoryStorage,
@@ -11143,23 +12100,12 @@ const {
 } = require('./fragments');
 
 const {
-  createClientDebugger,
-  summarizePayloadSafely,
-} = require('./debug');
-
-const {
   MemoryStorage,
   StorageAdapter,
   getNativeStorageBackend,
   createClientStorage,
   defaultStorage,
 } = require('./storage');
-
-const {
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
-} = require('./devtool');
 
 const {
   defineClientService,
@@ -11170,6 +12116,54 @@ const {
 const {
   createClientHostManager,
 } = require('./host');
+
+const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+
+const NOOP_DEVTOOL_HANDLE = Object.freeze({
+  open() {},
+  close() {},
+  toggle() {},
+  refresh() {},
+  destroy() {},
+});
+
+let _debugMod = null;
+function getDebugModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_debugMod) {
+      _debugMod = require('./debug');
+    }
+    return _debugMod;
+  }
+  return {
+    createClientDebugger: () => NOOP_DEBUGGER,
+    summarizePayloadSafely: () => null,
+  };
+}
+
+let _devtoolMod = null;
+function getDevtoolModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_devtoolMod) {
+      _devtoolMod = require('./devtool');
+    }
+    return _devtoolMod;
+  }
+  return {
+    mountDevtool: () => NOOP_DEVTOOL_HANDLE,
+    highlightElement: () => {},
+    setupReduxDevToolsBridge: () => null,
+  };
+}
+
+let _liteMod = null;
+function getLiteModule() {
+  if (!_liteMod) {
+    const reqFn = typeof module !== 'undefined' && module.require ? module.require.bind(module) : require;
+    _liteMod = reqFn('./lite');
+  }
+  return _liteMod;
+}
 
 let _serverFragments = null;
 function getServerFragments() {
@@ -11201,10 +12195,12 @@ function createClientRuntime(options = {}) {
     options.debugger ||
     (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
       ? options.debug
-      : createClientDebugger({
-          enabled: Boolean(options.debug),
-          logger: options.debugLogger,
-        }));
+      : options.debug
+        ? getDebugModule().createClientDebugger({
+            enabled: true,
+            logger: options.debugLogger,
+          })
+        : NOOP_DEBUGGER);
 
   const datastar = createDatastarAdapter({
     datastar: options.datastar,
@@ -11364,7 +12360,7 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
-    mountDevtool: (opts) => mountDevtool(runtime, opts),
+    mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
       create: (formEl, formOpts = {}) =>
@@ -11428,7 +12424,7 @@ function bootClient(options = {}) {
     const onReady = () => {
       runtime.mount();
       if (shouldMountDevtools) {
-        runtime.devtool = mountDevtool(runtime, options.devtoolsOptions || {});
+        runtime.devtool = getDevtoolModule().mountDevtool(runtime, options.devtoolsOptions || {});
       }
     };
     if (document.readyState === 'loading') {
@@ -11447,10 +12443,10 @@ module.exports = {
   createClientRuntime,
   bootClient,
   get createLiteClientRuntime() {
-    return require('./lite').createLiteClientRuntime;
+    return getLiteModule().createLiteClientRuntime;
   },
   get bootLiteClient() {
-    return require('./lite').bootLiteClient;
+    return getLiteModule().bootLiteClient;
   },
   createControllerRuntime,
   queryScopedTargets,
@@ -11526,17 +12522,31 @@ module.exports = {
   createDatastarAdapter,
   createSignalsEngine,
   evaluateStateExpression,
+  isArray,
+  isNumber,
+  randomId,
+  uid,
   getByPath,
   setByPath,
   morphDomTrees,
   parseHtmlFragment,
 
   // Debug & Telemetry & DevTools
-  createClientDebugger,
-  summarizePayloadSafely,
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
+  get createClientDebugger() {
+    return getDebugModule().createClientDebugger;
+  },
+  get summarizePayloadSafely() {
+    return getDebugModule().summarizePayloadSafely;
+  },
+  get mountDevtool() {
+    return getDevtoolModule().mountDevtool;
+  },
+  get highlightElement() {
+    return getDevtoolModule().highlightElement;
+  },
+  get setupReduxDevToolsBridge() {
+    return getDevtoolModule().setupReduxDevToolsBridge;
+  },
 
   // Client Storage & Persistence
   MemoryStorage,
@@ -11615,23 +12625,12 @@ const {
 } = require('./fragments');
 
 const {
-  createClientDebugger,
-  summarizePayloadSafely,
-} = require('./debug');
-
-const {
   MemoryStorage,
   StorageAdapter,
   getNativeStorageBackend,
   createClientStorage,
   defaultStorage,
 } = require('./storage');
-
-const {
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
-} = require('./devtool');
 
 const {
   defineClientService,
@@ -11642,6 +12641,54 @@ const {
 const {
   createClientHostManager,
 } = require('./host');
+
+const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+
+const NOOP_DEVTOOL_HANDLE = Object.freeze({
+  open() {},
+  close() {},
+  toggle() {},
+  refresh() {},
+  destroy() {},
+});
+
+let _debugMod = null;
+function getDebugModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_debugMod) {
+      _debugMod = require('./debug');
+    }
+    return _debugMod;
+  }
+  return {
+    createClientDebugger: () => NOOP_DEBUGGER,
+    summarizePayloadSafely: () => null,
+  };
+}
+
+let _devtoolMod = null;
+function getDevtoolModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_devtoolMod) {
+      _devtoolMod = require('./devtool');
+    }
+    return _devtoolMod;
+  }
+  return {
+    mountDevtool: () => NOOP_DEVTOOL_HANDLE,
+    highlightElement: () => {},
+    setupReduxDevToolsBridge: () => null,
+  };
+}
+
+let _liteMod = null;
+function getLiteModule() {
+  if (!_liteMod) {
+    const reqFn = typeof module !== 'undefined' && module.require ? module.require.bind(module) : require;
+    _liteMod = reqFn('./lite');
+  }
+  return _liteMod;
+}
 
 let _serverFragments = null;
 function getServerFragments() {
@@ -11673,10 +12720,12 @@ function createClientRuntime(options = {}) {
     options.debugger ||
     (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
       ? options.debug
-      : createClientDebugger({
-          enabled: Boolean(options.debug),
-          logger: options.debugLogger,
-        }));
+      : options.debug
+        ? getDebugModule().createClientDebugger({
+            enabled: true,
+            logger: options.debugLogger,
+          })
+        : NOOP_DEBUGGER);
 
   const datastar = createDatastarAdapter({
     datastar: options.datastar,
@@ -11836,7 +12885,7 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
-    mountDevtool: (opts) => mountDevtool(runtime, opts),
+    mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
       create: (formEl, formOpts = {}) =>
@@ -11900,7 +12949,7 @@ function bootClient(options = {}) {
     const onReady = () => {
       runtime.mount();
       if (shouldMountDevtools) {
-        runtime.devtool = mountDevtool(runtime, options.devtoolsOptions || {});
+        runtime.devtool = getDevtoolModule().mountDevtool(runtime, options.devtoolsOptions || {});
       }
     };
     if (document.readyState === 'loading') {
@@ -11919,10 +12968,10 @@ module.exports = {
   createClientRuntime,
   bootClient,
   get createLiteClientRuntime() {
-    return require('./lite').createLiteClientRuntime;
+    return getLiteModule().createLiteClientRuntime;
   },
   get bootLiteClient() {
-    return require('./lite').bootLiteClient;
+    return getLiteModule().bootLiteClient;
   },
   createControllerRuntime,
   queryScopedTargets,
@@ -11998,17 +13047,31 @@ module.exports = {
   createDatastarAdapter,
   createSignalsEngine,
   evaluateStateExpression,
+  isArray,
+  isNumber,
+  randomId,
+  uid,
   getByPath,
   setByPath,
   morphDomTrees,
   parseHtmlFragment,
 
   // Debug & Telemetry & DevTools
-  createClientDebugger,
-  summarizePayloadSafely,
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
+  get createClientDebugger() {
+    return getDebugModule().createClientDebugger;
+  },
+  get summarizePayloadSafely() {
+    return getDebugModule().summarizePayloadSafely;
+  },
+  get mountDevtool() {
+    return getDevtoolModule().mountDevtool;
+  },
+  get highlightElement() {
+    return getDevtoolModule().highlightElement;
+  },
+  get setupReduxDevToolsBridge() {
+    return getDevtoolModule().setupReduxDevToolsBridge;
+  },
 
   // Client Storage & Persistence
   MemoryStorage,
@@ -12087,23 +13150,12 @@ const {
 } = require('./fragments');
 
 const {
-  createClientDebugger,
-  summarizePayloadSafely,
-} = require('./debug');
-
-const {
   MemoryStorage,
   StorageAdapter,
   getNativeStorageBackend,
   createClientStorage,
   defaultStorage,
 } = require('./storage');
-
-const {
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
-} = require('./devtool');
 
 const {
   defineClientService,
@@ -12114,6 +13166,54 @@ const {
 const {
   createClientHostManager,
 } = require('./host');
+
+const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+
+const NOOP_DEVTOOL_HANDLE = Object.freeze({
+  open() {},
+  close() {},
+  toggle() {},
+  refresh() {},
+  destroy() {},
+});
+
+let _debugMod = null;
+function getDebugModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_debugMod) {
+      _debugMod = require('./debug');
+    }
+    return _debugMod;
+  }
+  return {
+    createClientDebugger: () => NOOP_DEBUGGER,
+    summarizePayloadSafely: () => null,
+  };
+}
+
+let _devtoolMod = null;
+function getDevtoolModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_devtoolMod) {
+      _devtoolMod = require('./devtool');
+    }
+    return _devtoolMod;
+  }
+  return {
+    mountDevtool: () => NOOP_DEVTOOL_HANDLE,
+    highlightElement: () => {},
+    setupReduxDevToolsBridge: () => null,
+  };
+}
+
+let _liteMod = null;
+function getLiteModule() {
+  if (!_liteMod) {
+    const reqFn = typeof module !== 'undefined' && module.require ? module.require.bind(module) : require;
+    _liteMod = reqFn('./lite');
+  }
+  return _liteMod;
+}
 
 let _serverFragments = null;
 function getServerFragments() {
@@ -12145,10 +13245,12 @@ function createClientRuntime(options = {}) {
     options.debugger ||
     (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
       ? options.debug
-      : createClientDebugger({
-          enabled: Boolean(options.debug),
-          logger: options.debugLogger,
-        }));
+      : options.debug
+        ? getDebugModule().createClientDebugger({
+            enabled: true,
+            logger: options.debugLogger,
+          })
+        : NOOP_DEBUGGER);
 
   const datastar = createDatastarAdapter({
     datastar: options.datastar,
@@ -12308,7 +13410,7 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
-    mountDevtool: (opts) => mountDevtool(runtime, opts),
+    mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
       create: (formEl, formOpts = {}) =>
@@ -12372,7 +13474,7 @@ function bootClient(options = {}) {
     const onReady = () => {
       runtime.mount();
       if (shouldMountDevtools) {
-        runtime.devtool = mountDevtool(runtime, options.devtoolsOptions || {});
+        runtime.devtool = getDevtoolModule().mountDevtool(runtime, options.devtoolsOptions || {});
       }
     };
     if (document.readyState === 'loading') {
@@ -12391,10 +13493,10 @@ module.exports = {
   createClientRuntime,
   bootClient,
   get createLiteClientRuntime() {
-    return require('./lite').createLiteClientRuntime;
+    return getLiteModule().createLiteClientRuntime;
   },
   get bootLiteClient() {
-    return require('./lite').bootLiteClient;
+    return getLiteModule().bootLiteClient;
   },
   createControllerRuntime,
   queryScopedTargets,
@@ -12470,17 +13572,31 @@ module.exports = {
   createDatastarAdapter,
   createSignalsEngine,
   evaluateStateExpression,
+  isArray,
+  isNumber,
+  randomId,
+  uid,
   getByPath,
   setByPath,
   morphDomTrees,
   parseHtmlFragment,
 
   // Debug & Telemetry & DevTools
-  createClientDebugger,
-  summarizePayloadSafely,
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
+  get createClientDebugger() {
+    return getDebugModule().createClientDebugger;
+  },
+  get summarizePayloadSafely() {
+    return getDebugModule().summarizePayloadSafely;
+  },
+  get mountDevtool() {
+    return getDevtoolModule().mountDevtool;
+  },
+  get highlightElement() {
+    return getDevtoolModule().highlightElement;
+  },
+  get setupReduxDevToolsBridge() {
+    return getDevtoolModule().setupReduxDevToolsBridge;
+  },
 
   // Client Storage & Persistence
   MemoryStorage,
@@ -12559,23 +13675,12 @@ const {
 } = require('./fragments');
 
 const {
-  createClientDebugger,
-  summarizePayloadSafely,
-} = require('./debug');
-
-const {
   MemoryStorage,
   StorageAdapter,
   getNativeStorageBackend,
   createClientStorage,
   defaultStorage,
 } = require('./storage');
-
-const {
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
-} = require('./devtool');
 
 const {
   defineClientService,
@@ -12586,6 +13691,54 @@ const {
 const {
   createClientHostManager,
 } = require('./host');
+
+const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+
+const NOOP_DEVTOOL_HANDLE = Object.freeze({
+  open() {},
+  close() {},
+  toggle() {},
+  refresh() {},
+  destroy() {},
+});
+
+let _debugMod = null;
+function getDebugModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_debugMod) {
+      _debugMod = require('./debug');
+    }
+    return _debugMod;
+  }
+  return {
+    createClientDebugger: () => NOOP_DEBUGGER,
+    summarizePayloadSafely: () => null,
+  };
+}
+
+let _devtoolMod = null;
+function getDevtoolModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_devtoolMod) {
+      _devtoolMod = require('./devtool');
+    }
+    return _devtoolMod;
+  }
+  return {
+    mountDevtool: () => NOOP_DEVTOOL_HANDLE,
+    highlightElement: () => {},
+    setupReduxDevToolsBridge: () => null,
+  };
+}
+
+let _liteMod = null;
+function getLiteModule() {
+  if (!_liteMod) {
+    const reqFn = typeof module !== 'undefined' && module.require ? module.require.bind(module) : require;
+    _liteMod = reqFn('./lite');
+  }
+  return _liteMod;
+}
 
 let _serverFragments = null;
 function getServerFragments() {
@@ -12617,10 +13770,12 @@ function createClientRuntime(options = {}) {
     options.debugger ||
     (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
       ? options.debug
-      : createClientDebugger({
-          enabled: Boolean(options.debug),
-          logger: options.debugLogger,
-        }));
+      : options.debug
+        ? getDebugModule().createClientDebugger({
+            enabled: true,
+            logger: options.debugLogger,
+          })
+        : NOOP_DEBUGGER);
 
   const datastar = createDatastarAdapter({
     datastar: options.datastar,
@@ -12780,7 +13935,7 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
-    mountDevtool: (opts) => mountDevtool(runtime, opts),
+    mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
       create: (formEl, formOpts = {}) =>
@@ -12844,7 +13999,7 @@ function bootClient(options = {}) {
     const onReady = () => {
       runtime.mount();
       if (shouldMountDevtools) {
-        runtime.devtool = mountDevtool(runtime, options.devtoolsOptions || {});
+        runtime.devtool = getDevtoolModule().mountDevtool(runtime, options.devtoolsOptions || {});
       }
     };
     if (document.readyState === 'loading') {
@@ -12863,10 +14018,10 @@ module.exports = {
   createClientRuntime,
   bootClient,
   get createLiteClientRuntime() {
-    return require('./lite').createLiteClientRuntime;
+    return getLiteModule().createLiteClientRuntime;
   },
   get bootLiteClient() {
-    return require('./lite').bootLiteClient;
+    return getLiteModule().bootLiteClient;
   },
   createControllerRuntime,
   queryScopedTargets,
@@ -12942,17 +14097,31 @@ module.exports = {
   createDatastarAdapter,
   createSignalsEngine,
   evaluateStateExpression,
+  isArray,
+  isNumber,
+  randomId,
+  uid,
   getByPath,
   setByPath,
   morphDomTrees,
   parseHtmlFragment,
 
   // Debug & Telemetry & DevTools
-  createClientDebugger,
-  summarizePayloadSafely,
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
+  get createClientDebugger() {
+    return getDebugModule().createClientDebugger;
+  },
+  get summarizePayloadSafely() {
+    return getDebugModule().summarizePayloadSafely;
+  },
+  get mountDevtool() {
+    return getDevtoolModule().mountDevtool;
+  },
+  get highlightElement() {
+    return getDevtoolModule().highlightElement;
+  },
+  get setupReduxDevToolsBridge() {
+    return getDevtoolModule().setupReduxDevToolsBridge;
+  },
 
   // Client Storage & Persistence
   MemoryStorage,
@@ -13031,23 +14200,12 @@ const {
 } = require('./fragments');
 
 const {
-  createClientDebugger,
-  summarizePayloadSafely,
-} = require('./debug');
-
-const {
   MemoryStorage,
   StorageAdapter,
   getNativeStorageBackend,
   createClientStorage,
   defaultStorage,
 } = require('./storage');
-
-const {
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
-} = require('./devtool');
 
 const {
   defineClientService,
@@ -13058,6 +14216,54 @@ const {
 const {
   createClientHostManager,
 } = require('./host');
+
+const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+
+const NOOP_DEVTOOL_HANDLE = Object.freeze({
+  open() {},
+  close() {},
+  toggle() {},
+  refresh() {},
+  destroy() {},
+});
+
+let _debugMod = null;
+function getDebugModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_debugMod) {
+      _debugMod = require('./debug');
+    }
+    return _debugMod;
+  }
+  return {
+    createClientDebugger: () => NOOP_DEBUGGER,
+    summarizePayloadSafely: () => null,
+  };
+}
+
+let _devtoolMod = null;
+function getDevtoolModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_devtoolMod) {
+      _devtoolMod = require('./devtool');
+    }
+    return _devtoolMod;
+  }
+  return {
+    mountDevtool: () => NOOP_DEVTOOL_HANDLE,
+    highlightElement: () => {},
+    setupReduxDevToolsBridge: () => null,
+  };
+}
+
+let _liteMod = null;
+function getLiteModule() {
+  if (!_liteMod) {
+    const reqFn = typeof module !== 'undefined' && module.require ? module.require.bind(module) : require;
+    _liteMod = reqFn('./lite');
+  }
+  return _liteMod;
+}
 
 let _serverFragments = null;
 function getServerFragments() {
@@ -13089,10 +14295,12 @@ function createClientRuntime(options = {}) {
     options.debugger ||
     (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
       ? options.debug
-      : createClientDebugger({
-          enabled: Boolean(options.debug),
-          logger: options.debugLogger,
-        }));
+      : options.debug
+        ? getDebugModule().createClientDebugger({
+            enabled: true,
+            logger: options.debugLogger,
+          })
+        : NOOP_DEBUGGER);
 
   const datastar = createDatastarAdapter({
     datastar: options.datastar,
@@ -13252,7 +14460,7 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
-    mountDevtool: (opts) => mountDevtool(runtime, opts),
+    mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
       create: (formEl, formOpts = {}) =>
@@ -13316,7 +14524,7 @@ function bootClient(options = {}) {
     const onReady = () => {
       runtime.mount();
       if (shouldMountDevtools) {
-        runtime.devtool = mountDevtool(runtime, options.devtoolsOptions || {});
+        runtime.devtool = getDevtoolModule().mountDevtool(runtime, options.devtoolsOptions || {});
       }
     };
     if (document.readyState === 'loading') {
@@ -13335,10 +14543,10 @@ module.exports = {
   createClientRuntime,
   bootClient,
   get createLiteClientRuntime() {
-    return require('./lite').createLiteClientRuntime;
+    return getLiteModule().createLiteClientRuntime;
   },
   get bootLiteClient() {
-    return require('./lite').bootLiteClient;
+    return getLiteModule().bootLiteClient;
   },
   createControllerRuntime,
   queryScopedTargets,
@@ -13414,17 +14622,31 @@ module.exports = {
   createDatastarAdapter,
   createSignalsEngine,
   evaluateStateExpression,
+  isArray,
+  isNumber,
+  randomId,
+  uid,
   getByPath,
   setByPath,
   morphDomTrees,
   parseHtmlFragment,
 
   // Debug & Telemetry & DevTools
-  createClientDebugger,
-  summarizePayloadSafely,
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
+  get createClientDebugger() {
+    return getDebugModule().createClientDebugger;
+  },
+  get summarizePayloadSafely() {
+    return getDebugModule().summarizePayloadSafely;
+  },
+  get mountDevtool() {
+    return getDevtoolModule().mountDevtool;
+  },
+  get highlightElement() {
+    return getDevtoolModule().highlightElement;
+  },
+  get setupReduxDevToolsBridge() {
+    return getDevtoolModule().setupReduxDevToolsBridge;
+  },
 
   // Client Storage & Persistence
   MemoryStorage,
@@ -13503,23 +14725,12 @@ const {
 } = require('./fragments');
 
 const {
-  createClientDebugger,
-  summarizePayloadSafely,
-} = require('./debug');
-
-const {
   MemoryStorage,
   StorageAdapter,
   getNativeStorageBackend,
   createClientStorage,
   defaultStorage,
 } = require('./storage');
-
-const {
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
-} = require('./devtool');
 
 const {
   defineClientService,
@@ -13530,6 +14741,54 @@ const {
 const {
   createClientHostManager,
 } = require('./host');
+
+const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+
+const NOOP_DEVTOOL_HANDLE = Object.freeze({
+  open() {},
+  close() {},
+  toggle() {},
+  refresh() {},
+  destroy() {},
+});
+
+let _debugMod = null;
+function getDebugModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_debugMod) {
+      _debugMod = require('./debug');
+    }
+    return _debugMod;
+  }
+  return {
+    createClientDebugger: () => NOOP_DEBUGGER,
+    summarizePayloadSafely: () => null,
+  };
+}
+
+let _devtoolMod = null;
+function getDevtoolModule() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!_devtoolMod) {
+      _devtoolMod = require('./devtool');
+    }
+    return _devtoolMod;
+  }
+  return {
+    mountDevtool: () => NOOP_DEVTOOL_HANDLE,
+    highlightElement: () => {},
+    setupReduxDevToolsBridge: () => null,
+  };
+}
+
+let _liteMod = null;
+function getLiteModule() {
+  if (!_liteMod) {
+    const reqFn = typeof module !== 'undefined' && module.require ? module.require.bind(module) : require;
+    _liteMod = reqFn('./lite');
+  }
+  return _liteMod;
+}
 
 let _serverFragments = null;
 function getServerFragments() {
@@ -13561,10 +14820,12 @@ function createClientRuntime(options = {}) {
     options.debugger ||
     (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
       ? options.debug
-      : createClientDebugger({
-          enabled: Boolean(options.debug),
-          logger: options.debugLogger,
-        }));
+      : options.debug
+        ? getDebugModule().createClientDebugger({
+            enabled: true,
+            logger: options.debugLogger,
+          })
+        : NOOP_DEBUGGER);
 
   const datastar = createDatastarAdapter({
     datastar: options.datastar,
@@ -13724,7 +14985,7 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
-    mountDevtool: (opts) => mountDevtool(runtime, opts),
+    mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
       create: (formEl, formOpts = {}) =>
@@ -13788,7 +15049,7 @@ function bootClient(options = {}) {
     const onReady = () => {
       runtime.mount();
       if (shouldMountDevtools) {
-        runtime.devtool = mountDevtool(runtime, options.devtoolsOptions || {});
+        runtime.devtool = getDevtoolModule().mountDevtool(runtime, options.devtoolsOptions || {});
       }
     };
     if (document.readyState === 'loading') {
@@ -13807,10 +15068,10 @@ module.exports = {
   createClientRuntime,
   bootClient,
   get createLiteClientRuntime() {
-    return require('./lite').createLiteClientRuntime;
+    return getLiteModule().createLiteClientRuntime;
   },
   get bootLiteClient() {
-    return require('./lite').bootLiteClient;
+    return getLiteModule().bootLiteClient;
   },
   createControllerRuntime,
   queryScopedTargets,
@@ -13886,17 +15147,31 @@ module.exports = {
   createDatastarAdapter,
   createSignalsEngine,
   evaluateStateExpression,
+  isArray,
+  isNumber,
+  randomId,
+  uid,
   getByPath,
   setByPath,
   morphDomTrees,
   parseHtmlFragment,
 
   // Debug & Telemetry & DevTools
-  createClientDebugger,
-  summarizePayloadSafely,
-  mountDevtool,
-  highlightElement,
-  setupReduxDevToolsBridge,
+  get createClientDebugger() {
+    return getDebugModule().createClientDebugger;
+  },
+  get summarizePayloadSafely() {
+    return getDebugModule().summarizePayloadSafely;
+  },
+  get mountDevtool() {
+    return getDevtoolModule().mountDevtool;
+  },
+  get highlightElement() {
+    return getDevtoolModule().highlightElement;
+  },
+  get setupReduxDevToolsBridge() {
+    return getDevtoolModule().setupReduxDevToolsBridge;
+  },
 
   // Client Storage & Persistence
   MemoryStorage,
@@ -14044,8 +15319,20 @@ exports.default = (0, client_1.defineController)({
         },
         page: 1,
         selectedTodoId: 3,
+        loadingTodoId: null,
+        manualDraftMode: false,
+        labActiveControllers: '',
+        labActiveFragments: '',
+        labHostCount: 0,
+        labRequestOrder: '',
+        labPatchOrder: '',
+        labAssertions: 'READY',
     }),
     computed: {
+        draftSummaryText: ({ state }) => {
+            const { search, status, priority } = state.draft;
+            return `Draft: ${status}/${priority}${search ? ` • "${search}"` : ''}`;
+        },
         filterSummaryText: ({ state }) => {
             const { search, status, priority } = state.applied;
             return `Filter: ${status}/${priority}${search ? ` • "${search}"` : ''} • Page ${state.page}`;
@@ -14053,6 +15340,7 @@ exports.default = (0, client_1.defineController)({
         editingBadge: ({ state }) => {
             return state.selectedTodoId ? `Task #${state.selectedTodoId}` : 'No Task Selected';
         },
+        isLoadingRecord: ({ state }) => state.loadingTodoId !== null,
         hasInsights: ({ tasks }) => Boolean(tasks.insights?.data),
         insightsHeadline: ({ tasks }) => tasks.insights?.data?.recommendation || '',
         insightsDetail: ({ tasks }) => {
@@ -14061,17 +15349,21 @@ exports.default = (0, client_1.defineController)({
                 return '';
             return `Completion: ${data.percentCompleted}% (${data.completed}/${data.total}) • Top Category: ${data.topCategory}`;
         },
+        insightsErrorText: ({ tasks }) => {
+            const err = tasks.insights?.error;
+            return err && err.message ? err.message : '';
+        },
     },
     tasks: {
         insights: ({ api }) => ({
-            run: () => api.get('/api/todos/insights'),
+            run: (category) => api.get('/api/todos/insights', category ? { query: { category } } : undefined),
             concurrency: 'latest',
             staleTime: '10s',
             refetchOnWindowFocus: true,
             refetchOnReconnect: true,
         }),
     },
-    connect({ forms, state }) {
+    connect({ forms, state, el }) {
         const createForm = forms.get('create-todo', {
             resetOnSuccess: true,
         });
@@ -14085,12 +15377,35 @@ exports.default = (0, client_1.defineController)({
         }
         const editForm = forms.get('edit-todo');
         if (editForm) {
+            editForm.beforeSubmit(() => {
+                // Prevent submitting to wrong record while a new record selection is in-flight
+                if (state.loadingTodoId !== null) {
+                    return false;
+                }
+                return true;
+            });
             editForm.onSuccess(async (_data, { services }) => {
                 if (!services.has('toast'))
                     return;
                 const toast = await services.get('toast');
                 toast.success('Draft saved.');
             });
+        }
+        // Sync initial telemetry if lab panel is present
+        const doc = el?.ownerDocument || (typeof document !== 'undefined' ? document : null);
+        if (doc) {
+            const ctrlNodes = doc.querySelectorAll('[data-w-controller]');
+            const fragNodes = doc.querySelectorAll('[data-w-fragment]');
+            const hostNodes = doc.querySelectorAll('[data-w-host]');
+            state.labActiveControllers = Array.from(ctrlNodes)
+                .map((n) => n.getAttribute('data-w-controller'))
+                .filter(Boolean)
+                .join(', ');
+            state.labActiveFragments = Array.from(fragNodes)
+                .map((n) => n.getAttribute('data-w-fragment-id') || n.getAttribute('data-w-fragment'))
+                .filter(Boolean)
+                .join(', ');
+            state.labHostCount = hostNodes.length;
         }
         // Vue-style reactive watcher: monitors selected task id and supports onCleanup
         (0, client_1.watch)(() => state.selectedTodoId, (newId, _oldId, onCleanup) => {
@@ -14108,6 +15423,24 @@ exports.default = (0, client_1.defineController)({
         };
     },
     actions: {
+        async onSearchInput({ state, refresh }) {
+            if (state.manualDraftMode)
+                return;
+            const next = { ...state.draft };
+            await refresh('todos-list', {
+                search: next.search,
+                status: next.status,
+                priority: next.priority,
+                page: 1,
+                limit: 4,
+            }, {
+                throwOnError: false,
+                onSuccess() {
+                    state.applied = { ...next };
+                    state.page = 1;
+                },
+            });
+        },
         async applyFilters({ state, refresh }) {
             const next = { ...state.draft };
             await refresh('todos-list', {
@@ -14117,8 +15450,9 @@ exports.default = (0, client_1.defineController)({
                 page: 1,
                 limit: 4,
             }, {
+                throwOnError: false,
                 onSuccess() {
-                    state.applied = next;
+                    state.applied = { ...next };
                     state.page = 1;
                 },
             });
@@ -14136,8 +15470,9 @@ exports.default = (0, client_1.defineController)({
                 page: 1,
                 limit: 4,
             }, {
+                throwOnError: false,
                 onSuccess() {
-                    state.applied = next;
+                    state.applied = { ...next };
                     state.page = 1;
                 },
             });
@@ -14156,8 +15491,9 @@ exports.default = (0, client_1.defineController)({
                 page: 1,
                 limit: 4,
             }, {
+                throwOnError: false,
                 onSuccess() {
-                    state.applied = next;
+                    state.applied = { ...next };
                     state.page = 1;
                 },
             });
@@ -14171,6 +15507,7 @@ exports.default = (0, client_1.defineController)({
                 page: 1,
                 limit: 4,
             }, {
+                throwOnError: false,
                 onSuccess() {
                     state.draft = { ...initial };
                     state.applied = { ...initial };
@@ -14187,6 +15524,7 @@ exports.default = (0, client_1.defineController)({
                 page: nextPageNum,
                 limit: 4,
             }, {
+                throwOnError: false,
                 onSuccess() {
                     state.page = nextPageNum;
                 },
@@ -14201,6 +15539,7 @@ exports.default = (0, client_1.defineController)({
                 page: prevPageNum,
                 limit: 4,
             }, {
+                throwOnError: false,
                 onSuccess() {
                     state.page = prevPageNum;
                 },
@@ -14212,6 +15551,7 @@ exports.default = (0, client_1.defineController)({
             const id = actionEl.data('todo-id');
             if (!id)
                 return;
+            const targetId = Number(id);
             const editForm = forms.get('edit-todo');
             if (!editForm)
                 return;
@@ -14223,19 +15563,45 @@ exports.default = (0, client_1.defineController)({
                         return;
                 }
             }
-            state.selectedTodoId = Number(id);
-            // Client requests the record via typed GET with latest concurrency
-            const todo = await api.get(`/api/todos/${id}`, {
-                key: 'todos:edit-fetch',
-                concurrency: 'latest',
-            });
-            if (!todo || typeof todo !== 'object')
-                return;
-            // If user typed into the form while the fetch was in flight, do not overwrite dirty draft
-            if (editForm.dirty)
-                return;
-            editForm.setAction(`/api/todos/${todo.id}`);
-            editForm.fill(todo, { baseline: true });
+            const prevSelectedId = state.selectedTodoId;
+            const revAtStart = editForm.inputRevision;
+            state.selectedTodoId = targetId;
+            state.loadingTodoId = targetId;
+            try {
+                // Client requests the record via typed GET with latest concurrency
+                const todo = await api.get(`/api/todos/${targetId}`, {
+                    key: 'todos:edit-fetch',
+                    concurrency: 'latest',
+                });
+                if (!todo || typeof todo !== 'object')
+                    return;
+                if (state.selectedTodoId !== targetId)
+                    return;
+                // If user typed NEW changes into the form while the fetch was in flight, do not overwrite their in-flight edits
+                if (editForm.inputRevision !== revAtStart) {
+                    return;
+                }
+                editForm.setDraftKey(`form_draft:edit-todo:todo-${todo.id}`, { restore: false });
+                editForm.setAction(`/api/todos/${todo.id}`);
+                editForm.fill(todo, { baseline: true });
+            }
+            catch (err) {
+                const isCanceled = Boolean(err &&
+                    typeof err === 'object' &&
+                    (err.isCanceled === true ||
+                        err.name === 'AbortError'));
+                if (!isCanceled && state.selectedTodoId === targetId) {
+                    state.selectedTodoId = prevSelectedId;
+                }
+                if (!isCanceled) {
+                    throw err;
+                }
+            }
+            finally {
+                if (state.loadingTodoId === targetId) {
+                    state.loadingTodoId = null;
+                }
+            }
         },
         resetDraftForm({ forms }) {
             const editForm = forms.get('edit-todo');
@@ -14243,8 +15609,9 @@ exports.default = (0, client_1.defineController)({
                 editForm.reset();
             }
         },
-        async loadInsights({ tasks, services }) {
-            await tasks.insights.run();
+        async loadInsights({ tasks, services }, _event, actionEl) {
+            const category = actionEl?.data('category') || undefined;
+            await tasks.insights.run(category);
             if (services.has('toast')) {
                 const toast = await services.get('toast');
                 toast.success('Insights updated.');
@@ -14258,6 +15625,33 @@ exports.default = (0, client_1.defineController)({
             if (services.has('toast')) {
                 const toast = await services.get('toast');
                 toast.success('Filter summary copied.');
+            }
+        },
+        syncLabTelemetry({ state, el }) {
+            const doc = el?.ownerDocument || (typeof document !== 'undefined' ? document : null);
+            if (!doc)
+                return;
+            const ctrlNodes = doc.querySelectorAll('[data-w-controller]');
+            const fragNodes = doc.querySelectorAll('[data-w-fragment]');
+            const hostNodes = doc.querySelectorAll('[data-w-host]');
+            state.labActiveControllers = Array.from(ctrlNodes)
+                .map((n) => n.getAttribute('data-w-controller'))
+                .filter(Boolean)
+                .join(', ');
+            state.labActiveFragments = Array.from(fragNodes)
+                .map((n) => n.getAttribute('data-w-fragment-id') || n.getAttribute('data-w-fragment'))
+                .filter(Boolean)
+                .join(', ');
+            state.labHostCount = hostNodes.length;
+        },
+        async retryFailedFragments(ctx) {
+            const maybeRetry = ctx.retryFailedFragments;
+            if (typeof maybeRetry === 'function') {
+                await maybeRetry();
+                return;
+            }
+            if (typeof window !== 'undefined' && window.__WEBSPRESSO_CLIENT__?.fragments?.retryFailed) {
+                await window.__WEBSPRESSO_CLIENT__.fragments.retryFailed();
             }
         },
     },

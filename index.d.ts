@@ -6429,6 +6429,7 @@ export interface ClientTask<TData = any, TArgs extends unknown[] = any[]> {
   readonly error: ClientRequestError | Error | null;
   readonly stale: boolean;
   readonly lastUpdatedAt: number;
+  readonly lastArgs: TArgs;
   isStale(): boolean;
   run(...args: TArgs): Promise<TData | undefined>;
   cancel(): void;
@@ -6737,8 +6738,12 @@ export interface ClientFormHandle<
   readonly services: ClientServicesRegistry<TServices>;
   readonly pending: boolean;
   readonly dirty: boolean;
+  readonly inputRevision: number;
+  readonly draftKey: string;
+  readonly baseline: TValues;
   readonly errors: Record<string, string>;
-  readonly formError: string;
+  readonly formError: string | null;
+  readonly lastError: ClientRequestError | Error | null;
   readonly fieldErrors: Partial<Record<keyof TValues & string, string>> & Record<string, string>;
   disabled: boolean;
   values(): TValues;
@@ -6754,8 +6759,12 @@ export interface ClientFormHandle<
   saveDraft(): boolean;
   restoreDraft(): boolean;
   clearDraft(): boolean;
+  setDraftKey(nextKey: string, options?: { restore?: boolean }): this;
   readonly hasDraft: boolean;
   submit(submitter?: HTMLElement | null | Record<string, unknown>): Promise<ClientFormSubmitResult<TResponse>>;
+  beforeSubmit(
+    callback: (values: TValues, meta: { form: ClientFormHandle<TValues, TResponse, TServices>; submitter?: HTMLElement | null; action: string; method: string }) => boolean | Promise<boolean>
+  ): () => void;
   onSuccess(
     callback: (data: TResponse, meta: ClientFormHookMeta<TValues, TResponse, TServices>) => void | Promise<void>
   ): () => void;
@@ -6886,7 +6895,9 @@ export interface ControllerContext<
   readonly lastError: Error | null;
   clearError(): void;
   readonly storage: ClientStorage & { readonly global: ClientStorage; readonly root: ClientStorage };
+  readonly persistenceConflicts: Array<Record<string, unknown>>;
   clearPersistedState(): void;
+  retryFailedFragments(): Promise<FragmentRefreshResult>;
   onError(listener: (err: Error, meta?: ControllerErrorMeta) => void): () => void;
   task<TData = any, TArgs extends unknown[] = any[]>(
     runFn: (...args: TArgs) => Promise<TData>,

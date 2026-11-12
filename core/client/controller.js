@@ -495,6 +495,7 @@ function createControllerRuntime(options = {}) {
   const activeInstances = new Map();
   // Standalone forms (forms without a controller wrapper)
   const standaloneForms = new WeakMap();
+  const activeStandaloneForms = new Set();
 
   /**
    * Register a controller definition with collision checking.
@@ -769,6 +770,7 @@ function createControllerRuntime(options = {}) {
       let _data = null;
       let _error = null;
       let _stale = false;
+      let _lastArgs = [];
 
       function isTaskStale(mode = true) {
         if (!mode) return false;
@@ -787,6 +789,10 @@ function createControllerRuntime(options = {}) {
 
       async function run(...args) {
         if (!isConnected()) return undefined;
+        if (args.length > 0) {
+          _lastArgs = [...args];
+        }
+        const effectiveArgs = args.length > 0 ? args : _lastArgs;
 
         if (policy === 'drop' && activeRuns > 0) {
           if (debug && typeof debug.trackDiscardedResponse === 'function') {
@@ -802,12 +808,12 @@ function createControllerRuntime(options = {}) {
 
         if (policy === 'queue') {
           const wait = queuedPromise;
-          const nextRun = wait.then(() => executeRun(...args)).catch(() => {});
+          const nextRun = wait.then(() => executeRun(...effectiveArgs)).catch(() => {});
           queuedPromise = nextRun;
           return nextRun;
         }
 
-        return executeRun(...args);
+        return executeRun(...effectiveArgs);
       }
 
       async function executeRun(...args) {
@@ -834,7 +840,7 @@ function createControllerRuntime(options = {}) {
         try {
           const result = await runFn(...args);
 
-          if (!isConnected() || runVersion !== currentRunVersion) {
+          if (!isConnected() || (policy !== 'parallel' && runVersion !== currentRunVersion)) {
             return undefined;
           }
 
@@ -847,7 +853,7 @@ function createControllerRuntime(options = {}) {
           updateSignal('stale', false);
           return result;
         } catch (err) {
-          if (!isConnected() || runVersion !== currentRunVersion) {
+          if (!isConnected() || (policy !== 'parallel' && runVersion !== currentRunVersion)) {
             return undefined;
           }
           if (err && (err.isCanceled || err.name === 'AbortError')) {
@@ -865,7 +871,11 @@ function createControllerRuntime(options = {}) {
             inFlightAbort = null;
           }
           activeRuns = Math.max(0, activeRuns - 1);
-          if (runVersion === currentRunVersion || activeRuns === 0) {
+          const shouldClearPending =
+            policy === 'parallel'
+              ? activeRuns === 0
+              : runVersion === currentRunVersion || activeRuns === 0;
+          if (shouldClearPending) {
             _pending = false;
             _stale = false;
             if (isConnected()) {
@@ -911,6 +921,9 @@ function createControllerRuntime(options = {}) {
         },
         get lastUpdatedAt() {
           return _lastUpdatedAt;
+        },
+        get lastArgs() {
+          return [..._lastArgs];
         },
         isStale: () => isTaskStale(true),
         run,
@@ -1359,12 +1372,39 @@ function createControllerRuntime(options = {}) {
       root: defaultStorage,
     });
     const persistConfig = normalizePersistConfig(reg.definition.persist, controllerName);
+    let persistTimer = null;
+    let lastSavedJson = '';
+    const persistenceConflicts = [];
     function resolvePersistDriver(pConfig) {
       if (!pConfig) return storageCtx.local;
       if (pConfig.isGlobal) {
         return defaultStorage[pConfig.storageType] || defaultStorage.local;
       }
       return storageCtx[pConfig.storageType] || storageCtx.local;
+    }
+
+    function checkFragmentPersistenceConflict(idOrName, input) {
+      if (!persistConfig || !fragments || typeof fragments.getInstance !== 'function' || !input || typeof input !== 'object') {
+        return;
+      }
+      const inst =
+        fragments.getInstance(idOrName) ||
+        (typeof fragments.getInstances === 'function'
+          ? fragments.getInstances().find((i) => i.name === idOrName)
+          : null);
+      if (inst && inst.persistInput && inst.persistInput.key !== persistConfig.storageKey) {
+        const conflict = {
+          controller: controllerName,
+          controllerStorageKey: persistConfig.storageKey,
+          fragment: inst.instanceId,
+          fragmentStorageKey: inst.persistInput.key,
+          keys: Object.keys(input),
+        };
+        persistenceConflicts.push(conflict);
+        if (debug && typeof debug.recordEvent === 'function') {
+          debug.recordEvent('persist:conflict', conflict);
+        }
+      }
     }
 
     // 6. Context object passed to `connect(ctx)` and `actions[name](ctx, event, actionEl)`
@@ -1383,10 +1423,27 @@ function createControllerRuntime(options = {}) {
       tasks: tasksProxy,
       task: createTaskInstance,
       storage: storageCtx,
+      get persistenceConflicts() {
+        return [...persistenceConflicts];
+      },
       clearPersistedState: () => {
+        if (persistTimer) {
+          clearTimeout(persistTimer);
+          persistTimer = null;
+        }
         if (persistConfig) {
           const driver = resolvePersistDriver(persistConfig);
           driver.remove(persistConfig.storageKey);
+          if (state && initialRawState) {
+            const keysToTrack = persistConfig.keys || Object.keys(initialRawState);
+            const currentPayload = {};
+            for (const k of keysToTrack) {
+              currentPayload[k] = state[k];
+            }
+            lastSavedJson = JSON.stringify(currentPayload);
+          } else {
+            lastSavedJson = '';
+          }
         }
       },
       param: (name, maybeEl) => {
@@ -1430,7 +1487,12 @@ function createControllerRuntime(options = {}) {
         return unregister;
       },
       invalidate: (tags) => (fragments ? fragments.invalidate(tags) : Promise.resolve({ ok: true, refreshed: [] })),
+      retryFailedFragments: () =>
+        fragments && typeof fragments.retryFailed === 'function'
+          ? fragments.retryFailed()
+          : Promise.resolve({ refreshed: [], skipped: true }),
       refresh: async (idOrName, input, opts) => {
+        checkFragmentPersistenceConflict(idOrName, input);
         if (!fragments) {
           const empty = { ok: true, refreshed: [], skipped: true };
           if (opts && typeof opts.onSuccess === 'function') await opts.onSuccess(empty);
@@ -1446,6 +1508,7 @@ function createControllerRuntime(options = {}) {
           return inst && inst.input ? { ...inst.input } : {};
         },
         refresh: (input, opts) => {
+          checkFragmentPersistenceConflict(idOrName, input);
           if (!fragments) {
             const empty = { ok: true, refreshed: [], skipped: true };
             if (opts && typeof opts.onSuccess === 'function') {
@@ -1478,14 +1541,34 @@ function createControllerRuntime(options = {}) {
     );
     state = stateManager.state;
 
-    // Hydrate persisted state if defined
+    // Hydrate persisted state if defined (with schema-compatible type validation against corrupted storage)
     if (persistConfig) {
       const driver = resolvePersistDriver(persistConfig);
       const savedData = driver.get(persistConfig.storageKey, null);
       if (savedData && typeof savedData === 'object' && !isArray(savedData)) {
         for (const [k, v] of Object.entries(savedData)) {
           if (persistConfig.keys && !persistConfig.keys.includes(k)) continue;
-          if (Object.prototype.hasOwnProperty.call(initialRawState, k)) {
+          if (!Object.prototype.hasOwnProperty.call(initialRawState, k)) continue;
+          const initVal = initialRawState[k];
+          if (initVal !== null && typeof initVal === 'object' && !isArray(initVal)) {
+            if (v !== null && typeof v === 'object' && !isArray(v)) {
+              const merged = { ...initVal };
+              for (const [subKey, subVal] of Object.entries(v)) {
+                if (Object.prototype.hasOwnProperty.call(initVal, subKey)) {
+                  if (initVal[subKey] === null || typeof subVal === typeof initVal[subKey]) {
+                    merged[subKey] = subVal;
+                  }
+                } else {
+                  merged[subKey] = subVal;
+                }
+              }
+              state[k] = merged;
+            }
+          } else if (isArray(initVal)) {
+            if (isArray(v)) {
+              state[k] = v;
+            }
+          } else if (initVal === null || initVal === undefined || typeof v === typeof initVal) {
             state[k] = v;
           }
         }
@@ -1609,7 +1692,17 @@ function createControllerRuntime(options = {}) {
         isConnected,
         isLoadingTargetActive,
       });
-      domDisposers.push(unbind);
+      if (domDisposers.length === 0) {
+        domDisposers.push(unbind);
+      }
+
+      // Prune disconnected forms from scopedForms
+      for (const [fName, fh] of Array.from(scopedForms.entries())) {
+        if (!fh.el || fh.el.isConnected === false || !rootEl.contains(fh.el)) {
+          fh.destroy();
+          scopedForms.delete(fName);
+        }
+      }
 
       // Also auto-initialize any `<form data-w-form>` inside this controller's scope
       if (rootEl.tagName === 'FORM' && rootEl.hasAttribute('data-w-form')) {
@@ -1619,7 +1712,10 @@ function createControllerRuntime(options = {}) {
         const formsInScope = rootEl.querySelectorAll('form[data-w-form]');
         for (let i = 0; i < formsInScope.length; i++) {
           if (isTargetInControllerScope(rootEl, formsInScope[i])) {
-            createFormHandle(formsInScope[i], { api: scopedApi, datastar, debug, services });
+            const fh = createFormHandle(formsInScope[i], { api: scopedApi, datastar, debug, services });
+            if (fh && fh.name) {
+              scopedForms.set(fh.name, fh);
+            }
           }
         }
       }
@@ -1630,8 +1726,6 @@ function createControllerRuntime(options = {}) {
     // Auto-sync persisted state changes back to storage
     if (persistConfig) {
       const driver = resolvePersistDriver(persistConfig);
-      let persistTimer = null;
-      let lastSavedJson = '';
 
       const stopPersistEffect = registerEffect(() => {
         if (!isConnected()) return;
@@ -1816,6 +1910,11 @@ function createControllerRuntime(options = {}) {
       if (standaloneForm) {
         standaloneForm.destroy();
         standaloneForms.delete(node);
+        activeStandaloneForms.delete(standaloneForm);
+      } else if (node && node.__wFormHandle) {
+        try {
+          node.__wFormHandle.destroy();
+        } catch (_e) {}
       }
     }
   }
@@ -1901,6 +2000,7 @@ function createControllerRuntime(options = {}) {
           services,
         });
         standaloneForms.set(formEl, handle);
+        activeStandaloneForms.add(handle);
       }
     }
 
@@ -1944,10 +2044,19 @@ function createControllerRuntime(options = {}) {
     getActiveInstances() {
       return Array.from(activeInstances.values());
     },
+    getStandaloneFormCount() {
+      return activeStandaloneForms.size;
+    },
     destroyAll() {
       for (const inst of Array.from(activeInstances.values())) {
         inst.destroy();
       }
+      for (const fh of Array.from(activeStandaloneForms.values())) {
+        try {
+          fh.destroy();
+        } catch (_e) {}
+      }
+      activeStandaloneForms.clear();
     },
   };
 }

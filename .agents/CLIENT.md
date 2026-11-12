@@ -39,9 +39,10 @@ When multiple SSR fragments exist on a single page:
 1. **Fragment Name vs Instance ID**:
    - `data-w-fragment="name"` indicates the fragment definition to invoke on the server.
    - `data-w-fragment-id="instanceId"` distinguishes distinct instances on the page (e.g. `list:default`, `list:sidebar`).
-2. **Parent-Child Deduplication (`deduplicateParentChildFragments`)**:
+2. **Parent-Child Deduplication (`deduplicateParentChildFragments`) & Nested `childInputs` Preservation**:
    - If fragment B is nested inside fragment A's DOM subtree and both are invalidated by the same mutation tag, **fragment B is automatically dropped from the outgoing network request**.
-   - Only fragment A is requested. Because rendering fragment A on the server inherently renders fragment B, this avoids duplicate SQL queries, dual network roundtrips, and conflicting DOM patch races.
+   - Only fragment A is requested, alongside a `childInputs` map containing fragment B's active client-side input (`{ [childInstanceId]: child.input }`). When rendering fragment A on the server, `fsy.fragment()` merges `req.__fragmentChildInputs` over static template defaults so fragment B's server-rendered HTML genuinely reflects its active filter/page state.
+   - Candidate inputs passed to `refresh(id, nextInput)` are only committed to `inst.input`, `data-w-fragment-input`, and storage after the server response succeeds with `reqVersion >= inst.version`; superseded or failed refreshes never corrupt applied input state.
 3. **Communication Channels Between Fragments**:
    - **Tag Invalidation (`dependsOn`)**: Decoupled, multi-fragment refresh coalesced into a single `POST /__webspresso/fragments` HTTP call.
    - **Request Memoization (`ctx.memo`)**: Co-refreshed fragments share cached loaders/queries within the same request lifecycle.
@@ -225,9 +226,16 @@ form.reset();
 form.setAction(`/api/todos/${todo.id}`);
 form.disabled = true; // prevents submit while loading
 
-// 5. Normalized values read
+// 5. Normalized values & baseline inspection
 const values = form.read(); // or form.values
+const base = form.baseline; // current clean baseline snapshot
+const rev = form.inputRevision; // increments on every user input/change event (guards against overwriting in-flight edits)
+
+// 6. Pre-submit guard & record-scoped draft keys
+form.beforeSubmit((vals) => !state.isLoadingRecord);
+form.setDraftKey(`form_draft:edit-todo:todo-${todo.id}`, { restore: false });
 ```
+- **Debounced Draft Race Safety**: Any pending 150ms draft save timer is automatically canceled on `submit()`, `clearDraft()`, `saveDraft()`, `reset()`, `clear()`, `fill(..., { baseline: true })`, `setDraftKey()`, and `destroy()`, guaranteeing a submitted form never resurrects a stale draft.
 
 ### Form Semantics:
 - `fill(values)` by default modifies field values without changing baseline.
@@ -452,10 +460,10 @@ bootClient({
 ## 11. Bundle Size & Browser Support Matrix
 
 - **Runtime Size (Zero External Dependencies)**:
-  - Full client runtime (`webspresso/core/client` = signals + controllers + watchers + forms + API client + SSR fragment reconciler & auto-revalidation + lifecycle tasks + client services & lazy UI hosts + storage, with `devtool.js` & `debug.js` stripped in production): **~34.4 KB Gzip** / **~30.0 KB Brotli** (~109.3 KB minified).
-  - Lite client runtime (`webspresso/client/lite` = SSR fragments & auto-revalidation + native forms + API client + storage, with lazy service registry): **~18.2 KB Gzip** / **~16.1 KB Brotli** (~56.1 KB minified).
-  - Datastar Signals & DOM Adapter alone: **~7.0 KB Gzip** / **~6.2 KB Brotli** (~20.0 KB minified).
-  - Client Services & Lazy UI Host (`core/client/services.js` + `host.js`): **~4.2 KB Gzip** / **~3.8 KB Brotli** (~11.3 KB minified).
+  - Full client runtime (`webspresso/core/client` = signals + controllers + watchers + forms + API client + SSR fragment reconciler & auto-revalidation + lifecycle tasks + client services & lazy UI hosts + storage, with `devtool.js` & `debug.js` stripped in production): **~36.3 KB Gzip** / **~31.6 KB Brotli** (~116.1 KB minified).
+  - Lite client runtime (`webspresso/client/lite` = SSR fragments & auto-revalidation + native forms + API client + storage, with lazy service registry): **~19.1 KB Gzip** / **~16.9 KB Brotli** (~59.3 KB minified).
+  - Datastar Signals & DOM Adapter alone: **~7.4 KB Gzip** / **~6.6 KB Brotli** (~21.4 KB minified).
+  - Client Services & Lazy UI Host (`core/client/services.js` + `host.js`): **~4.2 KB Gzip** / **~3.8 KB Brotli** (~11.4 KB minified).
   - Namespaced Client Storage (`core/client/storage.js`): **~1.1 KB Gzip** / **~1.0 KB Brotli** (~2.9 KB minified).
 - **A-la-Carte Subpath Exports**:
   - `webspresso/client` → Full suite (`bootClient`, `defineController`, `defineClientService`, `watch`)

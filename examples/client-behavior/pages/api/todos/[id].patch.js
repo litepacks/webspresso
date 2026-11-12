@@ -15,6 +15,14 @@ module.exports = defineApi({
       category: z.string().trim().min(1).max(40).optional(),
       notes: z.string().trim().max(500).optional(),
     }),
+    response: z.object({
+      id: z.number(),
+      title: z.string(),
+      completed: z.boolean(),
+      priority: z.enum(['high', 'medium', 'low']),
+      category: z.string(),
+      notes: z.string(),
+    }),
   }),
   async handler(req) {
     const updated = updateTodo(req.input.params.id, req.input.body);

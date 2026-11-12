@@ -7,7 +7,7 @@ const { createApp } = require('../../index');
 
 function createClientBehaviorExampleApp(options = {}) {
   const rootDir = __dirname;
-  return createApp({
+  const result = createApp({
     rootDir,
     pagesDir: path.join(rootDir, 'pages'),
     viewsDir: path.join(rootDir, 'views'),
@@ -15,6 +15,10 @@ function createClientBehaviorExampleApp(options = {}) {
     logging: false,
     ...options,
   });
+  if (options.isDev !== undefined && result.app && result.app.locals) {
+    result.app.locals.isDev = options.isDev;
+  }
+  return result;
 }
 
 /**
