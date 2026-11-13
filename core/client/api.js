@@ -84,9 +84,28 @@ class ClientRequestError extends Error {
       this.status === 408;
     this.isDropped = Boolean(details.isDropped);
     this.isSuperseded = Boolean(details.isSuperseded);
+    this.dispatched =
+      details.dispatched !== undefined
+        ? Boolean(details.dispatched)
+        : !this.isDropped && (this.kind !== 'canceled' || Boolean(details.cause));
+    this.outcomeUnknown =
+      details.outcomeUnknown !== undefined
+        ? Boolean(details.outcomeUnknown)
+        : MUTATION_METHODS.has(this.method) &&
+          this.dispatched &&
+          !this.isDropped &&
+          (this.kind === 'timeout' || this.kind === 'network' || this.kind === 'canceled');
+    this.outcome = this.outcomeUnknown
+      ? 'unknown'
+      : !this.dispatched || this.isDropped
+        ? 'not_sent'
+        : 'failed';
     this.serverRollbackGuaranteed = false;
     if (this.isCanceled) {
       this.note = 'Client request cancellation/abort does not roll back server-side execution.';
+    } else if (this.outcomeUnknown) {
+      this.note =
+        'Mutation request was dispatched before response delivery failed; the server may have committed the operation.';
     }
     if (details.cause) {
       this.cause = details.cause;
@@ -675,6 +694,8 @@ function createApiClient(config = {}) {
         method: upperMethod,
         url: requestUrl,
         key: requestKey,
+        dispatched: false,
+        outcomeUnknown: false,
       });
     }
 
@@ -914,6 +935,7 @@ function createApiClient(config = {}) {
               url: requestUrl,
               key: requestKey,
               isTimedOut: true,
+              dispatched: true,
               cause: fetchErr,
             }
           );
@@ -947,6 +969,7 @@ function createApiClient(config = {}) {
               url: requestUrl,
               key: requestKey,
               isSuperseded: superseded,
+              dispatched: true,
               cause: fetchErr,
             }
           );
@@ -962,6 +985,7 @@ function createApiClient(config = {}) {
             method: upperMethod,
             url: requestUrl,
             key: requestKey,
+            dispatched: true,
             cause: fetchErr,
           }
         );

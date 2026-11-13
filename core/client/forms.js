@@ -23,31 +23,46 @@ const { isArray, setElementBusyState } = require('./utils');
  * @param {string} target
  * @returns {boolean}
  */
-function isSafeRedirectUrl(target) {
-  if (!target || typeof target !== 'string') return false;
+function resolveSafeRedirectUrl(target) {
+  if (!target || typeof target !== 'string') return null;
   const trimmed = target.trim();
-  if (!trimmed) return false;
+  if (!trimmed) return null;
 
   // Block control characters
-  if (/[\u0000-\u001F\u007F-\u009F]/.test(trimmed)) return false;
+  if (/[\u0000-\u001F\u007F-\u009F]/.test(trimmed)) return null;
 
   // Block protocol-relative URLs (//example.com) and backslash traversal (/\ or \\)
   if (trimmed.startsWith('//') || trimmed.startsWith('/\\') || trimmed.startsWith('\\')) {
-    return false;
+    return null;
   }
 
   // Relative path starting with single slash (e.g. /dashboard)
   if (trimmed.startsWith('/')) {
-    return true;
+    try {
+      const parsed = new URL(trimmed, 'http://localhost');
+      if (parsed.origin !== 'http://localhost' || !parsed.pathname.startsWith('/') || parsed.pathname.startsWith('//')) {
+        return null;
+      }
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    } catch {
+      return null;
+    }
   }
 
   // Absolute URL: MUST explicitly parse as http: or https:
   try {
     const parsed = new URL(trimmed);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.href;
   } catch {
-    return false;
+    return null;
   }
+}
+
+function isSafeRedirectUrl(target) {
+  return resolveSafeRedirectUrl(target) !== null;
 }
 
 let errorIdSeq = 0;
@@ -955,6 +970,8 @@ function createFormHandle(formEl, options = {}) {
     formError = null;
     lastError = null;
     syncErrorsToDom(false);
+    const submitRevision = inputRevision;
+    const submittedSnapshot = captureInitialFormSnapshot(formEl);
     setPendingState(true, submitter);
 
     try {
@@ -974,7 +991,6 @@ function createFormHandle(formEl, options = {}) {
       }
 
       lastData = responseData;
-      dirty = false;
       fieldErrors = {};
       formError = null;
       syncErrorsToDom(false);
@@ -995,18 +1011,51 @@ function createFormHandle(formEl, options = {}) {
         clearAttr === 'true' ||
         clearAttr === '1';
 
-      if (shouldClear) {
-        clear();
-      } else if (shouldReset) {
-        reset();
-      } else {
-        // Current state becomes the new clean baseline after successful save
-        initialSnapshot = captureInitialFormSnapshot(formEl);
-        baselineValues = parseFormElement(formEl).data;
-      }
+      const editedDuringSubmit = inputRevision !== submitRevision;
 
-      if (isDraftEnabled) {
-        clearDraft();
+      if (!editedDuringSubmit) {
+        dirty = false;
+        if (shouldClear) {
+          clear();
+        } else if (shouldReset) {
+          reset();
+        } else {
+          // Current state becomes the new clean baseline after successful save
+          initialSnapshot = captureInitialFormSnapshot(formEl);
+          baselineValues = parseFormElement(formEl).data;
+        }
+
+        if (isDraftEnabled) {
+          clearDraft();
+        }
+      } else {
+        // User edited form controls while submit was in flight:
+        // Never wipe out the new unsubmitted edits via reset() or clear().
+        // Update baseline to what was actually committed on the server (or empty baseline if clearOnSuccess).
+        if (shouldClear) {
+          const clearedSnapshot = new Map();
+          for (const [ctrl, snap] of submittedSnapshot.entries()) {
+            clearedSnapshot.set(ctrl, {
+              ...snap,
+              checked: false,
+              value: '',
+              selectedValues: [],
+            });
+          }
+          initialSnapshot = clearedSnapshot;
+          baselineValues = {};
+        } else if (!shouldReset) {
+          initialSnapshot = submittedSnapshot;
+          baselineValues = payloadData && typeof payloadData === 'object' ? { ...payloadData } : {};
+        }
+        dirty = computeFormDirty(formEl, initialSnapshot);
+        if (isDraftEnabled) {
+          if (dirty) {
+            saveDraft();
+          } else {
+            clearDraft();
+          }
+        }
       }
 
       // Invoke registered success hooks. Note: Any background fragment refresh failure
@@ -1025,11 +1074,12 @@ function createFormHandle(formEl, options = {}) {
       }
 
       // Explicit redirect behavior
-      const redirectTarget =
+      const rawRedirectTarget =
         submitOptions.redirectOnSuccess ||
         (formEl && formEl.getAttribute('data-w-redirect')) ||
         null;
-      if (redirectTarget && isSafeRedirectUrl(redirectTarget)) {
+      const redirectTarget = resolveSafeRedirectUrl(rawRedirectTarget);
+      if (redirectTarget) {
         if (typeof options.navigate === 'function') {
           options.navigate(redirectTarget);
         } else if (typeof window !== 'undefined' && window.location) {
@@ -1072,7 +1122,13 @@ function createFormHandle(formEl, options = {}) {
       if (submitOptions.throwOnError) {
         throw err;
       }
-      return { ok: false, submitted: false, error: err };
+      return {
+        ok: false,
+        submitted: false,
+        outcomeUnknown: Boolean(err && err.outcomeUnknown),
+        outcome: (err && err.outcome) || 'failed',
+        error: err,
+      };
     } finally {
       setPendingState(false, submitter);
     }

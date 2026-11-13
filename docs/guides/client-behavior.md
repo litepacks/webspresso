@@ -1496,6 +1496,39 @@ bootClient({
 });
 ```
 
+> [!NOTE]
+> Global `bootClient` refetch options (`staleTime`, `refetchOnWindowFocus`, `refetchOnReconnect`, `refetchInterval`) apply **only** to SSR fragments (`[data-w-fragment]`). Controller `tasks` opt into background revalidation explicitly per task, and tasks marked `{ mutation: true }` (or `{ kind: 'mutation' }`) never auto-refetch.
+
+---
+
+## 18. Core Runtime Contracts & Edge-Case Guarantees
+
+1. **Mutation Success vs Post-Commit Refresh/Hook Errors & `outcomeUnknown`**:
+   - When a mutation (`POST`, `PUT`, `PATCH`, `DELETE`) commits on the server (HTTP 2xx), `form.submit()` returns `{ ok: true, submitted: true, data }`.
+   - If the post-commit fragment refresh fails or an `onSuccess` hook throws, `ok` remains `true` (with `refreshError` or `hookError` populated), and the form does not display a false save-error banner.
+   - `runtime.fragments.retryFailed()` retries **only** the failed fragment refresh targets (`POST /__webspresso/fragments`) without re-running the mutation.
+   - If a mutation request was already dispatched (`error.dispatched === true`) and the connection drops or times out before the response arrives, `ClientRequestError` sets `outcomeUnknown: true` and `outcome: 'unknown'` (and `form.submit()` returns `{ ok: false, outcomeUnknown: true, outcome: 'unknown' }`), allowing the UI to prompt for state verification instead of assuming the write never happened.
+
+2. **Form Baseline, Dirty State & In-Flight Edit Protection**:
+   - `form.dirty` compares live form values against `form.baseline` (updated on initial mount, `form.fill(values, { baseline: true })`, or successful submit).
+   - Pending debounced draft writes (`data-w-persist-draft`) are canceled when `form.submit()` begins, preventing a stale timer from re-writing a cleared draft after submit.
+   - If the user continues editing fields while `form.submit()` is awaiting a response, completion of the in-flight submission updates `form.baseline` to the committed payload **without** clearing or resetting the newer unsubmitted edits, keeping `form.dirty === true` and saving the updated draft.
+
+3. **Fragment Input, Multi-Instance Targeting & Partial Batch Failure**:
+   - `ctx.fragment(idOrName).input` resolves by `instanceId` (`data-w-fragment-id`), `<name>:default`, or fragment `name` (`data-w-fragment`), while `ctx.fragment(name).inputs` returns a map of `{ [instanceId]: input }` for all mounted instances.
+   - `refresh(name, input)` targets all mounted instances sharing `data-w-fragment="<name>"` (with parent/child deduplication), whereas `refresh(instanceId, input)` targets only that specific instance.
+   - In a multi-fragment refresh batch, if one fragment fails on the server while sibling fragments succeed, succeeded fragments are patched and `{ ok: false, partial: true, refreshed, errors }` is returned; `retryFailed()` then retries only the failed fragment(s).
+   - Parent fragment refreshes preserve nested child fragment `instanceId`, runtime `input`, and active focused input elements/caret selection.
+
+4. **Service & UI Host Ownership (`created: true` vs Layout Host)**:
+   - `mountHost(key)` marks `host.created = true` when creating a new `<div data-w-host="<key>">` container and `host.created = false` when attaching to an existing layout element.
+   - `runtime.destroy()` removes runtime-created host elements (`created: true`) and restores layout-inherited host elements (`created: false`) to their original attributes (`id`, `className`, custom attributes) without detaching them from the layout.
+
+5. **Persistence Restore Priority & SSR Reconciliation**:
+   - Controller `persist` restores validated keys over `state()` defaults on mount and ignores corrupted or schema-mismatched storage entries.
+   - Fragment `data-w-persist-input` keeps `inst.input` aligned with the rendered SSR HTML until its automatic reconciliation refresh finishes and updates the DOM, and explicit user resets to default values (such as `'all'`) are persisted so subsequent DOM scans never revert to an older filter.
+
+
 
 
 

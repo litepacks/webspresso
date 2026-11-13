@@ -188,7 +188,12 @@ function parseDataValue(val) {
   if (val === 'undefined') return undefined;
   if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(val)) {
     const num = Number(val);
-    if (isNumber(num)) return num;
+    if (isNumber(num)) {
+      if (/^-?(?:0|[1-9]\d*)$/.test(val) && !Number.isSafeInteger(num)) {
+        return val;
+      }
+      return num;
+    }
   }
   if ((val.startsWith('{') && val.endsWith('}')) || (val.startsWith('[') && val.endsWith(']'))) {
     try {
@@ -658,7 +663,12 @@ function parseDataValue(val) {
   if (val === 'undefined') return undefined;
   if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(val)) {
     const num = Number(val);
-    if (isNumber(num)) return num;
+    if (isNumber(num)) {
+      if (/^-?(?:0|[1-9]\d*)$/.test(val) && !Number.isSafeInteger(num)) {
+        return val;
+      }
+      return num;
+    }
   }
   if ((val.startsWith('{') && val.endsWith('}')) || (val.startsWith('[') && val.endsWith(']'))) {
     try {
@@ -2570,9 +2580,28 @@ class ClientRequestError extends Error {
       this.status === 408;
     this.isDropped = Boolean(details.isDropped);
     this.isSuperseded = Boolean(details.isSuperseded);
+    this.dispatched =
+      details.dispatched !== undefined
+        ? Boolean(details.dispatched)
+        : !this.isDropped && (this.kind !== 'canceled' || Boolean(details.cause));
+    this.outcomeUnknown =
+      details.outcomeUnknown !== undefined
+        ? Boolean(details.outcomeUnknown)
+        : MUTATION_METHODS.has(this.method) &&
+          this.dispatched &&
+          !this.isDropped &&
+          (this.kind === 'timeout' || this.kind === 'network' || this.kind === 'canceled');
+    this.outcome = this.outcomeUnknown
+      ? 'unknown'
+      : !this.dispatched || this.isDropped
+        ? 'not_sent'
+        : 'failed';
     this.serverRollbackGuaranteed = false;
     if (this.isCanceled) {
       this.note = 'Client request cancellation/abort does not roll back server-side execution.';
+    } else if (this.outcomeUnknown) {
+      this.note =
+        'Mutation request was dispatched before response delivery failed; the server may have committed the operation.';
     }
     if (details.cause) {
       this.cause = details.cause;
@@ -3161,6 +3190,8 @@ function createApiClient(config = {}) {
         method: upperMethod,
         url: requestUrl,
         key: requestKey,
+        dispatched: false,
+        outcomeUnknown: false,
       });
     }
 
@@ -3400,6 +3431,7 @@ function createApiClient(config = {}) {
               url: requestUrl,
               key: requestKey,
               isTimedOut: true,
+              dispatched: true,
               cause: fetchErr,
             }
           );
@@ -3433,6 +3465,7 @@ function createApiClient(config = {}) {
               url: requestUrl,
               key: requestKey,
               isSuperseded: superseded,
+              dispatched: true,
               cause: fetchErr,
             }
           );
@@ -3448,6 +3481,7 @@ function createApiClient(config = {}) {
             method: upperMethod,
             url: requestUrl,
             key: requestKey,
+            dispatched: true,
             cause: fetchErr,
           }
         );
@@ -3851,31 +3885,46 @@ const { isArray, setElementBusyState } = require('./utils');
  * @param {string} target
  * @returns {boolean}
  */
-function isSafeRedirectUrl(target) {
-  if (!target || typeof target !== 'string') return false;
+function resolveSafeRedirectUrl(target) {
+  if (!target || typeof target !== 'string') return null;
   const trimmed = target.trim();
-  if (!trimmed) return false;
+  if (!trimmed) return null;
 
   // Block control characters
-  if (/[\u0000-\u001F\u007F-\u009F]/.test(trimmed)) return false;
+  if (/[\u0000-\u001F\u007F-\u009F]/.test(trimmed)) return null;
 
   // Block protocol-relative URLs (//example.com) and backslash traversal (/\ or \\)
   if (trimmed.startsWith('//') || trimmed.startsWith('/\\') || trimmed.startsWith('\\')) {
-    return false;
+    return null;
   }
 
   // Relative path starting with single slash (e.g. /dashboard)
   if (trimmed.startsWith('/')) {
-    return true;
+    try {
+      const parsed = new URL(trimmed, 'http://localhost');
+      if (parsed.origin !== 'http://localhost' || !parsed.pathname.startsWith('/') || parsed.pathname.startsWith('//')) {
+        return null;
+      }
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    } catch {
+      return null;
+    }
   }
 
   // Absolute URL: MUST explicitly parse as http: or https:
   try {
     const parsed = new URL(trimmed);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.href;
   } catch {
-    return false;
+    return null;
   }
+}
+
+function isSafeRedirectUrl(target) {
+  return resolveSafeRedirectUrl(target) !== null;
 }
 
 let errorIdSeq = 0;
@@ -4783,6 +4832,8 @@ function createFormHandle(formEl, options = {}) {
     formError = null;
     lastError = null;
     syncErrorsToDom(false);
+    const submitRevision = inputRevision;
+    const submittedSnapshot = captureInitialFormSnapshot(formEl);
     setPendingState(true, submitter);
 
     try {
@@ -4802,7 +4853,6 @@ function createFormHandle(formEl, options = {}) {
       }
 
       lastData = responseData;
-      dirty = false;
       fieldErrors = {};
       formError = null;
       syncErrorsToDom(false);
@@ -4823,18 +4873,51 @@ function createFormHandle(formEl, options = {}) {
         clearAttr === 'true' ||
         clearAttr === '1';
 
-      if (shouldClear) {
-        clear();
-      } else if (shouldReset) {
-        reset();
-      } else {
-        // Current state becomes the new clean baseline after successful save
-        initialSnapshot = captureInitialFormSnapshot(formEl);
-        baselineValues = parseFormElement(formEl).data;
-      }
+      const editedDuringSubmit = inputRevision !== submitRevision;
 
-      if (isDraftEnabled) {
-        clearDraft();
+      if (!editedDuringSubmit) {
+        dirty = false;
+        if (shouldClear) {
+          clear();
+        } else if (shouldReset) {
+          reset();
+        } else {
+          // Current state becomes the new clean baseline after successful save
+          initialSnapshot = captureInitialFormSnapshot(formEl);
+          baselineValues = parseFormElement(formEl).data;
+        }
+
+        if (isDraftEnabled) {
+          clearDraft();
+        }
+      } else {
+        // User edited form controls while submit was in flight:
+        // Never wipe out the new unsubmitted edits via reset() or clear().
+        // Update baseline to what was actually committed on the server (or empty baseline if clearOnSuccess).
+        if (shouldClear) {
+          const clearedSnapshot = new Map();
+          for (const [ctrl, snap] of submittedSnapshot.entries()) {
+            clearedSnapshot.set(ctrl, {
+              ...snap,
+              checked: false,
+              value: '',
+              selectedValues: [],
+            });
+          }
+          initialSnapshot = clearedSnapshot;
+          baselineValues = {};
+        } else if (!shouldReset) {
+          initialSnapshot = submittedSnapshot;
+          baselineValues = payloadData && typeof payloadData === 'object' ? { ...payloadData } : {};
+        }
+        dirty = computeFormDirty(formEl, initialSnapshot);
+        if (isDraftEnabled) {
+          if (dirty) {
+            saveDraft();
+          } else {
+            clearDraft();
+          }
+        }
       }
 
       // Invoke registered success hooks. Note: Any background fragment refresh failure
@@ -4853,11 +4936,12 @@ function createFormHandle(formEl, options = {}) {
       }
 
       // Explicit redirect behavior
-      const redirectTarget =
+      const rawRedirectTarget =
         submitOptions.redirectOnSuccess ||
         (formEl && formEl.getAttribute('data-w-redirect')) ||
         null;
-      if (redirectTarget && isSafeRedirectUrl(redirectTarget)) {
+      const redirectTarget = resolveSafeRedirectUrl(rawRedirectTarget);
+      if (redirectTarget) {
         if (typeof options.navigate === 'function') {
           options.navigate(redirectTarget);
         } else if (typeof window !== 'undefined' && window.location) {
@@ -4900,7 +4984,13 @@ function createFormHandle(formEl, options = {}) {
       if (submitOptions.throwOnError) {
         throw err;
       }
-      return { ok: false, submitted: false, error: err };
+      return {
+        ok: false,
+        submitted: false,
+        outcomeUnknown: Boolean(err && err.outcomeUnknown),
+        outcome: (err && err.outcome) || 'failed',
+        error: err,
+      };
     } finally {
       setPendingState(false, submitter);
     }
@@ -6509,6 +6599,33 @@ function setupReduxDevToolsBridge(runtime) {
   }
 }
 
+function escapeHtml(val) {
+  return String(val ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function sanitizeHref(url, fallback = '#') {
+  if (!url || typeof url !== 'string') return fallback;
+  const trimmed = url.trim();
+  if (!trimmed || /[\u0000-\u001F\u007F-\u009F]/.test(trimmed)) return fallback;
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//') && !trimmed.startsWith('/\\')) {
+    return escapeHtml(trimmed);
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return escapeHtml(parsed.href);
+    }
+  } catch {
+    return fallback;
+  }
+  return fallback;
+}
+
 /**
  * Format JSON with syntax-colored HTML or safe text.
  */
@@ -6517,13 +6634,11 @@ function formatJsonHtml(data) {
   if (data === null) return '<span style="color:#f43f5e">null</span>';
   try {
     const jsonStr = JSON.stringify(data, null, 2);
-    return jsonStr
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+    return escapeHtml(jsonStr).replace(
+      /(&quot;(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\&])*&quot;(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+      (match) => {
         let cls = 'color:#38bdf8;'; // number
-        if (/^"/.test(match)) {
+        if (/^&quot;/.test(match)) {
           if (/:$/.test(match)) {
             cls = 'color:#a78bfa;font-weight:600;'; // key
           } else {
@@ -6535,9 +6650,10 @@ function formatJsonHtml(data) {
           cls = 'color:#f43f5e;'; // null
         }
         return `<span style="${cls}">${match}</span>`;
-      });
+      }
+    );
   } catch (_) {
-    return String(data);
+    return escapeHtml(data);
   }
 }
 
@@ -6983,12 +7099,12 @@ function mountDevtool(runtime, options = {}) {
               (c) => `
             <div
               class="ws-card ws-controller-item"
-              data-inst-id="${c.instanceId}"
+              data-inst-id="${escapeHtml(c.instanceId)}"
               style="cursor:pointer;padding:8px 10px;margin-bottom:6px;${
                 c.instanceId === current.instanceId ? 'border-color:#f59e0b;background:#27272a;' : ''
               }">
-              <div style="font-weight:700;color:#f4f4f5;">${c.name || 'anonymous'}</div>
-              <div style="font-size:10px;color:#a1a1aa;">&lt;${c.tagName}&gt; • ${c.instanceId}</div>
+              <div style="font-weight:700;color:#f4f4f5;">${escapeHtml(c.name || 'anonymous')}</div>
+              <div style="font-size:10px;color:#a1a1aa;">&lt;${escapeHtml(c.tagName)}&gt; • ${escapeHtml(c.instanceId)}</div>
             </div>
           `
             )
@@ -6999,10 +7115,10 @@ function mountDevtool(runtime, options = {}) {
         <div style="overflow-y:auto;padding-right:4px;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
             <div>
-              <h3 style="font-size:14px;font-weight:700;color:#fff;">${current.name || 'anonymous'}</h3>
-              <p style="font-size:10px;color:#71717a;">Instance: ${current.instanceId} • Connected: ${current.isConnected ? '✅' : '❌'}</p>
+              <h3 style="font-size:14px;font-weight:700;color:#fff;">${escapeHtml(current.name || 'anonymous')}</h3>
+              <p style="font-size:10px;color:#71717a;">Instance: ${escapeHtml(current.instanceId)} • Connected: ${current.isConnected ? '✅' : '❌'}</p>
             </div>
-            <button class="ws-btn ws-btn-sm" id="ws-btn-highlight-ctrl" data-inst-id="${current.instanceId}">
+            <button class="ws-btn ws-btn-sm" id="ws-btn-highlight-ctrl" data-inst-id="${escapeHtml(current.instanceId)}">
               🎯 Highlight in DOM
             </button>
           </div>
@@ -7011,7 +7127,7 @@ function mountDevtool(runtime, options = {}) {
           <div class="ws-card">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
               <strong style="color:#fbbf24;font-size:11px;">REACTIVE STATE</strong>
-              <button class="ws-btn ws-btn-sm" id="ws-btn-copy-state" data-inst-id="${current.instanceId}">📋 Copy</button>
+              <button class="ws-btn ws-btn-sm" id="ws-btn-copy-state" data-inst-id="${escapeHtml(current.instanceId)}">📋 Copy</button>
             </div>
             <div class="ws-code-block">${formatJsonHtml(current.state)}</div>
           </div>
@@ -7048,14 +7164,14 @@ function mountDevtool(runtime, options = {}) {
           <div class="ws-card" style="margin-bottom:10px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
               <div>
-                <strong style="color:#38bdf8;font-size:12px;">${f.name}</strong>
-                <span style="font-size:10px;color:#71717a;margin-left:6px;">#${f.instanceId}</span>
+                <strong style="color:#38bdf8;font-size:12px;">${escapeHtml(f.name)}</strong>
+                <span style="font-size:10px;color:#71717a;margin-left:6px;">#${escapeHtml(f.instanceId)}</span>
               </div>
               <div style="display:flex;gap:6px;">
-                <button class="ws-btn ws-btn-sm" id="ws-btn-highlight-frag" data-inst-id="${f.instanceId}">
+                <button class="ws-btn ws-btn-sm" id="ws-btn-highlight-frag" data-inst-id="${escapeHtml(f.instanceId)}">
                   🎯 Highlight
                 </button>
-                <button class="ws-btn ws-btn-primary ws-btn-sm" id="ws-btn-refresh-frag" data-frag-name="${f.name}">
+                <button class="ws-btn ws-btn-primary ws-btn-sm" id="ws-btn-refresh-frag" data-frag-name="${escapeHtml(f.name)}">
                   🔄 Refresh
                 </button>
               </div>
@@ -7065,13 +7181,13 @@ function mountDevtool(runtime, options = {}) {
                 <span style="color:#a1a1aa;">Depends On Tags:</span>
                 ${
                   f.dependsOn.length > 0
-                    ? f.dependsOn.map((t) => `<span class="ws-badge ws-badge-info" style="margin-left:4px;">${t}</span>`).join('')
+                    ? f.dependsOn.map((t) => `<span class="ws-badge ws-badge-info" style="margin-left:4px;">${escapeHtml(t)}</span>`).join('')
                     : '<span style="color:#71717a;margin-left:4px;">(none)</span>'
                 }
               </div>
               <div>
                 <span style="color:#a1a1aa;">Version:</span>
-                <span style="color:#f4f4f5;margin-left:4px;">${f.version}</span>
+                <span style="color:#f4f4f5;margin-left:4px;">${escapeHtml(f.version)}</span>
               </div>
             </div>
             ${
@@ -7108,11 +7224,11 @@ function mountDevtool(runtime, options = {}) {
                     (r) => `
             <div class="ws-card" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;margin-bottom:6px;">
               <div>
-                <span class="ws-badge ws-badge-${r.method === 'GET' ? 'info' : 'warning'}">${r.method}</span>
-                <span style="font-weight:600;margin-left:6px;">${r.url}</span>
+                <span class="ws-badge ws-badge-${r.method === 'GET' ? 'info' : 'warning'}">${escapeHtml(r.method)}</span>
+                <span style="font-weight:600;margin-left:6px;">${escapeHtml(r.url)}</span>
               </div>
               <div style="font-size:10px;color:#a1a1aa;">
-                Policy: <span style="color:#38bdf8;">${r.policy || 'none'}</span> • Status: <span style="color:#34d399;">${r.status}</span>
+                Policy: <span style="color:#38bdf8;">${escapeHtml(r.policy || 'none')}</span> • Status: <span style="color:#34d399;">${escapeHtml(r.status)}</span>
               </div>
             </div>
           `
@@ -7130,7 +7246,7 @@ function mountDevtool(runtime, options = {}) {
               .map(
                 (c) => `
               <div class="ws-card" style="padding:10px;margin-bottom:6px;">
-                <div style="font-weight:600;color:#f4f4f5;font-size:11px;">Chain: ${c.chainId}</div>
+                <div style="font-weight:600;color:#f4f4f5;font-size:11px;">Chain: ${escapeHtml(c.chainId)}</div>
                 <div class="ws-code-block" style="margin-top:4px;padding:6px;">${formatJsonHtml(c)}</div>
               </div>
             `
@@ -7152,8 +7268,8 @@ function mountDevtool(runtime, options = {}) {
                 .map(
                   (t) => `
                 <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #27272a;font-size:11px;">
-                  <span>${t.fragmentName || t.instanceId}</span>
-                  <span style="color:#fbbf24;">patch: ${t.patchMs}ms ${t.loadMs ? `(load: ${t.loadMs}ms, render: ${t.renderMs}ms)` : ''}</span>
+                  <span>${escapeHtml(t.fragmentName || t.instanceId)}</span>
+                  <span style="color:#fbbf24;">patch: ${escapeHtml(t.patchMs)}ms ${t.loadMs ? `(load: ${escapeHtml(t.loadMs)}ms, render: ${escapeHtml(t.renderMs)}ms)` : ''}</span>
                 </div>
               `
                 )
@@ -7192,7 +7308,7 @@ function mountDevtool(runtime, options = {}) {
                   .map(
                     (e) => `
             <div class="ws-card" style="margin-bottom:6px;">
-              <div style="font-weight:600;color:#38bdf8;font-size:11px;">${e.key}</div>
+              <div style="font-weight:600;color:#38bdf8;font-size:11px;">${escapeHtml(e.key)}</div>
               <div class="ws-code-block" style="margin-top:4px;padding:6px;">${formatJsonHtml(
                 (() => {
                   try {
@@ -7218,7 +7334,7 @@ function mountDevtool(runtime, options = {}) {
                   .map(
                     (e) => `
             <div class="ws-card" style="margin-bottom:6px;">
-              <div style="font-weight:600;color:#a78bfa;font-size:11px;">${e.key}</div>
+              <div style="font-weight:600;color:#a78bfa;font-size:11px;">${escapeHtml(e.key)}</div>
               <div class="ws-code-block" style="margin-top:4px;padding:6px;">${formatJsonHtml(
                 (() => {
                   try {
@@ -7249,7 +7365,7 @@ function mountDevtool(runtime, options = {}) {
             <div style="font-size:10px;color:#a1a1aa;margin-top:2px;">Visual database browser, query runner, and table inspector.</div>
             <div style="font-size:9px;color:#71717a;margin-top:4px;">Run in terminal: <code>npx webspresso studio</code> (port 4567)</div>
           </div>
-          <a href="${studioUrl}" target="_blank" rel="noopener noreferrer" class="ws-btn ws-btn-primary" id="ws-btn-open-studio" style="text-decoration:none;">
+          <a href="${sanitizeHref(studioUrl)}" target="_blank" rel="noopener noreferrer" class="ws-btn ws-btn-primary" id="ws-btn-open-studio" style="text-decoration:none;">
             Open DB Studio ↗
           </a>
         </div>
@@ -7263,8 +7379,8 @@ function mountDevtool(runtime, options = {}) {
             <div style="font-weight:700;color:#38bdf8;font-size:13px;">⚙️ Admin Panel SPA</div>
             <div style="font-size:10px;color:#a1a1aa;margin-top:2px;">Mithril.js model CRUD and staff administration cockpit.</div>
           </div>
-          <a href="${features.adminPath}" target="_blank" rel="noopener noreferrer" class="ws-btn" id="ws-btn-open-admin" style="text-decoration:none;">
-            Open ${features.adminPath} ↗
+          <a href="${sanitizeHref(features.adminPath)}" target="_blank" rel="noopener noreferrer" class="ws-btn" id="ws-btn-open-admin" style="text-decoration:none;">
+            Open ${escapeHtml(features.adminPath)} ↗
           </a>
         </div>
       `
@@ -7352,7 +7468,7 @@ function mountDevtool(runtime, options = {}) {
         <!-- Footer -->
         <div class="ws-footer">
           <span>Shortcuts: <strong>Alt + W</strong> to toggle • Console: <code>window.__WEBSPRESSO_DEVTOOLS__</code></span>
-          <span style="color:#a1a1aa;">Webspresso v${PKG_VERSION}</span>
+          <span style="color:#a1a1aa;">Webspresso v${escapeHtml(PKG_VERSION)}</span>
         </div>
       </div>
     `;
@@ -8414,19 +8530,26 @@ function createControllerRuntime(options = {}) {
       const signalPrefix = `__w_inst_${instanceId}.task_${taskKey}`;
 
       // React Query-style automatic revalidation options for tasks
+      const isMutationTask = taskOpts.mutation === true || taskOpts.kind === 'mutation';
       const staleTimeMs = parseDurationMs(taskOpts.staleTime, 0);
-      const refetchOnMountMode = parseRefetchMode(
-        taskOpts.refetchOnMount !== undefined ? taskOpts.refetchOnMount : taskOpts.refetchOnVisit,
-        false
-      );
-      const refetchOnFocusMode = parseRefetchMode(
-        taskOpts.refetchOnWindowFocus !== undefined ? taskOpts.refetchOnWindowFocus : taskOpts.refetchOnFocus,
-        false
-      );
-      const refetchOnReconnectMode = parseRefetchMode(taskOpts.refetchOnReconnect, false);
-      const refetchIntervalMs = parseDurationMs(taskOpts.refetchInterval, 0);
+      const refetchOnMountMode = isMutationTask
+        ? false
+        : parseRefetchMode(
+            taskOpts.refetchOnMount !== undefined ? taskOpts.refetchOnMount : taskOpts.refetchOnVisit,
+            false
+          );
+      const refetchOnFocusMode = isMutationTask
+        ? false
+        : parseRefetchMode(
+            taskOpts.refetchOnWindowFocus !== undefined ? taskOpts.refetchOnWindowFocus : taskOpts.refetchOnFocus,
+            false
+          );
+      const refetchOnReconnectMode = isMutationTask
+        ? false
+        : parseRefetchMode(taskOpts.refetchOnReconnect, false);
+      const refetchIntervalMs = isMutationTask ? 0 : parseDurationMs(taskOpts.refetchInterval, 0);
       const refetchIntervalInBg =
-        parseRefetchMode(taskOpts.refetchIntervalInBackground, false) === true;
+        !isMutationTask && parseRefetchMode(taskOpts.refetchIntervalInBackground, false) === true;
 
       let currentRunVersion = 0;
       let activeRuns = 0;
@@ -9182,6 +9305,15 @@ function createControllerRuntime(options = {}) {
         get input() {
           const inst = fragments && fragments.getInstance ? fragments.getInstance(idOrName) : null;
           return inst && inst.input ? { ...inst.input } : {};
+        },
+        get inputs() {
+          if (!fragments || typeof fragments.getInstances !== 'function') return {};
+          const list = fragments.getInstances(idOrName);
+          const map = {};
+          for (const inst of list) {
+            map[inst.instanceId] = inst.input ? { ...inst.input } : {};
+          }
+          return map;
         },
         refresh: (input, opts) => {
           checkFragmentPersistenceConflict(idOrName, input);
@@ -10456,6 +10588,9 @@ function createFragmentCoordinator(options = {}) {
       if (!parentInst || !parentInst.el) continue;
       for (const otherInst of instances.values()) {
         if (otherInst !== parentInst && otherInst.el && isStrictAncestor(parentInst.el, otherInst.el)) {
+          // Supersede any older in-flight refresh on the nested child so a late child response
+          // cannot overwrite the newer parent+child snapshot.
+          otherInst.version += 1;
           if (otherInst.input && typeof otherInst.input === 'object') {
             childInputs[otherInst.instanceId] = { ...otherInst.input };
             if (!childInputs[otherInst.name]) {
@@ -10660,8 +10795,8 @@ function createFragmentCoordinator(options = {}) {
       debug.trackRequestEnd(reqId, { status: 'completed', httpStatus: response.status });
     }
 
-    lastFailedBatch = null;
     const rawFragments = (body && body.fragments) || {};
+    const rawErrors = (body && body.errors && typeof body.errors === 'object' ? body.errors : {}) || {};
     const resultsMap = {};
     if (isArray(rawFragments)) {
       for (const item of rawFragments) {
@@ -10674,12 +10809,42 @@ function createFragmentCoordinator(options = {}) {
       Object.assign(resultsMap, rawFragments);
     }
     const refreshedIds = [];
+    const batchErrors = [];
+    const failedTargets = [];
     let staleDiscardCount = 0;
     let totalLoadMs = 0;
     let totalRenderMs = 0;
 
     for (const target of targets) {
       const inst = instances.get(target.instanceId);
+      const fragError =
+        rawErrors[target.instanceId] ||
+        rawErrors[target.name] ||
+        (resultsMap[target.instanceId] && resultsMap[target.instanceId].error) ||
+        (resultsMap[target.name] && resultsMap[target.name].error) ||
+        null;
+      if (fragError) {
+        const errObj =
+          fragError instanceof Error
+            ? fragError
+            : Object.assign(
+                new Error(
+                  (fragError && typeof fragError === 'object' && fragError.message) ||
+                    String(fragError) ||
+                    `Fragment "${target.name}" failed to refresh`
+                ),
+                {
+                  status: (fragError && fragError.status) || 500,
+                  code: (fragError && fragError.code) || 'FRAGMENT_REFRESH_ERROR',
+                  instanceId: target.instanceId,
+                  fragmentName: target.name,
+                }
+              );
+        batchErrors.push(errObj);
+        failedTargets.push(target);
+        continue;
+      }
+
       const fragResult = resultsMap[target.instanceId] || resultsMap[target.name];
       if (!inst || !fragResult) continue;
       if (target.reqVersion < inst.version) {
@@ -10701,13 +10866,33 @@ function createFragmentCoordinator(options = {}) {
     }
 
     const allSuperseded =
-      refreshedIds.length === 0 && staleDiscardCount > 0 && staleDiscardCount === targets.length;
+      refreshedIds.length === 0 &&
+      batchErrors.length === 0 &&
+      staleDiscardCount > 0 &&
+      staleDiscardCount === targets.length;
+
+    if (refreshedIds.length > 0 && lastFailedBatch && isArray(lastFailedBatch.targets)) {
+      const refreshedSet = new Set(refreshedIds);
+      const remainingFailed = lastFailedBatch.targets.filter((t) => !refreshedSet.has(t.instanceId));
+      lastFailedBatch =
+        remainingFailed.length > 0
+          ? { targets: remainingFailed, chainIds: lastFailedBatch.chainIds }
+          : null;
+    }
+
+    if (batchErrors.length > 0) {
+      lastFailedBatch = {
+        targets: failedTargets,
+        chainIds,
+      };
+    }
 
     for (const cid of chainIds) {
       if (debug) {
         debug.recordChainRefresh(cid, {
           fragmentIds: refreshedIds,
-          status: allSuperseded ? 'superseded' : 'ok',
+          status: batchErrors.length > 0 ? (refreshedIds.length > 0 ? 'partial-error' : 'error') : allSuperseded ? 'superseded' : 'ok',
+          error: batchErrors[0] || null,
           loadMs: totalLoadMs,
           renderMs: totalRenderMs,
           totalServerMs: body && isNumber(body.totalMs) ? body.totalMs : null,
@@ -10722,6 +10907,20 @@ function createFragmentCoordinator(options = {}) {
         superseded: true,
         refreshed: [],
         errors: [],
+        timings: {
+          loadMs: totalLoadMs,
+          renderMs: totalRenderMs,
+        },
+      };
+    }
+
+    if (batchErrors.length > 0) {
+      return {
+        ok: false,
+        partial: refreshedIds.length > 0,
+        refreshed: refreshedIds,
+        errors: batchErrors,
+        error: batchErrors[0],
         timings: {
           loadMs: totalLoadMs,
           renderMs: totalRenderMs,
@@ -10769,7 +10968,7 @@ function createFragmentCoordinator(options = {}) {
     for (const inst of instances.values()) {
       let matched = false;
       for (const tag of tagsToFlush) {
-        if (inst.dependsOn.has(tag) || inst.name === tag) {
+        if (inst.dependsOn.has(tag) || inst.name === tag || inst.instanceId === tag) {
           matched = true;
           break;
         }
@@ -10959,6 +11158,21 @@ function createFragmentCoordinator(options = {}) {
       const result = await executeBatchRefresh(targets, [], abortController.signal, refreshOpts.timeout);
       clearOwnedAbortControllers();
       const enrichedResult = { ok: true, ...result };
+      if (enrichedResult.ok === false && !enrichedResult.canceled && !enrichedResult.superseded && enrichedResult.error) {
+        const failHandler = refreshOpts.onFailure || refreshOpts.onError;
+        if (typeof failHandler === 'function') {
+          await failHandler(enrichedResult.error);
+        }
+        if (typeof refreshOpts.onSettled === 'function') {
+          await refreshOpts.onSettled(enrichedResult, enrichedResult.error);
+        } else if (typeof refreshOpts.onComplete === 'function') {
+          await refreshOpts.onComplete(enrichedResult, enrichedResult.error);
+        }
+        if (refreshOpts.throwOnError === true) {
+          throw enrichedResult.error;
+        }
+        return enrichedResult;
+      }
       if (!enrichedResult.canceled && !enrichedResult.superseded && enrichedResult.ok !== false) {
         if (typeof refreshOpts.onSuccess === 'function') {
           await refreshOpts.onSuccess(enrichedResult);
@@ -11029,6 +11243,24 @@ function createFragmentCoordinator(options = {}) {
     return executeBatchRefresh(retryTargets, chainIds);
   }
 
+  function resolveInstanceByIdOrName(idOrName) {
+    if (!idOrName) return null;
+    const direct = instances.get(idOrName);
+    if (direct && (!direct.el || direct.el.isConnected !== false)) {
+      return direct;
+    }
+    const defaultInst = instances.get(`${idOrName}:default`);
+    if (defaultInst && (!defaultInst.el || defaultInst.el.isConnected !== false)) {
+      return defaultInst;
+    }
+    for (const inst of instances.values()) {
+      if (inst.name === idOrName && (!inst.el || inst.el.isConnected !== false)) {
+        return inst;
+      }
+    }
+    return null;
+  }
+
   return {
     syncDomInstances,
     invalidate,
@@ -11040,17 +11272,28 @@ function createFragmentCoordinator(options = {}) {
       scanDomInstances();
       for (const item of items) {
         const key = item.instanceId || item.name;
-        const inst = instances.get(key) || Array.from(instances.values()).find((i) => i.name === key);
-        if (inst) {
-          if (item.input && typeof item.input === 'object') {
-            inst.input = { ...item.input };
-            if (inst.el && typeof inst.el.setAttribute === 'function') {
-              const serializedInput = JSON.stringify(inst.input);
-              inst.el.setAttribute('data-w-fragment-input', serializedInput);
-              inst._rawInput = serializedInput;
+        const matchedList = [];
+        if (item.instanceId && instances.has(item.instanceId)) {
+          matchedList.push(instances.get(item.instanceId));
+        } else {
+          for (const inst of instances.values()) {
+            if (inst.instanceId === key || inst.name === key) {
+              matchedList.push(inst);
             }
           }
-          pendingTags.add(inst.name);
+        }
+        if (matchedList.length > 0) {
+          for (const inst of matchedList) {
+            if (item.input && typeof item.input === 'object') {
+              inst.input = { ...item.input };
+              if (inst.el && typeof inst.el.setAttribute === 'function') {
+                const serializedInput = JSON.stringify(inst.input);
+                inst.el.setAttribute('data-w-fragment-input', serializedInput);
+                inst._rawInput = serializedInput;
+              }
+            }
+            pendingTags.add(item.instanceId ? inst.instanceId : inst.name);
+          }
         } else if (key) {
           pendingTags.add(String(key).trim());
         }
@@ -11063,7 +11306,7 @@ function createFragmentCoordinator(options = {}) {
       const matching = [];
       for (const inst of instances.values()) {
         for (const t of tagSet) {
-          if (inst.dependsOn.has(t) || inst.name === t) {
+          if (inst.dependsOn.has(t) || inst.name === t || inst.instanceId === t) {
             matching.push(inst);
             break;
           }
@@ -11073,17 +11316,19 @@ function createFragmentCoordinator(options = {}) {
     },
     retryFailed,
     retryLastFailed: retryFailed,
-    getInstance(instanceId) {
-      const hit = instances.get(instanceId);
-      if (hit && (!hit.el || hit.el.isConnected !== false)) {
+    getInstance(instanceIdOrName) {
+      const hit = resolveInstanceByIdOrName(instanceIdOrName);
+      if (hit) {
         return hit;
       }
       scanDomInstances();
-      return instances.get(instanceId) || null;
+      return resolveInstanceByIdOrName(instanceIdOrName);
     },
-    getInstances() {
+    getInstances(nameOrId) {
       scanDomInstances();
-      return Array.from(instances.values());
+      const all = Array.from(instances.values());
+      if (!nameOrId) return all;
+      return all.filter((inst) => inst.instanceId === nameOrId || inst.name === nameOrId);
     },
     getStoredInput(instanceIdOrName, storageType = 'session') {
       const store = storageType === 'local' ? defaultStorage.local : defaultStorage.session;
@@ -15702,7 +15947,7 @@ exports.services = {
 };
 function startExampleClient(options = {}) {
     return (0, client_1.bootClient)({
-        debug: true,
+        debug: process.env.NODE_ENV !== 'production',
         services: exports.services,
         controllers: {
             todos: todos_client_1.default,

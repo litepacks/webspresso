@@ -185,7 +185,12 @@ function parseDataValue(val) {
   if (val === 'undefined') return undefined;
   if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(val)) {
     const num = Number(val);
-    if (isNumber(num)) return num;
+    if (isNumber(num)) {
+      if (/^-?(?:0|[1-9]\d*)$/.test(val) && !Number.isSafeInteger(num)) {
+        return val;
+      }
+      return num;
+    }
   }
   if ((val.startsWith('{') && val.endsWith('}')) || (val.startsWith('[') && val.endsWith(']'))) {
     try {

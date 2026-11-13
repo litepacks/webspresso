@@ -811,6 +811,9 @@ function createFragmentRefreshHandler(config) {
     const startTotal = Date.now();
     try {
       const isGet = req.method === 'GET';
+      if (!isGet && req.headers && req.headers['sec-fetch-site'] === 'cross-site') {
+        throw new ForbiddenError('Cross-site fragment refresh requests are forbidden.');
+      }
       const payload = isGet ? req.query || {} : req.body || {};
 
       const pagePath = payload.pagePath || payload.page || req.headers['x-webspresso-page'] || '/';
@@ -912,6 +915,8 @@ function createFragmentRefreshHandler(config) {
       });
 
       const results = {};
+      const fragmentErrors = {};
+      let firstError = null;
 
       for (const reqItem of requestedFragments) {
         const fragName = reqItem.name.trim();
@@ -932,34 +937,51 @@ function createFragmentRefreshHandler(config) {
               : rawFragDef.middleware || [],
         };
 
-        const rendered = await executeAndRenderFragment({
-          name: fragName,
-          fragmentDef: fragDef,
-          instanceId,
-          pagePath,
-          rawInput: reqItem.input || {},
-          req,
-          res,
-          ctx,
-          nunjucksEnv,
-          baseRenderCtx: { fsy },
-          renderedInstanceIds,
-        });
+        try {
+          const rendered = await executeAndRenderFragment({
+            name: fragName,
+            fragmentDef: fragDef,
+            instanceId,
+            pagePath,
+            rawInput: reqItem.input || {},
+            req,
+            res,
+            ctx,
+            nunjucksEnv,
+            baseRenderCtx: { fsy },
+            renderedInstanceIds,
+          });
 
-        results[instanceId] = {
-          instanceId: rendered.instanceId,
-          name: rendered.name,
-          html: rendered.html,
-          input: rendered.input,
-          loadMs: rendered.loadMs,
-          renderMs: rendered.renderMs,
-        };
+          results[instanceId] = {
+            instanceId: rendered.instanceId,
+            name: rendered.name,
+            html: rendered.html,
+            input: rendered.input,
+            loadMs: rendered.loadMs,
+            renderMs: rendered.renderMs,
+          };
+        } catch (fragErr) {
+          if (!firstError) firstError = fragErr;
+          fragmentErrors[instanceId] = {
+            instanceId,
+            name: fragName,
+            status: fragErr.statusCode || fragErr.status || 500,
+            code: fragErr.code || 'FRAGMENT_REFRESH_ERROR',
+            message: fragErr.message || `Failed to render fragment "${fragName}"`,
+          };
+        }
+      }
+
+      if (firstError && Object.keys(results).length === 0) {
+        return next(firstError);
       }
 
       const totalMs = Math.max(0, Date.now() - startTotal);
       res.setHeader('Cache-Control', 'no-store');
+      const hasPartialErrors = Object.keys(fragmentErrors).length > 0;
       return res.status(200).json({
-        ok: true,
+        ok: !hasPartialErrors,
+        ...(hasPartialErrors ? { partial: true, errors: fragmentErrors } : {}),
         pagePath,
         totalMs,
         fragments: results,

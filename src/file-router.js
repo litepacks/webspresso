@@ -1998,12 +1998,30 @@ function mountPages(app, options) {
       resolveMiddlewareList: (mwList) => resolveMiddlewares(mwList, middlewares),
     });
 
-    const { rateLimit } = require('../core/rate-limit');
-    const fragmentLimiter = rateLimit({
-      window: 60000,
-      limit: 300,
-      skip: () => process.env.NODE_ENV === 'test',
-    });
+    let fragmentLimiter;
+    try {
+      const expressRateLimit = require('express-rate-limit');
+      const rateLimitFn = expressRateLimit.rateLimit || expressRateLimit;
+      if (typeof rateLimitFn === 'function') {
+        fragmentLimiter = rateLimitFn({
+          windowMs: 60000,
+          limit: 300,
+          standardHeaders: 'draft-7',
+          legacyHeaders: false,
+          skip: () => process.env.NODE_ENV === 'test',
+        });
+      }
+    } catch (_e) {
+      // Fall back to built-in core/rate-limit when express-rate-limit peer is not installed
+    }
+    if (!fragmentLimiter) {
+      const { rateLimit } = require('../core/rate-limit');
+      fragmentLimiter = rateLimit({
+        window: 60000,
+        limit: 300,
+        skip: () => process.env.NODE_ENV === 'test',
+      });
+    }
 
     if (typeof app.get === 'function') {
       app.get('/__webspresso/fragments', fragmentLimiter, fragmentRefreshHandler);

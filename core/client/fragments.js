@@ -704,6 +704,9 @@ function createFragmentCoordinator(options = {}) {
       if (!parentInst || !parentInst.el) continue;
       for (const otherInst of instances.values()) {
         if (otherInst !== parentInst && otherInst.el && isStrictAncestor(parentInst.el, otherInst.el)) {
+          // Supersede any older in-flight refresh on the nested child so a late child response
+          // cannot overwrite the newer parent+child snapshot.
+          otherInst.version += 1;
           if (otherInst.input && typeof otherInst.input === 'object') {
             childInputs[otherInst.instanceId] = { ...otherInst.input };
             if (!childInputs[otherInst.name]) {
@@ -908,8 +911,8 @@ function createFragmentCoordinator(options = {}) {
       debug.trackRequestEnd(reqId, { status: 'completed', httpStatus: response.status });
     }
 
-    lastFailedBatch = null;
     const rawFragments = (body && body.fragments) || {};
+    const rawErrors = (body && body.errors && typeof body.errors === 'object' ? body.errors : {}) || {};
     const resultsMap = {};
     if (isArray(rawFragments)) {
       for (const item of rawFragments) {
@@ -922,12 +925,42 @@ function createFragmentCoordinator(options = {}) {
       Object.assign(resultsMap, rawFragments);
     }
     const refreshedIds = [];
+    const batchErrors = [];
+    const failedTargets = [];
     let staleDiscardCount = 0;
     let totalLoadMs = 0;
     let totalRenderMs = 0;
 
     for (const target of targets) {
       const inst = instances.get(target.instanceId);
+      const fragError =
+        rawErrors[target.instanceId] ||
+        rawErrors[target.name] ||
+        (resultsMap[target.instanceId] && resultsMap[target.instanceId].error) ||
+        (resultsMap[target.name] && resultsMap[target.name].error) ||
+        null;
+      if (fragError) {
+        const errObj =
+          fragError instanceof Error
+            ? fragError
+            : Object.assign(
+                new Error(
+                  (fragError && typeof fragError === 'object' && fragError.message) ||
+                    String(fragError) ||
+                    `Fragment "${target.name}" failed to refresh`
+                ),
+                {
+                  status: (fragError && fragError.status) || 500,
+                  code: (fragError && fragError.code) || 'FRAGMENT_REFRESH_ERROR',
+                  instanceId: target.instanceId,
+                  fragmentName: target.name,
+                }
+              );
+        batchErrors.push(errObj);
+        failedTargets.push(target);
+        continue;
+      }
+
       const fragResult = resultsMap[target.instanceId] || resultsMap[target.name];
       if (!inst || !fragResult) continue;
       if (target.reqVersion < inst.version) {
@@ -949,13 +982,33 @@ function createFragmentCoordinator(options = {}) {
     }
 
     const allSuperseded =
-      refreshedIds.length === 0 && staleDiscardCount > 0 && staleDiscardCount === targets.length;
+      refreshedIds.length === 0 &&
+      batchErrors.length === 0 &&
+      staleDiscardCount > 0 &&
+      staleDiscardCount === targets.length;
+
+    if (refreshedIds.length > 0 && lastFailedBatch && isArray(lastFailedBatch.targets)) {
+      const refreshedSet = new Set(refreshedIds);
+      const remainingFailed = lastFailedBatch.targets.filter((t) => !refreshedSet.has(t.instanceId));
+      lastFailedBatch =
+        remainingFailed.length > 0
+          ? { targets: remainingFailed, chainIds: lastFailedBatch.chainIds }
+          : null;
+    }
+
+    if (batchErrors.length > 0) {
+      lastFailedBatch = {
+        targets: failedTargets,
+        chainIds,
+      };
+    }
 
     for (const cid of chainIds) {
       if (debug) {
         debug.recordChainRefresh(cid, {
           fragmentIds: refreshedIds,
-          status: allSuperseded ? 'superseded' : 'ok',
+          status: batchErrors.length > 0 ? (refreshedIds.length > 0 ? 'partial-error' : 'error') : allSuperseded ? 'superseded' : 'ok',
+          error: batchErrors[0] || null,
           loadMs: totalLoadMs,
           renderMs: totalRenderMs,
           totalServerMs: body && isNumber(body.totalMs) ? body.totalMs : null,
@@ -970,6 +1023,20 @@ function createFragmentCoordinator(options = {}) {
         superseded: true,
         refreshed: [],
         errors: [],
+        timings: {
+          loadMs: totalLoadMs,
+          renderMs: totalRenderMs,
+        },
+      };
+    }
+
+    if (batchErrors.length > 0) {
+      return {
+        ok: false,
+        partial: refreshedIds.length > 0,
+        refreshed: refreshedIds,
+        errors: batchErrors,
+        error: batchErrors[0],
         timings: {
           loadMs: totalLoadMs,
           renderMs: totalRenderMs,
@@ -1017,7 +1084,7 @@ function createFragmentCoordinator(options = {}) {
     for (const inst of instances.values()) {
       let matched = false;
       for (const tag of tagsToFlush) {
-        if (inst.dependsOn.has(tag) || inst.name === tag) {
+        if (inst.dependsOn.has(tag) || inst.name === tag || inst.instanceId === tag) {
           matched = true;
           break;
         }
@@ -1207,6 +1274,21 @@ function createFragmentCoordinator(options = {}) {
       const result = await executeBatchRefresh(targets, [], abortController.signal, refreshOpts.timeout);
       clearOwnedAbortControllers();
       const enrichedResult = { ok: true, ...result };
+      if (enrichedResult.ok === false && !enrichedResult.canceled && !enrichedResult.superseded && enrichedResult.error) {
+        const failHandler = refreshOpts.onFailure || refreshOpts.onError;
+        if (typeof failHandler === 'function') {
+          await failHandler(enrichedResult.error);
+        }
+        if (typeof refreshOpts.onSettled === 'function') {
+          await refreshOpts.onSettled(enrichedResult, enrichedResult.error);
+        } else if (typeof refreshOpts.onComplete === 'function') {
+          await refreshOpts.onComplete(enrichedResult, enrichedResult.error);
+        }
+        if (refreshOpts.throwOnError === true) {
+          throw enrichedResult.error;
+        }
+        return enrichedResult;
+      }
       if (!enrichedResult.canceled && !enrichedResult.superseded && enrichedResult.ok !== false) {
         if (typeof refreshOpts.onSuccess === 'function') {
           await refreshOpts.onSuccess(enrichedResult);
@@ -1277,6 +1359,24 @@ function createFragmentCoordinator(options = {}) {
     return executeBatchRefresh(retryTargets, chainIds);
   }
 
+  function resolveInstanceByIdOrName(idOrName) {
+    if (!idOrName) return null;
+    const direct = instances.get(idOrName);
+    if (direct && (!direct.el || direct.el.isConnected !== false)) {
+      return direct;
+    }
+    const defaultInst = instances.get(`${idOrName}:default`);
+    if (defaultInst && (!defaultInst.el || defaultInst.el.isConnected !== false)) {
+      return defaultInst;
+    }
+    for (const inst of instances.values()) {
+      if (inst.name === idOrName && (!inst.el || inst.el.isConnected !== false)) {
+        return inst;
+      }
+    }
+    return null;
+  }
+
   return {
     syncDomInstances,
     invalidate,
@@ -1288,17 +1388,28 @@ function createFragmentCoordinator(options = {}) {
       scanDomInstances();
       for (const item of items) {
         const key = item.instanceId || item.name;
-        const inst = instances.get(key) || Array.from(instances.values()).find((i) => i.name === key);
-        if (inst) {
-          if (item.input && typeof item.input === 'object') {
-            inst.input = { ...item.input };
-            if (inst.el && typeof inst.el.setAttribute === 'function') {
-              const serializedInput = JSON.stringify(inst.input);
-              inst.el.setAttribute('data-w-fragment-input', serializedInput);
-              inst._rawInput = serializedInput;
+        const matchedList = [];
+        if (item.instanceId && instances.has(item.instanceId)) {
+          matchedList.push(instances.get(item.instanceId));
+        } else {
+          for (const inst of instances.values()) {
+            if (inst.instanceId === key || inst.name === key) {
+              matchedList.push(inst);
             }
           }
-          pendingTags.add(inst.name);
+        }
+        if (matchedList.length > 0) {
+          for (const inst of matchedList) {
+            if (item.input && typeof item.input === 'object') {
+              inst.input = { ...item.input };
+              if (inst.el && typeof inst.el.setAttribute === 'function') {
+                const serializedInput = JSON.stringify(inst.input);
+                inst.el.setAttribute('data-w-fragment-input', serializedInput);
+                inst._rawInput = serializedInput;
+              }
+            }
+            pendingTags.add(item.instanceId ? inst.instanceId : inst.name);
+          }
         } else if (key) {
           pendingTags.add(String(key).trim());
         }
@@ -1311,7 +1422,7 @@ function createFragmentCoordinator(options = {}) {
       const matching = [];
       for (const inst of instances.values()) {
         for (const t of tagSet) {
-          if (inst.dependsOn.has(t) || inst.name === t) {
+          if (inst.dependsOn.has(t) || inst.name === t || inst.instanceId === t) {
             matching.push(inst);
             break;
           }
@@ -1321,17 +1432,19 @@ function createFragmentCoordinator(options = {}) {
     },
     retryFailed,
     retryLastFailed: retryFailed,
-    getInstance(instanceId) {
-      const hit = instances.get(instanceId);
-      if (hit && (!hit.el || hit.el.isConnected !== false)) {
+    getInstance(instanceIdOrName) {
+      const hit = resolveInstanceByIdOrName(instanceIdOrName);
+      if (hit) {
         return hit;
       }
       scanDomInstances();
-      return instances.get(instanceId) || null;
+      return resolveInstanceByIdOrName(instanceIdOrName);
     },
-    getInstances() {
+    getInstances(nameOrId) {
       scanDomInstances();
-      return Array.from(instances.values());
+      const all = Array.from(instances.values());
+      if (!nameOrId) return all;
+      return all.filter((inst) => inst.instanceId === nameOrId || inst.name === nameOrId);
     },
     getStoredInput(instanceIdOrName, storageType = 'session') {
       const store = storageType === 'local' ? defaultStorage.local : defaultStorage.session;

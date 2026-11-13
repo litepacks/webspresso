@@ -75,6 +75,33 @@ function setupReduxDevToolsBridge(runtime) {
   }
 }
 
+function escapeHtml(val) {
+  return String(val ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function sanitizeHref(url, fallback = '#') {
+  if (!url || typeof url !== 'string') return fallback;
+  const trimmed = url.trim();
+  if (!trimmed || /[\u0000-\u001F\u007F-\u009F]/.test(trimmed)) return fallback;
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//') && !trimmed.startsWith('/\\')) {
+    return escapeHtml(trimmed);
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return escapeHtml(parsed.href);
+    }
+  } catch {
+    return fallback;
+  }
+  return fallback;
+}
+
 /**
  * Format JSON with syntax-colored HTML or safe text.
  */
@@ -83,13 +110,11 @@ function formatJsonHtml(data) {
   if (data === null) return '<span style="color:#f43f5e">null</span>';
   try {
     const jsonStr = JSON.stringify(data, null, 2);
-    return jsonStr
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+    return escapeHtml(jsonStr).replace(
+      /(&quot;(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\&])*&quot;(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+      (match) => {
         let cls = 'color:#38bdf8;'; // number
-        if (/^"/.test(match)) {
+        if (/^&quot;/.test(match)) {
           if (/:$/.test(match)) {
             cls = 'color:#a78bfa;font-weight:600;'; // key
           } else {
@@ -101,9 +126,10 @@ function formatJsonHtml(data) {
           cls = 'color:#f43f5e;'; // null
         }
         return `<span style="${cls}">${match}</span>`;
-      });
+      }
+    );
   } catch (_) {
-    return String(data);
+    return escapeHtml(data);
   }
 }
 
@@ -549,12 +575,12 @@ function mountDevtool(runtime, options = {}) {
               (c) => `
             <div
               class="ws-card ws-controller-item"
-              data-inst-id="${c.instanceId}"
+              data-inst-id="${escapeHtml(c.instanceId)}"
               style="cursor:pointer;padding:8px 10px;margin-bottom:6px;${
                 c.instanceId === current.instanceId ? 'border-color:#f59e0b;background:#27272a;' : ''
               }">
-              <div style="font-weight:700;color:#f4f4f5;">${c.name || 'anonymous'}</div>
-              <div style="font-size:10px;color:#a1a1aa;">&lt;${c.tagName}&gt; • ${c.instanceId}</div>
+              <div style="font-weight:700;color:#f4f4f5;">${escapeHtml(c.name || 'anonymous')}</div>
+              <div style="font-size:10px;color:#a1a1aa;">&lt;${escapeHtml(c.tagName)}&gt; • ${escapeHtml(c.instanceId)}</div>
             </div>
           `
             )
@@ -565,10 +591,10 @@ function mountDevtool(runtime, options = {}) {
         <div style="overflow-y:auto;padding-right:4px;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
             <div>
-              <h3 style="font-size:14px;font-weight:700;color:#fff;">${current.name || 'anonymous'}</h3>
-              <p style="font-size:10px;color:#71717a;">Instance: ${current.instanceId} • Connected: ${current.isConnected ? '✅' : '❌'}</p>
+              <h3 style="font-size:14px;font-weight:700;color:#fff;">${escapeHtml(current.name || 'anonymous')}</h3>
+              <p style="font-size:10px;color:#71717a;">Instance: ${escapeHtml(current.instanceId)} • Connected: ${current.isConnected ? '✅' : '❌'}</p>
             </div>
-            <button class="ws-btn ws-btn-sm" id="ws-btn-highlight-ctrl" data-inst-id="${current.instanceId}">
+            <button class="ws-btn ws-btn-sm" id="ws-btn-highlight-ctrl" data-inst-id="${escapeHtml(current.instanceId)}">
               🎯 Highlight in DOM
             </button>
           </div>
@@ -577,7 +603,7 @@ function mountDevtool(runtime, options = {}) {
           <div class="ws-card">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
               <strong style="color:#fbbf24;font-size:11px;">REACTIVE STATE</strong>
-              <button class="ws-btn ws-btn-sm" id="ws-btn-copy-state" data-inst-id="${current.instanceId}">📋 Copy</button>
+              <button class="ws-btn ws-btn-sm" id="ws-btn-copy-state" data-inst-id="${escapeHtml(current.instanceId)}">📋 Copy</button>
             </div>
             <div class="ws-code-block">${formatJsonHtml(current.state)}</div>
           </div>
@@ -614,14 +640,14 @@ function mountDevtool(runtime, options = {}) {
           <div class="ws-card" style="margin-bottom:10px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
               <div>
-                <strong style="color:#38bdf8;font-size:12px;">${f.name}</strong>
-                <span style="font-size:10px;color:#71717a;margin-left:6px;">#${f.instanceId}</span>
+                <strong style="color:#38bdf8;font-size:12px;">${escapeHtml(f.name)}</strong>
+                <span style="font-size:10px;color:#71717a;margin-left:6px;">#${escapeHtml(f.instanceId)}</span>
               </div>
               <div style="display:flex;gap:6px;">
-                <button class="ws-btn ws-btn-sm" id="ws-btn-highlight-frag" data-inst-id="${f.instanceId}">
+                <button class="ws-btn ws-btn-sm" id="ws-btn-highlight-frag" data-inst-id="${escapeHtml(f.instanceId)}">
                   🎯 Highlight
                 </button>
-                <button class="ws-btn ws-btn-primary ws-btn-sm" id="ws-btn-refresh-frag" data-frag-name="${f.name}">
+                <button class="ws-btn ws-btn-primary ws-btn-sm" id="ws-btn-refresh-frag" data-frag-name="${escapeHtml(f.name)}">
                   🔄 Refresh
                 </button>
               </div>
@@ -631,13 +657,13 @@ function mountDevtool(runtime, options = {}) {
                 <span style="color:#a1a1aa;">Depends On Tags:</span>
                 ${
                   f.dependsOn.length > 0
-                    ? f.dependsOn.map((t) => `<span class="ws-badge ws-badge-info" style="margin-left:4px;">${t}</span>`).join('')
+                    ? f.dependsOn.map((t) => `<span class="ws-badge ws-badge-info" style="margin-left:4px;">${escapeHtml(t)}</span>`).join('')
                     : '<span style="color:#71717a;margin-left:4px;">(none)</span>'
                 }
               </div>
               <div>
                 <span style="color:#a1a1aa;">Version:</span>
-                <span style="color:#f4f4f5;margin-left:4px;">${f.version}</span>
+                <span style="color:#f4f4f5;margin-left:4px;">${escapeHtml(f.version)}</span>
               </div>
             </div>
             ${
@@ -674,11 +700,11 @@ function mountDevtool(runtime, options = {}) {
                     (r) => `
             <div class="ws-card" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;margin-bottom:6px;">
               <div>
-                <span class="ws-badge ws-badge-${r.method === 'GET' ? 'info' : 'warning'}">${r.method}</span>
-                <span style="font-weight:600;margin-left:6px;">${r.url}</span>
+                <span class="ws-badge ws-badge-${r.method === 'GET' ? 'info' : 'warning'}">${escapeHtml(r.method)}</span>
+                <span style="font-weight:600;margin-left:6px;">${escapeHtml(r.url)}</span>
               </div>
               <div style="font-size:10px;color:#a1a1aa;">
-                Policy: <span style="color:#38bdf8;">${r.policy || 'none'}</span> • Status: <span style="color:#34d399;">${r.status}</span>
+                Policy: <span style="color:#38bdf8;">${escapeHtml(r.policy || 'none')}</span> • Status: <span style="color:#34d399;">${escapeHtml(r.status)}</span>
               </div>
             </div>
           `
@@ -696,7 +722,7 @@ function mountDevtool(runtime, options = {}) {
               .map(
                 (c) => `
               <div class="ws-card" style="padding:10px;margin-bottom:6px;">
-                <div style="font-weight:600;color:#f4f4f5;font-size:11px;">Chain: ${c.chainId}</div>
+                <div style="font-weight:600;color:#f4f4f5;font-size:11px;">Chain: ${escapeHtml(c.chainId)}</div>
                 <div class="ws-code-block" style="margin-top:4px;padding:6px;">${formatJsonHtml(c)}</div>
               </div>
             `
@@ -718,8 +744,8 @@ function mountDevtool(runtime, options = {}) {
                 .map(
                   (t) => `
                 <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #27272a;font-size:11px;">
-                  <span>${t.fragmentName || t.instanceId}</span>
-                  <span style="color:#fbbf24;">patch: ${t.patchMs}ms ${t.loadMs ? `(load: ${t.loadMs}ms, render: ${t.renderMs}ms)` : ''}</span>
+                  <span>${escapeHtml(t.fragmentName || t.instanceId)}</span>
+                  <span style="color:#fbbf24;">patch: ${escapeHtml(t.patchMs)}ms ${t.loadMs ? `(load: ${escapeHtml(t.loadMs)}ms, render: ${escapeHtml(t.renderMs)}ms)` : ''}</span>
                 </div>
               `
                 )
@@ -758,7 +784,7 @@ function mountDevtool(runtime, options = {}) {
                   .map(
                     (e) => `
             <div class="ws-card" style="margin-bottom:6px;">
-              <div style="font-weight:600;color:#38bdf8;font-size:11px;">${e.key}</div>
+              <div style="font-weight:600;color:#38bdf8;font-size:11px;">${escapeHtml(e.key)}</div>
               <div class="ws-code-block" style="margin-top:4px;padding:6px;">${formatJsonHtml(
                 (() => {
                   try {
@@ -784,7 +810,7 @@ function mountDevtool(runtime, options = {}) {
                   .map(
                     (e) => `
             <div class="ws-card" style="margin-bottom:6px;">
-              <div style="font-weight:600;color:#a78bfa;font-size:11px;">${e.key}</div>
+              <div style="font-weight:600;color:#a78bfa;font-size:11px;">${escapeHtml(e.key)}</div>
               <div class="ws-code-block" style="margin-top:4px;padding:6px;">${formatJsonHtml(
                 (() => {
                   try {
@@ -815,7 +841,7 @@ function mountDevtool(runtime, options = {}) {
             <div style="font-size:10px;color:#a1a1aa;margin-top:2px;">Visual database browser, query runner, and table inspector.</div>
             <div style="font-size:9px;color:#71717a;margin-top:4px;">Run in terminal: <code>npx webspresso studio</code> (port 4567)</div>
           </div>
-          <a href="${studioUrl}" target="_blank" rel="noopener noreferrer" class="ws-btn ws-btn-primary" id="ws-btn-open-studio" style="text-decoration:none;">
+          <a href="${sanitizeHref(studioUrl)}" target="_blank" rel="noopener noreferrer" class="ws-btn ws-btn-primary" id="ws-btn-open-studio" style="text-decoration:none;">
             Open DB Studio ↗
           </a>
         </div>
@@ -829,8 +855,8 @@ function mountDevtool(runtime, options = {}) {
             <div style="font-weight:700;color:#38bdf8;font-size:13px;">⚙️ Admin Panel SPA</div>
             <div style="font-size:10px;color:#a1a1aa;margin-top:2px;">Mithril.js model CRUD and staff administration cockpit.</div>
           </div>
-          <a href="${features.adminPath}" target="_blank" rel="noopener noreferrer" class="ws-btn" id="ws-btn-open-admin" style="text-decoration:none;">
-            Open ${features.adminPath} ↗
+          <a href="${sanitizeHref(features.adminPath)}" target="_blank" rel="noopener noreferrer" class="ws-btn" id="ws-btn-open-admin" style="text-decoration:none;">
+            Open ${escapeHtml(features.adminPath)} ↗
           </a>
         </div>
       `
@@ -918,7 +944,7 @@ function mountDevtool(runtime, options = {}) {
         <!-- Footer -->
         <div class="ws-footer">
           <span>Shortcuts: <strong>Alt + W</strong> to toggle • Console: <code>window.__WEBSPRESSO_DEVTOOLS__</code></span>
-          <span style="color:#a1a1aa;">Webspresso v${PKG_VERSION}</span>
+          <span style="color:#a1a1aa;">Webspresso v${escapeHtml(PKG_VERSION)}</span>
         </div>
       </div>
     `;

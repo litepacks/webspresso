@@ -17,7 +17,7 @@ declare module '../../index' {
 
 export function startExampleClient(options: Record<string, unknown> = {}) {
   return bootClient({
-    debug: true,
+    debug: process.env.NODE_ENV !== 'production',
     services,
     controllers: {
       todos: todosController,

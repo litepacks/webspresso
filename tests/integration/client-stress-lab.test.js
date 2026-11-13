@@ -207,6 +207,10 @@ function createStressLabHarness(app) {
 
     const res = await req;
 
+    if (matchingRule && matchingRule.failAfterServer) {
+      throw matchingRule.failAfterServer;
+    }
+
     if (matchingRule && matchingRule.beforeBrowserBarrier) {
       await matchingRule.beforeBrowserBarrier.wait(reqDescriptor);
     }
@@ -1561,6 +1565,46 @@ describe('Client Behavior Stress Lab — End-to-End Verification (Scenarios A–
       expect(prodSsr.status).toBe(200);
       expect(prodSsr.text).not.toContain('data-testid="stress-lab-panel"');
 
+      // Execute the REAL production bundle (`dist-client/client-entry.<HASH>.js`) against `prodApp`
+      const { pathToFileURL } = require('url');
+      const prodEntryPath = path.join(prodOutDir, entryJsFiles[0]);
+      const prodBundleMod = await import(pathToFileURL(prodEntryPath).href);
+      expect(typeof prodBundleMod.startExampleClient).toBe('function');
+
+      const prodServer = http.createServer(prodApp);
+      await new Promise((resolve) => prodServer.listen(0, '127.0.0.1', resolve));
+      const prodHarness = createStressLabHarness(prodServer);
+      const prodEnv = createMiniDomEnvironment(prodSsr.text, 'http://localhost/todos');
+      try {
+        const prodRuntime = prodBundleMod.startExampleClient({
+          root: prodEnv.document,
+          document: prodEnv.document,
+          fetch: prodHarness.fetchImpl,
+          pagePath: '/todos',
+        });
+        await new Promise((r) => setTimeout(r, 20));
+
+        // Lazy `toast` chunk is NOT initialized on initial mount
+        expect(prodRuntime.services.isInitialized('toast')).toBe(false);
+
+        // Trigger create-todo form submit through the real production bundle; this dynamically imports `chunks/toast.<HASH>.js`
+        const createFormEl = prodEnv.document.querySelector('form[data-w-form="create-todo"]');
+        createFormEl.querySelector('input[name="title"]').value = 'Built With Real Production Bundle';
+        const prodTodosEl = prodEnv.document.querySelector('[data-w-controller="todos"]');
+        const prodTodosInst = prodRuntime.getControllerInstance(prodTodosEl, 'todos');
+        const submitRes = await prodTodosInst.ctx.forms.get('create-todo').submit();
+        expect(submitRes.ok).toBe(true);
+        expect(prodRuntime.services.isInitialized('toast')).toBe(true);
+        expect(prodEnv.document.querySelectorAll('[data-w-host="toast"]').length).toBe(1);
+
+        prodRuntime.destroy();
+      } finally {
+        prodEnv.restore();
+        try {
+          prodServer.close();
+        } catch (_e) {}
+      }
+
       // 2. Also verify standalone demo bundle (`buildBrowserDemoBundle`) compiles cleanly
       const demoBundlePath = buildBrowserDemoBundle(exampleDir);
       expect(fs.existsSync(demoBundlePath)).toBe(true);
@@ -1747,6 +1791,363 @@ describe('Client Behavior Stress Lab — End-to-End Verification (Scenarios A–
         err.message = `[Seed=0x${seed.toString(16)} Steps=${stepLog.join(' -> ')}] ${err.message}`;
         throw err;
       } finally {
+        lab.cleanup();
+      }
+    });
+  });
+
+  // ===========================================================================
+  // SCENARIO M: TARGETED REGRESSION TESTS FOR CROSS-LAYER CONTRACTS
+  // ===========================================================================
+  describe('Scenario M: In-Flight Form Edits, Lost Mutation Response, Partial Batch Failure, Multi-Instance & Data Coercion', () => {
+    it('preserves user edits made while submit() is in flight without wiping them via clearOnSuccess/resetOnSuccess or marking them clean', async () => {
+      const lab = await mountStressLabPage();
+      try {
+        const { env, todosInst, harness } = lab;
+        const editFormEl = env.document.querySelector('form[data-w-form="edit-todo"]');
+        const titleInput = env.document.querySelector('[data-testid="edit-draft-title"]');
+        const editForm = todosInst.ctx.forms.get('edit-todo');
+
+        // Edit form is initially bound to Todo #3 (`action="/api/todos/3"`)
+        // User edits title to "Committed v1" and starts submit, held in flight by a barrier
+        titleInput.value = 'Committed v1';
+        titleInput.dispatchEvent(new MiniEvent('input', { bubbles: true }));
+        expect(editForm.dirty).toBe(true);
+
+        const submitBarrier = createBarrier('hold-in-flight-submit');
+        harness.addInterceptor({
+          tag: 'PATCH-Todo-3-Hold',
+          match: (req) => req.method === 'PATCH' && req.pathname === '/api/todos/3',
+          beforeBrowserBarrier: submitBarrier,
+        });
+
+        const submitPromise = editForm.submit();
+        await submitBarrier.waitUntilReached();
+
+        // While submit is still in flight, user types a follow-up edit ("Unsaved v2")
+        titleInput.value = 'Unsaved v2';
+        titleInput.dispatchEvent(new MiniEvent('input', { bubbles: true }));
+
+        submitBarrier.release();
+        const res = await submitPromise;
+        expect(res.ok).toBe(true);
+
+        // Server received "Committed v1" for Todo #3
+        expect(exampleStore.getTodoById(3).title).toBe('Committed v1');
+        // Input keeps "Unsaved v2", baseline is "Committed v1", dirty remains true, and draft holds "Unsaved v2"
+        expect(titleInput.value).toBe('Unsaved v2');
+        expect(editForm.baseline.title).toBe('Committed v1');
+        expect(editForm.dirty).toBe(true);
+        expect(editForm.hasDraft).toBe(true);
+      } finally {
+        lab.cleanup();
+      }
+    });
+
+    it('marks lost mutation responses after server commit with outcomeUnknown: true (outcome: "unknown") vs pre-commit errors', async () => {
+      const lab = await mountStressLabPage();
+      try {
+        const { env, todosInst, harness } = lab;
+        const createFormEl = env.document.querySelector('form[data-w-form="create-todo"]');
+        createFormEl.querySelector('input[name="title"]').value = 'Committed But Response Dropped';
+        const createForm = todosInst.ctx.forms.get('create-todo');
+
+        // 1. Server commits POST /api/todos, then network drops before response reaches browser
+        harness.addInterceptor({
+          tag: 'POST-Lost-After-Commit',
+          match: (req) => req.method === 'POST' && req.pathname === '/api/todos',
+          failAfterServer: new TypeError('Socket hang up after server commit'),
+        });
+
+        const lostRes = await createForm.submit();
+        expect(lostRes.ok).toBe(false);
+        expect(lostRes.outcomeUnknown).toBe(true);
+        expect(lostRes.outcome).toBe('unknown');
+        expect(lostRes.error.dispatched).toBe(true);
+        expect(lostRes.error.outcomeUnknown).toBe(true);
+        expect(lostRes.error.outcome).toBe('unknown');
+        // Verify server actually committed the record
+        expect(
+          exampleStore
+            .queryTodos({ limit: 50 })
+            .items.some((t) => t.title === 'Committed But Response Dropped')
+        ).toBe(true);
+
+        // 2. Pre-commit HTTP 500 error has outcomeUnknown: false and outcome: 'failed'
+        harness.addInterceptor({
+          tag: 'POST-Rejected-500',
+          match: (req) => req.method === 'POST' && req.pathname === '/api/todos',
+          mockStatus: 500,
+          mockBody: { message: 'Database rejected write before commit' },
+        });
+        createFormEl.querySelector('input[name="title"]').value = 'Rejected Before Commit';
+        const failedRes = await createForm.submit();
+        expect(failedRes.ok).toBe(false);
+        expect(failedRes.outcomeUnknown).toBe(false);
+        expect(failedRes.outcome).toBe('failed');
+      } finally {
+        lab.cleanup();
+      }
+    });
+
+    it('supports multi-instance fragment targeting by name vs instanceId, preserves >53-bit IDs in .data(), and blocks auto-refetch on mutation tasks', async () => {
+      const lab = await mountStressLabPage();
+      try {
+        const { env, runtime, todosInst } = lab;
+
+        // 1. `ctx.fragment('list').input` resolves by fragment `name` ('list') even though instanceId is `'todos-list'`
+        expect(todosInst.ctx.fragment('list').input).toEqual({
+          search: '',
+          status: 'all',
+          priority: 'all',
+          page: 1,
+          limit: 4,
+        });
+
+        // Mount a second instance of fragment `list` (`todos-list:secondary`) with different input
+        const secondaryWrapper = env.document.createElement('div');
+        secondaryWrapper.innerHTML = `
+          <div
+            data-w-fragment="list"
+            data-w-fragment-id="todos-list:secondary"
+            data-w-depends-on="todos"
+            data-w-fragment-page="/todos"
+            data-w-fragment-input='{"search":"","status":"completed","priority":"all","page":1,"limit":4}'
+          ></div>
+        `;
+        env.document.body.appendChild(secondaryWrapper.firstElementChild);
+        runtime.fragments.syncDomInstances();
+
+        expect(todosInst.ctx.fragment('list').inputs).toEqual({
+          'todos-list': { search: '', status: 'all', priority: 'all', page: 1, limit: 4 },
+          'todos-list:secondary': { search: '', status: 'completed', priority: 'all', page: 1, limit: 4 },
+        });
+
+        // Targeting specific instanceId refreshes ONLY that instance
+        const singleRes = await runtime.fragments.refresh('todos-list:secondary', { priority: 'low' });
+        expect(singleRes.ok).toBe(true);
+        expect(singleRes.refreshed).toEqual(['todos-list:secondary']);
+        expect(runtime.fragments.getInstance('todos-list').input.priority).toBe('all');
+        expect(runtime.fragments.getInstance('todos-list:secondary').input.priority).toBe('low');
+
+        // 2. `.data()` preserves both leading-zero strings ("0042") and >53-bit Snowflake/BigInt IDs ("9007199254740993")
+        const { decorateElement } = require('../../core/client/utils');
+        const testBtn = env.document.createElement('button');
+        testBtn.setAttribute('data-code', '0042');
+        testBtn.setAttribute('data-snowflake-id', '9007199254740993');
+        testBtn.setAttribute('data-safe-id', '42');
+        decorateElement(testBtn);
+        expect(testBtn.data('code')).toBe('0042');
+        expect(testBtn.data('snowflakeId')).toBe('9007199254740993');
+        expect(testBtn.data('safeId')).toBe(42);
+
+        // 3. Mutation tasks (`mutation: true`) never auto-refetch on focus or reconnect even if refetch flags are passed
+        let mutationRuns = 0;
+        const mutTask = todosInst.ctx.task(
+          async () => {
+            mutationRuns += 1;
+            return { committed: mutationRuns };
+          },
+          {
+            mutation: true,
+            refetchOnWindowFocus: 'always',
+            refetchOnReconnect: 'always',
+            refetchInterval: 20,
+          }
+        );
+        await mutTask.run();
+        expect(mutationRuns).toBe(1);
+        env.window.dispatchEvent(new env.window.Event('focus'));
+        env.window.dispatchEvent(new env.window.Event('online'));
+        await new Promise((r) => setTimeout(r, 40));
+        expect(mutationRuns).toBe(1);
+      } finally {
+        lab.cleanup();
+      }
+    });
+  });
+
+  // ===========================================================================
+  // SCENARIO N: UNIFIED 10-STEP END-TO-END CROSS-LAYER STRESS SCENARIO
+  // ===========================================================================
+  describe('Scenario N: Unified 10-Step Cross-Layer Stress Scenario', () => {
+    it('executes all 10 required cross-layer steps in a single continuous flow and verifies DOM, form draft, server records, and active resources', async () => {
+      // Step 1: Pre-seed persisted filter (`status: 'active'`) in sessionStorage and open the page
+      const reconcileBarrier = createBarrier('step1-reconcile');
+      const lab = await mountStressLabPage({
+        beforeMount({ harness }) {
+          defaultStorage.session.set('frag_input:list', {
+            search: '',
+            status: 'active',
+            priority: 'all',
+            page: 1,
+            limit: 4,
+          });
+          harness.addInterceptor({
+            tag: 'Step1-Persist-Reconcile',
+            match: (req) => req.pathname === '/__webspresso/fragments',
+            beforeBrowserBarrier: reconcileBarrier,
+          });
+        },
+      });
+      try {
+        const { env, runtime, todosInst, harness } = lab;
+        await reconcileBarrier.waitUntilReached();
+        reconcileBarrier.release();
+        await new Promise((r) => setTimeout(r, 25));
+
+        const editFormEl = env.document.querySelector('form[data-w-form="edit-todo"]');
+        const editTitleInput = editFormEl.querySelector('input[name="title"]');
+        const editForm = todosInst.ctx.forms.get('edit-todo');
+
+        // Verify Step 1: Persisted filter (`status: 'active'`) was restored & reconciled with DOM (4 active todos out of 6)
+        expect(runtime.fragments.getInstance('todos-list').input.status).toBe('active');
+        expect(env.document.querySelector('[data-testid="todos-matching-count"]').textContent).toBe('4');
+
+        // Step 2: Edit Todo #3 (initially loaded in edit-todo form), modify its title, and leave the form dirty
+        editTitleInput.value = 'Step 2 Dirty Draft In Progress';
+        editTitleInput.dispatchEvent(new MiniEvent('input', { bubbles: true }));
+        editForm.saveDraft();
+        expect(editForm.dirty).toBe(true);
+        expect(editForm.hasDraft).toBe(true);
+
+        // Also focus the search input to verify focus/caret & child `todos-list` instance preservation across parent `todos-summary` refresh
+        const childSearchInput = env.document.querySelector('input[data-w-model="draft.search"]');
+        childSearchInput.focus();
+        childSearchInput.value = 'keep-focus';
+        childSearchInput.selectionStart = 4;
+        childSearchInput.selectionEnd = 10;
+
+        // Step 6 setup: Start an explicit filter refresh that will be held by a barrier so it becomes a delayed stale response
+        const staleRefreshBarrier = createBarrier('step6-stale-filter-refresh');
+        harness.addInterceptor({
+          tag: 'Stale-Filter-Refresh',
+          match: (req) => req.pathname === '/__webspresso/fragments',
+          beforeBrowserBarrier: staleRefreshBarrier,
+        });
+        const staleRefreshPromise = todosInst.ctx.refresh('todos-list', {
+          search: '',
+          status: 'completed',
+          priority: 'low',
+        });
+        await staleRefreshBarrier.waitUntilReached();
+
+        // Step 7 setup: Fail ONLY `activity` (`todos-activity`) on the next batch refresh so the multi-fragment invalidation batch partially succeeds
+        let failActivityOnce = true;
+        exampleStore.setServerHooks({
+          beforeFragmentLoad(fragmentName) {
+            if (failActivityOnce && fragmentName === 'activity') {
+              failActivityOnce = false;
+              const err = new Error('Step 7 simulated partial batch failure on activity');
+              err.status = 503;
+              throw err;
+            }
+          },
+        });
+
+        // Step 3 & Step 4: Trigger a mutation from another controller/actor (`POST /api/todos/3/toggle`)
+        // This commits on the server and invalidates `todos` -> parent (`todos-summary` containing child `todos-list`) and sibling (`todos-activity`)
+        const toggleResult = await runtime.api.post('/api/todos/3/toggle');
+
+        // Step 5: Simultaneously trigger window `focus` auto-refetch while invalidation refresh is settling
+        env.window.dispatchEvent(new env.window.Event('focus'));
+
+        const batchRefreshRes = await toggleResult.__refreshPromise;
+        exampleStore.setServerHooks({});
+
+        // Verify Step 4 & Step 7: Partial batch failure reported accurately (`todos-summary` succeeded with nested `todos-list`, while `todos-activity` failed)
+        expect(batchRefreshRes.ok).toBe(false);
+        expect(batchRefreshRes.partial).toBe(true);
+        expect(batchRefreshRes.refreshed).toEqual(['todos-summary']);
+        expect(batchRefreshRes.errors.length).toBe(1);
+        expect(batchRefreshRes.errors[0].instanceId).toBe('todos-activity');
+        expect(batchRefreshRes.errors[0].fragmentName).toBe('activity');
+
+        // Verify Step 6: Release the older delayed response and confirm it is discarded as stale/superseded
+        staleRefreshBarrier.release();
+        const staleOutcome = await staleRefreshPromise;
+        expect(staleOutcome.superseded).toBe(true);
+        expect(runtime.fragments.getInstance('todos-list').input.status).toBe('active');
+
+        // Step 8: Mount a temporary controller that requests a slow lazy service, and remove the controller while the service is loading
+        let slowServiceResolve;
+        runtime.registerService(
+          'slow-analytics',
+          defineClientService({
+            load: () =>
+              new Promise((resolve) => {
+                slowServiceResolve = resolve;
+              }),
+            create: ({ mountHost }) => {
+              const host = mountHost('slow-analytics');
+              return { hostEl: host.el };
+            },
+          })
+        );
+        let postDisposeContinuationRan = false;
+        runtime.register(
+          'ephemeral-widget',
+          defineController({
+            actions: {
+              async bootSlowService({ services, isConnected }) {
+                await services.get('slow-analytics');
+                if (!isConnected()) return;
+                postDisposeContinuationRan = true;
+              },
+            },
+          })
+        );
+        const ephemeralEl = env.document.createElement('div');
+        ephemeralEl.setAttribute('data-w-controller', 'ephemeral-widget');
+        env.document.body.appendChild(ephemeralEl);
+        await runtime.controllers.mountSubtree(ephemeralEl);
+        const ephemeralInst = runtime.getControllerInstance(ephemeralEl, 'ephemeral-widget');
+        const slowActionPromise = ephemeralInst.actions.bootSlowService();
+
+        // Unmount the controller while `slow-analytics` is still loading
+        runtime.controllers.unmountSubtree(ephemeralEl);
+        ephemeralEl.remove();
+        slowServiceResolve({ default: {} });
+        await slowActionPromise;
+        expect(postDisposeContinuationRan).toBe(false);
+
+        // Step 9: Retry the failed fragment refresh (`retryFailed()`) and verify it retries ONLY `todos-activity` without re-running the toggle mutation
+        const mutationCommitsBeforeRetry = exampleStore.getStoreMetrics().mutationCommits;
+        const retryRes = await runtime.fragments.retryFailed();
+        expect(retryRes.ok).toBe(true);
+        expect(retryRes.refreshed).toEqual(['todos-activity']);
+        // Zero new mutation commits occurred during fragment retry
+        expect(exampleStore.getStoreMetrics().mutationCommits).toBe(mutationCommitsBeforeRetry);
+
+        // Step 10: Verify final DOM, form draft, server records, child input focus, and active resources
+        // 10a. Server records: Todo #3 was toggled from active -> completed ONCE (so 3 active, 3 completed out of 6)
+        expect(exampleStore.getTodoById(3).completed).toBe(true);
+        expect(exampleStore.getTodosSummary()).toMatchObject({ total: 6, completed: 3, active: 3 });
+
+        // 10b. Final DOM matches server state & active filter (`status: 'active'` -> 3 active rows: #4, #5, #6)
+        expect(env.document.querySelector('[data-testid="todos-total-count"]').textContent).toBe('6');
+        expect(env.document.querySelector('[data-testid="todos-completed-count"]').textContent).toBe('3');
+        expect(env.document.querySelector('[data-testid="todos-active-count"]').textContent).toBe('3');
+        expect(env.document.querySelector('[data-testid="todos-matching-count"]').textContent).toBe('3');
+
+        // 10c. Active input & child `todos-list` instance identity (`status: 'active'`) inside `todos-summary` were preserved across parent refresh
+        const preservedSearchInput = env.document.querySelector('input[data-w-model="draft.search"]');
+        expect(preservedSearchInput).toBe(childSearchInput);
+        expect(preservedSearchInput.value).toBe('keep-focus');
+        expect(env.document.activeElement).toBe(childSearchInput);
+        expect(runtime.fragments.getInstance('todos-list').instanceId).toBe('todos-list');
+        expect(runtime.fragments.getInstance('todos-list').input.status).toBe('active');
+
+        // 10d. Dirty edit form for Todo #3 and its persisted draft remained intact throughout external mutations and refreshes
+        expect(editForm.dirty).toBe(true);
+        expect(editTitleInput.value).toBe('Step 2 Dirty Draft In Progress');
+        expect(editForm.hasDraft).toBe(true);
+
+        // 10e. Active resources: ephemeral controller is gone, only `todos` and `quick-share` remain mounted
+        const activeNames = runtime.controllers.getActiveInstances().map((c) => c.name).sort();
+        expect(activeNames).toEqual(['quick-share', 'todos']);
+      } finally {
+        exampleStore.setServerHooks({});
         lab.cleanup();
       }
     });

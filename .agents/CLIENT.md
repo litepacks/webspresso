@@ -694,6 +694,44 @@ SSR Fragments (`defineFragment` / `[data-w-fragment]`), controller `tasks`, and 
 - **DOM Attributes**: `data-w-stale-time`, `data-w-refetch-on-focus`, `data-w-refetch-on-reconnect`, `data-w-refetch-on-mount`, `data-w-refetch-interval`, `data-w-refetch-in-background`.
 - **Coalescing & Cleanup**: Multiple fragments triggered on window focus, reconnect, or interval ticks are deduplicated and batched into a single `POST /__webspresso/fragments` call. Hidden tabs pause `refetchInterval` by default (`refetchIntervalInBackground: false`), and all timers/listeners are cleaned up on unmount or `runtime.destroy()`.
 
+---
+
+## 16. Core Runtime Contracts & Invariants
+
+1. **Mutation Success vs Refresh/Hook Error & Lost Mutation Responses (`outcomeUnknown`)**:
+   - Once a server mutation (`POST`, `PUT`, `PATCH`, `DELETE`) commits and returns HTTP 2xx, `form.submit()` resolves with `{ ok: true, submitted: true, data }`.
+   - If a subsequent automatic fragment invalidation refresh fails (e.g. HTTP 503) or an `onSuccess` callback / notification service throws, the mutation is **not** marked as failed or rolled back (`ok` remains `true`, and `refreshError` / `hookError` are attached to the result).
+   - Calling `runtime.fragments.retryFailed()` (or `ctx.retryFailedFragments()`) retries **only** the failed fragment refresh batch (`POST /__webspresso/fragments`) without re-sending any mutation.
+   - If a mutation request was already dispatched over the network (`error.dispatched === true`) and fails due to a timeout, network drop, or mid-flight abort before a response arrives, `ClientRequestError` sets `outcomeUnknown: true` and `outcome: 'unknown'` (and `form.submit()` returns `{ ok: false, outcomeUnknown: true, outcome: 'unknown' }`), distinguishing an uncertain commit state from pre-dispatch cancellation (`outcome: 'not_sent'`) or an explicit server error response (`outcome: 'failed'`).
+
+2. **Form Baseline, Dirty Tracking, Reset/Clear & In-Flight Edits**:
+   - `form.dirty` is computed against `form.baseline` (captured from initial SSR values, `form.fill(values, { baseline: true })`, or the last committed submission).
+   - If the user edits a field back to its baseline value, `form.dirty` automatically returns to `false`.
+   - Calling `form.submit()` cancels any pending debounced draft write (`saveDraft`) so a cleared draft is never resurrected after a fast submit.
+   - If the user types new edits while `form.submit()` is in-flight, completion of the earlier submission updates `form.baseline` to the committed snapshot **without** running `clear()` / `reset()`, preserving the user's newer unsubmitted edits in the DOM, keeping `form.dirty === true`, and persisting the updated draft.
+
+3. **Task Auto-Refetch Boundaries**:
+   - Global `bootClient({ staleTime, refetchOnWindowFocus, refetchOnReconnect, refetchInterval })` options apply **only** to SSR fragments (`[data-w-fragment]`), never to controller tasks.
+   - Controller tasks (`ctx.task` / `tasks: { ... }`) opt into background revalidation individually and reuse their most recent execution arguments (`task.lastArgs`).
+   - Tasks marked `{ mutation: true }` or `{ kind: 'mutation' }` never auto-refetch on mount, focus, reconnect, or interval ticks.
+
+4. **Fragment Input, Multi-Instance Targeting, Partial Batch Failure & Nested Preservation**:
+   - `ctx.fragment(idOrName).input` resolves by exact `instanceId` (`data-w-fragment-id`), `<name>:default`, or fragment `name` (`data-w-fragment`), and `ctx.fragment(name).inputs` returns `{ [instanceId]: input }` across all mounted instances of that fragment.
+   - `refresh(name, input)` refreshes all mounted instances with `data-w-fragment="<name>"` (deduplicating parent/child), whereas `refresh(instanceId, input)` refreshes only that specific instance.
+   - `inst.input` is updated only when a newer response (`reqVersion >= inst.version`) is actually applied to the DOM; superseded responses neither patch the DOM nor run `onSuccess`.
+   - During a parent fragment refresh, nested child fragments preserve their `instanceId`, runtime `input`, and active focused form controls/selection range.
+   - If a multi-fragment refresh batch partially fails on the server, succeeded fragments are patched into the DOM while failed fragments are reported in `{ ok: false, partial: true, refreshed, errors }`, and `retryFailed()` retries only the failed fragment(s).
+
+5. **Service & UI Host Ownership (`created: true` vs Layout Host)**:
+   - `mountHost(key)` sets `host.created = true` when the runtime creates `<div data-w-host="<key>">`, and `host.created = false` when attaching to a pre-existing layout element.
+   - On `runtime.destroy()`, runtime-created hosts (`created: true`) are removed from the DOM, whereas layout-owned hosts (`created: false`) are cleared and have their original attributes (`id`, `className`, custom attributes) restored without removing the element from the layout.
+
+6. **Persistence Restore Priority & Reconciliation**:
+   - Controller state priority: `state()` initial defaults → overridden by validated `persist` storage values on mount (corrupted or mismatched types are ignored).
+   - Fragment input priority: SSR `data-w-fragment-input` represents the initial rendered HTML; if `data-w-persist-input` finds a differing stored filter, `inst.input` remains aligned with the visible SSR HTML until the automatic reconciliation refresh completes and patches the DOM.
+   - Explicit user selection of default filter values (e.g. `status: 'all'`, `search: ''`) writes those values to storage so subsequent DOM scans never overwrite an explicit reset with stale storage.
+
+
 
 
 

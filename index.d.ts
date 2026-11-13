@@ -6367,6 +6367,9 @@ export class ClientRequestError<TData = unknown> extends Error {
   readonly isTimedOut: boolean;
   readonly isDropped: boolean;
   readonly isSuperseded: boolean;
+  readonly dispatched: boolean;
+  readonly outcomeUnknown: boolean;
+  readonly outcome: 'unknown' | 'failed' | 'not_sent';
   readonly cause?: unknown;
   constructor(options: {
     message: string;
@@ -6383,6 +6386,9 @@ export class ClientRequestError<TData = unknown> extends Error {
     isTimedOut?: boolean;
     isDropped?: boolean;
     isSuperseded?: boolean;
+    dispatched?: boolean;
+    outcomeUnknown?: boolean;
+    outcome?: 'unknown' | 'failed' | 'not_sent';
   });
 }
 
@@ -6440,6 +6446,8 @@ export interface ClientTaskOptions {
   concurrency?: ClientConcurrencyPolicy;
   policy?: ClientConcurrencyPolicy;
   key?: string;
+  mutation?: boolean;
+  kind?: 'query' | 'mutation';
   staleTime?: number | string;
   refetchOnMount?: ClientRefetchPolicy;
   refetchOnVisit?: ClientRefetchPolicy;
@@ -6714,6 +6722,8 @@ export interface ClientFormSubmitResult<TData = any> {
   hookError?: Error | null;
   error?: ClientRequestError | Error;
   aborted?: boolean;
+  outcomeUnknown?: boolean;
+  outcome?: 'unknown' | 'failed' | 'not_sent';
 }
 
 export interface ClientFormHookMeta<
@@ -6801,10 +6811,12 @@ export interface ControllerFormsRegistry<TServices = AppClientServices> {
 
 export interface FragmentRefreshResult {
   ok: boolean;
+  partial?: boolean;
   refreshed: string[];
   errors?: Error[];
   skipped?: boolean;
   canceled?: boolean;
+  superseded?: boolean;
   error?: Error | null;
   timings?: {
     loadMs: number;
@@ -6825,6 +6837,7 @@ export interface FragmentRefreshOptions {
 
 export interface ControllerFragmentHandle<TInput extends Record<string, any> = Record<string, any>> {
   readonly input: TInput;
+  readonly inputs: Record<string, TInput>;
   refresh(
     nextInput?: Partial<TInput> & Record<string, unknown>,
     options?: FragmentRefreshOptions

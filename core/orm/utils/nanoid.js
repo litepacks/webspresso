@@ -63,14 +63,13 @@ function resolveNanoidSize(arg) {
  * @param {typeof import('zod').z} zod
  */
 function extendZ(zod) {
-  return new Proxy(zod, {
-    get(target, prop, receiver) {
-      if (prop === 'nanoid') {
-        return function nanoid(arg) {
-          return zodNanoid(zod, resolveNanoidSize(arg));
-        };
-      }
-      return Reflect.get(target, prop, receiver);
+  return Object.create(zod, {
+    nanoid: {
+      value: function nanoid(arg) {
+        return zodNanoid(zod, resolveNanoidSize(arg));
+      },
+      enumerable: true,
+      configurable: true,
     },
   });
 }

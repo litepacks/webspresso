@@ -738,19 +738,26 @@ function createControllerRuntime(options = {}) {
       const signalPrefix = `__w_inst_${instanceId}.task_${taskKey}`;
 
       // React Query-style automatic revalidation options for tasks
+      const isMutationTask = taskOpts.mutation === true || taskOpts.kind === 'mutation';
       const staleTimeMs = parseDurationMs(taskOpts.staleTime, 0);
-      const refetchOnMountMode = parseRefetchMode(
-        taskOpts.refetchOnMount !== undefined ? taskOpts.refetchOnMount : taskOpts.refetchOnVisit,
-        false
-      );
-      const refetchOnFocusMode = parseRefetchMode(
-        taskOpts.refetchOnWindowFocus !== undefined ? taskOpts.refetchOnWindowFocus : taskOpts.refetchOnFocus,
-        false
-      );
-      const refetchOnReconnectMode = parseRefetchMode(taskOpts.refetchOnReconnect, false);
-      const refetchIntervalMs = parseDurationMs(taskOpts.refetchInterval, 0);
+      const refetchOnMountMode = isMutationTask
+        ? false
+        : parseRefetchMode(
+            taskOpts.refetchOnMount !== undefined ? taskOpts.refetchOnMount : taskOpts.refetchOnVisit,
+            false
+          );
+      const refetchOnFocusMode = isMutationTask
+        ? false
+        : parseRefetchMode(
+            taskOpts.refetchOnWindowFocus !== undefined ? taskOpts.refetchOnWindowFocus : taskOpts.refetchOnFocus,
+            false
+          );
+      const refetchOnReconnectMode = isMutationTask
+        ? false
+        : parseRefetchMode(taskOpts.refetchOnReconnect, false);
+      const refetchIntervalMs = isMutationTask ? 0 : parseDurationMs(taskOpts.refetchInterval, 0);
       const refetchIntervalInBg =
-        parseRefetchMode(taskOpts.refetchIntervalInBackground, false) === true;
+        !isMutationTask && parseRefetchMode(taskOpts.refetchIntervalInBackground, false) === true;
 
       let currentRunVersion = 0;
       let activeRuns = 0;
@@ -1506,6 +1513,15 @@ function createControllerRuntime(options = {}) {
         get input() {
           const inst = fragments && fragments.getInstance ? fragments.getInstance(idOrName) : null;
           return inst && inst.input ? { ...inst.input } : {};
+        },
+        get inputs() {
+          if (!fragments || typeof fragments.getInstances !== 'function') return {};
+          const list = fragments.getInstances(idOrName);
+          const map = {};
+          for (const inst of list) {
+            map[inst.instanceId] = inst.input ? { ...inst.input } : {};
+          }
+          return map;
         },
         refresh: (input, opts) => {
           checkFragmentPersistenceConflict(idOrName, input);

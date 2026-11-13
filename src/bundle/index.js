@@ -944,17 +944,34 @@ function buildBundleFallback({ cwd, entryPoints, outdir, publicDir, manifestPath
   const emittedChunksBySource = new Map(); // absSourcePath -> { absOut, relFromOutdir, relOutput }
 
   function transpileSource(absFile, rawCode) {
+    let code = rawCode;
     if ((absFile.endsWith('.ts') || absFile.endsWith('.tsx')) && ts) {
-      const transpiled = ts.transpileModule(rawCode, {
+      const transpiled = ts.transpileModule(code, {
         compilerOptions: {
           module: ts.ModuleKind.ESNext,
           target: ts.ScriptTarget.ES2020,
         },
         fileName: absFile,
       });
-      return transpiled.outputText;
+      code = transpiled.outputText;
     }
-    return rawCode;
+    return code.replace(/\bprocess\.env\.NODE_ENV\b/g, '"production"');
+  }
+
+  function extractCjsExportNames(code) {
+    const match = code.match(/module\.exports\s*=\s*\{([\s\S]*?)\};?\s*$/);
+    if (!match) return [];
+    const body = match[1].replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const names = new Set();
+    const propRegex = /^\s*(?:get\s+|set\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:,|:|\()/gm;
+    let m;
+    while ((m = propRegex.exec(body)) !== null) {
+      const name = m[1];
+      if (name && name !== 'get' && name !== 'set' && name !== 'function') {
+        names.add(name);
+      }
+    }
+    return Array.from(names);
   }
 
   function emitChunkModule(absModulePath) {
@@ -1037,6 +1054,53 @@ function buildBundleFallback({ cwd, entryPoints, outdir, publicDir, manifestPath
         return `${prefix}${quote}${relSpec}${quote}`;
       }
     );
+
+    // 3. Transform CommonJS modules (`module.exports = ...` / `require('./...')`) into native ESM chunks
+    if (/\bmodule\.exports\b/.test(rewritten)) {
+      const cjsImports = [];
+      let depSeq = 0;
+      const depVarBySpec = new Map();
+      const exportNames = extractCjsExportNames(rewritten);
+
+      rewritten = rewritten.replace(
+        /\b(?:reqFn|require)\s*\(\s*(['"])(\.[^'"]+)\1\s*\)/g,
+        (fullMatch, quote, spec) => {
+          if (spec === './debug' || spec === './devtool' || spec === './server-fragments') {
+            return '{}';
+          }
+          const resolved = resolveLocalModuleFile(importerAbsPath, spec);
+          if (!resolved) return fullMatch;
+          const chunkInfo = emitChunkModule(resolved);
+          if (!chunkInfo || !chunkInfo.absOut) return fullMatch;
+          let relSpec = path.relative(emitterOutDir, chunkInfo.absOut).replace(/\\/g, '/');
+          if (!relSpec.startsWith('.')) relSpec = './' + relSpec;
+          let depVar = depVarBySpec.get(relSpec);
+          if (!depVar) {
+            depVar = `__cjs_dep_${++depSeq}`;
+            depVarBySpec.set(relSpec, depVar);
+            cjsImports.push(`import ${depVar} from ${quote}${relSpec}${quote};`);
+            collectedImports.push({ path: chunkInfo.relOutput, kind: 'import-statement' });
+          }
+          return depVar;
+        }
+      );
+
+      const strippedBody = rewritten.replace(/^\s*['"]use strict['"];?\s*/, '');
+      const namedExportLines = exportNames.map(
+        (name) => `export const ${name} = __cjs_exports.${name};`
+      );
+      rewritten = [
+        ...cjsImports,
+        'const __cjs_exports = (() => {',
+        'const module = { exports: {} };',
+        'const exports = module.exports;',
+        strippedBody,
+        'return module.exports;',
+        '})();',
+        'export default __cjs_exports;',
+        ...namedExportLines,
+      ].join('\n');
+    }
 
     return rewritten;
   }
