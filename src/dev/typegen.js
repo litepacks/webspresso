@@ -14,6 +14,16 @@ const { scanRoutes } = require('../../src/discovery/scan-routes');
 const { compileRouteTable } = require('../../src/routing/route-table');
 const { z } = require('../../core/validation');
 const {
+  getZodDef,
+  getZodTypeName,
+  getZodInner,
+  getZodArrayElement,
+  getZodObjectShape,
+  getZodEnumValues,
+  getZodLiteralValue,
+  isZodCoerced,
+} = require('../../core/validation/zod-introspect');
+const {
   collectApiRouteContracts: collectApiRouteContractsRaw,
   generateApiDeclarationCode,
   checkTemplateFormContracts: checkTemplateFormContractsRaw,
@@ -49,7 +59,7 @@ function inferZodTransformOutputType(transformFn, innerSchema, indent, mode) {
     return mode === 'wire' ? 'string' : 'Date';
   }
   // Try executing transform on a safe dummy sample if innerSchema is primitive
-  const innerType = innerSchema && innerSchema._def && innerSchema._def.typeName;
+  const innerType = getZodTypeName(innerSchema);
   try {
     let sample;
     if (innerType === 'ZodString') sample = '1';
@@ -79,14 +89,14 @@ function inferZodTransformOutputType(transformFn, innerSchema, indent, mode) {
  * @returns {boolean}
  */
 function isZodFieldOptional(zField, mode = 'output') {
-  if (!zField || !zField._def) return false;
-  const t = zField._def.typeName;
+  const t = getZodTypeName(zField);
+  if (!t) return false;
   if (t === 'ZodOptional') return true;
   if (t === 'ZodDefault') {
     return mode === 'input';
   }
-  if (t === 'ZodEffects' && zField._def.schema) {
-    return isZodFieldOptional(zField._def.schema, mode);
+  if ((t === 'ZodEffects' || t === 'ZodPipeline') && getZodInner(zField)) {
+    return isZodFieldOptional(getZodInner(zField), mode);
   }
   return false;
 }
@@ -95,13 +105,13 @@ function isZodFieldOptional(zField, mode = 'output') {
  * Unwraps outer `ZodOptional` / `ZodDefault` for property type emission inside `ZodObject`.
  */
 function unwrapOptionalOrDefault(zField, mode = 'output') {
-  if (!zField || !zField._def) return zField;
-  const t = zField._def.typeName;
+  const t = getZodTypeName(zField);
+  if (!t) return zField;
   if (t === 'ZodOptional') {
-    return zField._def.innerType;
+    return getZodInner(zField);
   }
   if (t === 'ZodDefault' && mode === 'input') {
-    return zField._def.innerType;
+    return getZodInner(zField);
   }
   return zField;
 }
@@ -114,8 +124,9 @@ function unwrapOptionalOrDefault(zField, mode = 'output') {
  * @returns {string}
  */
 function zodToTsType(zType, indent = 0, mode = 'output') {
-  if (!zType || !zType._def) return 'unknown';
-  const typeName = zType._def.typeName;
+  const def = getZodDef(zType);
+  const typeName = getZodTypeName(zType);
+  if (!def || !typeName) return 'unknown';
   const spaces = '  '.repeat(indent);
   const nextSpaces = '  '.repeat(indent + 1);
 
@@ -128,12 +139,12 @@ function zodToTsType(zType, indent = 0, mode = 'output') {
     case 'ZodString':
       return 'string';
     case 'ZodNumber':
-      if (mode === 'input' && zType._def.coerce) {
+      if (mode === 'input' && isZodCoerced(zType)) {
         return 'number | string';
       }
       return 'number';
     case 'ZodBoolean':
-      if (mode === 'input' && zType._def.coerce) {
+      if (mode === 'input' && isZodCoerced(zType)) {
         return 'boolean | string';
       }
       return 'boolean';
@@ -155,48 +166,63 @@ function zodToTsType(zType, indent = 0, mode = 'output') {
       return 'unknown';
     case 'ZodNever':
       return 'never';
-    case 'ZodLiteral':
-      return typeof zType._def.value === 'string'
-        ? `'${zType._def.value}'`
-        : String(zType._def.value);
+    case 'ZodLiteral': {
+      const litVal = getZodLiteralValue(zType);
+      return typeof litVal === 'string' ? `'${litVal}'` : String(litVal);
+    }
     case 'ZodEnum':
-      return (zType._def.values || []).map((v) => `'${v}'`).join(' | ') || 'string';
+      return getZodEnumValues(zType).map((v) => `'${v}'`).join(' | ') || 'string';
     case 'ZodNativeEnum':
       return 'number | string';
     case 'ZodArray':
-      return `Array<${zodToTsType(zType._def.type, indent, mode)}>`;
+      return `Array<${zodToTsType(getZodArrayElement(zType), indent, mode)}>`;
     case 'ZodOptional':
-      return `${zodToTsType(zType._def.innerType, indent, mode)} | undefined`;
+      return `${zodToTsType(getZodInner(zType), indent, mode)} | undefined`;
     case 'ZodNullable':
-      return `${zodToTsType(zType._def.innerType, indent, mode)} | null`;
+      return `${zodToTsType(getZodInner(zType), indent, mode)} | null`;
     case 'ZodDefault':
-      return zodToTsType(zType._def.innerType, indent, mode);
+      return zodToTsType(getZodInner(zType), indent, mode);
+    case 'ZodPipeline': {
+      const inDef = getZodDef(def.in);
+      const outDef = getZodDef(def.out);
+      if (mode === 'input') {
+        if (inDef && inDef.type === 'transform' && def.out) {
+          return `${zodToTsType(def.out, indent, mode)} | string`;
+        }
+        return zodToTsType(def.in, indent, mode);
+      }
+      if (outDef && outDef.type === 'transform' && typeof outDef.transform === 'function') {
+        return inferZodTransformOutputType(outDef.transform, def.in, indent, mode);
+      }
+      return zodToTsType(def.out || def.in, indent, mode);
+    }
     case 'ZodEffects': {
       if (mode === 'input') {
-        if (zType._def.effect && zType._def.effect.type === 'preprocess') {
-          return `${zodToTsType(zType._def.schema, indent, mode)} | string`;
+        if (def.effect && def.effect.type === 'preprocess') {
+          return `${zodToTsType(def.schema, indent, mode)} | string`;
         }
-        return zodToTsType(zType._def.schema, indent, mode);
+        return zodToTsType(def.schema, indent, mode);
       }
-      if (zType._def.effect && zType._def.effect.type === 'transform') {
+      if (def.effect && def.effect.type === 'transform') {
         return inferZodTransformOutputType(
-          zType._def.effect.transform,
-          zType._def.schema,
+          def.effect.transform,
+          def.schema,
           indent,
           mode
         );
       }
-      return zodToTsType(zType._def.schema, indent, mode);
+      return zodToTsType(def.schema, indent, mode);
     }
     case 'ZodUnion':
     case 'ZodDiscriminatedUnion':
-      return (zType._def.options || []).map((opt) => zodToTsType(opt, indent, mode)).join(' | ') || 'unknown';
+      return (def.options || []).map((opt) => zodToTsType(opt, indent, mode)).join(' | ') || 'unknown';
     case 'ZodObject': {
-      const shape = typeof zType.shape === 'function' ? zType.shape() : zType.shape;
+      const shape = getZodObjectShape(zType);
       if (!shape || Object.keys(shape).length === 0) return 'Record<string, unknown>';
       const entries = [];
       for (const [k, v] of Object.entries(shape)) {
-        if (mode === 'wire' && v && v._def && (v._def.typeName === 'ZodUndefined' || v._def.typeName === 'ZodVoid')) {
+        const vType = getZodTypeName(v);
+        if (mode === 'wire' && (vType === 'ZodUndefined' || vType === 'ZodVoid')) {
           continue;
         }
         const isOpt = isZodFieldOptional(v, mode);
@@ -209,7 +235,7 @@ function zodToTsType(zType, indent = 0, mode = 'output') {
       return `{\n${entries.join('\n')}\n${spaces}}`;
     }
     case 'ZodRecord':
-      return `Record<string, ${zodToTsType(zType._def.valueType, indent, mode)}>`;
+      return `Record<string, ${zodToTsType(def.valueType, indent, mode)}>`;
     default:
       return 'unknown';
   }
@@ -247,8 +273,8 @@ function collectModelMetadata(modelsDir) {
       const columns = [];
       if (model.schema && model.schema.shape) {
         for (const [colName, colZod] of Object.entries(model.schema.shape)) {
-          const isOpt = colZod?._def?.typeName === 'ZodOptional';
-          const innerZod = isOpt ? colZod._def.innerType : colZod;
+          const isOpt = getZodTypeName(colZod) === 'ZodOptional';
+          const innerZod = isOpt ? getZodInner(colZod) : colZod;
           columns.push({
             name: colName,
             isOptional: isOpt,

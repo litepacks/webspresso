@@ -4,7 +4,7 @@
  * @module plugins/mcp/providers/services
  */
 
-const { zodToJsonSchema } = require('zod-to-json-schema');
+const { zodToJsonSchemaCompat } = require('../../../core/validation/zod-introspect');
 
 /**
  * Normalizes a dot-separated service name to an MCP-safe tool name
@@ -99,7 +99,7 @@ function convertZodToInputSchema(schema) {
   }
 
   try {
-    const rawSchema = zodToJsonSchema(schema, {
+    const rawSchema = zodToJsonSchemaCompat(schema, {
       $refStrategy: 'none',
       removeAdditionalStrategy: 'strict',
     });

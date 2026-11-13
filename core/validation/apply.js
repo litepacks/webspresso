@@ -6,6 +6,9 @@
  * @module core/validation/apply
  */
 
+const { ensureZodCompat } = require('./zod-introspect');
+ensureZodCompat();
+
 const EMPTY_INPUT = Object.freeze({
   body: undefined,
   params: undefined,

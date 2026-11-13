@@ -7,7 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { zodToJsonSchema } = require('zod-to-json-schema');
+const { zodToJsonSchemaCompat, getZodTypeName } = require('../validation/zod-introspect');
 const { compileSchema } = require('../compileSchema');
 const { generateOrmOpenApiSchemas } = require('./orm-components');
 
@@ -100,13 +100,13 @@ function inferOperationTags(routePath, explicitTags) {
  * @returns {object[]}
  */
 function expandZodObjectToParameters(zodObj, where) {
-  if (!zodObj || zodObj._def?.typeName !== 'ZodObject') return [];
+  if (!zodObj || getZodTypeName(zodObj) !== 'ZodObject') return [];
   const shape = zodObj.shape;
   return Object.entries(shape).map(([name, zType]) => ({
     name,
     in: where,
     required: where === 'path' ? true : !zType.isOptional(),
-    schema: zodToJsonSchema(zType, { target: 'openApi3', $refStrategy: 'none' }),
+    schema: zodToJsonSchemaCompat(zType, { target: 'openApi3', $refStrategy: 'none' }),
   }));
 }
 
@@ -169,7 +169,7 @@ function buildOperation(route, compiled, mod = null) {
       description: 'OK',
       content: {
         'application/json': {
-          schema: zodToJsonSchema(compiled.response, { target: 'openApi3', $refStrategy: 'none' }),
+          schema: zodToJsonSchemaCompat(compiled.response, { target: 'openApi3', $refStrategy: 'none' }),
         },
       },
     };
@@ -188,7 +188,7 @@ function buildOperation(route, compiled, mod = null) {
     op.requestBody = {
       content: {
         'application/json': {
-          schema: zodToJsonSchema(compiled.body, { target: 'openApi3', $refStrategy: 'none' }),
+          schema: zodToJsonSchemaCompat(compiled.body, { target: 'openApi3', $refStrategy: 'none' }),
         },
       },
     };

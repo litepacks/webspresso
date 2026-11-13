@@ -94,8 +94,12 @@ function translateSingleIssue(issue, t) {
 
   const pathKey = Array.isArray(issue.path) && issue.path.length > 0 ? issue.path.join('.') : '';
   const field = Array.isArray(issue.path) && issue.path.length > 0 ? issue.path[issue.path.length - 1] : '';
-  const isRequired = (issue.code === 'invalid_type' && (issue.received === 'undefined' || issue.message === 'Required'))
-    || issue.message === 'Required';
+  const isRequired = (issue.code === 'invalid_type' && (
+    issue.received === 'undefined' ||
+    issue.input === undefined ||
+    issue.message === 'Required' ||
+    /received undefined$/i.test(issue.message || '')
+  )) || issue.message === 'Required';
 
   const params = Object.assign(
     {

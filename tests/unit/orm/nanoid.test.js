@@ -61,8 +61,11 @@ describe('zodNanoid', () => {
 describe('extendZ (z.nanoid)', () => {
   const zx = extendZ(z);
 
-  it('should not add nanoid to global z', () => {
-    expect(z.nanoid).toBeUndefined();
+  it('should not mutate global z.nanoid', () => {
+    const originalNanoid = z.nanoid;
+    const extended = extendZ(z);
+    expect(z.nanoid).toBe(originalNanoid);
+    expect(typeof extended.nanoid).toBe('function');
   });
 
   it('should expose z.nanoid matching zodNanoid', () => {

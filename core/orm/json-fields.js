@@ -3,6 +3,8 @@
  * @module core/orm/json-fields
  */
 
+const { getZodDef, getZodInner, getZodTypeName } = require('../validation/zod-introspect');
+
 /**
  * Get JSON column names from model
  * @param {import('./types').ModelDefinition} model - Model definition
@@ -31,16 +33,15 @@ function getJsonColumns(model) {
   if (model && model.schema && model.schema.shape) {
     for (const [name, fieldSchema] of Object.entries(model.schema.shape)) {
       let current = fieldSchema;
-      while (current && current._def) {
-        if (current._def.innerType) {
-          current = current._def.innerType;
-        } else if (current._def.schema) {
-          current = current._def.schema;
+      while (current && getZodDef(current)) {
+        const inner = getZodInner(current);
+        if (inner) {
+          current = inner;
         } else {
           break;
         }
       }
-      const typeName = current?._def?.typeName;
+      const typeName = getZodTypeName(current);
       if (typeName === 'ZodRecord' || typeName === 'ZodObject' || typeName === 'ZodArray') {
         jsonCols.add(name);
       }

@@ -383,7 +383,8 @@ describe('Schema Helpers', () => {
         expect(meta.type).toBe('array');
         expect(meta.nullable).toBe(false);
         // Should be a ZodArray
-        expect(schema._def.typeName).toBe('ZodArray');
+        const { getZodTypeName } = require('../../../core/validation/zod-introspect');
+        expect(getZodTypeName(schema)).toBe('ZodArray');
       });
 
       it('should create an array column with custom item schema', () => {

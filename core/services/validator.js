@@ -293,7 +293,18 @@ function validateServiceInput(schema, input, serviceName, options = {}) {
   // 1. Zod schema validation
   if (compiled instanceof z.ZodType || typeof compiled.safeParse === 'function') {
     try {
-      const result = compiled.safeParse(sanitized);
+      let result;
+      if (compiled._zod && typeof compiled._zod.run === 'function') {
+        const rawRun = compiled._zod.run({ value: sanitized, issues: [] }, { async: true });
+        if (rawRun instanceof Promise) {
+          // Attach no-op catch so async refinements rejected during sync preflight don't emit UnhandledRejection
+          rawRun.catch(() => {});
+          throw new Error('Encountered Promise during synchronous parse');
+        }
+        result = rawRun.issues.length ? compiled.safeParse(sanitized) : { success: true, data: rawRun.value };
+      } else {
+        result = compiled.safeParse(sanitized);
+      }
       if (!result.success) {
         const { message, fields, fieldErrors } = formatZodErrors(result.error, serviceName);
         throw createServiceValidationError(message, {

@@ -163,21 +163,39 @@ function extractUrlParamNames(routePath) {
  * @param {import('zod').ZodTypeAny | null} zSchema
  * @returns {{ acceptsFormData: boolean, fields: Record<string, { type: string, required: boolean, isFile: boolean, isArray: boolean }> | null, isStrictObject: boolean }}
  */
-function inspectBodySchemaFields(zSchema) {
-  if (!zSchema || !zSchema._def) {
-    return { acceptsFormData: false, fields: null, isStrictObject: false };
-  }
+const {
+  getZodDef,
+  getZodTypeName,
+  getZodInner,
+  getZodArrayElement,
+  getZodObjectShape,
+} = require('../../core/validation/zod-introspect');
 
+function unwrapZodObject(zSchema) {
   let current = zSchema;
-  while (current && current._def && (current._def.typeName === 'ZodEffects' || current._def.typeName === 'ZodOptional' || current._def.typeName === 'ZodDefault')) {
-    current = current._def.schema || current._def.innerType;
+  while (current && getZodDef(current)) {
+    const tName = getZodTypeName(current);
+    if (tName === 'ZodEffects' || tName === 'ZodOptional' || tName === 'ZodDefault' || tName === 'ZodPipeline') {
+      current = getZodInner(current);
+    } else {
+      break;
+    }
   }
+  return current;
+}
 
-  if (!current || !current._def || current._def.typeName !== 'ZodObject') {
+function inspectBodySchemaFields(zSchema) {
+  if (!zSchema || !getZodDef(zSchema)) {
     return { acceptsFormData: false, fields: null, isStrictObject: false };
   }
 
-  const shape = typeof current.shape === 'function' ? current.shape() : current.shape;
+  const current = unwrapZodObject(zSchema);
+
+  if (!current || getZodTypeName(current) !== 'ZodObject') {
+    return { acceptsFormData: false, fields: null, isStrictObject: false };
+  }
+
+  const shape = getZodObjectShape(current);
   if (!shape || typeof shape !== 'object') {
     return { acceptsFormData: false, fields: {}, isStrictObject: true };
   }
@@ -190,18 +208,16 @@ function inspectBodySchemaFields(zSchema) {
     let required = true;
     let isArray = false;
 
-    while (inner && inner._def) {
-      const tName = inner._def.typeName;
+    while (inner && getZodDef(inner)) {
+      const tName = getZodTypeName(inner);
       if (tName === 'ZodOptional' || tName === 'ZodDefault') {
         required = false;
-        inner = inner._def.innerType;
-      } else if (tName === 'ZodNullable') {
-        inner = inner._def.innerType;
-      } else if (tName === 'ZodEffects') {
-        inner = inner._def.schema;
+        inner = getZodInner(inner);
+      } else if (tName === 'ZodNullable' || tName === 'ZodEffects' || tName === 'ZodPipeline') {
+        inner = getZodInner(inner);
       } else if (tName === 'ZodArray') {
         isArray = true;
-        inner = inner._def.type;
+        inner = getZodArrayElement(inner);
       } else {
         break;
       }
@@ -213,7 +229,7 @@ function inspectBodySchemaFields(zSchema) {
     );
     if (isFile) acceptsFormData = true;
 
-    const baseTypeName = inner && inner._def ? inner._def.typeName : 'ZodUnknown';
+    const baseTypeName = getZodTypeName(inner) || 'ZodUnknown';
     let scalarKind = 'string';
     if (isFile) scalarKind = 'file';
     else if (baseTypeName === 'ZodNumber') scalarKind = 'number';
@@ -271,12 +287,9 @@ function inferHandlerWireResponse(handlerFn, fileSource, schemas, zodToTsTypeFn)
   // 2. Build local variable type table from `req.input.body.<prop>` and literal assignments
   const bodyFieldTypes = {};
   if (schemas && schemas.bodySchema) {
-    let current = schemas.bodySchema;
-    while (current && current._def && (current._def.typeName === 'ZodEffects' || current._def.typeName === 'ZodOptional' || current._def.typeName === 'ZodDefault')) {
-      current = current._def.schema || current._def.innerType;
-    }
-    if (current && current._def && current._def.typeName === 'ZodObject') {
-      const shape = typeof current.shape === 'function' ? current.shape() : current.shape;
+    const current = unwrapZodObject(schemas.bodySchema);
+    if (current && getZodTypeName(current) === 'ZodObject') {
+      const shape = getZodObjectShape(current);
       if (shape) {
         for (const [k, v] of Object.entries(shape)) {
           bodyFieldTypes[k] = zodToTsTypeFn(v, 2, 'wire');

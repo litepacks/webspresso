@@ -28,6 +28,31 @@ if (z.ZodType && z.ZodType.prototype && typeof z.ZodType.prototype._refinement =
   };
   wrappedRefinement.__webspresso_wrapped = true;
   z.ZodType.prototype._refinement = wrappedRefinement;
+} else if (z.ZodType && z.ZodType.prototype && typeof z.ZodType.prototype.refine === 'function' && !z.ZodType.prototype.refine.__webspresso_wrapped) {
+  const origRefine = z.ZodType.prototype.refine;
+  const wrappedRefine = function (check, params) {
+    const wrappedCheck = typeof check === 'function'
+      ? (val) => {
+          const res = check(val);
+          if (res && typeof res.catch === 'function') {
+            res.catch(() => {});
+          }
+          return res;
+        }
+      : check;
+    return origRefine.call(this, wrappedCheck, params);
+  };
+  wrappedRefine.__webspresso_wrapped = true;
+  z.ZodType.prototype.refine = wrappedRefine;
+}
+
+if (z.ZodError && z.ZodError.prototype && !Object.getOwnPropertyDescriptor(z.ZodError.prototype, 'errors')) {
+  Object.defineProperty(z.ZodError.prototype, 'errors', {
+    get() {
+      return this.issues;
+    },
+    configurable: true,
+  });
 }
 
 /**

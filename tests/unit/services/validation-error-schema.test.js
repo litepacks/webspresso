@@ -288,7 +288,7 @@ describe('Services Zod & Validation Error Schema Integrity (Item 6)', () => {
       registry.register('billing.invoice', defineService({
         schema: ({ z }) => z.object({
           amount: z.number().positive('Amount must be positive'),
-          currency: z.enum(['USD', 'EUR', 'TRY'], { errorMap: () => ({ message: 'Unsupported currency' }) }),
+          currency: z.enum(['USD', 'EUR', 'TRY'], { error: () => 'Unsupported currency' }),
         }),
         async handler(input) {
           return { billed: true, amount: input.amount };
