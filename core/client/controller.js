@@ -367,6 +367,8 @@ function defineController(definition = {}) {
     tasks: definition.tasks && typeof definition.tasks === 'object' ? definition.tasks : {},
     connect: typeof definition.connect === 'function' ? definition.connect : null,
     disconnect: typeof definition.disconnect === 'function' ? definition.disconnect : null,
+    beforePatch: typeof definition.beforePatch === 'function' ? definition.beforePatch : null,
+    afterPatch: typeof definition.afterPatch === 'function' ? definition.afterPatch : null,
     onError: typeof definition.onError === 'function' ? definition.onError : null,
     persist: definition.persist || null,
     watch: definition.watch && typeof definition.watch === 'object' ? definition.watch : null,
@@ -1813,6 +1815,33 @@ function createControllerRuntime(options = {}) {
       get isConnected() {
         return isConnected();
       },
+      invokeBeforePatch(meta = {}) {
+        if (!isConnected() || !reg.definition.beforePatch) return;
+        try {
+          const result = reg.definition.beforePatch(ctx, meta);
+          if (result && typeof result.then === 'function') {
+            // beforePatch must be synchronous; warn in dev and do not block morph
+            if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production' && typeof console !== 'undefined') {
+              console.warn(`[webspresso] Controller "${controllerName}" beforePatch() returned a Promise; beforePatch hooks are synchronous and are not awaited.`);
+            }
+          }
+        } catch (err) {
+          handleControllerError(err, { phase: 'beforePatch' });
+        }
+      },
+      invokeAfterPatch(meta = {}) {
+        if (!isConnected() || !reg.definition.afterPatch) return;
+        try {
+          const res = reg.definition.afterPatch(ctx, meta);
+          if (res && typeof res.then === 'function') {
+            res.catch((err) => {
+              handleControllerError(err, { phase: 'afterPatch' });
+            });
+          }
+        } catch (err) {
+          handleControllerError(err, { phase: 'afterPatch' });
+        }
+      },
       destroy() {
         if (!connected) return;
         connected = false;
@@ -2037,6 +2066,82 @@ function createControllerRuntime(options = {}) {
     return mounted;
   }
 
+  const patchCycleTracker = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+
+  function collectAffectedInstances(fragmentEl) {
+    if (!fragmentEl) return [];
+    const affected = [];
+    for (const inst of activeInstances.values()) {
+      if (!inst || !inst.el || !inst.isConnected) continue;
+      if (
+        inst.el === fragmentEl ||
+        (typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el)) ||
+        (typeof inst.el.contains === 'function' && inst.el.contains(fragmentEl))
+      ) {
+        affected.push(inst);
+      }
+    }
+    // Sort deterministically: outer ancestors first, inner descendants second
+    affected.sort((a, b) => {
+      if (a.el === b.el) return 0;
+      if (typeof a.el.contains === 'function' && a.el.contains(b.el)) return -1;
+      if (typeof b.el.contains === 'function' && b.el.contains(a.el)) return 1;
+      if (typeof a.el.compareDocumentPosition === 'function') {
+        const pos = a.el.compareDocumentPosition(b.el);
+        if (pos & 4) return -1; // DOCUMENT_POSITION_FOLLOWING
+        if (pos & 2) return 1;  // DOCUMENT_POSITION_PRECEDING
+      }
+      return 0;
+    });
+    return affected;
+  }
+
+  function notifyBeforePatch(fragmentEl, meta = {}) {
+    const affected = collectAffectedInstances(fragmentEl);
+    for (let i = 0; i < affected.length; i++) {
+      const inst = affected[i];
+      inst.invokeBeforePatch({
+        ...meta,
+        isFragmentRoot: inst.el === fragmentEl,
+        isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
+      });
+    }
+  }
+
+  function notifyAfterPatch(fragmentEl, meta = {}) {
+    if (patchCycleTracker && fragmentEl) {
+      const now = Date.now();
+      const prev = patchCycleTracker.get(fragmentEl) || { count: 0, lastAt: 0 };
+      const count = now - prev.lastAt < 100 ? prev.count + 1 : 1;
+      patchCycleTracker.set(fragmentEl, { count, lastAt: now });
+      if (count > 5) {
+        const msg = `Possible patch hook refresh loop detected on fragment "${meta.fragmentName || meta.fragmentId || 'unknown'}" (${count} rapid patch cycles).`;
+        if (debug && typeof debug.recordEvent === 'function') {
+          debug.recordEvent('patch:loop-warning', {
+            code: 'PATCH_HOOK_LOOP_DETECTED',
+            fragmentId: meta.fragmentId || null,
+            fragmentName: meta.fragmentName || null,
+            count,
+            message: msg,
+          });
+        } else if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production' && typeof console !== 'undefined') {
+          console.warn(`[webspresso] ${msg}`);
+        }
+      }
+    }
+
+    const affected = collectAffectedInstances(fragmentEl);
+    // Reverse order for afterPatch: inner descendants first, outer ancestors second
+    for (let i = affected.length - 1; i >= 0; i--) {
+      const inst = affected[i];
+      inst.invokeAfterPatch({
+        ...meta,
+        isFragmentRoot: inst.el === fragmentEl,
+        isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
+      });
+    }
+  }
+
   return {
     register,
     services,
@@ -2050,6 +2155,8 @@ function createControllerRuntime(options = {}) {
     mountSubtree,
     syncTree: mountSubtree,
     unmountSubtree,
+    notifyBeforePatch,
+    notifyAfterPatch,
     mountControllerOnElement,
     getInstanceForElement(el, name) {
       const map = elementInstances.get(el);

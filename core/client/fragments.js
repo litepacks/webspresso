@@ -157,6 +157,172 @@ function createFragmentCoordinator(options = {}) {
   let isDisposed = false;
   let lifecycleListenersAttached = false;
 
+  // Per-version patch options (mode, limit, target, removeKeys, onBeforePatch, onAfterPatch)
+  const pendingPatchOptsByKey = new Map();
+
+  // Lazy fragment IntersectionObserver state
+  let lazyObserver = null;
+  const observedLazyEls = new WeakSet();
+
+  function getLazyObserver() {
+    if (lazyObserver) return lazyObserver;
+    const win =
+      typeof window !== 'undefined'
+        ? window
+        : typeof globalThis !== 'undefined'
+          ? globalThis
+          : null;
+    const IOCtor = win && typeof win.IntersectionObserver === 'function' ? win.IntersectionObserver : null;
+    if (!IOCtor) return null;
+    lazyObserver = new IOCtor((entries) => {
+      if (isDisposed) return;
+      const visibleIds = [];
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        if (!entry || !entry.isIntersecting) continue;
+        const targetEl = entry.target;
+        try {
+          lazyObserver.unobserve(targetEl);
+        } catch (_e) {}
+        const fragId = targetEl && targetEl.getAttribute ? targetEl.getAttribute('data-w-fragment-id') : null;
+        const inst = fragId ? instances.get(fragId) : null;
+        if (inst && inst.lazy && inst.lazyState === 'idle') {
+          inst.lazyState = 'loading';
+          visibleIds.push(inst.instanceId);
+        }
+      }
+      if (visibleIds.length > 0) {
+        scheduleAutoRefresh(visibleIds, 'lazy');
+      }
+    });
+    return lazyObserver;
+  }
+
+  function observeLazyFragment(inst) {
+    if (!inst || !inst.el || !inst.lazy || inst.lazyState !== 'idle') return;
+    if (observedLazyEls.has(inst.el)) return;
+    const obs = getLazyObserver();
+    if (!obs) return;
+    observedLazyEls.add(inst.el);
+    try {
+      obs.observe(inst.el);
+    } catch (_e) {}
+  }
+
+  function unobserveLazyFragment(inst) {
+    if (!inst || !inst.el || !lazyObserver) return;
+    try {
+      lazyObserver.unobserve(inst.el);
+    } catch (_e) {}
+  }
+
+  function getListItemKey(node) {
+    if (!node || node.nodeType !== 1 || typeof node.getAttribute !== 'function') return null;
+    if (node.id) return `id:${node.id}`;
+    const wKey = node.getAttribute('data-w-key');
+    if (wKey) return `wkey:${wKey}`;
+    return null;
+  }
+
+  function patchIncrementalList(fragEl, html, opts = {}) {
+    const doc = fragEl.ownerDocument || (typeof document !== 'undefined' ? document : null);
+    const parsed = datastar && typeof datastar.parseHtmlFragment === 'function'
+      ? datastar.parseHtmlFragment(html, doc)
+      : null;
+    if (!parsed) return false;
+
+    const targetSel = opts.target || null;
+    const container =
+      (targetSel && fragEl.querySelector ? fragEl.querySelector(targetSel) : null) ||
+      (fragEl.querySelector ? fragEl.querySelector('[data-w-list]') : null) ||
+      fragEl;
+    const incomingContainer =
+      (targetSel && parsed.querySelector ? parsed.querySelector(targetSel) : null) ||
+      (parsed.querySelector ? parsed.querySelector('[data-w-list]') : null) ||
+      parsed;
+
+    // 1. Remove explicitly requested keys if any
+    if (isArray(opts.removeKeys) && opts.removeKeys.length > 0) {
+      const removeSet = new Set(opts.removeKeys.map(String));
+      const curChildren = Array.from(container.children || []);
+      for (let i = 0; i < curChildren.length; i++) {
+        const child = curChildren[i];
+        const rawKey = child.getAttribute('data-w-key') || child.id || '';
+        const fullKey = getListItemKey(child);
+        if (removeSet.has(rawKey) || (fullKey && removeSet.has(fullKey))) {
+          if (typeof opts.onBeforeNodeRemove === 'function') opts.onBeforeNodeRemove(child);
+          container.removeChild(child);
+        }
+      }
+    }
+
+    // 2. Index existing keyed items in container
+    const existingByKey = new Map();
+    const existingChildren = Array.from(container.children || []);
+    for (let i = 0; i < existingChildren.length; i++) {
+      const k = getListItemKey(existingChildren[i]);
+      if (k && !existingByKey.has(k)) {
+        existingByKey.set(k, existingChildren[i]);
+      }
+    }
+
+    const incomingItems = Array.from(incomingContainer.children || []);
+    const mode = opts.mode === 'prepend' ? 'prepend' : 'append';
+    const itemsToInsert = mode === 'prepend' ? incomingItems.slice().reverse() : incomingItems;
+
+    for (let i = 0; i < itemsToInsert.length; i++) {
+      const incoming = itemsToInsert[i];
+      if (incoming.nodeType !== 1) continue;
+      const key = getListItemKey(incoming);
+      const existingMatch = key ? existingByKey.get(key) : null;
+
+      if (existingMatch && existingMatch.tagName === incoming.tagName) {
+        // Update existing keyed item in place without duplicating
+        if (datastar && typeof datastar.morphDomTrees === 'function') {
+          datastar.morphDomTrees(existingMatch, incoming, {
+            onBeforeNodeRemove: opts.onBeforeNodeRemove,
+            onNodeAdded: opts.onNodeAdded,
+          });
+        }
+        continue;
+      }
+
+      const imported = container.ownerDocument
+        ? container.ownerDocument.importNode(incoming, true)
+        : incoming.cloneNode(true);
+
+      if (mode === 'prepend') {
+        const firstRef = (container.children && container.children[0]) || container.firstChild || null;
+        container.insertBefore(imported, firstRef);
+      } else {
+        container.appendChild(imported);
+      }
+
+      if (key) {
+        existingByKey.set(key, imported);
+      }
+      if (typeof opts.onNodeAdded === 'function') {
+        opts.onNodeAdded(imported);
+      }
+    }
+
+    // 3. Enforce optional retained item limit
+    const limitAttr = container.getAttribute ? container.getAttribute('data-w-limit') : null;
+    const rawLimit = opts.limit !== undefined ? opts.limit : limitAttr;
+    const limit = rawLimit !== null && rawLimit !== undefined && rawLimit !== '' ? Number(rawLimit) : 0;
+    if (Number.isFinite(limit) && limit > 0) {
+      while (container.children && container.children.length > limit) {
+        const ch = container.children;
+        const victim = mode === 'prepend' ? ch[ch.length - 1] : ch[0];
+        if (!victim) break;
+        if (typeof opts.onBeforeNodeRemove === 'function') opts.onBeforeNodeRemove(victim);
+        container.removeChild(victim);
+      }
+    }
+
+    return true;
+  }
+
   function isDocumentHidden() {
     const root = getRoot();
     const doc = root && root.nodeType === 9 ? root : root && root.ownerDocument ? root.ownerDocument : typeof document !== 'undefined' ? document : null;
@@ -260,7 +426,12 @@ function createFragmentCoordinator(options = {}) {
     try {
       await executeBatchRefresh(targets);
     } catch (_err) {
-      // Background auto-refetch errors are non-fatal
+      // Background auto-refetch errors are non-fatal; reset lazyState if still unloaded so retry/re-observe works
+      for (const inst of deduped) {
+        if (inst.lazy && inst.lazyState === 'loading') {
+          inst.lazyState = 'idle';
+        }
+      }
     }
   }
 
@@ -272,7 +443,7 @@ function createFragmentCoordinator(options = {}) {
     if (reason) pendingAutoReasons.add(reason);
     if (pendingAutoInstanceIds.size === 0) return;
 
-    if (reason === 'mount') {
+    if (reason === 'mount' || reason === 'lazy') {
       if (!autoBatchScheduled) {
         autoBatchScheduled = true;
         Promise.resolve().then(flushAutoRefresh);
@@ -469,6 +640,9 @@ function createFragmentCoordinator(options = {}) {
       ensureLifecycleListeners();
     }
 
+    const rawLazyAttr = el.getAttribute('data-w-lazy');
+    const isLazyUnloaded = Boolean(rawLazyAttr && rawLazyAttr !== 'false' && rawLazyAttr !== 'loaded');
+
     if (existing) {
       existing.name = name;
       existing.pagePath = pagePath;
@@ -489,6 +663,9 @@ function createFragmentCoordinator(options = {}) {
       existing._rawStale = rawStale;
       existing._rawInterval = rawInterval;
       syncInstanceInterval(existing);
+      if (existing.lazy && existing.lazyState === 'idle') {
+        observeLazyFragment(existing);
+      }
     } else {
       const created = {
         instanceId,
@@ -511,6 +688,9 @@ function createFragmentCoordinator(options = {}) {
         refetchIntervalInBackground,
         intervalTimer: null,
         activeIntervalMs: 0,
+        lazy: isLazyUnloaded,
+        lazyState: isLazyUnloaded ? 'idle' : 'loaded',
+        staleWhileUnloaded: false,
         _rawInput: rawInput,
         _rawDepends: rawDepends,
         _rawStale: rawStale,
@@ -518,7 +698,9 @@ function createFragmentCoordinator(options = {}) {
       };
       instances.set(instanceId, created);
       syncInstanceInterval(created);
-      if (pendingRestoredInput) {
+      if (isLazyUnloaded) {
+        observeLazyFragment(created);
+      } else if (pendingRestoredInput) {
         Promise.resolve().then(() => {
           if (!isDisposed && created.version === 0 && instances.get(instanceId) === created) {
             refresh(instanceId, pendingRestoredInput).catch(() => {});
@@ -558,6 +740,7 @@ function createFragmentCoordinator(options = {}) {
           !seenIds.has(id) || (inst.el && inst.el.isConnected === false);
         if (disconnected) {
           clearInstanceInterval(inst);
+          unobserveLazyFragment(inst);
           if (inst.abortController) {
             try {
               inst.abortController.abort();
@@ -603,6 +786,21 @@ function createFragmentCoordinator(options = {}) {
     const html = fragmentPayload && typeof fragmentPayload.html === 'string' ? fragmentPayload.html : '';
     if (!html) return false;
 
+    const patchKey = `${inst.instanceId}:${reqVersion}`;
+    const patchOpts = pendingPatchOptsByKey.get(patchKey) || null;
+    if (patchOpts) {
+      pendingPatchOptsByKey.delete(patchKey);
+    }
+
+    if (typeof options.onBeforePatch === 'function') {
+      options.onBeforePatch(inst.el, inst);
+    }
+    if (patchOpts && typeof patchOpts.onBeforePatch === 'function') {
+      try {
+        patchOpts.onBeforePatch(inst.el, inst);
+      } catch (_e) {}
+    }
+
     const patchStart = Date.now();
 
     const committedInput =
@@ -629,13 +827,34 @@ function createFragmentCoordinator(options = {}) {
       }
     }
 
-    if (datastar && typeof datastar.patchFragmentElement === 'function') {
+    const patchMode = fragmentPayload.mode || (patchOpts && patchOpts.mode) || 'replace';
+    if (patchMode === 'append' || patchMode === 'prepend') {
+      patchIncrementalList(inst.el, html, {
+        mode: patchMode,
+        limit: fragmentPayload.limit !== undefined ? fragmentPayload.limit : patchOpts && patchOpts.limit,
+        target: fragmentPayload.target || (patchOpts && patchOpts.target),
+        removeKeys: fragmentPayload.removeKeys || (patchOpts && patchOpts.removeKeys),
+        onBeforeNodeRemove: options.onBeforeNodeRemove,
+        onNodeAdded: options.onNodeAdded,
+      });
+    } else if (datastar && typeof datastar.patchFragmentElement === 'function') {
       datastar.patchFragmentElement(inst.el, html, {
         onBeforeNodeRemove: options.onBeforeNodeRemove,
         onNodeAdded: options.onNodeAdded,
       });
     } else {
       inst.el.innerHTML = html;
+    }
+
+    // Clear lazy unloaded markers once a real patch is applied
+    if (inst.lazy || inst.lazyState !== 'loaded') {
+      inst.lazy = false;
+      inst.lazyState = 'loaded';
+      inst.staleWhileUnloaded = false;
+      unobserveLazyFragment(inst);
+      if (inst.el && typeof inst.el.removeAttribute === 'function') {
+        inst.el.removeAttribute('data-w-lazy');
+      }
     }
 
     const patchMs = Math.max(0, Date.now() - patchStart);
@@ -652,6 +871,11 @@ function createFragmentCoordinator(options = {}) {
 
     if (typeof options.onAfterPatch === 'function') {
       options.onAfterPatch(inst.el, inst);
+    }
+    if (patchOpts && typeof patchOpts.onAfterPatch === 'function') {
+      try {
+        patchOpts.onAfterPatch(inst.el, inst);
+      } catch (_e) {}
     }
 
     if (debug) {
@@ -1090,7 +1314,12 @@ function createFragmentCoordinator(options = {}) {
         }
       }
       if (matched) {
-        matchingInstances.push(inst);
+        if (inst.lazy && inst.lazyState === 'idle') {
+          // Do not fetch off-screen unloaded lazy fragments on invalidation; mark stale for when visible
+          inst.staleWhileUnloaded = true;
+        } else {
+          matchingInstances.push(inst);
+        }
       }
     }
 
@@ -1245,6 +1474,29 @@ function createFragmentCoordinator(options = {}) {
       }
       inst.abortController = abortController;
       inst.version += 1;
+
+      if (inst.lazy && inst.lazyState === 'idle') {
+        inst.lazyState = 'loading';
+        unobserveLazyFragment(inst);
+      }
+
+      if (
+        refreshOpts.mode ||
+        refreshOpts.limit !== undefined ||
+        refreshOpts.target ||
+        refreshOpts.removeKeys ||
+        typeof refreshOpts.onBeforePatch === 'function' ||
+        typeof refreshOpts.onAfterPatch === 'function'
+      ) {
+        pendingPatchOptsByKey.set(`${inst.instanceId}:${inst.version}`, {
+          mode: refreshOpts.mode || null,
+          limit: refreshOpts.limit,
+          target: refreshOpts.target,
+          removeKeys: refreshOpts.removeKeys,
+          onBeforePatch: refreshOpts.onBeforePatch,
+          onAfterPatch: refreshOpts.onAfterPatch,
+        });
+      }
 
       const candidateInput =
         nextInput && typeof nextInput === 'object'
@@ -1481,6 +1733,13 @@ function createFragmentCoordinator(options = {}) {
       }
       pendingAutoInstanceIds.clear();
       pendingAutoReasons.clear();
+      pendingPatchOptsByKey.clear();
+      if (lazyObserver && typeof lazyObserver.disconnect === 'function') {
+        try {
+          lazyObserver.disconnect();
+        } catch (_e) {}
+        lazyObserver = null;
+      }
       removeLifecycleListeners();
       for (const inst of instances.values()) {
         clearInstanceInterval(inst);

@@ -24,7 +24,7 @@
  *    external package is not installed in `node_modules`.
  */
 
-const { isArray, getByPath, setByPath } = require('../utils');
+const { isArray, getByPath, setByPath, parseDelayMs } = require('../utils');
 
 const PluginType = {
   Attribute: 1,
@@ -703,20 +703,122 @@ const CLIENT_OWNED_TEXT_ATTR = 'data-w-text';
 const CLIENT_OWNED_SHOW_ATTR = 'data-w-show';
 const CLIENT_OWNED_DISABLED_ATTR = 'data-w-disabled';
 const CLIENT_OWNED_MODEL_ATTR = 'data-w-model';
+const CLIENT_OWNED_CLASS_ATTR = 'data-w-class';
+
+function hasClassBindingAttr(el) {
+  if (!el || !el.attributes) return false;
+  if (el.hasAttribute && el.hasAttribute(CLIENT_OWNED_CLASS_ATTR)) return true;
+  for (let i = 0; i < el.attributes.length; i++) {
+    if (el.attributes[i].name.startsWith('data-w-class:')) return true;
+  }
+  return false;
+}
 
 /**
  * Determine whether a node has client bindings owning specific DOM properties.
  */
 function getClientOwnership(el) {
   if (!el || typeof el.hasAttribute !== 'function') {
-    return { text: false, show: false, disabled: false, model: false };
+    return { text: false, show: false, disabled: false, model: false, classBinding: false };
   }
   return {
     text: el.hasAttribute(CLIENT_OWNED_TEXT_ATTR),
     show: el.hasAttribute(CLIENT_OWNED_SHOW_ATTR),
     disabled: el.hasAttribute(CLIENT_OWNED_DISABLED_ATTR),
     model: el.hasAttribute(CLIENT_OWNED_MODEL_ATTR),
+    classBinding: hasClassBindingAttr(el),
   };
+}
+
+/**
+ * Determine ignore mode for third-party widget DOM ownership (`data-w-ignore`).
+ * - `'children'` (default `data-w-ignore` or `data-w-ignore="children"`): sync root attributes, never morph inner DOM.
+ * - `'self'` (`data-w-ignore="self"`): never sync root attributes, morph inner DOM.
+ * - `'all'` (`data-w-ignore="all"`): never sync root attributes AND never morph inner DOM.
+ * Note: Parent removal/key-change STILL removes the node and triggers `onBeforeNodeRemove` cleanup.
+ */
+function getIgnoreMode(el) {
+  if (!el || typeof el.hasAttribute !== 'function' || !el.hasAttribute('data-w-ignore')) {
+    return null;
+  }
+  const raw = (el.getAttribute('data-w-ignore') || '').trim().toLowerCase();
+  if (raw === 'self') return 'self';
+  if (raw === 'all' || raw === 'both') return 'all';
+  return 'children';
+}
+
+function emitOwnershipConflict(debug, el, property, token, message) {
+  const isDev = typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production';
+  if (!debug && !isDev) return;
+  const tag = el && el.tagName ? el.tagName.toLowerCase() : 'element';
+  const idPart = el && el.id ? `#${el.id}` : '';
+  const payload = {
+    element: `${tag}${idPart}`,
+    property,
+    token: token || null,
+    message,
+  };
+  if (debug && typeof debug.recordEvent === 'function') {
+    debug.recordEvent('ownership:conflict', payload);
+  } else if (isDev && typeof console !== 'undefined' && typeof console.warn === 'function') {
+    console.warn(`[webspresso:ownership] ${message}`, payload);
+  }
+}
+
+/**
+ * Sync `class` attribute from `fromEl` onto `toEl`, preserving client-owned class tokens
+ * managed by `data-w-class`, `data-w-class:*`, and `data-w-loading-class`.
+ */
+function syncClassAttribute(toEl, fromEl, debug) {
+  const ownedClassState = toEl.__wOwnedClassState;
+  const fromRaw = fromEl.getAttribute('class');
+
+  if (!ownedClassState || ownedClassState.size === 0) {
+    if (fromRaw === null) {
+      if (toEl.hasAttribute('class')) toEl.removeAttribute('class');
+    } else if (toEl.getAttribute('class') !== fromRaw) {
+      toEl.setAttribute('class', fromRaw);
+    }
+    return;
+  }
+
+  const serverTokens = (fromRaw || '').trim().split(/\s+/).filter(Boolean);
+  const merged = [];
+  const seen = new Set();
+
+  for (let i = 0; i < serverTokens.length; i++) {
+    const tok = serverTokens[i];
+    if (ownedClassState.has(tok)) {
+      emitOwnershipConflict(
+        debug,
+        toEl,
+        'class',
+        tok,
+        `Ownership conflict on <${(toEl.tagName || 'el').toLowerCase()}>: both server class attribute and client data-w-class manage token "${tok}".`
+      );
+      continue;
+    }
+    if (!seen.has(tok)) {
+      seen.add(tok);
+      merged.push(tok);
+    }
+  }
+
+  for (const [tok, active] of ownedClassState.entries()) {
+    if (active && !seen.has(tok)) {
+      seen.add(tok);
+      merged.push(tok);
+    }
+  }
+
+  const nextClass = merged.join(' ');
+  if (nextClass) {
+    if (toEl.getAttribute('class') !== nextClass) {
+      toEl.setAttribute('class', nextClass);
+    }
+  } else if (toEl.hasAttribute('class')) {
+    toEl.removeAttribute('class');
+  }
 }
 
 /**
@@ -775,16 +877,62 @@ function getMorphNodeKey(node) {
 /**
  * Sync attributes from `fromEl` onto `toEl` while respecting client-owned properties
  * and preserving active focus / form draft states.
+ * When a client binding attribute (`data-w-show`, `data-w-disabled`, `data-w-class`, etc.)
+ * is removed in `fromEl`, ownership is immediately released so server HTML can reclaim it.
  */
-function syncElementAttributes(toEl, fromEl, ownership, insideDirtyForm = false) {
+function syncElementAttributes(toEl, fromEl, ownership, insideDirtyForm = false, debug = null) {
   const fromAttrs = fromEl.attributes;
   const toAttrs = Array.from(toEl.attributes);
+
+  const effectiveOwnership = {
+    text: ownership.text && fromEl.hasAttribute(CLIENT_OWNED_TEXT_ATTR),
+    show: ownership.show && fromEl.hasAttribute(CLIENT_OWNED_SHOW_ATTR),
+    disabled: ownership.disabled && fromEl.hasAttribute(CLIENT_OWNED_DISABLED_ATTR),
+    model: ownership.model && fromEl.hasAttribute(CLIENT_OWNED_MODEL_ATTR),
+    classBinding: ownership.classBinding && hasClassBindingAttr(fromEl),
+  };
+
+  if (ownership.classBinding && !effectiveOwnership.classBinding && toEl.__wOwnedClassState) {
+    toEl.__wOwnedClassState.clear();
+    delete toEl.__wOwnedClassState;
+  }
+
+  const wasHiddenByShow = effectiveOwnership.show && toEl.hasAttribute('hidden');
+
+  if (effectiveOwnership.show && fromEl.hasAttribute('hidden')) {
+    emitOwnershipConflict(
+      debug,
+      toEl,
+      'hidden',
+      null,
+      `Ownership conflict on <${(toEl.tagName || 'el').toLowerCase()}>: both server "hidden" attribute and client data-w-show manage visibility.`
+    );
+  }
+  if (effectiveOwnership.disabled && fromEl.hasAttribute('disabled')) {
+    emitOwnershipConflict(
+      debug,
+      toEl,
+      'disabled',
+      null,
+      `Ownership conflict on <${(toEl.tagName || 'el').toLowerCase()}>: both server "disabled" attribute and client data-w-disabled manage disabled state.`
+    );
+  }
+  if (effectiveOwnership.model && fromEl.hasAttribute('value') && fromEl.getAttribute('value') !== '') {
+    emitOwnershipConflict(
+      debug,
+      toEl,
+      'value',
+      null,
+      `Ownership conflict on <${(toEl.tagName || 'el').toLowerCase()}>: both server "value" attribute and client data-w-model manage input value.`
+    );
+  }
 
   // Remove attributes no longer present on server HTML, except client-managed runtime state
   for (let i = 0; i < toAttrs.length; i++) {
     const attrName = toAttrs[i].name;
-    if (ownership.disabled && attrName === 'disabled') continue;
-    if (ownership.show && attrName === 'hidden') continue;
+    if (attrName === 'class') continue; // Handled by syncClassAttribute
+    if (effectiveOwnership.disabled && (attrName === 'disabled' || attrName === 'aria-disabled')) continue;
+    if (effectiveOwnership.show && attrName === 'hidden') continue;
     if (attrName.startsWith('data-w-bound-')) continue;
     if (
       attrName === 'data-w-fragment-input' ||
@@ -798,11 +946,17 @@ function syncElementAttributes(toEl, fromEl, ownership, insideDirtyForm = false)
     }
   }
 
+  // If `data-w-show` was removed and server does not set `style`, clear inline `display: none`
+  if (ownership.show && !effectiveOwnership.show && !fromEl.hasAttribute('style') && toEl.style && toEl.style.display === 'none') {
+    toEl.style.display = '';
+  }
+
   // Set updated attributes from server HTML
   for (let i = 0; i < fromAttrs.length; i++) {
     const attr = fromAttrs[i];
-    if (ownership.disabled && attr.name === 'disabled') continue;
-    if (ownership.show && attr.name === 'hidden') continue;
+    if (attr.name === 'class') continue; // Handled by syncClassAttribute
+    if (effectiveOwnership.disabled && (attr.name === 'disabled' || attr.name === 'aria-disabled')) continue;
+    if (effectiveOwnership.show && attr.name === 'hidden') continue;
     if (attr.name === 'action' && toEl.tagName === 'FORM' && (toEl.__wCustomAction || insideDirtyForm)) {
       continue;
     }
@@ -810,6 +964,16 @@ function syncElementAttributes(toEl, fromEl, ownership, insideDirtyForm = false)
       toEl.setAttribute(attr.name, attr.value);
     }
   }
+
+  // Sync `class` preserving client-owned class tokens
+  syncClassAttribute(toEl, fromEl, debug);
+
+  // Restore `style.display = 'none'` if server `style` overwrote it while `data-w-show` hides the element
+  if (wasHiddenByShow && toEl.style && toEl.style.display !== 'none') {
+    toEl.style.display = 'none';
+  }
+
+  return effectiveOwnership;
 }
 
 /**
@@ -862,11 +1026,19 @@ function syncFormControlValue(toEl, fromEl, ownership, preserveDraft) {
 function morphDomTrees(toEl, fromEl, ctx = {}) {
   if (!toEl || !fromEl) return toEl;
 
-  const ownership = getClientOwnership(toEl);
+  const rawOwnership = getClientOwnership(toEl);
+  const ignoreMode = getIgnoreMode(toEl);
   const isForm = toEl.tagName === 'FORM';
   const insideDirtyForm = Boolean(ctx.insideDirtyForm || (isForm && isFormDirtyOrPreserved(toEl)));
 
-  syncElementAttributes(toEl, fromEl, ownership, insideDirtyForm);
+  const ownership =
+    ignoreMode === 'self' || ignoreMode === 'all'
+      ? rawOwnership
+      : syncElementAttributes(toEl, fromEl, rawOwnership, insideDirtyForm, ctx.debug);
+
+  if (ignoreMode === 'children' || ignoreMode === 'all') {
+    return toEl;
+  }
 
   if (toEl.tagName === 'INPUT' || toEl.tagName === 'TEXTAREA' || toEl.tagName === 'SELECT') {
     syncFormControlValue(toEl, fromEl, ownership, insideDirtyForm);
@@ -1172,6 +1344,167 @@ function createDatastarAdapter(options = {}) {
   }
 
   /**
+   * Parse `{ 'is-active': expr1, isOpen: expr2 }` into `Array<{ classes: string[], expr: string }>`.
+   */
+  function parseClassMapExpression(rawExpr) {
+    const trimmed = (rawExpr || '').trim();
+    if (!trimmed) return [];
+    const inner = trimmed.startsWith('{') && trimmed.endsWith('}')
+      ? trimmed.slice(1, -1).trim()
+      : trimmed;
+    if (!inner) return [];
+
+    const entries = [];
+    let current = '';
+    let parenDepth = 0;
+    let bracketDepth = 0;
+    let inQuote = null;
+
+    for (let i = 0; i < inner.length; i++) {
+      const ch = inner[i];
+      if (inQuote) {
+        current += ch;
+        if (ch === inQuote && inner[i - 1] !== '\\') inQuote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        inQuote = ch;
+        current += ch;
+        continue;
+      }
+      if (ch === '(') parenDepth++;
+      else if (ch === ')' && parenDepth > 0) parenDepth--;
+      else if (ch === '[') bracketDepth++;
+      else if (ch === ']' && bracketDepth > 0) bracketDepth--;
+
+      if (ch === ',' && parenDepth === 0 && bracketDepth === 0) {
+        if (current.trim()) entries.push(current.trim());
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    if (current.trim()) entries.push(current.trim());
+
+    const result = [];
+    for (const entry of entries) {
+      let colonIdx = -1;
+      let q = null;
+      for (let i = 0; i < entry.length; i++) {
+        const ch = entry[i];
+        if (q) {
+          if (ch === q && entry[i - 1] !== '\\') q = null;
+          continue;
+        }
+        if (ch === '"' || ch === "'") {
+          q = ch;
+          continue;
+        }
+        if (ch === ':') {
+          colonIdx = i;
+          break;
+        }
+      }
+      if (colonIdx <= 0) continue;
+      let rawKey = entry.slice(0, colonIdx).trim();
+      const expr = entry.slice(colonIdx + 1).trim();
+      if ((rawKey.startsWith("'") && rawKey.endsWith("'")) || (rawKey.startsWith('"') && rawKey.endsWith('"'))) {
+        rawKey = rawKey.slice(1, -1);
+      }
+      const classes = rawKey.split(/\s+/).filter(Boolean);
+      if (classes.length > 0 && expr) {
+        result.push({ classes, expr });
+      }
+    }
+    return result;
+  }
+
+  function parseEventScheduleModifiers(modifiers) {
+    let mode = null;
+    let waitMs = 250;
+    let leading = null;
+    let trailing = null;
+
+    const list = Array.from(modifiers);
+    for (let i = 0; i < list.length; i++) {
+      const mod = list[i];
+      if (mod === 'debounce' || mod === 'throttle') {
+        mode = mod;
+        const next = list[i + 1];
+        if (next && /^\d+(?:ms|s)?$/i.test(next)) {
+          waitMs = parseDelayMs(next, 250);
+          i++;
+        }
+      } else if (mod.startsWith('debounce-')) {
+        mode = 'debounce';
+        waitMs = parseDelayMs(mod.slice('debounce-'.length), 250);
+      } else if (mod.startsWith('throttle-')) {
+        mode = 'throttle';
+        waitMs = parseDelayMs(mod.slice('throttle-'.length), 250);
+      } else if (mod === 'leading') {
+        leading = true;
+      } else if (mod === 'trailing') {
+        trailing = true;
+      }
+    }
+
+    if (!mode) return null;
+    if (mode === 'debounce') {
+      return {
+        mode: 'debounce',
+        waitMs,
+        leading: leading === true,
+        trailing: trailing !== false,
+      };
+    }
+    return {
+      mode: 'throttle',
+      waitMs,
+      leading: leading !== false,
+      trailing: trailing !== false,
+    };
+  }
+
+  function getElementBindingSignature(el) {
+    if (!el || !el.attributes) return '';
+    const parts = [];
+    for (let i = 0; i < el.attributes.length; i++) {
+      const n = el.attributes[i].name;
+      if (
+        n === 'data-w-text' ||
+        n === 'data-w-show' ||
+        n === 'data-w-disabled' ||
+        n === 'data-w-model' ||
+        n === 'data-w-class' ||
+        n.startsWith('data-w-class:') ||
+        n === 'data-w-loading' ||
+        n === 'data-w-loading-hide' ||
+        n === 'data-w-loading-delay' ||
+        n === 'data-w-loading-class' ||
+        n === 'data-w-on' ||
+        n.startsWith('data-w-on:') ||
+        n === 'data-w-click'
+      ) {
+        parts.push(`${n}=${el.attributes[i].value}`);
+      }
+    }
+    parts.sort();
+    return parts.join('\n');
+  }
+
+  function setOwnedClassToken(el, token, active) {
+    if (!el) return;
+    if (!el.__wOwnedClassState) {
+      el.__wOwnedClassState = new Map();
+    }
+    el.__wOwnedClassState.set(token, Boolean(active));
+    if (el.classList) {
+      if (active) el.classList.add(token);
+      else el.classList.remove(token);
+    }
+  }
+
+  /**
    * Bind V1 declarative attributes inside `rootEl` for a controller instance.
    */
   function bindControllerDom({
@@ -1207,7 +1540,24 @@ function createDatastarAdapter(options = {}) {
 
     for (let i = 0; i < elements.length; i++) {
       const el = elements[i];
-      if (elementDisposersMap.has(el)) continue;
+      const sig = getElementBindingSignature(el);
+      if (elementDisposersMap.has(el)) {
+        if (el.__wBindingSig === sig) continue;
+        // Bindings on this preserved element changed (e.g. server added/removed data-w-show/class):
+        // dispose old bindings and re-bind cleanly.
+        const oldDisposers = elementDisposersMap.get(el);
+        for (let d = 0; d < oldDisposers.length; d++) {
+          try {
+            oldDisposers[d]();
+          } catch (_e) {}
+        }
+        elementDisposersMap.delete(el);
+        if (el.__wOwnedClassState) {
+          el.__wOwnedClassState.clear();
+          delete el.__wOwnedClassState;
+        }
+      }
+      el.__wBindingSig = sig;
       const elDisposers = [];
       elementDisposersMap.set(el, elDisposers);
 
@@ -1236,30 +1586,106 @@ function createDatastarAdapter(options = {}) {
         elDisposers.push(stop);
       }
 
-      // 2b. data-w-loading & data-w-loading-hide (declarative action/task busy indicators)
+      // 2a. data-w-class & data-w-class:<token>
+      if (el.hasAttribute('data-w-class')) {
+        const rawClassExpr = el.getAttribute('data-w-class') || '';
+        const classEntries = parseClassMapExpression(rawClassExpr);
+        for (let c = 0; c < classEntries.length; c++) {
+          const entry = classEntries[c];
+          const stop = engine.effect(() => {
+            if (!isConnected() || el.isConnected === false) return;
+            const active = Boolean(evaluateStateExpression(state, entry.expr));
+            for (let k = 0; k < entry.classes.length; k++) {
+              setOwnedClassToken(el, entry.classes[k], active);
+            }
+          });
+          elDisposers.push(stop);
+        }
+      }
+      if (el.attributes) {
+        for (let a = 0; a < el.attributes.length; a++) {
+          const attr = el.attributes[a];
+          if (attr.name.startsWith('data-w-class:')) {
+            const token = attr.name.slice('data-w-class:'.length).trim();
+            const expr = (attr.value || '').trim();
+            if (token && expr) {
+              const stop = engine.effect(() => {
+                if (!isConnected() || el.isConnected === false) return;
+                setOwnedClassToken(el, token, Boolean(evaluateStateExpression(state, expr)));
+              });
+              elDisposers.push(stop);
+            }
+          }
+        }
+      }
+
+      // 2b. data-w-loading & data-w-loading-hide (with optional data-w-loading-delay)
       if (el.hasAttribute('data-w-loading') || el.hasAttribute('data-w-loading-hide')) {
         const isHide = el.hasAttribute('data-w-loading-hide');
         const rawSpec = el.getAttribute(isHide ? 'data-w-loading-hide' : 'data-w-loading') || '';
         const initialDisplay = el.style && el.style.display && el.style.display !== 'none' ? el.style.display : '';
+        const delayMs = parseDelayMs(el.getAttribute('data-w-loading-delay'), 0);
         const loadingClasses = (el.getAttribute('data-w-loading-class') || '')
           .trim()
           .split(/\s+/)
           .filter(Boolean);
+
+        let delayTimer = null;
+        let generation = 0;
+        let visuallyActive = false;
+
+        const applyVisualLoading = (active) => {
+          visuallyActive = active;
+          toggleElementVisibility(el, isHide ? !active : active, initialDisplay);
+          if (loadingClasses.length > 0 && el.classList) {
+            for (let c = 0; c < loadingClasses.length; c++) {
+              setOwnedClassToken(el, loadingClasses[c], active);
+            }
+          }
+        };
+
+        // Initialize non-loading state synchronously when delay > 0
+        if (delayMs > 0) {
+          applyVisualLoading(false);
+        }
+
         const stop = engine.effect(() => {
           if (!isConnected() || el.isConnected === false) return;
           const active =
             typeof isLoadingTargetActive === 'function'
               ? Boolean(isLoadingTargetActive(rawSpec))
               : Boolean(evaluateStateExpression(state, rawSpec || '$busy'));
-          toggleElementVisibility(el, isHide ? !active : active, initialDisplay);
-          if (loadingClasses.length > 0 && el.classList) {
-            for (let c = 0; c < loadingClasses.length; c++) {
-              if (active) el.classList.add(loadingClasses[c]);
-              else el.classList.remove(loadingClasses[c]);
+
+          if (delayMs <= 0) {
+            applyVisualLoading(active);
+            return;
+          }
+
+          if (active) {
+            if (visuallyActive || delayTimer) return;
+            const gen = ++generation;
+            delayTimer = setTimeout(() => {
+              delayTimer = null;
+              if (gen !== generation || !isConnected() || el.isConnected === false) return;
+              applyVisualLoading(true);
+            }, delayMs);
+          } else {
+            generation++;
+            if (delayTimer) {
+              clearTimeout(delayTimer);
+              delayTimer = null;
             }
+            applyVisualLoading(false);
           }
         });
-        elDisposers.push(stop);
+        elDisposers.push(() => {
+          generation++;
+          if (delayTimer) {
+            clearTimeout(delayTimer);
+            delayTimer = null;
+          }
+          stop();
+        });
       }
 
       // 3. data-w-disabled
@@ -1401,15 +1827,149 @@ function createDatastarAdapter(options = {}) {
 
       // 5. Event bindings (data-w-on:<event>, data-w-on, data-w-click)
       const eventBindings = extractEventBindings(el);
-      for (const binding of eventBindings) {
-        const listener = (event) => {
-          if (!isConnected() || el.isConnected === false) return;
-          if (binding.modifiers.has('prevent')) event.preventDefault();
-          if (binding.modifiers.has('stop')) event.stopPropagation();
-          invokeAction(binding.actionName, event, el);
-        };
-        el.addEventListener(binding.eventName, listener);
-        elDisposers.push(() => el.removeEventListener(binding.eventName, listener));
+      if (eventBindings.length > 0) {
+        let isEventComposing = false;
+        const hasScheduled = eventBindings.some((b) => parseEventScheduleModifiers(b.modifiers) !== null);
+        if (hasScheduled) {
+          const onCompStart = () => {
+            isEventComposing = true;
+          };
+          const onCompEnd = () => {
+            isEventComposing = false;
+          };
+          el.addEventListener('compositionstart', onCompStart);
+          el.addEventListener('compositionend', onCompEnd);
+          elDisposers.push(() => {
+            try {
+              el.removeEventListener('compositionstart', onCompStart);
+              el.removeEventListener('compositionend', onCompEnd);
+            } catch (_e) {}
+          });
+        }
+
+        const parentForm = typeof el.closest === 'function' ? el.closest('form') : el.form || null;
+
+        for (const binding of eventBindings) {
+          const schedule = parseEventScheduleModifiers(binding.modifiers);
+          if (!schedule) {
+            const listener = (event) => {
+              if (!isConnected() || el.isConnected === false) return;
+              if (binding.modifiers.has('prevent')) event.preventDefault();
+              if (binding.modifiers.has('stop')) event.stopPropagation();
+              invokeAction(binding.actionName, event, el);
+            };
+            el.addEventListener(binding.eventName, listener);
+            elDisposers.push(() => el.removeEventListener(binding.eventName, listener));
+            continue;
+          }
+
+          let timer = null;
+          let lastExecTime = 0;
+          let pendingEvent = null;
+          let generation = 0;
+
+          const cancelPending = () => {
+            generation++;
+            if (timer) {
+              clearTimeout(timer);
+              timer = null;
+            }
+            pendingEvent = null;
+          };
+
+          const fireScheduled = (capturedEvent) => {
+            if (!isConnected() || el.isConnected === false) return;
+            invokeAction(binding.actionName, capturedEvent, el);
+          };
+
+          const listener = (event) => {
+            if (!isConnected() || el.isConnected === false) return;
+            if (binding.modifiers.has('prevent')) event.preventDefault();
+            if (binding.modifiers.has('stop')) event.stopPropagation();
+            if (
+              (event.isComposing || isEventComposing) &&
+              (binding.eventName === 'input' || binding.eventName === 'keydown' || binding.eventName === 'keyup')
+            ) {
+              return;
+            }
+
+            // Capture a safe event reference (never rely on event.currentTarget after async delay)
+            const capturedEvent = event;
+            const gen = generation;
+
+            if (schedule.mode === 'debounce') {
+              const callNow = schedule.leading && !timer;
+              if (timer) clearTimeout(timer);
+              pendingEvent = capturedEvent;
+              timer = setTimeout(() => {
+                timer = null;
+                if (gen !== generation) return;
+                const evtToPass = pendingEvent;
+                pendingEvent = null;
+                if (schedule.trailing && evtToPass) {
+                  fireScheduled(evtToPass);
+                }
+              }, schedule.waitMs);
+              if (callNow) {
+                pendingEvent = null;
+                fireScheduled(capturedEvent);
+              }
+            } else {
+              // Throttle: default leading + trailing
+              const now = Date.now();
+              const remaining = schedule.waitMs - (now - lastExecTime);
+              if (remaining <= 0 || remaining > schedule.waitMs) {
+                if (timer) {
+                  clearTimeout(timer);
+                  timer = null;
+                }
+                pendingEvent = null;
+                if (schedule.leading) {
+                  lastExecTime = now;
+                  fireScheduled(capturedEvent);
+                } else if (schedule.trailing) {
+                  pendingEvent = capturedEvent;
+                  timer = setTimeout(() => {
+                    timer = null;
+                    if (gen !== generation) return;
+                    lastExecTime = Date.now();
+                    const evtToPass = pendingEvent;
+                    pendingEvent = null;
+                    if (evtToPass) fireScheduled(evtToPass);
+                  }, schedule.waitMs);
+                }
+              } else if (schedule.trailing) {
+                pendingEvent = capturedEvent;
+                if (!timer) {
+                  timer = setTimeout(() => {
+                    timer = null;
+                    if (gen !== generation) return;
+                    lastExecTime = schedule.leading ? Date.now() : 0;
+                    const evtToPass = pendingEvent;
+                    pendingEvent = null;
+                    if (evtToPass) fireScheduled(evtToPass);
+                  }, remaining);
+                }
+              }
+            }
+          };
+
+          el.addEventListener(binding.eventName, listener);
+          elDisposers.push(() => {
+            cancelPending();
+            el.removeEventListener(binding.eventName, listener);
+          });
+
+          if (parentForm && typeof parentForm.addEventListener === 'function') {
+            const onFormReset = () => cancelPending();
+            parentForm.addEventListener('reset', onFormReset);
+            elDisposers.push(() => {
+              try {
+                parentForm.removeEventListener('reset', onFormReset);
+              } catch (_e) {}
+            });
+          }
+        }
       }
     }
 
@@ -1460,6 +2020,7 @@ function createDatastarAdapter(options = {}) {
     const morphed = morphDomTrees(targetEl, parsed, {
       onBeforeNodeRemove: lifecycleCallbacks.onBeforeNodeRemove,
       onNodeAdded: lifecycleCallbacks.onNodeAdded,
+      debug: options.debug || null,
     });
 
     // Restore focus & selection range if the focused element was preserved inside targetEl

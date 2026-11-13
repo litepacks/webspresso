@@ -5075,6 +5075,11 @@ export interface DefineApiOptions<
   middleware?: (string | import('express').RequestHandler | [string, Record<string, unknown>])[];
   flag?: string | { key: string; statusCode?: number; message?: string };
   schema?: TSchema;
+  validateFields?: boolean | string[];
+  validate?: (
+    req: ApiRequest<TBody, TParams, TQuery, THeaders>,
+    ctx: { body: TBody; fields: string[]; req: ApiRequest<TBody, TParams, TQuery, THeaders>; res: ApiResponse<TBody, TParams, TQuery, THeaders> }
+  ) => Promise<Record<string, string> | null | undefined> | Record<string, string> | null | undefined;
   response?: Record<number | string, unknown>;
   handler: (
     req: ApiRequest<TBody, TParams, TQuery, THeaders>,
@@ -5094,6 +5099,16 @@ export function defineApi<
 >(
   config: {
     schema: TSchema;
+    validateFields?: boolean | string[];
+    validate?: (
+      req: ApiRequest<ApiNoInfer<TBody>, ApiNoInfer<TParams>, ApiNoInfer<TQuery>, ApiNoInfer<THeaders>>,
+      ctx: {
+        body: ApiNoInfer<TBody>;
+        fields: string[];
+        req: ApiRequest<ApiNoInfer<TBody>, ApiNoInfer<TParams>, ApiNoInfer<TQuery>, ApiNoInfer<THeaders>>;
+        res: ApiResponse<ApiNoInfer<TBody>, ApiNoInfer<TParams>, ApiNoInfer<TQuery>, ApiNoInfer<THeaders>>;
+      }
+    ) => Promise<Record<string, string> | null | undefined> | Record<string, string> | null | undefined;
     description?: string;
     tags?: string[];
     middleware?: (string | import('express').RequestHandler | [string, Record<string, unknown>])[];
@@ -6417,6 +6432,12 @@ export interface ClientRequestCallOptions<
   timeout?: number;
   retry?: boolean | number | ClientRetryOptions;
   retryMutations?: boolean;
+  onUploadProgress?: (progress: {
+    loaded: number;
+    total: number;
+    percent: number | null;
+    lengthComputable: boolean;
+  }) => void;
 }
 
 export interface AppApiRouteMap {
@@ -6748,6 +6769,9 @@ export interface ClientFormHandle<
   readonly services: ClientServicesRegistry<TServices>;
   readonly pending: boolean;
   readonly dirty: boolean;
+  readonly touched: boolean;
+  readonly touchedFields: string[];
+  readonly submitted: boolean;
   readonly inputRevision: number;
   readonly draftKey: string;
   readonly baseline: TValues;
@@ -6756,6 +6780,34 @@ export interface ClientFormHandle<
   readonly lastError: ClientRequestError | Error | null;
   readonly fieldErrors: Partial<Record<keyof TValues & string, string>> & Record<string, string>;
   disabled: boolean;
+  isTouched(fieldName?: keyof TValues & string | string): boolean;
+  touch(fieldName?: keyof TValues & string | string): this;
+  untouch(fieldName?: keyof TValues & string | string): this;
+  validateField(
+    fieldName: (keyof TValues & string) | string,
+    options?: { url?: string; method?: string; contextFields?: string[] | '*' }
+  ): Promise<{
+    ok: boolean;
+    valid?: boolean;
+    stale?: boolean;
+    canceled?: boolean;
+    networkError?: boolean;
+    errors?: Record<string, string>;
+    error?: Error;
+  }>;
+  readonly uploads: Array<{
+    field: string;
+    name: string;
+    size: number;
+    status: 'uploading' | 'done' | 'error' | 'canceled';
+    loaded: number;
+    total: number;
+    percent: number | null;
+    error: string | null;
+  }>;
+  cancelUpload(): boolean;
+  createPreviewUrl(file: File | Blob, fieldName?: string): string | null;
+  revokePreviewUrls(fieldName?: string): void;
   values(): TValues;
   read(submitter?: HTMLElement | null): TValues;
   fill(values: Partial<TValues> & Record<string, unknown>, options?: ClientFormFillOptions): this;
@@ -6828,6 +6880,12 @@ export interface FragmentRefreshOptions {
   replaceInput?: boolean;
   timeout?: number;
   throwOnError?: boolean;
+  mode?: 'replace' | 'append' | 'prepend';
+  limit?: number;
+  target?: string;
+  removeKeys?: string[];
+  onBeforePatch?: (el: Element, inst: any) => void;
+  onAfterPatch?: (el: Element, inst: any) => void;
   onSuccess?: (result: FragmentRefreshResult) => void | Promise<void>;
   onFailure?: (error: Error) => void | Promise<void>;
   onError?: (error: Error) => void | Promise<void>;
@@ -6849,8 +6907,15 @@ export interface ControllerErrorMeta {
   task?: string;
   event?: Event;
   actionEl?: HTMLElement | null;
-  phase?: 'action' | 'task' | 'connect' | 'disconnect';
+  phase?: 'action' | 'task' | 'connect' | 'disconnect' | 'beforePatch' | 'afterPatch';
   [key: string]: unknown;
+}
+
+export interface FragmentPatchHookMeta {
+  fragmentId?: string | null;
+  fragmentName?: string | null;
+  isFragmentRoot?: boolean;
+  isDescendant?: boolean;
 }
 
 export type WatchSource<T = any> =
@@ -7001,6 +7066,22 @@ export interface ControllerDefinition<
       TServices
     >
   ) => void;
+  beforePatch?: (
+    ctx: ControllerContext<
+      [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> },
+      Record<string, ClientTask>,
+      TServices
+    >,
+    meta: FragmentPatchHookMeta
+  ) => void;
+  afterPatch?: (
+    ctx: ControllerContext<
+      [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> },
+      Record<string, ClientTask>,
+      TServices
+    >,
+    meta: FragmentPatchHookMeta
+  ) => void | Promise<void>;
   onError?: ControllerErrorHandler<
     [TState][TState extends any ? 0 : never] & { readonly [K in keyof TComputed]: ReturnType<TComputed[K]> },
     Record<string, ClientTask>,
@@ -7065,6 +7146,9 @@ export interface FragmentDefinition<TInput = Record<string, unknown>, TData = Re
   refetchOnVisit?: ClientRefetchPolicy;
   refetchInterval?: number | string | false;
   refetchIntervalInBackground?: boolean;
+  lazy?: boolean;
+  placeholder?: string | ((ctx: { input: TInput; instanceId: string; name: string }) => string);
+  placeholderTemplate?: string;
   load?: (context: FragmentLoaderContext<TInput>) => TData | Promise<TData>;
 }
 

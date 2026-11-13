@@ -229,13 +229,71 @@ async function executeApiPipeline(params) {
       req.service.invalidateTags = req.service.invalidateByTags;
     }
 
+    const rawValidateHeader = req && req.headers ? req.headers['x-webspresso-validate-fields'] : null;
+    const hasValidateHeader = Boolean(rawValidateHeader && String(rawValidateHeader).trim());
+    if (hasValidateHeader && !(apiDef && apiDef.validateFields)) {
+      if (res && typeof res.status === 'function' && typeof res.json === 'function') {
+        return res.status(400).json({
+          status: 400,
+          error: 'Field validation not enabled on this endpoint',
+          message: 'Field validation not enabled on this endpoint',
+          code: 'FIELD_VALIDATION_NOT_ENABLED',
+        });
+      }
+      const err = new Error('Field validation not enabled on this endpoint');
+      err.status = 400;
+      throw err;
+    }
+
+    const isFieldValidationRequest = Boolean(hasValidateHeader && apiDef && apiDef.validateFields);
+    const requestedValidateFields = isFieldValidationRequest
+      ? String(rawValidateHeader).split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
+    const allowedValidateFields =
+      isFieldValidationRequest && Array.isArray(apiDef.validateFields)
+        ? requestedValidateFields.filter((f) => apiDef.validateFields.includes(f))
+        : requestedValidateFields;
+    const fieldValidationErrors = {};
+
     // 2. Schema validation
     const pagesDir = context.pagesDir || appOptions.pagesDir || 'pages';
     const routeDir = descriptor._routeDir !== undefined
       ? descriptor._routeDir
       : (descriptor._routeDir = descriptor.file ? path.dirname(descriptor.file) : '');
 
-    if (compiledSchema) {
+    if (isFieldValidationRequest) {
+      req.input = {
+        body: req.body,
+        params: req.params,
+        query: req.query,
+      };
+      if (compiledSchema && compiledSchema.body) {
+        let issues = null;
+        if (typeof compiledSchema.body.safeParse === 'function') {
+          const parsed = compiledSchema.body.safeParse(req.body);
+          if (parsed.success) {
+            req.input.body = parsed.data;
+          } else if (parsed.error && Array.isArray(parsed.error.issues)) {
+            issues = parsed.error.issues;
+          }
+        } else if (typeof compiledSchema.body.parse === 'function') {
+          try {
+            req.input.body = compiledSchema.body.parse(req.body);
+          } catch (parseErr) {
+            if (Array.isArray(parseErr?.issues)) issues = parseErr.issues;
+          }
+        }
+        if (issues) {
+          const translated = translateValidationIssues(issues, { req, pagesDir, routeDir, isDev });
+          for (const issue of translated) {
+            const pathKey = Array.isArray(issue.path) && issue.path.length > 0 ? String(issue.path[0]) : null;
+            if (pathKey && allowedValidateFields.includes(pathKey) && !fieldValidationErrors[pathKey]) {
+              fieldValidationErrors[pathKey] = issue.message || 'Invalid value';
+            }
+          }
+        }
+      }
+    } else if (compiledSchema) {
       try {
         validateRequestInput(req, compiledSchema);
       } catch (err) {
@@ -346,6 +404,29 @@ async function executeApiPipeline(params) {
       if (middlewares.length > 0) {
         await runMiddlewares(middlewares, req, res);
         if (res && (res.headersSent || res.writableEnded || res.finished)) return;
+      }
+
+      if (isFieldValidationRequest) {
+        if (typeof apiDef.validate === 'function') {
+          const customErrs = await apiDef.validate(apiCtx, allowedValidateFields);
+          if (customErrs && typeof customErrs === 'object') {
+            for (const [k, v] of Object.entries(customErrs)) {
+              if (allowedValidateFields.includes(k) && v && !fieldValidationErrors[k]) {
+                fieldValidationErrors[k] = String(v);
+              }
+            }
+          }
+        }
+        const payload = {
+          ok: Object.keys(fieldValidationErrors).length === 0,
+          valid: Object.keys(fieldValidationErrors).length === 0,
+          errors: fieldValidationErrors,
+          validatedFields: allowedValidateFields,
+        };
+        if (res && typeof res.status === 'function' && typeof res.json === 'function') {
+          return res.status(200).json(payload);
+        }
+        return payload;
       }
 
       const result = await handlerFn(req, res, apiCtx);

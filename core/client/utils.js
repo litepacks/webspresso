@@ -356,14 +356,59 @@ function uid(prefix = 'id', len = 5) {
 }
 
 /**
+ * Parse a delay/duration attribute such as `"200"`, `"200ms"`, or `"1s"` into milliseconds.
+ *
+ * @param {string|number|null|undefined} raw
+ * @param {number} [fallback=0]
+ * @returns {number}
+ */
+function parseDelayMs(raw, fallback = 0) {
+  if (raw === null || raw === undefined || raw === '') return fallback;
+  if (typeof raw === 'number') return Number.isFinite(raw) && raw >= 0 ? raw : fallback;
+  const s = String(raw).trim().toLowerCase();
+  if (!s) return fallback;
+  const msMatch = s.match(/^(\d+(?:\.\d+)?)\s*ms$/);
+  if (msMatch) return Math.max(0, Math.round(Number(msMatch[1])));
+  const sMatch = s.match(/^(\d+(?:\.\d+)?)\s*s$/);
+  if (sMatch) return Math.max(0, Math.round(Number(sMatch[1]) * 1000));
+  const num = Number(s);
+  return Number.isFinite(num) && num >= 0 ? Math.round(num) : fallback;
+}
+
+/**
  * Apply or restore automatic busy/loading state (`data-w-busy`, `aria-busy`, `disabled`,
  * `data-w-loading-text` / `data-w-disable-with`, and `data-w-loading-class`) on an interactive element.
+ * Respects `data-w-loading-delay` for visual indicators (`loading-text`, `loading-class`) while
+ * applying `data-w-busy`, `aria-busy`, and `disabled` double-submit protection immediately.
  *
  * @param {Element|null|undefined} el
  * @param {boolean} isBusy
  */
 function setElementBusyState(el, isBusy) {
   if (!el || typeof el.setAttribute !== 'function') return;
+
+  const applyVisualBusy = () => {
+    const tag = el.tagName || '';
+    const loadingText = el.getAttribute('data-w-loading-text') ?? el.getAttribute('data-w-disable-with');
+    if (loadingText !== null) {
+      if (tag === 'INPUT' && (el.type === 'submit' || el.type === 'button')) {
+        el.__wOrigValue = el.value;
+        el.value = loadingText;
+      } else {
+        el.__wOrigText = el.textContent;
+        el.textContent = loadingText;
+      }
+    }
+
+    const loadingClass = safeTrim(el.getAttribute('data-w-loading-class'));
+    if (loadingClass && el.classList) {
+      const classes = loadingClass.split(/\s+/).filter(Boolean);
+      el.__wAddedClasses = classes;
+      for (let i = 0; i < classes.length; i++) {
+        el.classList.add(classes[i]);
+      }
+    }
+  };
 
   if (isBusy) {
     el.__wBusyCount = (el.__wBusyCount || 0) + 1;
@@ -391,24 +436,22 @@ function setElementBusyState(el, isBusy) {
       el.setAttribute('aria-disabled', 'true');
     }
 
-    const loadingText = el.getAttribute('data-w-loading-text') ?? el.getAttribute('data-w-disable-with');
-    if (loadingText !== null) {
-      if (tag === 'INPUT' && (el.type === 'submit' || el.type === 'button')) {
-        el.__wOrigValue = el.value;
-        el.value = loadingText;
-      } else {
-        el.__wOrigText = el.textContent;
-        el.textContent = loadingText;
-      }
+    const delayMs = parseDelayMs(el.getAttribute('data-w-loading-delay'), 0);
+    el.__wBusyGen = (el.__wBusyGen || 0) + 1;
+    if (el.__wBusyTimer) {
+      clearTimeout(el.__wBusyTimer);
+      el.__wBusyTimer = null;
     }
 
-    const loadingClass = safeTrim(el.getAttribute('data-w-loading-class'));
-    if (loadingClass && el.classList) {
-      const classes = loadingClass.split(/\s+/).filter(Boolean);
-      el.__wAddedClasses = classes;
-      for (let i = 0; i < classes.length; i++) {
-        el.classList.add(classes[i]);
-      }
+    if (delayMs > 0) {
+      const gen = el.__wBusyGen;
+      el.__wBusyTimer = setTimeout(() => {
+        el.__wBusyTimer = null;
+        if (el.__wBusyGen !== gen || !el.__wActionBusy || el.isConnected === false) return;
+        applyVisualBusy();
+      }, delayMs);
+    } else {
+      applyVisualBusy();
     }
   } else {
     if (!el.__wBusyCount) return;
@@ -416,6 +459,12 @@ function setElementBusyState(el, isBusy) {
     if (el.__wBusyCount > 0) return;
 
     el.__wActionBusy = false;
+    el.__wBusyGen = (el.__wBusyGen || 0) + 1;
+    if (el.__wBusyTimer) {
+      clearTimeout(el.__wBusyTimer);
+      el.__wBusyTimer = null;
+    }
+
     el.removeAttribute('data-w-busy');
     el.removeAttribute('aria-busy');
 
@@ -464,6 +513,7 @@ module.exports = {
   parseDataValue,
   decorateElement,
   parseDurationMs,
+  parseDelayMs,
   parseRefetchMode,
   randomId,
   uid,

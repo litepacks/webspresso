@@ -1528,6 +1528,42 @@ bootClient({
    - Controller `persist` restores validated keys over `state()` defaults on mount and ignores corrupted or schema-mismatched storage entries.
    - Fragment `data-w-persist-input` keeps `inst.input` aligned with the rendered SSR HTML until its automatic reconciliation refresh finishes and updates the DOM, and explicit user resets to default values (such as `'all'`) are persisted so subsequent DOM scans never revert to an older filter.
 
+---
+
+## 19. LiveView / Livewire-Inspired Enhancements
+
+All enhancements below are **opt-in** and extend the existing controller, form, fragment, and API contracts without introducing a second state store, renderer, or expression language:
+
+1. **Third-Party Widget DOM Ownership (`data-w-ignore`)**:
+   - `data-w-ignore` / `data-w-ignore="children"`: morpher updates root attributes while leaving inner DOM untouched.
+   - `data-w-ignore="self"`: skips root attribute sync while morphing children.
+   - `data-w-ignore="all"`: skips both root attribute sync and inner DOM morphing.
+   - Removing the parent container or changing its `data-w-key` still removes the element and runs `disconnect()` / cleanup.
+2. **Patch Class & Visibility Ownership (`data-w-class`, `data-w-class:*`)**:
+   - Client-managed tokens from `data-w-class="{ 'is-open': open }"` or `data-w-class:is-open="open"` are preserved while server `class` updates merge cleanly.
+   - Removing `data-w-class`, `data-w-show`, `data-w-disabled`, or `data-w-model` in server HTML immediately releases client ownership.
+   - In development mode, overlapping server and client writes to the same token or attribute emit `ownership:conflict` diagnostics.
+3. **Patch Lifecycle Hooks (`beforePatch` / `afterPatch`)**:
+   - `beforePatch(ctx, meta)` runs synchronously before morphing (outer ancestor → inner descendant); `afterPatch(ctx, meta)` runs after morphing (inner descendant → outer ancestor).
+   - Never invoked for superseded fragment responses; errors are isolated via `onError`; rapid patch bursts (>5 in 100ms) emit `PATCH_HOOK_LOOP_DETECTED`.
+4. **Form `touched`, `submitted` & `errorDisplay: 'touched'`**:
+   - `form.touched`, `form.touchedFields`, `form.submitted`, `form.isTouched()`, `form.touch()`, and `form.untouch()` are tracked independently of `form.dirty`.
+   - Set `data-w-error-mode="touched"` to show errors only for interacted fields until submit. `form.fill(values, { baseline: true })` clears `touched` and previous errors.
+5. **Delayed Loading Indicator (`data-w-loading-delay="200ms"`)**:
+   - `disabled`, `data-w-busy`, and `aria-busy` apply immediately to block double-submits; visual `data-w-loading-text` / `data-w-loading-class` / `data-w-loading-hide` appear only if the request outlives the delay.
+6. **Event Debounce & Throttle (`data-w-on:input.debounce.300`)**:
+   - `data-w-model` updates immediately while actions respect `.debounce.<ms>` / `.throttle.<ms>` with `.leading` / `.trailing`, IME composition guards, captured `actionEl`, and cancellation on form `reset` or unmount.
+7. **Lazy SSR Fragments (`lazy: true`)**:
+   - `defineFragment({ lazy: true, placeholder })` skips `load()` on initial SSR, renders `data-w-lazy="visible"`, and batches visible fragments via `IntersectionObserver`. Invalidations while unloaded mark stale without fetching; `refresh()` loads immediately.
+   - *Progressive enhancement boundary*: lazy fragment content relies on client JavaScript; keep SEO-critical content in standard eager SSR.
+8. **Field-Level Server Validation (`defineApi({ validateFields, validate })`)**:
+   - `form.validateField(name)` sends `X-Webspresso-Validate-Fields` to validate only requested fields without running the mutation `handler`. Stale responses are discarded, other fields' errors are preserved, and network/5xx errors emit `w-form:validation-error` without marking the field invalid.
+9. **Incremental Keyed List Updates**:
+   - `fragment.refresh(input, { mode: 'append' | 'prepend', limit, target, removeKeys })` updates keyed items (`data-w-key` / `id`) in place, appends/prepends new items, removes `removeKeys`, and trims to `limit`.
+10. **Upload Progress, Cancel & Preview URLs**:
+    - Requests with `onUploadProgress` use `XMLHttpRequest` for real `lengthComputable` progress; `form.uploads`, `form.cancelUpload()`, `form.createPreviewUrl()`, and `form.revokePreviewUrls()` manage upload state and `URL.revokeObjectURL()` cleanup.
+
+
 
 
 

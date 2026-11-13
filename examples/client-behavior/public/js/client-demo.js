@@ -359,14 +359,59 @@ function uid(prefix = 'id', len = 5) {
 }
 
 /**
+ * Parse a delay/duration attribute such as `"200"`, `"200ms"`, or `"1s"` into milliseconds.
+ *
+ * @param {string|number|null|undefined} raw
+ * @param {number} [fallback=0]
+ * @returns {number}
+ */
+function parseDelayMs(raw, fallback = 0) {
+  if (raw === null || raw === undefined || raw === '') return fallback;
+  if (typeof raw === 'number') return Number.isFinite(raw) && raw >= 0 ? raw : fallback;
+  const s = String(raw).trim().toLowerCase();
+  if (!s) return fallback;
+  const msMatch = s.match(/^(\d+(?:\.\d+)?)\s*ms$/);
+  if (msMatch) return Math.max(0, Math.round(Number(msMatch[1])));
+  const sMatch = s.match(/^(\d+(?:\.\d+)?)\s*s$/);
+  if (sMatch) return Math.max(0, Math.round(Number(sMatch[1]) * 1000));
+  const num = Number(s);
+  return Number.isFinite(num) && num >= 0 ? Math.round(num) : fallback;
+}
+
+/**
  * Apply or restore automatic busy/loading state (`data-w-busy`, `aria-busy`, `disabled`,
  * `data-w-loading-text` / `data-w-disable-with`, and `data-w-loading-class`) on an interactive element.
+ * Respects `data-w-loading-delay` for visual indicators (`loading-text`, `loading-class`) while
+ * applying `data-w-busy`, `aria-busy`, and `disabled` double-submit protection immediately.
  *
  * @param {Element|null|undefined} el
  * @param {boolean} isBusy
  */
 function setElementBusyState(el, isBusy) {
   if (!el || typeof el.setAttribute !== 'function') return;
+
+  const applyVisualBusy = () => {
+    const tag = el.tagName || '';
+    const loadingText = el.getAttribute('data-w-loading-text') ?? el.getAttribute('data-w-disable-with');
+    if (loadingText !== null) {
+      if (tag === 'INPUT' && (el.type === 'submit' || el.type === 'button')) {
+        el.__wOrigValue = el.value;
+        el.value = loadingText;
+      } else {
+        el.__wOrigText = el.textContent;
+        el.textContent = loadingText;
+      }
+    }
+
+    const loadingClass = safeTrim(el.getAttribute('data-w-loading-class'));
+    if (loadingClass && el.classList) {
+      const classes = loadingClass.split(/\s+/).filter(Boolean);
+      el.__wAddedClasses = classes;
+      for (let i = 0; i < classes.length; i++) {
+        el.classList.add(classes[i]);
+      }
+    }
+  };
 
   if (isBusy) {
     el.__wBusyCount = (el.__wBusyCount || 0) + 1;
@@ -394,24 +439,22 @@ function setElementBusyState(el, isBusy) {
       el.setAttribute('aria-disabled', 'true');
     }
 
-    const loadingText = el.getAttribute('data-w-loading-text') ?? el.getAttribute('data-w-disable-with');
-    if (loadingText !== null) {
-      if (tag === 'INPUT' && (el.type === 'submit' || el.type === 'button')) {
-        el.__wOrigValue = el.value;
-        el.value = loadingText;
-      } else {
-        el.__wOrigText = el.textContent;
-        el.textContent = loadingText;
-      }
+    const delayMs = parseDelayMs(el.getAttribute('data-w-loading-delay'), 0);
+    el.__wBusyGen = (el.__wBusyGen || 0) + 1;
+    if (el.__wBusyTimer) {
+      clearTimeout(el.__wBusyTimer);
+      el.__wBusyTimer = null;
     }
 
-    const loadingClass = safeTrim(el.getAttribute('data-w-loading-class'));
-    if (loadingClass && el.classList) {
-      const classes = loadingClass.split(/\s+/).filter(Boolean);
-      el.__wAddedClasses = classes;
-      for (let i = 0; i < classes.length; i++) {
-        el.classList.add(classes[i]);
-      }
+    if (delayMs > 0) {
+      const gen = el.__wBusyGen;
+      el.__wBusyTimer = setTimeout(() => {
+        el.__wBusyTimer = null;
+        if (el.__wBusyGen !== gen || !el.__wActionBusy || el.isConnected === false) return;
+        applyVisualBusy();
+      }, delayMs);
+    } else {
+      applyVisualBusy();
     }
   } else {
     if (!el.__wBusyCount) return;
@@ -419,6 +462,12 @@ function setElementBusyState(el, isBusy) {
     if (el.__wBusyCount > 0) return;
 
     el.__wActionBusy = false;
+    el.__wBusyGen = (el.__wBusyGen || 0) + 1;
+    if (el.__wBusyTimer) {
+      clearTimeout(el.__wBusyTimer);
+      el.__wBusyTimer = null;
+    }
+
     el.removeAttribute('data-w-busy');
     el.removeAttribute('aria-busy');
 
@@ -467,6 +516,7 @@ module.exports = {
   parseDataValue,
   decorateElement,
   parseDurationMs,
+  parseDelayMs,
   parseRefetchMode,
   randomId,
   uid,
@@ -834,14 +884,59 @@ function uid(prefix = 'id', len = 5) {
 }
 
 /**
+ * Parse a delay/duration attribute such as `"200"`, `"200ms"`, or `"1s"` into milliseconds.
+ *
+ * @param {string|number|null|undefined} raw
+ * @param {number} [fallback=0]
+ * @returns {number}
+ */
+function parseDelayMs(raw, fallback = 0) {
+  if (raw === null || raw === undefined || raw === '') return fallback;
+  if (typeof raw === 'number') return Number.isFinite(raw) && raw >= 0 ? raw : fallback;
+  const s = String(raw).trim().toLowerCase();
+  if (!s) return fallback;
+  const msMatch = s.match(/^(\d+(?:\.\d+)?)\s*ms$/);
+  if (msMatch) return Math.max(0, Math.round(Number(msMatch[1])));
+  const sMatch = s.match(/^(\d+(?:\.\d+)?)\s*s$/);
+  if (sMatch) return Math.max(0, Math.round(Number(sMatch[1]) * 1000));
+  const num = Number(s);
+  return Number.isFinite(num) && num >= 0 ? Math.round(num) : fallback;
+}
+
+/**
  * Apply or restore automatic busy/loading state (`data-w-busy`, `aria-busy`, `disabled`,
  * `data-w-loading-text` / `data-w-disable-with`, and `data-w-loading-class`) on an interactive element.
+ * Respects `data-w-loading-delay` for visual indicators (`loading-text`, `loading-class`) while
+ * applying `data-w-busy`, `aria-busy`, and `disabled` double-submit protection immediately.
  *
  * @param {Element|null|undefined} el
  * @param {boolean} isBusy
  */
 function setElementBusyState(el, isBusy) {
   if (!el || typeof el.setAttribute !== 'function') return;
+
+  const applyVisualBusy = () => {
+    const tag = el.tagName || '';
+    const loadingText = el.getAttribute('data-w-loading-text') ?? el.getAttribute('data-w-disable-with');
+    if (loadingText !== null) {
+      if (tag === 'INPUT' && (el.type === 'submit' || el.type === 'button')) {
+        el.__wOrigValue = el.value;
+        el.value = loadingText;
+      } else {
+        el.__wOrigText = el.textContent;
+        el.textContent = loadingText;
+      }
+    }
+
+    const loadingClass = safeTrim(el.getAttribute('data-w-loading-class'));
+    if (loadingClass && el.classList) {
+      const classes = loadingClass.split(/\s+/).filter(Boolean);
+      el.__wAddedClasses = classes;
+      for (let i = 0; i < classes.length; i++) {
+        el.classList.add(classes[i]);
+      }
+    }
+  };
 
   if (isBusy) {
     el.__wBusyCount = (el.__wBusyCount || 0) + 1;
@@ -869,24 +964,22 @@ function setElementBusyState(el, isBusy) {
       el.setAttribute('aria-disabled', 'true');
     }
 
-    const loadingText = el.getAttribute('data-w-loading-text') ?? el.getAttribute('data-w-disable-with');
-    if (loadingText !== null) {
-      if (tag === 'INPUT' && (el.type === 'submit' || el.type === 'button')) {
-        el.__wOrigValue = el.value;
-        el.value = loadingText;
-      } else {
-        el.__wOrigText = el.textContent;
-        el.textContent = loadingText;
-      }
+    const delayMs = parseDelayMs(el.getAttribute('data-w-loading-delay'), 0);
+    el.__wBusyGen = (el.__wBusyGen || 0) + 1;
+    if (el.__wBusyTimer) {
+      clearTimeout(el.__wBusyTimer);
+      el.__wBusyTimer = null;
     }
 
-    const loadingClass = safeTrim(el.getAttribute('data-w-loading-class'));
-    if (loadingClass && el.classList) {
-      const classes = loadingClass.split(/\s+/).filter(Boolean);
-      el.__wAddedClasses = classes;
-      for (let i = 0; i < classes.length; i++) {
-        el.classList.add(classes[i]);
-      }
+    if (delayMs > 0) {
+      const gen = el.__wBusyGen;
+      el.__wBusyTimer = setTimeout(() => {
+        el.__wBusyTimer = null;
+        if (el.__wBusyGen !== gen || !el.__wActionBusy || el.isConnected === false) return;
+        applyVisualBusy();
+      }, delayMs);
+    } else {
+      applyVisualBusy();
     }
   } else {
     if (!el.__wBusyCount) return;
@@ -894,6 +987,12 @@ function setElementBusyState(el, isBusy) {
     if (el.__wBusyCount > 0) return;
 
     el.__wActionBusy = false;
+    el.__wBusyGen = (el.__wBusyGen || 0) + 1;
+    if (el.__wBusyTimer) {
+      clearTimeout(el.__wBusyTimer);
+      el.__wBusyTimer = null;
+    }
+
     el.removeAttribute('data-w-busy');
     el.removeAttribute('aria-busy');
 
@@ -942,6 +1041,7 @@ module.exports = {
   parseDataValue,
   decorateElement,
   parseDurationMs,
+  parseDelayMs,
   parseRefetchMode,
   randomId,
   uid,
@@ -977,7 +1077,7 @@ module.exports = {
  *    external package is not installed in `node_modules`.
  */
 
-const { isArray, getByPath, setByPath } = require('../utils');
+const { isArray, getByPath, setByPath, parseDelayMs } = require('../utils');
 
 const PluginType = {
   Attribute: 1,
@@ -1656,20 +1756,122 @@ const CLIENT_OWNED_TEXT_ATTR = 'data-w-text';
 const CLIENT_OWNED_SHOW_ATTR = 'data-w-show';
 const CLIENT_OWNED_DISABLED_ATTR = 'data-w-disabled';
 const CLIENT_OWNED_MODEL_ATTR = 'data-w-model';
+const CLIENT_OWNED_CLASS_ATTR = 'data-w-class';
+
+function hasClassBindingAttr(el) {
+  if (!el || !el.attributes) return false;
+  if (el.hasAttribute && el.hasAttribute(CLIENT_OWNED_CLASS_ATTR)) return true;
+  for (let i = 0; i < el.attributes.length; i++) {
+    if (el.attributes[i].name.startsWith('data-w-class:')) return true;
+  }
+  return false;
+}
 
 /**
  * Determine whether a node has client bindings owning specific DOM properties.
  */
 function getClientOwnership(el) {
   if (!el || typeof el.hasAttribute !== 'function') {
-    return { text: false, show: false, disabled: false, model: false };
+    return { text: false, show: false, disabled: false, model: false, classBinding: false };
   }
   return {
     text: el.hasAttribute(CLIENT_OWNED_TEXT_ATTR),
     show: el.hasAttribute(CLIENT_OWNED_SHOW_ATTR),
     disabled: el.hasAttribute(CLIENT_OWNED_DISABLED_ATTR),
     model: el.hasAttribute(CLIENT_OWNED_MODEL_ATTR),
+    classBinding: hasClassBindingAttr(el),
   };
+}
+
+/**
+ * Determine ignore mode for third-party widget DOM ownership (`data-w-ignore`).
+ * - `'children'` (default `data-w-ignore` or `data-w-ignore="children"`): sync root attributes, never morph inner DOM.
+ * - `'self'` (`data-w-ignore="self"`): never sync root attributes, morph inner DOM.
+ * - `'all'` (`data-w-ignore="all"`): never sync root attributes AND never morph inner DOM.
+ * Note: Parent removal/key-change STILL removes the node and triggers `onBeforeNodeRemove` cleanup.
+ */
+function getIgnoreMode(el) {
+  if (!el || typeof el.hasAttribute !== 'function' || !el.hasAttribute('data-w-ignore')) {
+    return null;
+  }
+  const raw = (el.getAttribute('data-w-ignore') || '').trim().toLowerCase();
+  if (raw === 'self') return 'self';
+  if (raw === 'all' || raw === 'both') return 'all';
+  return 'children';
+}
+
+function emitOwnershipConflict(debug, el, property, token, message) {
+  const isDev = typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production';
+  if (!debug && !isDev) return;
+  const tag = el && el.tagName ? el.tagName.toLowerCase() : 'element';
+  const idPart = el && el.id ? `#${el.id}` : '';
+  const payload = {
+    element: `${tag}${idPart}`,
+    property,
+    token: token || null,
+    message,
+  };
+  if (debug && typeof debug.recordEvent === 'function') {
+    debug.recordEvent('ownership:conflict', payload);
+  } else if (isDev && typeof console !== 'undefined' && typeof console.warn === 'function') {
+    console.warn(`[webspresso:ownership] ${message}`, payload);
+  }
+}
+
+/**
+ * Sync `class` attribute from `fromEl` onto `toEl`, preserving client-owned class tokens
+ * managed by `data-w-class`, `data-w-class:*`, and `data-w-loading-class`.
+ */
+function syncClassAttribute(toEl, fromEl, debug) {
+  const ownedClassState = toEl.__wOwnedClassState;
+  const fromRaw = fromEl.getAttribute('class');
+
+  if (!ownedClassState || ownedClassState.size === 0) {
+    if (fromRaw === null) {
+      if (toEl.hasAttribute('class')) toEl.removeAttribute('class');
+    } else if (toEl.getAttribute('class') !== fromRaw) {
+      toEl.setAttribute('class', fromRaw);
+    }
+    return;
+  }
+
+  const serverTokens = (fromRaw || '').trim().split(/\s+/).filter(Boolean);
+  const merged = [];
+  const seen = new Set();
+
+  for (let i = 0; i < serverTokens.length; i++) {
+    const tok = serverTokens[i];
+    if (ownedClassState.has(tok)) {
+      emitOwnershipConflict(
+        debug,
+        toEl,
+        'class',
+        tok,
+        `Ownership conflict on <${(toEl.tagName || 'el').toLowerCase()}>: both server class attribute and client data-w-class manage token "${tok}".`
+      );
+      continue;
+    }
+    if (!seen.has(tok)) {
+      seen.add(tok);
+      merged.push(tok);
+    }
+  }
+
+  for (const [tok, active] of ownedClassState.entries()) {
+    if (active && !seen.has(tok)) {
+      seen.add(tok);
+      merged.push(tok);
+    }
+  }
+
+  const nextClass = merged.join(' ');
+  if (nextClass) {
+    if (toEl.getAttribute('class') !== nextClass) {
+      toEl.setAttribute('class', nextClass);
+    }
+  } else if (toEl.hasAttribute('class')) {
+    toEl.removeAttribute('class');
+  }
 }
 
 /**
@@ -1728,16 +1930,62 @@ function getMorphNodeKey(node) {
 /**
  * Sync attributes from `fromEl` onto `toEl` while respecting client-owned properties
  * and preserving active focus / form draft states.
+ * When a client binding attribute (`data-w-show`, `data-w-disabled`, `data-w-class`, etc.)
+ * is removed in `fromEl`, ownership is immediately released so server HTML can reclaim it.
  */
-function syncElementAttributes(toEl, fromEl, ownership, insideDirtyForm = false) {
+function syncElementAttributes(toEl, fromEl, ownership, insideDirtyForm = false, debug = null) {
   const fromAttrs = fromEl.attributes;
   const toAttrs = Array.from(toEl.attributes);
+
+  const effectiveOwnership = {
+    text: ownership.text && fromEl.hasAttribute(CLIENT_OWNED_TEXT_ATTR),
+    show: ownership.show && fromEl.hasAttribute(CLIENT_OWNED_SHOW_ATTR),
+    disabled: ownership.disabled && fromEl.hasAttribute(CLIENT_OWNED_DISABLED_ATTR),
+    model: ownership.model && fromEl.hasAttribute(CLIENT_OWNED_MODEL_ATTR),
+    classBinding: ownership.classBinding && hasClassBindingAttr(fromEl),
+  };
+
+  if (ownership.classBinding && !effectiveOwnership.classBinding && toEl.__wOwnedClassState) {
+    toEl.__wOwnedClassState.clear();
+    delete toEl.__wOwnedClassState;
+  }
+
+  const wasHiddenByShow = effectiveOwnership.show && toEl.hasAttribute('hidden');
+
+  if (effectiveOwnership.show && fromEl.hasAttribute('hidden')) {
+    emitOwnershipConflict(
+      debug,
+      toEl,
+      'hidden',
+      null,
+      `Ownership conflict on <${(toEl.tagName || 'el').toLowerCase()}>: both server "hidden" attribute and client data-w-show manage visibility.`
+    );
+  }
+  if (effectiveOwnership.disabled && fromEl.hasAttribute('disabled')) {
+    emitOwnershipConflict(
+      debug,
+      toEl,
+      'disabled',
+      null,
+      `Ownership conflict on <${(toEl.tagName || 'el').toLowerCase()}>: both server "disabled" attribute and client data-w-disabled manage disabled state.`
+    );
+  }
+  if (effectiveOwnership.model && fromEl.hasAttribute('value') && fromEl.getAttribute('value') !== '') {
+    emitOwnershipConflict(
+      debug,
+      toEl,
+      'value',
+      null,
+      `Ownership conflict on <${(toEl.tagName || 'el').toLowerCase()}>: both server "value" attribute and client data-w-model manage input value.`
+    );
+  }
 
   // Remove attributes no longer present on server HTML, except client-managed runtime state
   for (let i = 0; i < toAttrs.length; i++) {
     const attrName = toAttrs[i].name;
-    if (ownership.disabled && attrName === 'disabled') continue;
-    if (ownership.show && attrName === 'hidden') continue;
+    if (attrName === 'class') continue; // Handled by syncClassAttribute
+    if (effectiveOwnership.disabled && (attrName === 'disabled' || attrName === 'aria-disabled')) continue;
+    if (effectiveOwnership.show && attrName === 'hidden') continue;
     if (attrName.startsWith('data-w-bound-')) continue;
     if (
       attrName === 'data-w-fragment-input' ||
@@ -1751,11 +1999,17 @@ function syncElementAttributes(toEl, fromEl, ownership, insideDirtyForm = false)
     }
   }
 
+  // If `data-w-show` was removed and server does not set `style`, clear inline `display: none`
+  if (ownership.show && !effectiveOwnership.show && !fromEl.hasAttribute('style') && toEl.style && toEl.style.display === 'none') {
+    toEl.style.display = '';
+  }
+
   // Set updated attributes from server HTML
   for (let i = 0; i < fromAttrs.length; i++) {
     const attr = fromAttrs[i];
-    if (ownership.disabled && attr.name === 'disabled') continue;
-    if (ownership.show && attr.name === 'hidden') continue;
+    if (attr.name === 'class') continue; // Handled by syncClassAttribute
+    if (effectiveOwnership.disabled && (attr.name === 'disabled' || attr.name === 'aria-disabled')) continue;
+    if (effectiveOwnership.show && attr.name === 'hidden') continue;
     if (attr.name === 'action' && toEl.tagName === 'FORM' && (toEl.__wCustomAction || insideDirtyForm)) {
       continue;
     }
@@ -1763,6 +2017,16 @@ function syncElementAttributes(toEl, fromEl, ownership, insideDirtyForm = false)
       toEl.setAttribute(attr.name, attr.value);
     }
   }
+
+  // Sync `class` preserving client-owned class tokens
+  syncClassAttribute(toEl, fromEl, debug);
+
+  // Restore `style.display = 'none'` if server `style` overwrote it while `data-w-show` hides the element
+  if (wasHiddenByShow && toEl.style && toEl.style.display !== 'none') {
+    toEl.style.display = 'none';
+  }
+
+  return effectiveOwnership;
 }
 
 /**
@@ -1815,11 +2079,19 @@ function syncFormControlValue(toEl, fromEl, ownership, preserveDraft) {
 function morphDomTrees(toEl, fromEl, ctx = {}) {
   if (!toEl || !fromEl) return toEl;
 
-  const ownership = getClientOwnership(toEl);
+  const rawOwnership = getClientOwnership(toEl);
+  const ignoreMode = getIgnoreMode(toEl);
   const isForm = toEl.tagName === 'FORM';
   const insideDirtyForm = Boolean(ctx.insideDirtyForm || (isForm && isFormDirtyOrPreserved(toEl)));
 
-  syncElementAttributes(toEl, fromEl, ownership, insideDirtyForm);
+  const ownership =
+    ignoreMode === 'self' || ignoreMode === 'all'
+      ? rawOwnership
+      : syncElementAttributes(toEl, fromEl, rawOwnership, insideDirtyForm, ctx.debug);
+
+  if (ignoreMode === 'children' || ignoreMode === 'all') {
+    return toEl;
+  }
 
   if (toEl.tagName === 'INPUT' || toEl.tagName === 'TEXTAREA' || toEl.tagName === 'SELECT') {
     syncFormControlValue(toEl, fromEl, ownership, insideDirtyForm);
@@ -2125,6 +2397,167 @@ function createDatastarAdapter(options = {}) {
   }
 
   /**
+   * Parse `{ 'is-active': expr1, isOpen: expr2 }` into `Array<{ classes: string[], expr: string }>`.
+   */
+  function parseClassMapExpression(rawExpr) {
+    const trimmed = (rawExpr || '').trim();
+    if (!trimmed) return [];
+    const inner = trimmed.startsWith('{') && trimmed.endsWith('}')
+      ? trimmed.slice(1, -1).trim()
+      : trimmed;
+    if (!inner) return [];
+
+    const entries = [];
+    let current = '';
+    let parenDepth = 0;
+    let bracketDepth = 0;
+    let inQuote = null;
+
+    for (let i = 0; i < inner.length; i++) {
+      const ch = inner[i];
+      if (inQuote) {
+        current += ch;
+        if (ch === inQuote && inner[i - 1] !== '\\') inQuote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        inQuote = ch;
+        current += ch;
+        continue;
+      }
+      if (ch === '(') parenDepth++;
+      else if (ch === ')' && parenDepth > 0) parenDepth--;
+      else if (ch === '[') bracketDepth++;
+      else if (ch === ']' && bracketDepth > 0) bracketDepth--;
+
+      if (ch === ',' && parenDepth === 0 && bracketDepth === 0) {
+        if (current.trim()) entries.push(current.trim());
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    if (current.trim()) entries.push(current.trim());
+
+    const result = [];
+    for (const entry of entries) {
+      let colonIdx = -1;
+      let q = null;
+      for (let i = 0; i < entry.length; i++) {
+        const ch = entry[i];
+        if (q) {
+          if (ch === q && entry[i - 1] !== '\\') q = null;
+          continue;
+        }
+        if (ch === '"' || ch === "'") {
+          q = ch;
+          continue;
+        }
+        if (ch === ':') {
+          colonIdx = i;
+          break;
+        }
+      }
+      if (colonIdx <= 0) continue;
+      let rawKey = entry.slice(0, colonIdx).trim();
+      const expr = entry.slice(colonIdx + 1).trim();
+      if ((rawKey.startsWith("'") && rawKey.endsWith("'")) || (rawKey.startsWith('"') && rawKey.endsWith('"'))) {
+        rawKey = rawKey.slice(1, -1);
+      }
+      const classes = rawKey.split(/\s+/).filter(Boolean);
+      if (classes.length > 0 && expr) {
+        result.push({ classes, expr });
+      }
+    }
+    return result;
+  }
+
+  function parseEventScheduleModifiers(modifiers) {
+    let mode = null;
+    let waitMs = 250;
+    let leading = null;
+    let trailing = null;
+
+    const list = Array.from(modifiers);
+    for (let i = 0; i < list.length; i++) {
+      const mod = list[i];
+      if (mod === 'debounce' || mod === 'throttle') {
+        mode = mod;
+        const next = list[i + 1];
+        if (next && /^\d+(?:ms|s)?$/i.test(next)) {
+          waitMs = parseDelayMs(next, 250);
+          i++;
+        }
+      } else if (mod.startsWith('debounce-')) {
+        mode = 'debounce';
+        waitMs = parseDelayMs(mod.slice('debounce-'.length), 250);
+      } else if (mod.startsWith('throttle-')) {
+        mode = 'throttle';
+        waitMs = parseDelayMs(mod.slice('throttle-'.length), 250);
+      } else if (mod === 'leading') {
+        leading = true;
+      } else if (mod === 'trailing') {
+        trailing = true;
+      }
+    }
+
+    if (!mode) return null;
+    if (mode === 'debounce') {
+      return {
+        mode: 'debounce',
+        waitMs,
+        leading: leading === true,
+        trailing: trailing !== false,
+      };
+    }
+    return {
+      mode: 'throttle',
+      waitMs,
+      leading: leading !== false,
+      trailing: trailing !== false,
+    };
+  }
+
+  function getElementBindingSignature(el) {
+    if (!el || !el.attributes) return '';
+    const parts = [];
+    for (let i = 0; i < el.attributes.length; i++) {
+      const n = el.attributes[i].name;
+      if (
+        n === 'data-w-text' ||
+        n === 'data-w-show' ||
+        n === 'data-w-disabled' ||
+        n === 'data-w-model' ||
+        n === 'data-w-class' ||
+        n.startsWith('data-w-class:') ||
+        n === 'data-w-loading' ||
+        n === 'data-w-loading-hide' ||
+        n === 'data-w-loading-delay' ||
+        n === 'data-w-loading-class' ||
+        n === 'data-w-on' ||
+        n.startsWith('data-w-on:') ||
+        n === 'data-w-click'
+      ) {
+        parts.push(`${n}=${el.attributes[i].value}`);
+      }
+    }
+    parts.sort();
+    return parts.join('\n');
+  }
+
+  function setOwnedClassToken(el, token, active) {
+    if (!el) return;
+    if (!el.__wOwnedClassState) {
+      el.__wOwnedClassState = new Map();
+    }
+    el.__wOwnedClassState.set(token, Boolean(active));
+    if (el.classList) {
+      if (active) el.classList.add(token);
+      else el.classList.remove(token);
+    }
+  }
+
+  /**
    * Bind V1 declarative attributes inside `rootEl` for a controller instance.
    */
   function bindControllerDom({
@@ -2160,7 +2593,24 @@ function createDatastarAdapter(options = {}) {
 
     for (let i = 0; i < elements.length; i++) {
       const el = elements[i];
-      if (elementDisposersMap.has(el)) continue;
+      const sig = getElementBindingSignature(el);
+      if (elementDisposersMap.has(el)) {
+        if (el.__wBindingSig === sig) continue;
+        // Bindings on this preserved element changed (e.g. server added/removed data-w-show/class):
+        // dispose old bindings and re-bind cleanly.
+        const oldDisposers = elementDisposersMap.get(el);
+        for (let d = 0; d < oldDisposers.length; d++) {
+          try {
+            oldDisposers[d]();
+          } catch (_e) {}
+        }
+        elementDisposersMap.delete(el);
+        if (el.__wOwnedClassState) {
+          el.__wOwnedClassState.clear();
+          delete el.__wOwnedClassState;
+        }
+      }
+      el.__wBindingSig = sig;
       const elDisposers = [];
       elementDisposersMap.set(el, elDisposers);
 
@@ -2189,30 +2639,106 @@ function createDatastarAdapter(options = {}) {
         elDisposers.push(stop);
       }
 
-      // 2b. data-w-loading & data-w-loading-hide (declarative action/task busy indicators)
+      // 2a. data-w-class & data-w-class:<token>
+      if (el.hasAttribute('data-w-class')) {
+        const rawClassExpr = el.getAttribute('data-w-class') || '';
+        const classEntries = parseClassMapExpression(rawClassExpr);
+        for (let c = 0; c < classEntries.length; c++) {
+          const entry = classEntries[c];
+          const stop = engine.effect(() => {
+            if (!isConnected() || el.isConnected === false) return;
+            const active = Boolean(evaluateStateExpression(state, entry.expr));
+            for (let k = 0; k < entry.classes.length; k++) {
+              setOwnedClassToken(el, entry.classes[k], active);
+            }
+          });
+          elDisposers.push(stop);
+        }
+      }
+      if (el.attributes) {
+        for (let a = 0; a < el.attributes.length; a++) {
+          const attr = el.attributes[a];
+          if (attr.name.startsWith('data-w-class:')) {
+            const token = attr.name.slice('data-w-class:'.length).trim();
+            const expr = (attr.value || '').trim();
+            if (token && expr) {
+              const stop = engine.effect(() => {
+                if (!isConnected() || el.isConnected === false) return;
+                setOwnedClassToken(el, token, Boolean(evaluateStateExpression(state, expr)));
+              });
+              elDisposers.push(stop);
+            }
+          }
+        }
+      }
+
+      // 2b. data-w-loading & data-w-loading-hide (with optional data-w-loading-delay)
       if (el.hasAttribute('data-w-loading') || el.hasAttribute('data-w-loading-hide')) {
         const isHide = el.hasAttribute('data-w-loading-hide');
         const rawSpec = el.getAttribute(isHide ? 'data-w-loading-hide' : 'data-w-loading') || '';
         const initialDisplay = el.style && el.style.display && el.style.display !== 'none' ? el.style.display : '';
+        const delayMs = parseDelayMs(el.getAttribute('data-w-loading-delay'), 0);
         const loadingClasses = (el.getAttribute('data-w-loading-class') || '')
           .trim()
           .split(/\s+/)
           .filter(Boolean);
+
+        let delayTimer = null;
+        let generation = 0;
+        let visuallyActive = false;
+
+        const applyVisualLoading = (active) => {
+          visuallyActive = active;
+          toggleElementVisibility(el, isHide ? !active : active, initialDisplay);
+          if (loadingClasses.length > 0 && el.classList) {
+            for (let c = 0; c < loadingClasses.length; c++) {
+              setOwnedClassToken(el, loadingClasses[c], active);
+            }
+          }
+        };
+
+        // Initialize non-loading state synchronously when delay > 0
+        if (delayMs > 0) {
+          applyVisualLoading(false);
+        }
+
         const stop = engine.effect(() => {
           if (!isConnected() || el.isConnected === false) return;
           const active =
             typeof isLoadingTargetActive === 'function'
               ? Boolean(isLoadingTargetActive(rawSpec))
               : Boolean(evaluateStateExpression(state, rawSpec || '$busy'));
-          toggleElementVisibility(el, isHide ? !active : active, initialDisplay);
-          if (loadingClasses.length > 0 && el.classList) {
-            for (let c = 0; c < loadingClasses.length; c++) {
-              if (active) el.classList.add(loadingClasses[c]);
-              else el.classList.remove(loadingClasses[c]);
+
+          if (delayMs <= 0) {
+            applyVisualLoading(active);
+            return;
+          }
+
+          if (active) {
+            if (visuallyActive || delayTimer) return;
+            const gen = ++generation;
+            delayTimer = setTimeout(() => {
+              delayTimer = null;
+              if (gen !== generation || !isConnected() || el.isConnected === false) return;
+              applyVisualLoading(true);
+            }, delayMs);
+          } else {
+            generation++;
+            if (delayTimer) {
+              clearTimeout(delayTimer);
+              delayTimer = null;
             }
+            applyVisualLoading(false);
           }
         });
-        elDisposers.push(stop);
+        elDisposers.push(() => {
+          generation++;
+          if (delayTimer) {
+            clearTimeout(delayTimer);
+            delayTimer = null;
+          }
+          stop();
+        });
       }
 
       // 3. data-w-disabled
@@ -2354,15 +2880,149 @@ function createDatastarAdapter(options = {}) {
 
       // 5. Event bindings (data-w-on:<event>, data-w-on, data-w-click)
       const eventBindings = extractEventBindings(el);
-      for (const binding of eventBindings) {
-        const listener = (event) => {
-          if (!isConnected() || el.isConnected === false) return;
-          if (binding.modifiers.has('prevent')) event.preventDefault();
-          if (binding.modifiers.has('stop')) event.stopPropagation();
-          invokeAction(binding.actionName, event, el);
-        };
-        el.addEventListener(binding.eventName, listener);
-        elDisposers.push(() => el.removeEventListener(binding.eventName, listener));
+      if (eventBindings.length > 0) {
+        let isEventComposing = false;
+        const hasScheduled = eventBindings.some((b) => parseEventScheduleModifiers(b.modifiers) !== null);
+        if (hasScheduled) {
+          const onCompStart = () => {
+            isEventComposing = true;
+          };
+          const onCompEnd = () => {
+            isEventComposing = false;
+          };
+          el.addEventListener('compositionstart', onCompStart);
+          el.addEventListener('compositionend', onCompEnd);
+          elDisposers.push(() => {
+            try {
+              el.removeEventListener('compositionstart', onCompStart);
+              el.removeEventListener('compositionend', onCompEnd);
+            } catch (_e) {}
+          });
+        }
+
+        const parentForm = typeof el.closest === 'function' ? el.closest('form') : el.form || null;
+
+        for (const binding of eventBindings) {
+          const schedule = parseEventScheduleModifiers(binding.modifiers);
+          if (!schedule) {
+            const listener = (event) => {
+              if (!isConnected() || el.isConnected === false) return;
+              if (binding.modifiers.has('prevent')) event.preventDefault();
+              if (binding.modifiers.has('stop')) event.stopPropagation();
+              invokeAction(binding.actionName, event, el);
+            };
+            el.addEventListener(binding.eventName, listener);
+            elDisposers.push(() => el.removeEventListener(binding.eventName, listener));
+            continue;
+          }
+
+          let timer = null;
+          let lastExecTime = 0;
+          let pendingEvent = null;
+          let generation = 0;
+
+          const cancelPending = () => {
+            generation++;
+            if (timer) {
+              clearTimeout(timer);
+              timer = null;
+            }
+            pendingEvent = null;
+          };
+
+          const fireScheduled = (capturedEvent) => {
+            if (!isConnected() || el.isConnected === false) return;
+            invokeAction(binding.actionName, capturedEvent, el);
+          };
+
+          const listener = (event) => {
+            if (!isConnected() || el.isConnected === false) return;
+            if (binding.modifiers.has('prevent')) event.preventDefault();
+            if (binding.modifiers.has('stop')) event.stopPropagation();
+            if (
+              (event.isComposing || isEventComposing) &&
+              (binding.eventName === 'input' || binding.eventName === 'keydown' || binding.eventName === 'keyup')
+            ) {
+              return;
+            }
+
+            // Capture a safe event reference (never rely on event.currentTarget after async delay)
+            const capturedEvent = event;
+            const gen = generation;
+
+            if (schedule.mode === 'debounce') {
+              const callNow = schedule.leading && !timer;
+              if (timer) clearTimeout(timer);
+              pendingEvent = capturedEvent;
+              timer = setTimeout(() => {
+                timer = null;
+                if (gen !== generation) return;
+                const evtToPass = pendingEvent;
+                pendingEvent = null;
+                if (schedule.trailing && evtToPass) {
+                  fireScheduled(evtToPass);
+                }
+              }, schedule.waitMs);
+              if (callNow) {
+                pendingEvent = null;
+                fireScheduled(capturedEvent);
+              }
+            } else {
+              // Throttle: default leading + trailing
+              const now = Date.now();
+              const remaining = schedule.waitMs - (now - lastExecTime);
+              if (remaining <= 0 || remaining > schedule.waitMs) {
+                if (timer) {
+                  clearTimeout(timer);
+                  timer = null;
+                }
+                pendingEvent = null;
+                if (schedule.leading) {
+                  lastExecTime = now;
+                  fireScheduled(capturedEvent);
+                } else if (schedule.trailing) {
+                  pendingEvent = capturedEvent;
+                  timer = setTimeout(() => {
+                    timer = null;
+                    if (gen !== generation) return;
+                    lastExecTime = Date.now();
+                    const evtToPass = pendingEvent;
+                    pendingEvent = null;
+                    if (evtToPass) fireScheduled(evtToPass);
+                  }, schedule.waitMs);
+                }
+              } else if (schedule.trailing) {
+                pendingEvent = capturedEvent;
+                if (!timer) {
+                  timer = setTimeout(() => {
+                    timer = null;
+                    if (gen !== generation) return;
+                    lastExecTime = schedule.leading ? Date.now() : 0;
+                    const evtToPass = pendingEvent;
+                    pendingEvent = null;
+                    if (evtToPass) fireScheduled(evtToPass);
+                  }, remaining);
+                }
+              }
+            }
+          };
+
+          el.addEventListener(binding.eventName, listener);
+          elDisposers.push(() => {
+            cancelPending();
+            el.removeEventListener(binding.eventName, listener);
+          });
+
+          if (parentForm && typeof parentForm.addEventListener === 'function') {
+            const onFormReset = () => cancelPending();
+            parentForm.addEventListener('reset', onFormReset);
+            elDisposers.push(() => {
+              try {
+                parentForm.removeEventListener('reset', onFormReset);
+              } catch (_e) {}
+            });
+          }
+        }
       }
     }
 
@@ -2413,6 +3073,7 @@ function createDatastarAdapter(options = {}) {
     const morphed = morphDomTrees(targetEl, parsed, {
       onBeforeNodeRemove: lifecycleCallbacks.onBeforeNodeRemove,
       onNodeAdded: lifecycleCallbacks.onNodeAdded,
+      debug: options.debug || null,
     });
 
     // Restore focus & selection range if the focused element was preserved inside targetEl
@@ -3114,6 +3775,110 @@ function abortableSleep(ms, signals = []) {
   });
 }
 
+function parseXhrHeaders(rawHeaders) {
+  const map = new Map();
+  if (typeof rawHeaders === 'string' && rawHeaders) {
+    const lines = rawHeaders.trim().split(/[\r\n]+/);
+    for (let i = 0; i < lines.length; i++) {
+      const idx = lines[i].indexOf(':');
+      if (idx > 0) {
+        const k = lines[i].slice(0, idx).trim().toLowerCase();
+        const v = lines[i].slice(idx + 1).trim();
+        map.set(k, v);
+      }
+    }
+  }
+  return {
+    get(name) {
+      return map.get(String(name || '').toLowerCase()) ?? null;
+    },
+    has(name) {
+      return map.has(String(name || '').toLowerCase());
+    },
+  };
+}
+
+function executeXhrUpload({ url, method, headers, body, credentials, signal, onUploadProgress }) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+    if (credentials === 'include' || credentials === 'same-origin') {
+      xhr.withCredentials = credentials === 'include';
+    }
+    if (headers && typeof headers === 'object') {
+      for (const [k, v] of Object.entries(headers)) {
+        if (v !== undefined && v !== null) {
+          xhr.setRequestHeader(k, String(v));
+        }
+      }
+    }
+
+    if (xhr.upload && typeof onUploadProgress === 'function') {
+      xhr.upload.onprogress = (evt) => {
+        const lengthComputable = Boolean(evt && evt.lengthComputable);
+        const loaded = evt && typeof evt.loaded === 'number' ? evt.loaded : 0;
+        const total = lengthComputable && evt && typeof evt.total === 'number' ? evt.total : 0;
+        const percent = lengthComputable && total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : null;
+        try {
+          onUploadProgress({ loaded, total, percent, lengthComputable });
+        } catch (_e) {}
+      };
+    }
+
+    const onAbort = () => {
+      try {
+        xhr.abort();
+      } catch (_e) {}
+    };
+    if (signal) {
+      if (signal.aborted) {
+        const abortErr = new Error('The operation was aborted.');
+        abortErr.name = 'AbortError';
+        reject(abortErr);
+        return;
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+
+    const cleanup = () => {
+      if (signal) {
+        try {
+          signal.removeEventListener('abort', onAbort);
+        } catch (_e) {}
+      }
+    };
+
+    xhr.onload = () => {
+      cleanup();
+      const status = xhr.status === 1223 ? 204 : xhr.status;
+      const rawText = typeof xhr.responseText === 'string' ? xhr.responseText : '';
+      const headerObj = parseXhrHeaders(xhr.getAllResponseHeaders ? xhr.getAllResponseHeaders() : '');
+      resolve({
+        ok: status >= 200 && status < 300,
+        status,
+        statusText: xhr.statusText || '',
+        headers: headerObj,
+        text: async () => rawText,
+        json: async () => (rawText ? JSON.parse(rawText) : null),
+      });
+    };
+
+    xhr.onerror = () => {
+      cleanup();
+      reject(new TypeError('Network request failed'));
+    };
+
+    xhr.onabort = () => {
+      cleanup();
+      const abortErr = new Error('The operation was aborted.');
+      abortErr.name = 'AbortError';
+      reject(abortErr);
+    };
+
+    xhr.send(body === undefined ? null : body);
+  });
+}
+
 /**
  * Create a Typed API Client instance.
  *
@@ -3400,13 +4165,25 @@ function createApiClient(config = {}) {
     try {
       let response;
       try {
-        response = await fetchImpl(requestUrl, {
-          method: upperMethod,
-          headers,
-          body: serializedBody,
-          credentials: options.credentials || 'same-origin',
-          signal: abortController.signal,
-        });
+        if (typeof options.onUploadProgress === 'function' && typeof XMLHttpRequest !== 'undefined') {
+          response = await executeXhrUpload({
+            url: requestUrl,
+            method: upperMethod,
+            headers,
+            body: serializedBody,
+            credentials: options.credentials || 'same-origin',
+            signal: abortController.signal,
+            onUploadProgress: options.onUploadProgress,
+          });
+        } else {
+          response = await fetchImpl(requestUrl, {
+            method: upperMethod,
+            headers,
+            body: serializedBody,
+            credentials: options.credentials || 'same-origin',
+            signal: abortController.signal,
+          });
+        }
       } catch (fetchErr) {
         if (timeoutTimer) {
           clearTimeout(timeoutTimer);
@@ -4312,6 +5089,7 @@ function createFormHandle(formEl, options = {}) {
   let baselineValues = parseFormElement(formEl).data;
   let pending = false;
   let dirty = false;
+  let submitted = false;
   let inputRevision = 0;
   let fieldErrors = {};
   let formError = null;
@@ -4319,6 +5097,83 @@ function createFormHandle(formEl, options = {}) {
   let lastData = null;
   let draftDebounceTimer = null;
   let resetTimer = null;
+
+  const touchedFields = new Set();
+  const errorDisplayMode =
+    options.errorDisplay === 'touched' ||
+    (formEl && formEl.getAttribute && formEl.getAttribute('data-w-error-mode') === 'touched')
+      ? 'touched'
+      : 'always';
+
+  const validationSeqByField = new Map();
+  const validationTimersByField = new Map();
+  const validationAbortByField = new Map();
+
+  let activeSubmitAbort = null;
+  let uploadEntries = [];
+  const previewUrlsByField = new Map();
+
+  function cancelFieldValidation(fieldName) {
+    if (fieldName) {
+      const t = validationTimersByField.get(fieldName);
+      if (t) {
+        clearTimeout(t);
+        validationTimersByField.delete(fieldName);
+      }
+      const ac = validationAbortByField.get(fieldName);
+      if (ac) {
+        try {
+          ac.abort();
+        } catch (_e) {}
+        validationAbortByField.delete(fieldName);
+      }
+      return;
+    }
+    for (const t of validationTimersByField.values()) clearTimeout(t);
+    validationTimersByField.clear();
+    for (const ac of validationAbortByField.values()) {
+      try {
+        ac.abort();
+      } catch (_e) {}
+    }
+    validationAbortByField.clear();
+  }
+
+  function revokePreviewUrls(fieldName) {
+    const revokeUrl = (u) => {
+      if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+        try {
+          URL.revokeObjectURL(u);
+        } catch (_e) {}
+      }
+    };
+    if (fieldName) {
+      const set = previewUrlsByField.get(fieldName);
+      if (set) {
+        for (const u of set) revokeUrl(u);
+        set.clear();
+        previewUrlsByField.delete(fieldName);
+      }
+      return;
+    }
+    for (const set of previewUrlsByField.values()) {
+      for (const u of set) revokeUrl(u);
+      set.clear();
+    }
+    previewUrlsByField.clear();
+  }
+
+  function createPreviewUrl(file, fieldName = '_default') {
+    if (!file || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return null;
+    const url = URL.createObjectURL(file);
+    let set = previewUrlsByField.get(fieldName);
+    if (!set) {
+      set = new Set();
+      previewUrlsByField.set(fieldName, set);
+    }
+    set.add(url);
+    return url;
+  }
 
   const beforeSubmitListeners = new Set();
   const successListeners = new Set();
@@ -4468,6 +5323,12 @@ function createFormHandle(formEl, options = {}) {
     }
   }
 
+  function isFieldErrorVisible(fieldName) {
+    if (errorDisplayMode !== 'touched') return true;
+    if (submitted) return true;
+    return touchedFields.has(fieldName);
+  }
+
   /**
    * Render field errors and form-level error into the DOM with accessible ARIA bindings.
    * Optionally focuses the first invalid control.
@@ -4480,7 +5341,11 @@ function createFormHandle(formEl, options = {}) {
     for (let i = 0; i < errorSpans.length; i++) {
       const span = errorSpans[i];
       const fieldName = span.getAttribute('data-w-error');
-      const msg = fieldName && fieldErrors[fieldName] ? String(fieldErrors[fieldName]) : '';
+      const normName = fieldName && fieldName.endsWith('[]') ? fieldName.slice(0, -2) : fieldName;
+      const rawMsg = fieldName && (fieldErrors[fieldName] || (normName && fieldErrors[normName]))
+        ? String(fieldErrors[fieldName] || fieldErrors[normName])
+        : '';
+      const msg = rawMsg && (isFieldErrorVisible(fieldName) || (normName && isFieldErrorVisible(normName))) ? rawMsg : '';
       span.textContent = msg;
       if (msg) {
         span.removeAttribute('hidden');
@@ -4503,7 +5368,8 @@ function createFormHandle(formEl, options = {}) {
       const rawName = ctrl.getAttribute('name');
       if (!rawName) continue;
       const normName = rawName.endsWith('[]') ? rawName.slice(0, -2) : rawName;
-      const errMsg = fieldErrors[normName] || fieldErrors[rawName];
+      const rawErrMsg = fieldErrors[normName] || fieldErrors[rawName];
+      const errMsg = rawErrMsg && (isFieldErrorVisible(normName) || isFieldErrorVisible(rawName)) ? rawErrMsg : '';
 
       if (errMsg) {
         ctrl.setAttribute('aria-invalid', 'true');
@@ -4588,6 +5454,8 @@ function createFormHandle(formEl, options = {}) {
    */
   function reset() {
     cancelDraftDebounce();
+    cancelFieldValidation();
+    revokePreviewUrls();
     if (!formEl) return;
     if (typeof formEl.reset === 'function') {
       formEl.reset();
@@ -4607,6 +5475,8 @@ function createFormHandle(formEl, options = {}) {
       }
     }
     dirty = false;
+    submitted = false;
+    touchedFields.clear();
     fieldErrors = {};
     formError = null;
     syncErrorsToDom(false);
@@ -4618,6 +5488,8 @@ function createFormHandle(formEl, options = {}) {
    */
   function clear() {
     cancelDraftDebounce();
+    cancelFieldValidation();
+    revokePreviewUrls();
     if (!formEl || typeof formEl.querySelectorAll !== 'function') return;
     const controls = formEl.querySelectorAll('input, select, textarea');
     for (let i = 0; i < controls.length; i++) {
@@ -4639,6 +5511,8 @@ function createFormHandle(formEl, options = {}) {
       }
     }
     dirty = computeFormDirty(formEl, initialSnapshot);
+    submitted = false;
+    touchedFields.clear();
     fieldErrors = {};
     formError = null;
     syncErrorsToDom(false);
@@ -4706,9 +5580,12 @@ function createFormHandle(formEl, options = {}) {
     }
 
     if (isBaseline) {
+      cancelFieldValidation();
       initialSnapshot = captureInitialFormSnapshot(formEl);
       baselineValues = parseFormElement(formEl).data;
       dirty = false;
+      submitted = false;
+      touchedFields.clear();
       fieldErrors = {};
       formError = null;
       lastError = null;
@@ -4827,7 +5704,9 @@ function createFormHandle(formEl, options = {}) {
       }
     }
 
-    // Clear previous errors before request starts
+    // Clear previous errors before request starts, mark submitted = true
+    cancelFieldValidation();
+    submitted = true;
     fieldErrors = {};
     formError = null;
     lastError = null;
@@ -4836,6 +5715,36 @@ function createFormHandle(formEl, options = {}) {
     const submittedSnapshot = captureInitialFormSnapshot(formEl);
     setPendingState(true, submitter);
 
+    // Track per-file upload state if multipart
+    const submitAbortController = new AbortController();
+    activeSubmitAbort = submitAbortController;
+    if (isMultipart && formEl && typeof formEl.querySelectorAll === 'function') {
+      const nextUploads = [];
+      const fileInputs = formEl.querySelectorAll('input[type="file"]');
+      for (let i = 0; i < fileInputs.length; i++) {
+        const fi = fileInputs[i];
+        const fName = fi.getAttribute('name') || 'file';
+        const files = fi.files || [];
+        for (let j = 0; j < files.length; j++) {
+          const f = files[j];
+          nextUploads.push({
+            field: fName,
+            name: f.name || 'file',
+            size: typeof f.size === 'number' ? f.size : 0,
+            status: 'uploading',
+            loaded: 0,
+            total: typeof f.size === 'number' ? f.size : 0,
+            percent: null,
+            error: null,
+          });
+        }
+      }
+      uploadEntries = nextUploads;
+      if (uploadEntries.length > 0) notifyStateChange();
+    } else {
+      uploadEntries = [];
+    }
+
     try {
       let responseData;
       const reqKey = `form:${formName}:${method}:${actionUrl}`;
@@ -4843,13 +5752,36 @@ function createFormHandle(formEl, options = {}) {
         responseData = await api.get(actionUrl, payloadData, {
           key: reqKey,
           policy: 'latest',
+          signal: submitAbortController.signal,
         });
       } else {
         const bodyToSend = isMultipart && formData ? formData : payloadData;
-        responseData = await api.request(method, actionUrl, bodyToSend, {
+        const reqOpts = {
           key: reqKey,
           policy: 'drop',
-        });
+          signal: submitAbortController.signal,
+        };
+        if (isMultipart && uploadEntries.length > 0) {
+          reqOpts.onUploadProgress = (prog) => {
+            for (let i = 0; i < uploadEntries.length; i++) {
+              uploadEntries[i].loaded = prog.loaded;
+              uploadEntries[i].total = prog.total || uploadEntries[i].total;
+              uploadEntries[i].percent = prog.percent;
+            }
+            if (typeof submitOptions.onUploadProgress === 'function') {
+              submitOptions.onUploadProgress(prog, uploadEntries);
+            }
+            notifyStateChange();
+          };
+        }
+        responseData = await api.request(method, actionUrl, bodyToSend, reqOpts);
+      }
+
+      if (uploadEntries.length > 0) {
+        for (let i = 0; i < uploadEntries.length; i++) {
+          uploadEntries[i].status = 'done';
+          if (uploadEntries[i].percent !== null) uploadEntries[i].percent = 100;
+        }
       }
 
       lastData = responseData;
@@ -4962,6 +5894,15 @@ function createFormHandle(formEl, options = {}) {
       return { ok: true, submitted: true, data: responseData, refreshOk, refreshError, hookError };
     } catch (err) {
       lastError = err || null;
+      if (uploadEntries.length > 0) {
+        const isCanceled = Boolean(err && err.isCanceled);
+        for (let i = 0; i < uploadEntries.length; i++) {
+          if (uploadEntries[i].status === 'uploading') {
+            uploadEntries[i].status = isCanceled ? 'canceled' : 'error';
+            uploadEntries[i].error = isCanceled ? null : (err && err.message ? err.message : 'Upload failed');
+          }
+        }
+      }
       if (err && err.kind === 'validation') {
         fieldErrors = { ...(err.fieldErrors || {}) };
         formError = err.formError || (Object.keys(fieldErrors).length === 0 ? err.message : null);
@@ -4992,23 +5933,172 @@ function createFormHandle(formEl, options = {}) {
         error: err,
       };
     } finally {
+      if (activeSubmitAbort === submitAbortController) {
+        activeSubmitAbort = null;
+      }
       setPendingState(false, submitter);
     }
   }
 
-  // Listen to native submit and input/change events on `formEl`
+  function parseFieldValidateConfig(ctrl) {
+    const ctrlAttr = ctrl && ctrl.getAttribute ? ctrl.getAttribute('data-w-validate') : null;
+    const formAttr = formEl && formEl.getAttribute ? formEl.getAttribute('data-w-validate') : null;
+    const raw = ctrlAttr !== null ? ctrlAttr : formAttr;
+    if (!raw || raw === 'false') return null;
+    const parts = String(raw).split(/[\s,|]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+    const onBlur = parts.includes('blur') || parts.includes('true') || raw === '';
+    let debounceMs = null;
+    for (const p of parts) {
+      if (p.startsWith('debounce:')) {
+        const ms = Number(p.slice('debounce:'.length).replace(/ms$/i, ''));
+        debounceMs = Number.isFinite(ms) && ms >= 0 ? ms : 300;
+      } else if (p === 'debounce') {
+        debounceMs = 300;
+      }
+    }
+    return { onBlur, debounceMs };
+  }
+
+  async function validateField(fieldName, vOpts = {}) {
+    if (!formEl || !api || !fieldName) return { ok: true, valid: true, errors: {} };
+    const norm = fieldName.endsWith('[]') ? fieldName.slice(0, -2) : fieldName;
+
+    const seq = (validationSeqByField.get(norm) || 0) + 1;
+    validationSeqByField.set(norm, seq);
+
+    const prevAbort = validationAbortByField.get(norm);
+    if (prevAbort) {
+      try {
+        prevAbort.abort();
+      } catch (_e) {}
+    }
+    const ac = new AbortController();
+    validationAbortByField.set(norm, ac);
+
+    const validateUrl =
+      vOpts.url ||
+      (formEl.getAttribute && (formEl.getAttribute('data-w-validate-url') || formEl.getAttribute('action'))) ||
+      (typeof window !== 'undefined' && window.location ? window.location.pathname : '/');
+    const method = String(vOpts.method || (formEl.getAttribute && formEl.getAttribute('method')) || 'POST').toUpperCase();
+
+    const { data: allValues } = parseFormElement(formEl);
+    const ctrl = formEl.querySelector ? (formEl.querySelector(`[name="${norm}"]`) || formEl.querySelector(`[name="${fieldName}"]`)) : null;
+    const contextAttr = ctrl && ctrl.getAttribute ? ctrl.getAttribute('data-w-validate-context') : null;
+
+    let payload = { [norm]: allValues[norm] };
+    if (vOpts.contextFields === '*' || contextAttr === '*') {
+      payload = { ...allValues };
+    } else {
+      const ctxList = isArray(vOpts.contextFields)
+        ? vOpts.contextFields
+        : typeof contextAttr === 'string' && contextAttr.trim()
+          ? contextAttr.split(',').map((s) => s.trim()).filter(Boolean)
+          : [];
+      for (const cf of ctxList) {
+        if (Object.prototype.hasOwnProperty.call(allValues, cf)) {
+          payload[cf] = allValues[cf];
+        }
+      }
+    }
+
+    try {
+      const resp = await api.request(method, validateUrl, payload, {
+        headers: { 'X-Webspresso-Validate-Fields': norm },
+        signal: ac.signal,
+      });
+
+      if (seq !== validationSeqByField.get(norm)) {
+        return { ok: true, stale: true, valid: true, errors: {} };
+      }
+
+      const respErrors = resp && resp.errors && typeof resp.errors === 'object' ? resp.errors : {};
+      if (respErrors[norm]) {
+        fieldErrors[norm] = String(respErrors[norm]);
+      } else {
+        delete fieldErrors[norm];
+      }
+      syncErrorsToDom(false);
+      notifyStateChange();
+      return {
+        ok: true,
+        valid: !fieldErrors[norm],
+        errors: fieldErrors[norm] ? { [norm]: fieldErrors[norm] } : {},
+      };
+    } catch (err) {
+      if (seq !== validationSeqByField.get(norm) || (err && err.isCanceled)) {
+        return { ok: true, stale: true, canceled: Boolean(err && err.isCanceled), errors: {} };
+      }
+      // If server returned a 400/422 validation envelope, extract only this field's error
+      if (err && err.kind === 'validation' && err.fieldErrors) {
+        if (err.fieldErrors[norm]) {
+          fieldErrors[norm] = String(err.fieldErrors[norm]);
+        } else {
+          delete fieldErrors[norm];
+        }
+        syncErrorsToDom(false);
+        notifyStateChange();
+        return { ok: true, valid: !fieldErrors[norm], errors: fieldErrors[norm] ? { [norm]: fieldErrors[norm] } : {} };
+      }
+      // Network or 5xx error: NEVER mark the field as invalid!
+      if (typeof formEl.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') {
+        formEl.dispatchEvent(
+          new CustomEvent('w-form:validation-error', {
+            bubbles: true,
+            detail: { field: norm, error: err },
+          })
+        );
+      }
+      return { ok: false, networkError: true, error: err };
+    } finally {
+      if (validationAbortByField.get(norm) === ac) {
+        validationAbortByField.delete(norm);
+      }
+    }
+  }
+
+  function cancelUpload() {
+    if (activeSubmitAbort) {
+      try {
+        activeSubmitAbort.abort();
+      } catch (_e) {}
+      activeSubmitAbort = null;
+      return true;
+    }
+    return false;
+  }
+
+  // Listen to native submit, focusout, and input/change events on `formEl`
   const onDomInput = (evt) => {
     inputRevision += 1;
     dirty = computeFormDirty(formEl, initialSnapshot);
     const target = evt && evt.target;
     if (target && target.getAttribute) {
+      const type = (target.type || '').toLowerCase();
       const rawName = target.getAttribute('name');
+      if (type === 'file' && evt.type === 'change' && rawName) {
+        revokePreviewUrls(rawName);
+      }
       if (rawName) {
         const norm = rawName.endsWith('[]') ? rawName.slice(0, -2) : rawName;
+        if (evt.type === 'change' && (type === 'checkbox' || type === 'radio' || target.tagName === 'SELECT')) {
+          touchedFields.add(norm);
+        }
         if (fieldErrors[norm] || fieldErrors[rawName]) {
           delete fieldErrors[norm];
           delete fieldErrors[rawName];
           syncErrorsToDom(false);
+        }
+        if (evt.type === 'input') {
+          const vCfg = parseFieldValidateConfig(target);
+          if (vCfg && vCfg.debounceMs !== null) {
+            const prevTimer = validationTimersByField.get(norm);
+            if (prevTimer) clearTimeout(prevTimer);
+            const t = setTimeout(() => {
+              validationTimersByField.delete(norm);
+              validateField(norm).catch(() => {});
+            }, vCfg.debounceMs);
+            validationTimersByField.set(norm, t);
+          }
         }
       }
     }
@@ -5022,16 +6112,40 @@ function createFormHandle(formEl, options = {}) {
     notifyStateChange();
   };
 
+  const onDomFocusOut = (evt) => {
+    const target = evt && evt.target;
+    if (!target || !target.getAttribute) return;
+    const rawName = target.getAttribute('name');
+    if (!rawName) return;
+    const type = (target.type || '').toLowerCase();
+    if (type === 'submit' || type === 'button' || type === 'reset' || type === 'hidden') return;
+    const norm = rawName.endsWith('[]') ? rawName.slice(0, -2) : rawName;
+    const wasTouched = touchedFields.has(norm);
+    touchedFields.add(norm);
+    if (!wasTouched) {
+      syncErrorsToDom(false);
+      notifyStateChange();
+    }
+    const vCfg = parseFieldValidateConfig(target);
+    if (vCfg && vCfg.onBlur) {
+      validateField(norm).catch(() => {});
+    }
+  };
+
   const onDomSubmit = (evt) => {
     submit(evt);
   };
 
   const onDomReset = () => {
     cancelDraftDebounce();
+    cancelFieldValidation();
+    revokePreviewUrls();
     if (resetTimer) clearTimeout(resetTimer);
     resetTimer = setTimeout(() => {
       resetTimer = null;
       dirty = false;
+      submitted = false;
+      touchedFields.clear();
       fieldErrors = {};
       formError = null;
       syncErrorsToDom(false);
@@ -5042,6 +6156,7 @@ function createFormHandle(formEl, options = {}) {
   if (formEl && typeof formEl.addEventListener === 'function') {
     formEl.addEventListener('input', onDomInput);
     formEl.addEventListener('change', onDomInput);
+    formEl.addEventListener('focusout', onDomFocusOut);
     formEl.addEventListener('submit', onDomSubmit);
     formEl.addEventListener('reset', onDomReset);
   }
@@ -5067,6 +6182,54 @@ function createFormHandle(formEl, options = {}) {
       dirty = computeFormDirty(formEl, initialSnapshot);
       return dirty;
     },
+    get touched() {
+      return touchedFields.size > 0;
+    },
+    get touchedFields() {
+      return Array.from(touchedFields);
+    },
+    get submitted() {
+      return submitted;
+    },
+    isTouched(fieldName) {
+      if (!fieldName) return touchedFields.size > 0;
+      const norm = fieldName.endsWith('[]') ? fieldName.slice(0, -2) : fieldName;
+      return touchedFields.has(norm) || touchedFields.has(fieldName);
+    },
+    touch(fieldName) {
+      if (fieldName) {
+        const norm = fieldName.endsWith('[]') ? fieldName.slice(0, -2) : fieldName;
+        touchedFields.add(norm);
+      } else if (formEl && typeof formEl.querySelectorAll === 'function') {
+        const controls = formEl.querySelectorAll('input, select, textarea');
+        for (let i = 0; i < controls.length; i++) {
+          const n = controls[i].getAttribute && controls[i].getAttribute('name');
+          if (n) touchedFields.add(n.endsWith('[]') ? n.slice(0, -2) : n);
+        }
+      }
+      syncErrorsToDom(false);
+      notifyStateChange();
+      return handle;
+    },
+    untouch(fieldName) {
+      if (fieldName) {
+        const norm = fieldName.endsWith('[]') ? fieldName.slice(0, -2) : fieldName;
+        touchedFields.delete(norm);
+        touchedFields.delete(fieldName);
+      } else {
+        touchedFields.clear();
+      }
+      syncErrorsToDom(false);
+      notifyStateChange();
+      return handle;
+    },
+    validateField,
+    get uploads() {
+      return uploadEntries.map((u) => ({ ...u }));
+    },
+    cancelUpload,
+    createPreviewUrl,
+    revokePreviewUrls,
     get inputRevision() {
       return inputRevision;
     },
@@ -5167,6 +6330,9 @@ function createFormHandle(formEl, options = {}) {
     },
     destroy() {
       cancelDraftDebounce();
+      cancelFieldValidation();
+      cancelUpload();
+      revokePreviewUrls();
       if (resetTimer) {
         clearTimeout(resetTimer);
         resetTimer = null;
@@ -5174,6 +6340,7 @@ function createFormHandle(formEl, options = {}) {
       if (formEl && typeof formEl.removeEventListener === 'function') {
         formEl.removeEventListener('input', onDomInput);
         formEl.removeEventListener('change', onDomInput);
+        formEl.removeEventListener('focusout', onDomFocusOut);
         formEl.removeEventListener('submit', onDomSubmit);
         formEl.removeEventListener('reset', onDomReset);
       }
@@ -8159,6 +9326,8 @@ function defineController(definition = {}) {
     tasks: definition.tasks && typeof definition.tasks === 'object' ? definition.tasks : {},
     connect: typeof definition.connect === 'function' ? definition.connect : null,
     disconnect: typeof definition.disconnect === 'function' ? definition.disconnect : null,
+    beforePatch: typeof definition.beforePatch === 'function' ? definition.beforePatch : null,
+    afterPatch: typeof definition.afterPatch === 'function' ? definition.afterPatch : null,
     onError: typeof definition.onError === 'function' ? definition.onError : null,
     persist: definition.persist || null,
     watch: definition.watch && typeof definition.watch === 'object' ? definition.watch : null,
@@ -9605,6 +10774,33 @@ function createControllerRuntime(options = {}) {
       get isConnected() {
         return isConnected();
       },
+      invokeBeforePatch(meta = {}) {
+        if (!isConnected() || !reg.definition.beforePatch) return;
+        try {
+          const result = reg.definition.beforePatch(ctx, meta);
+          if (result && typeof result.then === 'function') {
+            // beforePatch must be synchronous; warn in dev and do not block morph
+            if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production' && typeof console !== 'undefined') {
+              console.warn(`[webspresso] Controller "${controllerName}" beforePatch() returned a Promise; beforePatch hooks are synchronous and are not awaited.`);
+            }
+          }
+        } catch (err) {
+          handleControllerError(err, { phase: 'beforePatch' });
+        }
+      },
+      invokeAfterPatch(meta = {}) {
+        if (!isConnected() || !reg.definition.afterPatch) return;
+        try {
+          const res = reg.definition.afterPatch(ctx, meta);
+          if (res && typeof res.then === 'function') {
+            res.catch((err) => {
+              handleControllerError(err, { phase: 'afterPatch' });
+            });
+          }
+        } catch (err) {
+          handleControllerError(err, { phase: 'afterPatch' });
+        }
+      },
       destroy() {
         if (!connected) return;
         connected = false;
@@ -9829,6 +11025,82 @@ function createControllerRuntime(options = {}) {
     return mounted;
   }
 
+  const patchCycleTracker = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+
+  function collectAffectedInstances(fragmentEl) {
+    if (!fragmentEl) return [];
+    const affected = [];
+    for (const inst of activeInstances.values()) {
+      if (!inst || !inst.el || !inst.isConnected) continue;
+      if (
+        inst.el === fragmentEl ||
+        (typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el)) ||
+        (typeof inst.el.contains === 'function' && inst.el.contains(fragmentEl))
+      ) {
+        affected.push(inst);
+      }
+    }
+    // Sort deterministically: outer ancestors first, inner descendants second
+    affected.sort((a, b) => {
+      if (a.el === b.el) return 0;
+      if (typeof a.el.contains === 'function' && a.el.contains(b.el)) return -1;
+      if (typeof b.el.contains === 'function' && b.el.contains(a.el)) return 1;
+      if (typeof a.el.compareDocumentPosition === 'function') {
+        const pos = a.el.compareDocumentPosition(b.el);
+        if (pos & 4) return -1; // DOCUMENT_POSITION_FOLLOWING
+        if (pos & 2) return 1;  // DOCUMENT_POSITION_PRECEDING
+      }
+      return 0;
+    });
+    return affected;
+  }
+
+  function notifyBeforePatch(fragmentEl, meta = {}) {
+    const affected = collectAffectedInstances(fragmentEl);
+    for (let i = 0; i < affected.length; i++) {
+      const inst = affected[i];
+      inst.invokeBeforePatch({
+        ...meta,
+        isFragmentRoot: inst.el === fragmentEl,
+        isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
+      });
+    }
+  }
+
+  function notifyAfterPatch(fragmentEl, meta = {}) {
+    if (patchCycleTracker && fragmentEl) {
+      const now = Date.now();
+      const prev = patchCycleTracker.get(fragmentEl) || { count: 0, lastAt: 0 };
+      const count = now - prev.lastAt < 100 ? prev.count + 1 : 1;
+      patchCycleTracker.set(fragmentEl, { count, lastAt: now });
+      if (count > 5) {
+        const msg = `Possible patch hook refresh loop detected on fragment "${meta.fragmentName || meta.fragmentId || 'unknown'}" (${count} rapid patch cycles).`;
+        if (debug && typeof debug.recordEvent === 'function') {
+          debug.recordEvent('patch:loop-warning', {
+            code: 'PATCH_HOOK_LOOP_DETECTED',
+            fragmentId: meta.fragmentId || null,
+            fragmentName: meta.fragmentName || null,
+            count,
+            message: msg,
+          });
+        } else if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production' && typeof console !== 'undefined') {
+          console.warn(`[webspresso] ${msg}`);
+        }
+      }
+    }
+
+    const affected = collectAffectedInstances(fragmentEl);
+    // Reverse order for afterPatch: inner descendants first, outer ancestors second
+    for (let i = affected.length - 1; i >= 0; i--) {
+      const inst = affected[i];
+      inst.invokeAfterPatch({
+        ...meta,
+        isFragmentRoot: inst.el === fragmentEl,
+        isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
+      });
+    }
+  }
+
   return {
     register,
     services,
@@ -9842,6 +11114,8 @@ function createControllerRuntime(options = {}) {
     mountSubtree,
     syncTree: mountSubtree,
     unmountSubtree,
+    notifyBeforePatch,
+    notifyAfterPatch,
     mountControllerOnElement,
     getInstanceForElement(el, name) {
       const map = elementInstances.get(el);
@@ -10041,6 +11315,172 @@ function createFragmentCoordinator(options = {}) {
   let isDisposed = false;
   let lifecycleListenersAttached = false;
 
+  // Per-version patch options (mode, limit, target, removeKeys, onBeforePatch, onAfterPatch)
+  const pendingPatchOptsByKey = new Map();
+
+  // Lazy fragment IntersectionObserver state
+  let lazyObserver = null;
+  const observedLazyEls = new WeakSet();
+
+  function getLazyObserver() {
+    if (lazyObserver) return lazyObserver;
+    const win =
+      typeof window !== 'undefined'
+        ? window
+        : typeof globalThis !== 'undefined'
+          ? globalThis
+          : null;
+    const IOCtor = win && typeof win.IntersectionObserver === 'function' ? win.IntersectionObserver : null;
+    if (!IOCtor) return null;
+    lazyObserver = new IOCtor((entries) => {
+      if (isDisposed) return;
+      const visibleIds = [];
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        if (!entry || !entry.isIntersecting) continue;
+        const targetEl = entry.target;
+        try {
+          lazyObserver.unobserve(targetEl);
+        } catch (_e) {}
+        const fragId = targetEl && targetEl.getAttribute ? targetEl.getAttribute('data-w-fragment-id') : null;
+        const inst = fragId ? instances.get(fragId) : null;
+        if (inst && inst.lazy && inst.lazyState === 'idle') {
+          inst.lazyState = 'loading';
+          visibleIds.push(inst.instanceId);
+        }
+      }
+      if (visibleIds.length > 0) {
+        scheduleAutoRefresh(visibleIds, 'lazy');
+      }
+    });
+    return lazyObserver;
+  }
+
+  function observeLazyFragment(inst) {
+    if (!inst || !inst.el || !inst.lazy || inst.lazyState !== 'idle') return;
+    if (observedLazyEls.has(inst.el)) return;
+    const obs = getLazyObserver();
+    if (!obs) return;
+    observedLazyEls.add(inst.el);
+    try {
+      obs.observe(inst.el);
+    } catch (_e) {}
+  }
+
+  function unobserveLazyFragment(inst) {
+    if (!inst || !inst.el || !lazyObserver) return;
+    try {
+      lazyObserver.unobserve(inst.el);
+    } catch (_e) {}
+  }
+
+  function getListItemKey(node) {
+    if (!node || node.nodeType !== 1 || typeof node.getAttribute !== 'function') return null;
+    if (node.id) return `id:${node.id}`;
+    const wKey = node.getAttribute('data-w-key');
+    if (wKey) return `wkey:${wKey}`;
+    return null;
+  }
+
+  function patchIncrementalList(fragEl, html, opts = {}) {
+    const doc = fragEl.ownerDocument || (typeof document !== 'undefined' ? document : null);
+    const parsed = datastar && typeof datastar.parseHtmlFragment === 'function'
+      ? datastar.parseHtmlFragment(html, doc)
+      : null;
+    if (!parsed) return false;
+
+    const targetSel = opts.target || null;
+    const container =
+      (targetSel && fragEl.querySelector ? fragEl.querySelector(targetSel) : null) ||
+      (fragEl.querySelector ? fragEl.querySelector('[data-w-list]') : null) ||
+      fragEl;
+    const incomingContainer =
+      (targetSel && parsed.querySelector ? parsed.querySelector(targetSel) : null) ||
+      (parsed.querySelector ? parsed.querySelector('[data-w-list]') : null) ||
+      parsed;
+
+    // 1. Remove explicitly requested keys if any
+    if (isArray(opts.removeKeys) && opts.removeKeys.length > 0) {
+      const removeSet = new Set(opts.removeKeys.map(String));
+      const curChildren = Array.from(container.children || []);
+      for (let i = 0; i < curChildren.length; i++) {
+        const child = curChildren[i];
+        const rawKey = child.getAttribute('data-w-key') || child.id || '';
+        const fullKey = getListItemKey(child);
+        if (removeSet.has(rawKey) || (fullKey && removeSet.has(fullKey))) {
+          if (typeof opts.onBeforeNodeRemove === 'function') opts.onBeforeNodeRemove(child);
+          container.removeChild(child);
+        }
+      }
+    }
+
+    // 2. Index existing keyed items in container
+    const existingByKey = new Map();
+    const existingChildren = Array.from(container.children || []);
+    for (let i = 0; i < existingChildren.length; i++) {
+      const k = getListItemKey(existingChildren[i]);
+      if (k && !existingByKey.has(k)) {
+        existingByKey.set(k, existingChildren[i]);
+      }
+    }
+
+    const incomingItems = Array.from(incomingContainer.children || []);
+    const mode = opts.mode === 'prepend' ? 'prepend' : 'append';
+    const itemsToInsert = mode === 'prepend' ? incomingItems.slice().reverse() : incomingItems;
+
+    for (let i = 0; i < itemsToInsert.length; i++) {
+      const incoming = itemsToInsert[i];
+      if (incoming.nodeType !== 1) continue;
+      const key = getListItemKey(incoming);
+      const existingMatch = key ? existingByKey.get(key) : null;
+
+      if (existingMatch && existingMatch.tagName === incoming.tagName) {
+        // Update existing keyed item in place without duplicating
+        if (datastar && typeof datastar.morphDomTrees === 'function') {
+          datastar.morphDomTrees(existingMatch, incoming, {
+            onBeforeNodeRemove: opts.onBeforeNodeRemove,
+            onNodeAdded: opts.onNodeAdded,
+          });
+        }
+        continue;
+      }
+
+      const imported = container.ownerDocument
+        ? container.ownerDocument.importNode(incoming, true)
+        : incoming.cloneNode(true);
+
+      if (mode === 'prepend') {
+        const firstRef = (container.children && container.children[0]) || container.firstChild || null;
+        container.insertBefore(imported, firstRef);
+      } else {
+        container.appendChild(imported);
+      }
+
+      if (key) {
+        existingByKey.set(key, imported);
+      }
+      if (typeof opts.onNodeAdded === 'function') {
+        opts.onNodeAdded(imported);
+      }
+    }
+
+    // 3. Enforce optional retained item limit
+    const limitAttr = container.getAttribute ? container.getAttribute('data-w-limit') : null;
+    const rawLimit = opts.limit !== undefined ? opts.limit : limitAttr;
+    const limit = rawLimit !== null && rawLimit !== undefined && rawLimit !== '' ? Number(rawLimit) : 0;
+    if (Number.isFinite(limit) && limit > 0) {
+      while (container.children && container.children.length > limit) {
+        const ch = container.children;
+        const victim = mode === 'prepend' ? ch[ch.length - 1] : ch[0];
+        if (!victim) break;
+        if (typeof opts.onBeforeNodeRemove === 'function') opts.onBeforeNodeRemove(victim);
+        container.removeChild(victim);
+      }
+    }
+
+    return true;
+  }
+
   function isDocumentHidden() {
     const root = getRoot();
     const doc = root && root.nodeType === 9 ? root : root && root.ownerDocument ? root.ownerDocument : typeof document !== 'undefined' ? document : null;
@@ -10144,7 +11584,12 @@ function createFragmentCoordinator(options = {}) {
     try {
       await executeBatchRefresh(targets);
     } catch (_err) {
-      // Background auto-refetch errors are non-fatal
+      // Background auto-refetch errors are non-fatal; reset lazyState if still unloaded so retry/re-observe works
+      for (const inst of deduped) {
+        if (inst.lazy && inst.lazyState === 'loading') {
+          inst.lazyState = 'idle';
+        }
+      }
     }
   }
 
@@ -10156,7 +11601,7 @@ function createFragmentCoordinator(options = {}) {
     if (reason) pendingAutoReasons.add(reason);
     if (pendingAutoInstanceIds.size === 0) return;
 
-    if (reason === 'mount') {
+    if (reason === 'mount' || reason === 'lazy') {
       if (!autoBatchScheduled) {
         autoBatchScheduled = true;
         Promise.resolve().then(flushAutoRefresh);
@@ -10353,6 +11798,9 @@ function createFragmentCoordinator(options = {}) {
       ensureLifecycleListeners();
     }
 
+    const rawLazyAttr = el.getAttribute('data-w-lazy');
+    const isLazyUnloaded = Boolean(rawLazyAttr && rawLazyAttr !== 'false' && rawLazyAttr !== 'loaded');
+
     if (existing) {
       existing.name = name;
       existing.pagePath = pagePath;
@@ -10373,6 +11821,9 @@ function createFragmentCoordinator(options = {}) {
       existing._rawStale = rawStale;
       existing._rawInterval = rawInterval;
       syncInstanceInterval(existing);
+      if (existing.lazy && existing.lazyState === 'idle') {
+        observeLazyFragment(existing);
+      }
     } else {
       const created = {
         instanceId,
@@ -10395,6 +11846,9 @@ function createFragmentCoordinator(options = {}) {
         refetchIntervalInBackground,
         intervalTimer: null,
         activeIntervalMs: 0,
+        lazy: isLazyUnloaded,
+        lazyState: isLazyUnloaded ? 'idle' : 'loaded',
+        staleWhileUnloaded: false,
         _rawInput: rawInput,
         _rawDepends: rawDepends,
         _rawStale: rawStale,
@@ -10402,7 +11856,9 @@ function createFragmentCoordinator(options = {}) {
       };
       instances.set(instanceId, created);
       syncInstanceInterval(created);
-      if (pendingRestoredInput) {
+      if (isLazyUnloaded) {
+        observeLazyFragment(created);
+      } else if (pendingRestoredInput) {
         Promise.resolve().then(() => {
           if (!isDisposed && created.version === 0 && instances.get(instanceId) === created) {
             refresh(instanceId, pendingRestoredInput).catch(() => {});
@@ -10442,6 +11898,7 @@ function createFragmentCoordinator(options = {}) {
           !seenIds.has(id) || (inst.el && inst.el.isConnected === false);
         if (disconnected) {
           clearInstanceInterval(inst);
+          unobserveLazyFragment(inst);
           if (inst.abortController) {
             try {
               inst.abortController.abort();
@@ -10487,6 +11944,21 @@ function createFragmentCoordinator(options = {}) {
     const html = fragmentPayload && typeof fragmentPayload.html === 'string' ? fragmentPayload.html : '';
     if (!html) return false;
 
+    const patchKey = `${inst.instanceId}:${reqVersion}`;
+    const patchOpts = pendingPatchOptsByKey.get(patchKey) || null;
+    if (patchOpts) {
+      pendingPatchOptsByKey.delete(patchKey);
+    }
+
+    if (typeof options.onBeforePatch === 'function') {
+      options.onBeforePatch(inst.el, inst);
+    }
+    if (patchOpts && typeof patchOpts.onBeforePatch === 'function') {
+      try {
+        patchOpts.onBeforePatch(inst.el, inst);
+      } catch (_e) {}
+    }
+
     const patchStart = Date.now();
 
     const committedInput =
@@ -10513,13 +11985,34 @@ function createFragmentCoordinator(options = {}) {
       }
     }
 
-    if (datastar && typeof datastar.patchFragmentElement === 'function') {
+    const patchMode = fragmentPayload.mode || (patchOpts && patchOpts.mode) || 'replace';
+    if (patchMode === 'append' || patchMode === 'prepend') {
+      patchIncrementalList(inst.el, html, {
+        mode: patchMode,
+        limit: fragmentPayload.limit !== undefined ? fragmentPayload.limit : patchOpts && patchOpts.limit,
+        target: fragmentPayload.target || (patchOpts && patchOpts.target),
+        removeKeys: fragmentPayload.removeKeys || (patchOpts && patchOpts.removeKeys),
+        onBeforeNodeRemove: options.onBeforeNodeRemove,
+        onNodeAdded: options.onNodeAdded,
+      });
+    } else if (datastar && typeof datastar.patchFragmentElement === 'function') {
       datastar.patchFragmentElement(inst.el, html, {
         onBeforeNodeRemove: options.onBeforeNodeRemove,
         onNodeAdded: options.onNodeAdded,
       });
     } else {
       inst.el.innerHTML = html;
+    }
+
+    // Clear lazy unloaded markers once a real patch is applied
+    if (inst.lazy || inst.lazyState !== 'loaded') {
+      inst.lazy = false;
+      inst.lazyState = 'loaded';
+      inst.staleWhileUnloaded = false;
+      unobserveLazyFragment(inst);
+      if (inst.el && typeof inst.el.removeAttribute === 'function') {
+        inst.el.removeAttribute('data-w-lazy');
+      }
     }
 
     const patchMs = Math.max(0, Date.now() - patchStart);
@@ -10536,6 +12029,11 @@ function createFragmentCoordinator(options = {}) {
 
     if (typeof options.onAfterPatch === 'function') {
       options.onAfterPatch(inst.el, inst);
+    }
+    if (patchOpts && typeof patchOpts.onAfterPatch === 'function') {
+      try {
+        patchOpts.onAfterPatch(inst.el, inst);
+      } catch (_e) {}
     }
 
     if (debug) {
@@ -10974,7 +12472,12 @@ function createFragmentCoordinator(options = {}) {
         }
       }
       if (matched) {
-        matchingInstances.push(inst);
+        if (inst.lazy && inst.lazyState === 'idle') {
+          // Do not fetch off-screen unloaded lazy fragments on invalidation; mark stale for when visible
+          inst.staleWhileUnloaded = true;
+        } else {
+          matchingInstances.push(inst);
+        }
       }
     }
 
@@ -11129,6 +12632,29 @@ function createFragmentCoordinator(options = {}) {
       }
       inst.abortController = abortController;
       inst.version += 1;
+
+      if (inst.lazy && inst.lazyState === 'idle') {
+        inst.lazyState = 'loading';
+        unobserveLazyFragment(inst);
+      }
+
+      if (
+        refreshOpts.mode ||
+        refreshOpts.limit !== undefined ||
+        refreshOpts.target ||
+        refreshOpts.removeKeys ||
+        typeof refreshOpts.onBeforePatch === 'function' ||
+        typeof refreshOpts.onAfterPatch === 'function'
+      ) {
+        pendingPatchOptsByKey.set(`${inst.instanceId}:${inst.version}`, {
+          mode: refreshOpts.mode || null,
+          limit: refreshOpts.limit,
+          target: refreshOpts.target,
+          removeKeys: refreshOpts.removeKeys,
+          onBeforePatch: refreshOpts.onBeforePatch,
+          onAfterPatch: refreshOpts.onAfterPatch,
+        });
+      }
 
       const candidateInput =
         nextInput && typeof nextInput === 'object'
@@ -11365,6 +12891,13 @@ function createFragmentCoordinator(options = {}) {
       }
       pendingAutoInstanceIds.clear();
       pendingAutoReasons.clear();
+      pendingPatchOptsByKey.clear();
+      if (lazyObserver && typeof lazyObserver.disconnect === 'function') {
+        try {
+          lazyObserver.disconnect();
+        } catch (_e) {}
+        lazyObserver = null;
+      }
       removeLifecycleListeners();
       for (const inst of instances.values()) {
         clearInstanceInterval(inst);
@@ -11954,9 +13487,21 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onAfterPatch(patchedEl) {
+    onBeforePatch(patchedEl, inst) {
+      if (controllers) {
+        controllers.notifyBeforePatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
+      }
+    },
+    onAfterPatch(patchedEl, inst) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
+        controllers.notifyAfterPatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
       }
     },
   });
@@ -12479,9 +14024,21 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onAfterPatch(patchedEl) {
+    onBeforePatch(patchedEl, inst) {
+      if (controllers) {
+        controllers.notifyBeforePatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
+      }
+    },
+    onAfterPatch(patchedEl, inst) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
+        controllers.notifyAfterPatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
       }
     },
   });
@@ -13004,9 +14561,21 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onAfterPatch(patchedEl) {
+    onBeforePatch(patchedEl, inst) {
+      if (controllers) {
+        controllers.notifyBeforePatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
+      }
+    },
+    onAfterPatch(patchedEl, inst) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
+        controllers.notifyAfterPatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
       }
     },
   });
@@ -13529,9 +15098,21 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onAfterPatch(patchedEl) {
+    onBeforePatch(patchedEl, inst) {
+      if (controllers) {
+        controllers.notifyBeforePatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
+      }
+    },
+    onAfterPatch(patchedEl, inst) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
+        controllers.notifyAfterPatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
       }
     },
   });
@@ -14054,9 +15635,21 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onAfterPatch(patchedEl) {
+    onBeforePatch(patchedEl, inst) {
+      if (controllers) {
+        controllers.notifyBeforePatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
+      }
+    },
+    onAfterPatch(patchedEl, inst) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
+        controllers.notifyAfterPatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
       }
     },
   });
@@ -14579,9 +16172,21 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onAfterPatch(patchedEl) {
+    onBeforePatch(patchedEl, inst) {
+      if (controllers) {
+        controllers.notifyBeforePatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
+      }
+    },
+    onAfterPatch(patchedEl, inst) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
+        controllers.notifyAfterPatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
       }
     },
   });
@@ -15104,9 +16709,21 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onAfterPatch(patchedEl) {
+    onBeforePatch(patchedEl, inst) {
+      if (controllers) {
+        controllers.notifyBeforePatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
+      }
+    },
+    onAfterPatch(patchedEl, inst) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
+        controllers.notifyAfterPatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
       }
     },
   });

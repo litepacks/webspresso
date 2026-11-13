@@ -731,6 +731,22 @@ SSR Fragments (`defineFragment` / `[data-w-fragment]`), controller `tasks`, and 
    - Fragment input priority: SSR `data-w-fragment-input` represents the initial rendered HTML; if `data-w-persist-input` finds a differing stored filter, `inst.input` remains aligned with the visible SSR HTML until the automatic reconciliation refresh completes and patches the DOM.
    - Explicit user selection of default filter values (e.g. `status: 'all'`, `search: ''`) writes those values to storage so subsequent DOM scans never overwrite an explicit reset with stale storage.
 
+---
+
+## 17. LiveView / Livewire-Inspired Opt-In Enhancements
+
+- **Widget DOM Ownership (`data-w-ignore`)**: `data-w-ignore` / `data-w-ignore="children"` preserves inner DOM while syncing root attributes; `data-w-ignore="self"` skips root attribute sync while morphing children; `data-w-ignore="all"` skips both. Parent removal or key change still removes the node and invokes `disconnect()` / cleanup.
+- **Token-Level Class & Ownership Sync (`data-w-class`, `data-w-class:*`)**: Preserves client-managed class tokens during fragment patches while applying server class updates; removing `data-w-class`/`data-w-show`/`data-w-disabled`/`data-w-model` releases ownership immediately. Dev mode emits `ownership:conflict` diagnostics when server HTML also writes a client-owned token/attribute.
+- **Patch Lifecycle Hooks (`beforePatch` / `afterPatch`)**: Defined on `defineController` (and per-refresh options). `beforePatch` runs synchronously before morphing (ancestor → descendant); `afterPatch` runs after morphing (descendant → ancestor). Never called on superseded responses; errors are isolated via `onError`; rapid patch bursts (>5 in 100ms) emit `PATCH_HOOK_LOOP_DETECTED`.
+- **Form `touched`, `submitted`, & `errorDisplay: 'touched'`**: Tracks `touched` / `touchedFields` / `submitted` independently from `dirty`. With `data-w-error-mode="touched"`, errors appear only for touched fields until submit. `fill(..., { baseline: true })` resets `touched` and errors.
+- **Delayed Loading Indicators (`data-w-loading-delay`)**: `disabled`, `data-w-busy`, and `aria-busy` apply immediately to prevent double-submit; visual `data-w-loading-text` / `data-w-loading-class` / `data-w-loading-hide` wait for the delay using generation tokens and unmount cleanup.
+- **Event Debounce & Throttle (`data-w-on:input.debounce.300`)**: Supports `.debounce.<ms>` and `.throttle.<ms>` with `.leading` / `.trailing`, IME composition guard, captured `actionEl`, and automatic cancel on form `reset` or unmount while `data-w-model` updates immediately.
+- **Lazy SSR Fragments (`lazy: true`)**: Skips `load()` on initial SSR, renders `placeholder` / `placeholderTemplate` with `data-w-lazy="visible"`, and loads via `IntersectionObserver` (batched) or explicit `refresh()`. Invalidations while unloaded mark stale without fetching. *Progressive enhancement note*: lazy fragment content requires JS in the browser; SEO-critical content should remain standard eager SSR.
+- **Field-Level Server Validation (`defineApi({ validateFields, validate })`)**: `form.validateField(name)` sends `X-Webspresso-Validate-Fields` (skipping `handlerFn` on the server), ignores stale responses, preserves other field errors, and isolates network/5xx errors without marking fields invalid. Supports `data-w-validate="blur|debounce:300"`.
+- **Incremental Keyed List Updates**: `fragment.refresh(input, { mode: 'append' | 'prepend', limit, target, removeKeys })` appends/prepends keyed items (`data-w-key` / `id`), updates existing keys in place via `morphDomTrees`, removes `removeKeys`, and trims to `limit`.
+- **Upload Progress, Cancel & Previews**: Uses `XMLHttpRequest` when `onUploadProgress` is provided, exposing `form.uploads`, `form.cancelUpload()`, `form.createPreviewUrl()`, and automatic `URL.revokeObjectURL()` cleanup on reset/unmount.
+
+
 
 
 

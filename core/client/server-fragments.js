@@ -118,6 +118,9 @@ function defineFragment(config = {}) {
         : config.persist !== undefined
           ? config.persist
           : undefined,
+    lazy: config.lazy !== undefined ? Boolean(config.lazy) : undefined,
+    placeholder: config.placeholder !== undefined ? config.placeholder : undefined,
+    placeholderTemplate: config.placeholderTemplate !== undefined ? config.placeholderTemplate : undefined,
   };
 }
 
@@ -403,6 +406,7 @@ function wrapFragmentRootHtml({
   refetchInterval,
   refetchIntervalInBackground,
   persistInput,
+  lazy,
 }) {
   const safeTag = /^[a-zA-Z][a-zA-Z0-9-]*$/.test(tag || 'div') ? tag : 'div';
   const attrs = [
@@ -447,6 +451,10 @@ function wrapFragmentRootHtml({
     const persistAttrVal =
       persistInput === true || persistInput === 'input' ? 'session' : String(persistInput);
     attrs.push(`data-w-persist-input="${escapeHtmlAttr(persistAttrVal)}"`);
+  }
+
+  if (lazy) {
+    attrs.push('data-w-lazy="visible"');
   }
 
   if (className) {
@@ -512,10 +520,18 @@ async function executeAndRenderFragment({
   // 3. Validate & coerce fragment input
   const validatedInput = validateFragmentInput(name, fragmentDef, rawInput);
 
-  // 4. Execute fragment loader (`load(fragmentCtx)`)
+  const isLazy = Boolean(options.lazy !== undefined ? options.lazy : fragmentDef.lazy);
+  const isRefreshTarget = Boolean(
+    req &&
+      req.__isWebspressoFragmentRefresh &&
+      (!req.__refreshedFragmentIds || req.__refreshedFragmentIds.has(instanceId))
+  );
+  const renderAsLazyPlaceholder = isLazy && !isRefreshTarget;
+
+  // 4. Execute fragment loader (`load(fragmentCtx)`) unless rendering initial lazy placeholder
   const loadStart = Date.now();
   let fragmentData = {};
-  if (typeof fragmentDef.load === 'function') {
+  if (!renderAsLazyPlaceholder && typeof fragmentDef.load === 'function') {
     const fragmentCtx = {
       ...ctx,
       req,
@@ -535,20 +551,45 @@ async function executeAndRenderFragment({
   }
   const loadMs = Math.max(0, Date.now() - loadStart);
 
-  // 5. Render fragment template via Nunjucks
+  // 5. Render fragment template (or lazy placeholder) via Nunjucks
   const renderStart = Date.now();
-  const templateCtx = {
-    ...(res && res.locals ? res.locals : {}),
-    ...baseRenderCtx,
-    ...fragmentData,
-    fragmentInput: validatedInput,
-    fragmentId: instanceId,
-    fragmentName: name,
-  };
+  let innerHtml = '';
+  if (renderAsLazyPlaceholder) {
+    const phTemplate = options.placeholderTemplate || fragmentDef.placeholderTemplate;
+    const phOption = options.placeholder !== undefined ? options.placeholder : fragmentDef.placeholder;
+    if (typeof phTemplate === 'string' && phTemplate.trim()) {
+      const cleanPh = phTemplate.trim().replace(/^\/+/, '');
+      if (cleanPh.includes('..')) {
+        throw new BadRequestError(`Invalid placeholder template path for fragment "${name}".`);
+      }
+      innerHtml = nunjucksEnv.render(cleanPh, {
+        ...(res && res.locals ? res.locals : {}),
+        ...baseRenderCtx,
+        fragmentInput: validatedInput,
+        fragmentId: instanceId,
+        fragmentName: name,
+      });
+    } else if (typeof phOption === 'function') {
+      innerHtml = String(phOption({ input: validatedInput, instanceId, name }) || '');
+    } else if (typeof phOption === 'string') {
+      innerHtml = phOption;
+    } else {
+      innerHtml = '<div class="w-fragment-placeholder" role="status" aria-busy="true" aria-live="polite" style="min-height:48px">Loading...</div>';
+    }
+  } else {
+    const templateCtx = {
+      ...(res && res.locals ? res.locals : {}),
+      ...baseRenderCtx,
+      ...fragmentData,
+      fragmentInput: validatedInput,
+      fragmentId: instanceId,
+      fragmentName: name,
+    };
 
-  let innerHtml = nunjucksEnv.render(cleanTemplate, templateCtx);
-  // Resolve any nested async SSR fragments inside this fragment
-  innerHtml = await resolvePendingSsrFragments(innerHtml, req);
+    innerHtml = nunjucksEnv.render(cleanTemplate, templateCtx);
+    // Resolve any nested async SSR fragments inside this fragment
+    innerHtml = await resolvePendingSsrFragments(innerHtml, req);
+  }
   const renderMs = Math.max(0, Date.now() - renderStart);
 
   if (renderedInstanceIds) {
@@ -591,6 +632,7 @@ async function executeAndRenderFragment({
         : options.persist !== undefined
           ? options.persist
           : fragmentDef.persistInput,
+    lazy: renderAsLazyPlaceholder,
   });
 
   return {
@@ -897,6 +939,8 @@ function createFragmentRefreshHandler(config) {
       const ctx = typeof buildContext === 'function' ? buildContext(req, res, { fsy }) : { req, res, fsy };
       ensureRequestMemo(req, ctx);
 
+      req.__isWebspressoFragmentRefresh = true;
+      req.__refreshedFragmentIds = new Set(requestedFragments.map((it) => it.instanceId || `${it.name}:default`));
       req.__fragmentChildInputs =
         payload.childInputs && typeof payload.childInputs === 'object' && !isArray(payload.childInputs)
           ? payload.childInputs

@@ -192,9 +192,21 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onAfterPatch(patchedEl) {
+    onBeforePatch(patchedEl, inst) {
+      if (controllers) {
+        controllers.notifyBeforePatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
+      }
+    },
+    onAfterPatch(patchedEl, inst) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
+        controllers.notifyAfterPatch(patchedEl, {
+          fragmentId: inst && inst.instanceId ? inst.instanceId : null,
+          fragmentName: inst && inst.name ? inst.name : null,
+        });
       }
     },
   });

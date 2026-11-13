@@ -13,6 +13,8 @@
  * @param {Array<string|Function>} [config.middleware] - Named or functional middlewares
  * @param {string|{ key: string, statusCode?: number, message?: string }} [config.flag] - Feature flag required to access this endpoint
  * @param {Object|Function} [config.schema] - Request schemas (params, query, body, headers)
+ * @param {boolean|string[]} [config.validateFields] - Opt-in field-level validation without running mutation handler
+ * @param {Function} [config.validate] - Optional async read-only validation hook: async (ctx, fields) => ({ field: 'msg' })
  * @param {Object} [config.response] - Expected response schemas by status code
  * @param {Function} config.handler - Request handler: async (req, ctx) => data
  * @returns {Object}

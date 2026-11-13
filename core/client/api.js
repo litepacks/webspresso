@@ -618,6 +618,110 @@ function abortableSleep(ms, signals = []) {
   });
 }
 
+function parseXhrHeaders(rawHeaders) {
+  const map = new Map();
+  if (typeof rawHeaders === 'string' && rawHeaders) {
+    const lines = rawHeaders.trim().split(/[\r\n]+/);
+    for (let i = 0; i < lines.length; i++) {
+      const idx = lines[i].indexOf(':');
+      if (idx > 0) {
+        const k = lines[i].slice(0, idx).trim().toLowerCase();
+        const v = lines[i].slice(idx + 1).trim();
+        map.set(k, v);
+      }
+    }
+  }
+  return {
+    get(name) {
+      return map.get(String(name || '').toLowerCase()) ?? null;
+    },
+    has(name) {
+      return map.has(String(name || '').toLowerCase());
+    },
+  };
+}
+
+function executeXhrUpload({ url, method, headers, body, credentials, signal, onUploadProgress }) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+    if (credentials === 'include' || credentials === 'same-origin') {
+      xhr.withCredentials = credentials === 'include';
+    }
+    if (headers && typeof headers === 'object') {
+      for (const [k, v] of Object.entries(headers)) {
+        if (v !== undefined && v !== null) {
+          xhr.setRequestHeader(k, String(v));
+        }
+      }
+    }
+
+    if (xhr.upload && typeof onUploadProgress === 'function') {
+      xhr.upload.onprogress = (evt) => {
+        const lengthComputable = Boolean(evt && evt.lengthComputable);
+        const loaded = evt && typeof evt.loaded === 'number' ? evt.loaded : 0;
+        const total = lengthComputable && evt && typeof evt.total === 'number' ? evt.total : 0;
+        const percent = lengthComputable && total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : null;
+        try {
+          onUploadProgress({ loaded, total, percent, lengthComputable });
+        } catch (_e) {}
+      };
+    }
+
+    const onAbort = () => {
+      try {
+        xhr.abort();
+      } catch (_e) {}
+    };
+    if (signal) {
+      if (signal.aborted) {
+        const abortErr = new Error('The operation was aborted.');
+        abortErr.name = 'AbortError';
+        reject(abortErr);
+        return;
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+
+    const cleanup = () => {
+      if (signal) {
+        try {
+          signal.removeEventListener('abort', onAbort);
+        } catch (_e) {}
+      }
+    };
+
+    xhr.onload = () => {
+      cleanup();
+      const status = xhr.status === 1223 ? 204 : xhr.status;
+      const rawText = typeof xhr.responseText === 'string' ? xhr.responseText : '';
+      const headerObj = parseXhrHeaders(xhr.getAllResponseHeaders ? xhr.getAllResponseHeaders() : '');
+      resolve({
+        ok: status >= 200 && status < 300,
+        status,
+        statusText: xhr.statusText || '',
+        headers: headerObj,
+        text: async () => rawText,
+        json: async () => (rawText ? JSON.parse(rawText) : null),
+      });
+    };
+
+    xhr.onerror = () => {
+      cleanup();
+      reject(new TypeError('Network request failed'));
+    };
+
+    xhr.onabort = () => {
+      cleanup();
+      const abortErr = new Error('The operation was aborted.');
+      abortErr.name = 'AbortError';
+      reject(abortErr);
+    };
+
+    xhr.send(body === undefined ? null : body);
+  });
+}
+
 /**
  * Create a Typed API Client instance.
  *
@@ -904,13 +1008,25 @@ function createApiClient(config = {}) {
     try {
       let response;
       try {
-        response = await fetchImpl(requestUrl, {
-          method: upperMethod,
-          headers,
-          body: serializedBody,
-          credentials: options.credentials || 'same-origin',
-          signal: abortController.signal,
-        });
+        if (typeof options.onUploadProgress === 'function' && typeof XMLHttpRequest !== 'undefined') {
+          response = await executeXhrUpload({
+            url: requestUrl,
+            method: upperMethod,
+            headers,
+            body: serializedBody,
+            credentials: options.credentials || 'same-origin',
+            signal: abortController.signal,
+            onUploadProgress: options.onUploadProgress,
+          });
+        } else {
+          response = await fetchImpl(requestUrl, {
+            method: upperMethod,
+            headers,
+            body: serializedBody,
+            credentials: options.credentials || 'same-origin',
+            signal: abortController.signal,
+          });
+        }
       } catch (fetchErr) {
         if (timeoutTimer) {
           clearTimeout(timeoutTimer);

@@ -450,6 +450,7 @@ function createFormHandle(formEl, options = {}) {
   let baselineValues = parseFormElement(formEl).data;
   let pending = false;
   let dirty = false;
+  let submitted = false;
   let inputRevision = 0;
   let fieldErrors = {};
   let formError = null;
@@ -457,6 +458,83 @@ function createFormHandle(formEl, options = {}) {
   let lastData = null;
   let draftDebounceTimer = null;
   let resetTimer = null;
+
+  const touchedFields = new Set();
+  const errorDisplayMode =
+    options.errorDisplay === 'touched' ||
+    (formEl && formEl.getAttribute && formEl.getAttribute('data-w-error-mode') === 'touched')
+      ? 'touched'
+      : 'always';
+
+  const validationSeqByField = new Map();
+  const validationTimersByField = new Map();
+  const validationAbortByField = new Map();
+
+  let activeSubmitAbort = null;
+  let uploadEntries = [];
+  const previewUrlsByField = new Map();
+
+  function cancelFieldValidation(fieldName) {
+    if (fieldName) {
+      const t = validationTimersByField.get(fieldName);
+      if (t) {
+        clearTimeout(t);
+        validationTimersByField.delete(fieldName);
+      }
+      const ac = validationAbortByField.get(fieldName);
+      if (ac) {
+        try {
+          ac.abort();
+        } catch (_e) {}
+        validationAbortByField.delete(fieldName);
+      }
+      return;
+    }
+    for (const t of validationTimersByField.values()) clearTimeout(t);
+    validationTimersByField.clear();
+    for (const ac of validationAbortByField.values()) {
+      try {
+        ac.abort();
+      } catch (_e) {}
+    }
+    validationAbortByField.clear();
+  }
+
+  function revokePreviewUrls(fieldName) {
+    const revokeUrl = (u) => {
+      if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+        try {
+          URL.revokeObjectURL(u);
+        } catch (_e) {}
+      }
+    };
+    if (fieldName) {
+      const set = previewUrlsByField.get(fieldName);
+      if (set) {
+        for (const u of set) revokeUrl(u);
+        set.clear();
+        previewUrlsByField.delete(fieldName);
+      }
+      return;
+    }
+    for (const set of previewUrlsByField.values()) {
+      for (const u of set) revokeUrl(u);
+      set.clear();
+    }
+    previewUrlsByField.clear();
+  }
+
+  function createPreviewUrl(file, fieldName = '_default') {
+    if (!file || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return null;
+    const url = URL.createObjectURL(file);
+    let set = previewUrlsByField.get(fieldName);
+    if (!set) {
+      set = new Set();
+      previewUrlsByField.set(fieldName, set);
+    }
+    set.add(url);
+    return url;
+  }
 
   const beforeSubmitListeners = new Set();
   const successListeners = new Set();
@@ -606,6 +684,12 @@ function createFormHandle(formEl, options = {}) {
     }
   }
 
+  function isFieldErrorVisible(fieldName) {
+    if (errorDisplayMode !== 'touched') return true;
+    if (submitted) return true;
+    return touchedFields.has(fieldName);
+  }
+
   /**
    * Render field errors and form-level error into the DOM with accessible ARIA bindings.
    * Optionally focuses the first invalid control.
@@ -618,7 +702,11 @@ function createFormHandle(formEl, options = {}) {
     for (let i = 0; i < errorSpans.length; i++) {
       const span = errorSpans[i];
       const fieldName = span.getAttribute('data-w-error');
-      const msg = fieldName && fieldErrors[fieldName] ? String(fieldErrors[fieldName]) : '';
+      const normName = fieldName && fieldName.endsWith('[]') ? fieldName.slice(0, -2) : fieldName;
+      const rawMsg = fieldName && (fieldErrors[fieldName] || (normName && fieldErrors[normName]))
+        ? String(fieldErrors[fieldName] || fieldErrors[normName])
+        : '';
+      const msg = rawMsg && (isFieldErrorVisible(fieldName) || (normName && isFieldErrorVisible(normName))) ? rawMsg : '';
       span.textContent = msg;
       if (msg) {
         span.removeAttribute('hidden');
@@ -641,7 +729,8 @@ function createFormHandle(formEl, options = {}) {
       const rawName = ctrl.getAttribute('name');
       if (!rawName) continue;
       const normName = rawName.endsWith('[]') ? rawName.slice(0, -2) : rawName;
-      const errMsg = fieldErrors[normName] || fieldErrors[rawName];
+      const rawErrMsg = fieldErrors[normName] || fieldErrors[rawName];
+      const errMsg = rawErrMsg && (isFieldErrorVisible(normName) || isFieldErrorVisible(rawName)) ? rawErrMsg : '';
 
       if (errMsg) {
         ctrl.setAttribute('aria-invalid', 'true');
@@ -726,6 +815,8 @@ function createFormHandle(formEl, options = {}) {
    */
   function reset() {
     cancelDraftDebounce();
+    cancelFieldValidation();
+    revokePreviewUrls();
     if (!formEl) return;
     if (typeof formEl.reset === 'function') {
       formEl.reset();
@@ -745,6 +836,8 @@ function createFormHandle(formEl, options = {}) {
       }
     }
     dirty = false;
+    submitted = false;
+    touchedFields.clear();
     fieldErrors = {};
     formError = null;
     syncErrorsToDom(false);
@@ -756,6 +849,8 @@ function createFormHandle(formEl, options = {}) {
    */
   function clear() {
     cancelDraftDebounce();
+    cancelFieldValidation();
+    revokePreviewUrls();
     if (!formEl || typeof formEl.querySelectorAll !== 'function') return;
     const controls = formEl.querySelectorAll('input, select, textarea');
     for (let i = 0; i < controls.length; i++) {
@@ -777,6 +872,8 @@ function createFormHandle(formEl, options = {}) {
       }
     }
     dirty = computeFormDirty(formEl, initialSnapshot);
+    submitted = false;
+    touchedFields.clear();
     fieldErrors = {};
     formError = null;
     syncErrorsToDom(false);
@@ -844,9 +941,12 @@ function createFormHandle(formEl, options = {}) {
     }
 
     if (isBaseline) {
+      cancelFieldValidation();
       initialSnapshot = captureInitialFormSnapshot(formEl);
       baselineValues = parseFormElement(formEl).data;
       dirty = false;
+      submitted = false;
+      touchedFields.clear();
       fieldErrors = {};
       formError = null;
       lastError = null;
@@ -965,7 +1065,9 @@ function createFormHandle(formEl, options = {}) {
       }
     }
 
-    // Clear previous errors before request starts
+    // Clear previous errors before request starts, mark submitted = true
+    cancelFieldValidation();
+    submitted = true;
     fieldErrors = {};
     formError = null;
     lastError = null;
@@ -974,6 +1076,36 @@ function createFormHandle(formEl, options = {}) {
     const submittedSnapshot = captureInitialFormSnapshot(formEl);
     setPendingState(true, submitter);
 
+    // Track per-file upload state if multipart
+    const submitAbortController = new AbortController();
+    activeSubmitAbort = submitAbortController;
+    if (isMultipart && formEl && typeof formEl.querySelectorAll === 'function') {
+      const nextUploads = [];
+      const fileInputs = formEl.querySelectorAll('input[type="file"]');
+      for (let i = 0; i < fileInputs.length; i++) {
+        const fi = fileInputs[i];
+        const fName = fi.getAttribute('name') || 'file';
+        const files = fi.files || [];
+        for (let j = 0; j < files.length; j++) {
+          const f = files[j];
+          nextUploads.push({
+            field: fName,
+            name: f.name || 'file',
+            size: typeof f.size === 'number' ? f.size : 0,
+            status: 'uploading',
+            loaded: 0,
+            total: typeof f.size === 'number' ? f.size : 0,
+            percent: null,
+            error: null,
+          });
+        }
+      }
+      uploadEntries = nextUploads;
+      if (uploadEntries.length > 0) notifyStateChange();
+    } else {
+      uploadEntries = [];
+    }
+
     try {
       let responseData;
       const reqKey = `form:${formName}:${method}:${actionUrl}`;
@@ -981,13 +1113,36 @@ function createFormHandle(formEl, options = {}) {
         responseData = await api.get(actionUrl, payloadData, {
           key: reqKey,
           policy: 'latest',
+          signal: submitAbortController.signal,
         });
       } else {
         const bodyToSend = isMultipart && formData ? formData : payloadData;
-        responseData = await api.request(method, actionUrl, bodyToSend, {
+        const reqOpts = {
           key: reqKey,
           policy: 'drop',
-        });
+          signal: submitAbortController.signal,
+        };
+        if (isMultipart && uploadEntries.length > 0) {
+          reqOpts.onUploadProgress = (prog) => {
+            for (let i = 0; i < uploadEntries.length; i++) {
+              uploadEntries[i].loaded = prog.loaded;
+              uploadEntries[i].total = prog.total || uploadEntries[i].total;
+              uploadEntries[i].percent = prog.percent;
+            }
+            if (typeof submitOptions.onUploadProgress === 'function') {
+              submitOptions.onUploadProgress(prog, uploadEntries);
+            }
+            notifyStateChange();
+          };
+        }
+        responseData = await api.request(method, actionUrl, bodyToSend, reqOpts);
+      }
+
+      if (uploadEntries.length > 0) {
+        for (let i = 0; i < uploadEntries.length; i++) {
+          uploadEntries[i].status = 'done';
+          if (uploadEntries[i].percent !== null) uploadEntries[i].percent = 100;
+        }
       }
 
       lastData = responseData;
@@ -1100,6 +1255,15 @@ function createFormHandle(formEl, options = {}) {
       return { ok: true, submitted: true, data: responseData, refreshOk, refreshError, hookError };
     } catch (err) {
       lastError = err || null;
+      if (uploadEntries.length > 0) {
+        const isCanceled = Boolean(err && err.isCanceled);
+        for (let i = 0; i < uploadEntries.length; i++) {
+          if (uploadEntries[i].status === 'uploading') {
+            uploadEntries[i].status = isCanceled ? 'canceled' : 'error';
+            uploadEntries[i].error = isCanceled ? null : (err && err.message ? err.message : 'Upload failed');
+          }
+        }
+      }
       if (err && err.kind === 'validation') {
         fieldErrors = { ...(err.fieldErrors || {}) };
         formError = err.formError || (Object.keys(fieldErrors).length === 0 ? err.message : null);
@@ -1130,23 +1294,172 @@ function createFormHandle(formEl, options = {}) {
         error: err,
       };
     } finally {
+      if (activeSubmitAbort === submitAbortController) {
+        activeSubmitAbort = null;
+      }
       setPendingState(false, submitter);
     }
   }
 
-  // Listen to native submit and input/change events on `formEl`
+  function parseFieldValidateConfig(ctrl) {
+    const ctrlAttr = ctrl && ctrl.getAttribute ? ctrl.getAttribute('data-w-validate') : null;
+    const formAttr = formEl && formEl.getAttribute ? formEl.getAttribute('data-w-validate') : null;
+    const raw = ctrlAttr !== null ? ctrlAttr : formAttr;
+    if (!raw || raw === 'false') return null;
+    const parts = String(raw).split(/[\s,|]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+    const onBlur = parts.includes('blur') || parts.includes('true') || raw === '';
+    let debounceMs = null;
+    for (const p of parts) {
+      if (p.startsWith('debounce:')) {
+        const ms = Number(p.slice('debounce:'.length).replace(/ms$/i, ''));
+        debounceMs = Number.isFinite(ms) && ms >= 0 ? ms : 300;
+      } else if (p === 'debounce') {
+        debounceMs = 300;
+      }
+    }
+    return { onBlur, debounceMs };
+  }
+
+  async function validateField(fieldName, vOpts = {}) {
+    if (!formEl || !api || !fieldName) return { ok: true, valid: true, errors: {} };
+    const norm = fieldName.endsWith('[]') ? fieldName.slice(0, -2) : fieldName;
+
+    const seq = (validationSeqByField.get(norm) || 0) + 1;
+    validationSeqByField.set(norm, seq);
+
+    const prevAbort = validationAbortByField.get(norm);
+    if (prevAbort) {
+      try {
+        prevAbort.abort();
+      } catch (_e) {}
+    }
+    const ac = new AbortController();
+    validationAbortByField.set(norm, ac);
+
+    const validateUrl =
+      vOpts.url ||
+      (formEl.getAttribute && (formEl.getAttribute('data-w-validate-url') || formEl.getAttribute('action'))) ||
+      (typeof window !== 'undefined' && window.location ? window.location.pathname : '/');
+    const method = String(vOpts.method || (formEl.getAttribute && formEl.getAttribute('method')) || 'POST').toUpperCase();
+
+    const { data: allValues } = parseFormElement(formEl);
+    const ctrl = formEl.querySelector ? (formEl.querySelector(`[name="${norm}"]`) || formEl.querySelector(`[name="${fieldName}"]`)) : null;
+    const contextAttr = ctrl && ctrl.getAttribute ? ctrl.getAttribute('data-w-validate-context') : null;
+
+    let payload = { [norm]: allValues[norm] };
+    if (vOpts.contextFields === '*' || contextAttr === '*') {
+      payload = { ...allValues };
+    } else {
+      const ctxList = isArray(vOpts.contextFields)
+        ? vOpts.contextFields
+        : typeof contextAttr === 'string' && contextAttr.trim()
+          ? contextAttr.split(',').map((s) => s.trim()).filter(Boolean)
+          : [];
+      for (const cf of ctxList) {
+        if (Object.prototype.hasOwnProperty.call(allValues, cf)) {
+          payload[cf] = allValues[cf];
+        }
+      }
+    }
+
+    try {
+      const resp = await api.request(method, validateUrl, payload, {
+        headers: { 'X-Webspresso-Validate-Fields': norm },
+        signal: ac.signal,
+      });
+
+      if (seq !== validationSeqByField.get(norm)) {
+        return { ok: true, stale: true, valid: true, errors: {} };
+      }
+
+      const respErrors = resp && resp.errors && typeof resp.errors === 'object' ? resp.errors : {};
+      if (respErrors[norm]) {
+        fieldErrors[norm] = String(respErrors[norm]);
+      } else {
+        delete fieldErrors[norm];
+      }
+      syncErrorsToDom(false);
+      notifyStateChange();
+      return {
+        ok: true,
+        valid: !fieldErrors[norm],
+        errors: fieldErrors[norm] ? { [norm]: fieldErrors[norm] } : {},
+      };
+    } catch (err) {
+      if (seq !== validationSeqByField.get(norm) || (err && err.isCanceled)) {
+        return { ok: true, stale: true, canceled: Boolean(err && err.isCanceled), errors: {} };
+      }
+      // If server returned a 400/422 validation envelope, extract only this field's error
+      if (err && err.kind === 'validation' && err.fieldErrors) {
+        if (err.fieldErrors[norm]) {
+          fieldErrors[norm] = String(err.fieldErrors[norm]);
+        } else {
+          delete fieldErrors[norm];
+        }
+        syncErrorsToDom(false);
+        notifyStateChange();
+        return { ok: true, valid: !fieldErrors[norm], errors: fieldErrors[norm] ? { [norm]: fieldErrors[norm] } : {} };
+      }
+      // Network or 5xx error: NEVER mark the field as invalid!
+      if (typeof formEl.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') {
+        formEl.dispatchEvent(
+          new CustomEvent('w-form:validation-error', {
+            bubbles: true,
+            detail: { field: norm, error: err },
+          })
+        );
+      }
+      return { ok: false, networkError: true, error: err };
+    } finally {
+      if (validationAbortByField.get(norm) === ac) {
+        validationAbortByField.delete(norm);
+      }
+    }
+  }
+
+  function cancelUpload() {
+    if (activeSubmitAbort) {
+      try {
+        activeSubmitAbort.abort();
+      } catch (_e) {}
+      activeSubmitAbort = null;
+      return true;
+    }
+    return false;
+  }
+
+  // Listen to native submit, focusout, and input/change events on `formEl`
   const onDomInput = (evt) => {
     inputRevision += 1;
     dirty = computeFormDirty(formEl, initialSnapshot);
     const target = evt && evt.target;
     if (target && target.getAttribute) {
+      const type = (target.type || '').toLowerCase();
       const rawName = target.getAttribute('name');
+      if (type === 'file' && evt.type === 'change' && rawName) {
+        revokePreviewUrls(rawName);
+      }
       if (rawName) {
         const norm = rawName.endsWith('[]') ? rawName.slice(0, -2) : rawName;
+        if (evt.type === 'change' && (type === 'checkbox' || type === 'radio' || target.tagName === 'SELECT')) {
+          touchedFields.add(norm);
+        }
         if (fieldErrors[norm] || fieldErrors[rawName]) {
           delete fieldErrors[norm];
           delete fieldErrors[rawName];
           syncErrorsToDom(false);
+        }
+        if (evt.type === 'input') {
+          const vCfg = parseFieldValidateConfig(target);
+          if (vCfg && vCfg.debounceMs !== null) {
+            const prevTimer = validationTimersByField.get(norm);
+            if (prevTimer) clearTimeout(prevTimer);
+            const t = setTimeout(() => {
+              validationTimersByField.delete(norm);
+              validateField(norm).catch(() => {});
+            }, vCfg.debounceMs);
+            validationTimersByField.set(norm, t);
+          }
         }
       }
     }
@@ -1160,16 +1473,40 @@ function createFormHandle(formEl, options = {}) {
     notifyStateChange();
   };
 
+  const onDomFocusOut = (evt) => {
+    const target = evt && evt.target;
+    if (!target || !target.getAttribute) return;
+    const rawName = target.getAttribute('name');
+    if (!rawName) return;
+    const type = (target.type || '').toLowerCase();
+    if (type === 'submit' || type === 'button' || type === 'reset' || type === 'hidden') return;
+    const norm = rawName.endsWith('[]') ? rawName.slice(0, -2) : rawName;
+    const wasTouched = touchedFields.has(norm);
+    touchedFields.add(norm);
+    if (!wasTouched) {
+      syncErrorsToDom(false);
+      notifyStateChange();
+    }
+    const vCfg = parseFieldValidateConfig(target);
+    if (vCfg && vCfg.onBlur) {
+      validateField(norm).catch(() => {});
+    }
+  };
+
   const onDomSubmit = (evt) => {
     submit(evt);
   };
 
   const onDomReset = () => {
     cancelDraftDebounce();
+    cancelFieldValidation();
+    revokePreviewUrls();
     if (resetTimer) clearTimeout(resetTimer);
     resetTimer = setTimeout(() => {
       resetTimer = null;
       dirty = false;
+      submitted = false;
+      touchedFields.clear();
       fieldErrors = {};
       formError = null;
       syncErrorsToDom(false);
@@ -1180,6 +1517,7 @@ function createFormHandle(formEl, options = {}) {
   if (formEl && typeof formEl.addEventListener === 'function') {
     formEl.addEventListener('input', onDomInput);
     formEl.addEventListener('change', onDomInput);
+    formEl.addEventListener('focusout', onDomFocusOut);
     formEl.addEventListener('submit', onDomSubmit);
     formEl.addEventListener('reset', onDomReset);
   }
@@ -1205,6 +1543,54 @@ function createFormHandle(formEl, options = {}) {
       dirty = computeFormDirty(formEl, initialSnapshot);
       return dirty;
     },
+    get touched() {
+      return touchedFields.size > 0;
+    },
+    get touchedFields() {
+      return Array.from(touchedFields);
+    },
+    get submitted() {
+      return submitted;
+    },
+    isTouched(fieldName) {
+      if (!fieldName) return touchedFields.size > 0;
+      const norm = fieldName.endsWith('[]') ? fieldName.slice(0, -2) : fieldName;
+      return touchedFields.has(norm) || touchedFields.has(fieldName);
+    },
+    touch(fieldName) {
+      if (fieldName) {
+        const norm = fieldName.endsWith('[]') ? fieldName.slice(0, -2) : fieldName;
+        touchedFields.add(norm);
+      } else if (formEl && typeof formEl.querySelectorAll === 'function') {
+        const controls = formEl.querySelectorAll('input, select, textarea');
+        for (let i = 0; i < controls.length; i++) {
+          const n = controls[i].getAttribute && controls[i].getAttribute('name');
+          if (n) touchedFields.add(n.endsWith('[]') ? n.slice(0, -2) : n);
+        }
+      }
+      syncErrorsToDom(false);
+      notifyStateChange();
+      return handle;
+    },
+    untouch(fieldName) {
+      if (fieldName) {
+        const norm = fieldName.endsWith('[]') ? fieldName.slice(0, -2) : fieldName;
+        touchedFields.delete(norm);
+        touchedFields.delete(fieldName);
+      } else {
+        touchedFields.clear();
+      }
+      syncErrorsToDom(false);
+      notifyStateChange();
+      return handle;
+    },
+    validateField,
+    get uploads() {
+      return uploadEntries.map((u) => ({ ...u }));
+    },
+    cancelUpload,
+    createPreviewUrl,
+    revokePreviewUrls,
     get inputRevision() {
       return inputRevision;
     },
@@ -1305,6 +1691,9 @@ function createFormHandle(formEl, options = {}) {
     },
     destroy() {
       cancelDraftDebounce();
+      cancelFieldValidation();
+      cancelUpload();
+      revokePreviewUrls();
       if (resetTimer) {
         clearTimeout(resetTimer);
         resetTimer = null;
@@ -1312,6 +1701,7 @@ function createFormHandle(formEl, options = {}) {
       if (formEl && typeof formEl.removeEventListener === 'function') {
         formEl.removeEventListener('input', onDomInput);
         formEl.removeEventListener('change', onDomInput);
+        formEl.removeEventListener('focusout', onDomFocusOut);
         formEl.removeEventListener('submit', onDomSubmit);
         formEl.removeEventListener('reset', onDomReset);
       }

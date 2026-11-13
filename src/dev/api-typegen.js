@@ -1154,6 +1154,50 @@ function checkTemplateFormContracts(rootDir, options = {}) {
       continue;
     }
 
+    // Validate new client-behavior data-w-* attributes (skipping dynamic {{ ... }} / {% ... %} values)
+    const ignoreAttrRe = /\bdata-w-ignore\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+    let attrMatch;
+    while ((attrMatch = ignoreAttrRe.exec(content)) !== null) {
+      const val = (attrMatch[1] ?? attrMatch[2] ?? '').trim().toLowerCase();
+      if (!val || val.includes('{{') || val.includes('{%')) continue;
+      if (val !== 'children' && val !== 'self' && val !== 'all' && val !== 'both') {
+        warnings.push({
+          code: 'INVALID_DATA_W_IGNORE',
+          file: relFile,
+          value: val,
+          message: `Template "${relFile}" uses unsupported data-w-ignore="${val}". Expected "children", "self", or "all".`,
+        });
+      }
+    }
+
+    const delayAttrRe = /\bdata-w-loading-delay\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+    while ((attrMatch = delayAttrRe.exec(content)) !== null) {
+      const val = (attrMatch[1] ?? attrMatch[2] ?? '').trim();
+      if (!val || val.includes('{{') || val.includes('{%')) continue;
+      if (!/^\d+(?:\.\d+)?(?:ms|s)?$/i.test(val)) {
+        warnings.push({
+          code: 'INVALID_LOADING_DELAY',
+          file: relFile,
+          value: val,
+          message: `Template "${relFile}" uses invalid data-w-loading-delay="${val}". Expected a non-negative number or duration (e.g. "200", "200ms", "1s").`,
+        });
+      }
+    }
+
+    const errorModeRe = /\bdata-w-error-mode\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+    while ((attrMatch = errorModeRe.exec(content)) !== null) {
+      const val = (attrMatch[1] ?? attrMatch[2] ?? '').trim().toLowerCase();
+      if (!val || val.includes('{{') || val.includes('{%')) continue;
+      if (val !== 'touched' && val !== 'always') {
+        warnings.push({
+          code: 'INVALID_ERROR_MODE',
+          file: relFile,
+          value: val,
+          message: `Template "${relFile}" uses unsupported data-w-error-mode="${val}". Expected "touched" or "always".`,
+        });
+      }
+    }
+
     let formMatch;
     while ((formMatch = formRegex.exec(content)) !== null) {
       const formAttrs = formMatch[1] || '';
