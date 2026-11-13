@@ -226,7 +226,7 @@
     "dotenv": "^16.3.1",
     "exceljs": "^4.4.0",
     "express-rate-limit": "^8.4.1",
-    "hono": "^4.13.13",
+    "hono": "^4.13.16",
     "mjml": "^5.4.0",
     "nodemailer": "^10.0.10",
     "release-it": "^20.2.1",
@@ -242,7 +242,7 @@
     "node": ">=20.0.0"
   },
   "overrides": {
-    "basic-ftp": "^6.2.1",
+    "basic-ftp": "^6.2.4",
     "chokidar": "^4.0.3",
     "katex": "^0.18.2",
     "tar": "^7.5.11",
