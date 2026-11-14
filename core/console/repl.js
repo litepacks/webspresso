@@ -7,6 +7,7 @@
  * @module core/console/repl
  */
 
+const fs = require('fs');
 const repl = require('repl');
 const path = require('path');
 const { buildConsoleContext } = require('./context');
@@ -67,7 +68,12 @@ async function startConsole(options = {}) {
   if (options.history !== false && typeof replServer.setupHistory === 'function') {
     const historyPath = options.historyPath || path.resolve(meta.rootDir, '.webspresso_history');
     try {
-      replServer.setupHistory(historyPath, () => {});
+      if (fs.existsSync(path.dirname(historyPath))) {
+        const res = replServer.setupHistory(historyPath, () => {});
+        if (res && typeof res.catch === 'function') {
+          res.catch(() => {});
+        }
+      }
     } catch (_) {
       // Gracefully continue without persistent history if write fails
     }

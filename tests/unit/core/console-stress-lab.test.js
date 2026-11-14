@@ -305,6 +305,7 @@ module.exports = defineService({ description: 'Health check', handler: async () 
       historyPath: path.join(rootDir, 'nonexistent-parent', 'sub', '.history'),
     });
 
+    await new Promise((r) => setTimeout(r, 20));
     const exitPromise = new Promise((resolve) => replServer.once('exit', resolve));
     replServer.close();
     await exitPromise;
