@@ -157,8 +157,9 @@ function createFragmentCoordinator(options = {}) {
   let isDisposed = false;
   let lifecycleListenersAttached = false;
 
-  // Per-version patch options (mode, limit, target, removeKeys, onBeforePatch, onAfterPatch)
+  // Per-version patch options (mode, limit, target, removeKeys, onBeforePatch, onAfterPatch, hookChainDepth)
   const pendingPatchOptsByKey = new Map();
+  let pendingInvalidateHookDepth = 0;
 
   // Lazy fragment IntersectionObserver state
   let lazyObserver = null;
@@ -792,16 +793,21 @@ function createFragmentCoordinator(options = {}) {
       pendingPatchOptsByKey.delete(patchKey);
     }
 
+    const patchMeta = {
+      hookChainDepth: (patchOpts && patchOpts.hookChainDepth) || 0,
+    };
+
     if (typeof options.onBeforePatch === 'function') {
-      options.onBeforePatch(inst.el, inst);
+      options.onBeforePatch(inst.el, inst, patchMeta);
     }
     if (patchOpts && typeof patchOpts.onBeforePatch === 'function') {
       try {
-        patchOpts.onBeforePatch(inst.el, inst);
+        patchOpts.onBeforePatch(inst.el, inst, patchMeta);
       } catch (_e) {}
     }
 
     const patchStart = Date.now();
+    const patchMode = fragmentPayload.mode || (patchOpts && patchOpts.mode) || 'replace';
 
     const committedInput =
       fragmentPayload.input && typeof fragmentPayload.input === 'object' && !isArray(fragmentPayload.input)
@@ -811,6 +817,8 @@ function createFragmentCoordinator(options = {}) {
           : null;
 
     if (
+      patchMode !== 'append' &&
+      patchMode !== 'prepend' &&
       committedInput &&
       !followUpNeeded &&
       pendingTags.size === 0
@@ -827,7 +835,16 @@ function createFragmentCoordinator(options = {}) {
       }
     }
 
-    const patchMode = fragmentPayload.mode || (patchOpts && patchOpts.mode) || 'replace';
+    // Track existing strict descendant fragments before replace morph so removed children can be cleaned up
+    const prevDescendants = [];
+    if (patchMode !== 'append' && patchMode !== 'prepend') {
+      for (const otherInst of instances.values()) {
+        if (otherInst !== inst && otherInst.el && isStrictAncestor(inst.el, otherInst.el)) {
+          prevDescendants.push(otherInst);
+        }
+      }
+    }
+
     if (patchMode === 'append' || patchMode === 'prepend') {
       patchIncrementalList(inst.el, html, {
         mode: patchMode,
@@ -861,20 +878,40 @@ function createFragmentCoordinator(options = {}) {
     const now = Date.now();
     inst.lastUpdatedAt = now;
 
+    // Clean up any nested child fragments removed during this parent patch
+    for (let i = 0; i < prevDescendants.length; i++) {
+      const prevChild = prevDescendants[i];
+      if (!prevChild.el || prevChild.el.isConnected === false || !isStrictAncestor(inst.el, prevChild.el)) {
+        clearInstanceInterval(prevChild);
+        unobserveLazyFragment(prevChild);
+        if (prevChild.abortController) {
+          try {
+            prevChild.abortController.abort();
+          } catch (_e) {}
+          prevChild.abortController = null;
+        }
+        instances.delete(prevChild.instanceId);
+      }
+    }
+
     // Re-sync nested fragment instances that may have been updated inside this parent fragment
     scanDomInstances(inst.el);
     for (const otherInst of instances.values()) {
       if (otherInst !== inst && otherInst.el && isStrictAncestor(inst.el, otherInst.el)) {
-        otherInst.lastUpdatedAt = now;
+        if (otherInst.el.__wPreservedLazyChild) {
+          delete otherInst.el.__wPreservedLazyChild;
+        } else if (!(otherInst.lazy && otherInst.lazyState === 'idle')) {
+          otherInst.lastUpdatedAt = now;
+        }
       }
     }
 
     if (typeof options.onAfterPatch === 'function') {
-      options.onAfterPatch(inst.el, inst);
+      options.onAfterPatch(inst.el, inst, patchMeta);
     }
     if (patchOpts && typeof patchOpts.onAfterPatch === 'function') {
       try {
-        patchOpts.onAfterPatch(inst.el, inst);
+        patchOpts.onAfterPatch(inst.el, inst, patchMeta);
       } catch (_e) {}
     }
 
@@ -1339,8 +1376,16 @@ function createFragmentCoordinator(options = {}) {
     // Parent/Child deduplication: if parent & child are both invalidated, parent refresh covers child
     const dedupedInstances = deduplicateParentChildFragments(matchingInstances);
 
+    const batchHookDepth = pendingInvalidateHookDepth;
+    pendingInvalidateHookDepth = 0;
+
     const targets = dedupedInstances.map((inst) => {
       inst.version += 1;
+      if (batchHookDepth > 0) {
+        pendingPatchOptsByKey.set(`${inst.instanceId}:${inst.version}`, {
+          hookChainDepth: batchHookDepth,
+        });
+      }
       return {
         instanceId: inst.instanceId,
         name: inst.name,
@@ -1385,6 +1430,13 @@ function createFragmentCoordinator(options = {}) {
    * @returns {Promise<{ refreshed: string[], skipped?: boolean }>}
    */
   function invalidate(tags, meta = {}) {
+    const activeHook = typeof options.getPatchHookContext === 'function' ? options.getPatchHookContext() : null;
+    if (activeHook) {
+      const nextDepth = (activeHook.depth || 0) + 1;
+      if (nextDepth > pendingInvalidateHookDepth) {
+        pendingInvalidateHookDepth = nextDepth;
+      }
+    }
     const tagList = isArray(tags) ? tags : [tags];
     for (const raw of tagList) {
       if (typeof raw === 'string' && raw.trim()) {
@@ -1480,11 +1532,15 @@ function createFragmentCoordinator(options = {}) {
         unobserveLazyFragment(inst);
       }
 
+      const activeHook = typeof options.getPatchHookContext === 'function' ? options.getPatchHookContext() : null;
+      const hookChainDepth = activeHook ? (activeHook.depth || 0) + 1 : 0;
+
       if (
         refreshOpts.mode ||
         refreshOpts.limit !== undefined ||
         refreshOpts.target ||
         refreshOpts.removeKeys ||
+        hookChainDepth > 0 ||
         typeof refreshOpts.onBeforePatch === 'function' ||
         typeof refreshOpts.onAfterPatch === 'function'
       ) {
@@ -1493,6 +1549,7 @@ function createFragmentCoordinator(options = {}) {
           limit: refreshOpts.limit,
           target: refreshOpts.target,
           removeKeys: refreshOpts.removeKeys,
+          hookChainDepth,
           onBeforePatch: refreshOpts.onBeforePatch,
           onAfterPatch: refreshOpts.onAfterPatch,
         });

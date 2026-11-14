@@ -646,6 +646,17 @@ async function executeAndRenderFragment({
   };
 }
 
+function getPluginRegisteredFragment(name) {
+  try {
+    const { getPluginManager } = require('../plugins/plugin-manager');
+    const pm = typeof getPluginManager === 'function' ? getPluginManager() : null;
+    if (pm && typeof pm.getFragment === 'function') {
+      return pm.getFragment(name) || null;
+    }
+  } catch (_e) {}
+  return null;
+}
+
 /**
  * Create the `fsy.fragment(name, input?, options?)` template helper for a page render pass.
  * Uses the exact same `executeAndRenderFragment` pipeline for initial SSR as subsequent refreshes!
@@ -665,7 +676,9 @@ function attachSsrFragmentHelper({ req, res, ctx, pageMod, pagePath, nunjucksEnv
 
   function renderFragmentHelper(name, rawInput = {}, options = {}) {
     const cleanName = String(name || '').trim();
-    const fragmentDef = fragmentsMap[cleanName];
+    const fragmentDef =
+      (Object.prototype.hasOwnProperty.call(fragmentsMap, cleanName) ? fragmentsMap[cleanName] : null) ||
+      getPluginRegisteredFragment(cleanName);
     if (!fragmentDef) {
       throw new NotFoundError(
         `Fragment "${cleanName}" is not defined in fragments export for page "${pagePath}".`
@@ -898,9 +911,10 @@ function createFragmentRefreshHandler(config) {
       req.params = { ...(req.params || {}), ...params };
 
       const pageMod = typeof entry.getPageMod === 'function' ? entry.getPageMod() : entry.pageMod;
-      const fragmentsMap = (pageMod && pageMod.fragments) || {};
+      const pageFragmentsMap = (pageMod && pageMod.fragments) || {};
+      const fragmentsMap = { ...pageFragmentsMap };
 
-      // Validate that all requested fragments are registered on this page BEFORE running loaders
+      // Validate that all requested fragments are registered on this page (or by a plugin) BEFORE running loaders
       // (Rejects arbitrary template paths or unknown fragment names)
       for (const item of requestedFragments) {
         if (!item || typeof item.name !== 'string' || !item.name.trim()) {
@@ -910,7 +924,12 @@ function createFragmentRefreshHandler(config) {
           throw new BadRequestError('Client cannot specify arbitrary template paths in fragment refresh requests.');
         }
         if (!Object.prototype.hasOwnProperty.call(fragmentsMap, item.name)) {
-          throw new NotFoundError(`Fragment "${item.name}" is not registered on page "${entry.routePath}".`);
+          const pluginFrag = getPluginRegisteredFragment(item.name);
+          if (pluginFrag) {
+            fragmentsMap[item.name] = pluginFrag;
+          } else {
+            throw new NotFoundError(`Fragment "${item.name}" is not registered on page "${entry.routePath}".`);
+          }
         }
       }
 

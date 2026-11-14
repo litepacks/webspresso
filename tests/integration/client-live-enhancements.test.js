@@ -365,12 +365,68 @@ describe('Client Live Enhancements (LiveView / Livewire Inspired)', () => {
         expect(res1.superseded).toBe(true);
         expect(callOrder.length).toBe(4);
 
-        // Rapidly trigger >5 patches to verify loop detection warning
+        // Legitimate rapid independent patches MUST NOT emit a false loop warning
         for (let i = 0; i < 6; i++) {
           await runtime.fragments.refresh('feed:default');
         }
-        const loopWarnings = debuggerInst.getSnapshot().events.filter((e) => e.type === 'patch:loop-warning');
-        expect(loopWarnings.length).toBeGreaterThanOrEqual(1);
+        let loopWarnings = debuggerInst.getSnapshot().events.filter((e) => e.type === 'patch:loop-warning');
+        expect(loopWarnings.length).toBe(0);
+
+        // Real causal loop (afterPatch -> refresh -> afterPatch -> ...) MUST emit PATCH_HOOK_LOOP_DETECTED
+        let loopCount = 0;
+        let resolveLoopDone;
+        const loopDone = new Promise((r) => {
+          resolveLoopDone = r;
+        });
+        const loopHtml = `
+          <div data-w-fragment="feed" data-w-fragment-id="feed:default" data-w-fragment-page="/feed">
+            <div data-w-controller="looper"></div>
+          </div>
+        `;
+        const loopEnv = createMiniDomEnvironment(loopHtml, 'http://localhost/feed');
+        const loopDebug = createClientDebugger({ enabled: true });
+        try {
+          const loopRuntime = createClientRuntime({
+            root: loopEnv.document,
+            debug: loopDebug,
+            fetch: async () =>
+              new Response(
+                JSON.stringify({
+                  ok: true,
+                  fragments: {
+                    'feed:default': {
+                      instanceId: 'feed:default',
+                      name: 'feed',
+                      html: '<div data-w-fragment="feed" data-w-fragment-id="feed:default" data-w-fragment-page="/feed"><div data-w-controller="looper"></div></div>',
+                    },
+                  },
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } }
+              ),
+          });
+          loopRuntime.register(
+            'looper',
+            defineController({
+              afterPatch(ctx) {
+                if (loopCount < 4) {
+                  loopCount += 1;
+                  ctx.refresh('feed:default').catch(() => {});
+                } else {
+                  resolveLoopDone();
+                }
+              },
+            })
+          );
+          await loopRuntime.mount();
+          await loopRuntime.fragments.refresh('feed:default');
+          await loopDone;
+          loopWarnings = loopDebug.getSnapshot().events.filter((e) => e.type === 'patch:loop-warning');
+          expect(loopWarnings.length).toBeGreaterThanOrEqual(1);
+          expect(loopWarnings[0].code).toBe('PATCH_HOOK_LOOP_DETECTED');
+          loopRuntime.destroy();
+        } finally {
+          loopEnv.restore();
+        }
 
         runtime.destroy();
       } finally {
@@ -939,6 +995,380 @@ describe('Client Live Enhancements (LiveView / Livewire Inspired)', () => {
         global.XMLHttpRequest = origXhr;
         URL.createObjectURL = origCreateObjUrl;
         URL.revokeObjectURL = origRevokeObjUrl;
+        env.restore();
+      }
+    });
+  });
+
+  describe('11. Hardening: Cross-feature interactions (Areas 1-6)', () => {
+    function createDeferred() {
+      let resolve, reject;
+      const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    }
+
+    it('Area 1: incremental append keeps base query for invalidation, discards superseded append on replace, and cleans up limit-evicted controllers', async () => {
+      const html = `
+        <div data-w-fragment="feed" data-w-fragment-id="feed:default" data-w-fragment-page="/feed" data-w-depends-on="feed" data-w-fragment-input='{"page":1,"filter":"all"}'>
+          <ul data-w-list data-w-limit="3">
+            <li data-w-key="a"><div data-w-controller="rowCtrl">A</div></li>
+            <li data-w-key="b"><div data-w-controller="rowCtrl">B</div></li>
+          </ul>
+        </div>
+      `;
+      const env = createMiniDomEnvironment(html, 'http://localhost/feed');
+      const disconnected = [];
+      const requests = [];
+      const appendBarrier = createDeferred();
+
+      try {
+        const customFetch = vi.fn(async (_url, init) => {
+          const body = JSON.parse(init.body);
+          const target = body.fragments[0];
+          requests.push({ input: target.input });
+          if (target.input.page === 2) {
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                fragments: {
+                  'feed:default': {
+                    instanceId: 'feed:default',
+                    name: 'feed',
+                    input: { page: 2, filter: target.input.filter },
+                    html: '<div data-w-fragment="feed"><ul data-w-list><li data-w-key="c"><div data-w-controller="rowCtrl">C</div></li></ul></div>',
+                  },
+                },
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+          if (target.input.page === 3) {
+            await appendBarrier.promise;
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                fragments: {
+                  'feed:default': {
+                    instanceId: 'feed:default',
+                    name: 'feed',
+                    input: { page: 3, filter: target.input.filter },
+                    html: '<div data-w-fragment="feed"><ul data-w-list><li data-w-key="d"><div data-w-controller="rowCtrl">D</div></li></ul></div>',
+                  },
+                },
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+          const label = target.input.filter === 'done' ? 'Done-1' : 'A-fresh';
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              fragments: {
+                'feed:default': {
+                  instanceId: 'feed:default',
+                  name: 'feed',
+                  input: target.input,
+                  html: `<div data-w-fragment="feed" data-w-fragment-id="feed:default" data-w-fragment-page="/feed" data-w-depends-on="feed"><ul data-w-list data-w-limit="3"><li data-w-key="a"><div data-w-controller="rowCtrl">${label}</div></li></ul></div>`,
+                },
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        });
+
+        const runtime = createClientRuntime({ root: env.document, fetch: customFetch });
+        runtime.register(
+          'rowCtrl',
+          defineController({
+            connect(ctx) {
+              const txt = ctx.el.textContent;
+              return () => disconnected.push(txt);
+            },
+          })
+        );
+        await runtime.mount();
+
+        // 1. Append page 2 & page 3 (with limit=3, appending D would evict A; first append C)
+        await runtime.fragments.refresh('feed:default', { page: 2 }, { mode: 'append' });
+        expect(Array.from(env.document.querySelectorAll('li')).map((el) => el.getAttribute('data-w-key'))).toEqual(['a', 'b', 'c']);
+        // Base input must remain page: 1 so automatic invalidation resets cleanly to page 1!
+        expect(runtime.fragments.getInstance('feed:default').input).toEqual({ page: 1, filter: 'all' });
+
+        // 2. Mutation invalidation uses base query (page: 1), NOT page: 2, and replaces list
+        await runtime.fragments.invalidate(['feed']);
+        expect(requests[requests.length - 1].input).toEqual({ page: 1, filter: 'all' });
+        expect(Array.from(env.document.querySelectorAll('li')).map((el) => el.textContent.trim())).toEqual(['A-fresh']);
+        expect(disconnected).toContain('B');
+        expect(disconnected).toContain('C');
+
+        // 3. In-flight append (page 3) superseded by newer replace (filter: 'done') MUST be discarded
+        const pAppend3 = runtime.fragments.refresh('feed:default', { page: 3 }, { mode: 'append' });
+        const pReplace = runtime.fragments.refresh('feed:default', { page: 1, filter: 'done' }, { mode: 'replace' });
+        await pReplace;
+        appendBarrier.resolve();
+        await pAppend3;
+        expect(Array.from(env.document.querySelectorAll('li')).map((el) => el.textContent.trim())).toEqual(['Done-1']);
+        expect(runtime.fragments.getInstance('feed:default').input).toEqual({ page: 1, filter: 'done' });
+
+        runtime.destroy();
+      } finally {
+        env.restore();
+      }
+    });
+
+    it('Area 2: form validation races invalidate on submit/reset/clear/baseline-fill/unmount without clobbering unrelated errors', async () => {
+      const html = `
+        <form data-w-form="profile" action="/api/profile" method="post" novalidate>
+          <input name="email" value="a@b.com">
+          <div data-w-error-for="email"></div>
+          <input name="username" value="alice" data-w-validate-context="email">
+          <div data-w-error-for="username"></div>
+          <button type="submit">Save</button>
+        </form>
+      `;
+      const env = createMiniDomEnvironment(html, 'http://localhost/profile');
+      const slowValidation = createDeferred();
+      const postSubmitValidation = createDeferred();
+      let validateCall = 0;
+
+      try {
+        const customFetch = vi.fn(async (_url, init) => {
+          const validateHeader = init.headers && (init.headers['X-Webspresso-Validate-Fields'] || init.headers['x-webspresso-validate-fields']);
+          if (validateHeader) {
+            validateCall += 1;
+            if (validateCall === 1) {
+              await slowValidation.promise;
+              return new Response(JSON.stringify({ ok: true, valid: false, errors: { email: 'Old slow error' } }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              });
+            }
+            if (validateCall === 2) {
+              return new Response(JSON.stringify({ ok: true, valid: true, errors: {} }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              });
+            }
+            if (validateCall === 3) {
+              // Simulate a fetch implementation that resolves AFTER submit even if aborted
+              await postSubmitValidation.promise;
+              return new Response(JSON.stringify({ ok: true, valid: false, errors: { email: 'Late post-submit error' } }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              });
+            }
+            // Cross-field / 500 error check
+            return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
+          return new Response(JSON.stringify({ ok: true, saved: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        });
+
+        const runtime = createClientRuntime({ root: env.document, fetch: customFetch });
+        await runtime.mount();
+
+        const formEl = env.document.querySelector('form');
+        const form = formEl.__wFormHandle;
+
+        // 1. Rapid field changes: call 1 (slow) vs call 2 (fast)
+        const v1 = form.validateField('email');
+        const v2 = form.validateField('email');
+        await v2;
+        slowValidation.resolve();
+        await v1;
+        expect(form.fieldErrors.email).toBeUndefined();
+
+        // 2. Submit while validation 3 is in-flight, and resolve validation 3 AFTER submit completes
+        const v3 = form.validateField('email');
+        const submitRes = await form.submit();
+        expect(submitRes.ok).toBe(true);
+        postSubmitValidation.resolve();
+        await v3;
+        expect(form.fieldErrors.email).toBeUndefined();
+
+        // 3. Network/5xx error dispatches w-form:validation-error and does NOT mark field invalid
+        const events = [];
+        formEl.addEventListener('w-form:validation-error', (e) => events.push(e.detail));
+        const v4 = await form.validateField('username');
+        expect(v4.networkError).toBe(true);
+        expect(form.fieldErrors.username).toBeUndefined();
+        expect(events.length).toBe(1);
+
+        // 4. fill({ baseline: true }) resets dirty & clears errors
+        form.fill({ email: 'new@b.com' }, { baseline: false });
+        expect(form.dirty).toBe(true);
+        form.fill({ email: 'new@b.com' }, { baseline: true });
+        expect(form.dirty).toBe(false);
+
+        runtime.destroy();
+      } finally {
+        env.restore();
+      }
+    });
+
+    it('Area 3: parent refresh preserves loaded lazy child, skips unloaded lazy child freshness bump, and cleans up removed children', async () => {
+      const html = `
+        <div data-w-fragment="parent" data-w-fragment-id="parent:default" data-w-fragment-page="/p" data-w-depends-on="parent">
+          <div data-w-fragment="lazy-unloaded" data-w-fragment-id="lazy-unloaded:default" data-w-fragment-page="/p" data-w-depends-on="child" data-w-lazy="true">Placeholder</div>
+          <div data-w-fragment="lazy-loaded" data-w-fragment-id="lazy-loaded:default" data-w-fragment-page="/p" data-w-depends-on="child">Loaded Content</div>
+        </div>
+      `;
+      const env = createMiniDomEnvironment(html, 'http://localhost/p');
+      try {
+        let phase = 1;
+        const customFetch = vi.fn(async () => {
+          const inner = phase === 1
+            ? `
+              <div data-w-fragment="lazy-unloaded" data-w-fragment-id="lazy-unloaded:default" data-w-fragment-page="/p" data-w-depends-on="child" data-w-lazy="true">Placeholder</div>
+              <div data-w-fragment="lazy-loaded" data-w-fragment-id="lazy-loaded:default" data-w-fragment-page="/p" data-w-depends-on="child" data-w-lazy="true">Server Lazy Placeholder</div>
+            `
+            : `<p>Children removed</p>`;
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              fragments: {
+                'parent:default': {
+                  instanceId: 'parent:default',
+                  name: 'parent',
+                  html: `<div data-w-fragment="parent" data-w-fragment-id="parent:default" data-w-fragment-page="/p" data-w-depends-on="parent">${inner}</div>`,
+                },
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        });
+
+        const runtime = createClientRuntime({ root: env.document, fetch: customFetch });
+        await runtime.mount();
+
+        const unloadedInst = runtime.fragments.getInstance('lazy-unloaded:default');
+        const loadedInst = runtime.fragments.getInstance('lazy-loaded:default');
+        unloadedInst.lastUpdatedAt = 1000;
+        loadedInst.lastUpdatedAt = 1000;
+
+        await runtime.fragments.refresh('parent:default');
+
+        // Unloaded lazy child was NOT loaded and its lastUpdatedAt was NOT falsely bumped
+        expect(unloadedInst.lazyState).toBe('idle');
+        expect(unloadedInst.lastUpdatedAt).toBe(1000);
+
+        // Loaded lazy child was NOT overwritten by server's lazy placeholder and kept its content & freshness timestamp
+        expect(env.document.querySelector('[data-w-fragment-id="lazy-loaded:default"]').textContent).toBe('Loaded Content');
+        expect(loadedInst.lastUpdatedAt).toBe(1000);
+
+        // Parent patch removing child cleans up removed child instances
+        phase = 2;
+        await runtime.fragments.refresh('parent:default');
+        expect(runtime.fragments.getInstance('lazy-unloaded:default')).toBeNull();
+        expect(runtime.fragments.getInstance('lazy-loaded:default')).toBeNull();
+
+        runtime.destroy();
+      } finally {
+        env.restore();
+      }
+    });
+
+    it('Area 4 & 5 & 6: data-w-ignore skips inner controller patch hooks, XHR status=0 maps to network outcomeUnknown, and fill({ baseline: false }) recomputes dirty accurately', async () => {
+      const html = `
+        <div data-w-fragment="main" data-w-fragment-id="main:default" data-w-fragment-page="/m">
+          <div data-w-ignore="children">
+            <div data-w-controller="ignoredInner"></div>
+          </div>
+          <form data-w-form="edit" action="/api/edit" method="post" novalidate>
+            <input name="title" value="Initial">
+          </form>
+        </div>
+      `;
+      const env = createMiniDomEnvironment(html, 'http://localhost/m');
+      const hookCalls = [];
+      const origXhr = global.XMLHttpRequest;
+
+      global.XMLHttpRequest = class MockFailXHR {
+        constructor() {
+          this.upload = {};
+          this.status = 0;
+          this.statusText = '';
+          this.responseText = '';
+        }
+        open() {}
+        setRequestHeader() {}
+        getAllResponseHeaders() {
+          return '';
+        }
+        send() {
+          if (this.onload) this.onload();
+        }
+        abort() {}
+      };
+
+      try {
+        const customFetch = vi.fn(async () =>
+          new Response(
+            JSON.stringify({
+              ok: true,
+              fragments: {
+                'main:default': {
+                  instanceId: 'main:default',
+                  name: 'main',
+                  html: `<div data-w-fragment="main" data-w-fragment-id="main:default" data-w-fragment-page="/m"><div data-w-ignore="children"><div data-w-controller="ignoredInner"></div></div><form data-w-form="edit" action="/api/edit" method="post" novalidate><input name="title" value="Initial"></form></div>`,
+                },
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          )
+        );
+
+        const runtime = createClientRuntime({ root: env.document, fetch: customFetch });
+        runtime.register(
+          'ignoredInner',
+          defineController({
+            beforePatch() {
+              hookCalls.push('before');
+            },
+            afterPatch() {
+              hookCalls.push('after');
+            },
+          })
+        );
+        await runtime.mount();
+
+        // Area 4: inner controller inside data-w-ignore="children" MUST NOT receive patch hooks
+        await runtime.fragments.refresh('main:default');
+        expect(hookCalls).toEqual([]);
+
+        // Area 6: fill({ baseline: false }) with same values keeps dirty === false; different sets dirty === true
+        const form = env.document.querySelector('form').__wFormHandle;
+        form.fill({ title: 'Initial' }, { baseline: false });
+        expect(form.dirty).toBe(false);
+        form.fill({ title: 'Changed' }, { baseline: false });
+        expect(form.dirty).toBe(true);
+
+        // Area 5: XHR status === 0 with onUploadProgress maps to kind: 'network' + outcomeUnknown: true
+        let xhrErr = null;
+        try {
+          await runtime.api.post('/api/upload', new FormData(), {
+            onUploadProgress: () => {},
+          });
+        } catch (err) {
+          xhrErr = err;
+        }
+        expect(xhrErr).toBeTruthy();
+        expect(xhrErr.kind).toBe('network');
+        expect(xhrErr.dispatched).toBe(true);
+        expect(xhrErr.outcomeUnknown).toBe(true);
+
+        runtime.destroy();
+      } finally {
+        global.XMLHttpRequest = origXhr;
         env.restore();
       }
     });

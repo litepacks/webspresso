@@ -192,20 +192,25 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onBeforePatch(patchedEl, inst) {
+    getPatchHookContext() {
+      return controllers ? controllers.getActivePatchHookContext() : null;
+    },
+    onBeforePatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.notifyBeforePatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },
-    onAfterPatch(patchedEl, inst) {
+    onAfterPatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
         controllers.notifyAfterPatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },

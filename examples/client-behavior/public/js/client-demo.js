@@ -2079,6 +2079,21 @@ function syncFormControlValue(toEl, fromEl, ownership, preserveDraft) {
 function morphDomTrees(toEl, fromEl, ctx = {}) {
   if (!toEl || !fromEl) return toEl;
 
+  // Preserve an already-loaded lazy child fragment if a parent refresh sends a lazy placeholder
+  if (
+    toEl.hasAttribute &&
+    fromEl.hasAttribute &&
+    toEl.hasAttribute('data-w-fragment') &&
+    fromEl.hasAttribute('data-w-fragment') &&
+    !toEl.hasAttribute('data-w-lazy')
+  ) {
+    const incomingLazy = fromEl.getAttribute('data-w-lazy');
+    if (incomingLazy && incomingLazy !== 'false' && incomingLazy !== 'loaded') {
+      toEl.__wPreservedLazyChild = true;
+      return toEl;
+    }
+  }
+
   const rawOwnership = getClientOwnership(toEl);
   const ignoreMode = getIgnoreMode(toEl);
   const isForm = toEl.tagName === 'FORM';
@@ -3850,6 +3865,10 @@ function executeXhrUpload({ url, method, headers, body, credentials, signal, onU
 
     xhr.onload = () => {
       cleanup();
+      if (xhr.status === 0) {
+        reject(new TypeError('Network request failed'));
+        return;
+      }
       const status = xhr.status === 1223 ? 204 : xhr.status;
       const rawText = typeof xhr.responseText === 'string' ? xhr.responseText : '';
       const headerObj = parseXhrHeaders(xhr.getAllResponseHeaders ? xhr.getAllResponseHeaders() : '');
@@ -5108,6 +5127,7 @@ function createFormHandle(formEl, options = {}) {
   const validationSeqByField = new Map();
   const validationTimersByField = new Map();
   const validationAbortByField = new Map();
+  let validationEpoch = 0;
 
   let activeSubmitAbort = null;
   let uploadEntries = [];
@@ -5115,6 +5135,7 @@ function createFormHandle(formEl, options = {}) {
 
   function cancelFieldValidation(fieldName) {
     if (fieldName) {
+      validationSeqByField.set(fieldName, (validationSeqByField.get(fieldName) || 0) + 1);
       const t = validationTimersByField.get(fieldName);
       if (t) {
         clearTimeout(t);
@@ -5129,6 +5150,7 @@ function createFormHandle(formEl, options = {}) {
       }
       return;
     }
+    validationEpoch += 1;
     for (const t of validationTimersByField.values()) clearTimeout(t);
     validationTimersByField.clear();
     for (const ac of validationAbortByField.values()) {
@@ -5963,6 +5985,7 @@ function createFormHandle(formEl, options = {}) {
     if (!formEl || !api || !fieldName) return { ok: true, valid: true, errors: {} };
     const norm = fieldName.endsWith('[]') ? fieldName.slice(0, -2) : fieldName;
 
+    const epoch = validationEpoch;
     const seq = (validationSeqByField.get(norm) || 0) + 1;
     validationSeqByField.set(norm, seq);
 
@@ -6007,7 +6030,7 @@ function createFormHandle(formEl, options = {}) {
         signal: ac.signal,
       });
 
-      if (seq !== validationSeqByField.get(norm)) {
+      if (epoch !== validationEpoch || seq !== validationSeqByField.get(norm)) {
         return { ok: true, stale: true, valid: true, errors: {} };
       }
 
@@ -6025,7 +6048,7 @@ function createFormHandle(formEl, options = {}) {
         errors: fieldErrors[norm] ? { [norm]: fieldErrors[norm] } : {},
       };
     } catch (err) {
-      if (seq !== validationSeqByField.get(norm) || (err && err.isCanceled)) {
+      if (epoch !== validationEpoch || seq !== validationSeqByField.get(norm) || (err && err.isCanceled)) {
         return { ok: true, stale: true, canceled: Boolean(err && err.isCanceled), errors: {} };
       }
       // If server returned a 400/422 validation envelope, extract only this field's error
@@ -11025,7 +11048,28 @@ function createControllerRuntime(options = {}) {
     return mounted;
   }
 
-  const patchCycleTracker = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+  let activeHookContext = null;
+
+  function isInsideIgnoredSubtree(el, rootEl) {
+    let cur = el && el.parentElement ? el.parentElement : null;
+    while (cur) {
+      if (typeof cur.hasAttribute === 'function' && cur.hasAttribute('data-w-ignore')) {
+        const mode = (cur.getAttribute('data-w-ignore') || '').trim().toLowerCase();
+        if (mode !== 'self') {
+          return true;
+        }
+      }
+      if (cur === rootEl) break;
+      cur = cur.parentElement || null;
+    }
+    if (el === rootEl && el && typeof el.hasAttribute === 'function' && el.hasAttribute('data-w-ignore')) {
+      const mode = (el.getAttribute('data-w-ignore') || '').trim().toLowerCase();
+      if (mode === 'all' || mode === 'both') {
+        return true;
+      }
+    }
+    return false;
+  }
 
   function collectAffectedInstances(fragmentEl) {
     if (!fragmentEl) return [];
@@ -11037,6 +11081,7 @@ function createControllerRuntime(options = {}) {
         (typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el)) ||
         (typeof inst.el.contains === 'function' && inst.el.contains(fragmentEl))
       ) {
+        if (isInsideIgnoredSubtree(inst.el, fragmentEl)) continue;
         affected.push(inst);
       }
     }
@@ -11057,47 +11102,60 @@ function createControllerRuntime(options = {}) {
 
   function notifyBeforePatch(fragmentEl, meta = {}) {
     const affected = collectAffectedInstances(fragmentEl);
-    for (let i = 0; i < affected.length; i++) {
-      const inst = affected[i];
-      inst.invokeBeforePatch({
-        ...meta,
-        isFragmentRoot: inst.el === fragmentEl,
-        isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
-      });
+    const prevHookCtx = activeHookContext;
+    activeHookContext = {
+      fragmentEl,
+      depth: meta && typeof meta.hookChainDepth === 'number' ? meta.hookChainDepth : 0,
+    };
+    try {
+      for (let i = 0; i < affected.length; i++) {
+        const inst = affected[i];
+        inst.invokeBeforePatch({
+          ...meta,
+          isFragmentRoot: inst.el === fragmentEl,
+          isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
+        });
+      }
+    } finally {
+      activeHookContext = prevHookCtx;
     }
   }
 
   function notifyAfterPatch(fragmentEl, meta = {}) {
-    if (patchCycleTracker && fragmentEl) {
-      const now = Date.now();
-      const prev = patchCycleTracker.get(fragmentEl) || { count: 0, lastAt: 0 };
-      const count = now - prev.lastAt < 100 ? prev.count + 1 : 1;
-      patchCycleTracker.set(fragmentEl, { count, lastAt: now });
-      if (count > 5) {
-        const msg = `Possible patch hook refresh loop detected on fragment "${meta.fragmentName || meta.fragmentId || 'unknown'}" (${count} rapid patch cycles).`;
-        if (debug && typeof debug.recordEvent === 'function') {
-          debug.recordEvent('patch:loop-warning', {
-            code: 'PATCH_HOOK_LOOP_DETECTED',
-            fragmentId: meta.fragmentId || null,
-            fragmentName: meta.fragmentName || null,
-            count,
-            message: msg,
-          });
-        } else if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production' && typeof console !== 'undefined') {
-          console.warn(`[webspresso] ${msg}`);
-        }
+    const chainDepth = meta && typeof meta.hookChainDepth === 'number' ? meta.hookChainDepth : 0;
+    if (chainDepth > 3) {
+      const msg = `Possible patch hook refresh loop detected on fragment "${meta.fragmentName || meta.fragmentId || 'unknown'}" (causal chain depth ${chainDepth}).`;
+      if (debug && typeof debug.recordEvent === 'function') {
+        debug.recordEvent('patch:loop-warning', {
+          code: 'PATCH_HOOK_LOOP_DETECTED',
+          fragmentId: meta.fragmentId || null,
+          fragmentName: meta.fragmentName || null,
+          count: chainDepth,
+          message: msg,
+        });
+      } else if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production' && typeof console !== 'undefined') {
+        console.warn(`[webspresso] ${msg}`);
       }
     }
 
     const affected = collectAffectedInstances(fragmentEl);
-    // Reverse order for afterPatch: inner descendants first, outer ancestors second
-    for (let i = affected.length - 1; i >= 0; i--) {
-      const inst = affected[i];
-      inst.invokeAfterPatch({
-        ...meta,
-        isFragmentRoot: inst.el === fragmentEl,
-        isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
-      });
+    const prevHookCtx = activeHookContext;
+    activeHookContext = {
+      fragmentEl,
+      depth: chainDepth,
+    };
+    try {
+      // Reverse order for afterPatch: inner descendants first, outer ancestors second
+      for (let i = affected.length - 1; i >= 0; i--) {
+        const inst = affected[i];
+        inst.invokeAfterPatch({
+          ...meta,
+          isFragmentRoot: inst.el === fragmentEl,
+          isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
+        });
+      }
+    } finally {
+      activeHookContext = prevHookCtx;
     }
   }
 
@@ -11116,6 +11174,9 @@ function createControllerRuntime(options = {}) {
     unmountSubtree,
     notifyBeforePatch,
     notifyAfterPatch,
+    getActivePatchHookContext() {
+      return activeHookContext;
+    },
     mountControllerOnElement,
     getInstanceForElement(el, name) {
       const map = elementInstances.get(el);
@@ -11315,8 +11376,9 @@ function createFragmentCoordinator(options = {}) {
   let isDisposed = false;
   let lifecycleListenersAttached = false;
 
-  // Per-version patch options (mode, limit, target, removeKeys, onBeforePatch, onAfterPatch)
+  // Per-version patch options (mode, limit, target, removeKeys, onBeforePatch, onAfterPatch, hookChainDepth)
   const pendingPatchOptsByKey = new Map();
+  let pendingInvalidateHookDepth = 0;
 
   // Lazy fragment IntersectionObserver state
   let lazyObserver = null;
@@ -11950,16 +12012,21 @@ function createFragmentCoordinator(options = {}) {
       pendingPatchOptsByKey.delete(patchKey);
     }
 
+    const patchMeta = {
+      hookChainDepth: (patchOpts && patchOpts.hookChainDepth) || 0,
+    };
+
     if (typeof options.onBeforePatch === 'function') {
-      options.onBeforePatch(inst.el, inst);
+      options.onBeforePatch(inst.el, inst, patchMeta);
     }
     if (patchOpts && typeof patchOpts.onBeforePatch === 'function') {
       try {
-        patchOpts.onBeforePatch(inst.el, inst);
+        patchOpts.onBeforePatch(inst.el, inst, patchMeta);
       } catch (_e) {}
     }
 
     const patchStart = Date.now();
+    const patchMode = fragmentPayload.mode || (patchOpts && patchOpts.mode) || 'replace';
 
     const committedInput =
       fragmentPayload.input && typeof fragmentPayload.input === 'object' && !isArray(fragmentPayload.input)
@@ -11969,6 +12036,8 @@ function createFragmentCoordinator(options = {}) {
           : null;
 
     if (
+      patchMode !== 'append' &&
+      patchMode !== 'prepend' &&
       committedInput &&
       !followUpNeeded &&
       pendingTags.size === 0
@@ -11985,7 +12054,16 @@ function createFragmentCoordinator(options = {}) {
       }
     }
 
-    const patchMode = fragmentPayload.mode || (patchOpts && patchOpts.mode) || 'replace';
+    // Track existing strict descendant fragments before replace morph so removed children can be cleaned up
+    const prevDescendants = [];
+    if (patchMode !== 'append' && patchMode !== 'prepend') {
+      for (const otherInst of instances.values()) {
+        if (otherInst !== inst && otherInst.el && isStrictAncestor(inst.el, otherInst.el)) {
+          prevDescendants.push(otherInst);
+        }
+      }
+    }
+
     if (patchMode === 'append' || patchMode === 'prepend') {
       patchIncrementalList(inst.el, html, {
         mode: patchMode,
@@ -12019,20 +12097,40 @@ function createFragmentCoordinator(options = {}) {
     const now = Date.now();
     inst.lastUpdatedAt = now;
 
+    // Clean up any nested child fragments removed during this parent patch
+    for (let i = 0; i < prevDescendants.length; i++) {
+      const prevChild = prevDescendants[i];
+      if (!prevChild.el || prevChild.el.isConnected === false || !isStrictAncestor(inst.el, prevChild.el)) {
+        clearInstanceInterval(prevChild);
+        unobserveLazyFragment(prevChild);
+        if (prevChild.abortController) {
+          try {
+            prevChild.abortController.abort();
+          } catch (_e) {}
+          prevChild.abortController = null;
+        }
+        instances.delete(prevChild.instanceId);
+      }
+    }
+
     // Re-sync nested fragment instances that may have been updated inside this parent fragment
     scanDomInstances(inst.el);
     for (const otherInst of instances.values()) {
       if (otherInst !== inst && otherInst.el && isStrictAncestor(inst.el, otherInst.el)) {
-        otherInst.lastUpdatedAt = now;
+        if (otherInst.el.__wPreservedLazyChild) {
+          delete otherInst.el.__wPreservedLazyChild;
+        } else if (!(otherInst.lazy && otherInst.lazyState === 'idle')) {
+          otherInst.lastUpdatedAt = now;
+        }
       }
     }
 
     if (typeof options.onAfterPatch === 'function') {
-      options.onAfterPatch(inst.el, inst);
+      options.onAfterPatch(inst.el, inst, patchMeta);
     }
     if (patchOpts && typeof patchOpts.onAfterPatch === 'function') {
       try {
-        patchOpts.onAfterPatch(inst.el, inst);
+        patchOpts.onAfterPatch(inst.el, inst, patchMeta);
       } catch (_e) {}
     }
 
@@ -12497,8 +12595,16 @@ function createFragmentCoordinator(options = {}) {
     // Parent/Child deduplication: if parent & child are both invalidated, parent refresh covers child
     const dedupedInstances = deduplicateParentChildFragments(matchingInstances);
 
+    const batchHookDepth = pendingInvalidateHookDepth;
+    pendingInvalidateHookDepth = 0;
+
     const targets = dedupedInstances.map((inst) => {
       inst.version += 1;
+      if (batchHookDepth > 0) {
+        pendingPatchOptsByKey.set(`${inst.instanceId}:${inst.version}`, {
+          hookChainDepth: batchHookDepth,
+        });
+      }
       return {
         instanceId: inst.instanceId,
         name: inst.name,
@@ -12543,6 +12649,13 @@ function createFragmentCoordinator(options = {}) {
    * @returns {Promise<{ refreshed: string[], skipped?: boolean }>}
    */
   function invalidate(tags, meta = {}) {
+    const activeHook = typeof options.getPatchHookContext === 'function' ? options.getPatchHookContext() : null;
+    if (activeHook) {
+      const nextDepth = (activeHook.depth || 0) + 1;
+      if (nextDepth > pendingInvalidateHookDepth) {
+        pendingInvalidateHookDepth = nextDepth;
+      }
+    }
     const tagList = isArray(tags) ? tags : [tags];
     for (const raw of tagList) {
       if (typeof raw === 'string' && raw.trim()) {
@@ -12638,11 +12751,15 @@ function createFragmentCoordinator(options = {}) {
         unobserveLazyFragment(inst);
       }
 
+      const activeHook = typeof options.getPatchHookContext === 'function' ? options.getPatchHookContext() : null;
+      const hookChainDepth = activeHook ? (activeHook.depth || 0) + 1 : 0;
+
       if (
         refreshOpts.mode ||
         refreshOpts.limit !== undefined ||
         refreshOpts.target ||
         refreshOpts.removeKeys ||
+        hookChainDepth > 0 ||
         typeof refreshOpts.onBeforePatch === 'function' ||
         typeof refreshOpts.onAfterPatch === 'function'
       ) {
@@ -12651,6 +12768,7 @@ function createFragmentCoordinator(options = {}) {
           limit: refreshOpts.limit,
           target: refreshOpts.target,
           removeKeys: refreshOpts.removeKeys,
+          hookChainDepth,
           onBeforePatch: refreshOpts.onBeforePatch,
           onAfterPatch: refreshOpts.onAfterPatch,
         });
@@ -13487,20 +13605,25 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onBeforePatch(patchedEl, inst) {
+    getPatchHookContext() {
+      return controllers ? controllers.getActivePatchHookContext() : null;
+    },
+    onBeforePatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.notifyBeforePatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },
-    onAfterPatch(patchedEl, inst) {
+    onAfterPatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
         controllers.notifyAfterPatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },
@@ -14024,20 +14147,25 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onBeforePatch(patchedEl, inst) {
+    getPatchHookContext() {
+      return controllers ? controllers.getActivePatchHookContext() : null;
+    },
+    onBeforePatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.notifyBeforePatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },
-    onAfterPatch(patchedEl, inst) {
+    onAfterPatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
         controllers.notifyAfterPatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },
@@ -14561,20 +14689,25 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onBeforePatch(patchedEl, inst) {
+    getPatchHookContext() {
+      return controllers ? controllers.getActivePatchHookContext() : null;
+    },
+    onBeforePatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.notifyBeforePatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },
-    onAfterPatch(patchedEl, inst) {
+    onAfterPatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
         controllers.notifyAfterPatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },
@@ -15098,20 +15231,25 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onBeforePatch(patchedEl, inst) {
+    getPatchHookContext() {
+      return controllers ? controllers.getActivePatchHookContext() : null;
+    },
+    onBeforePatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.notifyBeforePatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },
-    onAfterPatch(patchedEl, inst) {
+    onAfterPatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
         controllers.notifyAfterPatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },
@@ -15635,20 +15773,25 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onBeforePatch(patchedEl, inst) {
+    getPatchHookContext() {
+      return controllers ? controllers.getActivePatchHookContext() : null;
+    },
+    onBeforePatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.notifyBeforePatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },
-    onAfterPatch(patchedEl, inst) {
+    onAfterPatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
         controllers.notifyAfterPatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },
@@ -16172,20 +16315,25 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onBeforePatch(patchedEl, inst) {
+    getPatchHookContext() {
+      return controllers ? controllers.getActivePatchHookContext() : null;
+    },
+    onBeforePatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.notifyBeforePatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },
-    onAfterPatch(patchedEl, inst) {
+    onAfterPatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
         controllers.notifyAfterPatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },
@@ -16709,20 +16857,25 @@ function createClientRuntime(options = {}) {
         controllers.mountSubtree(addedEl);
       }
     },
-    onBeforePatch(patchedEl, inst) {
+    getPatchHookContext() {
+      return controllers ? controllers.getActivePatchHookContext() : null;
+    },
+    onBeforePatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.notifyBeforePatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },
-    onAfterPatch(patchedEl, inst) {
+    onAfterPatch(patchedEl, inst, meta) {
       if (controllers) {
         controllers.mountSubtree(patchedEl);
         controllers.notifyAfterPatch(patchedEl, {
           fragmentId: inst && inst.instanceId ? inst.instanceId : null,
           fragmentName: inst && inst.name ? inst.name : null,
+          hookChainDepth: meta && meta.hookChainDepth ? meta.hookChainDepth : 0,
         });
       }
     },

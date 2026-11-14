@@ -153,6 +153,31 @@ app.listen(PORT, () => {
 });
 ```
 
+### 5. Client Behavior Controller (`pages/notes.client.ts`)
+
+Co-locate reactive client logic right next to `pages/notes.njk` (`<div data-w-controller="notes">`) with automatic bundling and server-import boundary protection:
+
+```typescript
+import { defineController } from 'webspresso/client';
+
+export default defineController({
+  state: () => ({ title: '', saving: false }),
+  actions: {
+    async create(ctx) {
+      if (!ctx.state.title.trim()) return;
+      ctx.state.saving = true;
+      try {
+        await ctx.api.post('/api/notes', { title: ctx.state.title });
+        ctx.state.title = '';
+        await ctx.fragments.invalidate('notes'); // Refresh SSR fragments tagged with "notes"
+      } finally {
+        ctx.state.saving = false;
+      }
+    },
+  },
+});
+```
+
 ---
 
 ## ⚡ High-Performance Architecture (Cold Start & AOT)
@@ -202,6 +227,7 @@ Detailed topic guides are available in the repository:
 
 - **[Installation & First App](docs/getting-started/installation.md)** — Node.js requirements, setup, and first steps.
 - **[File-Based Routing & API Routes](.agents/ROUTING.md)** — Routing conventions, parameters, and cascading layouts.
+- **[Client Behavior & SSR Fragments](docs/guides/client-behavior.md)** — `defineController`, `defineFragment`, forms, and auto-revalidation.
 - **[SSR Streaming & Chunked Transfer](.agents/STREAMING.md)** — Out-of-order slots, `_loading.njk` skeletons, and TTFB optimization.
 - **[Database & ORM Guide](.agents/ORM.md)** — Repositories, relations, soft deletes, and ambient transactions.
 - **[Dual Authentication System](.agents/AUTH.md)** — Sessions, JWT rotation, magic links, and device management.

@@ -168,8 +168,39 @@ const CLIENT_RUNTIME_SCRIPT = `(function() {
     document.addEventListener('keydown', onKeyDown);
   }
 
+  function saveScrollPosition() {
+    try {
+      if (typeof window.sessionStorage !== 'undefined') {
+        window.sessionStorage.setItem('__ws_dev_scroll', JSON.stringify({
+          url: window.location.pathname + window.location.search,
+          x: window.scrollX || 0,
+          y: window.scrollY || 0,
+        }));
+      }
+    } catch (_) {}
+  }
+
+  function restoreScrollPosition() {
+    try {
+      if (typeof window.sessionStorage === 'undefined') return;
+      var raw = window.sessionStorage.getItem('__ws_dev_scroll');
+      if (!raw) return;
+      window.sessionStorage.removeItem('__ws_dev_scroll');
+      var pos = JSON.parse(raw);
+      if (pos && pos.url === (window.location.pathname + window.location.search)) {
+        var apply = function() { window.scrollTo(pos.x || 0, pos.y || 0); };
+        if (typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(apply);
+        } else {
+          apply();
+        }
+      }
+    } catch (_) {}
+  }
+
   function safeReload(reason) {
     clearOverlay();
+    saveScrollPosition();
     var reasonMsg = reason ? ' (' + reason + ')' : '';
     console.log('[Webspresso] 🔄 Reloading page' + reasonMsg + '...');
 
@@ -246,10 +277,15 @@ const CLIENT_RUNTIME_SCRIPT = `(function() {
     };
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', connect);
-  } else {
+  function init() {
+    restoreScrollPosition();
     connect();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
   }
 })();
 `;
@@ -290,6 +326,7 @@ function createDevReloadHub(config = {}) {
   const autoInject = options.autoInject !== false;
   const watchPublicAll = options.watchPublicAll === true;
   const extraWatch = Array.isArray(options.watch) ? options.watch : [];
+  let ignoreClientFiles = Boolean(options.ignoreClientFiles);
 
   const templateExtensions = new Set(
     (Array.isArray(options.templateExtensions)
@@ -392,6 +429,9 @@ function createDevReloadHub(config = {}) {
     },
     setDevMetaProvider: (fn) => {
       getDevMetaCallback = fn;
+    },
+    setIgnoreClientFiles: (flag) => {
+      ignoreClientFiles = Boolean(flag);
     },
     invalidateTemplateCache,
     triggerTemplateReload: (filename, reason = 'template') => {
@@ -594,6 +634,7 @@ function createDevReloadHub(config = {}) {
     if (watchTemplates && viewsDir && fs.existsSync(viewsDir)) {
       watchDirectory(viewsDir, (eventType, filename) => {
         if (!filename || shouldIgnore(filename)) return;
+        if (ignoreClientFiles && filename.includes('.client.')) return;
         const ext = path.extname(filename).toLowerCase();
         if (ext === '.css') {
           onCssFileChanged(filename);
@@ -607,6 +648,7 @@ function createDevReloadHub(config = {}) {
     if (watchTemplates && pagesDir && fs.existsSync(pagesDir)) {
       watchDirectory(pagesDir, (eventType, filename) => {
         if (!filename || shouldIgnore(filename)) return;
+        if (ignoreClientFiles && filename.includes('.client.')) return;
         const ext = path.extname(filename).toLowerCase();
         if (ext === '.css') {
           onCssFileChanged(filename);

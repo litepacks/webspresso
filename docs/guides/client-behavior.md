@@ -287,8 +287,8 @@ Forms retrieved via `ctx.forms.get('form-name', options?)` (or `ctx.forms('form-
 - **Programmatic Submission & Options**:
   - `await form.submit({ resetOnSuccess, clearOnSuccess, redirectOnSuccess, throwOnError })`: Triggers validation and submission programmatically, returning `{ ok, submitted, data, refreshOk, refreshError }`.
 - **State & Field Manipulation**:
-  - `form.fill(values, { baseline: false })`: Fills form controls and sets `form.dirty = true`.
-  - `form.fill(record, { baseline: true })`: Sets a new baseline (e.g. after fetching a record from an API endpoint), resets `form.dirty = false`, and clears previous errors.
+  - `form.fill(values, { baseline: false })`: Fills form controls and recomputes `form.dirty` against `form.baseline` (`true` if filled values differ from baseline, `false` if they match).
+  - `form.fill(record, { baseline: true })`: Sets a new baseline (e.g. after fetching a record from an API endpoint or syncing with server-normalized values), resets `form.dirty = false`, and clears previous errors.
   - `form.setAction(url)` / `form.setRouteParams(params)`: Updates form target URL.
   - `form.disabled = true`: Disables all form controls during async record loading.
 
@@ -1510,9 +1510,10 @@ bootClient({
    - If a mutation request was already dispatched (`error.dispatched === true`) and the connection drops or times out before the response arrives, `ClientRequestError` sets `outcomeUnknown: true` and `outcome: 'unknown'` (and `form.submit()` returns `{ ok: false, outcomeUnknown: true, outcome: 'unknown' }`), allowing the UI to prompt for state verification instead of assuming the write never happened.
 
 2. **Form Baseline, Dirty State & In-Flight Edit Protection**:
-   - `form.dirty` compares live form values against `form.baseline` (updated on initial mount, `form.fill(values, { baseline: true })`, or successful submit).
+   - `form.dirty` compares live form values against `form.baseline` (updated on initial mount, `form.fill(values, { baseline: true })`, or successful submit). Note that `form.baseline` reflects the committed client payload (or initial DOM state); if the server normalizes or computes fields on save and returns the canonical record, call `form.fill(res.data, { baseline: true })` to align `baseline` with the server-normalized values.
    - Pending debounced draft writes (`data-w-persist-draft`) are canceled when `form.submit()` begins, preventing a stale timer from re-writing a cleared draft after submit.
    - If the user continues editing fields while `form.submit()` is awaiting a response, completion of the in-flight submission updates `form.baseline` to the committed payload **without** clearing or resetting the newer unsubmitted edits, keeping `form.dirty === true` and saving the updated draft.
+   - Starting `form.submit()`, `form.reset()`, `form.clear()`, `form.fill(..., { baseline: true })`, or `form.destroy()` invalidates any in-flight `form.validateField()` requests so stale validation responses can never overwrite current form errors.
 
 3. **Fragment Input, Multi-Instance Targeting & Partial Batch Failure**:
    - `ctx.fragment(idOrName).input` resolves by `instanceId` (`data-w-fragment-id`), `<name>:default`, or fragment `name` (`data-w-fragment`), while `ctx.fragment(name).inputs` returns a map of `{ [instanceId]: input }` for all mounted instances.

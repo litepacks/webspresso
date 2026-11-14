@@ -3,13 +3,7 @@
  * Reset admin user password via CLI
  */
 
-let _inquirer;
-const inquirer = {
-  prompt: (...args) => {
-    if (!_inquirer) _inquirer = require('inquirer');
-    return _inquirer.prompt(...args);
-  },
-};
+const inquirer = require('../utils/prompt');
 const { loadDbConfig, createDbInstance } = require('../utils/db');
 
 function registerCommand(program) {

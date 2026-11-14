@@ -108,11 +108,18 @@ function runCli(args, options = {}) {
     };
 
     const program = createProgram();
-    program.exitOverride();
-    program.configureOutput({
+    const outCfg = {
       writeOut: (str) => { stdout += str; },
       writeErr: (str) => { stderr += str; },
-    });
+    };
+    const applyOutputAndExit = (cmd) => {
+      cmd.exitOverride();
+      cmd.configureOutput(outCfg);
+      for (const sub of cmd.commands || []) {
+        applyOutputAndExit(sub);
+      }
+    };
+    applyOutputAndExit(program);
 
     let exitCode = 0;
     try {

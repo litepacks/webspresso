@@ -147,6 +147,9 @@ class PluginManager {
     this.routes = [];                   // Collected route metadata
     this.customRoutes = [];             // Routes added by plugins
     this.cspDirectives = new Map();     // directive -> Set of sources (from plugins)
+    this.clientControllers = new Map(); // name -> { name, filePath, pluginName }
+    this.clientServices = new Map();    // name -> { name, filePath, pluginName }
+    this.registeredFragments = new Map(); // name -> { name, def, pluginName }
     this.disposers = [];                // Array<{ name: string, fn: Function }>
     this._cachedHelpers = null;         // Cached helpers object
     this.pendingAsyncOperations = [];   // Track background promises
@@ -271,7 +274,7 @@ class PluginManager {
 
     // Build graph
     for (const plugin of plugins) {
-      if (!plugin.name) {
+      if (!plugin || !plugin.name) {
         console.warn('[plugin-manager] Skipping plugin without name:', plugin);
         continue;
       }
@@ -730,6 +733,33 @@ class PluginManager {
        */
       getScriptInjector() {
         return getCachedScriptInjector();
+      },
+
+      /**
+       * Register a client controller entry file (`.client.js` / `.client.ts`) for bundler discovery
+       * @param {string} name - Controller name used in `data-w-controller="<name>"`
+       * @param {string} filePath - Absolute or project-relative path to the client controller module
+       */
+      registerClientController(name, filePath) {
+        self.registerClientController(name, filePath, pluginName);
+      },
+
+      /**
+       * Register a client service module (`defineClientService(...)`) for bundler discovery
+       * @param {string} name - Service name used in `ctx.services.get('<name>')`
+       * @param {string} filePath - Absolute or project-relative path to the client service module
+       */
+      registerClientService(name, filePath) {
+        self.registerClientService(name, filePath, pluginName);
+      },
+
+      /**
+       * Register a reusable SSR fragment (`defineFragment(...)`) usable across pages
+       * @param {string} name - Fragment name used in `fsy.fragment('<name>', ...)`
+       * @param {Object} fragmentDef - Fragment definition created via `defineFragment(...)`
+       */
+      registerFragment(name, fragmentDef) {
+        self.registerFragment(name, fragmentDef, pluginName);
       }
     };
   }
@@ -806,6 +836,130 @@ class PluginManager {
     if (this.nunjucksEnv && typeof this.nunjucksEnv.addFilter === 'function') {
       this.nunjucksEnv.addFilter(name, fn);
     }
+  }
+
+  /**
+   * Register a client controller module from a plugin.
+   * @param {string} name
+   * @param {string} filePath
+   * @param {string} [pluginName='unknown']
+   */
+  registerClientController(name, filePath, pluginName = 'unknown') {
+    const cleanName = typeof name === 'string' ? name.trim() : '';
+    const cleanPath = typeof filePath === 'string' ? filePath.trim() : '';
+    if (!cleanName || !cleanPath) {
+      throw new TypeError(`[plugin-manager] registerClientController(name, filePath) requires non-empty strings (plugin "${pluginName}").`);
+    }
+    const existing = this.clientControllers.get(cleanName);
+    if (existing && existing.filePath !== cleanPath) {
+      const err = new Error(
+        `Client controller name collision: "${cleanName}" is registered by both plugin "${existing.pluginName}" (${existing.filePath}) and "${pluginName}" (${cleanPath}).`
+      );
+      err.code = 'PLUGIN_CLIENT_CONTROLLER_COLLISION';
+      throw err;
+    }
+    this.clientControllers.set(cleanName, {
+      name: cleanName,
+      filePath: cleanPath,
+      pluginName,
+    });
+  }
+
+  /**
+   * Register a client service module from a plugin.
+   * @param {string} name
+   * @param {string} filePath
+   * @param {string} [pluginName='unknown']
+   */
+  registerClientService(name, filePath, pluginName = 'unknown') {
+    const cleanName = typeof name === 'string' ? name.trim() : '';
+    const cleanPath = typeof filePath === 'string' ? filePath.trim() : '';
+    if (!cleanName || !cleanPath) {
+      throw new TypeError(`[plugin-manager] registerClientService(name, filePath) requires non-empty strings (plugin "${pluginName}").`);
+    }
+    const existing = this.clientServices.get(cleanName);
+    if (existing && existing.filePath !== cleanPath) {
+      const err = new Error(
+        `Client service name collision: "${cleanName}" is registered by both plugin "${existing.pluginName}" (${existing.filePath}) and "${pluginName}" (${cleanPath}).`
+      );
+      err.code = 'PLUGIN_CLIENT_SERVICE_COLLISION';
+      throw err;
+    }
+    this.clientServices.set(cleanName, {
+      name: cleanName,
+      filePath: cleanPath,
+      pluginName,
+    });
+  }
+
+  /**
+   * Register a reusable SSR fragment definition from a plugin.
+   * @param {string} name
+   * @param {Object} fragmentDef
+   * @param {string} [pluginName='unknown']
+   */
+  registerFragment(name, fragmentDef, pluginName = 'unknown') {
+    const cleanName = typeof name === 'string' ? name.trim() : '';
+    if (!cleanName || !fragmentDef || typeof fragmentDef !== 'object') {
+      throw new TypeError(`[plugin-manager] registerFragment(name, fragmentDef) requires a valid fragment name and definition (plugin "${pluginName}").`);
+    }
+    if (this.registeredFragments.has(cleanName)) {
+      console.warn(`[plugin-manager] Fragment "${cleanName}" is already registered (registered by "${pluginName}" overwrites existing fragment).`);
+    }
+    this.registeredFragments.set(cleanName, {
+      name: cleanName,
+      def: fragmentDef,
+      pluginName,
+    });
+  }
+
+  /**
+   * Get all client controllers registered by plugins.
+   * @returns {Array<{ name: string, filePath: string, pluginName: string }>}
+   */
+  getClientControllers() {
+    return Array.from(this.clientControllers.values());
+  }
+
+  /**
+   * Get all client services registered by plugins.
+   * @returns {Array<{ name: string, filePath: string, pluginName: string }>}
+   */
+  getClientServices() {
+    return Array.from(this.clientServices.values());
+  }
+
+  /**
+   * Look up a plugin-registered fragment definition by name.
+   * @param {string} name
+   * @returns {Object|null}
+   */
+  getFragment(name) {
+    const entry = this.registeredFragments.get(name);
+    return entry ? entry.def : null;
+  }
+
+  /**
+   * Get all plugin-registered fragments as a plain map `{ [name]: fragmentDef }`.
+   * @returns {Record<string, Object>}
+   */
+  getFragments() {
+    const out = {};
+    for (const [name, entry] of this.registeredFragments) {
+      out[name] = entry.def;
+    }
+    return out;
+  }
+
+  /**
+   * Get combined client manifest of controllers, services, and fragment names registered by plugins.
+   */
+  getClientManifest() {
+    return {
+      controllers: this.getClientControllers(),
+      services: this.getClientServices(),
+      fragments: Array.from(this.registeredFragments.keys()),
+    };
   }
 
   /**

@@ -213,22 +213,52 @@ function findPageEntryPoints(cwd = process.cwd()) {
     walkViews(dirToScan);
   }
 
+  // 4. Plugin-registered client controllers and services (if PluginManager is active)
+  try {
+    const { getPluginManager } = require('../../core/plugins/plugin-manager');
+    const pm = typeof getPluginManager === 'function' ? getPluginManager() : null;
+    if (pm) {
+      if (typeof pm.getClientControllers === 'function') {
+        for (const ctrl of pm.getClientControllers()) {
+          const entryName = `plugins/${ctrl.pluginName}/${ctrl.name}`;
+          if (!pageEntries[entryName]) {
+            pageEntries[entryName] = path.isAbsolute(ctrl.filePath)
+              ? ctrl.filePath
+              : path.resolve(cwd, ctrl.filePath);
+          }
+        }
+      }
+      if (typeof pm.getClientServices === 'function') {
+        for (const svc of pm.getClientServices()) {
+          const entryName = `plugins/${svc.pluginName}/services/${svc.name}`;
+          if (!pageEntries[entryName]) {
+            pageEntries[entryName] = path.isAbsolute(svc.filePath)
+              ? svc.filePath
+              : path.resolve(cwd, svc.filePath);
+          }
+        }
+      }
+    }
+  } catch (_e) {}
+
   return pageEntries;
 }
 
 /**
- * Discovers all `.client.{js,ts,mjs,jsx,tsx}` controller files across `pages/` and `views/`
+ * Discovers all `.client.{js,ts,mjs,jsx,tsx}` controller files across `pages/`, `views/`, and plugins
  * and validates deterministic controller names for collisions.
  *
  * @param {string} [cwd=process.cwd()]
- * @returns {Array<{ controllerName: string, entryName: string, filePath: string, relativePath: string }>}
+ * @param {object} [options]
+ * @returns {Array<{ controllerName: string, entryName: string, filePath: string, relativePath: string, pluginName?: string }>}
  */
-function discoverClientControllers(cwd = process.cwd()) {
+function discoverClientControllers(cwd = process.cwd(), options = {}) {
   const pageEntries = findPageEntryPoints(cwd);
   const discovered = [];
   const byControllerName = new Map();
 
   for (const [entryName, filePath] of Object.entries(pageEntries)) {
+    if (entryName.startsWith('plugins/')) continue;
     const relativePath = path.relative(cwd, filePath).replace(/\\/g, '/');
     const controllerName = deriveControllerNameFromPath(relativePath);
     if (!controllerName) continue;
@@ -254,6 +284,46 @@ function discoverClientControllers(cwd = process.cwd()) {
     };
     byControllerName.set(controllerName, record);
     discovered.push(record);
+  }
+
+  try {
+    const pm =
+      options.pluginManager ||
+      require('../../core/plugins/plugin-manager').getPluginManager();
+    if (pm && typeof pm.getClientControllers === 'function') {
+      for (const ctrl of pm.getClientControllers()) {
+        const absPath = path.isAbsolute(ctrl.filePath)
+          ? ctrl.filePath
+          : path.resolve(cwd, ctrl.filePath);
+        const relativePath = path.relative(cwd, absPath).replace(/\\/g, '/');
+        if (byControllerName.has(ctrl.name)) {
+          const existing = byControllerName.get(ctrl.name);
+          if (existing.filePath !== absPath) {
+            const err = new Error(
+              `Controller name collision: "${ctrl.name}" is defined by both "${existing.relativePath}" and "${relativePath}".`
+            );
+            err.code = 'CONTROLLER_NAME_COLLISION';
+            err.controllerName = ctrl.name;
+            err.files = [existing.relativePath, relativePath];
+            throw err;
+          }
+          continue;
+        }
+        const record = {
+          controllerName: ctrl.name,
+          entryName: `plugins/${ctrl.pluginName}/${ctrl.name}`,
+          filePath: absPath,
+          relativePath,
+          pluginName: ctrl.pluginName,
+        };
+        byControllerName.set(ctrl.name, record);
+        discovered.push(record);
+      }
+    }
+  } catch (err) {
+    if (err && err.code === 'CONTROLLER_NAME_COLLISION') {
+      throw err;
+    }
   }
 
   return discovered;

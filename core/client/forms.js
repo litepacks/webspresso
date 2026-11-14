@@ -469,6 +469,7 @@ function createFormHandle(formEl, options = {}) {
   const validationSeqByField = new Map();
   const validationTimersByField = new Map();
   const validationAbortByField = new Map();
+  let validationEpoch = 0;
 
   let activeSubmitAbort = null;
   let uploadEntries = [];
@@ -476,6 +477,7 @@ function createFormHandle(formEl, options = {}) {
 
   function cancelFieldValidation(fieldName) {
     if (fieldName) {
+      validationSeqByField.set(fieldName, (validationSeqByField.get(fieldName) || 0) + 1);
       const t = validationTimersByField.get(fieldName);
       if (t) {
         clearTimeout(t);
@@ -490,6 +492,7 @@ function createFormHandle(formEl, options = {}) {
       }
       return;
     }
+    validationEpoch += 1;
     for (const t of validationTimersByField.values()) clearTimeout(t);
     validationTimersByField.clear();
     for (const ac of validationAbortByField.values()) {
@@ -1324,6 +1327,7 @@ function createFormHandle(formEl, options = {}) {
     if (!formEl || !api || !fieldName) return { ok: true, valid: true, errors: {} };
     const norm = fieldName.endsWith('[]') ? fieldName.slice(0, -2) : fieldName;
 
+    const epoch = validationEpoch;
     const seq = (validationSeqByField.get(norm) || 0) + 1;
     validationSeqByField.set(norm, seq);
 
@@ -1368,7 +1372,7 @@ function createFormHandle(formEl, options = {}) {
         signal: ac.signal,
       });
 
-      if (seq !== validationSeqByField.get(norm)) {
+      if (epoch !== validationEpoch || seq !== validationSeqByField.get(norm)) {
         return { ok: true, stale: true, valid: true, errors: {} };
       }
 
@@ -1386,7 +1390,7 @@ function createFormHandle(formEl, options = {}) {
         errors: fieldErrors[norm] ? { [norm]: fieldErrors[norm] } : {},
       };
     } catch (err) {
-      if (seq !== validationSeqByField.get(norm) || (err && err.isCanceled)) {
+      if (epoch !== validationEpoch || seq !== validationSeqByField.get(norm) || (err && err.isCanceled)) {
         return { ok: true, stale: true, canceled: Boolean(err && err.isCanceled), errors: {} };
       }
       // If server returned a 400/422 validation envelope, extract only this field's error

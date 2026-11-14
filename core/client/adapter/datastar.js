@@ -1026,6 +1026,21 @@ function syncFormControlValue(toEl, fromEl, ownership, preserveDraft) {
 function morphDomTrees(toEl, fromEl, ctx = {}) {
   if (!toEl || !fromEl) return toEl;
 
+  // Preserve an already-loaded lazy child fragment if a parent refresh sends a lazy placeholder
+  if (
+    toEl.hasAttribute &&
+    fromEl.hasAttribute &&
+    toEl.hasAttribute('data-w-fragment') &&
+    fromEl.hasAttribute('data-w-fragment') &&
+    !toEl.hasAttribute('data-w-lazy')
+  ) {
+    const incomingLazy = fromEl.getAttribute('data-w-lazy');
+    if (incomingLazy && incomingLazy !== 'false' && incomingLazy !== 'loaded') {
+      toEl.__wPreservedLazyChild = true;
+      return toEl;
+    }
+  }
+
   const rawOwnership = getClientOwnership(toEl);
   const ignoreMode = getIgnoreMode(toEl);
   const isForm = toEl.tagName === 'FORM';

@@ -6,6 +6,8 @@
  * @module core/console/commands
  */
 
+const fs = require('fs');
+const path = require('path');
 const { discoverAppRoutes } = require('../../src/discovery/scan-routes');
 
 /**
@@ -50,9 +52,12 @@ function registerConsoleCommands(replServer, { context, meta, rootDir }) {
         } else {
           console.log(`\n⚙️  Registered Services (${services.length}):`);
           for (const s of services) {
-            console.log(`  • \x1b[32m${s.name}\x1b[0m ${s.description ? `(${s.description})` : ''}`);
+            const name = typeof s === 'string' ? s : (s?.name || String(s));
+            const desc = typeof s === 'object' && s?.description ? `(${s.description})` : '';
+            console.log(`  • \x1b[32m${name}\x1b[0m ${desc}`);
           }
-          console.log('\n  Tip: Call a service with: await service(\'' + services[0].name + '\', payload)\n');
+          const firstName = typeof services[0] === 'string' ? services[0] : (services[0]?.name || String(services[0]));
+          console.log('\n  Tip: Call a service with: await service(\'' + firstName + '\', payload)\n');
         }
       }
       this.displayPrompt();
@@ -64,7 +69,14 @@ function registerConsoleCommands(replServer, { context, meta, rootDir }) {
     help: 'Scan and list all application API endpoints and SSR pages',
     action() {
       try {
-        const result = discoverAppRoutes({ rootDir });
+        const pagesApiDir = ['src/pages/api', 'pages/api']
+          .map((rel) => path.join(rootDir, rel))
+          .find((p) => fs.existsSync(p));
+        const hasStandaloneApi = ['src/api', 'api'].some((rel) => fs.existsSync(path.join(rootDir, rel)));
+        const result = discoverAppRoutes({
+          rootDir,
+          ...(!hasStandaloneApi && pagesApiDir ? { api: { dir: pagesApiDir, prefix: '/api' } } : {}),
+        });
         const descriptors = result.descriptors || [];
 
         if (descriptors.length === 0) {
@@ -101,10 +113,19 @@ function registerConsoleCommands(replServer, { context, meta, rootDir }) {
   replServer.defineCommand('flags', {
     help: 'List all active feature flags and targeting rules',
     action() {
-      if (!context.flags || typeof context.flags.list !== 'function') {
+      if (!context.flags) {
         console.log('\n⚠️  No feature flags configured.\n');
       } else {
-        const flags = context.flags.list();
+        const flags = typeof context.flags.list === 'function'
+          ? context.flags.list()
+          : (typeof context.flags.store?.getAll === 'function'
+            ? context.flags.store.getAll()
+            : (typeof context.flags.getAllFlags === 'function' ? context.flags.getAllFlags() : null));
+        if (!flags || typeof flags !== 'object') {
+          console.log('\n⚠️  No feature flags configured.\n');
+          this.displayPrompt();
+          return;
+        }
         const entries = Object.entries(flags);
         if (entries.length === 0) {
           console.log('\n⚠️  No feature flags registered.\n');

@@ -2066,7 +2066,28 @@ function createControllerRuntime(options = {}) {
     return mounted;
   }
 
-  const patchCycleTracker = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+  let activeHookContext = null;
+
+  function isInsideIgnoredSubtree(el, rootEl) {
+    let cur = el && el.parentElement ? el.parentElement : null;
+    while (cur) {
+      if (typeof cur.hasAttribute === 'function' && cur.hasAttribute('data-w-ignore')) {
+        const mode = (cur.getAttribute('data-w-ignore') || '').trim().toLowerCase();
+        if (mode !== 'self') {
+          return true;
+        }
+      }
+      if (cur === rootEl) break;
+      cur = cur.parentElement || null;
+    }
+    if (el === rootEl && el && typeof el.hasAttribute === 'function' && el.hasAttribute('data-w-ignore')) {
+      const mode = (el.getAttribute('data-w-ignore') || '').trim().toLowerCase();
+      if (mode === 'all' || mode === 'both') {
+        return true;
+      }
+    }
+    return false;
+  }
 
   function collectAffectedInstances(fragmentEl) {
     if (!fragmentEl) return [];
@@ -2078,6 +2099,7 @@ function createControllerRuntime(options = {}) {
         (typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el)) ||
         (typeof inst.el.contains === 'function' && inst.el.contains(fragmentEl))
       ) {
+        if (isInsideIgnoredSubtree(inst.el, fragmentEl)) continue;
         affected.push(inst);
       }
     }
@@ -2098,47 +2120,60 @@ function createControllerRuntime(options = {}) {
 
   function notifyBeforePatch(fragmentEl, meta = {}) {
     const affected = collectAffectedInstances(fragmentEl);
-    for (let i = 0; i < affected.length; i++) {
-      const inst = affected[i];
-      inst.invokeBeforePatch({
-        ...meta,
-        isFragmentRoot: inst.el === fragmentEl,
-        isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
-      });
+    const prevHookCtx = activeHookContext;
+    activeHookContext = {
+      fragmentEl,
+      depth: meta && typeof meta.hookChainDepth === 'number' ? meta.hookChainDepth : 0,
+    };
+    try {
+      for (let i = 0; i < affected.length; i++) {
+        const inst = affected[i];
+        inst.invokeBeforePatch({
+          ...meta,
+          isFragmentRoot: inst.el === fragmentEl,
+          isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
+        });
+      }
+    } finally {
+      activeHookContext = prevHookCtx;
     }
   }
 
   function notifyAfterPatch(fragmentEl, meta = {}) {
-    if (patchCycleTracker && fragmentEl) {
-      const now = Date.now();
-      const prev = patchCycleTracker.get(fragmentEl) || { count: 0, lastAt: 0 };
-      const count = now - prev.lastAt < 100 ? prev.count + 1 : 1;
-      patchCycleTracker.set(fragmentEl, { count, lastAt: now });
-      if (count > 5) {
-        const msg = `Possible patch hook refresh loop detected on fragment "${meta.fragmentName || meta.fragmentId || 'unknown'}" (${count} rapid patch cycles).`;
-        if (debug && typeof debug.recordEvent === 'function') {
-          debug.recordEvent('patch:loop-warning', {
-            code: 'PATCH_HOOK_LOOP_DETECTED',
-            fragmentId: meta.fragmentId || null,
-            fragmentName: meta.fragmentName || null,
-            count,
-            message: msg,
-          });
-        } else if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production' && typeof console !== 'undefined') {
-          console.warn(`[webspresso] ${msg}`);
-        }
+    const chainDepth = meta && typeof meta.hookChainDepth === 'number' ? meta.hookChainDepth : 0;
+    if (chainDepth > 3) {
+      const msg = `Possible patch hook refresh loop detected on fragment "${meta.fragmentName || meta.fragmentId || 'unknown'}" (causal chain depth ${chainDepth}).`;
+      if (debug && typeof debug.recordEvent === 'function') {
+        debug.recordEvent('patch:loop-warning', {
+          code: 'PATCH_HOOK_LOOP_DETECTED',
+          fragmentId: meta.fragmentId || null,
+          fragmentName: meta.fragmentName || null,
+          count: chainDepth,
+          message: msg,
+        });
+      } else if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production' && typeof console !== 'undefined') {
+        console.warn(`[webspresso] ${msg}`);
       }
     }
 
     const affected = collectAffectedInstances(fragmentEl);
-    // Reverse order for afterPatch: inner descendants first, outer ancestors second
-    for (let i = affected.length - 1; i >= 0; i--) {
-      const inst = affected[i];
-      inst.invokeAfterPatch({
-        ...meta,
-        isFragmentRoot: inst.el === fragmentEl,
-        isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
-      });
+    const prevHookCtx = activeHookContext;
+    activeHookContext = {
+      fragmentEl,
+      depth: chainDepth,
+    };
+    try {
+      // Reverse order for afterPatch: inner descendants first, outer ancestors second
+      for (let i = affected.length - 1; i >= 0; i--) {
+        const inst = affected[i];
+        inst.invokeAfterPatch({
+          ...meta,
+          isFragmentRoot: inst.el === fragmentEl,
+          isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
+        });
+      }
+    } finally {
+      activeHookContext = prevHookCtx;
     }
   }
 
@@ -2157,6 +2192,9 @@ function createControllerRuntime(options = {}) {
     unmountSubtree,
     notifyBeforePatch,
     notifyAfterPatch,
+    getActivePatchHookContext() {
+      return activeHookContext;
+    },
     mountControllerOnElement,
     getInstanceForElement(el, name) {
       const map = elementInstances.get(el);

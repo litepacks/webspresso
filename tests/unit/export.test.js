@@ -16,7 +16,7 @@ const {
 
 const fs = require('fs');
 const path = require('path');
-const { program } = require('commander');
+const { Command } = require('commander');
 const {
   exportStaticSite,
   discoverExportRoutes,
@@ -209,7 +209,7 @@ describe('Static Site Export & Prerendering (core/export)', () => {
 
   describe('CLI export command registration', () => {
     it('registers export command with options on commander instance', () => {
-      const testProg = new program.Command();
+      const testProg = new Command();
       registerExportCommand(testProg);
 
       const exportCmd = testProg.commands.find((c) => c.name() === 'export');

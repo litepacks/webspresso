@@ -6,13 +6,7 @@
  * @module bin/commands/page
  */
 
-let _inquirer;
-const inquirer = {
-  prompt: (...args) => {
-    if (!_inquirer) _inquirer = require('inquirer');
-    return _inquirer.prompt(...args);
-  },
-};
+const inquirer = require('../utils/prompt');
 const fs = require('fs');
 const path = require('path');
 

@@ -693,6 +693,10 @@ function executeXhrUpload({ url, method, headers, body, credentials, signal, onU
 
     xhr.onload = () => {
       cleanup();
+      if (xhr.status === 0) {
+        reject(new TypeError('Network request failed'));
+        return;
+      }
       const status = xhr.status === 1223 ? 204 : xhr.status;
       const rawText = typeof xhr.responseText === 'string' ? xhr.responseText : '';
       const headerObj = parseXhrHeaders(xhr.getAllResponseHeaders ? xhr.getAllResponseHeaders() : '');

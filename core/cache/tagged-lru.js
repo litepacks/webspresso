@@ -165,13 +165,17 @@ class TaggedLruCache {
   set(key, value, options = {}) {
     const tags = normalizeTags(options.tags);
 
-    // If key already had tags, clean them up first before assigning new tags
+    // Clear previous tags before lru.set so stale tags never survive if lru.set rejects (e.g. > maxBytes)
     if (this.keyToTags.has(key)) {
       this._removeKeyFromTags(key);
     }
 
-    this._addKeyToTags(key, tags);
+    // Run lru.set first so any internal _removeEntry('delete') on overwrite fires onEvict BEFORE we bind new tags
     this.lru.set(key, value, options);
+
+    if (tags.length > 0 && this.lru.has(key)) {
+      this._addKeyToTags(key, tags);
+    }
 
     return this;
   }
@@ -290,7 +294,9 @@ class TaggedLruCache {
       if (this.keyToTags.has(key)) {
         this._removeKeyFromTags(key);
       }
-      this._addKeyToTags(key, tags);
+      if (tags.length > 0 && this.lru.has(key)) {
+        this._addKeyToTags(key, tags);
+      }
     }
     return val;
   }

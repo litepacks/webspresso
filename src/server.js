@@ -24,7 +24,7 @@ const { resolveClientRuntime } = require('./client-runtime/resolve');
 const { mountPages, detectLocale, loadI18n, createTranslator } = require('./file-router');
 const { configureAssets, createHelpers, getScriptInjector, AssetManager } = require('./helpers');
 const { createDevReloadHub } = require('./dev-reload');
-const { createDevBundler } = require('./bundle');
+const { createDevBundler, findDefaultEntryPoints } = require('./bundle');
 const { registerClearHook } = require('./njk-frontmatter');
 const { createPluginManager } = require('./plugin-manager');
 const { createServiceRegistry } = require('./services');
@@ -1558,15 +1558,19 @@ function createApp(options = {}) {
   // Client-side JS incremental bundler (esbuild context() API)
   const bundleOption = options.bundle;
   const isBundleExplicit = bundleOption === true || (typeof bundleOption === 'object' && bundleOption.enabled !== false);
-  const isBundleDisabled = bundleOption === false;
+  const isBundleDisabled = bundleOption === false || (typeof bundleOption === 'object' && bundleOption.enabled === false);
+  const shouldAutoBundle = bundleOption === undefined && isDev && !isTest && findDefaultEntryPoints(rootDir).length > 0;
 
-  if (isBundleExplicit && !isBundleDisabled) {
+  if ((isBundleExplicit || shouldAutoBundle) && !isBundleDisabled) {
     const bundlerOpts = typeof bundleOption === 'object' ? { ...bundleOption } : {};
     if (!bundlerOpts.cwd) bundlerOpts.cwd = rootDir;
     const devBundler = createDevBundler(bundlerOpts, devReloadHub);
     app.devBundler = devBundler;
 
     if (devBundler.isAvailable() && bundlerOpts.watch !== false && isDev && !isTest) {
+      if (devReloadHub && typeof devReloadHub.setIgnoreClientFiles === 'function') {
+        devReloadHub.setIgnoreClientFiles(true);
+      }
       devBundler.startWatch().catch((err) => {
         if (logging) console.error('[Webspresso Bundler] Watch error:', err.message);
       });
@@ -1574,6 +1578,58 @@ function createApp(options = {}) {
 
     if (shutdownManager) {
       shutdownManager.registerDisposer('devBundler', () => devBundler.dispose());
+    }
+  }
+
+  // Auto-refresh generated TypeScript types & typed API client in dev mode when models/services/api routes change
+  if (isDev && !isTest && options.typegen !== false) {
+    const typegenWatchDirs = [
+      path.join(rootDir, 'models'),
+      path.join(rootDir, 'services'),
+      path.join(rootDir, 'pages', 'api'),
+    ].filter((d) => fs.existsSync(d));
+
+    if (typegenWatchDirs.length > 0) {
+      const typegenWatchers = [];
+      let typegenTimer = null;
+      const scheduleTypegenRefresh = () => {
+        if (typegenTimer) clearTimeout(typegenTimer);
+        typegenTimer = setTimeout(() => {
+          typegenTimer = null;
+          try {
+            const { generateTypes } = require('./dev/typegen');
+            generateTypes({ rootDir, silent: true });
+            const hasGeneratedClient =
+              fs.existsSync(path.join(rootDir, '.webspresso', 'client.ts')) ||
+              fs.existsSync(path.join(rootDir, 'src', 'client.ts'));
+            if (hasGeneratedClient) {
+              const { generateClient } = require('./dev/client-gen');
+              generateClient({ rootDir, silent: true });
+            }
+          } catch (_) {}
+        }, 250);
+        if (typeof typegenTimer.unref === 'function') typegenTimer.unref();
+      };
+
+      for (const watchDir of typegenWatchDirs) {
+        try {
+          const w = fs.watch(watchDir, { recursive: true }, (_evt, filename) => {
+            if (!filename || filename.includes('node_modules') || filename.includes('.webspresso')) return;
+            scheduleTypegenRefresh();
+          });
+          w.on('error', () => {});
+          typegenWatchers.push(w);
+        } catch (_) {}
+      }
+
+      if (shutdownManager) {
+        shutdownManager.registerDisposer('devTypegen', () => {
+          if (typegenTimer) clearTimeout(typegenTimer);
+          for (const w of typegenWatchers) {
+            try { w.close(); } catch (_) {}
+          }
+        });
+      }
     }
   }
 

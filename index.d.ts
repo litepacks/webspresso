@@ -1919,6 +1919,9 @@ export interface PluginRegisterContext {
   addHelper(name: string, fn: (...args: unknown[]) => unknown): void;
   addFilter(name: string, fn: (...args: unknown[]) => unknown): void;
   addRoute(method: string, path: string, ...handlers: RequestHandler[]): void;
+  registerClientController(name: string, filePath: string): void;
+  registerClientService(name: string, filePath: string): void;
+  registerFragment(name: string, fragmentDef: FragmentDefinition<any, any>): void;
   routes: unknown;
   [key: string]: unknown;
 }
@@ -1936,6 +1939,18 @@ export interface WebspressoPlugin {
 }
 
 export class PluginManager {
+  registerClientController(name: string, filePath: string, pluginName?: string): void;
+  registerClientService(name: string, filePath: string, pluginName?: string): void;
+  registerFragment(name: string, fragmentDef: FragmentDefinition<any, any>, pluginName?: string): void;
+  getClientControllers(): Array<{ name: string; filePath: string; pluginName: string }>;
+  getClientServices(): Array<{ name: string; filePath: string; pluginName: string }>;
+  getFragment(name: string): FragmentDefinition<any, any> | null;
+  getFragments(): Record<string, FragmentDefinition<any, any>>;
+  getClientManifest(): {
+    controllers: Array<{ name: string; filePath: string; pluginName: string }>;
+    services: Array<{ name: string; filePath: string; pluginName: string }>;
+    fragments: string[];
+  };
   [key: string]: unknown;
 }
 

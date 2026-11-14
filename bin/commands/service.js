@@ -5,13 +5,7 @@
  */
 
 const path = require('path');
-let _inquirer;
-const inquirer = {
-  prompt: (...args) => {
-    if (!_inquirer) _inquirer = require('inquirer');
-    return _inquirer.prompt(...args);
-  },
-};
+const inquirer = require('../utils/prompt');
 const { resolveDbConfigIfExists, createDbInstance } = require('../utils/db');
 
 /**

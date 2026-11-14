@@ -291,4 +291,48 @@ describe('Enhanced Dev Live Reload (Template & View Watching)', () => {
 
     app.devReloadHub.close();
   });
+
+  it('includes scroll position preservation in dev-reload client script and skips .client.* files when ignoreClientFiles is enabled', async () => {
+    const testPagesDir = path.join(baseFixtureDir, 'pages-8');
+    fs.mkdirSync(testPagesDir, { recursive: true });
+    fs.writeFileSync(path.join(testPagesDir, 'index.client.js'), 'console.log(1);');
+
+    const hub = createDevReloadHub({
+      enabled: true,
+      pagesDir: testPagesDir,
+      options: { debounce: 20, ignoreClientFiles: true },
+    });
+
+    // Verify client script includes scroll preservation helpers
+    let sentScript = '';
+    const mockRes = {
+      type: () => {},
+      setHeader: () => {},
+      send: (body) => { sentScript = body; },
+    };
+    hub.handleScript({}, mockRes);
+    expect(sentScript).toContain('__ws_dev_scroll');
+    expect(sentScript).toContain('saveScrollPosition');
+    expect(sentScript).toContain('restoreScrollPosition');
+
+    // Verify .client.js edits do not trigger premature template reload when ignoreClientFiles is true
+    let templateReloads = 0;
+    const origBroadcast = hub.broadcast;
+    hub.broadcast = (type, payload) => {
+      if (type === 'full') templateReloads += 1;
+      return origBroadcast(type, payload);
+    };
+
+    fs.writeFileSync(path.join(testPagesDir, 'index.client.js'), 'console.log(2);');
+    await wait(120);
+    expect(templateReloads).toBe(0);
+
+    // Toggling off allows normal .njk reloads
+    hub.setIgnoreClientFiles(false);
+    fs.writeFileSync(path.join(testPagesDir, 'about.njk'), '<h1>About</h1>');
+    await wait(250);
+    expect(templateReloads).toBeGreaterThanOrEqual(1);
+
+    hub.close();
+  });
 });

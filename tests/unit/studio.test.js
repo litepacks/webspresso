@@ -9,7 +9,7 @@
  * 4. CLI command registration (db:studio)
  */
 
-const { program } = require('commander');
+const { Command } = require('commander');
 const {
   createDatabase,
   startStudio,
@@ -383,7 +383,7 @@ describe('Webspresso DB Studio (core/studio)', () => {
 
   describe('CLI db:studio command registration', () => {
     it('registers db:studio and studio alias on commander', () => {
-      const testProg = new program.Command();
+      const testProg = new Command();
       registerStudioCommand(testProg);
 
       const studioCmd = testProg.commands.find((c) => c.name() === 'db:studio');
