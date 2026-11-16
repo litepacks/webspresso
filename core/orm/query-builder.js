@@ -99,10 +99,11 @@ class QueryBuilder {
     // Object form: where({ column: value, ... })
     if (typeof columnOrConditions === 'object' && columnOrConditions !== null) {
       for (const col of Object.keys(columnOrConditions)) {
+        const val = columnOrConditions[col];
         this.state.wheres.push({
           column: col,
-          operator: '=',
-          value: columnOrConditions[col],
+          operator: val === null ? 'is null' : '=',
+          value: val,
           boolean: 'and',
         });
       }
@@ -111,9 +112,14 @@ class QueryBuilder {
 
     // Three-argument form: where('column', '>', value)
     if (value !== undefined) {
+      let op = operatorOrValue;
+      if (value === null) {
+        if (op === '=' || op === 'is' || op === 'IS') op = 'is null';
+        else if (op === '!=' || op === '<>' || op === 'is not' || op === 'IS NOT') op = 'is not null';
+      }
       this.state.wheres.push({
         column: columnOrConditions,
-        operator: operatorOrValue,
+        operator: op,
         value,
         boolean: 'and',
       });
@@ -123,7 +129,7 @@ class QueryBuilder {
     // Two-argument form: where('column', value)
     this.state.wheres.push({
       column: columnOrConditions,
-      operator: '=',
+      operator: operatorOrValue === null ? 'is null' : '=',
       value: operatorOrValue,
       boolean: 'and',
     });

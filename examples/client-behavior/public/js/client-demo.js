@@ -34,6 +34,15 @@ function isObject(val) {
 }
 
 /**
+ * Check if a value is a function.
+ * @param {unknown} val
+ * @returns {val is Function}
+ */
+function isFn(val) {
+  return typeof val === 'function';
+}
+
+/**
  * Check if a value is a plain JavaScript object (not an Array, Map, FormData, etc.).
  * @param {unknown} val
  * @returns {boolean}
@@ -136,6 +145,7 @@ const NOOP_DEBUGGER = Object.freeze({
   recordChainRefresh() {},
   recordChainPatch() {},
   recordEvent() {},
+  trackLog() {},
   getSnapshot() {
     return {
       enabled: false,
@@ -146,9 +156,21 @@ const NOOP_DEBUGGER = Object.freeze({
       discardedResponses: [],
       cleanupErrors: [],
       events: [],
+      logs: [],
     };
   },
   clear() {},
+});
+
+/**
+ * Reusable zero-allocation no-op logger for production builds.
+ */
+const NOOP_LOGGER = Object.freeze({
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+  log() {},
 });
 
 /**
@@ -505,12 +527,14 @@ module.exports = {
   isArray,
   isNumber,
   isObject,
+  isFn,
   isPlainObject,
   isPromise,
   safeTrim,
   getByPath,
   setByPath,
   NOOP_DEBUGGER,
+  NOOP_LOGGER,
   toCamelCase,
   toKebabCase,
   parseDataValue,
@@ -559,6 +583,15 @@ function isObject(val) {
 }
 
 /**
+ * Check if a value is a function.
+ * @param {unknown} val
+ * @returns {val is Function}
+ */
+function isFn(val) {
+  return typeof val === 'function';
+}
+
+/**
  * Check if a value is a plain JavaScript object (not an Array, Map, FormData, etc.).
  * @param {unknown} val
  * @returns {boolean}
@@ -661,6 +694,7 @@ const NOOP_DEBUGGER = Object.freeze({
   recordChainRefresh() {},
   recordChainPatch() {},
   recordEvent() {},
+  trackLog() {},
   getSnapshot() {
     return {
       enabled: false,
@@ -671,9 +705,21 @@ const NOOP_DEBUGGER = Object.freeze({
       discardedResponses: [],
       cleanupErrors: [],
       events: [],
+      logs: [],
     };
   },
   clear() {},
+});
+
+/**
+ * Reusable zero-allocation no-op logger for production builds.
+ */
+const NOOP_LOGGER = Object.freeze({
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+  log() {},
 });
 
 /**
@@ -1030,12 +1076,14 @@ module.exports = {
   isArray,
   isNumber,
   isObject,
+  isFn,
   isPlainObject,
   isPromise,
   safeTrim,
   getByPath,
   setByPath,
   NOOP_DEBUGGER,
+  NOOP_LOGGER,
   toCamelCase,
   toKebabCase,
   parseDataValue,
@@ -1077,7 +1125,7 @@ module.exports = {
  *    external package is not installed in `node_modules`.
  */
 
-const { isArray, getByPath, setByPath, parseDelayMs } = require('../utils');
+const { isArray, getByPath, setByPath, parseDelayMs, isFn } = require('../utils');
 
 const PluginType = {
   Attribute: 1,
@@ -1102,7 +1150,7 @@ const DATASTAR_SSE_EVENT = 'datastar-sse';
  * @returns {object|null}
  */
 function resolveExternalDatastar(injectedDatastar) {
-  if (injectedDatastar && typeof injectedDatastar.load === 'function') {
+  if (injectedDatastar && isFn(injectedDatastar.load)) {
     return injectedDatastar;
   }
   if (typeof globalThis !== 'undefined' && globalThis.__WEBSPRESSO_DATASTAR__) {
@@ -1450,10 +1498,59 @@ function findTopLevelComparison(expr) {
  * @param {string} rawExpr
  * @returns {unknown}
  */
+function findTopLevelTernary(expr) {
+  let depthParen = 0;
+  let depthBracket = 0;
+  let quote = null;
+  let questionIdx = -1;
+  let ternaryDepth = 0;
+
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i];
+    if (quote) {
+      if (ch === '\\') { i++; continue; }
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch;
+      continue;
+    }
+    if (ch === '(') depthParen++;
+    else if (ch === ')') depthParen = Math.max(0, depthParen - 1);
+    else if (ch === '[') depthBracket++;
+    else if (ch === ']') depthBracket = Math.max(0, depthBracket - 1);
+    else if (depthParen === 0 && depthBracket === 0) {
+      if (ch === '?') {
+        if (questionIdx === -1) questionIdx = i;
+        ternaryDepth++;
+      } else if (ch === ':' && ternaryDepth > 0) {
+        ternaryDepth--;
+        if (ternaryDepth === 0 && questionIdx !== -1) {
+          return {
+            cond: expr.slice(0, questionIdx).trim(),
+            truthy: expr.slice(questionIdx + 1, i).trim(),
+            falsy: expr.slice(i + 1).trim(),
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function evaluateStateExpression(state, rawExpr) {
   if (typeof rawExpr !== 'string') return undefined;
   const expr = stripOuterParens(rawExpr.trim());
   if (!expr) return undefined;
+
+  // 0. Ternary conditional (cond ? truthy : falsy)
+  const tern = findTopLevelTernary(expr);
+  if (tern && tern.cond && tern.truthy && tern.falsy) {
+    return evaluateStateExpression(state, tern.cond)
+      ? evaluateStateExpression(state, tern.truthy)
+      : evaluateStateExpression(state, tern.falsy);
+  }
 
   // 1. Logical OR (||) - lowest precedence, evaluated first so that A || B && C splits into A and (B && C)
   const orParts = splitTopLevel(expr, '||');
@@ -1500,7 +1597,22 @@ function evaluateStateExpression(state, rawExpr) {
     }
   }
 
-  // 4. Negations (!!, !)
+  // 4. Addition / string concatenation (+) outside quotes
+  const plusParts = splitTopLevel(expr, '+');
+  if (plusParts && plusParts.length > 1) {
+    let acc = evaluateStateExpression(state, plusParts[0]);
+    for (let i = 1; i < plusParts.length; i++) {
+      const nextVal = evaluateStateExpression(state, plusParts[i]);
+      if (typeof acc === 'number' && typeof nextVal === 'number') {
+        acc = acc + nextVal;
+      } else {
+        acc = `${acc === null || acc === undefined ? '' : acc}${nextVal === null || nextVal === undefined ? '' : nextVal}`;
+      }
+    }
+    return acc;
+  }
+
+  // 5. Negations (!!, !)
   if (expr.startsWith('!!')) {
     return Boolean(evaluateStateExpression(state, expr.slice(2)));
   }
@@ -1621,7 +1733,7 @@ function createIsolatedControllerState(
           );
         }
         if (!isConnected()) {
-          if (debug && typeof debug.trackDiscardedResponse === 'function') {
+          if (debug && isFn(debug.trackDiscardedResponse)) {
             debug.trackDiscardedResponse({
               source: 'controller-state',
               instanceId,
@@ -1771,7 +1883,7 @@ function hasClassBindingAttr(el) {
  * Determine whether a node has client bindings owning specific DOM properties.
  */
 function getClientOwnership(el) {
-  if (!el || typeof el.hasAttribute !== 'function') {
+  if (!el || !isFn(el.hasAttribute)) {
     return { text: false, show: false, disabled: false, model: false, classBinding: false };
   }
   return {
@@ -1791,7 +1903,7 @@ function getClientOwnership(el) {
  * Note: Parent removal/key-change STILL removes the node and triggers `onBeforeNodeRemove` cleanup.
  */
 function getIgnoreMode(el) {
-  if (!el || typeof el.hasAttribute !== 'function' || !el.hasAttribute('data-w-ignore')) {
+  if (!el || !isFn(el.hasAttribute) || !el.hasAttribute('data-w-ignore')) {
     return null;
   }
   const raw = (el.getAttribute('data-w-ignore') || '').trim().toLowerCase();
@@ -1811,9 +1923,9 @@ function emitOwnershipConflict(debug, el, property, token, message) {
     token: token || null,
     message,
   };
-  if (debug && typeof debug.recordEvent === 'function') {
+  if (debug && isFn(debug.recordEvent)) {
     debug.recordEvent('ownership:conflict', payload);
-  } else if (isDev && typeof console !== 'undefined' && typeof console.warn === 'function') {
+  } else if (isDev && typeof console !== 'undefined' && isFn(console.warn)) {
     console.warn(`[webspresso:ownership] ${message}`, payload);
   }
 }
@@ -2188,7 +2300,7 @@ function morphDomTrees(toEl, fromEl, ctx = {}) {
           : newChild.cloneNode(true);
         const currentAtPos = toEl.childNodes[i];
         toEl.insertBefore(imported, currentAtPos || null);
-        if (typeof ctx.onNodeAdded === 'function') {
+        if (isFn(ctx.onNodeAdded)) {
           ctx.onNodeAdded(imported);
         }
       }
@@ -2228,7 +2340,7 @@ function morphDomTrees(toEl, fromEl, ctx = {}) {
       if (oldChild.nodeType === 1 && oldChild.hasAttribute && oldChild.hasAttribute('data-w-host')) {
         continue;
       }
-      if (oldChild.nodeType === 1 && typeof ctx.onBeforeNodeRemove === 'function') {
+      if (oldChild.nodeType === 1 && isFn(ctx.onBeforeNodeRemove)) {
         ctx.onBeforeNodeRemove(oldChild);
       }
       toEl.removeChild(oldChild);
@@ -2280,7 +2392,7 @@ function createDatastarAdapter(options = {}) {
   let datastarInitCtx = null;
 
   // If official @starfederation/datastar is present, capture its InitContext via a public AttributePlugin
-  if (externalDatastar && typeof externalDatastar.load === 'function') {
+  if (externalDatastar && isFn(externalDatastar.load)) {
     try {
       externalDatastar.load({
         type: externalDatastar.PluginType ? externalDatastar.PluginType.Attribute : PluginType.Attribute,
@@ -2290,7 +2402,7 @@ function createDatastarAdapter(options = {}) {
         },
         onLoad() {},
       });
-      if (typeof externalDatastar.apply === 'function' && typeof document !== 'undefined' && document.body) {
+      if (isFn(externalDatastar.apply) && typeof document !== 'undefined' && document.body) {
         externalDatastar.apply();
       }
     } catch (_err) {
@@ -2306,7 +2418,7 @@ function createDatastarAdapter(options = {}) {
       return datastarInitCtx && datastarInitCtx.signals ? datastarInitCtx.signals : fallbackEngine.signals;
     },
     effect(fn) {
-      if (datastarInitCtx && typeof datastarInitCtx.effect === 'function') {
+      if (datastarInitCtx && isFn(datastarInitCtx.effect)) {
         return datastarInitCtx.effect(fn);
       }
       return fallbackEngine.effect(fn);
@@ -2338,7 +2450,7 @@ function createDatastarAdapter(options = {}) {
 
   function collectScopedElements(rootEl) {
     const result = [rootEl];
-    if (!rootEl || typeof rootEl.querySelectorAll !== 'function') return result;
+    if (!rootEl || !isFn(rootEl.querySelectorAll)) return result;
     const all = rootEl.querySelectorAll('*');
     for (let i = 0; i < all.length; i++) {
       if (isWithinControllerScope(rootEl, all[i])) {
@@ -2391,6 +2503,8 @@ function createDatastarAdapter(options = {}) {
         }
       } else if (name === 'data-w-click') {
         bindings.push({ eventName: 'click', actionName: val, modifiers: new Set() });
+      } else if (name === 'data-w-submit') {
+        bindings.push({ eventName: 'submit', actionName: val, modifiers: new Set(['prevent']) });
       }
     }
 
@@ -2551,7 +2665,10 @@ function createDatastarAdapter(options = {}) {
         n === 'data-w-loading-class' ||
         n === 'data-w-on' ||
         n.startsWith('data-w-on:') ||
-        n === 'data-w-click'
+        n === 'data-w-click' ||
+        n === 'data-w-submit' ||
+        n.startsWith('data-w-style:') ||
+        n.startsWith('data-w-attr:')
       ) {
         parts.push(`${n}=${el.attributes[i].value}`);
       }
@@ -2593,7 +2710,7 @@ function createDatastarAdapter(options = {}) {
       const detached =
         !prevEl ||
         prevEl.isConnected === false ||
-        (rootEl && typeof rootEl.contains === 'function' && !rootEl.contains(prevEl));
+        (rootEl && isFn(rootEl.contains) && !rootEl.contains(prevEl));
       if (detached) {
         for (let d = 0; d < prevDisposers.length; d++) {
           try {
@@ -2889,11 +3006,65 @@ function createDatastarAdapter(options = {}) {
           };
 
           el.addEventListener(evtType, onModelInput);
-          elDisposers.push(() => el.removeEventListener(evtType, onModelInput));
+          elDisposers.push(() => {
+            if (isFn(el.removeEventListener)) {
+              el.removeEventListener(evtType, onModelInput);
+            }
+          });
         }
       }
 
-      // 5. Event bindings (data-w-on:<event>, data-w-on, data-w-click)
+      // 3b. data-w-style:<prop>="expr"
+      if (el.attributes) {
+        const styleAttrs = [];
+        const attrBindings = [];
+        for (let i = 0; i < el.attributes.length; i++) {
+          const attr = el.attributes[i];
+          if (attr.name.startsWith('data-w-style:') && attr.value) {
+            const prop = attr.name.slice('data-w-style:'.length).trim();
+            if (prop) styleAttrs.push({ prop, expr: attr.value });
+          } else if (attr.name.startsWith('data-w-attr:') && attr.value) {
+            const targetAttr = attr.name.slice('data-w-attr:'.length).trim();
+            if (targetAttr) attrBindings.push({ attrName: targetAttr, expr: attr.value });
+          }
+        }
+
+        for (const { prop, expr } of styleAttrs) {
+          const stopStyle = engine.effect(() => {
+            if (!isConnected() || el.isConnected === false || !el.style) return;
+            const val = evaluateStateExpression(state, expr);
+            if (val === null || val === undefined || val === false || val === '') {
+              if (isFn(el.style.removeProperty)) {
+                el.style.removeProperty(prop);
+              } else {
+                el.style[prop] = '';
+              }
+            } else if (isFn(el.style.setProperty)) {
+              el.style.setProperty(prop, String(val));
+            } else {
+              el.style[prop] = String(val);
+            }
+          });
+          elDisposers.push(stopStyle);
+        }
+
+        for (const { attrName, expr } of attrBindings) {
+          const stopAttr = engine.effect(() => {
+            if (!isConnected() || el.isConnected === false) return;
+            const val = evaluateStateExpression(state, expr);
+            if (val === null || val === undefined || val === false) {
+              el.removeAttribute(attrName);
+            } else if (val === true) {
+              el.setAttribute(attrName, '');
+            } else {
+              el.setAttribute(attrName, String(val));
+            }
+          });
+          elDisposers.push(stopAttr);
+        }
+      }
+
+      // 5. Event bindings (data-w-on:<event>, data-w-on, data-w-click, data-w-submit)
       const eventBindings = extractEventBindings(el);
       if (eventBindings.length > 0) {
         let isEventComposing = false;
@@ -2915,7 +3086,7 @@ function createDatastarAdapter(options = {}) {
           });
         }
 
-        const parentForm = typeof el.closest === 'function' ? el.closest('form') : el.form || null;
+        const parentForm = isFn(el.closest) ? el.closest('form') : el.form || null;
 
         for (const binding of eventBindings) {
           const schedule = parseEventScheduleModifiers(binding.modifiers);
@@ -2924,10 +3095,17 @@ function createDatastarAdapter(options = {}) {
               if (!isConnected() || el.isConnected === false) return;
               if (binding.modifiers.has('prevent')) event.preventDefault();
               if (binding.modifiers.has('stop')) event.stopPropagation();
-              invokeAction(binding.actionName, event, el);
+              const res = invokeAction(binding.actionName, event, el);
+              if (res && isFn(res.catch)) {
+                res.catch(() => {});
+              }
             };
             el.addEventListener(binding.eventName, listener);
-            elDisposers.push(() => el.removeEventListener(binding.eventName, listener));
+            elDisposers.push(() => {
+              if (isFn(el.removeEventListener)) {
+                el.removeEventListener(binding.eventName, listener);
+              }
+            });
             continue;
           }
 
@@ -2947,7 +3125,10 @@ function createDatastarAdapter(options = {}) {
 
           const fireScheduled = (capturedEvent) => {
             if (!isConnected() || el.isConnected === false) return;
-            invokeAction(binding.actionName, capturedEvent, el);
+            const res = invokeAction(binding.actionName, capturedEvent, el);
+            if (res && isFn(res.catch)) {
+              res.catch(() => {});
+            }
           };
 
           const listener = (event) => {
@@ -3028,7 +3209,7 @@ function createDatastarAdapter(options = {}) {
             el.removeEventListener(binding.eventName, listener);
           });
 
-          if (parentForm && typeof parentForm.addEventListener === 'function') {
+          if (parentForm && isFn(parentForm.addEventListener)) {
             const onFormReset = () => cancelPending();
             parentForm.addEventListener('reset', onFormReset);
             elDisposers.push(() => {
@@ -3075,7 +3256,7 @@ function createDatastarAdapter(options = {}) {
     if (
       doc &&
       doc.activeElement &&
-      typeof targetEl.contains === 'function' &&
+      isFn(targetEl.contains) &&
       targetEl.contains(doc.activeElement)
     ) {
       focusedEl = doc.activeElement;
@@ -3095,17 +3276,17 @@ function createDatastarAdapter(options = {}) {
     if (
       focusedEl &&
       focusedEl.isConnected !== false &&
-      typeof targetEl.contains === 'function' &&
+      isFn(targetEl.contains) &&
       targetEl.contains(focusedEl)
     ) {
       try {
-        if (doc && doc.activeElement !== focusedEl && typeof focusedEl.focus === 'function') {
+        if (doc && doc.activeElement !== focusedEl && isFn(focusedEl.focus)) {
           focusedEl.focus();
         }
         if (
           typeof selStart === 'number' &&
           typeof selEnd === 'number' &&
-          typeof focusedEl.setSelectionRange === 'function'
+          isFn(focusedEl.setSelectionRange)
         ) {
           focusedEl.setSelectionRange(selStart, selEnd);
         }
@@ -3113,7 +3294,7 @@ function createDatastarAdapter(options = {}) {
     }
 
     // If external @starfederation/datastar is active, notify apply() on updated subtree
-    if (externalDatastar && typeof externalDatastar.apply === 'function') {
+    if (externalDatastar && isFn(externalDatastar.apply)) {
       try {
         externalDatastar.apply();
       } catch (_err) {
@@ -3185,7 +3366,7 @@ module.exports = {
  * - Raw & streaming escape hatches (`api.raw`, `api.stream`)
  */
 
-const { isArray, isNumber } = require('./utils');
+const { isArray, isNumber, isFn } = require('./utils');
 
 const VALID_POLICIES = new Set(['latest', 'drop', 'queue', 'parallel']);
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -3308,11 +3489,11 @@ function discoverCsrfToken(doc) {
   const targetDoc = doc || (typeof document !== 'undefined' ? document : null);
   if (!targetDoc) return null;
 
-  if (typeof targetDoc.querySelector === 'function') {
+  if (isFn(targetDoc.querySelector)) {
     const meta =
       targetDoc.querySelector('meta[name="csrf-token"]') ||
       targetDoc.querySelector('meta[name="xsrf-token"]');
-    if (meta && typeof meta.getAttribute === 'function') {
+    if (meta && isFn(meta.getAttribute)) {
       const content = meta.getAttribute('content');
       if (content) return content.trim();
     }
@@ -3570,7 +3751,7 @@ function extractValidationErrors(payload) {
  */
 function unwrapApiResultAndInvalidate(parsedBody, responseHeaders) {
   const headerTags = [];
-  if (responseHeaders && typeof responseHeaders.get === 'function') {
+  if (responseHeaders && isFn(responseHeaders.get)) {
     const rawHeader = responseHeaders.get('x-webspresso-invalidate');
     if (rawHeader) {
       for (const tag of rawHeader.split(',')) {
@@ -3702,7 +3883,7 @@ function normalizeRetryConfig(retryOpt, upperMethod, retryMutations = false) {
     if (isArray(retryOpt.statusCodes)) {
       statusCodes = new Set(retryOpt.statusCodes);
     }
-    if (typeof retryOpt.onRetry === 'function') {
+    if (isFn(retryOpt.onRetry)) {
       onRetry = retryOpt.onRetry;
     }
   }
@@ -3766,7 +3947,7 @@ function abortableSleep(ms, signals = []) {
     const cleanup = () => {
       if (timer) clearTimeout(timer);
       for (const sig of signals) {
-        if (sig && typeof sig.removeEventListener === 'function') {
+        if (sig && isFn(sig.removeEventListener)) {
           sig.removeEventListener('abort', onAbort);
         }
       }
@@ -3778,7 +3959,7 @@ function abortableSleep(ms, signals = []) {
     };
 
     for (const sig of signals) {
-      if (sig && typeof sig.addEventListener === 'function') {
+      if (sig && isFn(sig.addEventListener)) {
         sig.addEventListener('abort', onAbort, { once: true });
       }
     }
@@ -3922,13 +4103,13 @@ function trimTrailingSlashes(str) {
 
 function createApiClient(config = {}) {
   const fetchImpl =
-    config.fetch || (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
+    config.fetch || (isFn(globalThis.fetch) ? globalThis.fetch.bind(globalThis) : null);
   const baseUrl = config.baseUrl ? trimTrailingSlashes(String(config.baseUrl)) : '';
   const lifecycleSignal = config.lifecycleSignal || null;
-  const isConnected = typeof config.isConnected === 'function' ? config.isConnected : () => true;
+  const isConnected = isFn(config.isConnected) ? config.isConnected : () => true;
   const debug = config.debug || null;
-  const onInvalidate = typeof config.onInvalidate === 'function' ? config.onInvalidate : null;
-  const onRefreshError = typeof config.onRefreshError === 'function' ? config.onRefreshError : null;
+  const onInvalidate = isFn(config.onInvalidate) ? config.onInvalidate : null;
+  const onRefreshError = isFn(config.onRefreshError) ? config.onRefreshError : null;
 
   // Concurrency state maps per request key
   const latestMap = new Map(); // key -> { seq: number, controller: AbortController, requestId: string }
@@ -4035,7 +4216,7 @@ function createApiClient(config = {}) {
 
           const delayMs = calculateRetryDelay(attempt, retryConfig);
 
-          if (typeof retryConfig.onRetry === 'function') {
+          if (isFn(retryConfig.onRetry)) {
             try {
               retryConfig.onRetry(err, attempt, delayMs);
             } catch (_cbErr) {
@@ -4043,7 +4224,7 @@ function createApiClient(config = {}) {
             }
           }
 
-          if (debug && typeof debug.trackRequestRetry === 'function') {
+          if (debug && isFn(debug.trackRequestRetry)) {
             debug.trackRequestRetry({
               requestId: currentReqId,
               key: requestKey,
@@ -4081,10 +4262,14 @@ function createApiClient(config = {}) {
             runSingleRequest(upperMethod, requestUrl, body, options, requestKey, subReqId, 'queue')
           )
         );
-      queueMap.set(
-        requestKey,
-        nextTask.catch(() => {})
-      );
+      const tailPromise = nextTask
+        .catch(() => {})
+        .finally(() => {
+          if (queueMap.get(requestKey) === tailPromise) {
+            queueMap.delete(requestKey);
+          }
+        });
+      queueMap.set(requestKey, tailPromise);
       return nextTask;
     }
 
@@ -4105,6 +4290,9 @@ function createApiClient(config = {}) {
         timedOut = true;
         abortController.abort();
       }, options.timeout);
+      if (timeoutTimer && isFn(timeoutTimer.unref)) {
+        timeoutTimer.unref();
+      }
     }
 
     // Policy: 'latest' -> Abort previous in-flight request for this key and increment sequence
@@ -4170,7 +4358,7 @@ function createApiClient(config = {}) {
     if (MUTATION_METHODS.has(upperMethod)) {
       const csrfToken =
         options.csrfToken ||
-        (typeof config.getCsrfToken === 'function' ? config.getCsrfToken() : discoverCsrfToken());
+        (isFn(config.getCsrfToken) ? config.getCsrfToken() : discoverCsrfToken());
       if (csrfToken && !headers['X-CSRF-Token'] && !headers['x-csrf-token']) {
         headers['X-CSRF-Token'] = csrfToken;
       }
@@ -4184,7 +4372,7 @@ function createApiClient(config = {}) {
     try {
       let response;
       try {
-        if (typeof options.onUploadProgress === 'function' && typeof XMLHttpRequest !== 'undefined') {
+        if (isFn(options.onUploadProgress) && typeof XMLHttpRequest !== 'undefined') {
           response = await executeXhrUpload({
             url: requestUrl,
             method: upperMethod,
@@ -4365,13 +4553,13 @@ function createApiClient(config = {}) {
       let parsedBody;
       const status = response.status;
       const contentType =
-        response.headers && typeof response.headers.get === 'function'
+        response.headers && isFn(response.headers.get)
           ? response.headers.get('content-type') || ''
           : '';
 
       if (status === 204 || status === 205) {
         parsedBody = undefined;
-      } else if (typeof response.text === 'function') {
+      } else if (isFn(response.text)) {
         let rawText;
         try {
           rawText = await response.text();
@@ -4405,7 +4593,7 @@ function createApiClient(config = {}) {
         } else {
           parsedBody = rawText;
         }
-      } else if (typeof response.json === 'function') {
+      } else if (isFn(response.json)) {
         try {
           parsedBody = await response.json();
         } catch (bodyErr) {
@@ -4501,7 +4689,7 @@ function createApiClient(config = {}) {
           )
           .catch((refreshErr) => {
             const notifyErr =
-              typeof options.onRefreshError === 'function' ? options.onRefreshError : onRefreshError;
+              isFn(options.onRefreshError) ? options.onRefreshError : onRefreshError;
             if (notifyErr) {
               try {
                 notifyErr(refreshErr, { tags: invalidate, method: upperMethod, url: requestUrl, chainId });
@@ -4539,6 +4727,9 @@ function createApiClient(config = {}) {
         set.delete(requestId);
         if (set.size === 0) {
           inFlightMap.delete(requestKey);
+          if (policy === 'latest') {
+            latestMap.delete(requestKey);
+          }
         }
       }
       if (options.signal) {
@@ -4659,7 +4850,7 @@ module.exports = {
 'use strict';
 
 const { defaultStorage } = require('./storage');
-const { isArray, setElementBusyState } = require('./utils');
+const { isArray, setElementBusyState, isFn } = require('./utils');
 
 /**
  * Webspresso Native HTML Form Layer & Typed Form Handle
@@ -4816,7 +5007,7 @@ function coerceScalarControlValue(el, rawValue) {
  * @returns {{ data: Record<string, unknown>, formData: FormData|null, isMultipart: boolean }}
  */
 function parseFormElement(formEl, submitterOrOptions = null) {
-  if (!formEl || typeof formEl.querySelectorAll !== 'function') {
+  if (!formEl || !isFn(formEl.querySelectorAll)) {
     return { data: {}, values: {}, formData: null, isMultipart: false };
   }
 
@@ -5028,7 +5219,7 @@ function parseFormElement(formEl, submitterOrOptions = null) {
  */
 function captureInitialFormSnapshot(formEl) {
   const snapshot = new Map();
-  if (!formEl || typeof formEl.querySelectorAll !== 'function') return snapshot;
+  if (!formEl || !isFn(formEl.querySelectorAll)) return snapshot;
   const controls = formEl.querySelectorAll('input, select, textarea');
   for (let i = 0; i < controls.length; i++) {
     const el = controls[i];
@@ -5053,7 +5244,7 @@ function captureInitialFormSnapshot(formEl) {
  * Check if any control in `formEl` differs from its captured initial snapshot.
  */
 function computeFormDirty(formEl, initialSnapshot) {
-  if (!formEl || typeof formEl.querySelectorAll !== 'function') return false;
+  if (!formEl || !isFn(formEl.querySelectorAll)) return false;
   const controls = formEl.querySelectorAll('input, select, textarea');
   for (let i = 0; i < controls.length; i++) {
     const el = controls[i];
@@ -5090,7 +5281,7 @@ function computeFormDirty(formEl, initialSnapshot) {
  */
 function createFormHandle(formEl, options = {}) {
   if (formEl && formEl.__wFormHandle) {
-    if (options.services && typeof formEl.__wFormHandle.__setServices === 'function') {
+    if (options.services && isFn(formEl.__wFormHandle.__setServices)) {
       formEl.__wFormHandle.__setServices(options.services);
     }
     return formEl.__wFormHandle;
@@ -5163,7 +5354,7 @@ function createFormHandle(formEl, options = {}) {
 
   function revokePreviewUrls(fieldName) {
     const revokeUrl = (u) => {
-      if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      if (typeof URL !== 'undefined' && isFn(URL.revokeObjectURL)) {
         try {
           URL.revokeObjectURL(u);
         } catch (_e) {}
@@ -5186,7 +5377,7 @@ function createFormHandle(formEl, options = {}) {
   }
 
   function createPreviewUrl(file, fieldName = '_default') {
-    if (!file || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return null;
+    if (!file || typeof URL === 'undefined' || !isFn(URL.createObjectURL)) return null;
     const url = URL.createObjectURL(file);
     let set = previewUrlsByField.get(fieldName);
     if (!set) {
@@ -5242,7 +5433,7 @@ function createFormHandle(formEl, options = {}) {
     (draftStorageType === 'local' ? defaultStorage.local : defaultStorage.session);
 
   function extractDraftValues(el) {
-    if (!el || typeof el.querySelectorAll !== 'function') return {};
+    if (!el || !isFn(el.querySelectorAll)) return {};
     const { data } = parseFormElement(el);
     const safeData = {};
     for (const [key, val] of Object.entries(data)) {
@@ -5291,7 +5482,7 @@ function createFormHandle(formEl, options = {}) {
     const cleanDraft = sanitizeDraftObject(saved);
     if (cleanDraft) {
       fill(cleanDraft, { baseline: false });
-      if (typeof formEl.dispatchEvent === 'function') {
+      if (isFn(formEl.dispatchEvent)) {
         const CustomEventCtor =
           (formEl.ownerDocument && formEl.ownerDocument.defaultView && formEl.ownerDocument.defaultView.CustomEvent) ||
           (typeof CustomEvent !== 'undefined' ? CustomEvent : null);
@@ -5325,7 +5516,7 @@ function createFormHandle(formEl, options = {}) {
     cancelDraftDebounce();
     if (typeof nextKey === 'string' && nextKey.trim()) {
       draftKey = nextKey.trim();
-      if (formEl && typeof formEl.setAttribute === 'function') {
+      if (formEl && isFn(formEl.setAttribute)) {
         formEl.setAttribute('data-w-draft-key', draftKey);
       }
       if (keyOpts && keyOpts.restore === true && isDraftEnabled) {
@@ -5356,7 +5547,7 @@ function createFormHandle(formEl, options = {}) {
    * Optionally focuses the first invalid control.
    */
   function syncErrorsToDom(focusFirstInvalid = false) {
-    if (!formEl || typeof formEl.querySelectorAll !== 'function') return;
+    if (!formEl || !isFn(formEl.querySelectorAll)) return;
 
     // 1. Clear previous error elements and aria-invalid states
     const errorSpans = formEl.querySelectorAll('[data-w-error]');
@@ -5401,7 +5592,7 @@ function createFormHandle(formEl, options = {}) {
         if (errSpan && errSpan.id) {
           ctrl.setAttribute('aria-describedby', errSpan.id);
         }
-        if (!firstInvalidControl && typeof ctrl.focus === 'function' && !isControlDisabled(ctrl)) {
+        if (!firstInvalidControl && isFn(ctrl.focus) && !isControlDisabled(ctrl)) {
           firstInvalidControl = ctrl;
         }
       } else {
@@ -5479,7 +5670,7 @@ function createFormHandle(formEl, options = {}) {
     cancelFieldValidation();
     revokePreviewUrls();
     if (!formEl) return;
-    if (typeof formEl.reset === 'function') {
+    if (isFn(formEl.reset)) {
       formEl.reset();
     }
     // Restore exact captured initial snapshot
@@ -5512,7 +5703,7 @@ function createFormHandle(formEl, options = {}) {
     cancelDraftDebounce();
     cancelFieldValidation();
     revokePreviewUrls();
-    if (!formEl || typeof formEl.querySelectorAll !== 'function') return;
+    if (!formEl || !isFn(formEl.querySelectorAll)) return;
     const controls = formEl.querySelectorAll('input, select, textarea');
     for (let i = 0; i < controls.length; i++) {
       const el = controls[i];
@@ -5550,7 +5741,7 @@ function createFormHandle(formEl, options = {}) {
    *                                            snapshot, clears `dirty`, and clears previous validation errors.
    */
   function fill(values = {}, options = {}) {
-    if (!formEl || typeof formEl.querySelectorAll !== 'function' || !values || typeof values !== 'object' || isArray(values)) {
+    if (!formEl || !isFn(formEl.querySelectorAll) || !values || typeof values !== 'object' || isArray(values)) {
       return handle;
     }
 
@@ -5672,7 +5863,7 @@ function createFormHandle(formEl, options = {}) {
     let event = null;
     let submitOptions = {};
 
-    if (eventOrOptions && typeof eventOrOptions.preventDefault === 'function') {
+    if (eventOrOptions && isFn(eventOrOptions.preventDefault)) {
       event = eventOrOptions;
       event.preventDefault();
     } else if (eventOrOptions && typeof eventOrOptions === 'object') {
@@ -5689,7 +5880,7 @@ function createFormHandle(formEl, options = {}) {
       submitOptions.validate !== false &&
       formEl &&
       !formEl.noValidate &&
-      typeof formEl.reportValidity === 'function'
+      isFn(formEl.reportValidity)
     ) {
       const isValid = formEl.reportValidity();
       if (!isValid) {
@@ -5740,7 +5931,7 @@ function createFormHandle(formEl, options = {}) {
     // Track per-file upload state if multipart
     const submitAbortController = new AbortController();
     activeSubmitAbort = submitAbortController;
-    if (isMultipart && formEl && typeof formEl.querySelectorAll === 'function') {
+    if (isMultipart && formEl && isFn(formEl.querySelectorAll)) {
       const nextUploads = [];
       const fileInputs = formEl.querySelectorAll('input[type="file"]');
       for (let i = 0; i < fileInputs.length; i++) {
@@ -5790,7 +5981,7 @@ function createFormHandle(formEl, options = {}) {
               uploadEntries[i].total = prog.total || uploadEntries[i].total;
               uploadEntries[i].percent = prog.percent;
             }
-            if (typeof submitOptions.onUploadProgress === 'function') {
+            if (isFn(submitOptions.onUploadProgress)) {
               submitOptions.onUploadProgress(prog, uploadEntries);
             }
             notifyStateChange();
@@ -5883,7 +6074,7 @@ function createFormHandle(formEl, options = {}) {
           await listener(responseData, { values: payloadData, form: handle, services });
         } catch (listenerErr) {
           if (!hookError) hookError = listenerErr;
-          if (debug && typeof debug.trackCleanupError === 'function') {
+          if (debug && isFn(debug.trackCleanupError)) {
             debug.trackCleanupError(`form_${formName}`, formName, 'form:onSuccess', listenerErr);
           }
         }
@@ -5896,7 +6087,7 @@ function createFormHandle(formEl, options = {}) {
         null;
       const redirectTarget = resolveSafeRedirectUrl(rawRedirectTarget);
       if (redirectTarget) {
-        if (typeof options.navigate === 'function') {
+        if (isFn(options.navigate)) {
           options.navigate(redirectTarget);
         } else if (typeof window !== 'undefined' && window.location) {
           window.location.assign(redirectTarget);
@@ -6063,7 +6254,7 @@ function createFormHandle(formEl, options = {}) {
         return { ok: true, valid: !fieldErrors[norm], errors: fieldErrors[norm] ? { [norm]: fieldErrors[norm] } : {} };
       }
       // Network or 5xx error: NEVER mark the field as invalid!
-      if (typeof formEl.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') {
+      if (isFn(formEl.dispatchEvent) && typeof CustomEvent !== 'undefined') {
         formEl.dispatchEvent(
           new CustomEvent('w-form:validation-error', {
             bubbles: true,
@@ -6176,7 +6367,7 @@ function createFormHandle(formEl, options = {}) {
     }, 0);
   };
 
-  if (formEl && typeof formEl.addEventListener === 'function') {
+  if (formEl && isFn(formEl.addEventListener)) {
     formEl.addEventListener('input', onDomInput);
     formEl.addEventListener('change', onDomInput);
     formEl.addEventListener('focusout', onDomFocusOut);
@@ -6223,7 +6414,7 @@ function createFormHandle(formEl, options = {}) {
       if (fieldName) {
         const norm = fieldName.endsWith('[]') ? fieldName.slice(0, -2) : fieldName;
         touchedFields.add(norm);
-      } else if (formEl && typeof formEl.querySelectorAll === 'function') {
+      } else if (formEl && isFn(formEl.querySelectorAll)) {
         const controls = formEl.querySelectorAll('input, select, textarea');
         for (let i = 0; i < controls.length; i++) {
           const n = controls[i].getAttribute && controls[i].getAttribute('name');
@@ -6360,7 +6551,7 @@ function createFormHandle(formEl, options = {}) {
         clearTimeout(resetTimer);
         resetTimer = null;
       }
-      if (formEl && typeof formEl.removeEventListener === 'function') {
+      if (formEl && isFn(formEl.removeEventListener)) {
         formEl.removeEventListener('input', onDomInput);
         formEl.removeEventListener('change', onDomInput);
         formEl.removeEventListener('focusout', onDomFocusOut);
@@ -6767,7 +6958,7 @@ module.exports = {
  * - Agnostic to UI rendering: does not impose any template language, virtual DOM, or widget type.
  */
 
-const { decorateElement } = require('./utils');
+const { decorateElement, isFn } = require('./utils');
 
 /**
  * Resolve the owning Document from a root Document or Element.
@@ -6796,7 +6987,7 @@ function resolveDefaultContainer(root, doc) {
       return doc.body;
     }
     const insideFragment =
-      typeof root.closest === 'function' ? Boolean(root.closest('[data-w-fragment]')) : false;
+      isFn(root.closest) ? Boolean(root.closest('[data-w-fragment]')) : false;
     if (!insideFragment) {
       return root;
     }
@@ -6880,10 +7071,10 @@ function createClientHostManager(options = {}) {
     // 2. Explicit CSS selector
     if (!el && typeof opts.selector === 'string' && opts.selector.trim()) {
       const searchRoot = opts.root || root || doc;
-      if (searchRoot && typeof searchRoot.querySelector === 'function') {
+      if (searchRoot && isFn(searchRoot.querySelector)) {
         el = searchRoot.querySelector(opts.selector.trim());
       }
-      if (!el && doc && searchRoot !== doc && typeof doc.querySelector === 'function') {
+      if (!el && doc && searchRoot !== doc && isFn(doc.querySelector)) {
         el = doc.querySelector(opts.selector.trim());
       }
     }
@@ -6891,7 +7082,7 @@ function createClientHostManager(options = {}) {
     // 3. Existing layout placeholder `[data-w-host="<key>"]` not owned by another active host manager
     if (!el && opts.createOnly !== true) {
       const searchRoot = opts.root || root || doc;
-      if (searchRoot && typeof searchRoot.querySelectorAll === 'function') {
+      if (searchRoot && isFn(searchRoot.querySelectorAll)) {
         const candidates = searchRoot.querySelectorAll(`[data-w-host="${key}"]`);
         for (let i = 0; i < candidates.length; i++) {
           const cand = candidates[i];
@@ -6905,7 +7096,7 @@ function createClientHostManager(options = {}) {
 
     // 4. Create a new host container outside fragment regions
     if (!el) {
-      if (!doc || typeof doc.createElement !== 'function') {
+      if (!doc || !isFn(doc.createElement)) {
         const err = new Error(`Cannot create UI host "${key}": no Document is available in the current environment.`);
         err.code = 'CLIENT_HOST_NO_DOCUMENT';
         throw err;
@@ -6918,13 +7109,13 @@ function createClientHostManager(options = {}) {
         (opts.container && opts.container.nodeType === 1 ? opts.container : null) ||
         resolveDefaultContainer(opts.root || root, doc);
 
-      if (container && typeof container.appendChild === 'function') {
+      if (container && isFn(container.appendChild)) {
         container.appendChild(el);
       }
     }
 
     function recordAndSetAttr(attrName, attrVal) {
-      if (!el || typeof el.setAttribute !== 'function') return;
+      if (!el || !isFn(el.setAttribute)) return;
       if (!created && !prevAttributes.has(attrName)) {
         prevAttributes.set(attrName, el.hasAttribute(attrName) ? el.getAttribute(attrName) : null);
       }
@@ -6997,7 +7188,7 @@ function createClientHostManager(options = {}) {
         try {
           unmountCallbacks[i](decoratedEl);
         } catch (err) {
-          if (debug && typeof debug.trackCleanupError === 'function') {
+          if (debug && isFn(debug.trackCleanupError)) {
             debug.trackCleanupError(`host_${key}`, key, 'host:unmount', err);
           }
         }
@@ -7009,9 +7200,9 @@ function createClientHostManager(options = {}) {
           delete el.__wHostManager;
         }
         if (created) {
-          if (el.parentNode && typeof el.parentNode.removeChild === 'function') {
+          if (el.parentNode && isFn(el.parentNode.removeChild)) {
             el.parentNode.removeChild(el);
-          } else if (typeof el.remove === 'function') {
+          } else if (isFn(el.remove)) {
             el.remove();
           }
         } else {
@@ -7028,7 +7219,7 @@ function createClientHostManager(options = {}) {
         }
       }
 
-      if (debug && typeof debug.recordEvent === 'function') {
+      if (debug && isFn(debug.recordEvent)) {
         debug.recordEvent('host:unmount', { key, created });
       }
     }
@@ -7056,7 +7247,7 @@ function createClientHostManager(options = {}) {
       handle,
     });
 
-    if (debug && typeof debug.recordEvent === 'function') {
+    if (debug && isFn(debug.recordEvent)) {
       debug.recordEvent('host:mount', { key, created });
     }
 
@@ -7091,7 +7282,7 @@ function createClientHostManager(options = {}) {
       try {
         records[i].handle.unmount();
       } catch (err) {
-        if (debug && typeof debug.trackCleanupError === 'function') {
+        if (debug && isFn(debug.trackCleanupError)) {
           debug.trackCleanupError(`host_${records[i].key}`, records[i].key, 'host:dispose', err);
         }
       }
@@ -7123,6 +7314,7 @@ module.exports = {
     "./services": function(module, exports, require) {
 'use strict';
 
+const { isFn } = require('./utils');
 /**
  * Webspresso Client Services Registry & Lifecycle Manager (`core/client/services.js`)
  *
@@ -7184,14 +7376,14 @@ function defineClientService(definition) {
     throw new TypeError('defineClientService() requires a configuration object or factory function.');
   }
 
-  const load = typeof definition.load === 'function' ? definition.load : null;
+  const load = isFn(definition.load) ? definition.load : null;
   const create =
-    typeof definition.create === 'function'
+    isFn(definition.create)
       ? definition.create
-      : typeof definition.setup === 'function'
+      : isFn(definition.setup)
         ? definition.setup
         : null;
-  const dispose = typeof definition.dispose === 'function' ? definition.dispose : null;
+  const dispose = isFn(definition.dispose) ? definition.dispose : null;
 
   if (!load && !create) {
     throw new TypeError(
@@ -7227,19 +7419,19 @@ async function instantiateFromLoadedModule(loaded, outerDef, serviceCtx, registe
 
   let target = loaded;
   if (typeof loaded === 'object') {
-    if (typeof loaded.dispose === 'function') registerDispose(loaded.dispose);
+    if (isFn(loaded.dispose)) registerDispose(loaded.dispose);
     if ('default' in loaded && loaded.default !== undefined) {
       target = loaded.default;
     }
   }
 
   if (target && typeof target === 'object' && target.__isWebspressoClientService) {
-    if (typeof target.dispose === 'function') registerDispose(target.dispose);
-    if (typeof target.load === 'function') {
+    if (isFn(target.dispose)) registerDispose(target.dispose);
+    if (isFn(target.load)) {
       const nested = await target.load(serviceCtx);
       return instantiateFromLoadedModule(nested, { create: target.create }, serviceCtx, registerDispose);
     }
-    return typeof target.create === 'function' ? await target.create(serviceCtx) : target;
+    return isFn(target.create) ? await target.create(serviceCtx) : target;
   }
 
   if (typeof target === 'function') {
@@ -7250,7 +7442,7 @@ async function instantiateFromLoadedModule(loaded, outerDef, serviceCtx, registe
   }
 
   if (target && typeof target === 'object') {
-    if (typeof target.dispose === 'function') registerDispose(target.dispose);
+    if (isFn(target.dispose)) registerDispose(target.dispose);
     const fn = target.createService || target.create || target.setup;
     if (typeof fn === 'function') return await fn.call(target, serviceCtx);
   }
@@ -7274,7 +7466,7 @@ function createClientServiceRegistry(options = {}) {
   const api = options.api || null;
   const baseStorage = options.storage || defaultStorage;
   const debug = options.debug || null;
-  const getRuntime = typeof options.getRuntime === 'function' ? options.getRuntime : () => null;
+  const getRuntime = isFn(options.getRuntime) ? options.getRuntime : () => null;
 
   // Registered service definitions: name -> normalized definition
   const definitions = new Map();
@@ -7358,7 +7550,7 @@ function createClientServiceRegistry(options = {}) {
       try {
         fn(attempt.instance, attempt.serviceCtx);
       } catch (err) {
-        if (debug && typeof debug.trackCleanupError === 'function') {
+        if (debug && isFn(debug.trackCleanupError)) {
           debug.trackCleanupError(`service_${serviceName}`, serviceName, phase, err);
         }
       }
@@ -7369,13 +7561,13 @@ function createClientServiceRegistry(options = {}) {
       attempt.disposeFns.length === 0 &&
       attempt.instance &&
       typeof attempt.instance === 'object' &&
-      typeof attempt.instance.dispose === 'function' &&
+      isFn(attempt.instance.dispose) &&
       !ranDisposeFns.has(attempt.instance.dispose)
     ) {
       try {
         attempt.instance.dispose();
       } catch (err) {
-        if (debug && typeof debug.trackCleanupError === 'function') {
+        if (debug && isFn(debug.trackCleanupError)) {
           debug.trackCleanupError(`service_${serviceName}`, serviceName, phase, err);
         }
       }
@@ -7386,7 +7578,7 @@ function createClientServiceRegistry(options = {}) {
       try {
         attempt.cleanups[i]();
       } catch (err) {
-        if (debug && typeof debug.trackCleanupError === 'function') {
+        if (debug && isFn(debug.trackCleanupError)) {
           debug.trackCleanupError(`service_${serviceName}`, serviceName, `${phase}:cleanup`, err);
         }
       }
@@ -7400,7 +7592,7 @@ function createClientServiceRegistry(options = {}) {
       try {
         hosts[i].unmount();
       } catch (err) {
-        if (debug && typeof debug.trackCleanupError === 'function') {
+        if (debug && isFn(debug.trackCleanupError)) {
           debug.trackCleanupError(`service_${serviceName}`, serviceName, `${phase}:host`, err);
         }
       }
@@ -7420,7 +7612,7 @@ function createClientServiceRegistry(options = {}) {
       entry.activeAttempt = null;
     }
 
-    if (wasReady && debug && typeof debug.recordEvent === 'function') {
+    if (wasReady && debug && isFn(debug.recordEvent)) {
       debug.recordEvent('service:dispose', { name: entry.name });
     }
   }
@@ -7473,7 +7665,7 @@ function createClientServiceRegistry(options = {}) {
     };
 
     const scopedStorage =
-      baseStorage && typeof baseStorage.scoped === 'function'
+      baseStorage && isFn(baseStorage.scoped)
         ? baseStorage.scoped(`service:${cleanName}`)
         : defaultStorage.scoped(`service:${cleanName}`);
 
@@ -7555,7 +7747,7 @@ function createClientServiceRegistry(options = {}) {
     };
     entries.set(cleanName, entry);
 
-    if (debug && typeof debug.recordEvent === 'function') {
+    if (debug && isFn(debug.recordEvent)) {
       debug.recordEvent('service:init', { name: cleanName });
     }
 
@@ -7603,7 +7795,7 @@ function createClientServiceRegistry(options = {}) {
           initOrder.push(cleanName);
         }
 
-        if (debug && typeof debug.recordEvent === 'function') {
+        if (debug && isFn(debug.recordEvent)) {
           debug.recordEvent('service:ready', {
             name: cleanName,
             hasHost: attempt.hosts.size > 0,
@@ -7620,7 +7812,7 @@ function createClientServiceRegistry(options = {}) {
           entries.delete(cleanName);
         }
 
-        if (debug && typeof debug.recordEvent === 'function') {
+        if (debug && isFn(debug.recordEvent)) {
           debug.recordEvent('service:error', {
             name: cleanName,
             code: err && err.code ? err.code : null,
@@ -7729,7 +7921,7 @@ module.exports = {
  */
 
 const { defaultStorage } = require('./storage');
-const { isArray, isNumber } = require('./utils');
+const { isArray, isNumber, isFn } = require('./utils');
 
 const DEVTOOL_HOST_ID = 'webspresso-client-devtools-host';
 
@@ -7770,7 +7962,7 @@ function setupReduxDevToolsBridge(runtime) {
     devTools.init(getCombinedState());
 
     // Dispatches state snapshot when events occur
-    if (runtime.debug && typeof runtime.debug.getSnapshot === 'function') {
+    if (runtime.debug && isFn(runtime.debug.getSnapshot)) {
       const origRecordEvent = runtime.debug.recordEvent;
       if (typeof origRecordEvent === 'function') {
         runtime.debug.recordEvent = function (type, detail) {
@@ -7853,7 +8045,7 @@ function formatJsonHtml(data) {
 function highlightElement(el) {
   if (!el || !el.style) return false;
   try {
-    if (typeof el.scrollIntoView === 'function') {
+    if (isFn(el.scrollIntoView)) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     const origOutline = el.style.outline;
@@ -7979,7 +8171,7 @@ function mountDevtool(runtime, options = {}) {
   host.style.cssText = 'position:fixed;z-index:999998;pointer-events:none;';
 
   // Use Shadow DOM to completely isolate styles from user CSS
-  const shadow = typeof host.attachShadow === 'function' ? host.attachShadow({ mode: 'open' }) : host;
+  const shadow = isFn(host.attachShadow) ? host.attachShadow({ mode: 'open' }) : host;
 
   // Style block
   const styleEl = document.createElement('style');
@@ -8216,7 +8408,7 @@ function mountDevtool(runtime, options = {}) {
   }
 
   function getNetworkSnapshot() {
-    if (!runtime.debug || typeof runtime.debug.getSnapshot !== 'function') return [];
+    if (!runtime.debug || !isFn(runtime.debug.getSnapshot)) return [];
     const snap = runtime.debug.getSnapshot();
     return {
       activeRequests: snap.activeRequests || [],
@@ -8599,11 +8791,52 @@ function mountDevtool(runtime, options = {}) {
     `;
   }
 
+  function renderLogsTab(logs) {
+    if (!logs || logs.length === 0) {
+      return `
+        <div class="ws-empty">
+          <div style="font-size:24px;margin-bottom:8px;">📋</div>
+          <div>No client logs recorded yet.</div>
+          <div style="font-size:11px;margin-top:4px;opacity:0.7;">Use <code>ctx.log.info(...)</code> or <code>runtime.log.warn(...)</code> in development.</div>
+        </div>
+      `;
+    }
+    const rows = logs.slice().reverse().map((l) => {
+      const badgeClass =
+        l.level === 'error'
+          ? 'ws-badge-danger'
+          : l.level === 'warn'
+            ? 'ws-badge-warning'
+            : 'ws-badge-info';
+      const dataStr = l.data !== undefined ? `<pre class="ws-code" style="margin-top:4px;max-height:90px;">${escapeHtml(JSON.stringify(l.data, null, 2))}</pre>` : '';
+      return `
+        <div class="ws-card" style="padding:8px 10px;margin-bottom:6px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <div>
+              <span class="ws-badge ${badgeClass}">${escapeHtml(String(l.level || 'info').toUpperCase())}</span>
+              <span style="font-weight:600;color:#e4e4e7;margin-left:6px;">${escapeHtml(l.source || 'client')}</span>
+            </div>
+            <span style="font-size:10px;color:#71717a;">${new Date(l.timestamp).toLocaleTimeString()}</span>
+          </div>
+          <div style="margin-top:4px;color:#d4d4d8;font-size:12px;">${escapeHtml(l.message || '')}</div>
+          ${dataStr}
+        </div>
+      `;
+    }).join('');
+    return `
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <button class="ws-btn ws-btn-sm" id="ws-btn-clear-logs">🧹 Clear Logs</button>
+      </div>
+      ${rows}
+    `;
+  }
+
   function renderDrawer() {
     const controllers = getControllersSnapshot();
     const fragments = getFragmentsSnapshot();
     const network = getNetworkSnapshot();
     const storage = getStorageSnapshot();
+    const logs = (network && Array.isArray(network.logs)) ? network.logs : [];
 
     return `
       <div class="ws-drawer" id="ws-devtool-drawer">
@@ -8624,6 +8857,9 @@ function mountDevtool(runtime, options = {}) {
             </button>
             <button class="ws-tab-btn ${activeTab === 'network' ? 'active' : ''}" data-tab="network">
               🌐 Network
+            </button>
+            <button class="ws-tab-btn ${activeTab === 'logs' ? 'active' : ''}" data-tab="logs">
+              📋 Logs (${logs.length})
             </button>
             <button class="ws-tab-btn ${activeTab === 'storage' ? 'active' : ''}" data-tab="storage">
               💾 Storage
@@ -8649,9 +8885,11 @@ function mountDevtool(runtime, options = {}) {
                 ? renderFragmentsTab(fragments)
                 : activeTab === 'network'
                   ? renderNetworkTab(network)
-                  : activeTab === 'storage'
-                    ? renderStorageTab(storage)
-                    : renderStudioTab()
+                  : activeTab === 'logs'
+                    ? renderLogsTab(logs)
+                    : activeTab === 'storage'
+                      ? renderStorageTab(storage)
+                      : renderStudioTab()
           }
         </div>
 
@@ -8668,10 +8906,10 @@ function mountDevtool(runtime, options = {}) {
   let wasOpen = false;
 
   function findInShadow(id) {
-    if (shadow && typeof shadow.getElementById === 'function') {
+    if (shadow && isFn(shadow.getElementById)) {
       return shadow.getElementById(id);
     }
-    return shadow && typeof shadow.querySelector === 'function' ? shadow.querySelector(`#${id}`) : null;
+    return shadow && isFn(shadow.querySelector) ? shadow.querySelector(`#${id}`) : null;
   }
 
   function updateDom(force = false) {
@@ -8683,7 +8921,7 @@ function mountDevtool(runtime, options = {}) {
     // Preserve scroll positions inside drawer before updating DOM
     let prevContentScrollTop = 0;
     const prevContentEl =
-      isOpen && wasOpen && shadow && typeof shadow.querySelector === 'function'
+      isOpen && wasOpen && shadow && isFn(shadow.querySelector)
         ? shadow.querySelector('.ws-content')
         : null;
     if (prevContentEl) {
@@ -8701,7 +8939,7 @@ function mountDevtool(runtime, options = {}) {
         drawerEl.classList.add('ws-drawer-enter');
       }
     }
-    if (prevContentScrollTop > 0 && shadow && typeof shadow.querySelector === 'function') {
+    if (prevContentScrollTop > 0 && shadow && isFn(shadow.querySelector)) {
       const nextContentEl = shadow.querySelector('.ws-content');
       if (nextContentEl) {
         nextContentEl.scrollTop = prevContentScrollTop;
@@ -8710,11 +8948,36 @@ function mountDevtool(runtime, options = {}) {
     bindEvents();
   }
 
+  let uiEventCleanups = [];
+
+  function clearUiListeners() {
+    while (uiEventCleanups.length > 0) {
+      const cleanup = uiEventCleanups.pop();
+      try {
+        cleanup();
+      } catch (_e) {}
+    }
+  }
+
+  function addUiListener(el, eventName, handler) {
+    if (!el || !isFn(el.addEventListener)) return;
+    el.addEventListener(eventName, handler);
+    uiEventCleanups.push(() => {
+      if (isFn(el.removeEventListener)) {
+        try {
+          el.removeEventListener(eventName, handler);
+        } catch (_e) {}
+      }
+    });
+  }
+
   function bindEvents() {
+    clearUiListeners();
+
     if (!isOpen) {
       const pill = findInShadow('ws-devtool-pill');
       if (pill) {
-        pill.addEventListener('click', () => {
+        addUiListener(pill, 'click', () => {
           isOpen = true;
           updateDom();
         });
@@ -8725,7 +8988,7 @@ function mountDevtool(runtime, options = {}) {
     // Close button
     const closeBtn = findInShadow('ws-btn-close');
     if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
+      addUiListener(closeBtn, 'click', () => {
         isOpen = false;
         updateDom();
       });
@@ -8734,7 +8997,7 @@ function mountDevtool(runtime, options = {}) {
     // Refresh snapshot button
     const refreshSnapBtn = findInShadow('ws-btn-refresh-snap');
     if (refreshSnapBtn) {
-      refreshSnapBtn.addEventListener('click', () => {
+      addUiListener(refreshSnapBtn, 'click', () => {
         updateDom();
       });
     }
@@ -8742,7 +9005,7 @@ function mountDevtool(runtime, options = {}) {
     // Tab buttons
     const tabBtns = shadow.querySelectorAll('.ws-tab-btn');
     for (let i = 0; i < tabBtns.length; i++) {
-      tabBtns[i].addEventListener('click', (e) => {
+      addUiListener(tabBtns[i], 'click', (e) => {
         const tab = e.currentTarget.getAttribute('data-tab');
         if (tab) {
           activeTab = tab;
@@ -8754,7 +9017,7 @@ function mountDevtool(runtime, options = {}) {
     // Controller selection in sidebar
     const ctrlItems = shadow.querySelectorAll('.ws-controller-item');
     for (let i = 0; i < ctrlItems.length; i++) {
-      ctrlItems[i].addEventListener('click', (e) => {
+      addUiListener(ctrlItems[i], 'click', (e) => {
         selectedControllerId = e.currentTarget.getAttribute('data-inst-id');
         updateDom();
       });
@@ -8763,7 +9026,7 @@ function mountDevtool(runtime, options = {}) {
     // Highlight controller in DOM
     const hlCtrlBtn = findInShadow('ws-btn-highlight-ctrl');
     if (hlCtrlBtn) {
-      hlCtrlBtn.addEventListener('click', (e) => {
+      addUiListener(hlCtrlBtn, 'click', (e) => {
         const instId = e.currentTarget.getAttribute('data-inst-id');
         const instances = runtime.controllers ? runtime.controllers.getActiveInstances() : [];
         const target = instances.find((i) => i.instanceId === instId);
@@ -8776,7 +9039,7 @@ function mountDevtool(runtime, options = {}) {
     // Copy state
     const copyStateBtn = findInShadow('ws-btn-copy-state');
     if (copyStateBtn) {
-      copyStateBtn.addEventListener('click', (e) => {
+      addUiListener(copyStateBtn, 'click', (e) => {
         const instId = e.currentTarget.getAttribute('data-inst-id');
         const instances = runtime.controllers ? runtime.controllers.getActiveInstances() : [];
         const target = instances.find((i) => i.instanceId === instId);
@@ -8795,7 +9058,7 @@ function mountDevtool(runtime, options = {}) {
     // Highlight fragment in DOM
     const hlFragBtns = shadow.querySelectorAll('#ws-btn-highlight-frag');
     for (let i = 0; i < hlFragBtns.length; i++) {
-      hlFragBtns[i].addEventListener('click', (e) => {
+      addUiListener(hlFragBtns[i], 'click', (e) => {
         const instId = e.currentTarget.getAttribute('data-inst-id');
         const frag = runtime.fragments ? runtime.fragments.getInstance(instId) : null;
         if (frag && frag.el) {
@@ -8807,7 +9070,7 @@ function mountDevtool(runtime, options = {}) {
     // Refresh fragment on demand
     const refreshFragBtns = shadow.querySelectorAll('#ws-btn-refresh-frag');
     for (let i = 0; i < refreshFragBtns.length; i++) {
-      refreshFragBtns[i].addEventListener('click', async (e) => {
+      addUiListener(refreshFragBtns[i], 'click', async (e) => {
         const name = e.currentTarget.getAttribute('data-frag-name');
         if (name && runtime.fragments) {
           const btn = e.currentTarget;
@@ -8828,7 +9091,7 @@ function mountDevtool(runtime, options = {}) {
     // Refresh all fragments
     const refreshAllBtn = findInShadow('ws-btn-refresh-all-frags');
     if (refreshAllBtn) {
-      refreshAllBtn.addEventListener('click', async () => {
+      addUiListener(refreshAllBtn, 'click', async () => {
         if (!runtime.fragments) return;
         const origText = refreshAllBtn.textContent;
         refreshAllBtn.textContent = '⏳ Refreshing...';
@@ -8849,7 +9112,7 @@ function mountDevtool(runtime, options = {}) {
     // Clear Webspresso storage
     const clearStorageBtn = findInShadow('ws-btn-clear-storage');
     if (clearStorageBtn) {
-      clearStorageBtn.addEventListener('click', () => {
+      addUiListener(clearStorageBtn, 'click', () => {
         defaultStorage.local.clear();
         defaultStorage.session.clear();
         clearStorageBtn.textContent = '✅ Cleared!';
@@ -8859,10 +9122,21 @@ function mountDevtool(runtime, options = {}) {
       });
     }
 
+    // Clear logs
+    const clearLogsBtn = findInShadow('ws-btn-clear-logs');
+    if (clearLogsBtn) {
+      addUiListener(clearLogsBtn, 'click', () => {
+        if (runtime.debug && isFn(runtime.debug.clear)) {
+          runtime.debug.clear();
+        }
+        updateDom();
+      });
+    }
+
     // Force page reload
     const forceReloadBtn = findInShadow('ws-btn-force-reload');
     if (forceReloadBtn) {
-      forceReloadBtn.addEventListener('click', () => {
+      addUiListener(forceReloadBtn, 'click', () => {
         if (typeof window !== 'undefined' && window.location) {
           window.location.reload();
         }
@@ -8951,6 +9225,7 @@ function mountDevtool(runtime, options = {}) {
       return false;
     },
     destroy() {
+      clearUiListeners();
       document.removeEventListener('keydown', onKeyDown);
       if (pollTimer) clearInterval(pollTimer);
       try {
@@ -9001,14 +9276,21 @@ const { createFormHandle } = require('./forms');
 const { createApiClient } = require('./api');
 const { defaultStorage, createClientStorage } = require('./storage');
 const { createClientServiceRegistry } = require('./services');
+const { createClientContextStore } = require('./context');
 const {
   isArray,
   isNumber,
   decorateElement,
   parseDurationMs,
   parseRefetchMode,
-  setElementBusyState,
-} = require('./utils');
+  setElementBusyState, isFn, setByPath, NOOP_LOGGER } = require('./utils');
+
+function getClientLoggerFactory() {
+  if (process.env.NODE_ENV !== 'production') {
+    return require('./debug').createClientLogger;
+  }
+  return () => NOOP_LOGGER;
+}
 
 let instanceSeq = 0;
 let activeControllerContext = null;
@@ -9080,7 +9362,7 @@ function hasArrayChanged(newArr, oldArr) {
 }
 
 function runUntracked(engine, fn) {
-  if (engine && typeof engine.untracked === 'function') {
+  if (engine && isFn(engine.untracked)) {
     return engine.untracked(fn);
   }
   return fn();
@@ -9194,12 +9476,12 @@ function createStandaloneWatch(engine, source, callback, options = {}) {
  * @returns {() => void} Unwatch function
  */
 function watch(source, callback, options = {}) {
-  if (activeControllerContext && typeof activeControllerContext.watch === 'function') {
+  if (activeControllerContext && isFn(activeControllerContext.watch)) {
     return activeControllerContext.watch(source, callback, options);
   }
   const { createDatastarAdapter } = require('./adapter/datastar');
   const engine = createDatastarAdapter().engine;
-  if (!engine || typeof engine.effect !== 'function') {
+  if (!engine || !isFn(engine.effect)) {
     return () => {};
   }
   return createStandaloneWatch(engine, source, callback, options);
@@ -9296,7 +9578,7 @@ function defineController(definition = {}) {
   if (!definition || typeof definition !== 'object') {
     throw new TypeError('defineController() requires a configuration object.');
   }
-  if (definition.state !== undefined && typeof definition.state !== 'function') {
+  if (definition.state !== undefined && !isFn(definition.state)) {
     throw new TypeError(
       'defineController({ state }) must be a factory function `() => ({ ... })` so each instance receives isolated state.'
     );
@@ -9310,7 +9592,7 @@ function defineController(definition = {}) {
   if (definition.watch !== undefined && (typeof definition.watch !== 'object' || definition.watch === null)) {
     throw new TypeError('defineController({ watch }) must be an object of watcher functions or descriptors.');
   }
-  if (definition.onError !== undefined && typeof definition.onError !== 'function') {
+  if (definition.onError !== undefined && !isFn(definition.onError)) {
     throw new TypeError('defineController({ onError }) must be an error handler function `(err, ctx, meta) => void`.');
   }
   if (definition.persist !== undefined && definition.persist !== null) {
@@ -9328,7 +9610,7 @@ function defineController(definition = {}) {
   // Pre-validate collision between state and computed properties
   if (definition.computed && typeof definition.computed === 'object') {
     let dummyState = {};
-    if (typeof definition.state === 'function') {
+    if (isFn(definition.state)) {
       try {
         dummyState = definition.state({ el: null }) || {};
       } catch (_e) {}
@@ -9347,12 +9629,13 @@ function defineController(definition = {}) {
     state: definition.state || (() => ({})),
     computed: definition.computed && typeof definition.computed === 'object' ? definition.computed : {},
     tasks: definition.tasks && typeof definition.tasks === 'object' ? definition.tasks : {},
-    connect: typeof definition.connect === 'function' ? definition.connect : null,
-    disconnect: typeof definition.disconnect === 'function' ? definition.disconnect : null,
-    beforePatch: typeof definition.beforePatch === 'function' ? definition.beforePatch : null,
-    afterPatch: typeof definition.afterPatch === 'function' ? definition.afterPatch : null,
-    onError: typeof definition.onError === 'function' ? definition.onError : null,
+    connect: isFn(definition.connect) ? definition.connect : null,
+    disconnect: isFn(definition.disconnect) ? definition.disconnect : null,
+    beforePatch: isFn(definition.beforePatch) ? definition.beforePatch : null,
+    afterPatch: isFn(definition.afterPatch) ? definition.afterPatch : null,
+    onError: isFn(definition.onError) ? definition.onError : null,
     persist: definition.persist || null,
+    sync: definition.sync || null,
     watch: definition.watch && typeof definition.watch === 'object' ? definition.watch : null,
     actions: definition.actions && typeof definition.actions === 'object' ? definition.actions : {},
   });
@@ -9424,7 +9707,7 @@ function isTargetInControllerScope(rootEl, candidateEl) {
  * - `data-w-target="notes.input"` (controller-prefixed target syntax)
  */
 function queryScopedTargets(rootEl, controllerName, targetName) {
-  if (!rootEl || typeof rootEl.querySelectorAll !== 'function' || !targetName) {
+  if (!rootEl || !isFn(rootEl.querySelectorAll) || !targetName) {
     return [];
   }
   const cleanTarget = String(targetName).trim();
@@ -9460,10 +9743,20 @@ function createControllerRuntime(options = {}) {
   const datastar = options.datastar;
   const fragments = options.fragments || null;
   const debug = options.debug || null;
+  const syncBus = options.syncBus || null;
+  const runtimeOnError = isFn(options.onError) ? options.onError : null;
+  const contextStore =
+    options.contextStore ||
+    createClientContextStore({
+      root: options.root,
+      context: options.context,
+      provide: options.provide,
+      route: options.route,
+    });
   const baseApiConfig = options.apiConfig || {};
-  const lazyLoader = typeof options.lazyLoader === 'function' ? options.lazyLoader : null;
+  const lazyLoader = isFn(options.lazyLoader) ? options.lazyLoader : null;
   const services =
-    options.services && typeof options.services.get === 'function'
+    options.services && isFn(options.services.get)
       ? options.services
       : createClientServiceRegistry({
           root: options.root || null,
@@ -9670,16 +9963,46 @@ function createControllerRuntime(options = {}) {
         return;
       }
 
+      const isCleanup = Boolean(meta.cleanup || meta.silent);
+      const phase = meta.phase || 'unknown';
+
+      if (debug) {
+        if (isCleanup && isFn(debug.trackCleanupError)) {
+          debug.trackCleanupError(instanceId, controllerName, phase, err);
+        } else if (isFn(debug.recordEvent)) {
+          debug.recordEvent('controller:error', {
+            instanceId,
+            controllerName,
+            phase,
+            message: err.message || String(err),
+          });
+        }
+      }
+
+      if (runtimeOnError) {
+        try {
+          runtimeOnError(err, {
+            instanceId,
+            controllerName,
+            ...meta,
+          });
+        } catch (_trackerErr) {
+          // Prevent recursive error tracking loop
+        }
+      }
+
+      if (isCleanup) {
+        return;
+      }
+
       lastError = err;
 
       // 1. Controller definition onError hook
-      if (typeof reg.definition.onError === 'function') {
+      if (isFn(reg.definition.onError)) {
         try {
           reg.definition.onError(err, ctx, meta);
         } catch (hookErr) {
-          if (debug) {
-            debug.trackCleanupError(instanceId, controllerName, 'onError', hookErr);
-          }
+          handleControllerError(hookErr, { phase: 'onError', cleanup: true });
         }
       }
 
@@ -9687,29 +10010,39 @@ function createControllerRuntime(options = {}) {
       for (const listener of Array.from(dynamicErrorListeners)) {
         try {
           listener(err, meta);
-        } catch (_listenerErr) {
-          // Ignore
+        } catch (listenerErr) {
+          handleControllerError(listenerErr, { phase: 'onErrorListener', cleanup: true });
         }
       }
 
       // 3. Dispatch bubbling CustomEvent 'w-controller:error' on rootEl
-      emitEvent(
-        'w-controller:error',
-        {
-          error: err,
-          instanceId,
-          controllerName,
-          ...meta,
-        },
-        { bubbles: true, cancelable: true }
-      );
+      try {
+        emitEvent(
+          'w-controller:error',
+          {
+            error: err,
+            instanceId,
+            controllerName,
+            ...meta,
+          },
+          { bubbles: true, cancelable: true }
+        );
+      } catch (emitErr) {
+        if (debug && isFn(debug.trackCleanupError)) {
+          debug.trackCleanupError(instanceId, controllerName, 'emitError', emitErr);
+        }
+      }
+    }
+
+    function trackCleanupError(phase, err) {
+      handleControllerError(err, { phase, cleanup: true });
     }
 
     let taskSeq = 0;
     function createTaskInstance(runFnOrConfig, options = {}) {
       let runFn = runFnOrConfig;
       let taskOpts = { ...options };
-      if (typeof runFnOrConfig === 'object' && runFnOrConfig !== null && typeof runFnOrConfig.run === 'function') {
+      if (typeof runFnOrConfig === 'object' && runFnOrConfig !== null && isFn(runFnOrConfig.run)) {
         runFn = runFnOrConfig.run;
         taskOpts = { ...runFnOrConfig, ...options };
       }
@@ -9749,19 +10082,62 @@ function createControllerRuntime(options = {}) {
       let queuedPromise = Promise.resolve();
       let _lastUpdatedAt = 0;
       let taskIntervalTimer = null;
-      let focusDebounceTimer = null;
+      let focusCoalesceQueued = false;
       const taskCleanupListeners = [];
 
       datastar.engine.signals.setValue(`${signalPrefix}.pending`, false);
       datastar.engine.signals.setValue(`${signalPrefix}.data`, null);
       datastar.engine.signals.setValue(`${signalPrefix}.error`, null);
       datastar.engine.signals.setValue(`${signalPrefix}.stale`, false);
+      datastar.engine.signals.setValue(`${signalPrefix}.status`, 'idle');
 
       let _pending = false;
       let _data = null;
       let _error = null;
       let _stale = false;
+      let _status = 'idle';
       let _lastArgs = [];
+
+      const rawSync = taskOpts.syncState;
+      const syncCfg = {
+        statusKey:
+          typeof rawSync === 'string'
+            ? rawSync
+            : (rawSync && typeof rawSync === 'object' ? rawSync.statusKey : null) || taskOpts.stateKey || null,
+        pendingKey:
+          (rawSync && typeof rawSync === 'object' ? rawSync.pendingKey : null) || taskOpts.pendingKey || null,
+        dataKey:
+          (rawSync && typeof rawSync === 'object' ? rawSync.dataKey : null) || taskOpts.dataKey || null,
+        errorKey:
+          (rawSync && typeof rawSync === 'object' ? rawSync.errorKey : null) || taskOpts.errorKey || null,
+      };
+
+      function syncRequestState(nextStatus, payload = {}) {
+        _status = nextStatus;
+        if (isConnected()) {
+          updateSignal('status', nextStatus);
+        }
+        if (!state || !isConnected()) return;
+        if (syncCfg.statusKey) {
+          state[syncCfg.statusKey] = nextStatus;
+        }
+        if (syncCfg.pendingKey) {
+          state[syncCfg.pendingKey] = nextStatus === 'pending';
+        }
+        if (nextStatus === 'pending') {
+          if (syncCfg.errorKey) state[syncCfg.errorKey] = null;
+        } else if (nextStatus === 'success') {
+          if (syncCfg.errorKey) state[syncCfg.errorKey] = null;
+          if (syncCfg.dataKey && 'data' in payload) state[syncCfg.dataKey] = payload.data;
+        } else if (nextStatus === 'failure') {
+          if (syncCfg.errorKey) {
+            const err = payload.error;
+            state[syncCfg.errorKey] = err ? (err.message || String(err)) : 'Request failed';
+          }
+        } else if (nextStatus === 'idle') {
+          if (syncCfg.errorKey) state[syncCfg.errorKey] = null;
+        }
+      }
 
       function isTaskStale(mode = true) {
         if (!mode) return false;
@@ -9786,7 +10162,7 @@ function createControllerRuntime(options = {}) {
         const effectiveArgs = args.length > 0 ? args : _lastArgs;
 
         if (policy === 'drop' && activeRuns > 0) {
-          if (debug && typeof debug.trackDiscardedResponse === 'function') {
+          if (debug && isFn(debug.trackDiscardedResponse)) {
             debug.trackDiscardedResponse({
               source: 'task',
               instanceId,
@@ -9823,6 +10199,7 @@ function createControllerRuntime(options = {}) {
 
         _pending = true;
         updateSignal('pending', true);
+        syncRequestState('pending');
         if (_data !== null) {
           _stale = true;
           updateSignal('stale', true);
@@ -9842,6 +10219,7 @@ function createControllerRuntime(options = {}) {
           updateSignal('data', result);
           updateSignal('error', null);
           updateSignal('stale', false);
+          syncRequestState('success', { data: result });
           return result;
         } catch (err) {
           if (!isConnected() || (policy !== 'parallel' && runVersion !== currentRunVersion)) {
@@ -9852,6 +10230,7 @@ function createControllerRuntime(options = {}) {
           }
           _error = err;
           updateSignal('error', err);
+          syncRequestState('failure', { error: err });
           handleControllerError(err, {
             task: taskKey,
             phase: 'task',
@@ -9898,6 +10277,10 @@ function createControllerRuntime(options = {}) {
           datastar.engine.signals.value(`${signalPrefix}.pending`);
           return _pending;
         },
+        get status() {
+          datastar.engine.signals.value(`${signalPrefix}.status`);
+          return _status;
+        },
         get data() {
           datastar.engine.signals.value(`${signalPrefix}.data`);
           return _data;
@@ -9919,23 +10302,41 @@ function createControllerRuntime(options = {}) {
         isStale: () => isTaskStale(true),
         run,
         cancel,
+        reset() {
+          cancel();
+          _data = null;
+          _error = null;
+          _lastUpdatedAt = 0;
+          if (isConnected()) {
+            updateSignal('data', null);
+            updateSignal('error', null);
+          }
+          syncRequestState('idle');
+        },
         dispose() {
           if (taskIntervalTimer) {
             clearInterval(taskIntervalTimer);
             taskIntervalTimer = null;
           }
-          if (focusDebounceTimer) {
-            clearTimeout(focusDebounceTimer);
-            focusDebounceTimer = null;
-          }
+          focusCoalesceQueued = false;
           while (taskCleanupListeners.length > 0) {
             const removeFn = taskCleanupListeners.pop();
             try {
               removeFn();
-            } catch (_e) {}
+            } catch (err) {
+              trackCleanupError('taskCleanupListener', err);
+            }
           }
-          cancel();
-          datastar.engine.signals.remove(signalPrefix);
+          try {
+            cancel();
+          } catch (err) {
+            trackCleanupError('taskCancel', err);
+          }
+          try {
+            datastar.engine.signals.remove(signalPrefix);
+          } catch (err) {
+            trackCleanupError('taskSignalsRemove', err);
+          }
         },
       };
 
@@ -9956,30 +10357,35 @@ function createControllerRuntime(options = {}) {
       }
 
       if (refetchOnFocusMode) {
+        const scheduleMicrotask =
+          typeof queueMicrotask === 'function'
+            ? queueMicrotask
+            : (cb) => Promise.resolve().then(cb);
+
         const onTaskFocus = () => {
-          if (!isConnected() || isDocHidden()) return;
-          if (focusDebounceTimer) clearTimeout(focusDebounceTimer);
-          focusDebounceTimer = setTimeout(() => {
-            focusDebounceTimer = null;
+          if (!isConnected() || isDocHidden() || focusCoalesceQueued) return;
+          focusCoalesceQueued = true;
+          scheduleMicrotask(() => {
+            focusCoalesceQueued = false;
             if (isConnected() && !isDocHidden() && activeRuns === 0 && isTaskStale(refetchOnFocusMode)) {
               run().catch(() => {});
             }
-          }, 20);
+          });
         };
         const onVisChange = () => {
           if (!isDocHidden()) onTaskFocus();
         };
-        if (doc && typeof doc.addEventListener === 'function') {
+        if (doc && isFn(doc.addEventListener)) {
           doc.addEventListener('visibilitychange', onVisChange);
           taskCleanupListeners.push(() => doc.removeEventListener('visibilitychange', onVisChange));
         }
-        if (win && typeof win.addEventListener === 'function') {
+        if (win && isFn(win.addEventListener)) {
           win.addEventListener('focus', onTaskFocus);
           taskCleanupListeners.push(() => win.removeEventListener('focus', onTaskFocus));
         }
       }
 
-      if (refetchOnReconnectMode && win && typeof win.addEventListener === 'function') {
+      if (refetchOnReconnectMode && win && isFn(win.addEventListener)) {
         const onTaskOnline = () => {
           if (isConnected() && activeRuns === 0 && isTaskStale(refetchOnReconnectMode)) {
             run().catch(() => {});
@@ -10003,7 +10409,7 @@ function createControllerRuntime(options = {}) {
             run().catch(() => {});
           }
         }, refetchIntervalMs);
-        if (taskIntervalTimer && typeof taskIntervalTimer.unref === 'function') {
+        if (taskIntervalTimer && isFn(taskIntervalTimer.unref)) {
           taskIntervalTimer.unref();
         }
       }
@@ -10016,7 +10422,11 @@ function createControllerRuntime(options = {}) {
       if (!isConnected()) return () => {};
       const stop = datastar.engine.effect(() => {
         if (!isConnected()) return;
-        fn();
+        try {
+          fn();
+        } catch (err) {
+          handleControllerError(err, { phase: 'effect' });
+        }
       });
       cleanupCallbacks.push(stop);
       return stop;
@@ -10163,21 +10573,30 @@ function createControllerRuntime(options = {}) {
         listenerOptions = maybeOptions;
       }
 
-      if (!targetEl || typeof targetEl.addEventListener !== 'function' || typeof handler !== 'function') {
+      if (!targetEl || !isFn(targetEl.addEventListener) || typeof handler !== 'function') {
         return () => {};
       }
 
       const wrappedHandler = (evt) => {
         if (!isConnected()) return;
-        handler(evt);
+        try {
+          const res = handler(evt);
+          if (res && isFn(res.catch)) {
+            res.catch((err) => handleControllerError(err, { phase: 'listener', event: eventName }));
+          }
+        } catch (err) {
+          handleControllerError(err, { phase: 'listener', event: eventName });
+        }
       };
 
       targetEl.addEventListener(eventName, wrappedHandler, listenerOptions);
       const remove = () => {
         try {
-          targetEl.removeEventListener(eventName, wrappedHandler, listenerOptions);
-        } catch (_e) {
-          // Ignore
+          if (isFn(targetEl.removeEventListener)) {
+            targetEl.removeEventListener(eventName, wrappedHandler, listenerOptions);
+          }
+        } catch (err) {
+          trackCleanupError('removeListener', err);
         }
       };
       cleanupCallbacks.push(remove);
@@ -10191,7 +10610,14 @@ function createControllerRuntime(options = {}) {
           clearInterval(timerId);
           return;
         }
-        fn();
+        try {
+          const res = fn();
+          if (res && isFn(res.catch)) {
+            res.catch((err) => handleControllerError(err, { phase: 'interval' }));
+          }
+        } catch (err) {
+          handleControllerError(err, { phase: 'interval' });
+        }
       }, ms);
       const clear = () => clearInterval(timerId);
       cleanupCallbacks.push(clear);
@@ -10202,7 +10628,14 @@ function createControllerRuntime(options = {}) {
       if (!isConnected()) return () => {};
       const timerId = setTimeout(() => {
         if (!isConnected()) return;
-        fn();
+        try {
+          const res = fn();
+          if (res && isFn(res.catch)) {
+            res.catch((err) => handleControllerError(err, { phase: 'timeout' }));
+          }
+        } catch (err) {
+          handleControllerError(err, { phase: 'timeout' });
+        }
       }, ms);
       const clear = () => clearTimeout(timerId);
       cleanupCallbacks.push(clear);
@@ -10210,7 +10643,7 @@ function createControllerRuntime(options = {}) {
     }
 
     function emitEvent(eventName, detail = undefined, eventOptions = {}) {
-      if (!rootEl || typeof rootEl.dispatchEvent !== 'function') return false;
+      if (!rootEl || !isFn(rootEl.dispatchEvent)) return false;
       const CustomEventCtor =
         (rootEl.ownerDocument && rootEl.ownerDocument.defaultView && rootEl.ownerDocument.defaultView.CustomEvent) ||
         (typeof CustomEvent !== 'undefined' ? CustomEvent : null);
@@ -10260,7 +10693,7 @@ function createControllerRuntime(options = {}) {
           formEl = rootEl;
         }
       }
-      if (!formEl && typeof rootEl.querySelectorAll === 'function') {
+      if (!formEl && isFn(rootEl.querySelectorAll)) {
         const candidates = rootEl.querySelectorAll('form[data-w-form], form');
         for (let i = 0; i < candidates.length; i++) {
           const cand = candidates[i];
@@ -10303,12 +10736,12 @@ function createControllerRuntime(options = {}) {
           const res = tDef(ctx);
           if (res && res.__isWebspressoTask) {
             taskInst = res;
-          } else if (res && typeof res === 'object' && typeof res.run === 'function') {
+          } else if (res && typeof res === 'object' && isFn(res.run)) {
             taskInst = createTaskInstance(res.run, { key: name, ...res });
           } else if (typeof res === 'function') {
             taskInst = createTaskInstance(res, { key: name });
           }
-        } else if (tDef && typeof tDef === 'object' && typeof tDef.run === 'function') {
+        } else if (tDef && typeof tDef === 'object' && isFn(tDef.run)) {
           taskInst = createTaskInstance(tDef.run, { key: name, ...tDef });
         }
         if (taskInst) {
@@ -10375,12 +10808,12 @@ function createControllerRuntime(options = {}) {
     }
 
     function checkFragmentPersistenceConflict(idOrName, input) {
-      if (!persistConfig || !fragments || typeof fragments.getInstance !== 'function' || !input || typeof input !== 'object') {
+      if (!persistConfig || !fragments || !isFn(fragments.getInstance) || !input || typeof input !== 'object') {
         return;
       }
       const inst =
         fragments.getInstance(idOrName) ||
-        (typeof fragments.getInstances === 'function'
+        (isFn(fragments.getInstances)
           ? fragments.getInstances().find((i) => i.name === idOrName)
           : null);
       if (inst && inst.persistInput && inst.persistInput.key !== persistConfig.storageKey) {
@@ -10392,17 +10825,34 @@ function createControllerRuntime(options = {}) {
           keys: Object.keys(input),
         };
         persistenceConflicts.push(conflict);
-        if (debug && typeof debug.recordEvent === 'function') {
+        if (debug && isFn(debug.recordEvent)) {
           debug.recordEvent('persist:conflict', conflict);
         }
       }
     }
 
     // 6. Context object passed to `connect(ctx)` and `actions[name](ctx, event, actionEl)`
+    // `ctx` itself is frozen to preserve framework contract, while `locals` provides a
+    // mutable per-instance bag for imperative helpers and non-reactive caches.
+    const locals = Object.create(null);
+    const instanceLogger =
+      process.env.NODE_ENV !== 'production'
+        ? getClientLoggerFactory()(debug, controllerName, { console: options.logToConsole !== false })
+        : NOOP_LOGGER;
+
     ctx = Object.freeze({
       instanceId,
       name: controllerName,
       el: rootEl,
+      locals,
+      log: instanceLogger,
+      get route() {
+        return contextStore.route;
+      },
+      get context() {
+        return contextStore.context;
+      },
+      inject: (key, fallback) => contextStore.inject(key, fallback),
       get state() {
         return state;
       },
@@ -10413,6 +10863,42 @@ function createControllerRuntime(options = {}) {
       targets: targetsAccessor,
       tasks: tasksProxy,
       task: createTaskInstance,
+      request: async (stateKeyOrOpts, fn) => {
+        if (typeof fn !== 'function') {
+          throw new TypeError('ctx.request(stateKeyOrOpts, fn) requires an async function.');
+        }
+        const opts = typeof stateKeyOrOpts === 'string' ? { statusKey: stateKeyOrOpts } : (stateKeyOrOpts || {});
+        const statusKey = opts.statusKey || opts.stateKey || null;
+        const pendingKey = opts.pendingKey || null;
+        const dataKey = opts.dataKey || null;
+        const errorKey = opts.errorKey || null;
+        const rethrow = opts.rethrow !== false;
+
+        if (isConnected() && state) {
+          if (statusKey) state[statusKey] = 'pending';
+          if (pendingKey) state[pendingKey] = true;
+          if (errorKey) state[errorKey] = null;
+        }
+        try {
+          const result = await fn({ signal: lifecycleAbort ? lifecycleAbort.signal : undefined });
+          if (isConnected() && state) {
+            if (statusKey) state[statusKey] = 'success';
+            if (pendingKey) state[pendingKey] = false;
+            if (errorKey) state[errorKey] = null;
+            if (dataKey) state[dataKey] = result;
+          }
+          return result;
+        } catch (err) {
+          if (isConnected() && state) {
+            if (statusKey) state[statusKey] = 'failure';
+            if (pendingKey) state[pendingKey] = false;
+            if (errorKey) state[errorKey] = err ? (err.message || String(err)) : 'Request failed';
+          }
+          handleControllerError(err, { phase: 'request', statusKey });
+          if (rethrow) throw err;
+          return undefined;
+        }
+      },
       storage: storageCtx,
       get persistenceConflicts() {
         return [...persistenceConflicts];
@@ -10441,7 +10927,7 @@ function createControllerRuntime(options = {}) {
         if (!name) return null;
         const el = decorateElement(maybeEl || currentActionEl);
         if (!el) return null;
-        if (typeof el.data === 'function') {
+        if (isFn(el.data)) {
           return el.data(name);
         }
         const rawAttr = el.getAttribute ? el.getAttribute(`data-${name}`) : null;
@@ -10451,6 +10937,21 @@ function createControllerRuntime(options = {}) {
       },
       on: registerListener,
       emit: emitEvent,
+      broadcast: (topic, payload) => (syncBus ? syncBus.publish('event', topic, payload) : false),
+      onBroadcast: (topic, handler) => {
+        if (!syncBus || !isFn(handler)) return () => {};
+        const unsub = syncBus.subscribe((msg) => {
+          if (!isConnected() || !msg || msg.kind !== 'event') return;
+          if (topic && topic !== '*' && msg.topic !== topic) return;
+          try {
+            handler(msg.payload, msg);
+          } catch (err) {
+            handleControllerError(err, { phase: 'broadcast', topic });
+          }
+        });
+        cleanupCallbacks.push(unsub);
+        return unsub;
+      },
       effect: registerEffect,
       watch: registerWatch,
       interval: registerInterval,
@@ -10479,16 +10980,16 @@ function createControllerRuntime(options = {}) {
       },
       invalidate: (tags) => (fragments ? fragments.invalidate(tags) : Promise.resolve({ ok: true, refreshed: [] })),
       retryFailedFragments: () =>
-        fragments && typeof fragments.retryFailed === 'function'
+        fragments && isFn(fragments.retryFailed)
           ? fragments.retryFailed()
           : Promise.resolve({ refreshed: [], skipped: true }),
       refresh: async (idOrName, input, opts) => {
         checkFragmentPersistenceConflict(idOrName, input);
         if (!fragments) {
           const empty = { ok: true, refreshed: [], skipped: true };
-          if (opts && typeof opts.onSuccess === 'function') await opts.onSuccess(empty);
-          if (opts && typeof opts.onSettled === 'function') await opts.onSettled(empty, null);
-          else if (opts && typeof opts.onComplete === 'function') await opts.onComplete(empty, null);
+          if (opts && isFn(opts.onSuccess)) await opts.onSuccess(empty);
+          if (opts && isFn(opts.onSettled)) await opts.onSettled(empty, null);
+          else if (opts && isFn(opts.onComplete)) await opts.onComplete(empty, null);
           return empty;
         }
         return fragments.refresh(idOrName, input, opts);
@@ -10499,7 +11000,7 @@ function createControllerRuntime(options = {}) {
           return inst && inst.input ? { ...inst.input } : {};
         },
         get inputs() {
-          if (!fragments || typeof fragments.getInstances !== 'function') return {};
+          if (!fragments || !isFn(fragments.getInstances)) return {};
           const list = fragments.getInstances(idOrName);
           const map = {};
           for (const inst of list) {
@@ -10511,7 +11012,7 @@ function createControllerRuntime(options = {}) {
           checkFragmentPersistenceConflict(idOrName, input);
           if (!fragments) {
             const empty = { ok: true, refreshed: [], skipped: true };
-            if (opts && typeof opts.onSuccess === 'function') {
+            if (opts && isFn(opts.onSuccess)) {
               return Promise.resolve(opts.onSuccess(empty)).then(() => empty);
             }
             return Promise.resolve(empty);
@@ -10582,7 +11083,7 @@ function createControllerRuntime(options = {}) {
           registerWatch(watchKey, (newVal, oldVal, onCleanup) => {
             watchDef.call(ctx, newVal, oldVal, onCleanup, ctx);
           });
-        } else if (watchDef && typeof watchDef === 'object' && typeof watchDef.handler === 'function') {
+        } else if (watchDef && typeof watchDef === 'object' && isFn(watchDef.handler)) {
           registerWatch(
             watchKey,
             (newVal, oldVal, onCleanup) => {
@@ -10611,22 +11112,22 @@ function createControllerRuntime(options = {}) {
         actionEl.__wActionBusy === true &&
         (!actionEl.hasAttribute || !actionEl.hasAttribute('data-w-allow-concurrent'))
       ) {
-        if (event && typeof event.preventDefault === 'function') {
+        if (event && isFn(event.preventDefault)) {
           event.preventDefault();
         }
         return undefined;
       }
 
       // Built-in `data-w-confirm` guard
-      if (actionEl && typeof actionEl.getAttribute === 'function') {
+      if (actionEl && isFn(actionEl.getAttribute)) {
         const confirmMsg = actionEl.getAttribute('data-w-confirm');
         if (confirmMsg !== null && confirmMsg !== '') {
           const confirmFn =
-            typeof window !== 'undefined' && typeof window.confirm === 'function'
+            typeof window !== 'undefined' && isFn(window.confirm)
               ? window.confirm.bind(window)
               : null;
           if (confirmFn && !confirmFn(confirmMsg)) {
-            if (event && typeof event.preventDefault === 'function') {
+            if (event && isFn(event.preventDefault)) {
               event.preventDefault();
             }
             return undefined;
@@ -10640,7 +11141,7 @@ function createControllerRuntime(options = {}) {
       activeControllerContext = ctx;
       try {
         const res = fn(ctx, event, decoratedEl);
-        if (res && typeof res.then === 'function') {
+        if (res && isFn(res.then)) {
           setActionBusy(actionName, 1);
           setElementBusyState(actionEl, true);
           return res.then(
@@ -10680,6 +11181,63 @@ function createControllerRuntime(options = {}) {
       }
     }
 
+    // 7b. Cross-tab selective state sync (`sync: ['theme']` or `sync: { keys: ['theme'], channel: '...' }`)
+    const rawSyncDef = reg.definition.sync;
+    if (syncBus && rawSyncDef && state) {
+      const syncKeys = isArray(rawSyncDef)
+        ? rawSyncDef
+        : isArray(rawSyncDef.keys)
+          ? rawSyncDef.keys
+          : [];
+      const syncChannel =
+        (!isArray(rawSyncDef) && typeof rawSyncDef.channel === 'string' && rawSyncDef.channel) ||
+        controllerName;
+
+      if (syncKeys.length > 0) {
+        let isApplyingRemoteSync = false;
+        let lastSentJson = JSON.stringify(
+          Object.fromEntries(syncKeys.map((k) => [k, resolveStatePath(state, k)]))
+        );
+
+        const stopSyncEffect = datastar.engine.effect(() => {
+          if (!isConnected()) return;
+          const snapshot = {};
+          for (let i = 0; i < syncKeys.length; i++) {
+            const k = syncKeys[i];
+            snapshot[k] = resolveStatePath(state, k);
+          }
+          if (isApplyingRemoteSync) {
+            lastSentJson = JSON.stringify(snapshot);
+            return;
+          }
+          const json = JSON.stringify(snapshot);
+          if (json !== lastSentJson) {
+            lastSentJson = json;
+            syncBus.publish('state', syncChannel, { patch: snapshot });
+          }
+        });
+        cleanupCallbacks.push(stopSyncEffect);
+
+        const unsubStateSync = syncBus.subscribe((msg) => {
+          if (!isConnected() || !msg || msg.kind !== 'state' || msg.topic !== syncChannel) return;
+          const patch = msg.payload && msg.payload.patch;
+          if (!patch || typeof patch !== 'object') return;
+          isApplyingRemoteSync = true;
+          try {
+            for (let i = 0; i < syncKeys.length; i++) {
+              const k = syncKeys[i];
+              if (Object.prototype.hasOwnProperty.call(patch, k)) {
+                setByPath(state, k, patch[k]);
+              }
+            }
+          } finally {
+            isApplyingRemoteSync = false;
+          }
+        });
+        cleanupCallbacks.push(unsubStateSync);
+      }
+    }
+
     // 7. Bind declarative DOM attributes within controller scope
     const domDisposers = [];
     function rebindDom() {
@@ -10708,7 +11266,7 @@ function createControllerRuntime(options = {}) {
       if (rootEl.tagName === 'FORM' && rootEl.hasAttribute('data-w-form')) {
         resolveFormHandle(rootEl.getAttribute('data-w-form'));
       }
-      if (typeof rootEl.querySelectorAll === 'function') {
+      if (isFn(rootEl.querySelectorAll)) {
         const formsInScope = rootEl.querySelectorAll('form[data-w-form]');
         for (let i = 0; i < formsInScope.length; i++) {
           if (isTargetInControllerScope(rootEl, formsInScope[i])) {
@@ -10801,7 +11359,7 @@ function createControllerRuntime(options = {}) {
         if (!isConnected() || !reg.definition.beforePatch) return;
         try {
           const result = reg.definition.beforePatch(ctx, meta);
-          if (result && typeof result.then === 'function') {
+          if (result && isFn(result.then)) {
             // beforePatch must be synchronous; warn in dev and do not block morph
             if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production' && typeof console !== 'undefined') {
               console.warn(`[webspresso] Controller "${controllerName}" beforePatch() returned a Promise; beforePatch hooks are synchronous and are not awaited.`);
@@ -10815,7 +11373,7 @@ function createControllerRuntime(options = {}) {
         if (!isConnected() || !reg.definition.afterPatch) return;
         try {
           const res = reg.definition.afterPatch(ctx, meta);
-          if (res && typeof res.then === 'function') {
+          if (res && isFn(res.then)) {
             res.catch((err) => {
               handleControllerError(err, { phase: 'afterPatch' });
             });
@@ -10835,9 +11393,7 @@ function createControllerRuntime(options = {}) {
             reg.definition.disconnect(ctx);
           } catch (err) {
             handleControllerError(err, { phase: 'disconnect' });
-            if (debug) {
-              debug.trackCleanupError(instanceId, controllerName, 'disconnect', err);
-            }
+            trackCleanupError('disconnect', err);
           }
         }
 
@@ -10846,9 +11402,7 @@ function createControllerRuntime(options = {}) {
           try {
             cleanupCallbacks[i]();
           } catch (err) {
-            if (debug) {
-              debug.trackCleanupError(instanceId, controllerName, 'cleanup', err);
-            }
+            trackCleanupError('cleanup', err);
           }
         }
         cleanupCallbacks.length = 0;
@@ -10857,8 +11411,8 @@ function createControllerRuntime(options = {}) {
         for (let i = 0; i < domDisposers.length; i++) {
           try {
             domDisposers[i]();
-          } catch (_e) {
-            // Ignore
+          } catch (err) {
+            trackCleanupError('domDisposer', err);
           }
         }
         domDisposers.length = 0;
@@ -10867,8 +11421,8 @@ function createControllerRuntime(options = {}) {
         for (const fh of scopedForms.values()) {
           try {
             fh.destroy();
-          } catch (_e) {
-            // Ignore
+          } catch (err) {
+            trackCleanupError('scopedFormDestroy', err);
           }
         }
         scopedForms.clear();
@@ -10877,8 +11431,8 @@ function createControllerRuntime(options = {}) {
         for (let i = 0; i < scopedTasksList.length; i++) {
           try {
             scopedTasksList[i].dispose();
-          } catch (_e) {
-            // Ignore
+          } catch (err) {
+            trackCleanupError('scopedTaskDispose', err);
           }
         }
         scopedTasksList.length = 0;
@@ -10917,7 +11471,7 @@ function createControllerRuntime(options = {}) {
     if (!el || el.nodeType !== 1) return;
 
     const elements = [el];
-    if (typeof el.querySelectorAll === 'function') {
+    if (isFn(el.querySelectorAll)) {
       const descendants = el.querySelectorAll('[data-w-controller], form[data-w-form]');
       for (let i = 0; i < descendants.length; i++) {
         elements.push(descendants[i]);
@@ -10967,7 +11521,7 @@ function createControllerRuntime(options = {}) {
     if (root.nodeType === 1 && root.hasAttribute && root.hasAttribute('data-w-controller')) {
       controllerElements.push(root);
     }
-    if (typeof root.querySelectorAll === 'function') {
+    if (isFn(root.querySelectorAll)) {
       const found = root.querySelectorAll('[data-w-controller]');
       for (let i = 0; i < found.length; i++) {
         controllerElements.push(found[i]);
@@ -11004,7 +11558,7 @@ function createControllerRuntime(options = {}) {
     if (root.nodeType === 1 && root.tagName === 'FORM' && root.hasAttribute('data-w-form')) {
       formElements.push(root);
     }
-    if (typeof root.querySelectorAll === 'function') {
+    if (isFn(root.querySelectorAll)) {
       const foundForms = root.querySelectorAll('form[data-w-form]');
       for (let i = 0; i < foundForms.length; i++) {
         formElements.push(foundForms[i]);
@@ -11053,7 +11607,7 @@ function createControllerRuntime(options = {}) {
   function isInsideIgnoredSubtree(el, rootEl) {
     let cur = el && el.parentElement ? el.parentElement : null;
     while (cur) {
-      if (typeof cur.hasAttribute === 'function' && cur.hasAttribute('data-w-ignore')) {
+      if (isFn(cur.hasAttribute) && cur.hasAttribute('data-w-ignore')) {
         const mode = (cur.getAttribute('data-w-ignore') || '').trim().toLowerCase();
         if (mode !== 'self') {
           return true;
@@ -11062,7 +11616,7 @@ function createControllerRuntime(options = {}) {
       if (cur === rootEl) break;
       cur = cur.parentElement || null;
     }
-    if (el === rootEl && el && typeof el.hasAttribute === 'function' && el.hasAttribute('data-w-ignore')) {
+    if (el === rootEl && el && isFn(el.hasAttribute) && el.hasAttribute('data-w-ignore')) {
       const mode = (el.getAttribute('data-w-ignore') || '').trim().toLowerCase();
       if (mode === 'all' || mode === 'both') {
         return true;
@@ -11078,8 +11632,8 @@ function createControllerRuntime(options = {}) {
       if (!inst || !inst.el || !inst.isConnected) continue;
       if (
         inst.el === fragmentEl ||
-        (typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el)) ||
-        (typeof inst.el.contains === 'function' && inst.el.contains(fragmentEl))
+        (isFn(fragmentEl.contains) && fragmentEl.contains(inst.el)) ||
+        (isFn(inst.el.contains) && inst.el.contains(fragmentEl))
       ) {
         if (isInsideIgnoredSubtree(inst.el, fragmentEl)) continue;
         affected.push(inst);
@@ -11088,9 +11642,9 @@ function createControllerRuntime(options = {}) {
     // Sort deterministically: outer ancestors first, inner descendants second
     affected.sort((a, b) => {
       if (a.el === b.el) return 0;
-      if (typeof a.el.contains === 'function' && a.el.contains(b.el)) return -1;
-      if (typeof b.el.contains === 'function' && b.el.contains(a.el)) return 1;
-      if (typeof a.el.compareDocumentPosition === 'function') {
+      if (isFn(a.el.contains) && a.el.contains(b.el)) return -1;
+      if (isFn(b.el.contains) && b.el.contains(a.el)) return 1;
+      if (isFn(a.el.compareDocumentPosition)) {
         const pos = a.el.compareDocumentPosition(b.el);
         if (pos & 4) return -1; // DOCUMENT_POSITION_FOLLOWING
         if (pos & 2) return 1;  // DOCUMENT_POSITION_PRECEDING
@@ -11113,7 +11667,7 @@ function createControllerRuntime(options = {}) {
         inst.invokeBeforePatch({
           ...meta,
           isFragmentRoot: inst.el === fragmentEl,
-          isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
+          isDescendant: inst.el !== fragmentEl && isFn(fragmentEl.contains) && fragmentEl.contains(inst.el),
         });
       }
     } finally {
@@ -11125,7 +11679,7 @@ function createControllerRuntime(options = {}) {
     const chainDepth = meta && typeof meta.hookChainDepth === 'number' ? meta.hookChainDepth : 0;
     if (chainDepth > 3) {
       const msg = `Possible patch hook refresh loop detected on fragment "${meta.fragmentName || meta.fragmentId || 'unknown'}" (causal chain depth ${chainDepth}).`;
-      if (debug && typeof debug.recordEvent === 'function') {
+      if (debug && isFn(debug.recordEvent)) {
         debug.recordEvent('patch:loop-warning', {
           code: 'PATCH_HOOK_LOOP_DETECTED',
           fragmentId: meta.fragmentId || null,
@@ -11151,7 +11705,7 @@ function createControllerRuntime(options = {}) {
         inst.invokeAfterPatch({
           ...meta,
           isFragmentRoot: inst.el === fragmentEl,
-          isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
+          isDescendant: inst.el !== fragmentEl && isFn(fragmentEl.contains) && fragmentEl.contains(inst.el),
         });
       }
     } finally {
@@ -11201,6 +11755,9 @@ function createControllerRuntime(options = {}) {
       }
       activeStandaloneForms.clear();
     },
+    provide: (keyOrMap, value) => contextStore.provide(keyOrMap, value),
+    getContext: () => contextStore.context,
+    getRoute: () => contextStore.route,
   };
 }
 
@@ -11220,7 +11777,7 @@ module.exports = {
 'use strict';
 
 const { defaultStorage } = require('./storage');
-const { isArray, isNumber, parseDurationMs, parseRefetchMode, uid } = require('./utils');
+const { isArray, isNumber, parseDurationMs, parseRefetchMode, uid, isFn } = require('./utils');
 
 /**
  * Webspresso Client-Side SSR Fragment Coordinator & Invalidation Engine
@@ -11289,7 +11846,7 @@ function isStrictAncestor(parentEl, childEl) {
     parentEl &&
       childEl &&
       parentEl !== childEl &&
-      typeof parentEl.contains === 'function' &&
+      isFn(parentEl.contains) &&
       parentEl.contains(childEl)
   );
 }
@@ -11334,7 +11891,7 @@ function createFragmentCoordinator(options = {}) {
   const getRoot = () =>
     options.root || options.document || (typeof document !== 'undefined' ? document : null);
   const fetchImpl =
-    options.fetch || (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
+    options.fetch || (isFn(globalThis.fetch) ? globalThis.fetch.bind(globalThis) : null);
   const endpoint = options.endpoint || DEFAULT_FRAGMENT_ENDPOINT;
   const datastar = options.datastar || options.adapter;
   const debug = options.debug || null;
@@ -11378,6 +11935,19 @@ function createFragmentCoordinator(options = {}) {
 
   // Per-version patch options (mode, limit, target, removeKeys, onBeforePatch, onAfterPatch, hookChainDepth)
   const pendingPatchOptsByKey = new Map();
+
+  const syncBus = options.syncBus || null;
+  const syncTabsEnabled = Boolean(syncBus && options.syncTabs !== false);
+  let unsubSync = null;
+  if (syncTabsEnabled) {
+    unsubSync = syncBus.subscribe((msg) => {
+      if (isDisposed || !msg || msg.kind !== 'invalidate') return;
+      const remoteTags = msg.payload && isArray(msg.payload.tags) ? msg.payload.tags : [];
+      if (remoteTags.length > 0) {
+        invalidate(remoteTags, { fromRemoteTab: true, source: 'cross-tab' }).catch(() => {});
+      }
+    });
+  }
   let pendingInvalidateHookDepth = 0;
 
   // Lazy fragment IntersectionObserver state
@@ -11392,7 +11962,7 @@ function createFragmentCoordinator(options = {}) {
         : typeof globalThis !== 'undefined'
           ? globalThis
           : null;
-    const IOCtor = win && typeof win.IntersectionObserver === 'function' ? win.IntersectionObserver : null;
+    const IOCtor = win && isFn(win.IntersectionObserver) ? win.IntersectionObserver : null;
     if (!IOCtor) return null;
     lazyObserver = new IOCtor((entries) => {
       if (isDisposed) return;
@@ -11437,7 +12007,7 @@ function createFragmentCoordinator(options = {}) {
   }
 
   function getListItemKey(node) {
-    if (!node || node.nodeType !== 1 || typeof node.getAttribute !== 'function') return null;
+    if (!node || node.nodeType !== 1 || !isFn(node.getAttribute)) return null;
     if (node.id) return `id:${node.id}`;
     const wKey = node.getAttribute('data-w-key');
     if (wKey) return `wkey:${wKey}`;
@@ -11446,7 +12016,7 @@ function createFragmentCoordinator(options = {}) {
 
   function patchIncrementalList(fragEl, html, opts = {}) {
     const doc = fragEl.ownerDocument || (typeof document !== 'undefined' ? document : null);
-    const parsed = datastar && typeof datastar.parseHtmlFragment === 'function'
+    const parsed = datastar && isFn(datastar.parseHtmlFragment)
       ? datastar.parseHtmlFragment(html, doc)
       : null;
     if (!parsed) return false;
@@ -11470,7 +12040,7 @@ function createFragmentCoordinator(options = {}) {
         const rawKey = child.getAttribute('data-w-key') || child.id || '';
         const fullKey = getListItemKey(child);
         if (removeSet.has(rawKey) || (fullKey && removeSet.has(fullKey))) {
-          if (typeof opts.onBeforeNodeRemove === 'function') opts.onBeforeNodeRemove(child);
+          if (isFn(opts.onBeforeNodeRemove)) opts.onBeforeNodeRemove(child);
           container.removeChild(child);
         }
       }
@@ -11498,7 +12068,7 @@ function createFragmentCoordinator(options = {}) {
 
       if (existingMatch && existingMatch.tagName === incoming.tagName) {
         // Update existing keyed item in place without duplicating
-        if (datastar && typeof datastar.morphDomTrees === 'function') {
+        if (datastar && isFn(datastar.morphDomTrees)) {
           datastar.morphDomTrees(existingMatch, incoming, {
             onBeforeNodeRemove: opts.onBeforeNodeRemove,
             onNodeAdded: opts.onNodeAdded,
@@ -11521,7 +12091,7 @@ function createFragmentCoordinator(options = {}) {
       if (key) {
         existingByKey.set(key, imported);
       }
-      if (typeof opts.onNodeAdded === 'function') {
+      if (isFn(opts.onNodeAdded)) {
         opts.onNodeAdded(imported);
       }
     }
@@ -11535,7 +12105,7 @@ function createFragmentCoordinator(options = {}) {
         const ch = container.children;
         const victim = mode === 'prepend' ? ch[ch.length - 1] : ch[0];
         if (!victim) break;
-        if (typeof opts.onBeforeNodeRemove === 'function') opts.onBeforeNodeRemove(victim);
+        if (isFn(opts.onBeforeNodeRemove)) opts.onBeforeNodeRemove(victim);
         container.removeChild(victim);
       }
     }
@@ -11588,7 +12158,7 @@ function createFragmentCoordinator(options = {}) {
       }
       scheduleAutoRefresh([inst.instanceId], 'interval');
     }, targetMs);
-    if (inst.intervalTimer && typeof inst.intervalTimer.unref === 'function') {
+    if (inst.intervalTimer && isFn(inst.intervalTimer.unref)) {
       inst.intervalTimer.unref();
     }
   }
@@ -11635,7 +12205,7 @@ function createFragmentCoordinator(options = {}) {
       };
     });
 
-    if (debug && typeof debug.recordEvent === 'function') {
+    if (debug && isFn(debug.recordEvent)) {
       debug.recordEvent('fragment:auto-refetch', {
         reason: reasons.length === 1 ? reasons[0] : reasons.join('+'),
         reasons,
@@ -11732,10 +12302,10 @@ function createFragmentCoordinator(options = {}) {
     const doc = root && root.nodeType === 9 ? root : root && root.ownerDocument ? root.ownerDocument : typeof document !== 'undefined' ? document : null;
     const win = (doc && doc.defaultView) || (typeof window !== 'undefined' ? window : null);
 
-    if (doc && typeof doc.addEventListener === 'function') {
+    if (doc && isFn(doc.addEventListener)) {
       doc.addEventListener('visibilitychange', onVisibilityChange);
     }
-    if (win && typeof win.addEventListener === 'function') {
+    if (win && isFn(win.addEventListener)) {
       win.addEventListener('focus', triggerFocusRefetch);
       win.addEventListener('online', triggerReconnectRefetch);
       win.addEventListener('pageshow', onPageShow);
@@ -11749,10 +12319,10 @@ function createFragmentCoordinator(options = {}) {
     const doc = root && root.nodeType === 9 ? root : root && root.ownerDocument ? root.ownerDocument : typeof document !== 'undefined' ? document : null;
     const win = (doc && doc.defaultView) || (typeof window !== 'undefined' ? window : null);
 
-    if (doc && typeof doc.removeEventListener === 'function') {
+    if (doc && isFn(doc.removeEventListener)) {
       doc.removeEventListener('visibilitychange', onVisibilityChange);
     }
-    if (win && typeof win.removeEventListener === 'function') {
+    if (win && isFn(win.removeEventListener)) {
       win.removeEventListener('focus', triggerFocusRefetch);
       win.removeEventListener('online', triggerReconnectRefetch);
       win.removeEventListener('pageshow', onPageShow);
@@ -11938,7 +12508,7 @@ function createFragmentCoordinator(options = {}) {
   function scanDomInstances(containerEl) {
     const defaultRoot = getRoot();
     const root = containerEl || defaultRoot;
-    if (!root || typeof root.querySelectorAll !== 'function') return;
+    if (!root || !isFn(root.querySelectorAll)) return;
 
     const isFullScan = !containerEl || containerEl === defaultRoot;
     const seenIds = isFullScan ? new Set() : null;
@@ -12016,10 +12586,10 @@ function createFragmentCoordinator(options = {}) {
       hookChainDepth: (patchOpts && patchOpts.hookChainDepth) || 0,
     };
 
-    if (typeof options.onBeforePatch === 'function') {
+    if (isFn(options.onBeforePatch)) {
       options.onBeforePatch(inst.el, inst, patchMeta);
     }
-    if (patchOpts && typeof patchOpts.onBeforePatch === 'function') {
+    if (patchOpts && isFn(patchOpts.onBeforePatch)) {
       try {
         patchOpts.onBeforePatch(inst.el, inst, patchMeta);
       } catch (_e) {}
@@ -12044,7 +12614,7 @@ function createFragmentCoordinator(options = {}) {
     ) {
       inst.input = { ...committedInput };
       const serializedInput = JSON.stringify(inst.input);
-      if (inst.el && typeof inst.el.setAttribute === 'function') {
+      if (inst.el && isFn(inst.el.setAttribute)) {
         inst.el.setAttribute('data-w-fragment-input', serializedInput);
       }
       inst._rawInput = serializedInput;
@@ -12073,7 +12643,7 @@ function createFragmentCoordinator(options = {}) {
         onBeforeNodeRemove: options.onBeforeNodeRemove,
         onNodeAdded: options.onNodeAdded,
       });
-    } else if (datastar && typeof datastar.patchFragmentElement === 'function') {
+    } else if (datastar && isFn(datastar.patchFragmentElement)) {
       datastar.patchFragmentElement(inst.el, html, {
         onBeforeNodeRemove: options.onBeforeNodeRemove,
         onNodeAdded: options.onNodeAdded,
@@ -12088,7 +12658,7 @@ function createFragmentCoordinator(options = {}) {
       inst.lazyState = 'loaded';
       inst.staleWhileUnloaded = false;
       unobserveLazyFragment(inst);
-      if (inst.el && typeof inst.el.removeAttribute === 'function') {
+      if (inst.el && isFn(inst.el.removeAttribute)) {
         inst.el.removeAttribute('data-w-lazy');
       }
     }
@@ -12125,10 +12695,10 @@ function createFragmentCoordinator(options = {}) {
       }
     }
 
-    if (typeof options.onAfterPatch === 'function') {
+    if (isFn(options.onAfterPatch)) {
       options.onAfterPatch(inst.el, inst, patchMeta);
     }
-    if (patchOpts && typeof patchOpts.onAfterPatch === 'function') {
+    if (patchOpts && isFn(patchOpts.onAfterPatch)) {
       try {
         patchOpts.onAfterPatch(inst.el, inst, patchMeta);
       } catch (_e) {}
@@ -12166,7 +12736,7 @@ function createFragmentCoordinator(options = {}) {
       'X-Webspresso-Fragment-Request': '1',
     };
 
-    if (typeof options.getCsrfToken === 'function') {
+    if (isFn(options.getCsrfToken)) {
       const token = options.getCsrfToken();
       if (token) headers['X-CSRF-Token'] = token;
     }
@@ -12213,7 +12783,7 @@ function createFragmentCoordinator(options = {}) {
       const inst = instances.get(t.instanceId);
       if (inst) {
         inst.inFlightCount = (inst.inFlightCount || 0) + 1;
-        if (inst.el && typeof inst.el.setAttribute === 'function') {
+        if (inst.el && isFn(inst.el.setAttribute)) {
           inst.el.setAttribute('aria-busy', 'true');
         }
       }
@@ -12224,7 +12794,7 @@ function createFragmentCoordinator(options = {}) {
         const inst = instances.get(t.instanceId);
         if (inst) {
           inst.inFlightCount = Math.max(0, (inst.inFlightCount || 1) - 1);
-          if (inst.inFlightCount === 0 && inst.el && typeof inst.el.removeAttribute === 'function') {
+          if (inst.inFlightCount === 0 && inst.el && isFn(inst.el.removeAttribute)) {
             inst.el.removeAttribute('aria-busy');
           }
         }
@@ -12347,10 +12917,10 @@ function createFragmentCoordinator(options = {}) {
 
     let body = null;
     try {
-      if (typeof response.text === 'function') {
+      if (isFn(response.text)) {
         const text = await response.text();
         body = text ? JSON.parse(text) : null;
-      } else if (typeof response.json === 'function') {
+      } else if (isFn(response.json)) {
         body = await response.json();
       }
     } catch (_e) {
@@ -12649,7 +13219,7 @@ function createFragmentCoordinator(options = {}) {
    * @returns {Promise<{ refreshed: string[], skipped?: boolean }>}
    */
   function invalidate(tags, meta = {}) {
-    const activeHook = typeof options.getPatchHookContext === 'function' ? options.getPatchHookContext() : null;
+    const activeHook = isFn(options.getPatchHookContext) ? options.getPatchHookContext() : null;
     if (activeHook) {
       const nextDepth = (activeHook.depth || 0) + 1;
       if (nextDepth > pendingInvalidateHookDepth) {
@@ -12657,10 +13227,16 @@ function createFragmentCoordinator(options = {}) {
       }
     }
     const tagList = isArray(tags) ? tags : [tags];
+    const cleanTags = [];
     for (const raw of tagList) {
       if (typeof raw === 'string' && raw.trim()) {
-        pendingTags.add(raw.trim());
+        const t = raw.trim();
+        pendingTags.add(t);
+        cleanTags.push(t);
       }
+    }
+    if (syncTabsEnabled && cleanTags.length > 0 && !(meta && meta.fromRemoteTab)) {
+      syncBus.publish('invalidate', 'fragments', { tags: cleanTags });
     }
     if (meta && meta.chainId) {
       pendingChains.push(meta.chainId);
@@ -12720,12 +13296,12 @@ function createFragmentCoordinator(options = {}) {
 
     if (matched.length === 0) {
       const skippedRes = { ok: true, refreshed: [], skipped: true };
-      if (typeof refreshOpts.onSuccess === 'function') {
+      if (isFn(refreshOpts.onSuccess)) {
         await refreshOpts.onSuccess(skippedRes);
       }
-      if (typeof refreshOpts.onSettled === 'function') {
+      if (isFn(refreshOpts.onSettled)) {
         await refreshOpts.onSettled(skippedRes, null);
-      } else if (typeof refreshOpts.onComplete === 'function') {
+      } else if (isFn(refreshOpts.onComplete)) {
         await refreshOpts.onComplete(skippedRes, null);
       }
       return skippedRes;
@@ -12751,7 +13327,7 @@ function createFragmentCoordinator(options = {}) {
         unobserveLazyFragment(inst);
       }
 
-      const activeHook = typeof options.getPatchHookContext === 'function' ? options.getPatchHookContext() : null;
+      const activeHook = isFn(options.getPatchHookContext) ? options.getPatchHookContext() : null;
       const hookChainDepth = activeHook ? (activeHook.depth || 0) + 1 : 0;
 
       if (
@@ -12760,8 +13336,8 @@ function createFragmentCoordinator(options = {}) {
         refreshOpts.target ||
         refreshOpts.removeKeys ||
         hookChainDepth > 0 ||
-        typeof refreshOpts.onBeforePatch === 'function' ||
-        typeof refreshOpts.onAfterPatch === 'function'
+        isFn(refreshOpts.onBeforePatch) ||
+        isFn(refreshOpts.onAfterPatch)
       ) {
         pendingPatchOptsByKey.set(`${inst.instanceId}:${inst.version}`, {
           mode: refreshOpts.mode || null,
@@ -12807,9 +13383,9 @@ function createFragmentCoordinator(options = {}) {
         if (typeof failHandler === 'function') {
           await failHandler(enrichedResult.error);
         }
-        if (typeof refreshOpts.onSettled === 'function') {
+        if (isFn(refreshOpts.onSettled)) {
           await refreshOpts.onSettled(enrichedResult, enrichedResult.error);
-        } else if (typeof refreshOpts.onComplete === 'function') {
+        } else if (isFn(refreshOpts.onComplete)) {
           await refreshOpts.onComplete(enrichedResult, enrichedResult.error);
         }
         if (refreshOpts.throwOnError === true) {
@@ -12818,13 +13394,13 @@ function createFragmentCoordinator(options = {}) {
         return enrichedResult;
       }
       if (!enrichedResult.canceled && !enrichedResult.superseded && enrichedResult.ok !== false) {
-        if (typeof refreshOpts.onSuccess === 'function') {
+        if (isFn(refreshOpts.onSuccess)) {
           await refreshOpts.onSuccess(enrichedResult);
         }
       }
-      if (typeof refreshOpts.onSettled === 'function') {
+      if (isFn(refreshOpts.onSettled)) {
         await refreshOpts.onSettled(enrichedResult, null);
-      } else if (typeof refreshOpts.onComplete === 'function') {
+      } else if (isFn(refreshOpts.onComplete)) {
         await refreshOpts.onComplete(enrichedResult, null);
       }
       return enrichedResult;
@@ -12838,9 +13414,9 @@ function createFragmentCoordinator(options = {}) {
           throw callbackErr;
         }
       }
-      if (typeof refreshOpts.onSettled === 'function') {
+      if (isFn(refreshOpts.onSettled)) {
         await refreshOpts.onSettled(null, err);
-      } else if (typeof refreshOpts.onComplete === 'function') {
+      } else if (isFn(refreshOpts.onComplete)) {
         await refreshOpts.onComplete(null, err);
       }
 
@@ -12930,7 +13506,7 @@ function createFragmentCoordinator(options = {}) {
           for (const inst of matchedList) {
             if (item.input && typeof item.input === 'object') {
               inst.input = { ...item.input };
-              if (inst.el && typeof inst.el.setAttribute === 'function') {
+              if (inst.el && isFn(inst.el.setAttribute)) {
                 const serializedInput = JSON.stringify(inst.input);
                 inst.el.setAttribute('data-w-fragment-input', serializedInput);
                 inst._rawInput = serializedInput;
@@ -13010,7 +13586,13 @@ function createFragmentCoordinator(options = {}) {
       pendingAutoInstanceIds.clear();
       pendingAutoReasons.clear();
       pendingPatchOptsByKey.clear();
-      if (lazyObserver && typeof lazyObserver.disconnect === 'function') {
+      if (isFn(unsubSync)) {
+        try {
+          unsubSync();
+        } catch (_e) {}
+        unsubSync = null;
+      }
+      if (lazyObserver && isFn(lazyObserver.disconnect)) {
         try {
           lazyObserver.disconnect();
         } catch (_e) {}
@@ -13051,7 +13633,7 @@ module.exports = {
  * and lifecycle cleanup errors without logging raw form values or sensitive payloads.
  */
 
-const { isArray, isNumber, NOOP_DEBUGGER, uid } = require('./utils');
+const { isArray, isNumber, NOOP_DEBUGGER, NOOP_LOGGER, uid, isFn } = require('./utils');
 
 const SENSITIVE_KEY_PATTERN = /password|passwd|secret|token|authorization|cookie|credit|card|cvv|ssn|api[-_]?key/i;
 
@@ -13102,7 +13684,7 @@ function summarizePayloadSafely(payload, includeSafePrimitives = false) {
 function createActiveDebugger(options = {}) {
   let enabled = Boolean(options.enabled);
   const maxEvents = isNumber(options.maxEvents) && options.maxEvents > 0 ? options.maxEvents : 200;
-  const customLogger = typeof options.logger === 'function' ? options.logger : null;
+  const customLogger = isFn(options.logger) ? options.logger : null;
 
   const events = [];
   const activeControllers = new Map(); // instanceId -> { name, instanceId, el, mountedAt }
@@ -13111,6 +13693,7 @@ function createActiveDebugger(options = {}) {
   const discardedResponses = [];
   const cleanupErrors = [];
   const fragmentTimings = [];
+  const logs = [];
 
   let chainSeq = 0;
 
@@ -13312,7 +13895,26 @@ function createActiveDebugger(options = {}) {
         discardedResponses: [...discardedResponses],
         cleanupErrors: [...cleanupErrors],
         events: [...events],
+        logs: [...logs],
       };
+    },
+
+    trackLog({ level = 'info', source = 'client', message = '', data } = {}) {
+      const normalizedLevel = ['debug', 'info', 'warn', 'error'].includes(level) ? level : 'info';
+      const entry = {
+        id: uid('log'),
+        level: normalizedLevel,
+        source: String(source || 'client'),
+        message: String(message || ''),
+        data: data !== undefined ? summarizePayloadSafely(data, true) : undefined,
+        timestamp: Date.now(),
+      };
+      logs.push(entry);
+      if (logs.length > maxEvents) {
+        logs.shift();
+      }
+      pushEvent(`log:${normalizedLevel}`, entry);
+      return entry;
     },
 
     clear() {
@@ -13323,6 +13925,7 @@ function createActiveDebugger(options = {}) {
       discardedResponses.length = 0;
       cleanupErrors.length = 0;
       fragmentTimings.length = 0;
+      logs.length = 0;
     },
   };
 
@@ -13391,6 +13994,12 @@ function createClientDebugger(options = {}) {
       recordEvent(t, d) {
         return activeInstance ? activeInstance.recordEvent(t, d) : null;
       },
+      trackLog(entry) {
+        if (!activeInstance) {
+          activeInstance = createActiveDebugger({ ...options, enabled: true });
+        }
+        return activeInstance.trackLog(entry);
+      },
       getSnapshot() {
         return activeInstance ? activeInstance.getSnapshot() : NOOP_DEBUGGER.getSnapshot();
       },
@@ -13403,8 +14012,42 @@ function createClientDebugger(options = {}) {
   return createActiveDebugger(options);
 }
 
+function createClientLogger(debug, source = 'client', options = {}) {
+  if (process.env.NODE_ENV === 'production') {
+    return NOOP_LOGGER;
+  }
+
+  const logToConsole = options.console !== false;
+
+  function write(level, message, data) {
+    if (debug && isFn(debug.trackLog)) {
+      debug.trackLog({ level, source, message, data });
+    }
+    if (logToConsole && typeof console !== 'undefined') {
+      const fn = isFn(console[level]) ? console[level] : console.log;
+      if (isFn(fn)) {
+        const prefix = `[webspresso:${source}]`;
+        if (data !== undefined) {
+          fn.call(console, prefix, message, data);
+        } else {
+          fn.call(console, prefix, message);
+        }
+      }
+    }
+  }
+
+  return Object.freeze({
+    debug: (message, data) => write('debug', message, data),
+    info: (message, data) => write('info', message, data),
+    warn: (message, data) => write('warn', message, data),
+    error: (message, data) => write('error', message, data),
+    log: (message, data) => write('info', message, data),
+  });
+}
+
 module.exports = {
   createClientDebugger,
+  createClientLogger,
   summarizePayloadSafely,
 };
 
@@ -13488,7 +14131,15 @@ const {
   createClientHostManager,
 } = require('./host');
 
-const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+const {
+  createClientContextStore,
+} = require('./context');
+
+const {
+  createCrossTabSync,
+} = require('./sync');
+
+const { isArray, isNumber, isFn, NOOP_DEBUGGER, NOOP_LOGGER, randomId, uid } = require('./utils');
 
 const NOOP_DEVTOOL_HANDLE = Object.freeze({
   open() {},
@@ -13508,6 +14159,7 @@ function getDebugModule() {
   }
   return {
     createClientDebugger: () => NOOP_DEBUGGER,
+    createClientLogger: () => NOOP_LOGGER,
     summarizePayloadSafely: () => null,
   };
 }
@@ -13564,7 +14216,7 @@ function createClientRuntime(options = {}) {
   const rootOption = options.root || options.document;
   const debug =
     options.debugger ||
-    (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
+    (options.debug && typeof options.debug === 'object' && isFn(options.debug.getSnapshot)
       ? options.debug
       : options.debug
         ? getDebugModule().createClientDebugger({
@@ -13580,12 +14232,23 @@ function createClientRuntime(options = {}) {
 
   let controllers = null;
 
+  const syncBus =
+    options.syncTabs === false
+      ? null
+      : createCrossTabSync({
+          root: rootOption,
+          channelName: options.syncChannel,
+          BroadcastChannel: options.BroadcastChannel,
+        });
+
   const fragments = createFragmentCoordinator({
     root: rootOption,
     fetch: options.fetch,
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    syncBus,
+    syncTabs: options.syncTabs !== false,
     staleTime: options.staleTime,
     refetchOnWindowFocus: options.refetchOnWindowFocus,
     refetchOnFocus: options.refetchOnFocus,
@@ -13643,7 +14306,7 @@ function createClientRuntime(options = {}) {
   let runtime = null;
 
   const services =
-    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+    options.services && isFn(options.services.get) && isFn(options.services.register)
       ? options.services
       : createClientServiceRegistry({
           root: rootOption,
@@ -13653,11 +14316,21 @@ function createClientRuntime(options = {}) {
           services: options.services,
         });
 
+  const contextStore = createClientContextStore({
+    root: rootOption,
+    context: options.context,
+    provide: options.provide,
+    route: options.route,
+  });
+
   controllers = createControllerRuntime({
     root: rootOption,
     datastar,
     fragments,
     debug,
+    syncBus,
+    onError: options.onError,
+    contextStore,
     apiConfig,
     services,
     lazyLoader: options.lazyLoader,
@@ -13718,17 +14391,25 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
-    if (fragments && typeof fragments.dispose === 'function') {
+    if (fragments && isFn(fragments.dispose)) {
       fragments.dispose();
     }
     services.dispose();
-    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+    if (syncBus) {
+      syncBus.destroy();
+    }
+    if (runtime && runtime.devtool && isFn(runtime.devtool.destroy)) {
       try {
         runtime.devtool.destroy();
       } catch (_e) {}
       runtime.devtool = null;
     }
   }
+
+  const runtimeLogger =
+    process.env.NODE_ENV !== 'production'
+      ? getDebugModule().createClientLogger(debug, 'runtime', { console: options.logToConsole !== false })
+      : NOOP_LOGGER;
 
   runtime = {
     api,
@@ -13738,8 +14419,12 @@ function createClientRuntime(options = {}) {
     datastar,
     adapter: datastar,
     debug,
+    log: runtimeLogger,
     register: (name, def, meta) => controllers.register(name, def, meta),
     registerService: (name, def) => services.register(name, def),
+    provide: (keyOrMap, value) => contextStore.provide(keyOrMap, value),
+    getContext: () => contextStore.context,
+    getRoute: () => contextStore.route,
     mount,
     unmount,
     destroy,
@@ -13748,6 +14433,16 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
+    broadcast: (topic, payload) => (syncBus ? syncBus.publish('event', topic, payload) : false),
+    onBroadcast: (topic, handler) => {
+      if (!syncBus || !isFn(handler)) return () => {};
+      return syncBus.subscribe((msg) => {
+        if (!msg || msg.kind !== 'event') return;
+        if (topic && topic !== '*' && msg.topic !== topic) return;
+        handler(msg.payload, msg);
+      });
+    },
+    sync: syncBus,
     mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
@@ -13778,7 +14473,7 @@ function bootClient(options = {}) {
     options.hmr !== false &&
     bootRoot &&
     bootRoot.__wBootedClientRuntime &&
-    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+    isFn(bootRoot.__wBootedClientRuntime.destroy)
   ) {
     try {
       bootRoot.__wBootedClientRuntime.destroy();
@@ -14030,7 +14725,15 @@ const {
   createClientHostManager,
 } = require('./host');
 
-const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+const {
+  createClientContextStore,
+} = require('./context');
+
+const {
+  createCrossTabSync,
+} = require('./sync');
+
+const { isArray, isNumber, isFn, NOOP_DEBUGGER, NOOP_LOGGER, randomId, uid } = require('./utils');
 
 const NOOP_DEVTOOL_HANDLE = Object.freeze({
   open() {},
@@ -14050,6 +14753,7 @@ function getDebugModule() {
   }
   return {
     createClientDebugger: () => NOOP_DEBUGGER,
+    createClientLogger: () => NOOP_LOGGER,
     summarizePayloadSafely: () => null,
   };
 }
@@ -14106,7 +14810,7 @@ function createClientRuntime(options = {}) {
   const rootOption = options.root || options.document;
   const debug =
     options.debugger ||
-    (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
+    (options.debug && typeof options.debug === 'object' && isFn(options.debug.getSnapshot)
       ? options.debug
       : options.debug
         ? getDebugModule().createClientDebugger({
@@ -14122,12 +14826,23 @@ function createClientRuntime(options = {}) {
 
   let controllers = null;
 
+  const syncBus =
+    options.syncTabs === false
+      ? null
+      : createCrossTabSync({
+          root: rootOption,
+          channelName: options.syncChannel,
+          BroadcastChannel: options.BroadcastChannel,
+        });
+
   const fragments = createFragmentCoordinator({
     root: rootOption,
     fetch: options.fetch,
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    syncBus,
+    syncTabs: options.syncTabs !== false,
     staleTime: options.staleTime,
     refetchOnWindowFocus: options.refetchOnWindowFocus,
     refetchOnFocus: options.refetchOnFocus,
@@ -14185,7 +14900,7 @@ function createClientRuntime(options = {}) {
   let runtime = null;
 
   const services =
-    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+    options.services && isFn(options.services.get) && isFn(options.services.register)
       ? options.services
       : createClientServiceRegistry({
           root: rootOption,
@@ -14195,11 +14910,21 @@ function createClientRuntime(options = {}) {
           services: options.services,
         });
 
+  const contextStore = createClientContextStore({
+    root: rootOption,
+    context: options.context,
+    provide: options.provide,
+    route: options.route,
+  });
+
   controllers = createControllerRuntime({
     root: rootOption,
     datastar,
     fragments,
     debug,
+    syncBus,
+    onError: options.onError,
+    contextStore,
     apiConfig,
     services,
     lazyLoader: options.lazyLoader,
@@ -14260,17 +14985,25 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
-    if (fragments && typeof fragments.dispose === 'function') {
+    if (fragments && isFn(fragments.dispose)) {
       fragments.dispose();
     }
     services.dispose();
-    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+    if (syncBus) {
+      syncBus.destroy();
+    }
+    if (runtime && runtime.devtool && isFn(runtime.devtool.destroy)) {
       try {
         runtime.devtool.destroy();
       } catch (_e) {}
       runtime.devtool = null;
     }
   }
+
+  const runtimeLogger =
+    process.env.NODE_ENV !== 'production'
+      ? getDebugModule().createClientLogger(debug, 'runtime', { console: options.logToConsole !== false })
+      : NOOP_LOGGER;
 
   runtime = {
     api,
@@ -14280,8 +15013,12 @@ function createClientRuntime(options = {}) {
     datastar,
     adapter: datastar,
     debug,
+    log: runtimeLogger,
     register: (name, def, meta) => controllers.register(name, def, meta),
     registerService: (name, def) => services.register(name, def),
+    provide: (keyOrMap, value) => contextStore.provide(keyOrMap, value),
+    getContext: () => contextStore.context,
+    getRoute: () => contextStore.route,
     mount,
     unmount,
     destroy,
@@ -14290,6 +15027,16 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
+    broadcast: (topic, payload) => (syncBus ? syncBus.publish('event', topic, payload) : false),
+    onBroadcast: (topic, handler) => {
+      if (!syncBus || !isFn(handler)) return () => {};
+      return syncBus.subscribe((msg) => {
+        if (!msg || msg.kind !== 'event') return;
+        if (topic && topic !== '*' && msg.topic !== topic) return;
+        handler(msg.payload, msg);
+      });
+    },
+    sync: syncBus,
     mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
@@ -14320,7 +15067,7 @@ function bootClient(options = {}) {
     options.hmr !== false &&
     bootRoot &&
     bootRoot.__wBootedClientRuntime &&
-    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+    isFn(bootRoot.__wBootedClientRuntime.destroy)
   ) {
     try {
       bootRoot.__wBootedClientRuntime.destroy();
@@ -14572,7 +15319,15 @@ const {
   createClientHostManager,
 } = require('./host');
 
-const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+const {
+  createClientContextStore,
+} = require('./context');
+
+const {
+  createCrossTabSync,
+} = require('./sync');
+
+const { isArray, isNumber, isFn, NOOP_DEBUGGER, NOOP_LOGGER, randomId, uid } = require('./utils');
 
 const NOOP_DEVTOOL_HANDLE = Object.freeze({
   open() {},
@@ -14592,6 +15347,7 @@ function getDebugModule() {
   }
   return {
     createClientDebugger: () => NOOP_DEBUGGER,
+    createClientLogger: () => NOOP_LOGGER,
     summarizePayloadSafely: () => null,
   };
 }
@@ -14648,7 +15404,7 @@ function createClientRuntime(options = {}) {
   const rootOption = options.root || options.document;
   const debug =
     options.debugger ||
-    (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
+    (options.debug && typeof options.debug === 'object' && isFn(options.debug.getSnapshot)
       ? options.debug
       : options.debug
         ? getDebugModule().createClientDebugger({
@@ -14664,12 +15420,23 @@ function createClientRuntime(options = {}) {
 
   let controllers = null;
 
+  const syncBus =
+    options.syncTabs === false
+      ? null
+      : createCrossTabSync({
+          root: rootOption,
+          channelName: options.syncChannel,
+          BroadcastChannel: options.BroadcastChannel,
+        });
+
   const fragments = createFragmentCoordinator({
     root: rootOption,
     fetch: options.fetch,
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    syncBus,
+    syncTabs: options.syncTabs !== false,
     staleTime: options.staleTime,
     refetchOnWindowFocus: options.refetchOnWindowFocus,
     refetchOnFocus: options.refetchOnFocus,
@@ -14727,7 +15494,7 @@ function createClientRuntime(options = {}) {
   let runtime = null;
 
   const services =
-    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+    options.services && isFn(options.services.get) && isFn(options.services.register)
       ? options.services
       : createClientServiceRegistry({
           root: rootOption,
@@ -14737,11 +15504,21 @@ function createClientRuntime(options = {}) {
           services: options.services,
         });
 
+  const contextStore = createClientContextStore({
+    root: rootOption,
+    context: options.context,
+    provide: options.provide,
+    route: options.route,
+  });
+
   controllers = createControllerRuntime({
     root: rootOption,
     datastar,
     fragments,
     debug,
+    syncBus,
+    onError: options.onError,
+    contextStore,
     apiConfig,
     services,
     lazyLoader: options.lazyLoader,
@@ -14802,17 +15579,25 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
-    if (fragments && typeof fragments.dispose === 'function') {
+    if (fragments && isFn(fragments.dispose)) {
       fragments.dispose();
     }
     services.dispose();
-    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+    if (syncBus) {
+      syncBus.destroy();
+    }
+    if (runtime && runtime.devtool && isFn(runtime.devtool.destroy)) {
       try {
         runtime.devtool.destroy();
       } catch (_e) {}
       runtime.devtool = null;
     }
   }
+
+  const runtimeLogger =
+    process.env.NODE_ENV !== 'production'
+      ? getDebugModule().createClientLogger(debug, 'runtime', { console: options.logToConsole !== false })
+      : NOOP_LOGGER;
 
   runtime = {
     api,
@@ -14822,8 +15607,12 @@ function createClientRuntime(options = {}) {
     datastar,
     adapter: datastar,
     debug,
+    log: runtimeLogger,
     register: (name, def, meta) => controllers.register(name, def, meta),
     registerService: (name, def) => services.register(name, def),
+    provide: (keyOrMap, value) => contextStore.provide(keyOrMap, value),
+    getContext: () => contextStore.context,
+    getRoute: () => contextStore.route,
     mount,
     unmount,
     destroy,
@@ -14832,6 +15621,16 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
+    broadcast: (topic, payload) => (syncBus ? syncBus.publish('event', topic, payload) : false),
+    onBroadcast: (topic, handler) => {
+      if (!syncBus || !isFn(handler)) return () => {};
+      return syncBus.subscribe((msg) => {
+        if (!msg || msg.kind !== 'event') return;
+        if (topic && topic !== '*' && msg.topic !== topic) return;
+        handler(msg.payload, msg);
+      });
+    },
+    sync: syncBus,
     mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
@@ -14862,7 +15661,7 @@ function bootClient(options = {}) {
     options.hmr !== false &&
     bootRoot &&
     bootRoot.__wBootedClientRuntime &&
-    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+    isFn(bootRoot.__wBootedClientRuntime.destroy)
   ) {
     try {
       bootRoot.__wBootedClientRuntime.destroy();
@@ -15114,7 +15913,15 @@ const {
   createClientHostManager,
 } = require('./host');
 
-const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+const {
+  createClientContextStore,
+} = require('./context');
+
+const {
+  createCrossTabSync,
+} = require('./sync');
+
+const { isArray, isNumber, isFn, NOOP_DEBUGGER, NOOP_LOGGER, randomId, uid } = require('./utils');
 
 const NOOP_DEVTOOL_HANDLE = Object.freeze({
   open() {},
@@ -15134,6 +15941,7 @@ function getDebugModule() {
   }
   return {
     createClientDebugger: () => NOOP_DEBUGGER,
+    createClientLogger: () => NOOP_LOGGER,
     summarizePayloadSafely: () => null,
   };
 }
@@ -15190,7 +15998,7 @@ function createClientRuntime(options = {}) {
   const rootOption = options.root || options.document;
   const debug =
     options.debugger ||
-    (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
+    (options.debug && typeof options.debug === 'object' && isFn(options.debug.getSnapshot)
       ? options.debug
       : options.debug
         ? getDebugModule().createClientDebugger({
@@ -15206,12 +16014,23 @@ function createClientRuntime(options = {}) {
 
   let controllers = null;
 
+  const syncBus =
+    options.syncTabs === false
+      ? null
+      : createCrossTabSync({
+          root: rootOption,
+          channelName: options.syncChannel,
+          BroadcastChannel: options.BroadcastChannel,
+        });
+
   const fragments = createFragmentCoordinator({
     root: rootOption,
     fetch: options.fetch,
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    syncBus,
+    syncTabs: options.syncTabs !== false,
     staleTime: options.staleTime,
     refetchOnWindowFocus: options.refetchOnWindowFocus,
     refetchOnFocus: options.refetchOnFocus,
@@ -15269,7 +16088,7 @@ function createClientRuntime(options = {}) {
   let runtime = null;
 
   const services =
-    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+    options.services && isFn(options.services.get) && isFn(options.services.register)
       ? options.services
       : createClientServiceRegistry({
           root: rootOption,
@@ -15279,11 +16098,21 @@ function createClientRuntime(options = {}) {
           services: options.services,
         });
 
+  const contextStore = createClientContextStore({
+    root: rootOption,
+    context: options.context,
+    provide: options.provide,
+    route: options.route,
+  });
+
   controllers = createControllerRuntime({
     root: rootOption,
     datastar,
     fragments,
     debug,
+    syncBus,
+    onError: options.onError,
+    contextStore,
     apiConfig,
     services,
     lazyLoader: options.lazyLoader,
@@ -15344,17 +16173,25 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
-    if (fragments && typeof fragments.dispose === 'function') {
+    if (fragments && isFn(fragments.dispose)) {
       fragments.dispose();
     }
     services.dispose();
-    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+    if (syncBus) {
+      syncBus.destroy();
+    }
+    if (runtime && runtime.devtool && isFn(runtime.devtool.destroy)) {
       try {
         runtime.devtool.destroy();
       } catch (_e) {}
       runtime.devtool = null;
     }
   }
+
+  const runtimeLogger =
+    process.env.NODE_ENV !== 'production'
+      ? getDebugModule().createClientLogger(debug, 'runtime', { console: options.logToConsole !== false })
+      : NOOP_LOGGER;
 
   runtime = {
     api,
@@ -15364,8 +16201,12 @@ function createClientRuntime(options = {}) {
     datastar,
     adapter: datastar,
     debug,
+    log: runtimeLogger,
     register: (name, def, meta) => controllers.register(name, def, meta),
     registerService: (name, def) => services.register(name, def),
+    provide: (keyOrMap, value) => contextStore.provide(keyOrMap, value),
+    getContext: () => contextStore.context,
+    getRoute: () => contextStore.route,
     mount,
     unmount,
     destroy,
@@ -15374,6 +16215,16 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
+    broadcast: (topic, payload) => (syncBus ? syncBus.publish('event', topic, payload) : false),
+    onBroadcast: (topic, handler) => {
+      if (!syncBus || !isFn(handler)) return () => {};
+      return syncBus.subscribe((msg) => {
+        if (!msg || msg.kind !== 'event') return;
+        if (topic && topic !== '*' && msg.topic !== topic) return;
+        handler(msg.payload, msg);
+      });
+    },
+    sync: syncBus,
     mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
@@ -15404,7 +16255,7 @@ function bootClient(options = {}) {
     options.hmr !== false &&
     bootRoot &&
     bootRoot.__wBootedClientRuntime &&
-    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+    isFn(bootRoot.__wBootedClientRuntime.destroy)
   ) {
     try {
       bootRoot.__wBootedClientRuntime.destroy();
@@ -15656,7 +16507,15 @@ const {
   createClientHostManager,
 } = require('./host');
 
-const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+const {
+  createClientContextStore,
+} = require('./context');
+
+const {
+  createCrossTabSync,
+} = require('./sync');
+
+const { isArray, isNumber, isFn, NOOP_DEBUGGER, NOOP_LOGGER, randomId, uid } = require('./utils');
 
 const NOOP_DEVTOOL_HANDLE = Object.freeze({
   open() {},
@@ -15676,6 +16535,7 @@ function getDebugModule() {
   }
   return {
     createClientDebugger: () => NOOP_DEBUGGER,
+    createClientLogger: () => NOOP_LOGGER,
     summarizePayloadSafely: () => null,
   };
 }
@@ -15732,7 +16592,7 @@ function createClientRuntime(options = {}) {
   const rootOption = options.root || options.document;
   const debug =
     options.debugger ||
-    (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
+    (options.debug && typeof options.debug === 'object' && isFn(options.debug.getSnapshot)
       ? options.debug
       : options.debug
         ? getDebugModule().createClientDebugger({
@@ -15748,12 +16608,23 @@ function createClientRuntime(options = {}) {
 
   let controllers = null;
 
+  const syncBus =
+    options.syncTabs === false
+      ? null
+      : createCrossTabSync({
+          root: rootOption,
+          channelName: options.syncChannel,
+          BroadcastChannel: options.BroadcastChannel,
+        });
+
   const fragments = createFragmentCoordinator({
     root: rootOption,
     fetch: options.fetch,
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    syncBus,
+    syncTabs: options.syncTabs !== false,
     staleTime: options.staleTime,
     refetchOnWindowFocus: options.refetchOnWindowFocus,
     refetchOnFocus: options.refetchOnFocus,
@@ -15811,7 +16682,7 @@ function createClientRuntime(options = {}) {
   let runtime = null;
 
   const services =
-    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+    options.services && isFn(options.services.get) && isFn(options.services.register)
       ? options.services
       : createClientServiceRegistry({
           root: rootOption,
@@ -15821,11 +16692,21 @@ function createClientRuntime(options = {}) {
           services: options.services,
         });
 
+  const contextStore = createClientContextStore({
+    root: rootOption,
+    context: options.context,
+    provide: options.provide,
+    route: options.route,
+  });
+
   controllers = createControllerRuntime({
     root: rootOption,
     datastar,
     fragments,
     debug,
+    syncBus,
+    onError: options.onError,
+    contextStore,
     apiConfig,
     services,
     lazyLoader: options.lazyLoader,
@@ -15886,17 +16767,25 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
-    if (fragments && typeof fragments.dispose === 'function') {
+    if (fragments && isFn(fragments.dispose)) {
       fragments.dispose();
     }
     services.dispose();
-    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+    if (syncBus) {
+      syncBus.destroy();
+    }
+    if (runtime && runtime.devtool && isFn(runtime.devtool.destroy)) {
       try {
         runtime.devtool.destroy();
       } catch (_e) {}
       runtime.devtool = null;
     }
   }
+
+  const runtimeLogger =
+    process.env.NODE_ENV !== 'production'
+      ? getDebugModule().createClientLogger(debug, 'runtime', { console: options.logToConsole !== false })
+      : NOOP_LOGGER;
 
   runtime = {
     api,
@@ -15906,8 +16795,12 @@ function createClientRuntime(options = {}) {
     datastar,
     adapter: datastar,
     debug,
+    log: runtimeLogger,
     register: (name, def, meta) => controllers.register(name, def, meta),
     registerService: (name, def) => services.register(name, def),
+    provide: (keyOrMap, value) => contextStore.provide(keyOrMap, value),
+    getContext: () => contextStore.context,
+    getRoute: () => contextStore.route,
     mount,
     unmount,
     destroy,
@@ -15916,6 +16809,16 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
+    broadcast: (topic, payload) => (syncBus ? syncBus.publish('event', topic, payload) : false),
+    onBroadcast: (topic, handler) => {
+      if (!syncBus || !isFn(handler)) return () => {};
+      return syncBus.subscribe((msg) => {
+        if (!msg || msg.kind !== 'event') return;
+        if (topic && topic !== '*' && msg.topic !== topic) return;
+        handler(msg.payload, msg);
+      });
+    },
+    sync: syncBus,
     mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
@@ -15946,7 +16849,7 @@ function bootClient(options = {}) {
     options.hmr !== false &&
     bootRoot &&
     bootRoot.__wBootedClientRuntime &&
-    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+    isFn(bootRoot.__wBootedClientRuntime.destroy)
   ) {
     try {
       bootRoot.__wBootedClientRuntime.destroy();
@@ -16198,7 +17101,15 @@ const {
   createClientHostManager,
 } = require('./host');
 
-const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+const {
+  createClientContextStore,
+} = require('./context');
+
+const {
+  createCrossTabSync,
+} = require('./sync');
+
+const { isArray, isNumber, isFn, NOOP_DEBUGGER, NOOP_LOGGER, randomId, uid } = require('./utils');
 
 const NOOP_DEVTOOL_HANDLE = Object.freeze({
   open() {},
@@ -16218,6 +17129,7 @@ function getDebugModule() {
   }
   return {
     createClientDebugger: () => NOOP_DEBUGGER,
+    createClientLogger: () => NOOP_LOGGER,
     summarizePayloadSafely: () => null,
   };
 }
@@ -16274,7 +17186,7 @@ function createClientRuntime(options = {}) {
   const rootOption = options.root || options.document;
   const debug =
     options.debugger ||
-    (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
+    (options.debug && typeof options.debug === 'object' && isFn(options.debug.getSnapshot)
       ? options.debug
       : options.debug
         ? getDebugModule().createClientDebugger({
@@ -16290,12 +17202,23 @@ function createClientRuntime(options = {}) {
 
   let controllers = null;
 
+  const syncBus =
+    options.syncTabs === false
+      ? null
+      : createCrossTabSync({
+          root: rootOption,
+          channelName: options.syncChannel,
+          BroadcastChannel: options.BroadcastChannel,
+        });
+
   const fragments = createFragmentCoordinator({
     root: rootOption,
     fetch: options.fetch,
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    syncBus,
+    syncTabs: options.syncTabs !== false,
     staleTime: options.staleTime,
     refetchOnWindowFocus: options.refetchOnWindowFocus,
     refetchOnFocus: options.refetchOnFocus,
@@ -16353,7 +17276,7 @@ function createClientRuntime(options = {}) {
   let runtime = null;
 
   const services =
-    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+    options.services && isFn(options.services.get) && isFn(options.services.register)
       ? options.services
       : createClientServiceRegistry({
           root: rootOption,
@@ -16363,11 +17286,21 @@ function createClientRuntime(options = {}) {
           services: options.services,
         });
 
+  const contextStore = createClientContextStore({
+    root: rootOption,
+    context: options.context,
+    provide: options.provide,
+    route: options.route,
+  });
+
   controllers = createControllerRuntime({
     root: rootOption,
     datastar,
     fragments,
     debug,
+    syncBus,
+    onError: options.onError,
+    contextStore,
     apiConfig,
     services,
     lazyLoader: options.lazyLoader,
@@ -16428,17 +17361,25 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
-    if (fragments && typeof fragments.dispose === 'function') {
+    if (fragments && isFn(fragments.dispose)) {
       fragments.dispose();
     }
     services.dispose();
-    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+    if (syncBus) {
+      syncBus.destroy();
+    }
+    if (runtime && runtime.devtool && isFn(runtime.devtool.destroy)) {
       try {
         runtime.devtool.destroy();
       } catch (_e) {}
       runtime.devtool = null;
     }
   }
+
+  const runtimeLogger =
+    process.env.NODE_ENV !== 'production'
+      ? getDebugModule().createClientLogger(debug, 'runtime', { console: options.logToConsole !== false })
+      : NOOP_LOGGER;
 
   runtime = {
     api,
@@ -16448,8 +17389,12 @@ function createClientRuntime(options = {}) {
     datastar,
     adapter: datastar,
     debug,
+    log: runtimeLogger,
     register: (name, def, meta) => controllers.register(name, def, meta),
     registerService: (name, def) => services.register(name, def),
+    provide: (keyOrMap, value) => contextStore.provide(keyOrMap, value),
+    getContext: () => contextStore.context,
+    getRoute: () => contextStore.route,
     mount,
     unmount,
     destroy,
@@ -16458,6 +17403,16 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
+    broadcast: (topic, payload) => (syncBus ? syncBus.publish('event', topic, payload) : false),
+    onBroadcast: (topic, handler) => {
+      if (!syncBus || !isFn(handler)) return () => {};
+      return syncBus.subscribe((msg) => {
+        if (!msg || msg.kind !== 'event') return;
+        if (topic && topic !== '*' && msg.topic !== topic) return;
+        handler(msg.payload, msg);
+      });
+    },
+    sync: syncBus,
     mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
@@ -16488,7 +17443,7 @@ function bootClient(options = {}) {
     options.hmr !== false &&
     bootRoot &&
     bootRoot.__wBootedClientRuntime &&
-    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+    isFn(bootRoot.__wBootedClientRuntime.destroy)
   ) {
     try {
       bootRoot.__wBootedClientRuntime.destroy();
@@ -16740,7 +17695,15 @@ const {
   createClientHostManager,
 } = require('./host');
 
-const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+const {
+  createClientContextStore,
+} = require('./context');
+
+const {
+  createCrossTabSync,
+} = require('./sync');
+
+const { isArray, isNumber, isFn, NOOP_DEBUGGER, NOOP_LOGGER, randomId, uid } = require('./utils');
 
 const NOOP_DEVTOOL_HANDLE = Object.freeze({
   open() {},
@@ -16760,6 +17723,7 @@ function getDebugModule() {
   }
   return {
     createClientDebugger: () => NOOP_DEBUGGER,
+    createClientLogger: () => NOOP_LOGGER,
     summarizePayloadSafely: () => null,
   };
 }
@@ -16816,7 +17780,7 @@ function createClientRuntime(options = {}) {
   const rootOption = options.root || options.document;
   const debug =
     options.debugger ||
-    (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
+    (options.debug && typeof options.debug === 'object' && isFn(options.debug.getSnapshot)
       ? options.debug
       : options.debug
         ? getDebugModule().createClientDebugger({
@@ -16832,12 +17796,23 @@ function createClientRuntime(options = {}) {
 
   let controllers = null;
 
+  const syncBus =
+    options.syncTabs === false
+      ? null
+      : createCrossTabSync({
+          root: rootOption,
+          channelName: options.syncChannel,
+          BroadcastChannel: options.BroadcastChannel,
+        });
+
   const fragments = createFragmentCoordinator({
     root: rootOption,
     fetch: options.fetch,
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    syncBus,
+    syncTabs: options.syncTabs !== false,
     staleTime: options.staleTime,
     refetchOnWindowFocus: options.refetchOnWindowFocus,
     refetchOnFocus: options.refetchOnFocus,
@@ -16895,7 +17870,7 @@ function createClientRuntime(options = {}) {
   let runtime = null;
 
   const services =
-    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+    options.services && isFn(options.services.get) && isFn(options.services.register)
       ? options.services
       : createClientServiceRegistry({
           root: rootOption,
@@ -16905,11 +17880,21 @@ function createClientRuntime(options = {}) {
           services: options.services,
         });
 
+  const contextStore = createClientContextStore({
+    root: rootOption,
+    context: options.context,
+    provide: options.provide,
+    route: options.route,
+  });
+
   controllers = createControllerRuntime({
     root: rootOption,
     datastar,
     fragments,
     debug,
+    syncBus,
+    onError: options.onError,
+    contextStore,
     apiConfig,
     services,
     lazyLoader: options.lazyLoader,
@@ -16970,17 +17955,25 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
-    if (fragments && typeof fragments.dispose === 'function') {
+    if (fragments && isFn(fragments.dispose)) {
       fragments.dispose();
     }
     services.dispose();
-    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+    if (syncBus) {
+      syncBus.destroy();
+    }
+    if (runtime && runtime.devtool && isFn(runtime.devtool.destroy)) {
       try {
         runtime.devtool.destroy();
       } catch (_e) {}
       runtime.devtool = null;
     }
   }
+
+  const runtimeLogger =
+    process.env.NODE_ENV !== 'production'
+      ? getDebugModule().createClientLogger(debug, 'runtime', { console: options.logToConsole !== false })
+      : NOOP_LOGGER;
 
   runtime = {
     api,
@@ -16990,8 +17983,12 @@ function createClientRuntime(options = {}) {
     datastar,
     adapter: datastar,
     debug,
+    log: runtimeLogger,
     register: (name, def, meta) => controllers.register(name, def, meta),
     registerService: (name, def) => services.register(name, def),
+    provide: (keyOrMap, value) => contextStore.provide(keyOrMap, value),
+    getContext: () => contextStore.context,
+    getRoute: () => contextStore.route,
     mount,
     unmount,
     destroy,
@@ -17000,6 +17997,16 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
+    broadcast: (topic, payload) => (syncBus ? syncBus.publish('event', topic, payload) : false),
+    onBroadcast: (topic, handler) => {
+      if (!syncBus || !isFn(handler)) return () => {};
+      return syncBus.subscribe((msg) => {
+        if (!msg || msg.kind !== 'event') return;
+        if (topic && topic !== '*' && msg.topic !== topic) return;
+        handler(msg.payload, msg);
+      });
+    },
+    sync: syncBus,
     mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
@@ -17030,7 +18037,7 @@ function bootClient(options = {}) {
     options.hmr !== false &&
     bootRoot &&
     bootRoot.__wBootedClientRuntime &&
-    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+    isFn(bootRoot.__wBootedClientRuntime.destroy)
   ) {
     try {
       bootRoot.__wBootedClientRuntime.destroy();

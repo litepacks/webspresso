@@ -75,7 +75,15 @@ const {
   createClientHostManager,
 } = require('./host');
 
-const { isArray, isNumber, NOOP_DEBUGGER, randomId, uid } = require('./utils');
+const {
+  createClientContextStore,
+} = require('./context');
+
+const {
+  createCrossTabSync,
+} = require('./sync');
+
+const { isArray, isNumber, isFn, NOOP_DEBUGGER, NOOP_LOGGER, randomId, uid } = require('./utils');
 
 const NOOP_DEVTOOL_HANDLE = Object.freeze({
   open() {},
@@ -95,6 +103,7 @@ function getDebugModule() {
   }
   return {
     createClientDebugger: () => NOOP_DEBUGGER,
+    createClientLogger: () => NOOP_LOGGER,
     summarizePayloadSafely: () => null,
   };
 }
@@ -151,7 +160,7 @@ function createClientRuntime(options = {}) {
   const rootOption = options.root || options.document;
   const debug =
     options.debugger ||
-    (options.debug && typeof options.debug === 'object' && typeof options.debug.getSnapshot === 'function'
+    (options.debug && typeof options.debug === 'object' && isFn(options.debug.getSnapshot)
       ? options.debug
       : options.debug
         ? getDebugModule().createClientDebugger({
@@ -167,12 +176,23 @@ function createClientRuntime(options = {}) {
 
   let controllers = null;
 
+  const syncBus =
+    options.syncTabs === false
+      ? null
+      : createCrossTabSync({
+          root: rootOption,
+          channelName: options.syncChannel,
+          BroadcastChannel: options.BroadcastChannel,
+        });
+
   const fragments = createFragmentCoordinator({
     root: rootOption,
     fetch: options.fetch,
     endpoint: options.fragmentEndpoint || DEFAULT_FRAGMENT_ENDPOINT,
     datastar,
     debug,
+    syncBus,
+    syncTabs: options.syncTabs !== false,
     staleTime: options.staleTime,
     refetchOnWindowFocus: options.refetchOnWindowFocus,
     refetchOnFocus: options.refetchOnFocus,
@@ -230,7 +250,7 @@ function createClientRuntime(options = {}) {
   let runtime = null;
 
   const services =
-    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+    options.services && isFn(options.services.get) && isFn(options.services.register)
       ? options.services
       : createClientServiceRegistry({
           root: rootOption,
@@ -240,11 +260,21 @@ function createClientRuntime(options = {}) {
           services: options.services,
         });
 
+  const contextStore = createClientContextStore({
+    root: rootOption,
+    context: options.context,
+    provide: options.provide,
+    route: options.route,
+  });
+
   controllers = createControllerRuntime({
     root: rootOption,
     datastar,
     fragments,
     debug,
+    syncBus,
+    onError: options.onError,
+    contextStore,
     apiConfig,
     services,
     lazyLoader: options.lazyLoader,
@@ -305,17 +335,25 @@ function createClientRuntime(options = {}) {
       observer = null;
     }
     controllers.destroyAll();
-    if (fragments && typeof fragments.dispose === 'function') {
+    if (fragments && isFn(fragments.dispose)) {
       fragments.dispose();
     }
     services.dispose();
-    if (runtime && runtime.devtool && typeof runtime.devtool.destroy === 'function') {
+    if (syncBus) {
+      syncBus.destroy();
+    }
+    if (runtime && runtime.devtool && isFn(runtime.devtool.destroy)) {
       try {
         runtime.devtool.destroy();
       } catch (_e) {}
       runtime.devtool = null;
     }
   }
+
+  const runtimeLogger =
+    process.env.NODE_ENV !== 'production'
+      ? getDebugModule().createClientLogger(debug, 'runtime', { console: options.logToConsole !== false })
+      : NOOP_LOGGER;
 
   runtime = {
     api,
@@ -325,8 +363,12 @@ function createClientRuntime(options = {}) {
     datastar,
     adapter: datastar,
     debug,
+    log: runtimeLogger,
     register: (name, def, meta) => controllers.register(name, def, meta),
     registerService: (name, def) => services.register(name, def),
+    provide: (keyOrMap, value) => contextStore.provide(keyOrMap, value),
+    getContext: () => contextStore.context,
+    getRoute: () => contextStore.route,
     mount,
     unmount,
     destroy,
@@ -335,6 +377,16 @@ function createClientRuntime(options = {}) {
     getController: (el, name) => controllers.getInstanceForElement(el, name),
     invalidate: (tags, meta) => fragments.invalidate(tags, meta),
     refresh: (idOrName, input, opts) => fragments.refresh(idOrName, input, opts),
+    broadcast: (topic, payload) => (syncBus ? syncBus.publish('event', topic, payload) : false),
+    onBroadcast: (topic, handler) => {
+      if (!syncBus || !isFn(handler)) return () => {};
+      return syncBus.subscribe((msg) => {
+        if (!msg || msg.kind !== 'event') return;
+        if (topic && topic !== '*' && msg.topic !== topic) return;
+        handler(msg.payload, msg);
+      });
+    },
+    sync: syncBus,
     mountDevtool: (opts) => getDevtoolModule().mountDevtool(runtime, opts),
     forms: {
       parse: parseFormElement,
@@ -365,7 +417,7 @@ function bootClient(options = {}) {
     options.hmr !== false &&
     bootRoot &&
     bootRoot.__wBootedClientRuntime &&
-    typeof bootRoot.__wBootedClientRuntime.destroy === 'function'
+    isFn(bootRoot.__wBootedClientRuntime.destroy)
   ) {
     try {
       bootRoot.__wBootedClientRuntime.destroy();

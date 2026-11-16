@@ -1,5 +1,6 @@
 'use strict';
 
+const { isFn } = require('./utils');
 /**
  * Webspresso Client Services Registry & Lifecycle Manager (`core/client/services.js`)
  *
@@ -61,14 +62,14 @@ function defineClientService(definition) {
     throw new TypeError('defineClientService() requires a configuration object or factory function.');
   }
 
-  const load = typeof definition.load === 'function' ? definition.load : null;
+  const load = isFn(definition.load) ? definition.load : null;
   const create =
-    typeof definition.create === 'function'
+    isFn(definition.create)
       ? definition.create
-      : typeof definition.setup === 'function'
+      : isFn(definition.setup)
         ? definition.setup
         : null;
-  const dispose = typeof definition.dispose === 'function' ? definition.dispose : null;
+  const dispose = isFn(definition.dispose) ? definition.dispose : null;
 
   if (!load && !create) {
     throw new TypeError(
@@ -104,19 +105,19 @@ async function instantiateFromLoadedModule(loaded, outerDef, serviceCtx, registe
 
   let target = loaded;
   if (typeof loaded === 'object') {
-    if (typeof loaded.dispose === 'function') registerDispose(loaded.dispose);
+    if (isFn(loaded.dispose)) registerDispose(loaded.dispose);
     if ('default' in loaded && loaded.default !== undefined) {
       target = loaded.default;
     }
   }
 
   if (target && typeof target === 'object' && target.__isWebspressoClientService) {
-    if (typeof target.dispose === 'function') registerDispose(target.dispose);
-    if (typeof target.load === 'function') {
+    if (isFn(target.dispose)) registerDispose(target.dispose);
+    if (isFn(target.load)) {
       const nested = await target.load(serviceCtx);
       return instantiateFromLoadedModule(nested, { create: target.create }, serviceCtx, registerDispose);
     }
-    return typeof target.create === 'function' ? await target.create(serviceCtx) : target;
+    return isFn(target.create) ? await target.create(serviceCtx) : target;
   }
 
   if (typeof target === 'function') {
@@ -127,7 +128,7 @@ async function instantiateFromLoadedModule(loaded, outerDef, serviceCtx, registe
   }
 
   if (target && typeof target === 'object') {
-    if (typeof target.dispose === 'function') registerDispose(target.dispose);
+    if (isFn(target.dispose)) registerDispose(target.dispose);
     const fn = target.createService || target.create || target.setup;
     if (typeof fn === 'function') return await fn.call(target, serviceCtx);
   }
@@ -151,7 +152,7 @@ function createClientServiceRegistry(options = {}) {
   const api = options.api || null;
   const baseStorage = options.storage || defaultStorage;
   const debug = options.debug || null;
-  const getRuntime = typeof options.getRuntime === 'function' ? options.getRuntime : () => null;
+  const getRuntime = isFn(options.getRuntime) ? options.getRuntime : () => null;
 
   // Registered service definitions: name -> normalized definition
   const definitions = new Map();
@@ -235,7 +236,7 @@ function createClientServiceRegistry(options = {}) {
       try {
         fn(attempt.instance, attempt.serviceCtx);
       } catch (err) {
-        if (debug && typeof debug.trackCleanupError === 'function') {
+        if (debug && isFn(debug.trackCleanupError)) {
           debug.trackCleanupError(`service_${serviceName}`, serviceName, phase, err);
         }
       }
@@ -246,13 +247,13 @@ function createClientServiceRegistry(options = {}) {
       attempt.disposeFns.length === 0 &&
       attempt.instance &&
       typeof attempt.instance === 'object' &&
-      typeof attempt.instance.dispose === 'function' &&
+      isFn(attempt.instance.dispose) &&
       !ranDisposeFns.has(attempt.instance.dispose)
     ) {
       try {
         attempt.instance.dispose();
       } catch (err) {
-        if (debug && typeof debug.trackCleanupError === 'function') {
+        if (debug && isFn(debug.trackCleanupError)) {
           debug.trackCleanupError(`service_${serviceName}`, serviceName, phase, err);
         }
       }
@@ -263,7 +264,7 @@ function createClientServiceRegistry(options = {}) {
       try {
         attempt.cleanups[i]();
       } catch (err) {
-        if (debug && typeof debug.trackCleanupError === 'function') {
+        if (debug && isFn(debug.trackCleanupError)) {
           debug.trackCleanupError(`service_${serviceName}`, serviceName, `${phase}:cleanup`, err);
         }
       }
@@ -277,7 +278,7 @@ function createClientServiceRegistry(options = {}) {
       try {
         hosts[i].unmount();
       } catch (err) {
-        if (debug && typeof debug.trackCleanupError === 'function') {
+        if (debug && isFn(debug.trackCleanupError)) {
           debug.trackCleanupError(`service_${serviceName}`, serviceName, `${phase}:host`, err);
         }
       }
@@ -297,7 +298,7 @@ function createClientServiceRegistry(options = {}) {
       entry.activeAttempt = null;
     }
 
-    if (wasReady && debug && typeof debug.recordEvent === 'function') {
+    if (wasReady && debug && isFn(debug.recordEvent)) {
       debug.recordEvent('service:dispose', { name: entry.name });
     }
   }
@@ -350,7 +351,7 @@ function createClientServiceRegistry(options = {}) {
     };
 
     const scopedStorage =
-      baseStorage && typeof baseStorage.scoped === 'function'
+      baseStorage && isFn(baseStorage.scoped)
         ? baseStorage.scoped(`service:${cleanName}`)
         : defaultStorage.scoped(`service:${cleanName}`);
 
@@ -432,7 +433,7 @@ function createClientServiceRegistry(options = {}) {
     };
     entries.set(cleanName, entry);
 
-    if (debug && typeof debug.recordEvent === 'function') {
+    if (debug && isFn(debug.recordEvent)) {
       debug.recordEvent('service:init', { name: cleanName });
     }
 
@@ -480,7 +481,7 @@ function createClientServiceRegistry(options = {}) {
           initOrder.push(cleanName);
         }
 
-        if (debug && typeof debug.recordEvent === 'function') {
+        if (debug && isFn(debug.recordEvent)) {
           debug.recordEvent('service:ready', {
             name: cleanName,
             hasHost: attempt.hosts.size > 0,
@@ -497,7 +498,7 @@ function createClientServiceRegistry(options = {}) {
           entries.delete(cleanName);
         }
 
-        if (debug && typeof debug.recordEvent === 'function') {
+        if (debug && isFn(debug.recordEvent)) {
           debug.recordEvent('service:error', {
             name: cleanName,
             code: err && err.code ? err.code : null,

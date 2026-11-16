@@ -1,7 +1,7 @@
 'use strict';
 
 const { defaultStorage } = require('./storage');
-const { isArray, isNumber, parseDurationMs, parseRefetchMode, uid } = require('./utils');
+const { isArray, isNumber, parseDurationMs, parseRefetchMode, uid, isFn } = require('./utils');
 
 /**
  * Webspresso Client-Side SSR Fragment Coordinator & Invalidation Engine
@@ -70,7 +70,7 @@ function isStrictAncestor(parentEl, childEl) {
     parentEl &&
       childEl &&
       parentEl !== childEl &&
-      typeof parentEl.contains === 'function' &&
+      isFn(parentEl.contains) &&
       parentEl.contains(childEl)
   );
 }
@@ -115,7 +115,7 @@ function createFragmentCoordinator(options = {}) {
   const getRoot = () =>
     options.root || options.document || (typeof document !== 'undefined' ? document : null);
   const fetchImpl =
-    options.fetch || (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
+    options.fetch || (isFn(globalThis.fetch) ? globalThis.fetch.bind(globalThis) : null);
   const endpoint = options.endpoint || DEFAULT_FRAGMENT_ENDPOINT;
   const datastar = options.datastar || options.adapter;
   const debug = options.debug || null;
@@ -159,6 +159,19 @@ function createFragmentCoordinator(options = {}) {
 
   // Per-version patch options (mode, limit, target, removeKeys, onBeforePatch, onAfterPatch, hookChainDepth)
   const pendingPatchOptsByKey = new Map();
+
+  const syncBus = options.syncBus || null;
+  const syncTabsEnabled = Boolean(syncBus && options.syncTabs !== false);
+  let unsubSync = null;
+  if (syncTabsEnabled) {
+    unsubSync = syncBus.subscribe((msg) => {
+      if (isDisposed || !msg || msg.kind !== 'invalidate') return;
+      const remoteTags = msg.payload && isArray(msg.payload.tags) ? msg.payload.tags : [];
+      if (remoteTags.length > 0) {
+        invalidate(remoteTags, { fromRemoteTab: true, source: 'cross-tab' }).catch(() => {});
+      }
+    });
+  }
   let pendingInvalidateHookDepth = 0;
 
   // Lazy fragment IntersectionObserver state
@@ -173,7 +186,7 @@ function createFragmentCoordinator(options = {}) {
         : typeof globalThis !== 'undefined'
           ? globalThis
           : null;
-    const IOCtor = win && typeof win.IntersectionObserver === 'function' ? win.IntersectionObserver : null;
+    const IOCtor = win && isFn(win.IntersectionObserver) ? win.IntersectionObserver : null;
     if (!IOCtor) return null;
     lazyObserver = new IOCtor((entries) => {
       if (isDisposed) return;
@@ -218,7 +231,7 @@ function createFragmentCoordinator(options = {}) {
   }
 
   function getListItemKey(node) {
-    if (!node || node.nodeType !== 1 || typeof node.getAttribute !== 'function') return null;
+    if (!node || node.nodeType !== 1 || !isFn(node.getAttribute)) return null;
     if (node.id) return `id:${node.id}`;
     const wKey = node.getAttribute('data-w-key');
     if (wKey) return `wkey:${wKey}`;
@@ -227,7 +240,7 @@ function createFragmentCoordinator(options = {}) {
 
   function patchIncrementalList(fragEl, html, opts = {}) {
     const doc = fragEl.ownerDocument || (typeof document !== 'undefined' ? document : null);
-    const parsed = datastar && typeof datastar.parseHtmlFragment === 'function'
+    const parsed = datastar && isFn(datastar.parseHtmlFragment)
       ? datastar.parseHtmlFragment(html, doc)
       : null;
     if (!parsed) return false;
@@ -251,7 +264,7 @@ function createFragmentCoordinator(options = {}) {
         const rawKey = child.getAttribute('data-w-key') || child.id || '';
         const fullKey = getListItemKey(child);
         if (removeSet.has(rawKey) || (fullKey && removeSet.has(fullKey))) {
-          if (typeof opts.onBeforeNodeRemove === 'function') opts.onBeforeNodeRemove(child);
+          if (isFn(opts.onBeforeNodeRemove)) opts.onBeforeNodeRemove(child);
           container.removeChild(child);
         }
       }
@@ -279,7 +292,7 @@ function createFragmentCoordinator(options = {}) {
 
       if (existingMatch && existingMatch.tagName === incoming.tagName) {
         // Update existing keyed item in place without duplicating
-        if (datastar && typeof datastar.morphDomTrees === 'function') {
+        if (datastar && isFn(datastar.morphDomTrees)) {
           datastar.morphDomTrees(existingMatch, incoming, {
             onBeforeNodeRemove: opts.onBeforeNodeRemove,
             onNodeAdded: opts.onNodeAdded,
@@ -302,7 +315,7 @@ function createFragmentCoordinator(options = {}) {
       if (key) {
         existingByKey.set(key, imported);
       }
-      if (typeof opts.onNodeAdded === 'function') {
+      if (isFn(opts.onNodeAdded)) {
         opts.onNodeAdded(imported);
       }
     }
@@ -316,7 +329,7 @@ function createFragmentCoordinator(options = {}) {
         const ch = container.children;
         const victim = mode === 'prepend' ? ch[ch.length - 1] : ch[0];
         if (!victim) break;
-        if (typeof opts.onBeforeNodeRemove === 'function') opts.onBeforeNodeRemove(victim);
+        if (isFn(opts.onBeforeNodeRemove)) opts.onBeforeNodeRemove(victim);
         container.removeChild(victim);
       }
     }
@@ -369,7 +382,7 @@ function createFragmentCoordinator(options = {}) {
       }
       scheduleAutoRefresh([inst.instanceId], 'interval');
     }, targetMs);
-    if (inst.intervalTimer && typeof inst.intervalTimer.unref === 'function') {
+    if (inst.intervalTimer && isFn(inst.intervalTimer.unref)) {
       inst.intervalTimer.unref();
     }
   }
@@ -416,7 +429,7 @@ function createFragmentCoordinator(options = {}) {
       };
     });
 
-    if (debug && typeof debug.recordEvent === 'function') {
+    if (debug && isFn(debug.recordEvent)) {
       debug.recordEvent('fragment:auto-refetch', {
         reason: reasons.length === 1 ? reasons[0] : reasons.join('+'),
         reasons,
@@ -513,10 +526,10 @@ function createFragmentCoordinator(options = {}) {
     const doc = root && root.nodeType === 9 ? root : root && root.ownerDocument ? root.ownerDocument : typeof document !== 'undefined' ? document : null;
     const win = (doc && doc.defaultView) || (typeof window !== 'undefined' ? window : null);
 
-    if (doc && typeof doc.addEventListener === 'function') {
+    if (doc && isFn(doc.addEventListener)) {
       doc.addEventListener('visibilitychange', onVisibilityChange);
     }
-    if (win && typeof win.addEventListener === 'function') {
+    if (win && isFn(win.addEventListener)) {
       win.addEventListener('focus', triggerFocusRefetch);
       win.addEventListener('online', triggerReconnectRefetch);
       win.addEventListener('pageshow', onPageShow);
@@ -530,10 +543,10 @@ function createFragmentCoordinator(options = {}) {
     const doc = root && root.nodeType === 9 ? root : root && root.ownerDocument ? root.ownerDocument : typeof document !== 'undefined' ? document : null;
     const win = (doc && doc.defaultView) || (typeof window !== 'undefined' ? window : null);
 
-    if (doc && typeof doc.removeEventListener === 'function') {
+    if (doc && isFn(doc.removeEventListener)) {
       doc.removeEventListener('visibilitychange', onVisibilityChange);
     }
-    if (win && typeof win.removeEventListener === 'function') {
+    if (win && isFn(win.removeEventListener)) {
       win.removeEventListener('focus', triggerFocusRefetch);
       win.removeEventListener('online', triggerReconnectRefetch);
       win.removeEventListener('pageshow', onPageShow);
@@ -719,7 +732,7 @@ function createFragmentCoordinator(options = {}) {
   function scanDomInstances(containerEl) {
     const defaultRoot = getRoot();
     const root = containerEl || defaultRoot;
-    if (!root || typeof root.querySelectorAll !== 'function') return;
+    if (!root || !isFn(root.querySelectorAll)) return;
 
     const isFullScan = !containerEl || containerEl === defaultRoot;
     const seenIds = isFullScan ? new Set() : null;
@@ -797,10 +810,10 @@ function createFragmentCoordinator(options = {}) {
       hookChainDepth: (patchOpts && patchOpts.hookChainDepth) || 0,
     };
 
-    if (typeof options.onBeforePatch === 'function') {
+    if (isFn(options.onBeforePatch)) {
       options.onBeforePatch(inst.el, inst, patchMeta);
     }
-    if (patchOpts && typeof patchOpts.onBeforePatch === 'function') {
+    if (patchOpts && isFn(patchOpts.onBeforePatch)) {
       try {
         patchOpts.onBeforePatch(inst.el, inst, patchMeta);
       } catch (_e) {}
@@ -825,7 +838,7 @@ function createFragmentCoordinator(options = {}) {
     ) {
       inst.input = { ...committedInput };
       const serializedInput = JSON.stringify(inst.input);
-      if (inst.el && typeof inst.el.setAttribute === 'function') {
+      if (inst.el && isFn(inst.el.setAttribute)) {
         inst.el.setAttribute('data-w-fragment-input', serializedInput);
       }
       inst._rawInput = serializedInput;
@@ -854,7 +867,7 @@ function createFragmentCoordinator(options = {}) {
         onBeforeNodeRemove: options.onBeforeNodeRemove,
         onNodeAdded: options.onNodeAdded,
       });
-    } else if (datastar && typeof datastar.patchFragmentElement === 'function') {
+    } else if (datastar && isFn(datastar.patchFragmentElement)) {
       datastar.patchFragmentElement(inst.el, html, {
         onBeforeNodeRemove: options.onBeforeNodeRemove,
         onNodeAdded: options.onNodeAdded,
@@ -869,7 +882,7 @@ function createFragmentCoordinator(options = {}) {
       inst.lazyState = 'loaded';
       inst.staleWhileUnloaded = false;
       unobserveLazyFragment(inst);
-      if (inst.el && typeof inst.el.removeAttribute === 'function') {
+      if (inst.el && isFn(inst.el.removeAttribute)) {
         inst.el.removeAttribute('data-w-lazy');
       }
     }
@@ -906,10 +919,10 @@ function createFragmentCoordinator(options = {}) {
       }
     }
 
-    if (typeof options.onAfterPatch === 'function') {
+    if (isFn(options.onAfterPatch)) {
       options.onAfterPatch(inst.el, inst, patchMeta);
     }
-    if (patchOpts && typeof patchOpts.onAfterPatch === 'function') {
+    if (patchOpts && isFn(patchOpts.onAfterPatch)) {
       try {
         patchOpts.onAfterPatch(inst.el, inst, patchMeta);
       } catch (_e) {}
@@ -947,7 +960,7 @@ function createFragmentCoordinator(options = {}) {
       'X-Webspresso-Fragment-Request': '1',
     };
 
-    if (typeof options.getCsrfToken === 'function') {
+    if (isFn(options.getCsrfToken)) {
       const token = options.getCsrfToken();
       if (token) headers['X-CSRF-Token'] = token;
     }
@@ -994,7 +1007,7 @@ function createFragmentCoordinator(options = {}) {
       const inst = instances.get(t.instanceId);
       if (inst) {
         inst.inFlightCount = (inst.inFlightCount || 0) + 1;
-        if (inst.el && typeof inst.el.setAttribute === 'function') {
+        if (inst.el && isFn(inst.el.setAttribute)) {
           inst.el.setAttribute('aria-busy', 'true');
         }
       }
@@ -1005,7 +1018,7 @@ function createFragmentCoordinator(options = {}) {
         const inst = instances.get(t.instanceId);
         if (inst) {
           inst.inFlightCount = Math.max(0, (inst.inFlightCount || 1) - 1);
-          if (inst.inFlightCount === 0 && inst.el && typeof inst.el.removeAttribute === 'function') {
+          if (inst.inFlightCount === 0 && inst.el && isFn(inst.el.removeAttribute)) {
             inst.el.removeAttribute('aria-busy');
           }
         }
@@ -1128,10 +1141,10 @@ function createFragmentCoordinator(options = {}) {
 
     let body = null;
     try {
-      if (typeof response.text === 'function') {
+      if (isFn(response.text)) {
         const text = await response.text();
         body = text ? JSON.parse(text) : null;
-      } else if (typeof response.json === 'function') {
+      } else if (isFn(response.json)) {
         body = await response.json();
       }
     } catch (_e) {
@@ -1430,7 +1443,7 @@ function createFragmentCoordinator(options = {}) {
    * @returns {Promise<{ refreshed: string[], skipped?: boolean }>}
    */
   function invalidate(tags, meta = {}) {
-    const activeHook = typeof options.getPatchHookContext === 'function' ? options.getPatchHookContext() : null;
+    const activeHook = isFn(options.getPatchHookContext) ? options.getPatchHookContext() : null;
     if (activeHook) {
       const nextDepth = (activeHook.depth || 0) + 1;
       if (nextDepth > pendingInvalidateHookDepth) {
@@ -1438,10 +1451,16 @@ function createFragmentCoordinator(options = {}) {
       }
     }
     const tagList = isArray(tags) ? tags : [tags];
+    const cleanTags = [];
     for (const raw of tagList) {
       if (typeof raw === 'string' && raw.trim()) {
-        pendingTags.add(raw.trim());
+        const t = raw.trim();
+        pendingTags.add(t);
+        cleanTags.push(t);
       }
+    }
+    if (syncTabsEnabled && cleanTags.length > 0 && !(meta && meta.fromRemoteTab)) {
+      syncBus.publish('invalidate', 'fragments', { tags: cleanTags });
     }
     if (meta && meta.chainId) {
       pendingChains.push(meta.chainId);
@@ -1501,12 +1520,12 @@ function createFragmentCoordinator(options = {}) {
 
     if (matched.length === 0) {
       const skippedRes = { ok: true, refreshed: [], skipped: true };
-      if (typeof refreshOpts.onSuccess === 'function') {
+      if (isFn(refreshOpts.onSuccess)) {
         await refreshOpts.onSuccess(skippedRes);
       }
-      if (typeof refreshOpts.onSettled === 'function') {
+      if (isFn(refreshOpts.onSettled)) {
         await refreshOpts.onSettled(skippedRes, null);
-      } else if (typeof refreshOpts.onComplete === 'function') {
+      } else if (isFn(refreshOpts.onComplete)) {
         await refreshOpts.onComplete(skippedRes, null);
       }
       return skippedRes;
@@ -1532,7 +1551,7 @@ function createFragmentCoordinator(options = {}) {
         unobserveLazyFragment(inst);
       }
 
-      const activeHook = typeof options.getPatchHookContext === 'function' ? options.getPatchHookContext() : null;
+      const activeHook = isFn(options.getPatchHookContext) ? options.getPatchHookContext() : null;
       const hookChainDepth = activeHook ? (activeHook.depth || 0) + 1 : 0;
 
       if (
@@ -1541,8 +1560,8 @@ function createFragmentCoordinator(options = {}) {
         refreshOpts.target ||
         refreshOpts.removeKeys ||
         hookChainDepth > 0 ||
-        typeof refreshOpts.onBeforePatch === 'function' ||
-        typeof refreshOpts.onAfterPatch === 'function'
+        isFn(refreshOpts.onBeforePatch) ||
+        isFn(refreshOpts.onAfterPatch)
       ) {
         pendingPatchOptsByKey.set(`${inst.instanceId}:${inst.version}`, {
           mode: refreshOpts.mode || null,
@@ -1588,9 +1607,9 @@ function createFragmentCoordinator(options = {}) {
         if (typeof failHandler === 'function') {
           await failHandler(enrichedResult.error);
         }
-        if (typeof refreshOpts.onSettled === 'function') {
+        if (isFn(refreshOpts.onSettled)) {
           await refreshOpts.onSettled(enrichedResult, enrichedResult.error);
-        } else if (typeof refreshOpts.onComplete === 'function') {
+        } else if (isFn(refreshOpts.onComplete)) {
           await refreshOpts.onComplete(enrichedResult, enrichedResult.error);
         }
         if (refreshOpts.throwOnError === true) {
@@ -1599,13 +1618,13 @@ function createFragmentCoordinator(options = {}) {
         return enrichedResult;
       }
       if (!enrichedResult.canceled && !enrichedResult.superseded && enrichedResult.ok !== false) {
-        if (typeof refreshOpts.onSuccess === 'function') {
+        if (isFn(refreshOpts.onSuccess)) {
           await refreshOpts.onSuccess(enrichedResult);
         }
       }
-      if (typeof refreshOpts.onSettled === 'function') {
+      if (isFn(refreshOpts.onSettled)) {
         await refreshOpts.onSettled(enrichedResult, null);
-      } else if (typeof refreshOpts.onComplete === 'function') {
+      } else if (isFn(refreshOpts.onComplete)) {
         await refreshOpts.onComplete(enrichedResult, null);
       }
       return enrichedResult;
@@ -1619,9 +1638,9 @@ function createFragmentCoordinator(options = {}) {
           throw callbackErr;
         }
       }
-      if (typeof refreshOpts.onSettled === 'function') {
+      if (isFn(refreshOpts.onSettled)) {
         await refreshOpts.onSettled(null, err);
-      } else if (typeof refreshOpts.onComplete === 'function') {
+      } else if (isFn(refreshOpts.onComplete)) {
         await refreshOpts.onComplete(null, err);
       }
 
@@ -1711,7 +1730,7 @@ function createFragmentCoordinator(options = {}) {
           for (const inst of matchedList) {
             if (item.input && typeof item.input === 'object') {
               inst.input = { ...item.input };
-              if (inst.el && typeof inst.el.setAttribute === 'function') {
+              if (inst.el && isFn(inst.el.setAttribute)) {
                 const serializedInput = JSON.stringify(inst.input);
                 inst.el.setAttribute('data-w-fragment-input', serializedInput);
                 inst._rawInput = serializedInput;
@@ -1791,7 +1810,13 @@ function createFragmentCoordinator(options = {}) {
       pendingAutoInstanceIds.clear();
       pendingAutoReasons.clear();
       pendingPatchOptsByKey.clear();
-      if (lazyObserver && typeof lazyObserver.disconnect === 'function') {
+      if (isFn(unsubSync)) {
+        try {
+          unsubSync();
+        } catch (_e) {}
+        unsubSync = null;
+      }
+      if (lazyObserver && isFn(lazyObserver.disconnect)) {
         try {
           lazyObserver.disconnect();
         } catch (_e) {}

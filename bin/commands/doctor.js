@@ -166,6 +166,11 @@ function registerCommand(program) {
             }
 
             if (stats.isDirectory()) {
+              if (child.startsWith('_')) {
+                line('⚠', `Directory "pages/${relPath}" starts with "_" and is ignored by file-based routing.`);
+                warnings += 1;
+                routingChecksPassed = false;
+              }
               if (child === 'api' && relativeDir === '') {
                 scanRoutes(fullPath, relPath, true);
               } else {
@@ -188,6 +193,11 @@ function registerCommand(program) {
                   kept.push({ name: base, isDir: false, original: child });
                 }
               } else {
+                if (ext === '.js' && VALID_API_METHODS.some((m) => child.endsWith(m))) {
+                  line('⚠', `Route "pages/${relPath}" uses an HTTP method suffix outside "pages/api/" and will not run as a defineApi() endpoint. Move it under "pages/api/".`);
+                  warnings += 1;
+                  routingChecksPassed = false;
+                }
                 if (ext === '.njk') {
                   const base = path.basename(child, ext);
                   kept.push({ name: base, isDir: false, original: child });

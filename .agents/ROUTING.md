@@ -72,6 +72,11 @@ API route filenames **MUST** declare their HTTP method before the `.js` extensio
 
 If no method suffix is provided (e.g. `pages/api/notes.js`), it defaults to `GET`.
 
+> [!IMPORTANT]
+> - All `defineApi({ handler })` routes **must** live under `pages/api/` (or a module's `api/` directory). Placing a `defineApi` handler in `pages/` outside `pages/api/` without `load()`/`render()`/`.njk` throws a `ConfigurationError` and is flagged by `webspresso doctor`.
+> - Directories and files starting with `_` (e.g. `_middleware.js`, `_layout.njk`, `_private/`) are reserved/private and intentionally ignored by route discovery.
+> - Dynamic route segments (e.g. `[id]`, `[gen_id]`) should be lowercase to avoid case-sensitivity issues.
+
 ---
 
 ## 2. Standard API Route Contract

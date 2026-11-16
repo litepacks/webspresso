@@ -761,6 +761,17 @@ async function executePagePipeline(params) {
         return html;
       }
 
+      // Guard against defineApi({ handler }) accidentally placed outside pages/api/
+      if (
+        typeof pageDef.handler === 'function' &&
+        typeof pageDef.load !== 'function'
+      ) {
+        const { ConfigurationError } = require('../errors');
+        throw new ConfigurationError(
+          `Page route "${descriptor.path || descriptor.source || 'unknown'}" exports handler() (defineApi) outside pages/api/. Move it under pages/api/ or export load()/render() for an SSR page.`
+        );
+      }
+
       // 9. Fallback: if json or data
       if (typeof loadedData === 'object' && loadedData !== null) {
         if (res && !res.headersSent && !res.writableEnded && !res.finished && typeof res.json === 'function') {

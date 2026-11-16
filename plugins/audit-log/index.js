@@ -6,7 +6,7 @@
 const { createAuditMiddleware } = require('./middleware');
 const { createAuditLogHandlers } = require('./api-handlers');
 const { generateAuditLogComponent } = require('./admin-component');
-const { generateAuditLogsMigration } = require('./migration-template');
+const { generateAuditLogsMigration, ensureAuditLogsTable } = require('./migration-template');
 const { purgeAuditLogs } = require('./purge');
 
 /**
@@ -160,6 +160,13 @@ function auditLogPlugin(options = {}) {
 
     register(ctx) {
       const adminPath = adminPathOpt || '/_admin';
+      if (options.autoCreateTable !== false) {
+        Promise.resolve(ensureAuditLogsTable(knex, tableName)).catch((err) => {
+          if (process.env.NODE_ENV !== 'test') {
+            console.warn('[audit-log] Failed to auto-create table:', err.message);
+          }
+        });
+      }
       if (typeof ctx.app?.use === 'function') {
         ctx.app.use(createAuditMiddleware({ knex, adminPath, tableName }));
       }

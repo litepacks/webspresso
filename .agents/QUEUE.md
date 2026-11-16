@@ -145,7 +145,8 @@ Files placed in `jobs/` are automatically mapped to dot-separated job names:
 ```js
 // jobs/email/send.js
 module.exports = async function(job, ctx) {
-  // job.data
+  // job.data, ctx.db, ctx.service('user.find', ...), ctx.queue, ctx.events, ctx.logger
+  // Ambient hooks like useDb() and useService() also work inside job handlers
 };
 
 module.exports.options = {

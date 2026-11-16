@@ -188,6 +188,7 @@ const productRepo = db.getRepository('Product');
 // 1. Basic Read & Find
 const product = await productRepo.findById(1);
 const activeProducts = await productRepo.find({ active: true });
+const nonDeleted = await productRepo.find({ deleted_at: null }); // Automatically compiles to IS NULL
 const singleProduct = await productRepo.findOne({ slug: 'laptop' });
 
 // 2. Insert, Update, Delete & Batch Operations

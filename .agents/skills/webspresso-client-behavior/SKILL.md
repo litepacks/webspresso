@@ -106,6 +106,7 @@ export default defineController({
   tasks: {
     insights: ({ api }) => ({
       policy: 'latest', // 'latest' | 'drop' | 'queue'
+      stateKey: 'insightsStatus', // Optional: auto-syncs 'idle' | 'pending' | 'success' | 'failure' to state
       staleTime: '15s',
       refetchOnWindowFocus: true,
       refetchOnReconnect: true,
@@ -226,4 +227,10 @@ bootClient({
 - **NEVER** import server-only modules (`fs`, `knex`, `core/orm`, `models/`, server `services/`) inside `.client.ts` / `.client.js` files.
 - **NEVER** create a global client state store for server data or serialize full-page props into `window.__INITIAL_STATE__`.
 - **NEVER** hardcode UI widget opinions (like toast/modal markup) into Webspresso core — use `defineClientService` and `mountHost` in application code.
+- **NEVER** mutate `ctx` directly (`ctx` is frozen); store per-instance imperative helpers on `ctx.locals`.
+- **ALWAYS** use `data-w-submit="actionName"` for form actions, `data-w-style:<prop>` / `data-w-attr:<name>` for reactive style/attribute bindings, and `tasks` `stateKey` or `ctx.request()` to sync `'idle' | 'pending' | 'success' | 'failure'` into `ctx.state`.
+- **Centralized Error Tracking**: Runtime, async DOM action, `effect`, `interval`, `timeout`, `listener`, and cleanup errors all route through `handleControllerError` and can be observed via `createControllerRuntime({ onError })`.
+- **Safe Client Context & Route Provider**: Use `{{ fsy.clientContext(data, { allow, schema }) | safe }}` (CSP-safe JSON tag), `bootClient({ context })`, or `runtime.provide()` to share explicit public config, and read `ctx.route` (`{ path, pattern, params, query }`), `ctx.context`, or `ctx.inject(key, fallback)` as deep-frozen objects inside controllers.
+- **Cross-Tab Sync & Broadcasts**: Use `defineController({ sync: ['theme'] })` to sync selected state keys across tabs, rely on automatic cross-tab fragment invalidation (`BroadcastChannel` + `storage` fallback), and use `ctx.broadcast()` / `ctx.onBroadcast()` for custom tab events.
+- **Dev-Only Client Logger**: Use `ctx.log.info/warn/error/debug(msg, data)` (or `runtime.log`) to mirror logs to console and the DevTools **Logs** tab; stripped in production builds (`NOOP_LOGGER`).
 

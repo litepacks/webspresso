@@ -31,6 +31,11 @@ export interface CreateAppOptions {
   logging?: boolean;
   logger?: boolean | CloudLogger | LoggerOptions;
   helmet?: boolean | Record<string, unknown>;
+  /**
+   * Top-level Content Security Policy override (deep-merged into helmet.contentSecurityPolicy).
+   * Pass `false` to disable CSP.
+   */
+  contentSecurityPolicy?: boolean | { reportOnly?: boolean; directives?: Record<string, unknown> };
   middlewares?: Record<string, WebspressoRegisteredMiddleware>;
   plugins?: WebspressoPlugin[];
   assets?: {
@@ -6464,9 +6469,19 @@ export interface AppApiRouteMap {
 }
 
 export type ClientRefetchPolicy = boolean | 'always';
+export type ClientRequestStatus = 'idle' | 'pending' | 'success' | 'failure';
+
+export interface ClientTaskStateSyncOptions<TState extends Record<string, any> = Record<string, any>> {
+  statusKey?: keyof TState | string;
+  stateKey?: keyof TState | string;
+  pendingKey?: keyof TState | string;
+  dataKey?: keyof TState | string;
+  errorKey?: keyof TState | string;
+}
 
 export interface ClientTask<TData = any, TArgs extends unknown[] = any[]> {
   readonly pending: boolean;
+  readonly status: ClientRequestStatus;
   readonly data: TData | null;
   readonly error: ClientRequestError | Error | null;
   readonly stale: boolean;
@@ -6475,6 +6490,7 @@ export interface ClientTask<TData = any, TArgs extends unknown[] = any[]> {
   isStale(): boolean;
   run(...args: TArgs): Promise<TData | undefined>;
   cancel(): void;
+  reset(): void;
   dispose(): void;
 }
 
@@ -6492,6 +6508,11 @@ export interface ClientTaskOptions {
   refetchOnReconnect?: ClientRefetchPolicy;
   refetchInterval?: number | string | false;
   refetchIntervalInBackground?: boolean;
+  stateKey?: string;
+  pendingKey?: string;
+  dataKey?: string;
+  errorKey?: string;
+  syncState?: string | ClientTaskStateSyncOptions;
 }
 
 export interface ClientFormFillOptions {
@@ -6967,12 +6988,35 @@ export type ControllerErrorHandler<
   meta?: ControllerErrorMeta
 ) => void | boolean;
 
+export interface ClientLogger {
+  debug(message: string, data?: unknown): void;
+  info(message: string, data?: unknown): void;
+  warn(message: string, data?: unknown): void;
+  error(message: string, data?: unknown): void;
+  log(message: string, data?: unknown): void;
+}
+
 export interface ControllerContext<
   TState extends Record<string, any> = Record<string, any>,
   TTasks extends Record<string, ClientTask> = Record<string, ClientTask>,
   TServices = AppClientServices
 > {
   readonly el: HTMLElement;
+  /** Mutable per-instance bag for imperative helpers and non-reactive caches (since `ctx` itself is frozen). */
+  readonly locals: Record<string, any>;
+  /** Dev-only structured logger mirrored to console & Webspresso DevTools (tree-shaken no-op in production). */
+  readonly log: ClientLogger;
+  /** Deep-frozen active route metadata (`path`, `pattern`, `params`, `query`). */
+  readonly route: {
+    readonly path: string;
+    readonly pattern: string;
+    readonly params: Record<string, string>;
+    readonly query: Record<string, string>;
+  };
+  /** Deep-frozen public context provided via `fsy.clientContext()`, `bootClient({ context })`, or `runtime.provide()`. */
+  readonly context: Readonly<Record<string, any>>;
+  /** Safely read a dot-path value from the injected client context. */
+  inject<T = any>(key: string, fallback?: T): T;
   readonly instanceId: string;
   readonly name: string;
   readonly state: TState;
@@ -6996,6 +7040,10 @@ export interface ControllerContext<
     runFn: (...args: TArgs) => Promise<TData>,
     options?: ClientTaskOptions
   ): ClientTask<TData, TArgs>;
+  request<TData = any>(
+    stateKeyOrOptions: keyof TState | string | (ClientTaskStateSyncOptions<TState> & { rethrow?: boolean }),
+    fn: (opts: { signal?: AbortSignal }) => Promise<TData>
+  ): Promise<TData | undefined>;
   param(name: string, actionEl?: ControllerElement | HTMLElement): string | null;
   target<T extends ControllerElement = ControllerElement>(targetName: string): T | null;
   targets<T extends ControllerElement = ControllerElement>(targetName: string): T[];
@@ -7006,6 +7054,13 @@ export interface ControllerContext<
     maybeOptions?: AddEventListenerOptions
   ): () => void;
   emit<TDetail = unknown>(eventName: string, detail?: TDetail, options?: CustomEventInit<TDetail>): boolean;
+  /** Broadcast a message to all other open browser tabs on the same origin. */
+  broadcast<TPayload = unknown>(topic: string, payload?: TPayload): boolean;
+  /** Subscribe to cross-tab broadcasts from other tabs (auto-unsubscribed on disconnect). */
+  onBroadcast<TPayload = unknown>(
+    topic: string,
+    handler: (payload: TPayload, msg: { kind: string; topic: string; senderId: string }) => void
+  ): () => void;
   effect(fn: () => void | (() => void)): () => void;
   watch<T = any>(
     source: WatchSource<T>,

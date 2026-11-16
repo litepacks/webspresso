@@ -15,7 +15,7 @@
 const { z } = require('../validation');
 const { ValidationError, NotFoundError, BadRequestError, UnauthorizedError, ForbiddenError } = require('../errors');
 const { onTransactionCommit, getAmbientTransaction } = require('../orm/transaction');
-const { isArray, isNumber } = require('./utils');
+const { isArray, isNumber, isFn } = require('./utils');
 
 /**
  * Execute an array of Express-style middlewares sequentially.
@@ -30,7 +30,7 @@ async function runMiddlewares(middlewares, req, res) {
           if (err) reject(err);
           else resolve();
         });
-        if (maybePromise && typeof maybePromise.then === 'function') {
+        if (maybePromise && isFn(maybePromise.then)) {
           maybePromise.then(resolve).catch(reject);
         } else if (mw.length < 3) {
           resolve();
@@ -61,7 +61,7 @@ function escapeHtmlAttr(str) {
 function markSafeHtml(str) {
   try {
     const nunjucks = require('nunjucks');
-    if (nunjucks && nunjucks.runtime && typeof nunjucks.runtime.SafeString === 'function') {
+    if (nunjucks && nunjucks.runtime && isFn(nunjucks.runtime.SafeString)) {
       return new nunjucks.runtime.SafeString(str);
     }
   } catch (_e) {
@@ -94,7 +94,7 @@ function defineFragment(config = {}) {
     schema: config.schema || null,
     auth: config.auth !== undefined ? config.auth : null,
     middleware: isArray(config.middleware) ? config.middleware : [],
-    load: typeof config.load === 'function' ? config.load : null,
+    load: isFn(config.load) ? config.load : null,
     staleTime: config.staleTime !== undefined ? config.staleTime : undefined,
     refetchOnWindowFocus:
       config.refetchOnWindowFocus !== undefined
@@ -199,7 +199,7 @@ function sendApiResult(req, res, rawResult) {
     });
   }
 
-  if (rawResult.headers && typeof res.setHeader === 'function') {
+  if (rawResult.headers && isFn(res.setHeader)) {
     for (const [k, v] of Object.entries(rawResult.headers)) {
       res.setHeader(k, v);
     }
@@ -207,10 +207,10 @@ function sendApiResult(req, res, rawResult) {
 
   const emitResponse = (committedTags) => {
     if (res.headersSent) return;
-    if (committedTags.length > 0 && typeof res.setHeader === 'function') {
+    if (committedTags.length > 0 && isFn(res.setHeader)) {
       res.setHeader('X-Webspresso-Invalidate', committedTags.join(', '));
     }
-    if (typeof res.status === 'function') {
+    if (isFn(res.status)) {
       res.status(status);
     } else {
       res.statusCode = status;
@@ -263,7 +263,7 @@ function ensureRequestMemo(req, ctx) {
     }
     const result = factoryFn();
     // If factoryFn returns a Promise, remove from cache if it rejects so retries inside the same request can recover
-    if (result && typeof result.catch === 'function') {
+    if (result && isFn(result.catch)) {
       result.catch(() => {
         if (memoMap.get(cacheKey) === result) {
           memoMap.delete(cacheKey);
@@ -298,7 +298,7 @@ function validateFragmentInput(fragmentName, fragmentDef, rawInput = {}) {
   }
 
   let resolvedSchema =
-    typeof fragmentDef.schema === 'function' ? fragmentDef.schema({ z }) : fragmentDef.schema;
+    isFn(fragmentDef.schema) ? fragmentDef.schema({ z }) : fragmentDef.schema;
 
   if (!resolvedSchema) {
     return { ...inputObj };
@@ -307,18 +307,18 @@ function validateFragmentInput(fragmentName, fragmentDef, rawInput = {}) {
   // Unwrap `{ query: ... }` or `{ input: ... }` if provided in route-style schema object
   if (
     typeof resolvedSchema === 'object' &&
-    typeof resolvedSchema.safeParse !== 'function'
+    !isFn(resolvedSchema.safeParse)
   ) {
-    if (resolvedSchema.input && typeof resolvedSchema.input.safeParse === 'function') {
+    if (resolvedSchema.input && isFn(resolvedSchema.input.safeParse)) {
       resolvedSchema = resolvedSchema.input;
-    } else if (resolvedSchema.query && typeof resolvedSchema.query.safeParse === 'function') {
+    } else if (resolvedSchema.query && isFn(resolvedSchema.query.safeParse)) {
       resolvedSchema = resolvedSchema.query;
     } else {
       resolvedSchema = z.object(resolvedSchema);
     }
   }
 
-  if (typeof resolvedSchema.safeParse === 'function') {
+  if (isFn(resolvedSchema.safeParse)) {
     const parsed = resolvedSchema.safeParse(inputObj);
     if (!parsed.success) {
       const issues = (parsed.error && parsed.error.issues ? parsed.error.issues : []).map((iss) => ({
@@ -531,7 +531,7 @@ async function executeAndRenderFragment({
   // 4. Execute fragment loader (`load(fragmentCtx)`) unless rendering initial lazy placeholder
   const loadStart = Date.now();
   let fragmentData = {};
-  if (!renderAsLazyPlaceholder && typeof fragmentDef.load === 'function') {
+  if (!renderAsLazyPlaceholder && isFn(fragmentDef.load)) {
     const fragmentCtx = {
       ...ctx,
       req,
@@ -650,7 +650,7 @@ function getPluginRegisteredFragment(name) {
   try {
     const { getPluginManager } = require('../plugins/plugin-manager');
     const pm = typeof getPluginManager === 'function' ? getPluginManager() : null;
-    if (pm && typeof pm.getFragment === 'function') {
+    if (pm && isFn(pm.getFragment)) {
       return pm.getFragment(name) || null;
     }
   } catch (_e) {}
@@ -910,7 +910,7 @@ function createFragmentRefreshHandler(config) {
       const { entry, params } = matched;
       req.params = { ...(req.params || {}), ...params };
 
-      const pageMod = typeof entry.getPageMod === 'function' ? entry.getPageMod() : entry.pageMod;
+      const pageMod = isFn(entry.getPageMod) ? entry.getPageMod() : entry.pageMod;
       const pageFragmentsMap = (pageMod && pageMod.fragments) || {};
       const fragmentsMap = { ...pageFragmentsMap };
 

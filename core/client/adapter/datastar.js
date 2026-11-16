@@ -24,7 +24,7 @@
  *    external package is not installed in `node_modules`.
  */
 
-const { isArray, getByPath, setByPath, parseDelayMs } = require('../utils');
+const { isArray, getByPath, setByPath, parseDelayMs, isFn } = require('../utils');
 
 const PluginType = {
   Attribute: 1,
@@ -49,7 +49,7 @@ const DATASTAR_SSE_EVENT = 'datastar-sse';
  * @returns {object|null}
  */
 function resolveExternalDatastar(injectedDatastar) {
-  if (injectedDatastar && typeof injectedDatastar.load === 'function') {
+  if (injectedDatastar && isFn(injectedDatastar.load)) {
     return injectedDatastar;
   }
   if (typeof globalThis !== 'undefined' && globalThis.__WEBSPRESSO_DATASTAR__) {
@@ -397,10 +397,59 @@ function findTopLevelComparison(expr) {
  * @param {string} rawExpr
  * @returns {unknown}
  */
+function findTopLevelTernary(expr) {
+  let depthParen = 0;
+  let depthBracket = 0;
+  let quote = null;
+  let questionIdx = -1;
+  let ternaryDepth = 0;
+
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i];
+    if (quote) {
+      if (ch === '\\') { i++; continue; }
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch;
+      continue;
+    }
+    if (ch === '(') depthParen++;
+    else if (ch === ')') depthParen = Math.max(0, depthParen - 1);
+    else if (ch === '[') depthBracket++;
+    else if (ch === ']') depthBracket = Math.max(0, depthBracket - 1);
+    else if (depthParen === 0 && depthBracket === 0) {
+      if (ch === '?') {
+        if (questionIdx === -1) questionIdx = i;
+        ternaryDepth++;
+      } else if (ch === ':' && ternaryDepth > 0) {
+        ternaryDepth--;
+        if (ternaryDepth === 0 && questionIdx !== -1) {
+          return {
+            cond: expr.slice(0, questionIdx).trim(),
+            truthy: expr.slice(questionIdx + 1, i).trim(),
+            falsy: expr.slice(i + 1).trim(),
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function evaluateStateExpression(state, rawExpr) {
   if (typeof rawExpr !== 'string') return undefined;
   const expr = stripOuterParens(rawExpr.trim());
   if (!expr) return undefined;
+
+  // 0. Ternary conditional (cond ? truthy : falsy)
+  const tern = findTopLevelTernary(expr);
+  if (tern && tern.cond && tern.truthy && tern.falsy) {
+    return evaluateStateExpression(state, tern.cond)
+      ? evaluateStateExpression(state, tern.truthy)
+      : evaluateStateExpression(state, tern.falsy);
+  }
 
   // 1. Logical OR (||) - lowest precedence, evaluated first so that A || B && C splits into A and (B && C)
   const orParts = splitTopLevel(expr, '||');
@@ -447,7 +496,22 @@ function evaluateStateExpression(state, rawExpr) {
     }
   }
 
-  // 4. Negations (!!, !)
+  // 4. Addition / string concatenation (+) outside quotes
+  const plusParts = splitTopLevel(expr, '+');
+  if (plusParts && plusParts.length > 1) {
+    let acc = evaluateStateExpression(state, plusParts[0]);
+    for (let i = 1; i < plusParts.length; i++) {
+      const nextVal = evaluateStateExpression(state, plusParts[i]);
+      if (typeof acc === 'number' && typeof nextVal === 'number') {
+        acc = acc + nextVal;
+      } else {
+        acc = `${acc === null || acc === undefined ? '' : acc}${nextVal === null || nextVal === undefined ? '' : nextVal}`;
+      }
+    }
+    return acc;
+  }
+
+  // 5. Negations (!!, !)
   if (expr.startsWith('!!')) {
     return Boolean(evaluateStateExpression(state, expr.slice(2)));
   }
@@ -568,7 +632,7 @@ function createIsolatedControllerState(
           );
         }
         if (!isConnected()) {
-          if (debug && typeof debug.trackDiscardedResponse === 'function') {
+          if (debug && isFn(debug.trackDiscardedResponse)) {
             debug.trackDiscardedResponse({
               source: 'controller-state',
               instanceId,
@@ -718,7 +782,7 @@ function hasClassBindingAttr(el) {
  * Determine whether a node has client bindings owning specific DOM properties.
  */
 function getClientOwnership(el) {
-  if (!el || typeof el.hasAttribute !== 'function') {
+  if (!el || !isFn(el.hasAttribute)) {
     return { text: false, show: false, disabled: false, model: false, classBinding: false };
   }
   return {
@@ -738,7 +802,7 @@ function getClientOwnership(el) {
  * Note: Parent removal/key-change STILL removes the node and triggers `onBeforeNodeRemove` cleanup.
  */
 function getIgnoreMode(el) {
-  if (!el || typeof el.hasAttribute !== 'function' || !el.hasAttribute('data-w-ignore')) {
+  if (!el || !isFn(el.hasAttribute) || !el.hasAttribute('data-w-ignore')) {
     return null;
   }
   const raw = (el.getAttribute('data-w-ignore') || '').trim().toLowerCase();
@@ -758,9 +822,9 @@ function emitOwnershipConflict(debug, el, property, token, message) {
     token: token || null,
     message,
   };
-  if (debug && typeof debug.recordEvent === 'function') {
+  if (debug && isFn(debug.recordEvent)) {
     debug.recordEvent('ownership:conflict', payload);
-  } else if (isDev && typeof console !== 'undefined' && typeof console.warn === 'function') {
+  } else if (isDev && typeof console !== 'undefined' && isFn(console.warn)) {
     console.warn(`[webspresso:ownership] ${message}`, payload);
   }
 }
@@ -1135,7 +1199,7 @@ function morphDomTrees(toEl, fromEl, ctx = {}) {
           : newChild.cloneNode(true);
         const currentAtPos = toEl.childNodes[i];
         toEl.insertBefore(imported, currentAtPos || null);
-        if (typeof ctx.onNodeAdded === 'function') {
+        if (isFn(ctx.onNodeAdded)) {
           ctx.onNodeAdded(imported);
         }
       }
@@ -1175,7 +1239,7 @@ function morphDomTrees(toEl, fromEl, ctx = {}) {
       if (oldChild.nodeType === 1 && oldChild.hasAttribute && oldChild.hasAttribute('data-w-host')) {
         continue;
       }
-      if (oldChild.nodeType === 1 && typeof ctx.onBeforeNodeRemove === 'function') {
+      if (oldChild.nodeType === 1 && isFn(ctx.onBeforeNodeRemove)) {
         ctx.onBeforeNodeRemove(oldChild);
       }
       toEl.removeChild(oldChild);
@@ -1227,7 +1291,7 @@ function createDatastarAdapter(options = {}) {
   let datastarInitCtx = null;
 
   // If official @starfederation/datastar is present, capture its InitContext via a public AttributePlugin
-  if (externalDatastar && typeof externalDatastar.load === 'function') {
+  if (externalDatastar && isFn(externalDatastar.load)) {
     try {
       externalDatastar.load({
         type: externalDatastar.PluginType ? externalDatastar.PluginType.Attribute : PluginType.Attribute,
@@ -1237,7 +1301,7 @@ function createDatastarAdapter(options = {}) {
         },
         onLoad() {},
       });
-      if (typeof externalDatastar.apply === 'function' && typeof document !== 'undefined' && document.body) {
+      if (isFn(externalDatastar.apply) && typeof document !== 'undefined' && document.body) {
         externalDatastar.apply();
       }
     } catch (_err) {
@@ -1253,7 +1317,7 @@ function createDatastarAdapter(options = {}) {
       return datastarInitCtx && datastarInitCtx.signals ? datastarInitCtx.signals : fallbackEngine.signals;
     },
     effect(fn) {
-      if (datastarInitCtx && typeof datastarInitCtx.effect === 'function') {
+      if (datastarInitCtx && isFn(datastarInitCtx.effect)) {
         return datastarInitCtx.effect(fn);
       }
       return fallbackEngine.effect(fn);
@@ -1285,7 +1349,7 @@ function createDatastarAdapter(options = {}) {
 
   function collectScopedElements(rootEl) {
     const result = [rootEl];
-    if (!rootEl || typeof rootEl.querySelectorAll !== 'function') return result;
+    if (!rootEl || !isFn(rootEl.querySelectorAll)) return result;
     const all = rootEl.querySelectorAll('*');
     for (let i = 0; i < all.length; i++) {
       if (isWithinControllerScope(rootEl, all[i])) {
@@ -1338,6 +1402,8 @@ function createDatastarAdapter(options = {}) {
         }
       } else if (name === 'data-w-click') {
         bindings.push({ eventName: 'click', actionName: val, modifiers: new Set() });
+      } else if (name === 'data-w-submit') {
+        bindings.push({ eventName: 'submit', actionName: val, modifiers: new Set(['prevent']) });
       }
     }
 
@@ -1498,7 +1564,10 @@ function createDatastarAdapter(options = {}) {
         n === 'data-w-loading-class' ||
         n === 'data-w-on' ||
         n.startsWith('data-w-on:') ||
-        n === 'data-w-click'
+        n === 'data-w-click' ||
+        n === 'data-w-submit' ||
+        n.startsWith('data-w-style:') ||
+        n.startsWith('data-w-attr:')
       ) {
         parts.push(`${n}=${el.attributes[i].value}`);
       }
@@ -1540,7 +1609,7 @@ function createDatastarAdapter(options = {}) {
       const detached =
         !prevEl ||
         prevEl.isConnected === false ||
-        (rootEl && typeof rootEl.contains === 'function' && !rootEl.contains(prevEl));
+        (rootEl && isFn(rootEl.contains) && !rootEl.contains(prevEl));
       if (detached) {
         for (let d = 0; d < prevDisposers.length; d++) {
           try {
@@ -1836,11 +1905,65 @@ function createDatastarAdapter(options = {}) {
           };
 
           el.addEventListener(evtType, onModelInput);
-          elDisposers.push(() => el.removeEventListener(evtType, onModelInput));
+          elDisposers.push(() => {
+            if (isFn(el.removeEventListener)) {
+              el.removeEventListener(evtType, onModelInput);
+            }
+          });
         }
       }
 
-      // 5. Event bindings (data-w-on:<event>, data-w-on, data-w-click)
+      // 3b. data-w-style:<prop>="expr"
+      if (el.attributes) {
+        const styleAttrs = [];
+        const attrBindings = [];
+        for (let i = 0; i < el.attributes.length; i++) {
+          const attr = el.attributes[i];
+          if (attr.name.startsWith('data-w-style:') && attr.value) {
+            const prop = attr.name.slice('data-w-style:'.length).trim();
+            if (prop) styleAttrs.push({ prop, expr: attr.value });
+          } else if (attr.name.startsWith('data-w-attr:') && attr.value) {
+            const targetAttr = attr.name.slice('data-w-attr:'.length).trim();
+            if (targetAttr) attrBindings.push({ attrName: targetAttr, expr: attr.value });
+          }
+        }
+
+        for (const { prop, expr } of styleAttrs) {
+          const stopStyle = engine.effect(() => {
+            if (!isConnected() || el.isConnected === false || !el.style) return;
+            const val = evaluateStateExpression(state, expr);
+            if (val === null || val === undefined || val === false || val === '') {
+              if (isFn(el.style.removeProperty)) {
+                el.style.removeProperty(prop);
+              } else {
+                el.style[prop] = '';
+              }
+            } else if (isFn(el.style.setProperty)) {
+              el.style.setProperty(prop, String(val));
+            } else {
+              el.style[prop] = String(val);
+            }
+          });
+          elDisposers.push(stopStyle);
+        }
+
+        for (const { attrName, expr } of attrBindings) {
+          const stopAttr = engine.effect(() => {
+            if (!isConnected() || el.isConnected === false) return;
+            const val = evaluateStateExpression(state, expr);
+            if (val === null || val === undefined || val === false) {
+              el.removeAttribute(attrName);
+            } else if (val === true) {
+              el.setAttribute(attrName, '');
+            } else {
+              el.setAttribute(attrName, String(val));
+            }
+          });
+          elDisposers.push(stopAttr);
+        }
+      }
+
+      // 5. Event bindings (data-w-on:<event>, data-w-on, data-w-click, data-w-submit)
       const eventBindings = extractEventBindings(el);
       if (eventBindings.length > 0) {
         let isEventComposing = false;
@@ -1862,7 +1985,7 @@ function createDatastarAdapter(options = {}) {
           });
         }
 
-        const parentForm = typeof el.closest === 'function' ? el.closest('form') : el.form || null;
+        const parentForm = isFn(el.closest) ? el.closest('form') : el.form || null;
 
         for (const binding of eventBindings) {
           const schedule = parseEventScheduleModifiers(binding.modifiers);
@@ -1871,10 +1994,17 @@ function createDatastarAdapter(options = {}) {
               if (!isConnected() || el.isConnected === false) return;
               if (binding.modifiers.has('prevent')) event.preventDefault();
               if (binding.modifiers.has('stop')) event.stopPropagation();
-              invokeAction(binding.actionName, event, el);
+              const res = invokeAction(binding.actionName, event, el);
+              if (res && isFn(res.catch)) {
+                res.catch(() => {});
+              }
             };
             el.addEventListener(binding.eventName, listener);
-            elDisposers.push(() => el.removeEventListener(binding.eventName, listener));
+            elDisposers.push(() => {
+              if (isFn(el.removeEventListener)) {
+                el.removeEventListener(binding.eventName, listener);
+              }
+            });
             continue;
           }
 
@@ -1894,7 +2024,10 @@ function createDatastarAdapter(options = {}) {
 
           const fireScheduled = (capturedEvent) => {
             if (!isConnected() || el.isConnected === false) return;
-            invokeAction(binding.actionName, capturedEvent, el);
+            const res = invokeAction(binding.actionName, capturedEvent, el);
+            if (res && isFn(res.catch)) {
+              res.catch(() => {});
+            }
           };
 
           const listener = (event) => {
@@ -1975,7 +2108,7 @@ function createDatastarAdapter(options = {}) {
             el.removeEventListener(binding.eventName, listener);
           });
 
-          if (parentForm && typeof parentForm.addEventListener === 'function') {
+          if (parentForm && isFn(parentForm.addEventListener)) {
             const onFormReset = () => cancelPending();
             parentForm.addEventListener('reset', onFormReset);
             elDisposers.push(() => {
@@ -2022,7 +2155,7 @@ function createDatastarAdapter(options = {}) {
     if (
       doc &&
       doc.activeElement &&
-      typeof targetEl.contains === 'function' &&
+      isFn(targetEl.contains) &&
       targetEl.contains(doc.activeElement)
     ) {
       focusedEl = doc.activeElement;
@@ -2042,17 +2175,17 @@ function createDatastarAdapter(options = {}) {
     if (
       focusedEl &&
       focusedEl.isConnected !== false &&
-      typeof targetEl.contains === 'function' &&
+      isFn(targetEl.contains) &&
       targetEl.contains(focusedEl)
     ) {
       try {
-        if (doc && doc.activeElement !== focusedEl && typeof focusedEl.focus === 'function') {
+        if (doc && doc.activeElement !== focusedEl && isFn(focusedEl.focus)) {
           focusedEl.focus();
         }
         if (
           typeof selStart === 'number' &&
           typeof selEnd === 'number' &&
-          typeof focusedEl.setSelectionRange === 'function'
+          isFn(focusedEl.setSelectionRange)
         ) {
           focusedEl.setSelectionRange(selStart, selEnd);
         }
@@ -2060,7 +2193,7 @@ function createDatastarAdapter(options = {}) {
     }
 
     // If external @starfederation/datastar is active, notify apply() on updated subtree
-    if (externalDatastar && typeof externalDatastar.apply === 'function') {
+    if (externalDatastar && isFn(externalDatastar.apply)) {
       try {
         externalDatastar.apply();
       } catch (_err) {

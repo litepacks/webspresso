@@ -14,6 +14,7 @@ const { CronExpression, CRON_ALIASES } = require('./cron');
 const { TaskScheduler } = require('./scheduler');
 const { walkDirectoryDetailed } = require('../utils/fs');
 const { parseDurationMs } = require('../utils/time');
+const { runWithContext } = require('../context/request');
 
 class QueueManager extends EventEmitter {
   /**
@@ -46,6 +47,14 @@ class QueueManager extends EventEmitter {
       : parseDurationMs(options.staleJobGrace ?? '1m', 60000);
     this.staleCheckInterval = parseDurationMs(options.staleCheckInterval ?? '30s', 30000);
     this._lastStaleCheck = 0;
+
+    this.context = {
+      db: options.db || null,
+      serviceRegistry: options.serviceRegistry || null,
+      events: options.events || null,
+      cache: options.cache || null,
+      logger: options.logger || null,
+    };
 
     /** @type {Map<string, { handler: Function, options: Object }>} */
     this.handlers = new Map();
@@ -727,6 +736,46 @@ class QueueManager extends EventEmitter {
   }
 
   /**
+   * Attach or update runtime context (db, serviceRegistry, events, cache, logger)
+   * passed to job handlers and ambient context hooks.
+   * @param {Object} [ctx={}]
+   */
+  setContext(ctx = {}) {
+    if (!ctx || typeof ctx !== 'object') return;
+    for (const key of ['db', 'serviceRegistry', 'events', 'cache', 'logger']) {
+      if (ctx[key] !== undefined) {
+        this.context[key] = ctx[key];
+      }
+    }
+  }
+
+  /**
+   * Build execution context for a job worker
+   * @param {Object} [extra={}]
+   * @returns {Object}
+   */
+  _buildJobContext(extra = {}) {
+    const db = this.context.db || null;
+    const serviceRegistry = this.context.serviceRegistry || null;
+    const logger = this.context.logger || console;
+    const jobCtx = {
+      queue: this,
+      db,
+      events: this.context.events || null,
+      cache: this.context.cache || null,
+      logger,
+      ...extra,
+    };
+    jobCtx.service = (name, input, opts) => {
+      if (!serviceRegistry) {
+        throw new Error('ServiceRegistry is not attached to QueueManager.');
+      }
+      return serviceRegistry.call(name, input, jobCtx, opts);
+    };
+    return jobCtx;
+  }
+
+  /**
    * Execute single job with timeout & retry handling
    * @private
    */
@@ -754,7 +803,10 @@ class QueueManager extends EventEmitter {
       }
     });
 
-    const handlerPromise = Promise.resolve().then(() => handler(job, { queue: this }));
+    const jobCtx = this._buildJobContext({ job });
+    const handlerPromise = Promise.resolve().then(() =>
+      runWithContext(jobCtx, () => handler(job, jobCtx))
+    );
     if (typeof handlerPromise.catch === 'function') {
       handlerPromise.catch(() => {});
     }

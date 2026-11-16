@@ -207,10 +207,24 @@ class AssetManager {
         let result;
         // Webpack string format (e.g. "/dist/app.xyz789.js")
         if (typeof entry === 'string') {
-          result = this.prefix + entry;
+          let normalized = entry;
+          const pubBase = path.basename(this.publicDir || 'public');
+          if (normalized.startsWith(`/${pubBase}/`)) {
+            normalized = normalized.slice(pubBase.length + 1);
+          } else if (normalized.startsWith(`${pubBase}/`)) {
+            normalized = '/' + normalized.slice(pubBase.length + 1);
+          }
+          result = this.prefix + normalized;
         } else if (entry.file) {
           // Vite / esbuild metafile format (e.g. { file: "assets/app-xyz789.js" })
-          const file = entry.file.startsWith('/') ? entry.file : '/' + entry.file;
+          let normalized = entry.file;
+          const pubBase = path.basename(this.publicDir || 'public');
+          if (normalized.startsWith(`/${pubBase}/`)) {
+            normalized = normalized.slice(pubBase.length + 1);
+          } else if (normalized.startsWith(`${pubBase}/`)) {
+            normalized = normalized.slice(pubBase.length + 1);
+          }
+          const file = normalized.startsWith('/') ? normalized : '/' + normalized;
           result = this.prefix ? (this.prefix + file).replace(/\/+/g, '/') : file;
         }
         if (result !== undefined) {
@@ -698,6 +712,45 @@ function createHelpers(ctx) {
 
     /** Active i18n translator function */
     t,
+
+    /**
+     * Emit a CSP-safe `<script type="application/json" id="__webspresso_context__">` tag
+     * containing sanitized route metadata and explicit public context values for client controllers.
+     * Supports positive `options.allow` / `options.schema` filtering.
+     * @param {Record<string, unknown>} [extra={}]
+     * @param {{ allow?: string[], schema?: { parse: Function } }} [contextOptions={}]
+     * @returns {string}
+     */
+    clientContext(extra = {}, contextOptions = {}) {
+      const { renderClientContextTag } = require('../core/client/context');
+      const filteredExtra =
+        extra && typeof extra === 'object'
+          ? (Array.isArray(contextOptions?.allow) || contextOptions?.schema
+              ? require('../core/client/context').sanitizeValue(
+                  Array.isArray(contextOptions.allow)
+                    ? Object.fromEntries(contextOptions.allow.filter((k) => k in extra).map((k) => [k, extra[k]]))
+                    : extra
+                )
+              : extra)
+          : {};
+      const parsedExtra =
+        contextOptions?.schema && typeof contextOptions.schema.parse === 'function'
+          ? contextOptions.schema.parse(filteredExtra)
+          : filteredExtra;
+      const routeInfo = req
+        ? {
+            path: req.path || '/',
+            pattern: (req.route && req.route.path) || req.baseUrl || req.path || '/',
+            params: req.params || {},
+            query: req.query || {},
+          }
+        : undefined;
+      return renderClientContextTag({
+        ...(parsedExtra && typeof parsedExtra === 'object' ? parsedExtra : {}),
+        locale,
+        ...(routeInfo ? { route: routeInfo } : {}),
+      });
+    },
 
     /**
      * Get old input value from previous request (AdonisJS & Laravel-inspired)

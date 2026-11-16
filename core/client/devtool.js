@@ -15,7 +15,7 @@
  */
 
 const { defaultStorage } = require('./storage');
-const { isArray, isNumber } = require('./utils');
+const { isArray, isNumber, isFn } = require('./utils');
 
 const DEVTOOL_HOST_ID = 'webspresso-client-devtools-host';
 
@@ -56,7 +56,7 @@ function setupReduxDevToolsBridge(runtime) {
     devTools.init(getCombinedState());
 
     // Dispatches state snapshot when events occur
-    if (runtime.debug && typeof runtime.debug.getSnapshot === 'function') {
+    if (runtime.debug && isFn(runtime.debug.getSnapshot)) {
       const origRecordEvent = runtime.debug.recordEvent;
       if (typeof origRecordEvent === 'function') {
         runtime.debug.recordEvent = function (type, detail) {
@@ -139,7 +139,7 @@ function formatJsonHtml(data) {
 function highlightElement(el) {
   if (!el || !el.style) return false;
   try {
-    if (typeof el.scrollIntoView === 'function') {
+    if (isFn(el.scrollIntoView)) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     const origOutline = el.style.outline;
@@ -265,7 +265,7 @@ function mountDevtool(runtime, options = {}) {
   host.style.cssText = 'position:fixed;z-index:999998;pointer-events:none;';
 
   // Use Shadow DOM to completely isolate styles from user CSS
-  const shadow = typeof host.attachShadow === 'function' ? host.attachShadow({ mode: 'open' }) : host;
+  const shadow = isFn(host.attachShadow) ? host.attachShadow({ mode: 'open' }) : host;
 
   // Style block
   const styleEl = document.createElement('style');
@@ -502,7 +502,7 @@ function mountDevtool(runtime, options = {}) {
   }
 
   function getNetworkSnapshot() {
-    if (!runtime.debug || typeof runtime.debug.getSnapshot !== 'function') return [];
+    if (!runtime.debug || !isFn(runtime.debug.getSnapshot)) return [];
     const snap = runtime.debug.getSnapshot();
     return {
       activeRequests: snap.activeRequests || [],
@@ -885,11 +885,52 @@ function mountDevtool(runtime, options = {}) {
     `;
   }
 
+  function renderLogsTab(logs) {
+    if (!logs || logs.length === 0) {
+      return `
+        <div class="ws-empty">
+          <div style="font-size:24px;margin-bottom:8px;">📋</div>
+          <div>No client logs recorded yet.</div>
+          <div style="font-size:11px;margin-top:4px;opacity:0.7;">Use <code>ctx.log.info(...)</code> or <code>runtime.log.warn(...)</code> in development.</div>
+        </div>
+      `;
+    }
+    const rows = logs.slice().reverse().map((l) => {
+      const badgeClass =
+        l.level === 'error'
+          ? 'ws-badge-danger'
+          : l.level === 'warn'
+            ? 'ws-badge-warning'
+            : 'ws-badge-info';
+      const dataStr = l.data !== undefined ? `<pre class="ws-code" style="margin-top:4px;max-height:90px;">${escapeHtml(JSON.stringify(l.data, null, 2))}</pre>` : '';
+      return `
+        <div class="ws-card" style="padding:8px 10px;margin-bottom:6px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <div>
+              <span class="ws-badge ${badgeClass}">${escapeHtml(String(l.level || 'info').toUpperCase())}</span>
+              <span style="font-weight:600;color:#e4e4e7;margin-left:6px;">${escapeHtml(l.source || 'client')}</span>
+            </div>
+            <span style="font-size:10px;color:#71717a;">${new Date(l.timestamp).toLocaleTimeString()}</span>
+          </div>
+          <div style="margin-top:4px;color:#d4d4d8;font-size:12px;">${escapeHtml(l.message || '')}</div>
+          ${dataStr}
+        </div>
+      `;
+    }).join('');
+    return `
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <button class="ws-btn ws-btn-sm" id="ws-btn-clear-logs">🧹 Clear Logs</button>
+      </div>
+      ${rows}
+    `;
+  }
+
   function renderDrawer() {
     const controllers = getControllersSnapshot();
     const fragments = getFragmentsSnapshot();
     const network = getNetworkSnapshot();
     const storage = getStorageSnapshot();
+    const logs = (network && Array.isArray(network.logs)) ? network.logs : [];
 
     return `
       <div class="ws-drawer" id="ws-devtool-drawer">
@@ -910,6 +951,9 @@ function mountDevtool(runtime, options = {}) {
             </button>
             <button class="ws-tab-btn ${activeTab === 'network' ? 'active' : ''}" data-tab="network">
               🌐 Network
+            </button>
+            <button class="ws-tab-btn ${activeTab === 'logs' ? 'active' : ''}" data-tab="logs">
+              📋 Logs (${logs.length})
             </button>
             <button class="ws-tab-btn ${activeTab === 'storage' ? 'active' : ''}" data-tab="storage">
               💾 Storage
@@ -935,9 +979,11 @@ function mountDevtool(runtime, options = {}) {
                 ? renderFragmentsTab(fragments)
                 : activeTab === 'network'
                   ? renderNetworkTab(network)
-                  : activeTab === 'storage'
-                    ? renderStorageTab(storage)
-                    : renderStudioTab()
+                  : activeTab === 'logs'
+                    ? renderLogsTab(logs)
+                    : activeTab === 'storage'
+                      ? renderStorageTab(storage)
+                      : renderStudioTab()
           }
         </div>
 
@@ -954,10 +1000,10 @@ function mountDevtool(runtime, options = {}) {
   let wasOpen = false;
 
   function findInShadow(id) {
-    if (shadow && typeof shadow.getElementById === 'function') {
+    if (shadow && isFn(shadow.getElementById)) {
       return shadow.getElementById(id);
     }
-    return shadow && typeof shadow.querySelector === 'function' ? shadow.querySelector(`#${id}`) : null;
+    return shadow && isFn(shadow.querySelector) ? shadow.querySelector(`#${id}`) : null;
   }
 
   function updateDom(force = false) {
@@ -969,7 +1015,7 @@ function mountDevtool(runtime, options = {}) {
     // Preserve scroll positions inside drawer before updating DOM
     let prevContentScrollTop = 0;
     const prevContentEl =
-      isOpen && wasOpen && shadow && typeof shadow.querySelector === 'function'
+      isOpen && wasOpen && shadow && isFn(shadow.querySelector)
         ? shadow.querySelector('.ws-content')
         : null;
     if (prevContentEl) {
@@ -987,7 +1033,7 @@ function mountDevtool(runtime, options = {}) {
         drawerEl.classList.add('ws-drawer-enter');
       }
     }
-    if (prevContentScrollTop > 0 && shadow && typeof shadow.querySelector === 'function') {
+    if (prevContentScrollTop > 0 && shadow && isFn(shadow.querySelector)) {
       const nextContentEl = shadow.querySelector('.ws-content');
       if (nextContentEl) {
         nextContentEl.scrollTop = prevContentScrollTop;
@@ -996,11 +1042,36 @@ function mountDevtool(runtime, options = {}) {
     bindEvents();
   }
 
+  let uiEventCleanups = [];
+
+  function clearUiListeners() {
+    while (uiEventCleanups.length > 0) {
+      const cleanup = uiEventCleanups.pop();
+      try {
+        cleanup();
+      } catch (_e) {}
+    }
+  }
+
+  function addUiListener(el, eventName, handler) {
+    if (!el || !isFn(el.addEventListener)) return;
+    el.addEventListener(eventName, handler);
+    uiEventCleanups.push(() => {
+      if (isFn(el.removeEventListener)) {
+        try {
+          el.removeEventListener(eventName, handler);
+        } catch (_e) {}
+      }
+    });
+  }
+
   function bindEvents() {
+    clearUiListeners();
+
     if (!isOpen) {
       const pill = findInShadow('ws-devtool-pill');
       if (pill) {
-        pill.addEventListener('click', () => {
+        addUiListener(pill, 'click', () => {
           isOpen = true;
           updateDom();
         });
@@ -1011,7 +1082,7 @@ function mountDevtool(runtime, options = {}) {
     // Close button
     const closeBtn = findInShadow('ws-btn-close');
     if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
+      addUiListener(closeBtn, 'click', () => {
         isOpen = false;
         updateDom();
       });
@@ -1020,7 +1091,7 @@ function mountDevtool(runtime, options = {}) {
     // Refresh snapshot button
     const refreshSnapBtn = findInShadow('ws-btn-refresh-snap');
     if (refreshSnapBtn) {
-      refreshSnapBtn.addEventListener('click', () => {
+      addUiListener(refreshSnapBtn, 'click', () => {
         updateDom();
       });
     }
@@ -1028,7 +1099,7 @@ function mountDevtool(runtime, options = {}) {
     // Tab buttons
     const tabBtns = shadow.querySelectorAll('.ws-tab-btn');
     for (let i = 0; i < tabBtns.length; i++) {
-      tabBtns[i].addEventListener('click', (e) => {
+      addUiListener(tabBtns[i], 'click', (e) => {
         const tab = e.currentTarget.getAttribute('data-tab');
         if (tab) {
           activeTab = tab;
@@ -1040,7 +1111,7 @@ function mountDevtool(runtime, options = {}) {
     // Controller selection in sidebar
     const ctrlItems = shadow.querySelectorAll('.ws-controller-item');
     for (let i = 0; i < ctrlItems.length; i++) {
-      ctrlItems[i].addEventListener('click', (e) => {
+      addUiListener(ctrlItems[i], 'click', (e) => {
         selectedControllerId = e.currentTarget.getAttribute('data-inst-id');
         updateDom();
       });
@@ -1049,7 +1120,7 @@ function mountDevtool(runtime, options = {}) {
     // Highlight controller in DOM
     const hlCtrlBtn = findInShadow('ws-btn-highlight-ctrl');
     if (hlCtrlBtn) {
-      hlCtrlBtn.addEventListener('click', (e) => {
+      addUiListener(hlCtrlBtn, 'click', (e) => {
         const instId = e.currentTarget.getAttribute('data-inst-id');
         const instances = runtime.controllers ? runtime.controllers.getActiveInstances() : [];
         const target = instances.find((i) => i.instanceId === instId);
@@ -1062,7 +1133,7 @@ function mountDevtool(runtime, options = {}) {
     // Copy state
     const copyStateBtn = findInShadow('ws-btn-copy-state');
     if (copyStateBtn) {
-      copyStateBtn.addEventListener('click', (e) => {
+      addUiListener(copyStateBtn, 'click', (e) => {
         const instId = e.currentTarget.getAttribute('data-inst-id');
         const instances = runtime.controllers ? runtime.controllers.getActiveInstances() : [];
         const target = instances.find((i) => i.instanceId === instId);
@@ -1081,7 +1152,7 @@ function mountDevtool(runtime, options = {}) {
     // Highlight fragment in DOM
     const hlFragBtns = shadow.querySelectorAll('#ws-btn-highlight-frag');
     for (let i = 0; i < hlFragBtns.length; i++) {
-      hlFragBtns[i].addEventListener('click', (e) => {
+      addUiListener(hlFragBtns[i], 'click', (e) => {
         const instId = e.currentTarget.getAttribute('data-inst-id');
         const frag = runtime.fragments ? runtime.fragments.getInstance(instId) : null;
         if (frag && frag.el) {
@@ -1093,7 +1164,7 @@ function mountDevtool(runtime, options = {}) {
     // Refresh fragment on demand
     const refreshFragBtns = shadow.querySelectorAll('#ws-btn-refresh-frag');
     for (let i = 0; i < refreshFragBtns.length; i++) {
-      refreshFragBtns[i].addEventListener('click', async (e) => {
+      addUiListener(refreshFragBtns[i], 'click', async (e) => {
         const name = e.currentTarget.getAttribute('data-frag-name');
         if (name && runtime.fragments) {
           const btn = e.currentTarget;
@@ -1114,7 +1185,7 @@ function mountDevtool(runtime, options = {}) {
     // Refresh all fragments
     const refreshAllBtn = findInShadow('ws-btn-refresh-all-frags');
     if (refreshAllBtn) {
-      refreshAllBtn.addEventListener('click', async () => {
+      addUiListener(refreshAllBtn, 'click', async () => {
         if (!runtime.fragments) return;
         const origText = refreshAllBtn.textContent;
         refreshAllBtn.textContent = '⏳ Refreshing...';
@@ -1135,7 +1206,7 @@ function mountDevtool(runtime, options = {}) {
     // Clear Webspresso storage
     const clearStorageBtn = findInShadow('ws-btn-clear-storage');
     if (clearStorageBtn) {
-      clearStorageBtn.addEventListener('click', () => {
+      addUiListener(clearStorageBtn, 'click', () => {
         defaultStorage.local.clear();
         defaultStorage.session.clear();
         clearStorageBtn.textContent = '✅ Cleared!';
@@ -1145,10 +1216,21 @@ function mountDevtool(runtime, options = {}) {
       });
     }
 
+    // Clear logs
+    const clearLogsBtn = findInShadow('ws-btn-clear-logs');
+    if (clearLogsBtn) {
+      addUiListener(clearLogsBtn, 'click', () => {
+        if (runtime.debug && isFn(runtime.debug.clear)) {
+          runtime.debug.clear();
+        }
+        updateDom();
+      });
+    }
+
     // Force page reload
     const forceReloadBtn = findInShadow('ws-btn-force-reload');
     if (forceReloadBtn) {
-      forceReloadBtn.addEventListener('click', () => {
+      addUiListener(forceReloadBtn, 'click', () => {
         if (typeof window !== 'undefined' && window.location) {
           window.location.reload();
         }
@@ -1237,6 +1319,7 @@ function mountDevtool(runtime, options = {}) {
       return false;
     },
     destroy() {
+      clearUiListeners();
       document.removeEventListener('keydown', onKeyDown);
       if (pollTimer) clearInterval(pollTimer);
       try {

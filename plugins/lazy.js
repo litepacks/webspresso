@@ -68,9 +68,72 @@ function lazyPlugin(pluginFactory, lazyOptions = {}) {
         throw new Error(`[lazyPlugin] Factory for plugin "${name}" did not return a valid plugin object`);
       }
 
+      const mountToRouterOrApp = (method, routePath, handlers, targetApp) => {
+        const m = String(method).toLowerCase();
+        if (typeof routePath !== 'string') {
+          // app.use(middlewareFn) without path
+          if (m === 'use' && typeof router.use === 'function') {
+            return router.use(routePath, ...handlers);
+          }
+          if (targetApp && typeof targetApp[m] === 'function') {
+            return targetApp[m](routePath, ...handlers);
+          }
+          return undefined;
+        }
+
+        let matchedPrefix = null;
+        for (const p of prefixes) {
+          if (routePath === p || routePath.startsWith(p + '/')) {
+            matchedPrefix = p;
+            break;
+          }
+        }
+
+        if (matchedPrefix) {
+          let subPath = routePath.slice(matchedPrefix.length);
+          if (!subPath || !subPath.startsWith('/')) {
+            subPath = '/' + (subPath || '');
+          }
+          if (typeof router[m] === 'function') {
+            return router[m](subPath, ...handlers);
+          }
+          if (typeof router.all === 'function') {
+            return router.all(subPath, ...handlers);
+          }
+        }
+
+        if (routesCtx?.addRoute && m !== 'use') {
+          return routesCtx.addRoute(method, routePath, ...handlers);
+        }
+        if (targetApp && typeof targetApp[m] === 'function') {
+          return targetApp[m](routePath, ...handlers);
+        }
+        return undefined;
+      };
+
+      const ROUTE_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'all', 'use']);
+      const wrapAppForLazyRouter = (realApp) => {
+        if (!realApp || prefixes.length === 0) return realApp;
+        return new Proxy(realApp, {
+          get(target, prop, receiver) {
+            if (typeof prop === 'string' && ROUTE_METHODS.has(prop)) {
+              return (pathOrHandler, ...handlers) => {
+                // Preserve Express app.get('settingName') getter when called with 1 arg
+                if (prop === 'get' && handlers.length === 0 && typeof pathOrHandler === 'string') {
+                  return target.get(pathOrHandler);
+                }
+                return mountToRouterOrApp(prop, pathOrHandler, handlers, target);
+              };
+            }
+            const val = Reflect.get(target, prop, receiver);
+            return typeof val === 'function' ? val.bind(target) : val;
+          },
+        });
+      };
+
       // 1. Call setup hook if present
       if (typeof realPlugin.setup === 'function' && regCtx?.app) {
-        const disposer = realPlugin.setup(regCtx.app);
+        const disposer = realPlugin.setup(wrapAppForLazyRouter(regCtx.app));
         if (typeof disposer === 'function' && regCtx.onDispose) {
           regCtx.onDispose(disposer);
         }
@@ -78,7 +141,10 @@ function lazyPlugin(pluginFactory, lazyOptions = {}) {
 
       // 2. Call register hook
       if (typeof realPlugin.register === 'function' && regCtx) {
-        const disposer = realPlugin.register(regCtx);
+        const customRegCtx = regCtx.app
+          ? { ...regCtx, app: wrapAppForLazyRouter(regCtx.app) }
+          : regCtx;
+        const disposer = realPlugin.register(customRegCtx);
         if (typeof disposer === 'function' && regCtx.onDispose) {
           regCtx.onDispose(disposer);
         }
@@ -88,35 +154,9 @@ function lazyPlugin(pluginFactory, lazyOptions = {}) {
       if (typeof realPlugin.onRoutesReady === 'function' && routesCtx) {
         const customRoutesCtx = {
           ...routesCtx,
+          app: wrapAppForLazyRouter(routesCtx.app),
           addRoute(method, routePath, ...handlers) {
-            const m = String(method).toLowerCase();
-            let matchedPrefix = null;
-            for (const p of prefixes) {
-              if (routePath === p || routePath.startsWith(p + '/')) {
-                matchedPrefix = p;
-                break;
-              }
-            }
-
-            if (matchedPrefix) {
-              // Convert absolute route path to router-relative subpath
-              let subPath = routePath.slice(matchedPrefix.length);
-              if (!subPath || !subPath.startsWith('/')) {
-                subPath = '/' + (subPath || '');
-              }
-              if (router[m]) {
-                router[m](subPath, ...handlers);
-              } else if (router.all) {
-                router.all(subPath, ...handlers);
-              }
-            } else {
-              // Route is outside configured prefix: mount directly on app
-              if (routesCtx.addRoute) {
-                routesCtx.addRoute(method, routePath, ...handlers);
-              } else if (routesCtx.app && routesCtx.app[m]) {
-                routesCtx.app[m](routePath, ...handlers);
-              }
-            }
+            return mountToRouterOrApp(method, routePath, handlers, routesCtx.app);
           },
         };
 

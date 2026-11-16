@@ -35,6 +35,22 @@ function generateManifest(metafile, options = {}) {
       publicUrl = publicUrl.slice(publicDir.length + 1);
     } else if (publicUrl.startsWith(publicDir)) {
       publicUrl = publicUrl.slice(publicDir.length);
+    } else {
+      const resolvedPublicDir = path.resolve(publicDir);
+      const resolvedOutPath = path.resolve(outPathRaw);
+      const rel = path.relative(resolvedPublicDir, resolvedOutPath).replace(/\\/g, '/');
+      if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+        publicUrl = rel;
+      } else {
+        const basePub = path.basename(publicDir);
+        const marker = `/${basePub}/`;
+        const idx = publicUrl.indexOf(marker);
+        if (idx !== -1) {
+          publicUrl = publicUrl.slice(idx + marker.length);
+        } else if (publicUrl.startsWith(`${basePub}/`)) {
+          publicUrl = publicUrl.slice(basePub.length + 1);
+        }
+      }
     }
     if (publicUrl.startsWith('/')) {
       publicUrl = publicUrl.slice(1);

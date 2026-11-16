@@ -664,6 +664,7 @@ function createApp(options = {}) {
     publicDir,
     logging = isDev && !isTest,
     helmet: helmetConfig,
+    contentSecurityPolicy: topLevelCspConfig,
     middlewares = {},
     plugins = [],
     assets: assetsConfig = {},
@@ -751,6 +752,14 @@ function createApp(options = {}) {
   if (queueManager) {
     app.queue = queueManager;
     options.queue = queueManager;
+    if (typeof queueManager.setContext === 'function') {
+      queueManager.setContext({
+        db: options.db ?? null,
+        serviceRegistry,
+        events: core.events ?? null,
+        cache: options.cache ?? null,
+      });
+    }
   }
 
   setAppContext({
@@ -1195,8 +1204,31 @@ function createApp(options = {}) {
   if (helmetConfig !== false) {
     const defaultConfig = getDefaultHelmetConfig(isDev);
     let finalConfig = helmetConfig === undefined || helmetConfig === true
-      ? defaultConfig
+      ? { ...defaultConfig }
       : { ...defaultConfig, ...helmetConfig };
+
+    // Deep-merge CSP directives if user provided helmet.contentSecurityPolicy or top-level options.contentSecurityPolicy
+    const mergeCsp = (baseCsp, overrideCsp) => {
+      if (overrideCsp === false) return false;
+      if (!overrideCsp || typeof overrideCsp !== 'object') return baseCsp;
+      if (baseCsp === false) return { ...overrideCsp };
+      const baseObj = (baseCsp && typeof baseCsp === 'object') ? baseCsp : {};
+      const merged = { ...baseObj, ...overrideCsp };
+      if (baseObj.directives || overrideCsp.directives) {
+        merged.directives = {
+          ...(baseObj.directives || {}),
+          ...(overrideCsp.directives || {}),
+        };
+      }
+      return merged;
+    };
+
+    if (helmetConfig && typeof helmetConfig === 'object' && helmetConfig.contentSecurityPolicy !== undefined) {
+      finalConfig.contentSecurityPolicy = mergeCsp(defaultConfig.contentSecurityPolicy, helmetConfig.contentSecurityPolicy);
+    }
+    if (topLevelCspConfig !== undefined) {
+      finalConfig.contentSecurityPolicy = mergeCsp(finalConfig.contentSecurityPolicy, topLevelCspConfig);
+    }
     
     // Collect CSP requirements from plugins (before they're fully registered)
     if (plugins && Array.isArray(plugins) && finalConfig.contentSecurityPolicy) {

@@ -746,6 +746,32 @@ SSR Fragments (`defineFragment` / `[data-w-fragment]`), controller `tasks`, and 
 - **Incremental Keyed List Updates**: `fragment.refresh(input, { mode: 'append' | 'prepend', limit, target, removeKeys })` appends/prepends keyed items (`data-w-key` / `id`), updates existing keys in place via `morphDomTrees`, removes `removeKeys`, and trims to `limit`.
 - **Upload Progress, Cancel & Previews**: Uses `XMLHttpRequest` when `onUploadProgress` is provided, exposing `form.uploads`, `form.cancelUpload()`, `form.createPreviewUrl()`, and automatic `URL.revokeObjectURL()` cleanup on reset/unmount.
 
+---
+
+## 18. Ergonomic Directives, Request State Sync & Centralized Error Tracking
+
+- **Additional Directives (`data-w-submit`, `data-w-style:<prop>`, `data-w-attr:<name>`)**:
+  - `data-w-submit="actionName"` binds a `<form>` submit event with automatic `event.preventDefault()`.
+  - `data-w-style:<prop>="expr"` and `data-w-attr:<name>="expr"` reactively update inline CSS properties and HTML attributes (`null`/`undefined`/`false` removes the property/attribute).
+  - CSP-safe expression evaluation supports ternary conditionals (`cond ? a : b`) and `+` concatenation/addition (`width + 'px'`).
+- **Mutable Per-Instance Helpers (`ctx.locals`)**: `ctx` is frozen (`Object.freeze`) to protect framework contracts; store imperative per-instance helpers or non-reactive caches on `ctx.locals` instead of mutating `ctx` or DOM elements.
+- **Automatic Request State Sync (`tasks` `stateKey`/`syncState` & `ctx.request()`)**:
+  - Tasks accept `stateKey`, `pendingKey`, `dataKey`, `errorKey`, or `syncState` to automatically write `'idle' | 'pending' | 'success' | 'failure'` into reactive controller `state` (ignoring superseded `latest` runs), and expose `task.status` + `task.reset()`.
+  - For ad-hoc requests inside actions, use `await ctx.request('saveStatus', ({ signal }) => ctx.api.post(...))` or `ctx.request({ statusKey, dataKey, errorKey }, fn)`.
+- **Centralized Error Tracking (`createControllerRuntime({ onError })`)**: All runtime, async DOM action, `effect`, `interval`, `timeout`, `listener`, and cleanup/dispose errors route through `handleControllerError` -> `debug` + `options.onError`.
+- **Safe Client Context & Route Provider (`ctx.route`, `ctx.context`, `ctx.inject()`, `fsy.clientContext()`)**:
+  - Emit public SSR route & config data safely in templates via `{{ fsy.clientContext(data, { allow: ['publishOrigin', 'maxTokens'], schema }) | safe }}` (renders a CSP-safe `<script type="application/json" id="__webspresso_context__">` tag with HTML escaping).
+  - Read deep-frozen route metadata (`ctx.route` -> `{ path, pattern, params, query }`) and injected values (`ctx.context`, `ctx.inject('features.ai', false)`) inside any controller.
+  - Extend client-side via `bootClient({ context: { ... } })` or `runtime.provide(key, value)`. Security relies on explicit opt-in, positive `allow` / Zod `schema` filtering, null-prototype maps, and `deepFreeze` (never automatic server/env dumps).
+- **Cross-Tab Sync (`sync`, `ctx.broadcast`, `ctx.onBroadcast`, `syncTabs`)**:
+  - Share specific controller state keys across open browser tabs via `defineController({ sync: { keys: ['theme'], channel: 'prefs' } })` (echo-loop safe via `tabId`).
+  - Fragment invalidations (`invalidate(['todos'])` / `apiResult`) automatically broadcast across tabs over `BroadcastChannel` (with `localStorage.storage` fallback; disable with `syncTabs: false`).
+  - Send/receive custom cross-tab messages with `ctx.broadcast(topic, payload)` and `ctx.onBroadcast(topic, handler)` (auto-cleaned up on disconnect).
+- **Dev-Only Client Logger (`ctx.log`, `runtime.log`)**:
+  - `ctx.log.debug/info/warn/error(message, data)` logs to both the browser console and the Webspresso DevTools **Logs** tab (with automatic sensitive-key redaction).
+  - Under `NODE_ENV=production`, `debug` / `devtool` modules are stripped via dead-code elimination and `ctx.log` resolves to zero-allocation `NOOP_LOGGER`.
+
+
 
 
 

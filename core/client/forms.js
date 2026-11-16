@@ -1,7 +1,7 @@
 'use strict';
 
 const { defaultStorage } = require('./storage');
-const { isArray, setElementBusyState } = require('./utils');
+const { isArray, setElementBusyState, isFn } = require('./utils');
 
 /**
  * Webspresso Native HTML Form Layer & Typed Form Handle
@@ -158,7 +158,7 @@ function coerceScalarControlValue(el, rawValue) {
  * @returns {{ data: Record<string, unknown>, formData: FormData|null, isMultipart: boolean }}
  */
 function parseFormElement(formEl, submitterOrOptions = null) {
-  if (!formEl || typeof formEl.querySelectorAll !== 'function') {
+  if (!formEl || !isFn(formEl.querySelectorAll)) {
     return { data: {}, values: {}, formData: null, isMultipart: false };
   }
 
@@ -370,7 +370,7 @@ function parseFormElement(formEl, submitterOrOptions = null) {
  */
 function captureInitialFormSnapshot(formEl) {
   const snapshot = new Map();
-  if (!formEl || typeof formEl.querySelectorAll !== 'function') return snapshot;
+  if (!formEl || !isFn(formEl.querySelectorAll)) return snapshot;
   const controls = formEl.querySelectorAll('input, select, textarea');
   for (let i = 0; i < controls.length; i++) {
     const el = controls[i];
@@ -395,7 +395,7 @@ function captureInitialFormSnapshot(formEl) {
  * Check if any control in `formEl` differs from its captured initial snapshot.
  */
 function computeFormDirty(formEl, initialSnapshot) {
-  if (!formEl || typeof formEl.querySelectorAll !== 'function') return false;
+  if (!formEl || !isFn(formEl.querySelectorAll)) return false;
   const controls = formEl.querySelectorAll('input, select, textarea');
   for (let i = 0; i < controls.length; i++) {
     const el = controls[i];
@@ -432,7 +432,7 @@ function computeFormDirty(formEl, initialSnapshot) {
  */
 function createFormHandle(formEl, options = {}) {
   if (formEl && formEl.__wFormHandle) {
-    if (options.services && typeof formEl.__wFormHandle.__setServices === 'function') {
+    if (options.services && isFn(formEl.__wFormHandle.__setServices)) {
       formEl.__wFormHandle.__setServices(options.services);
     }
     return formEl.__wFormHandle;
@@ -505,7 +505,7 @@ function createFormHandle(formEl, options = {}) {
 
   function revokePreviewUrls(fieldName) {
     const revokeUrl = (u) => {
-      if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      if (typeof URL !== 'undefined' && isFn(URL.revokeObjectURL)) {
         try {
           URL.revokeObjectURL(u);
         } catch (_e) {}
@@ -528,7 +528,7 @@ function createFormHandle(formEl, options = {}) {
   }
 
   function createPreviewUrl(file, fieldName = '_default') {
-    if (!file || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return null;
+    if (!file || typeof URL === 'undefined' || !isFn(URL.createObjectURL)) return null;
     const url = URL.createObjectURL(file);
     let set = previewUrlsByField.get(fieldName);
     if (!set) {
@@ -584,7 +584,7 @@ function createFormHandle(formEl, options = {}) {
     (draftStorageType === 'local' ? defaultStorage.local : defaultStorage.session);
 
   function extractDraftValues(el) {
-    if (!el || typeof el.querySelectorAll !== 'function') return {};
+    if (!el || !isFn(el.querySelectorAll)) return {};
     const { data } = parseFormElement(el);
     const safeData = {};
     for (const [key, val] of Object.entries(data)) {
@@ -633,7 +633,7 @@ function createFormHandle(formEl, options = {}) {
     const cleanDraft = sanitizeDraftObject(saved);
     if (cleanDraft) {
       fill(cleanDraft, { baseline: false });
-      if (typeof formEl.dispatchEvent === 'function') {
+      if (isFn(formEl.dispatchEvent)) {
         const CustomEventCtor =
           (formEl.ownerDocument && formEl.ownerDocument.defaultView && formEl.ownerDocument.defaultView.CustomEvent) ||
           (typeof CustomEvent !== 'undefined' ? CustomEvent : null);
@@ -667,7 +667,7 @@ function createFormHandle(formEl, options = {}) {
     cancelDraftDebounce();
     if (typeof nextKey === 'string' && nextKey.trim()) {
       draftKey = nextKey.trim();
-      if (formEl && typeof formEl.setAttribute === 'function') {
+      if (formEl && isFn(formEl.setAttribute)) {
         formEl.setAttribute('data-w-draft-key', draftKey);
       }
       if (keyOpts && keyOpts.restore === true && isDraftEnabled) {
@@ -698,7 +698,7 @@ function createFormHandle(formEl, options = {}) {
    * Optionally focuses the first invalid control.
    */
   function syncErrorsToDom(focusFirstInvalid = false) {
-    if (!formEl || typeof formEl.querySelectorAll !== 'function') return;
+    if (!formEl || !isFn(formEl.querySelectorAll)) return;
 
     // 1. Clear previous error elements and aria-invalid states
     const errorSpans = formEl.querySelectorAll('[data-w-error]');
@@ -743,7 +743,7 @@ function createFormHandle(formEl, options = {}) {
         if (errSpan && errSpan.id) {
           ctrl.setAttribute('aria-describedby', errSpan.id);
         }
-        if (!firstInvalidControl && typeof ctrl.focus === 'function' && !isControlDisabled(ctrl)) {
+        if (!firstInvalidControl && isFn(ctrl.focus) && !isControlDisabled(ctrl)) {
           firstInvalidControl = ctrl;
         }
       } else {
@@ -821,7 +821,7 @@ function createFormHandle(formEl, options = {}) {
     cancelFieldValidation();
     revokePreviewUrls();
     if (!formEl) return;
-    if (typeof formEl.reset === 'function') {
+    if (isFn(formEl.reset)) {
       formEl.reset();
     }
     // Restore exact captured initial snapshot
@@ -854,7 +854,7 @@ function createFormHandle(formEl, options = {}) {
     cancelDraftDebounce();
     cancelFieldValidation();
     revokePreviewUrls();
-    if (!formEl || typeof formEl.querySelectorAll !== 'function') return;
+    if (!formEl || !isFn(formEl.querySelectorAll)) return;
     const controls = formEl.querySelectorAll('input, select, textarea');
     for (let i = 0; i < controls.length; i++) {
       const el = controls[i];
@@ -892,7 +892,7 @@ function createFormHandle(formEl, options = {}) {
    *                                            snapshot, clears `dirty`, and clears previous validation errors.
    */
   function fill(values = {}, options = {}) {
-    if (!formEl || typeof formEl.querySelectorAll !== 'function' || !values || typeof values !== 'object' || isArray(values)) {
+    if (!formEl || !isFn(formEl.querySelectorAll) || !values || typeof values !== 'object' || isArray(values)) {
       return handle;
     }
 
@@ -1014,7 +1014,7 @@ function createFormHandle(formEl, options = {}) {
     let event = null;
     let submitOptions = {};
 
-    if (eventOrOptions && typeof eventOrOptions.preventDefault === 'function') {
+    if (eventOrOptions && isFn(eventOrOptions.preventDefault)) {
       event = eventOrOptions;
       event.preventDefault();
     } else if (eventOrOptions && typeof eventOrOptions === 'object') {
@@ -1031,7 +1031,7 @@ function createFormHandle(formEl, options = {}) {
       submitOptions.validate !== false &&
       formEl &&
       !formEl.noValidate &&
-      typeof formEl.reportValidity === 'function'
+      isFn(formEl.reportValidity)
     ) {
       const isValid = formEl.reportValidity();
       if (!isValid) {
@@ -1082,7 +1082,7 @@ function createFormHandle(formEl, options = {}) {
     // Track per-file upload state if multipart
     const submitAbortController = new AbortController();
     activeSubmitAbort = submitAbortController;
-    if (isMultipart && formEl && typeof formEl.querySelectorAll === 'function') {
+    if (isMultipart && formEl && isFn(formEl.querySelectorAll)) {
       const nextUploads = [];
       const fileInputs = formEl.querySelectorAll('input[type="file"]');
       for (let i = 0; i < fileInputs.length; i++) {
@@ -1132,7 +1132,7 @@ function createFormHandle(formEl, options = {}) {
               uploadEntries[i].total = prog.total || uploadEntries[i].total;
               uploadEntries[i].percent = prog.percent;
             }
-            if (typeof submitOptions.onUploadProgress === 'function') {
+            if (isFn(submitOptions.onUploadProgress)) {
               submitOptions.onUploadProgress(prog, uploadEntries);
             }
             notifyStateChange();
@@ -1225,7 +1225,7 @@ function createFormHandle(formEl, options = {}) {
           await listener(responseData, { values: payloadData, form: handle, services });
         } catch (listenerErr) {
           if (!hookError) hookError = listenerErr;
-          if (debug && typeof debug.trackCleanupError === 'function') {
+          if (debug && isFn(debug.trackCleanupError)) {
             debug.trackCleanupError(`form_${formName}`, formName, 'form:onSuccess', listenerErr);
           }
         }
@@ -1238,7 +1238,7 @@ function createFormHandle(formEl, options = {}) {
         null;
       const redirectTarget = resolveSafeRedirectUrl(rawRedirectTarget);
       if (redirectTarget) {
-        if (typeof options.navigate === 'function') {
+        if (isFn(options.navigate)) {
           options.navigate(redirectTarget);
         } else if (typeof window !== 'undefined' && window.location) {
           window.location.assign(redirectTarget);
@@ -1405,7 +1405,7 @@ function createFormHandle(formEl, options = {}) {
         return { ok: true, valid: !fieldErrors[norm], errors: fieldErrors[norm] ? { [norm]: fieldErrors[norm] } : {} };
       }
       // Network or 5xx error: NEVER mark the field as invalid!
-      if (typeof formEl.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') {
+      if (isFn(formEl.dispatchEvent) && typeof CustomEvent !== 'undefined') {
         formEl.dispatchEvent(
           new CustomEvent('w-form:validation-error', {
             bubbles: true,
@@ -1518,7 +1518,7 @@ function createFormHandle(formEl, options = {}) {
     }, 0);
   };
 
-  if (formEl && typeof formEl.addEventListener === 'function') {
+  if (formEl && isFn(formEl.addEventListener)) {
     formEl.addEventListener('input', onDomInput);
     formEl.addEventListener('change', onDomInput);
     formEl.addEventListener('focusout', onDomFocusOut);
@@ -1565,7 +1565,7 @@ function createFormHandle(formEl, options = {}) {
       if (fieldName) {
         const norm = fieldName.endsWith('[]') ? fieldName.slice(0, -2) : fieldName;
         touchedFields.add(norm);
-      } else if (formEl && typeof formEl.querySelectorAll === 'function') {
+      } else if (formEl && isFn(formEl.querySelectorAll)) {
         const controls = formEl.querySelectorAll('input, select, textarea');
         for (let i = 0; i < controls.length; i++) {
           const n = controls[i].getAttribute && controls[i].getAttribute('name');
@@ -1702,7 +1702,7 @@ function createFormHandle(formEl, options = {}) {
         clearTimeout(resetTimer);
         resetTimer = null;
       }
-      if (formEl && typeof formEl.removeEventListener === 'function') {
+      if (formEl && isFn(formEl.removeEventListener)) {
         formEl.removeEventListener('input', onDomInput);
         formEl.removeEventListener('change', onDomInput);
         formEl.removeEventListener('focusout', onDomFocusOut);

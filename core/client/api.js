@@ -13,7 +13,7 @@
  * - Raw & streaming escape hatches (`api.raw`, `api.stream`)
  */
 
-const { isArray, isNumber } = require('./utils');
+const { isArray, isNumber, isFn } = require('./utils');
 
 const VALID_POLICIES = new Set(['latest', 'drop', 'queue', 'parallel']);
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -136,11 +136,11 @@ function discoverCsrfToken(doc) {
   const targetDoc = doc || (typeof document !== 'undefined' ? document : null);
   if (!targetDoc) return null;
 
-  if (typeof targetDoc.querySelector === 'function') {
+  if (isFn(targetDoc.querySelector)) {
     const meta =
       targetDoc.querySelector('meta[name="csrf-token"]') ||
       targetDoc.querySelector('meta[name="xsrf-token"]');
-    if (meta && typeof meta.getAttribute === 'function') {
+    if (meta && isFn(meta.getAttribute)) {
       const content = meta.getAttribute('content');
       if (content) return content.trim();
     }
@@ -398,7 +398,7 @@ function extractValidationErrors(payload) {
  */
 function unwrapApiResultAndInvalidate(parsedBody, responseHeaders) {
   const headerTags = [];
-  if (responseHeaders && typeof responseHeaders.get === 'function') {
+  if (responseHeaders && isFn(responseHeaders.get)) {
     const rawHeader = responseHeaders.get('x-webspresso-invalidate');
     if (rawHeader) {
       for (const tag of rawHeader.split(',')) {
@@ -530,7 +530,7 @@ function normalizeRetryConfig(retryOpt, upperMethod, retryMutations = false) {
     if (isArray(retryOpt.statusCodes)) {
       statusCodes = new Set(retryOpt.statusCodes);
     }
-    if (typeof retryOpt.onRetry === 'function') {
+    if (isFn(retryOpt.onRetry)) {
       onRetry = retryOpt.onRetry;
     }
   }
@@ -594,7 +594,7 @@ function abortableSleep(ms, signals = []) {
     const cleanup = () => {
       if (timer) clearTimeout(timer);
       for (const sig of signals) {
-        if (sig && typeof sig.removeEventListener === 'function') {
+        if (sig && isFn(sig.removeEventListener)) {
           sig.removeEventListener('abort', onAbort);
         }
       }
@@ -606,7 +606,7 @@ function abortableSleep(ms, signals = []) {
     };
 
     for (const sig of signals) {
-      if (sig && typeof sig.addEventListener === 'function') {
+      if (sig && isFn(sig.addEventListener)) {
         sig.addEventListener('abort', onAbort, { once: true });
       }
     }
@@ -750,13 +750,13 @@ function trimTrailingSlashes(str) {
 
 function createApiClient(config = {}) {
   const fetchImpl =
-    config.fetch || (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
+    config.fetch || (isFn(globalThis.fetch) ? globalThis.fetch.bind(globalThis) : null);
   const baseUrl = config.baseUrl ? trimTrailingSlashes(String(config.baseUrl)) : '';
   const lifecycleSignal = config.lifecycleSignal || null;
-  const isConnected = typeof config.isConnected === 'function' ? config.isConnected : () => true;
+  const isConnected = isFn(config.isConnected) ? config.isConnected : () => true;
   const debug = config.debug || null;
-  const onInvalidate = typeof config.onInvalidate === 'function' ? config.onInvalidate : null;
-  const onRefreshError = typeof config.onRefreshError === 'function' ? config.onRefreshError : null;
+  const onInvalidate = isFn(config.onInvalidate) ? config.onInvalidate : null;
+  const onRefreshError = isFn(config.onRefreshError) ? config.onRefreshError : null;
 
   // Concurrency state maps per request key
   const latestMap = new Map(); // key -> { seq: number, controller: AbortController, requestId: string }
@@ -863,7 +863,7 @@ function createApiClient(config = {}) {
 
           const delayMs = calculateRetryDelay(attempt, retryConfig);
 
-          if (typeof retryConfig.onRetry === 'function') {
+          if (isFn(retryConfig.onRetry)) {
             try {
               retryConfig.onRetry(err, attempt, delayMs);
             } catch (_cbErr) {
@@ -871,7 +871,7 @@ function createApiClient(config = {}) {
             }
           }
 
-          if (debug && typeof debug.trackRequestRetry === 'function') {
+          if (debug && isFn(debug.trackRequestRetry)) {
             debug.trackRequestRetry({
               requestId: currentReqId,
               key: requestKey,
@@ -909,10 +909,14 @@ function createApiClient(config = {}) {
             runSingleRequest(upperMethod, requestUrl, body, options, requestKey, subReqId, 'queue')
           )
         );
-      queueMap.set(
-        requestKey,
-        nextTask.catch(() => {})
-      );
+      const tailPromise = nextTask
+        .catch(() => {})
+        .finally(() => {
+          if (queueMap.get(requestKey) === tailPromise) {
+            queueMap.delete(requestKey);
+          }
+        });
+      queueMap.set(requestKey, tailPromise);
       return nextTask;
     }
 
@@ -933,6 +937,9 @@ function createApiClient(config = {}) {
         timedOut = true;
         abortController.abort();
       }, options.timeout);
+      if (timeoutTimer && isFn(timeoutTimer.unref)) {
+        timeoutTimer.unref();
+      }
     }
 
     // Policy: 'latest' -> Abort previous in-flight request for this key and increment sequence
@@ -998,7 +1005,7 @@ function createApiClient(config = {}) {
     if (MUTATION_METHODS.has(upperMethod)) {
       const csrfToken =
         options.csrfToken ||
-        (typeof config.getCsrfToken === 'function' ? config.getCsrfToken() : discoverCsrfToken());
+        (isFn(config.getCsrfToken) ? config.getCsrfToken() : discoverCsrfToken());
       if (csrfToken && !headers['X-CSRF-Token'] && !headers['x-csrf-token']) {
         headers['X-CSRF-Token'] = csrfToken;
       }
@@ -1012,7 +1019,7 @@ function createApiClient(config = {}) {
     try {
       let response;
       try {
-        if (typeof options.onUploadProgress === 'function' && typeof XMLHttpRequest !== 'undefined') {
+        if (isFn(options.onUploadProgress) && typeof XMLHttpRequest !== 'undefined') {
           response = await executeXhrUpload({
             url: requestUrl,
             method: upperMethod,
@@ -1193,13 +1200,13 @@ function createApiClient(config = {}) {
       let parsedBody;
       const status = response.status;
       const contentType =
-        response.headers && typeof response.headers.get === 'function'
+        response.headers && isFn(response.headers.get)
           ? response.headers.get('content-type') || ''
           : '';
 
       if (status === 204 || status === 205) {
         parsedBody = undefined;
-      } else if (typeof response.text === 'function') {
+      } else if (isFn(response.text)) {
         let rawText;
         try {
           rawText = await response.text();
@@ -1233,7 +1240,7 @@ function createApiClient(config = {}) {
         } else {
           parsedBody = rawText;
         }
-      } else if (typeof response.json === 'function') {
+      } else if (isFn(response.json)) {
         try {
           parsedBody = await response.json();
         } catch (bodyErr) {
@@ -1329,7 +1336,7 @@ function createApiClient(config = {}) {
           )
           .catch((refreshErr) => {
             const notifyErr =
-              typeof options.onRefreshError === 'function' ? options.onRefreshError : onRefreshError;
+              isFn(options.onRefreshError) ? options.onRefreshError : onRefreshError;
             if (notifyErr) {
               try {
                 notifyErr(refreshErr, { tags: invalidate, method: upperMethod, url: requestUrl, chainId });
@@ -1367,6 +1374,9 @@ function createApiClient(config = {}) {
         set.delete(requestId);
         if (set.size === 0) {
           inFlightMap.delete(requestKey);
+          if (policy === 'latest') {
+            latestMap.delete(requestKey);
+          }
         }
       }
       if (options.signal) {

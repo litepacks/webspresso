@@ -44,7 +44,7 @@ const {
   MemoryStorage,
 } = require('./storage');
 
-const { NOOP_DEBUGGER } = require('./utils');
+const { NOOP_DEBUGGER, isFn } = require('./utils');
 
 const NOOP_SERVICES = Object.freeze({
   get(name) {
@@ -132,7 +132,7 @@ function createLiteClientRuntime(options = {}) {
   let runtime = null;
 
   const services =
-    options.services && typeof options.services.get === 'function' && typeof options.services.register === 'function'
+    options.services && isFn(options.services.get) && isFn(options.services.register)
       ? options.services
       : options.services && typeof options.services === 'object'
         ? getServicesModule().createClientServiceRegistry({
@@ -199,7 +199,7 @@ function createLiteClientRuntime(options = {}) {
       } catch (_e) {}
     }
     formsRegistry.clear();
-    if (fragments && typeof fragments.dispose === 'function') {
+    if (fragments && isFn(fragments.dispose)) {
       fragments.dispose();
     }
     services.dispose();

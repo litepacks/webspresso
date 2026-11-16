@@ -19,14 +19,21 @@ const { createFormHandle } = require('./forms');
 const { createApiClient } = require('./api');
 const { defaultStorage, createClientStorage } = require('./storage');
 const { createClientServiceRegistry } = require('./services');
+const { createClientContextStore } = require('./context');
 const {
   isArray,
   isNumber,
   decorateElement,
   parseDurationMs,
   parseRefetchMode,
-  setElementBusyState,
-} = require('./utils');
+  setElementBusyState, isFn, setByPath, NOOP_LOGGER } = require('./utils');
+
+function getClientLoggerFactory() {
+  if (process.env.NODE_ENV !== 'production') {
+    return require('./debug').createClientLogger;
+  }
+  return () => NOOP_LOGGER;
+}
 
 let instanceSeq = 0;
 let activeControllerContext = null;
@@ -98,7 +105,7 @@ function hasArrayChanged(newArr, oldArr) {
 }
 
 function runUntracked(engine, fn) {
-  if (engine && typeof engine.untracked === 'function') {
+  if (engine && isFn(engine.untracked)) {
     return engine.untracked(fn);
   }
   return fn();
@@ -212,12 +219,12 @@ function createStandaloneWatch(engine, source, callback, options = {}) {
  * @returns {() => void} Unwatch function
  */
 function watch(source, callback, options = {}) {
-  if (activeControllerContext && typeof activeControllerContext.watch === 'function') {
+  if (activeControllerContext && isFn(activeControllerContext.watch)) {
     return activeControllerContext.watch(source, callback, options);
   }
   const { createDatastarAdapter } = require('./adapter/datastar');
   const engine = createDatastarAdapter().engine;
-  if (!engine || typeof engine.effect !== 'function') {
+  if (!engine || !isFn(engine.effect)) {
     return () => {};
   }
   return createStandaloneWatch(engine, source, callback, options);
@@ -314,7 +321,7 @@ function defineController(definition = {}) {
   if (!definition || typeof definition !== 'object') {
     throw new TypeError('defineController() requires a configuration object.');
   }
-  if (definition.state !== undefined && typeof definition.state !== 'function') {
+  if (definition.state !== undefined && !isFn(definition.state)) {
     throw new TypeError(
       'defineController({ state }) must be a factory function `() => ({ ... })` so each instance receives isolated state.'
     );
@@ -328,7 +335,7 @@ function defineController(definition = {}) {
   if (definition.watch !== undefined && (typeof definition.watch !== 'object' || definition.watch === null)) {
     throw new TypeError('defineController({ watch }) must be an object of watcher functions or descriptors.');
   }
-  if (definition.onError !== undefined && typeof definition.onError !== 'function') {
+  if (definition.onError !== undefined && !isFn(definition.onError)) {
     throw new TypeError('defineController({ onError }) must be an error handler function `(err, ctx, meta) => void`.');
   }
   if (definition.persist !== undefined && definition.persist !== null) {
@@ -346,7 +353,7 @@ function defineController(definition = {}) {
   // Pre-validate collision between state and computed properties
   if (definition.computed && typeof definition.computed === 'object') {
     let dummyState = {};
-    if (typeof definition.state === 'function') {
+    if (isFn(definition.state)) {
       try {
         dummyState = definition.state({ el: null }) || {};
       } catch (_e) {}
@@ -365,12 +372,13 @@ function defineController(definition = {}) {
     state: definition.state || (() => ({})),
     computed: definition.computed && typeof definition.computed === 'object' ? definition.computed : {},
     tasks: definition.tasks && typeof definition.tasks === 'object' ? definition.tasks : {},
-    connect: typeof definition.connect === 'function' ? definition.connect : null,
-    disconnect: typeof definition.disconnect === 'function' ? definition.disconnect : null,
-    beforePatch: typeof definition.beforePatch === 'function' ? definition.beforePatch : null,
-    afterPatch: typeof definition.afterPatch === 'function' ? definition.afterPatch : null,
-    onError: typeof definition.onError === 'function' ? definition.onError : null,
+    connect: isFn(definition.connect) ? definition.connect : null,
+    disconnect: isFn(definition.disconnect) ? definition.disconnect : null,
+    beforePatch: isFn(definition.beforePatch) ? definition.beforePatch : null,
+    afterPatch: isFn(definition.afterPatch) ? definition.afterPatch : null,
+    onError: isFn(definition.onError) ? definition.onError : null,
     persist: definition.persist || null,
+    sync: definition.sync || null,
     watch: definition.watch && typeof definition.watch === 'object' ? definition.watch : null,
     actions: definition.actions && typeof definition.actions === 'object' ? definition.actions : {},
   });
@@ -442,7 +450,7 @@ function isTargetInControllerScope(rootEl, candidateEl) {
  * - `data-w-target="notes.input"` (controller-prefixed target syntax)
  */
 function queryScopedTargets(rootEl, controllerName, targetName) {
-  if (!rootEl || typeof rootEl.querySelectorAll !== 'function' || !targetName) {
+  if (!rootEl || !isFn(rootEl.querySelectorAll) || !targetName) {
     return [];
   }
   const cleanTarget = String(targetName).trim();
@@ -478,10 +486,20 @@ function createControllerRuntime(options = {}) {
   const datastar = options.datastar;
   const fragments = options.fragments || null;
   const debug = options.debug || null;
+  const syncBus = options.syncBus || null;
+  const runtimeOnError = isFn(options.onError) ? options.onError : null;
+  const contextStore =
+    options.contextStore ||
+    createClientContextStore({
+      root: options.root,
+      context: options.context,
+      provide: options.provide,
+      route: options.route,
+    });
   const baseApiConfig = options.apiConfig || {};
-  const lazyLoader = typeof options.lazyLoader === 'function' ? options.lazyLoader : null;
+  const lazyLoader = isFn(options.lazyLoader) ? options.lazyLoader : null;
   const services =
-    options.services && typeof options.services.get === 'function'
+    options.services && isFn(options.services.get)
       ? options.services
       : createClientServiceRegistry({
           root: options.root || null,
@@ -688,16 +706,46 @@ function createControllerRuntime(options = {}) {
         return;
       }
 
+      const isCleanup = Boolean(meta.cleanup || meta.silent);
+      const phase = meta.phase || 'unknown';
+
+      if (debug) {
+        if (isCleanup && isFn(debug.trackCleanupError)) {
+          debug.trackCleanupError(instanceId, controllerName, phase, err);
+        } else if (isFn(debug.recordEvent)) {
+          debug.recordEvent('controller:error', {
+            instanceId,
+            controllerName,
+            phase,
+            message: err.message || String(err),
+          });
+        }
+      }
+
+      if (runtimeOnError) {
+        try {
+          runtimeOnError(err, {
+            instanceId,
+            controllerName,
+            ...meta,
+          });
+        } catch (_trackerErr) {
+          // Prevent recursive error tracking loop
+        }
+      }
+
+      if (isCleanup) {
+        return;
+      }
+
       lastError = err;
 
       // 1. Controller definition onError hook
-      if (typeof reg.definition.onError === 'function') {
+      if (isFn(reg.definition.onError)) {
         try {
           reg.definition.onError(err, ctx, meta);
         } catch (hookErr) {
-          if (debug) {
-            debug.trackCleanupError(instanceId, controllerName, 'onError', hookErr);
-          }
+          handleControllerError(hookErr, { phase: 'onError', cleanup: true });
         }
       }
 
@@ -705,29 +753,39 @@ function createControllerRuntime(options = {}) {
       for (const listener of Array.from(dynamicErrorListeners)) {
         try {
           listener(err, meta);
-        } catch (_listenerErr) {
-          // Ignore
+        } catch (listenerErr) {
+          handleControllerError(listenerErr, { phase: 'onErrorListener', cleanup: true });
         }
       }
 
       // 3. Dispatch bubbling CustomEvent 'w-controller:error' on rootEl
-      emitEvent(
-        'w-controller:error',
-        {
-          error: err,
-          instanceId,
-          controllerName,
-          ...meta,
-        },
-        { bubbles: true, cancelable: true }
-      );
+      try {
+        emitEvent(
+          'w-controller:error',
+          {
+            error: err,
+            instanceId,
+            controllerName,
+            ...meta,
+          },
+          { bubbles: true, cancelable: true }
+        );
+      } catch (emitErr) {
+        if (debug && isFn(debug.trackCleanupError)) {
+          debug.trackCleanupError(instanceId, controllerName, 'emitError', emitErr);
+        }
+      }
+    }
+
+    function trackCleanupError(phase, err) {
+      handleControllerError(err, { phase, cleanup: true });
     }
 
     let taskSeq = 0;
     function createTaskInstance(runFnOrConfig, options = {}) {
       let runFn = runFnOrConfig;
       let taskOpts = { ...options };
-      if (typeof runFnOrConfig === 'object' && runFnOrConfig !== null && typeof runFnOrConfig.run === 'function') {
+      if (typeof runFnOrConfig === 'object' && runFnOrConfig !== null && isFn(runFnOrConfig.run)) {
         runFn = runFnOrConfig.run;
         taskOpts = { ...runFnOrConfig, ...options };
       }
@@ -767,19 +825,62 @@ function createControllerRuntime(options = {}) {
       let queuedPromise = Promise.resolve();
       let _lastUpdatedAt = 0;
       let taskIntervalTimer = null;
-      let focusDebounceTimer = null;
+      let focusCoalesceQueued = false;
       const taskCleanupListeners = [];
 
       datastar.engine.signals.setValue(`${signalPrefix}.pending`, false);
       datastar.engine.signals.setValue(`${signalPrefix}.data`, null);
       datastar.engine.signals.setValue(`${signalPrefix}.error`, null);
       datastar.engine.signals.setValue(`${signalPrefix}.stale`, false);
+      datastar.engine.signals.setValue(`${signalPrefix}.status`, 'idle');
 
       let _pending = false;
       let _data = null;
       let _error = null;
       let _stale = false;
+      let _status = 'idle';
       let _lastArgs = [];
+
+      const rawSync = taskOpts.syncState;
+      const syncCfg = {
+        statusKey:
+          typeof rawSync === 'string'
+            ? rawSync
+            : (rawSync && typeof rawSync === 'object' ? rawSync.statusKey : null) || taskOpts.stateKey || null,
+        pendingKey:
+          (rawSync && typeof rawSync === 'object' ? rawSync.pendingKey : null) || taskOpts.pendingKey || null,
+        dataKey:
+          (rawSync && typeof rawSync === 'object' ? rawSync.dataKey : null) || taskOpts.dataKey || null,
+        errorKey:
+          (rawSync && typeof rawSync === 'object' ? rawSync.errorKey : null) || taskOpts.errorKey || null,
+      };
+
+      function syncRequestState(nextStatus, payload = {}) {
+        _status = nextStatus;
+        if (isConnected()) {
+          updateSignal('status', nextStatus);
+        }
+        if (!state || !isConnected()) return;
+        if (syncCfg.statusKey) {
+          state[syncCfg.statusKey] = nextStatus;
+        }
+        if (syncCfg.pendingKey) {
+          state[syncCfg.pendingKey] = nextStatus === 'pending';
+        }
+        if (nextStatus === 'pending') {
+          if (syncCfg.errorKey) state[syncCfg.errorKey] = null;
+        } else if (nextStatus === 'success') {
+          if (syncCfg.errorKey) state[syncCfg.errorKey] = null;
+          if (syncCfg.dataKey && 'data' in payload) state[syncCfg.dataKey] = payload.data;
+        } else if (nextStatus === 'failure') {
+          if (syncCfg.errorKey) {
+            const err = payload.error;
+            state[syncCfg.errorKey] = err ? (err.message || String(err)) : 'Request failed';
+          }
+        } else if (nextStatus === 'idle') {
+          if (syncCfg.errorKey) state[syncCfg.errorKey] = null;
+        }
+      }
 
       function isTaskStale(mode = true) {
         if (!mode) return false;
@@ -804,7 +905,7 @@ function createControllerRuntime(options = {}) {
         const effectiveArgs = args.length > 0 ? args : _lastArgs;
 
         if (policy === 'drop' && activeRuns > 0) {
-          if (debug && typeof debug.trackDiscardedResponse === 'function') {
+          if (debug && isFn(debug.trackDiscardedResponse)) {
             debug.trackDiscardedResponse({
               source: 'task',
               instanceId,
@@ -841,6 +942,7 @@ function createControllerRuntime(options = {}) {
 
         _pending = true;
         updateSignal('pending', true);
+        syncRequestState('pending');
         if (_data !== null) {
           _stale = true;
           updateSignal('stale', true);
@@ -860,6 +962,7 @@ function createControllerRuntime(options = {}) {
           updateSignal('data', result);
           updateSignal('error', null);
           updateSignal('stale', false);
+          syncRequestState('success', { data: result });
           return result;
         } catch (err) {
           if (!isConnected() || (policy !== 'parallel' && runVersion !== currentRunVersion)) {
@@ -870,6 +973,7 @@ function createControllerRuntime(options = {}) {
           }
           _error = err;
           updateSignal('error', err);
+          syncRequestState('failure', { error: err });
           handleControllerError(err, {
             task: taskKey,
             phase: 'task',
@@ -916,6 +1020,10 @@ function createControllerRuntime(options = {}) {
           datastar.engine.signals.value(`${signalPrefix}.pending`);
           return _pending;
         },
+        get status() {
+          datastar.engine.signals.value(`${signalPrefix}.status`);
+          return _status;
+        },
         get data() {
           datastar.engine.signals.value(`${signalPrefix}.data`);
           return _data;
@@ -937,23 +1045,41 @@ function createControllerRuntime(options = {}) {
         isStale: () => isTaskStale(true),
         run,
         cancel,
+        reset() {
+          cancel();
+          _data = null;
+          _error = null;
+          _lastUpdatedAt = 0;
+          if (isConnected()) {
+            updateSignal('data', null);
+            updateSignal('error', null);
+          }
+          syncRequestState('idle');
+        },
         dispose() {
           if (taskIntervalTimer) {
             clearInterval(taskIntervalTimer);
             taskIntervalTimer = null;
           }
-          if (focusDebounceTimer) {
-            clearTimeout(focusDebounceTimer);
-            focusDebounceTimer = null;
-          }
+          focusCoalesceQueued = false;
           while (taskCleanupListeners.length > 0) {
             const removeFn = taskCleanupListeners.pop();
             try {
               removeFn();
-            } catch (_e) {}
+            } catch (err) {
+              trackCleanupError('taskCleanupListener', err);
+            }
           }
-          cancel();
-          datastar.engine.signals.remove(signalPrefix);
+          try {
+            cancel();
+          } catch (err) {
+            trackCleanupError('taskCancel', err);
+          }
+          try {
+            datastar.engine.signals.remove(signalPrefix);
+          } catch (err) {
+            trackCleanupError('taskSignalsRemove', err);
+          }
         },
       };
 
@@ -974,30 +1100,35 @@ function createControllerRuntime(options = {}) {
       }
 
       if (refetchOnFocusMode) {
+        const scheduleMicrotask =
+          typeof queueMicrotask === 'function'
+            ? queueMicrotask
+            : (cb) => Promise.resolve().then(cb);
+
         const onTaskFocus = () => {
-          if (!isConnected() || isDocHidden()) return;
-          if (focusDebounceTimer) clearTimeout(focusDebounceTimer);
-          focusDebounceTimer = setTimeout(() => {
-            focusDebounceTimer = null;
+          if (!isConnected() || isDocHidden() || focusCoalesceQueued) return;
+          focusCoalesceQueued = true;
+          scheduleMicrotask(() => {
+            focusCoalesceQueued = false;
             if (isConnected() && !isDocHidden() && activeRuns === 0 && isTaskStale(refetchOnFocusMode)) {
               run().catch(() => {});
             }
-          }, 20);
+          });
         };
         const onVisChange = () => {
           if (!isDocHidden()) onTaskFocus();
         };
-        if (doc && typeof doc.addEventListener === 'function') {
+        if (doc && isFn(doc.addEventListener)) {
           doc.addEventListener('visibilitychange', onVisChange);
           taskCleanupListeners.push(() => doc.removeEventListener('visibilitychange', onVisChange));
         }
-        if (win && typeof win.addEventListener === 'function') {
+        if (win && isFn(win.addEventListener)) {
           win.addEventListener('focus', onTaskFocus);
           taskCleanupListeners.push(() => win.removeEventListener('focus', onTaskFocus));
         }
       }
 
-      if (refetchOnReconnectMode && win && typeof win.addEventListener === 'function') {
+      if (refetchOnReconnectMode && win && isFn(win.addEventListener)) {
         const onTaskOnline = () => {
           if (isConnected() && activeRuns === 0 && isTaskStale(refetchOnReconnectMode)) {
             run().catch(() => {});
@@ -1021,7 +1152,7 @@ function createControllerRuntime(options = {}) {
             run().catch(() => {});
           }
         }, refetchIntervalMs);
-        if (taskIntervalTimer && typeof taskIntervalTimer.unref === 'function') {
+        if (taskIntervalTimer && isFn(taskIntervalTimer.unref)) {
           taskIntervalTimer.unref();
         }
       }
@@ -1034,7 +1165,11 @@ function createControllerRuntime(options = {}) {
       if (!isConnected()) return () => {};
       const stop = datastar.engine.effect(() => {
         if (!isConnected()) return;
-        fn();
+        try {
+          fn();
+        } catch (err) {
+          handleControllerError(err, { phase: 'effect' });
+        }
       });
       cleanupCallbacks.push(stop);
       return stop;
@@ -1181,21 +1316,30 @@ function createControllerRuntime(options = {}) {
         listenerOptions = maybeOptions;
       }
 
-      if (!targetEl || typeof targetEl.addEventListener !== 'function' || typeof handler !== 'function') {
+      if (!targetEl || !isFn(targetEl.addEventListener) || typeof handler !== 'function') {
         return () => {};
       }
 
       const wrappedHandler = (evt) => {
         if (!isConnected()) return;
-        handler(evt);
+        try {
+          const res = handler(evt);
+          if (res && isFn(res.catch)) {
+            res.catch((err) => handleControllerError(err, { phase: 'listener', event: eventName }));
+          }
+        } catch (err) {
+          handleControllerError(err, { phase: 'listener', event: eventName });
+        }
       };
 
       targetEl.addEventListener(eventName, wrappedHandler, listenerOptions);
       const remove = () => {
         try {
-          targetEl.removeEventListener(eventName, wrappedHandler, listenerOptions);
-        } catch (_e) {
-          // Ignore
+          if (isFn(targetEl.removeEventListener)) {
+            targetEl.removeEventListener(eventName, wrappedHandler, listenerOptions);
+          }
+        } catch (err) {
+          trackCleanupError('removeListener', err);
         }
       };
       cleanupCallbacks.push(remove);
@@ -1209,7 +1353,14 @@ function createControllerRuntime(options = {}) {
           clearInterval(timerId);
           return;
         }
-        fn();
+        try {
+          const res = fn();
+          if (res && isFn(res.catch)) {
+            res.catch((err) => handleControllerError(err, { phase: 'interval' }));
+          }
+        } catch (err) {
+          handleControllerError(err, { phase: 'interval' });
+        }
       }, ms);
       const clear = () => clearInterval(timerId);
       cleanupCallbacks.push(clear);
@@ -1220,7 +1371,14 @@ function createControllerRuntime(options = {}) {
       if (!isConnected()) return () => {};
       const timerId = setTimeout(() => {
         if (!isConnected()) return;
-        fn();
+        try {
+          const res = fn();
+          if (res && isFn(res.catch)) {
+            res.catch((err) => handleControllerError(err, { phase: 'timeout' }));
+          }
+        } catch (err) {
+          handleControllerError(err, { phase: 'timeout' });
+        }
       }, ms);
       const clear = () => clearTimeout(timerId);
       cleanupCallbacks.push(clear);
@@ -1228,7 +1386,7 @@ function createControllerRuntime(options = {}) {
     }
 
     function emitEvent(eventName, detail = undefined, eventOptions = {}) {
-      if (!rootEl || typeof rootEl.dispatchEvent !== 'function') return false;
+      if (!rootEl || !isFn(rootEl.dispatchEvent)) return false;
       const CustomEventCtor =
         (rootEl.ownerDocument && rootEl.ownerDocument.defaultView && rootEl.ownerDocument.defaultView.CustomEvent) ||
         (typeof CustomEvent !== 'undefined' ? CustomEvent : null);
@@ -1278,7 +1436,7 @@ function createControllerRuntime(options = {}) {
           formEl = rootEl;
         }
       }
-      if (!formEl && typeof rootEl.querySelectorAll === 'function') {
+      if (!formEl && isFn(rootEl.querySelectorAll)) {
         const candidates = rootEl.querySelectorAll('form[data-w-form], form');
         for (let i = 0; i < candidates.length; i++) {
           const cand = candidates[i];
@@ -1321,12 +1479,12 @@ function createControllerRuntime(options = {}) {
           const res = tDef(ctx);
           if (res && res.__isWebspressoTask) {
             taskInst = res;
-          } else if (res && typeof res === 'object' && typeof res.run === 'function') {
+          } else if (res && typeof res === 'object' && isFn(res.run)) {
             taskInst = createTaskInstance(res.run, { key: name, ...res });
           } else if (typeof res === 'function') {
             taskInst = createTaskInstance(res, { key: name });
           }
-        } else if (tDef && typeof tDef === 'object' && typeof tDef.run === 'function') {
+        } else if (tDef && typeof tDef === 'object' && isFn(tDef.run)) {
           taskInst = createTaskInstance(tDef.run, { key: name, ...tDef });
         }
         if (taskInst) {
@@ -1393,12 +1551,12 @@ function createControllerRuntime(options = {}) {
     }
 
     function checkFragmentPersistenceConflict(idOrName, input) {
-      if (!persistConfig || !fragments || typeof fragments.getInstance !== 'function' || !input || typeof input !== 'object') {
+      if (!persistConfig || !fragments || !isFn(fragments.getInstance) || !input || typeof input !== 'object') {
         return;
       }
       const inst =
         fragments.getInstance(idOrName) ||
-        (typeof fragments.getInstances === 'function'
+        (isFn(fragments.getInstances)
           ? fragments.getInstances().find((i) => i.name === idOrName)
           : null);
       if (inst && inst.persistInput && inst.persistInput.key !== persistConfig.storageKey) {
@@ -1410,17 +1568,34 @@ function createControllerRuntime(options = {}) {
           keys: Object.keys(input),
         };
         persistenceConflicts.push(conflict);
-        if (debug && typeof debug.recordEvent === 'function') {
+        if (debug && isFn(debug.recordEvent)) {
           debug.recordEvent('persist:conflict', conflict);
         }
       }
     }
 
     // 6. Context object passed to `connect(ctx)` and `actions[name](ctx, event, actionEl)`
+    // `ctx` itself is frozen to preserve framework contract, while `locals` provides a
+    // mutable per-instance bag for imperative helpers and non-reactive caches.
+    const locals = Object.create(null);
+    const instanceLogger =
+      process.env.NODE_ENV !== 'production'
+        ? getClientLoggerFactory()(debug, controllerName, { console: options.logToConsole !== false })
+        : NOOP_LOGGER;
+
     ctx = Object.freeze({
       instanceId,
       name: controllerName,
       el: rootEl,
+      locals,
+      log: instanceLogger,
+      get route() {
+        return contextStore.route;
+      },
+      get context() {
+        return contextStore.context;
+      },
+      inject: (key, fallback) => contextStore.inject(key, fallback),
       get state() {
         return state;
       },
@@ -1431,6 +1606,42 @@ function createControllerRuntime(options = {}) {
       targets: targetsAccessor,
       tasks: tasksProxy,
       task: createTaskInstance,
+      request: async (stateKeyOrOpts, fn) => {
+        if (typeof fn !== 'function') {
+          throw new TypeError('ctx.request(stateKeyOrOpts, fn) requires an async function.');
+        }
+        const opts = typeof stateKeyOrOpts === 'string' ? { statusKey: stateKeyOrOpts } : (stateKeyOrOpts || {});
+        const statusKey = opts.statusKey || opts.stateKey || null;
+        const pendingKey = opts.pendingKey || null;
+        const dataKey = opts.dataKey || null;
+        const errorKey = opts.errorKey || null;
+        const rethrow = opts.rethrow !== false;
+
+        if (isConnected() && state) {
+          if (statusKey) state[statusKey] = 'pending';
+          if (pendingKey) state[pendingKey] = true;
+          if (errorKey) state[errorKey] = null;
+        }
+        try {
+          const result = await fn({ signal: lifecycleAbort ? lifecycleAbort.signal : undefined });
+          if (isConnected() && state) {
+            if (statusKey) state[statusKey] = 'success';
+            if (pendingKey) state[pendingKey] = false;
+            if (errorKey) state[errorKey] = null;
+            if (dataKey) state[dataKey] = result;
+          }
+          return result;
+        } catch (err) {
+          if (isConnected() && state) {
+            if (statusKey) state[statusKey] = 'failure';
+            if (pendingKey) state[pendingKey] = false;
+            if (errorKey) state[errorKey] = err ? (err.message || String(err)) : 'Request failed';
+          }
+          handleControllerError(err, { phase: 'request', statusKey });
+          if (rethrow) throw err;
+          return undefined;
+        }
+      },
       storage: storageCtx,
       get persistenceConflicts() {
         return [...persistenceConflicts];
@@ -1459,7 +1670,7 @@ function createControllerRuntime(options = {}) {
         if (!name) return null;
         const el = decorateElement(maybeEl || currentActionEl);
         if (!el) return null;
-        if (typeof el.data === 'function') {
+        if (isFn(el.data)) {
           return el.data(name);
         }
         const rawAttr = el.getAttribute ? el.getAttribute(`data-${name}`) : null;
@@ -1469,6 +1680,21 @@ function createControllerRuntime(options = {}) {
       },
       on: registerListener,
       emit: emitEvent,
+      broadcast: (topic, payload) => (syncBus ? syncBus.publish('event', topic, payload) : false),
+      onBroadcast: (topic, handler) => {
+        if (!syncBus || !isFn(handler)) return () => {};
+        const unsub = syncBus.subscribe((msg) => {
+          if (!isConnected() || !msg || msg.kind !== 'event') return;
+          if (topic && topic !== '*' && msg.topic !== topic) return;
+          try {
+            handler(msg.payload, msg);
+          } catch (err) {
+            handleControllerError(err, { phase: 'broadcast', topic });
+          }
+        });
+        cleanupCallbacks.push(unsub);
+        return unsub;
+      },
       effect: registerEffect,
       watch: registerWatch,
       interval: registerInterval,
@@ -1497,16 +1723,16 @@ function createControllerRuntime(options = {}) {
       },
       invalidate: (tags) => (fragments ? fragments.invalidate(tags) : Promise.resolve({ ok: true, refreshed: [] })),
       retryFailedFragments: () =>
-        fragments && typeof fragments.retryFailed === 'function'
+        fragments && isFn(fragments.retryFailed)
           ? fragments.retryFailed()
           : Promise.resolve({ refreshed: [], skipped: true }),
       refresh: async (idOrName, input, opts) => {
         checkFragmentPersistenceConflict(idOrName, input);
         if (!fragments) {
           const empty = { ok: true, refreshed: [], skipped: true };
-          if (opts && typeof opts.onSuccess === 'function') await opts.onSuccess(empty);
-          if (opts && typeof opts.onSettled === 'function') await opts.onSettled(empty, null);
-          else if (opts && typeof opts.onComplete === 'function') await opts.onComplete(empty, null);
+          if (opts && isFn(opts.onSuccess)) await opts.onSuccess(empty);
+          if (opts && isFn(opts.onSettled)) await opts.onSettled(empty, null);
+          else if (opts && isFn(opts.onComplete)) await opts.onComplete(empty, null);
           return empty;
         }
         return fragments.refresh(idOrName, input, opts);
@@ -1517,7 +1743,7 @@ function createControllerRuntime(options = {}) {
           return inst && inst.input ? { ...inst.input } : {};
         },
         get inputs() {
-          if (!fragments || typeof fragments.getInstances !== 'function') return {};
+          if (!fragments || !isFn(fragments.getInstances)) return {};
           const list = fragments.getInstances(idOrName);
           const map = {};
           for (const inst of list) {
@@ -1529,7 +1755,7 @@ function createControllerRuntime(options = {}) {
           checkFragmentPersistenceConflict(idOrName, input);
           if (!fragments) {
             const empty = { ok: true, refreshed: [], skipped: true };
-            if (opts && typeof opts.onSuccess === 'function') {
+            if (opts && isFn(opts.onSuccess)) {
               return Promise.resolve(opts.onSuccess(empty)).then(() => empty);
             }
             return Promise.resolve(empty);
@@ -1600,7 +1826,7 @@ function createControllerRuntime(options = {}) {
           registerWatch(watchKey, (newVal, oldVal, onCleanup) => {
             watchDef.call(ctx, newVal, oldVal, onCleanup, ctx);
           });
-        } else if (watchDef && typeof watchDef === 'object' && typeof watchDef.handler === 'function') {
+        } else if (watchDef && typeof watchDef === 'object' && isFn(watchDef.handler)) {
           registerWatch(
             watchKey,
             (newVal, oldVal, onCleanup) => {
@@ -1629,22 +1855,22 @@ function createControllerRuntime(options = {}) {
         actionEl.__wActionBusy === true &&
         (!actionEl.hasAttribute || !actionEl.hasAttribute('data-w-allow-concurrent'))
       ) {
-        if (event && typeof event.preventDefault === 'function') {
+        if (event && isFn(event.preventDefault)) {
           event.preventDefault();
         }
         return undefined;
       }
 
       // Built-in `data-w-confirm` guard
-      if (actionEl && typeof actionEl.getAttribute === 'function') {
+      if (actionEl && isFn(actionEl.getAttribute)) {
         const confirmMsg = actionEl.getAttribute('data-w-confirm');
         if (confirmMsg !== null && confirmMsg !== '') {
           const confirmFn =
-            typeof window !== 'undefined' && typeof window.confirm === 'function'
+            typeof window !== 'undefined' && isFn(window.confirm)
               ? window.confirm.bind(window)
               : null;
           if (confirmFn && !confirmFn(confirmMsg)) {
-            if (event && typeof event.preventDefault === 'function') {
+            if (event && isFn(event.preventDefault)) {
               event.preventDefault();
             }
             return undefined;
@@ -1658,7 +1884,7 @@ function createControllerRuntime(options = {}) {
       activeControllerContext = ctx;
       try {
         const res = fn(ctx, event, decoratedEl);
-        if (res && typeof res.then === 'function') {
+        if (res && isFn(res.then)) {
           setActionBusy(actionName, 1);
           setElementBusyState(actionEl, true);
           return res.then(
@@ -1698,6 +1924,63 @@ function createControllerRuntime(options = {}) {
       }
     }
 
+    // 7b. Cross-tab selective state sync (`sync: ['theme']` or `sync: { keys: ['theme'], channel: '...' }`)
+    const rawSyncDef = reg.definition.sync;
+    if (syncBus && rawSyncDef && state) {
+      const syncKeys = isArray(rawSyncDef)
+        ? rawSyncDef
+        : isArray(rawSyncDef.keys)
+          ? rawSyncDef.keys
+          : [];
+      const syncChannel =
+        (!isArray(rawSyncDef) && typeof rawSyncDef.channel === 'string' && rawSyncDef.channel) ||
+        controllerName;
+
+      if (syncKeys.length > 0) {
+        let isApplyingRemoteSync = false;
+        let lastSentJson = JSON.stringify(
+          Object.fromEntries(syncKeys.map((k) => [k, resolveStatePath(state, k)]))
+        );
+
+        const stopSyncEffect = datastar.engine.effect(() => {
+          if (!isConnected()) return;
+          const snapshot = {};
+          for (let i = 0; i < syncKeys.length; i++) {
+            const k = syncKeys[i];
+            snapshot[k] = resolveStatePath(state, k);
+          }
+          if (isApplyingRemoteSync) {
+            lastSentJson = JSON.stringify(snapshot);
+            return;
+          }
+          const json = JSON.stringify(snapshot);
+          if (json !== lastSentJson) {
+            lastSentJson = json;
+            syncBus.publish('state', syncChannel, { patch: snapshot });
+          }
+        });
+        cleanupCallbacks.push(stopSyncEffect);
+
+        const unsubStateSync = syncBus.subscribe((msg) => {
+          if (!isConnected() || !msg || msg.kind !== 'state' || msg.topic !== syncChannel) return;
+          const patch = msg.payload && msg.payload.patch;
+          if (!patch || typeof patch !== 'object') return;
+          isApplyingRemoteSync = true;
+          try {
+            for (let i = 0; i < syncKeys.length; i++) {
+              const k = syncKeys[i];
+              if (Object.prototype.hasOwnProperty.call(patch, k)) {
+                setByPath(state, k, patch[k]);
+              }
+            }
+          } finally {
+            isApplyingRemoteSync = false;
+          }
+        });
+        cleanupCallbacks.push(unsubStateSync);
+      }
+    }
+
     // 7. Bind declarative DOM attributes within controller scope
     const domDisposers = [];
     function rebindDom() {
@@ -1726,7 +2009,7 @@ function createControllerRuntime(options = {}) {
       if (rootEl.tagName === 'FORM' && rootEl.hasAttribute('data-w-form')) {
         resolveFormHandle(rootEl.getAttribute('data-w-form'));
       }
-      if (typeof rootEl.querySelectorAll === 'function') {
+      if (isFn(rootEl.querySelectorAll)) {
         const formsInScope = rootEl.querySelectorAll('form[data-w-form]');
         for (let i = 0; i < formsInScope.length; i++) {
           if (isTargetInControllerScope(rootEl, formsInScope[i])) {
@@ -1819,7 +2102,7 @@ function createControllerRuntime(options = {}) {
         if (!isConnected() || !reg.definition.beforePatch) return;
         try {
           const result = reg.definition.beforePatch(ctx, meta);
-          if (result && typeof result.then === 'function') {
+          if (result && isFn(result.then)) {
             // beforePatch must be synchronous; warn in dev and do not block morph
             if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production' && typeof console !== 'undefined') {
               console.warn(`[webspresso] Controller "${controllerName}" beforePatch() returned a Promise; beforePatch hooks are synchronous and are not awaited.`);
@@ -1833,7 +2116,7 @@ function createControllerRuntime(options = {}) {
         if (!isConnected() || !reg.definition.afterPatch) return;
         try {
           const res = reg.definition.afterPatch(ctx, meta);
-          if (res && typeof res.then === 'function') {
+          if (res && isFn(res.then)) {
             res.catch((err) => {
               handleControllerError(err, { phase: 'afterPatch' });
             });
@@ -1853,9 +2136,7 @@ function createControllerRuntime(options = {}) {
             reg.definition.disconnect(ctx);
           } catch (err) {
             handleControllerError(err, { phase: 'disconnect' });
-            if (debug) {
-              debug.trackCleanupError(instanceId, controllerName, 'disconnect', err);
-            }
+            trackCleanupError('disconnect', err);
           }
         }
 
@@ -1864,9 +2145,7 @@ function createControllerRuntime(options = {}) {
           try {
             cleanupCallbacks[i]();
           } catch (err) {
-            if (debug) {
-              debug.trackCleanupError(instanceId, controllerName, 'cleanup', err);
-            }
+            trackCleanupError('cleanup', err);
           }
         }
         cleanupCallbacks.length = 0;
@@ -1875,8 +2154,8 @@ function createControllerRuntime(options = {}) {
         for (let i = 0; i < domDisposers.length; i++) {
           try {
             domDisposers[i]();
-          } catch (_e) {
-            // Ignore
+          } catch (err) {
+            trackCleanupError('domDisposer', err);
           }
         }
         domDisposers.length = 0;
@@ -1885,8 +2164,8 @@ function createControllerRuntime(options = {}) {
         for (const fh of scopedForms.values()) {
           try {
             fh.destroy();
-          } catch (_e) {
-            // Ignore
+          } catch (err) {
+            trackCleanupError('scopedFormDestroy', err);
           }
         }
         scopedForms.clear();
@@ -1895,8 +2174,8 @@ function createControllerRuntime(options = {}) {
         for (let i = 0; i < scopedTasksList.length; i++) {
           try {
             scopedTasksList[i].dispose();
-          } catch (_e) {
-            // Ignore
+          } catch (err) {
+            trackCleanupError('scopedTaskDispose', err);
           }
         }
         scopedTasksList.length = 0;
@@ -1935,7 +2214,7 @@ function createControllerRuntime(options = {}) {
     if (!el || el.nodeType !== 1) return;
 
     const elements = [el];
-    if (typeof el.querySelectorAll === 'function') {
+    if (isFn(el.querySelectorAll)) {
       const descendants = el.querySelectorAll('[data-w-controller], form[data-w-form]');
       for (let i = 0; i < descendants.length; i++) {
         elements.push(descendants[i]);
@@ -1985,7 +2264,7 @@ function createControllerRuntime(options = {}) {
     if (root.nodeType === 1 && root.hasAttribute && root.hasAttribute('data-w-controller')) {
       controllerElements.push(root);
     }
-    if (typeof root.querySelectorAll === 'function') {
+    if (isFn(root.querySelectorAll)) {
       const found = root.querySelectorAll('[data-w-controller]');
       for (let i = 0; i < found.length; i++) {
         controllerElements.push(found[i]);
@@ -2022,7 +2301,7 @@ function createControllerRuntime(options = {}) {
     if (root.nodeType === 1 && root.tagName === 'FORM' && root.hasAttribute('data-w-form')) {
       formElements.push(root);
     }
-    if (typeof root.querySelectorAll === 'function') {
+    if (isFn(root.querySelectorAll)) {
       const foundForms = root.querySelectorAll('form[data-w-form]');
       for (let i = 0; i < foundForms.length; i++) {
         formElements.push(foundForms[i]);
@@ -2071,7 +2350,7 @@ function createControllerRuntime(options = {}) {
   function isInsideIgnoredSubtree(el, rootEl) {
     let cur = el && el.parentElement ? el.parentElement : null;
     while (cur) {
-      if (typeof cur.hasAttribute === 'function' && cur.hasAttribute('data-w-ignore')) {
+      if (isFn(cur.hasAttribute) && cur.hasAttribute('data-w-ignore')) {
         const mode = (cur.getAttribute('data-w-ignore') || '').trim().toLowerCase();
         if (mode !== 'self') {
           return true;
@@ -2080,7 +2359,7 @@ function createControllerRuntime(options = {}) {
       if (cur === rootEl) break;
       cur = cur.parentElement || null;
     }
-    if (el === rootEl && el && typeof el.hasAttribute === 'function' && el.hasAttribute('data-w-ignore')) {
+    if (el === rootEl && el && isFn(el.hasAttribute) && el.hasAttribute('data-w-ignore')) {
       const mode = (el.getAttribute('data-w-ignore') || '').trim().toLowerCase();
       if (mode === 'all' || mode === 'both') {
         return true;
@@ -2096,8 +2375,8 @@ function createControllerRuntime(options = {}) {
       if (!inst || !inst.el || !inst.isConnected) continue;
       if (
         inst.el === fragmentEl ||
-        (typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el)) ||
-        (typeof inst.el.contains === 'function' && inst.el.contains(fragmentEl))
+        (isFn(fragmentEl.contains) && fragmentEl.contains(inst.el)) ||
+        (isFn(inst.el.contains) && inst.el.contains(fragmentEl))
       ) {
         if (isInsideIgnoredSubtree(inst.el, fragmentEl)) continue;
         affected.push(inst);
@@ -2106,9 +2385,9 @@ function createControllerRuntime(options = {}) {
     // Sort deterministically: outer ancestors first, inner descendants second
     affected.sort((a, b) => {
       if (a.el === b.el) return 0;
-      if (typeof a.el.contains === 'function' && a.el.contains(b.el)) return -1;
-      if (typeof b.el.contains === 'function' && b.el.contains(a.el)) return 1;
-      if (typeof a.el.compareDocumentPosition === 'function') {
+      if (isFn(a.el.contains) && a.el.contains(b.el)) return -1;
+      if (isFn(b.el.contains) && b.el.contains(a.el)) return 1;
+      if (isFn(a.el.compareDocumentPosition)) {
         const pos = a.el.compareDocumentPosition(b.el);
         if (pos & 4) return -1; // DOCUMENT_POSITION_FOLLOWING
         if (pos & 2) return 1;  // DOCUMENT_POSITION_PRECEDING
@@ -2131,7 +2410,7 @@ function createControllerRuntime(options = {}) {
         inst.invokeBeforePatch({
           ...meta,
           isFragmentRoot: inst.el === fragmentEl,
-          isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
+          isDescendant: inst.el !== fragmentEl && isFn(fragmentEl.contains) && fragmentEl.contains(inst.el),
         });
       }
     } finally {
@@ -2143,7 +2422,7 @@ function createControllerRuntime(options = {}) {
     const chainDepth = meta && typeof meta.hookChainDepth === 'number' ? meta.hookChainDepth : 0;
     if (chainDepth > 3) {
       const msg = `Possible patch hook refresh loop detected on fragment "${meta.fragmentName || meta.fragmentId || 'unknown'}" (causal chain depth ${chainDepth}).`;
-      if (debug && typeof debug.recordEvent === 'function') {
+      if (debug && isFn(debug.recordEvent)) {
         debug.recordEvent('patch:loop-warning', {
           code: 'PATCH_HOOK_LOOP_DETECTED',
           fragmentId: meta.fragmentId || null,
@@ -2169,7 +2448,7 @@ function createControllerRuntime(options = {}) {
         inst.invokeAfterPatch({
           ...meta,
           isFragmentRoot: inst.el === fragmentEl,
-          isDescendant: inst.el !== fragmentEl && typeof fragmentEl.contains === 'function' && fragmentEl.contains(inst.el),
+          isDescendant: inst.el !== fragmentEl && isFn(fragmentEl.contains) && fragmentEl.contains(inst.el),
         });
       }
     } finally {
@@ -2219,6 +2498,9 @@ function createControllerRuntime(options = {}) {
       }
       activeStandaloneForms.clear();
     },
+    provide: (keyOrMap, value) => contextStore.provide(keyOrMap, value),
+    getContext: () => contextStore.context,
+    getRoute: () => contextStore.route,
   };
 }
 

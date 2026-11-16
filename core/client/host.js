@@ -16,7 +16,7 @@
  * - Agnostic to UI rendering: does not impose any template language, virtual DOM, or widget type.
  */
 
-const { decorateElement } = require('./utils');
+const { decorateElement, isFn } = require('./utils');
 
 /**
  * Resolve the owning Document from a root Document or Element.
@@ -45,7 +45,7 @@ function resolveDefaultContainer(root, doc) {
       return doc.body;
     }
     const insideFragment =
-      typeof root.closest === 'function' ? Boolean(root.closest('[data-w-fragment]')) : false;
+      isFn(root.closest) ? Boolean(root.closest('[data-w-fragment]')) : false;
     if (!insideFragment) {
       return root;
     }
@@ -129,10 +129,10 @@ function createClientHostManager(options = {}) {
     // 2. Explicit CSS selector
     if (!el && typeof opts.selector === 'string' && opts.selector.trim()) {
       const searchRoot = opts.root || root || doc;
-      if (searchRoot && typeof searchRoot.querySelector === 'function') {
+      if (searchRoot && isFn(searchRoot.querySelector)) {
         el = searchRoot.querySelector(opts.selector.trim());
       }
-      if (!el && doc && searchRoot !== doc && typeof doc.querySelector === 'function') {
+      if (!el && doc && searchRoot !== doc && isFn(doc.querySelector)) {
         el = doc.querySelector(opts.selector.trim());
       }
     }
@@ -140,7 +140,7 @@ function createClientHostManager(options = {}) {
     // 3. Existing layout placeholder `[data-w-host="<key>"]` not owned by another active host manager
     if (!el && opts.createOnly !== true) {
       const searchRoot = opts.root || root || doc;
-      if (searchRoot && typeof searchRoot.querySelectorAll === 'function') {
+      if (searchRoot && isFn(searchRoot.querySelectorAll)) {
         const candidates = searchRoot.querySelectorAll(`[data-w-host="${key}"]`);
         for (let i = 0; i < candidates.length; i++) {
           const cand = candidates[i];
@@ -154,7 +154,7 @@ function createClientHostManager(options = {}) {
 
     // 4. Create a new host container outside fragment regions
     if (!el) {
-      if (!doc || typeof doc.createElement !== 'function') {
+      if (!doc || !isFn(doc.createElement)) {
         const err = new Error(`Cannot create UI host "${key}": no Document is available in the current environment.`);
         err.code = 'CLIENT_HOST_NO_DOCUMENT';
         throw err;
@@ -167,13 +167,13 @@ function createClientHostManager(options = {}) {
         (opts.container && opts.container.nodeType === 1 ? opts.container : null) ||
         resolveDefaultContainer(opts.root || root, doc);
 
-      if (container && typeof container.appendChild === 'function') {
+      if (container && isFn(container.appendChild)) {
         container.appendChild(el);
       }
     }
 
     function recordAndSetAttr(attrName, attrVal) {
-      if (!el || typeof el.setAttribute !== 'function') return;
+      if (!el || !isFn(el.setAttribute)) return;
       if (!created && !prevAttributes.has(attrName)) {
         prevAttributes.set(attrName, el.hasAttribute(attrName) ? el.getAttribute(attrName) : null);
       }
@@ -246,7 +246,7 @@ function createClientHostManager(options = {}) {
         try {
           unmountCallbacks[i](decoratedEl);
         } catch (err) {
-          if (debug && typeof debug.trackCleanupError === 'function') {
+          if (debug && isFn(debug.trackCleanupError)) {
             debug.trackCleanupError(`host_${key}`, key, 'host:unmount', err);
           }
         }
@@ -258,9 +258,9 @@ function createClientHostManager(options = {}) {
           delete el.__wHostManager;
         }
         if (created) {
-          if (el.parentNode && typeof el.parentNode.removeChild === 'function') {
+          if (el.parentNode && isFn(el.parentNode.removeChild)) {
             el.parentNode.removeChild(el);
-          } else if (typeof el.remove === 'function') {
+          } else if (isFn(el.remove)) {
             el.remove();
           }
         } else {
@@ -277,7 +277,7 @@ function createClientHostManager(options = {}) {
         }
       }
 
-      if (debug && typeof debug.recordEvent === 'function') {
+      if (debug && isFn(debug.recordEvent)) {
         debug.recordEvent('host:unmount', { key, created });
       }
     }
@@ -305,7 +305,7 @@ function createClientHostManager(options = {}) {
       handle,
     });
 
-    if (debug && typeof debug.recordEvent === 'function') {
+    if (debug && isFn(debug.recordEvent)) {
       debug.recordEvent('host:mount', { key, created });
     }
 
@@ -340,7 +340,7 @@ function createClientHostManager(options = {}) {
       try {
         records[i].handle.unmount();
       } catch (err) {
-        if (debug && typeof debug.trackCleanupError === 'function') {
+        if (debug && isFn(debug.trackCleanupError)) {
           debug.trackCleanupError(`host_${records[i].key}`, records[i].key, 'host:dispose', err);
         }
       }

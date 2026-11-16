@@ -34,12 +34,46 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
-  return knex.schema.dropTableIfExists('${tableName}');
-};
-`;
+  exports.down = function(knex) {
+    return knex.schema.dropTableIfExists('${tableName}');
+  };
+  `;
+}
+
+/**
+ * Ensure the audit_logs table exists (idempotent).
+ * @param {import('knex').Knex} knex
+ * @param {string} [tableName='audit_logs']
+ * @returns {Promise<boolean>} true if created, false if already exists or skipped
+ */
+async function ensureAuditLogsTable(knex, tableName = 'audit_logs') {
+  if (!knex || !knex.schema || typeof knex.schema.hasTable !== 'function') {
+    return false;
+  }
+  const exists = await knex.schema.hasTable(tableName);
+  if (exists) return false;
+
+  await knex.schema.createTable(tableName, (table) => {
+    table.bigIncrements('id').primary();
+    table.timestamp('created_at').defaultTo(knex.fn.now()).notNullable().index();
+    table.bigInteger('actor_id').nullable().index();
+    table.string('actor_email', 255).nullable();
+    table.string('action', 32).notNullable();
+    table.string('resource_model', 255).notNullable();
+    table.string('resource_id', 255).nullable();
+    table.string('http_method', 16).notNullable();
+    table.string('path', 2000).notNullable();
+    table.string('ip', 64).nullable();
+    table.text('user_agent').nullable();
+    table.json('metadata').nullable();
+
+    table.index(['resource_model', 'created_at']);
+    table.index(['action', 'created_at']);
+  });
+  return true;
 }
 
 module.exports = {
   generateAuditLogsMigration,
+  ensureAuditLogsTable,
 };

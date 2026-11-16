@@ -8,7 +8,7 @@
  * and lifecycle cleanup errors without logging raw form values or sensitive payloads.
  */
 
-const { isArray, isNumber, NOOP_DEBUGGER, uid } = require('./utils');
+const { isArray, isNumber, NOOP_DEBUGGER, NOOP_LOGGER, uid, isFn } = require('./utils');
 
 const SENSITIVE_KEY_PATTERN = /password|passwd|secret|token|authorization|cookie|credit|card|cvv|ssn|api[-_]?key/i;
 
@@ -59,7 +59,7 @@ function summarizePayloadSafely(payload, includeSafePrimitives = false) {
 function createActiveDebugger(options = {}) {
   let enabled = Boolean(options.enabled);
   const maxEvents = isNumber(options.maxEvents) && options.maxEvents > 0 ? options.maxEvents : 200;
-  const customLogger = typeof options.logger === 'function' ? options.logger : null;
+  const customLogger = isFn(options.logger) ? options.logger : null;
 
   const events = [];
   const activeControllers = new Map(); // instanceId -> { name, instanceId, el, mountedAt }
@@ -68,6 +68,7 @@ function createActiveDebugger(options = {}) {
   const discardedResponses = [];
   const cleanupErrors = [];
   const fragmentTimings = [];
+  const logs = [];
 
   let chainSeq = 0;
 
@@ -269,7 +270,26 @@ function createActiveDebugger(options = {}) {
         discardedResponses: [...discardedResponses],
         cleanupErrors: [...cleanupErrors],
         events: [...events],
+        logs: [...logs],
       };
+    },
+
+    trackLog({ level = 'info', source = 'client', message = '', data } = {}) {
+      const normalizedLevel = ['debug', 'info', 'warn', 'error'].includes(level) ? level : 'info';
+      const entry = {
+        id: uid('log'),
+        level: normalizedLevel,
+        source: String(source || 'client'),
+        message: String(message || ''),
+        data: data !== undefined ? summarizePayloadSafely(data, true) : undefined,
+        timestamp: Date.now(),
+      };
+      logs.push(entry);
+      if (logs.length > maxEvents) {
+        logs.shift();
+      }
+      pushEvent(`log:${normalizedLevel}`, entry);
+      return entry;
     },
 
     clear() {
@@ -280,6 +300,7 @@ function createActiveDebugger(options = {}) {
       discardedResponses.length = 0;
       cleanupErrors.length = 0;
       fragmentTimings.length = 0;
+      logs.length = 0;
     },
   };
 
@@ -348,6 +369,12 @@ function createClientDebugger(options = {}) {
       recordEvent(t, d) {
         return activeInstance ? activeInstance.recordEvent(t, d) : null;
       },
+      trackLog(entry) {
+        if (!activeInstance) {
+          activeInstance = createActiveDebugger({ ...options, enabled: true });
+        }
+        return activeInstance.trackLog(entry);
+      },
       getSnapshot() {
         return activeInstance ? activeInstance.getSnapshot() : NOOP_DEBUGGER.getSnapshot();
       },
@@ -360,8 +387,42 @@ function createClientDebugger(options = {}) {
   return createActiveDebugger(options);
 }
 
+function createClientLogger(debug, source = 'client', options = {}) {
+  if (process.env.NODE_ENV === 'production') {
+    return NOOP_LOGGER;
+  }
+
+  const logToConsole = options.console !== false;
+
+  function write(level, message, data) {
+    if (debug && isFn(debug.trackLog)) {
+      debug.trackLog({ level, source, message, data });
+    }
+    if (logToConsole && typeof console !== 'undefined') {
+      const fn = isFn(console[level]) ? console[level] : console.log;
+      if (isFn(fn)) {
+        const prefix = `[webspresso:${source}]`;
+        if (data !== undefined) {
+          fn.call(console, prefix, message, data);
+        } else {
+          fn.call(console, prefix, message);
+        }
+      }
+    }
+  }
+
+  return Object.freeze({
+    debug: (message, data) => write('debug', message, data),
+    info: (message, data) => write('info', message, data),
+    warn: (message, data) => write('warn', message, data),
+    error: (message, data) => write('error', message, data),
+    log: (message, data) => write('info', message, data),
+  });
+}
+
 module.exports = {
   createClientDebugger,
+  createClientLogger,
   summarizePayloadSafely,
 };
 

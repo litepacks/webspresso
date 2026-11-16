@@ -316,6 +316,26 @@ function createTimeoutMiddleware(timeoutConfig, options = {}) {
           next(err);
         }
       }
+
+      // Guard late async route handlers from throwing ERR_HTTP_HEADERS_SENT after timeout response is sent
+      const guardAfterTimeout = (fnName, returnRes = true) => {
+        const orig = res[fnName];
+        if (typeof orig !== 'function') return;
+        res[fnName] = function guardedTimeoutResponse(...args) {
+          if (req.timedout && (res.headersSent || res.writableEnded || res.finished)) {
+            return returnRes ? res : false;
+          }
+          return orig.apply(this, args);
+        };
+      };
+      guardAfterTimeout('setHeader', true);
+      guardAfterTimeout('removeHeader', true);
+      guardAfterTimeout('writeHead', true);
+      guardAfterTimeout('status', true);
+      guardAfterTimeout('send', true);
+      guardAfterTimeout('json', true);
+      guardAfterTimeout('end', true);
+      guardAfterTimeout('write', false);
     }, timeoutMs);
 
     if (timer && typeof timer.unref === 'function') {

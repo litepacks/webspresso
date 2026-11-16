@@ -489,16 +489,20 @@ function createDevReloadHub(config = {}) {
   function autoInjectMiddleware(req, res, next) {
     if (!autoInject) return next();
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    const reqPath = req.path || req.originalUrl || '';
+    if (reqPath.startsWith('/api/')) return next();
 
     const origSend = res.send.bind(res);
     res.send = function(body) {
       if (typeof body === 'string' && body.includes('</body>')) {
-        const metaJson = resolveDevMetaJson();
-        const metaTag = metaJson
-          ? `<script>window.__WEBSPRESSO_DEV_META__=${metaJson};</script>\n`
-          : '';
-        const scriptTag = `${metaTag}<script defer src="${CLIENT_SCRIPT_PATH}"></script>`;
-        if (!body.includes(CLIENT_SCRIPT_PATH)) {
+        const skipFlag = res.locals && res.locals.skipDevReload === true;
+        const ct = typeof res.getHeader === 'function' ? String(res.getHeader('Content-Type') || '') : '';
+        const isNonHtml = ct && !ct.toLowerCase().includes('text/html');
+        const csp = typeof res.getHeader === 'function' ? String(res.getHeader('Content-Security-Policy') || '') : '';
+        const isSandboxed = /\bsandbox\b/i.test(csp) || /connect-src\s+[^;]*'none'/i.test(csp);
+
+        if (!skipFlag && !isNonHtml && !isSandboxed && !body.includes(CLIENT_SCRIPT_PATH)) {
+          const scriptTag = `<script defer src="${CLIENT_SCRIPT_PATH}"></script>`;
           body = body.replace('</body>', scriptTag + '\n</body>');
         }
       }

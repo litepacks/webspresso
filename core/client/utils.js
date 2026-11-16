@@ -31,6 +31,15 @@ function isObject(val) {
 }
 
 /**
+ * Check if a value is a function.
+ * @param {unknown} val
+ * @returns {val is Function}
+ */
+function isFn(val) {
+  return typeof val === 'function';
+}
+
+/**
  * Check if a value is a plain JavaScript object (not an Array, Map, FormData, etc.).
  * @param {unknown} val
  * @returns {boolean}
@@ -133,6 +142,7 @@ const NOOP_DEBUGGER = Object.freeze({
   recordChainRefresh() {},
   recordChainPatch() {},
   recordEvent() {},
+  trackLog() {},
   getSnapshot() {
     return {
       enabled: false,
@@ -143,9 +153,21 @@ const NOOP_DEBUGGER = Object.freeze({
       discardedResponses: [],
       cleanupErrors: [],
       events: [],
+      logs: [],
     };
   },
   clear() {},
+});
+
+/**
+ * Reusable zero-allocation no-op logger for production builds.
+ */
+const NOOP_LOGGER = Object.freeze({
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+  log() {},
 });
 
 /**
@@ -502,12 +524,14 @@ module.exports = {
   isArray,
   isNumber,
   isObject,
+  isFn,
   isPlainObject,
   isPromise,
   safeTrim,
   getByPath,
   setByPath,
   NOOP_DEBUGGER,
+  NOOP_LOGGER,
   toCamelCase,
   toKebabCase,
   parseDataValue,

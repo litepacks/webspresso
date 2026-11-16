@@ -92,9 +92,12 @@ All reactive bindings are mediated through `core/client/adapter/datastar.js` usi
 | `data-w-controller` | Mounts a controller instance on the element | `data-w-controller="notes"` |
 | `data-w-target` | Marks a scoped child element for `ctx.target(name)` / `ctx.targets(name)` | `data-w-target="counter"` |
 | `data-w-on:<event>` / `data-w-click` | Binds a DOM event (or click shorthand) to a controller action | `data-w-on:click="loadStats"` / `data-w-click="loadStats"` |
+| `data-w-submit` | Binds a `<form>` submit event with automatic `preventDefault()` | `data-w-submit="submitPrompt"` |
 | `data-w-text` | Binds element `textContent` to controller state or computed getter | `data-w-text="totalNotes"` |
 | `data-w-show` | Toggles element `hidden` state from a boolean expression or computed path | `data-w-show="statsLoaded && !hasError"` |
 | `data-w-class` | Conditionally toggles CSS classes from state expressions | `data-w-class="{'is-active': isOpen}"` |
+| `data-w-style:<prop>` | Reactively binds an inline CSS property (supports ternary & `+`) | `data-w-style:width="previewWidth + 'px'"` |
+| `data-w-attr:<name>` | Reactively sets or removes an HTML attribute | `data-w-attr:aria-expanded="isOpen ? 'true' : 'false'"` |
 | `data-w-disabled` | Toggles `disabled` property/attribute from a boolean state or task signal | `data-w-disabled="tasks.stats.pending"` |
 | `data-w-model` | Two-way binding between form control (`input`/`select`/`textarea`) and state | `data-w-model="draft.search"` |
 | `data-w-form` | Binds native HTML `<form>` enhancement, validation, and submission lifecycle | `data-w-form="create-note"` |
@@ -1563,6 +1566,12 @@ All enhancements below are **opt-in** and extend the existing controller, form, 
    - `fragment.refresh(input, { mode: 'append' | 'prepend', limit, target, removeKeys })` updates keyed items (`data-w-key` / `id`) in place, appends/prepends new items, removes `removeKeys`, and trims to `limit`.
 10. **Upload Progress, Cancel & Preview URLs**:
     - Requests with `onUploadProgress` use `XMLHttpRequest` for real `lengthComputable` progress; `form.uploads`, `form.cancelUpload()`, `form.createPreviewUrl()`, and `form.revokePreviewUrls()` manage upload state and `URL.revokeObjectURL()` cleanup.
+11. **Safe Client Context & Route Provider (`fsy.clientContext`, `ctx.route`, `ctx.inject`)**:
+    - Emit explicit public SSR route & config data via `{{ fsy.clientContext(data, { allow, schema }) | safe }}` (CSP-safe `<script type="application/json">` tag with HTML escaping, null-prototype maps, and `deepFreeze`). Read `ctx.route`, `ctx.context`, and `ctx.inject(key, fallback)` inside controllers.
+12. **Cross-Tab Sync (`sync`, `ctx.broadcast`, `ctx.onBroadcast`)**:
+    - Share selected controller state keys (`defineController({ sync: { keys: ['theme'], channel: 'prefs' } })`), propagate fragment invalidations across open tabs over `BroadcastChannel` (with `storage` fallback), and send custom tab messages via `ctx.broadcast()` / `ctx.onBroadcast()`.
+13. **Dev-Only Client Logger (`ctx.log`, `runtime.log`)**:
+    - Log structured messages to both the browser console and the DevTools **Logs** tab with automatic sensitive-key redaction; tree-shaken to `NOOP_LOGGER` in production builds.
 
 
 
