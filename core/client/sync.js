@@ -52,8 +52,7 @@ function createCrossTabSync(options = {}) {
 
   const BCCtor =
     options.BroadcastChannel ||
-    (win && isFn(win.BroadcastChannel) ? win.BroadcastChannel : null) ||
-    (typeof BroadcastChannel === 'function' ? BroadcastChannel : null);
+    (win && isFn(win.BroadcastChannel) ? win.BroadcastChannel : null);
 
   let bc = null;
 
